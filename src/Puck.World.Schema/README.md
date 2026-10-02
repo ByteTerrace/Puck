@@ -1650,7 +1650,7 @@ node, a power of zero, and a power at or past the order are refused. One step
 lasts `ticksPerStep` ticks from the carrying cell's own `clock.epochTick`.
 `output` names what the cell reads: `Step` (0..order−1), `Node` or `Ring`
 (the node's ring, 0..7) on an `int` row; `Turns` (`⌊step·2^16/order⌋` raw, so
-it wraps once per loop the way `render.cycle` keys read a row), `Cos`, `Sin`
+it wraps once per loop the way a state clock reads its row), `Cos`, `Sin`
 (the order's root of unity at the step), `ProjectionX` or `ProjectionY` on a
 `fixed` row. The lattice outputs read through `Puck.Maths.SymmetryLattice`:
 the stored value is the node (0..239) the orbit walk starts from, carried
@@ -1706,11 +1706,11 @@ bound color moving rebuilds the program or rebakes the decal that baked it. `Wor
 names no declared text cell, or one whose text is not a hex color; the
 `CreationCanonicalizer` admits only the binding's syntax (a creation on its own
 has no world to resolve against—the world validator resolves it at the
-placement). `render.lighting`/`render.sky`/`render.environment` colors and
-every `render.cycle` key's speak `BindableColor` instead—the theme
-vocabulary's generalized form of the identical binding grammar (an accepted `#RRGGBBAA` alpha is ignored;
-the render path is opaque), resolved at emit by `WorldRenderCycleTrack`
-against the routed definition with no re-bake, so a cell write recolors the
+placement). `render.lighting`/`render.sky`/`render.environment` colors speak
+`BindableColor` instead—the theme vocabulary's generalized form of the
+identical binding grammar, which may also be keyed on a clock (an accepted
+`#RRGGBBAA` alpha is ignored; the render path is opaque), resolved at emit by
+`WorldEnvironmentResolve` against the routed definition with no re-bake, so a cell write recolors the
 sky on the next frame. Identity, profile, and `seatDefaults` neutral colors
 stay literal: they persist per identity and travel between worlds. A bound
 color is live—`world.state.cell.set colors sage #C0392B` re-registers

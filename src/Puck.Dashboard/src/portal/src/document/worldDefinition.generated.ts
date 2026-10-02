@@ -642,9 +642,17 @@ export type ActionTrigger = {
 
 export type ActionTriggerMode = "Level" | "Edge";
 
-export type BindableColor = string;
+export type BindableAngle = number | string | ShapeNonNullable5;
 
-export type BindableScalar = number | string;
+export type BindableColor = string | ShapeNonNullable3;
+
+export type BindableDirection = [number, number, number] | ShapeNonNullable;
+
+export type BindableScalar = number | string | ShapeNonNullable5;
+
+export type BindableVector2 = [number, number] | ShapeNonNullable7;
+
+export type BindableVector3 = [number, number, number] | ShapeNonNullable;
 
 export type BindingActivatorDefinition = {
   sequence: (string | null)[];
@@ -1119,11 +1127,11 @@ export type ExpressionProgram = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable20[];
+  instructions: ShapeNonNullable28[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable21[];
+  subprograms?: ShapeNonNullable29[];
   [k: string]: unknown;
 };
 
@@ -1134,11 +1142,11 @@ export type ExpressionProgramNonNullable = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable30[];
+  instructions: ShapeNonNullable38[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable31[];
+  subprograms?: ShapeNonNullable39[];
   [k: string]: unknown;
 };
 
@@ -1149,11 +1157,11 @@ export type ExpressionProgramNonNullable2 = {
   /**
    * The postfix instructions, in evaluation order.
    */
-  instructions: ShapeNonNullable40[];
+  instructions: ShapeNonNullable48[];
   /**
    * Gets the shared subprograms this program's Call and fold instructions index into. The call graph is a directed acyclic graph over at most RuleCapacity.MaxSubprograms entries: the compiler refuses a cycle by name and compiles each subprogram once, so a call chain nests at most that many deep at evaluation.
    */
-  subprograms?: ShapeNonNullable41[];
+  subprograms?: ShapeNonNullable49[];
   [k: string]: unknown;
 };
 
@@ -1323,7 +1331,7 @@ export type Int32List = number[];
 
 export type Int64List = number[];
 
-export type IntentSource = "Live" | "Idle" | Shape;
+export type IntentSource = "Live" | "Idle" | ShapeNonNullable8;
 
 export type LatticeTopology = LatticeTopologyGrid | LatticeTopologyRing | LatticeTopologyHex | LatticeTopologyBox | LatticeTopologyGraph | LatticeTopologyTiling | WorldFieldTopology | null;
 
@@ -1982,173 +1990,224 @@ export type SeatActivationPolicy = "Eager" | "OnDemand";
 export type ShadowTier = "Off" | "Low" | "Medium" | "High";
 
 export type Shape = {
-  $type: "producer";
-  name: string;
+  at: number;
+  value: [number, number, number];
+  ease?: "Linear" | "Smooth" | "Step";
 };
 
-export type ShapeNonNullable = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member";
+export type ShapeNonNullable = {
+  clock: string;
+  keys: Shape[];
+};
 
-export type ShapeNonNullable10 = string | number | ShapeNonNullable8 | ShapeNonNullable9;
+export type ShapeNonNullable10 = {
+  op: ShapeNonNullable9;
+};
 
 export type ShapeNonNullable11 = {
-  channel: string;
-  arguments?: ShapeNonNullable10[];
-};
-
-export type ShapeNonNullable12 = {
-  binding: string;
-  field: string;
-};
-
-export type ShapeNonNullable13 = {
-  pool: string;
-  slot: number;
-  field: string;
-};
-
-export type ShapeNonNullable14 = {
-  op: "Operand";
-  name: StateChannelRef;
-  key?: StateChannelRef;
-};
-
-export type ShapeNonNullable15 = {
-  $type: "cell";
-  name: StateChannelRef;
-  key?: StateChannelRef;
-};
-
-export type ShapeNonNullable16 = {
-  $type: "literal";
-  value: string;
-};
-
-export type ShapeNonNullable17 = {
-  $type: "embed";
-  text: string;
-  space?: string;
-};
-
-export type ShapeNonNullable18 = ShapeNonNullable15 | ShapeNonNullable16 | ShapeNonNullable17 | null;
-
-export type ShapeNonNullable19 = {
-  op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable18;
-  right: ShapeNonNullable18;
-};
-
-export type ShapeNonNullable2 = {
-  op: ShapeNonNullable;
-};
-
-export type ShapeNonNullable20 = ShapeNonNullable2 | ShapeNonNullable3 | ShapeNonNullable4 | ShapeNonNullable5 | ShapeNonNullable6 | ShapeNonNullable7 | ShapeNonNullable14 | ShapeNonNullable19 | null;
-
-export type ShapeNonNullable21 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable20[];
-};
-
-export type ShapeNonNullable22 = {
-  zone: ExpressionProgram;
-};
-
-export type ShapeNonNullable23 = {
-  expression: ExpressionProgram;
-};
-
-export type ShapeNonNullable24 = string | number | ShapeNonNullable22 | ShapeNonNullable23;
-
-export type ShapeNonNullable25 = {
-  channel: string;
-  arguments?: ShapeNonNullable24[];
-};
-
-export type ShapeNonNullable26 = {
-  op: "Operand";
-  name: unknown;
-  key?: unknown;
-};
-
-export type ShapeNonNullable27 = {
-  $type: "cell";
-  name: unknown;
-  key?: unknown;
-};
-
-export type ShapeNonNullable28 = ShapeNonNullable27 | ShapeNonNullable16 | ShapeNonNullable17 | null;
-
-export type ShapeNonNullable29 = {
-  op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable28;
-  right: ShapeNonNullable28;
-};
-
-export type ShapeNonNullable3 = {
   op: "Argument";
   index: number;
 };
 
-export type ShapeNonNullable30 = ShapeNonNullable2 | ShapeNonNullable3 | ShapeNonNullable4 | ShapeNonNullable5 | ShapeNonNullable6 | ShapeNonNullable7 | ShapeNonNullable26 | ShapeNonNullable29 | null;
-
-export type ShapeNonNullable31 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable30[];
-};
-
-export type ShapeNonNullable32 = {
-  zone: ExpressionProgramNonNullable;
-};
-
-export type ShapeNonNullable33 = {
-  expression: ExpressionProgramNonNullable;
-};
-
-export type ShapeNonNullable34 = string | number | ShapeNonNullable32 | ShapeNonNullable33;
-
-export type ShapeNonNullable35 = {
-  channel: string;
-  arguments?: ShapeNonNullable34[];
-};
-
-export type ShapeNonNullable36 = {
-  op: "Operand";
-  name: StateChannelRefNonNullable2;
-  key?: StateChannelRefNonNullable2;
-};
-
-export type ShapeNonNullable37 = {
-  $type: "cell";
-  name: StateChannelRefNonNullable2;
-  key?: StateChannelRefNonNullable2;
-};
-
-export type ShapeNonNullable38 = ShapeNonNullable37 | ShapeNonNullable16 | ShapeNonNullable17 | null;
-
-export type ShapeNonNullable39 = {
-  op: "Dot" | "Similarity" | "Identical";
-  left: ShapeNonNullable38;
-  right: ShapeNonNullable38;
-};
-
-export type ShapeNonNullable4 = {
+export type ShapeNonNullable12 = {
   op: "BoardShift" | "BoardRay" | "BoardImage";
   topology: string;
   index: string;
 };
 
-export type ShapeNonNullable40 = ShapeNonNullable2 | ShapeNonNullable3 | ShapeNonNullable4 | ShapeNonNullable5 | ShapeNonNullable6 | ShapeNonNullable7 | ShapeNonNullable36 | ShapeNonNullable39 | null;
-
-export type ShapeNonNullable41 = {
-  name?: string;
-  arity?: number;
-  instructions: ShapeNonNullable40[];
+export type ShapeNonNullable13 = {
+  op: "Call";
+  subprogram: number;
 };
 
-export type ShapeNonNullable42 = number | string | boolean;
+export type ShapeNonNullable14 = {
+  op: "Constant";
+  value: number;
+};
+
+export type ShapeNonNullable15 = {
+  op: "All" | "Any" | "Count" | "Sum";
+  family: string;
+  binder: string;
+  subprogram: number;
+};
+
+export type ShapeNonNullable16 = {
+  zone: unknown;
+};
+
+export type ShapeNonNullable17 = {
+  expression: unknown;
+};
+
+export type ShapeNonNullable18 = string | number | ShapeNonNullable16 | ShapeNonNullable17;
+
+export type ShapeNonNullable19 = {
+  channel: string;
+  arguments?: ShapeNonNullable18[];
+};
+
+export type ShapeNonNullable2 = {
+  at: number;
+  value: string;
+  ease?: "Linear" | "Smooth" | "Step";
+};
+
+export type ShapeNonNullable20 = {
+  binding: string;
+  field: string;
+};
+
+export type ShapeNonNullable21 = {
+  pool: string;
+  slot: number;
+  field: string;
+};
+
+export type ShapeNonNullable22 = {
+  op: "Operand";
+  name: StateChannelRef;
+  key?: StateChannelRef;
+};
+
+export type ShapeNonNullable23 = {
+  $type: "cell";
+  name: StateChannelRef;
+  key?: StateChannelRef;
+};
+
+export type ShapeNonNullable24 = {
+  $type: "literal";
+  value: string;
+};
+
+export type ShapeNonNullable25 = {
+  $type: "embed";
+  text: string;
+  space?: string;
+};
+
+export type ShapeNonNullable26 = ShapeNonNullable23 | ShapeNonNullable24 | ShapeNonNullable25 | null;
+
+export type ShapeNonNullable27 = {
+  op: "Dot" | "Similarity" | "Identical";
+  left: ShapeNonNullable26;
+  right: ShapeNonNullable26;
+};
+
+export type ShapeNonNullable28 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable22 | ShapeNonNullable27 | null;
+
+export type ShapeNonNullable29 = {
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable28[];
+};
+
+export type ShapeNonNullable3 = {
+  clock: string;
+  keys: ShapeNonNullable2[];
+};
+
+export type ShapeNonNullable30 = {
+  zone: ExpressionProgram;
+};
+
+export type ShapeNonNullable31 = {
+  expression: ExpressionProgram;
+};
+
+export type ShapeNonNullable32 = string | number | ShapeNonNullable30 | ShapeNonNullable31;
+
+export type ShapeNonNullable33 = {
+  channel: string;
+  arguments?: ShapeNonNullable32[];
+};
+
+export type ShapeNonNullable34 = {
+  op: "Operand";
+  name: unknown;
+  key?: unknown;
+};
+
+export type ShapeNonNullable35 = {
+  $type: "cell";
+  name: unknown;
+  key?: unknown;
+};
+
+export type ShapeNonNullable36 = ShapeNonNullable35 | ShapeNonNullable24 | ShapeNonNullable25 | null;
+
+export type ShapeNonNullable37 = {
+  op: "Dot" | "Similarity" | "Identical";
+  left: ShapeNonNullable36;
+  right: ShapeNonNullable36;
+};
+
+export type ShapeNonNullable38 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable34 | ShapeNonNullable37 | null;
+
+export type ShapeNonNullable39 = {
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable38[];
+};
+
+export type ShapeNonNullable4 = {
+  at: number;
+  value: number;
+  ease?: "Linear" | "Smooth" | "Step";
+};
+
+export type ShapeNonNullable40 = {
+  zone: ExpressionProgramNonNullable;
+};
+
+export type ShapeNonNullable41 = {
+  expression: ExpressionProgramNonNullable;
+};
+
+export type ShapeNonNullable42 = string | number | ShapeNonNullable40 | ShapeNonNullable41;
 
 export type ShapeNonNullable43 = {
+  channel: string;
+  arguments?: ShapeNonNullable42[];
+};
+
+export type ShapeNonNullable44 = {
+  op: "Operand";
+  name: StateChannelRefNonNullable2;
+  key?: StateChannelRefNonNullable2;
+};
+
+export type ShapeNonNullable45 = {
+  $type: "cell";
+  name: StateChannelRefNonNullable2;
+  key?: StateChannelRefNonNullable2;
+};
+
+export type ShapeNonNullable46 = ShapeNonNullable45 | ShapeNonNullable24 | ShapeNonNullable25 | null;
+
+export type ShapeNonNullable47 = {
+  op: "Dot" | "Similarity" | "Identical";
+  left: ShapeNonNullable46;
+  right: ShapeNonNullable46;
+};
+
+export type ShapeNonNullable48 = ShapeNonNullable10 | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13 | ShapeNonNullable14 | ShapeNonNullable15 | ShapeNonNullable44 | ShapeNonNullable47 | null;
+
+export type ShapeNonNullable49 = {
+  name?: string;
+  arity?: number;
+  instructions: ShapeNonNullable48[];
+};
+
+export type ShapeNonNullable5 = {
+  clock: string;
+  keys: ShapeNonNullable4[];
+};
+
+export type ShapeNonNullable50 = number | string | boolean;
+
+export type ShapeNonNullable51 = {
   epochTick?: number;
   epochEngineTick?: number;
   y0?: string;
@@ -2156,30 +2215,23 @@ export type ShapeNonNullable43 = {
   substepTicks?: number;
 };
 
-export type ShapeNonNullable5 = {
-  op: "Call";
-  subprogram: number;
-};
-
 export type ShapeNonNullable6 = {
-  op: "Constant";
-  value: number;
+  at: number;
+  value: [number, number];
+  ease?: "Linear" | "Smooth" | "Step";
 };
 
 export type ShapeNonNullable7 = {
-  op: "All" | "Any" | "Count" | "Sum";
-  family: string;
-  binder: string;
-  subprogram: number;
+  clock: string;
+  keys: ShapeNonNullable6[];
 };
 
 export type ShapeNonNullable8 = {
-  zone: unknown;
+  $type: "producer";
+  name: string;
 };
 
-export type ShapeNonNullable9 = {
-  expression: unknown;
-};
+export type ShapeNonNullable9 = "Add" | "Subtract" | "Multiply" | "Divide" | "Minimum" | "Maximum" | "Clamp" | "Remainder" | "BitAnd" | "BitOr" | "BitXor" | "BitNot" | "ShiftLeft" | "ShiftRight" | "ShiftRightLogical" | "Equal" | "NotEqual" | "Less" | "LessOrEqual" | "Greater" | "GreaterOrEqual" | "Select" | "SetBitCount" | "LeadingZeroCount" | "TrailingZeroCount" | "LowestSetBit" | "ClearLowestSetBit" | "RotateLeft" | "RotateRight" | "ByteSwap" | "ReverseBits" | "Negate" | "Absolute" | "ParallelBitExtract" | "ParallelBitDeposit" | "BitField" | "BitInsert" | "Sign" | "Pair" | "PairX" | "PairY" | "PairSwap" | "PairMaximum" | "PairMinimum" | "PairSum" | "PairDifference" | "PairTranslate" | "PairScale" | "MortonIndex" | "MortonX" | "MortonY" | "HilbertIndex" | "HilbertX" | "HilbertY" | "HexIndex" | "HexQ" | "HexR" | "HexRadius" | "HexEuclideanSquared" | "HexDistance" | "HexNeighbor" | "HexRotate" | "HexMirror" | "HexSwap" | "HexAdd" | "HexSubtract" | "HexMultiply" | "HexScale" | "HexTranslate" | "Layer" | "LayerOffset" | "LayerStart" | "LayerSize" | "SquareRoot" | "Sine" | "Cosine" | "SquareIndex" | "SquareX" | "SquareY" | "SquareRadius" | "SquareLength" | "SquareEuclideanSquared" | "SquareDistance" | "SquareChebyshev" | "SquareNeighbor" | "SquareRotate" | "SquareMirror" | "SquareSwap" | "SquareAdd" | "SquareSubtract" | "SquareMultiply" | "SquareScale" | "SquareTranslate" | "GreatestCommonDivisor" | "LeastCommonMultiple" | "FloorModulo" | "FloorDivide" | "FloorDivideModulo" | "DivideRemainder" | "Power" | "ModularPower" | "ModularInverse" | "ExtendedGreatestCommonDivisor" | "CycleForward" | "CycleDistance" | "SmallestMissing" | "IsPrime" | "PrimeAt" | "BinomialCoefficient" | "Factorial" | "SubsetRank" | "SubsetAt" | "SubsetMember" | "ArrangementRank" | "ArrangementAt" | "ArrangementMember" | "Floor" | "Ceiling" | "Round" | "ReplicationMask" | "RepeatBits" | "IsAbsent" | "Coalesce" | "Member";
 
 /**
  * One numeric key of a Sort, in its declared precedence order.
@@ -2240,17 +2292,17 @@ export type StateCellClock = {
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRef = string | ShapeNonNullable11 | ShapeNonNullable12 | ShapeNonNullable13;
+export type StateChannelRef = string | ShapeNonNullable19 | ShapeNonNullable20 | ShapeNonNullable21;
 
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRefNonNullable = string | ShapeNonNullable25 | ShapeNonNullable12 | ShapeNonNullable13;
+export type StateChannelRefNonNullable = string | ShapeNonNullable33 | ShapeNonNullable20 | ShapeNonNullable21;
 
 /**
  * A document's one reference to a state row, a cell key, a pool field, or a reserved channel. A live zone ($zones[…]) is a call whose one argument is a Zone.
  */
-export type StateChannelRefNonNullable2 = string | ShapeNonNullable35 | ShapeNonNullable12 | ShapeNonNullable13;
+export type StateChannelRefNonNullable2 = string | ShapeNonNullable43 | ShapeNonNullable20 | ShapeNonNullable21;
 
 /**
  * A row's or cell's tick-indexed rotation trait: the value is a pure function of the server tick through a generator of the symmetry lattice's reflection group — Puck.Maths.SymmetryWord, the lattice's own thirty-step cycle when no Word is authored — raised to Power once per step. The generator's order is the loop's period, derived from the word rather than authored: a word of order twelve is a twelve-position dial, one of order twenty-four a day. Nothing accumulates and nothing is rebased: the mapping is tick-absolute for a fixed epoch/substep pair, so a replay, a reconnect, or a fresh read at any tick lands on the same bits.
@@ -4037,13 +4089,13 @@ export type WorldCameraProgramOpOrbit = {
    */
   distance: number;
   /**
-   * The orbit heading in radians, as a literal or numeric state binding.
+   * The orbit heading in radians, as a literal, a numeric state binding, or keys on a clock that turn along the shorter arc.
    */
-  yaw: BindableScalar;
+  yaw: BindableAngle;
   /**
-   * The orbit tilt in radians, as a literal or numeric state binding.
+   * The orbit tilt in radians, as a literal, a numeric state binding, or keys on a clock.
    */
-  pitch: BindableScalar;
+  pitch: BindableAngle;
   /**
    * The world-axis offset from the current subject's origin to the pivot.
    */
@@ -4063,13 +4115,13 @@ export type WorldCameraProgramOpOrbitNullable = {
    */
   distance: number;
   /**
-   * The orbit heading in radians, as a literal or numeric state binding.
+   * The orbit heading in radians, as a literal, a numeric state binding, or keys on a clock that turn along the shorter arc.
    */
-  yaw: BindableScalar;
+  yaw: BindableAngle;
   /**
-   * The orbit tilt in radians, as a literal or numeric state binding.
+   * The orbit tilt in radians, as a literal, a numeric state binding, or keys on a clock.
    */
-  pitch: BindableScalar;
+  pitch: BindableAngle;
   /**
    * The world-axis offset from the current subject's origin to the pivot.
    */
@@ -4756,6 +4808,8 @@ export type WorldDistributionRegionScatter = {
    */
   seed?: number;
 };
+
+export type WorldEase = "Linear" | "Smooth" | "Step";
 
 export type WorldEditorCamera = {
   /**
@@ -6566,11 +6620,11 @@ export type WorldMarkerStyle = {
   /**
    * The ring's stroke color. Required exactly when Ring is authored; omitted otherwise.
    */
-  ringColor?: BindableColor | null;
+  ringColor?: BindableColor;
   /**
    * The ring's opacity, in [0, 1]. Required exactly when Ring is authored; omitted otherwise.
    */
-  ringAlpha?: BindableScalar | null;
+  ringAlpha?: BindableScalar;
 };
 
 export type WorldMemberIdentity = {
@@ -8821,53 +8875,27 @@ export type WorldRenderCurvature = {
   /**
    * How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.
    */
-  cavity?: number | null;
+  cavity?: BindableScalar;
   /**
    * How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.
    */
-  rim?: number | null;
+  rim?: BindableScalar;
   /**
    * The ink outline's strength where the curvature magnitude spikes. Zero draws none.
    */
-  ink?: number | null;
+  ink?: BindableScalar;
   /**
    * The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.
    */
-  inkLow?: number | null;
+  inkLow?: BindableScalar;
   /**
    * The curvature magnitude at which the outline saturates.
    */
-  inkHigh?: number | null;
+  inkHigh?: BindableScalar;
   /**
    * BindableColor's grammar: the outline colour.
    */
-  inkColor?: BindableColor | null;
-};
-
-export type WorldRenderCycle = {
-  /**
-   * The state row read (its slot cell; Fixed or Int).
-   */
-  state: string;
-  /**
-   * At least two keys, strictly ascending At in [0, 1).
-   */
-  keys: (WorldRenderCycleKey | null)[];
-};
-
-export type WorldRenderCycleKey = {
-  /**
-   * The row-value fraction this key sits at, in [0, 1).
-   */
-  at: number;
-  /**
-   * The lighting fields this key moves, or null.
-   */
-  lighting?: WorldRenderLighting | null;
-  /**
-   * The sky fields this key moves, or null.
-   */
-  sky?: WorldRenderSky | null;
+  inkColor?: BindableColor;
 };
 
 export type WorldRenderDefaults = {
@@ -8916,10 +8944,6 @@ export type WorldRenderDefaults = {
    */
   sky?: WorldRenderSky | null;
   /**
-   * Lighting and sky keyed over a state row's value (a day/night cycle when that row advances). Optional; absent leaves Lighting/Sky static.
-   */
-  cycle?: WorldRenderCycle | null;
-  /**
    * The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.
    */
   environment?: WorldRenderEnvironment | null;
@@ -8948,11 +8972,11 @@ export type WorldRenderHorizon = {
   /**
    * The ground-ward (direction.y = −1) colour. Absent is black.
    */
-  low?: BindableColor | null;
+  low?: BindableColor;
   /**
    * The sky-ward (direction.y = 1) colour. Absent is black.
    */
-  high?: BindableColor | null;
+  high?: BindableColor;
 };
 
 /**
@@ -8968,23 +8992,28 @@ export type WorldRenderLightDirectional = {
   /**
    * The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.
    */
-  direction?: DocumentVector3;
+  direction?: BindableDirection;
   /**
-   * The light's linear colour.
+   * The light's colour.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
   /**
    * The diffuse weight. Absent is the pinned sun weight.
    */
-  weight?: number | null;
+  weight?: BindableScalar;
   /**
-   * The light's angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.
+   * The light's angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.
    */
-  angularRadius?: number | null;
+  angularRadius?: BindableAngle;
   /**
    * Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.
    */
   shadows?: boolean | null;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
 };
 
 /**
@@ -8993,30 +9022,50 @@ export type WorldRenderLightDirectional = {
 export type WorldRenderLightHemisphere = {
   $type?: "hemisphere";
   /**
-   * The ambient's linear colour.
+   * The ambient's colour.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
   /**
    * The floor. Absent is the pinned ambient floor.
    */
-  base?: number | null;
+  base?: BindableScalar;
   /**
    * The hemisphere gradient. Absent is the pinned gradient.
    */
-  gradient?: number | null;
+  gradient?: BindableScalar;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
 };
-
-export type WorldRenderLightList = (WorldRenderLight | null)[];
 
 /**
  * A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.
  */
 export type WorldRenderLightOccluder = {
   $type?: "occluder";
-  position?: DocumentVector3;
-  radius?: number | null;
+  /**
+   * The world-space position, or the offset in the anchor's frame.
+   */
+  position?: BindableVector3;
+  /**
+   * The field's radius, positive.
+   */
+  radius?: BindableScalar;
+  /**
+   * An entity, entity part, or placement frame.
+   */
   anchor?: WorldAnchor | null;
-  weight?: number | null;
+  /**
+   * The attenuation, in [0, 1].
+   */
+  weight?: BindableScalar;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
 };
 
 /**
@@ -9027,23 +9076,28 @@ export type WorldRenderLightPoint = {
   /**
    * The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.
    */
-  position?: DocumentVector3;
+  position?: BindableVector3;
   /**
    * The falloff radius. Absent is the engine default.
    */
-  radius?: number | null;
+  radius?: BindableScalar;
   /**
    * An entity, entity part, or placement frame. A missing live target disables the light.
    */
   anchor?: WorldAnchor | null;
   /**
-   * The light's linear colour.
+   * The light's colour.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
   /**
    * The strength. Absent is the engine default.
    */
-  weight?: number | null;
+  weight?: BindableScalar;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
 };
 
 /**
@@ -9052,29 +9106,60 @@ export type WorldRenderLightPoint = {
 export type WorldRenderLightRim = {
   $type?: "rim";
   /**
-   * The rim's linear colour.
+   * The rim's colour.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
   /**
    * The strength. Absent is zero, which adds nothing.
    */
-  weight?: number | null;
+  weight?: BindableScalar;
   /**
    * The falloff exponent — larger confines the highlight nearer the silhouette. Absent is the engine default.
    */
-  power?: number | null;
+  power?: BindableScalar;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
 };
 
-/**
- * The lit path's lights and stylization as world data. Absent renders the pinned sun and hemisphere an unauthored world always had; present, the list IS the lights — an authored list without a hemisphere has no ambient. Every field of every light is optional individually and resolves to the engine's pinned default for its kind.
- */
 export type WorldRenderLighting = {
   /**
-   * The lights, at most SdfEnvironment.MaxLights, in slot order (a render.cycle key moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit pixel.
+   * The lights, at most SdfEnvironment.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.
    */
-  lights?: WorldRenderLightList | null;
+  lights?: (WorldRenderLight | null)[] | null;
   /**
    * The stylized curvature enrichment — cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.
+   */
+  curvature?: WorldRenderCurvature | null;
+  /**
+   * The clock the section's keys read, by name in the timeline section. Required with Keys and refused without them.
+   */
+  clock?: string | null;
+  /**
+   * The section's keys, ascending in time. A field a key states is keyed on Clock through the keys that state it, blended by the field's type and eased by each key's ease; a field no key states keeps its authored value.
+   */
+  keys?: (WorldRenderLightingKey | null)[] | null;
+};
+
+export type WorldRenderLightingKey = {
+  /**
+   * Where on the section's clock the key sits, in the clock's span units, in [0, span).
+   */
+  at: number;
+  /**
+   * How time eases from this key to the next key that states each field. Absent is Linear.
+   */
+  ease?: WorldEase | null;
+  /**
+   * The lights this key moves, by name: each the same kind as the light of that name, stating only the fields it moves. A light's name and shadowing are structure, which a key never states.
+   */
+  lights?: {
+    [k: string]: WorldRenderLight | null;
+  } | null;
+  /**
+   * The curvature fields this key moves.
    */
   curvature?: WorldRenderCurvature | null;
 };
@@ -9084,14 +9169,36 @@ export type WorldRenderLighting = {
  */
 export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter" | "Eighth";
 
-/**
- * The procedural sky as an ordered stack of layers. Absent is a hard gate: the world renders the pinned two-stop gradient and fog density, as before this section existed. The layers composite in a fixed order — gradient, stars, sun disc, clouds — whatever order they are authored in; fog is read every frame on its own. A layer kind appears at most once.
- */
 export type WorldRenderSky = {
   /**
    * The layers.
    */
-  layers?: WorldRenderSkyLayerList | null;
+  layers?: (WorldRenderSkyLayer | null)[] | null;
+  /**
+   * The clock the section's keys read, by name in the timeline section. Required with Keys and refused without them.
+   */
+  clock?: string | null;
+  /**
+   * The section's keys, ascending in time. A field a key states is keyed on Clock through the keys that state it; a field no key states keeps its authored value.
+   */
+  keys?: (WorldRenderSkyKey | null)[] | null;
+};
+
+export type WorldRenderSkyKey = {
+  /**
+   * Where on the section's clock the key sits, in the clock's span units, in [0, span).
+   */
+  at: number;
+  /**
+   * How time eases from this key to the next key that states each field. Absent is Linear.
+   */
+  ease?: WorldEase | null;
+  /**
+   * The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, a layer's name and the sun disc's light are structure, which a key never states.
+   */
+  layers?: {
+    [k: string]: WorldRenderSkyLayer | null;
+  } | null;
 };
 
 /**
@@ -9107,15 +9214,15 @@ export type WorldRenderSkyLayerClouds = {
   /**
    * The fraction of the sky the layer covers, in [0, 1]. Absent is zero.
    */
-  coverage?: number | null;
+  coverage?: BindableScalar;
   /**
    * The width of a cloud's edge, in (0, 1]. Absent is the engine default.
    */
-  softness?: number | null;
+  softness?: BindableScalar;
   /**
    * The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.
    */
-  scale?: number | null;
+  scale?: BindableScalar;
   /**
    * The hash seed folded into the lattice.
    */
@@ -9123,23 +9230,28 @@ export type WorldRenderSkyLayerClouds = {
   /**
    * BindableColor's grammar: the cloud colour. Absent is white.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
   /**
-   * The layer's wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.
+   * The layer's wind, in layer units per second along world X and Z, integrated on the tick clock. A rate: it keys only on a tick clock, and binds no state row. Absent holds still.
    */
-  drift?: DocumentVector2;
+  drift?: BindableVector2;
   /**
-   * The layer's rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.
+   * The layer's rotation about the zenith in radians per second; positive is counter-clockwise seen from below. A rate, as Drift is. Absent is none.
    */
-  spin?: number | null;
+  spin?: BindableScalar;
   /**
-   * The Coriolis twist in radians at 45° elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.
+   * The Coriolis twist at 45° elevation, in radians, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.
    */
-  curl?: number | null;
+  curl?: BindableAngle;
   /**
-   * The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.
+   * The wind of the shaping field relative to the cloud field, in layer units per second. A rate, as Drift is. Absent holds the shapes.
    */
-  shear?: DocumentVector2;
+  shear?: BindableVector2;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
 };
 
 /**
@@ -9150,7 +9262,12 @@ export type WorldRenderSkyLayerFog = {
   /**
    * The density per world unit. Absent is the pinned density.
    */
-  density?: number | null;
+  density?: BindableScalar;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
 };
 
 /**
@@ -9159,12 +9276,15 @@ export type WorldRenderSkyLayerFog = {
 export type WorldRenderSkyLayerGradient = {
   $type?: "gradient";
   /**
-   * Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation. A render.cycle key moves a stop by its index and may not add or remove one.
+   * Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation.
    */
   stops?: (WorldRenderSkyStop | null)[] | null;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
 };
-
-export type WorldRenderSkyLayerList = (WorldRenderSkyLayer | null)[];
 
 /**
  * The procedural star field: a deterministic per-cell hash over an octahedral sky projection.
@@ -9178,7 +9298,7 @@ export type WorldRenderSkyLayerStars = {
   /**
    * The peak per-star brightness. Absent is zero, which draws nothing.
    */
-  brightness?: number | null;
+  brightness?: BindableScalar;
   /**
    * The hash seed folded into every cell.
    */
@@ -9187,6 +9307,11 @@ export type WorldRenderSkyLayerStars = {
    * Scintillation for a share of the stars. Optional; absent twinkles none.
    */
   twinkle?: WorldRenderSkyTwinkle | null;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
 };
 
 /**
@@ -9199,13 +9324,18 @@ export type WorldRenderSkyLayerSunDisc = {
    */
   light?: number | null;
   /**
-   * The disc's angular half-radius in radians, in (0, π/2]. Absent is the engine default.
+   * The disc's angular half-radius, in (0, π/2] radians. Absent is the engine default.
    */
-  radius?: number | null;
+  radius?: BindableAngle;
   /**
    * The peak additive brightness. Absent is zero, which draws nothing.
    */
-  intensity?: number | null;
+  intensity?: BindableScalar;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
 };
 
 /**
@@ -9215,11 +9345,11 @@ export type WorldRenderSkyStop = {
   /**
    * The direction's Y component this stop sits at, in [−1, 1].
    */
-  elevation?: number | null;
+  elevation?: BindableScalar;
   /**
-   * BindableColor's grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key's colour.
+   * BindableColor's grammar: the colour at this elevation. Absent is white.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
 };
 
 /**
@@ -9229,15 +9359,15 @@ export type WorldRenderSkyTwinkle = {
   /**
    * The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.
    */
-  share?: number | null;
+  share?: BindableScalar;
   /**
    * How far a twinkling star dips below its steady brightness, in [0, 1].
    */
-  depth?: number | null;
+  depth?: BindableScalar;
   /**
-   * The fundamental scintillation rate in hertz.
+   * The fundamental scintillation rate in hertz. A rate: it keys only on a tick clock, and binds no state row.
    */
-  rate?: number | null;
+  rate?: BindableScalar;
 };
 
 export type WorldRenderSoftbox = {
@@ -9252,7 +9382,7 @@ export type WorldRenderSoftbox = {
   /**
    * BindableColor's grammar: the softbox's linear colour. Absent is white.
    */
-  color?: BindableColor | null;
+  color?: BindableColor;
   /**
    * The strength. Absent is 1.
    */
@@ -10279,13 +10409,13 @@ export type WorldStateRow = {
    * The closed set of cell value kinds a state row declares, shared by every cell the row carries. Carries no float kind: simulation state is float-free by the determinism contract (see Fixed for how a fractional value still rides here). A counter is represented as Fixed; a timer is Int declaring min zero.
    */
   kind: "Int" | "Fixed" | "Bool" | "Text" | "Vector";
-  value?: ShapeNonNullable42;
+  value?: ShapeNonNullable50;
   /**
    * The row's current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name — unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.
    */
   cells?: {
     key: string;
-    value: ShapeNonNullable42;
+    value: ShapeNonNullable50;
     advance?: StateAdvance;
     dynamics?: StateDynamics;
     cycle?: StateCycle;
@@ -10293,7 +10423,7 @@ export type WorldStateRow = {
      * Whether a cell's effective value-over-time behavior is its carrying row's own default, or an explicit opt-out — see Behavior and Resolve.
      */
     behavior?: "Inherit" | "None";
-    clock?: ShapeNonNullable43;
+    clock?: ShapeNonNullable51;
     visibility?: StateVisibility;
     /**
      * When a stored token property was last seen and whether the latest observation still sees it.
@@ -10422,7 +10552,7 @@ export type WorldStateRow = {
   };
   dynamics?: StateDynamics;
   cycle?: StateCycle;
-  clock?: ShapeNonNullable43;
+  clock?: ShapeNonNullable51;
   /**
    * The vector space this row belongs to; required for Vector, refused for every other kind.
    */

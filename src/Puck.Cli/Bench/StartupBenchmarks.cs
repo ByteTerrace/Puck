@@ -143,5 +143,5 @@ internal sealed record StartupSummary(double MeanMilliseconds, double MedianMill
 internal sealed record StartupReport(string Runtime, string OperatingSystem, string Artifact, bool Headless, int Width, int Height, int ExpectedSamples, StartupSample[] Samples, StartupSummary? Summary);
 [JsonSerializable(typeof(StartupReport))]
 [JsonSerializable(typeof(string))]
-[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSourceGenerationOptions(NewLine = "\n", WriteIndented = true)]
 internal sealed partial class StartupJsonContext : JsonSerializerContext;

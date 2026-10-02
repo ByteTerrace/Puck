@@ -6,7 +6,6 @@ using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Embeddings;
-using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Vocabulary;
 
 namespace Puck.World.Transpiler.Decompiler;
@@ -153,7 +152,7 @@ public static partial class WorldDecompiler {
         if (moduleBody) {
             _ = root.Remove(propertyName: "documentId");
 
-            if (root["schema"]?.GetValue<string>() == WorldDocumentVocabulary.Schema) {
+            if (root["schema"]?.GetValue<string>() == WorldDefinition.SchemaVersion) {
                 _ = root.Remove(propertyName: "schema");
             }
         }

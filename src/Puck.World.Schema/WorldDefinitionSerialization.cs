@@ -351,6 +351,7 @@ namespace Puck.World;
     // drop. WorldDefinition's [JsonExtensionData] root carve-out (see the type doc above) is the only exception —
     // STJ routes a root-level unmapped member there regardless of this setting.
     UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+    NewLine = "\n",
     WriteIndented = true
 )]
 internal sealed partial class WorldJsonSourceContext : JsonSerializerContext {

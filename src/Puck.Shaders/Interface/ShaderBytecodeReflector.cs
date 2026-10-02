@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.Shaders;
 
@@ -11,8 +11,6 @@ namespace Puck.Shaders;
 /// elsewhere.
 /// </summary>
 public sealed class ShaderBytecodeReflector : IDisposable {
-    private const uint SpirvMagic = 0x07230203u;
-
     private readonly ShaderToolchain m_toolchain;
 
     private IDisposable? m_dxil;
@@ -40,13 +38,10 @@ public sealed class ShaderBytecodeReflector : IDisposable {
     public IReadOnlyList<ShaderInterfaceBinding> Read(ReadOnlySpan<byte> bytecode) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
 
-        if (
-            (bytecode.Length >= sizeof(uint)) &&
-            (BinaryPrimitives.ReadUInt32LittleEndian(source: bytecode) == SpirvMagic)
-        ) {
+        if (ShaderBytecode.IsSpirV(bytecode: bytecode)) {
             return SpirvInterfaceReader.Read(module: bytecode);
         }
-        if (!bytecode.StartsWith(value: "DXBC"u8)) {
+        if (!ShaderBytecode.IsDxbcContainer(bytecode: bytecode)) {
             throw new InvalidDataException(message: "The bytecode is neither a SPIR-V module nor a DXIL container.");
         }
         if (!OperatingSystem.IsWindows()) {

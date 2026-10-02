@@ -663,7 +663,7 @@ public static class CartridgeDocumentEmitter {
             vocabulary: CartridgeVocabulary.Instance,
             sourceMap: sourceMap,
             diagnostics: diagnostics,
-            schema: (document.Schema ?? CartridgeVocabulary.Schema)
+            schema: (document.Schema ?? CartridgeDocument.SchemaId)
         ) { Budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken } };
 
         if (document.Schema is not null) {

@@ -1,49 +1,233 @@
 namespace Puck.Testing;
 
 /// <summary>A directory under the temporary root that one law owns: created on construction, under a name no other
-/// directory takes, and deleted whole on dispose. A deletion failure fails the law rather than masking a handle the code
-/// under test left open, unless the law asks for a best-effort delete. Names are relative to <see cref="RootPath"/> and
-/// may be forward-slashed; a write creates any subdirectory its name names.</summary>
+/// directory takes, and torn down on dispose in a fixed order so that a host's background work never races the delete.
+/// <para>
+/// The contract is explicit shutdown, not observation. Everything the law gave to <see cref="Own"/> is disposed last
+/// registered first, awaiting <see cref="IAsyncDisposable.DisposeAsync"/> when the owner has one and calling
+/// <see cref="IDisposable.Dispose"/> otherwise, and an owner that runs background workers returns from that disposal
+/// only after every worker has joined (a host awaits its services' <c>DisposeAsync</c>; a service with a
+/// <c>Completion</c> exposes it through <c>DisposeAsync</c>). The whole teardown, owners and delete, is bounded by
+/// <paramref name="teardownBound"/>; an owner that does not return in time fails the law by its type name and nothing
+/// under the directory is deleted.
+/// </para>
+/// <para>
+/// Once the owners have returned the directory is deleted, retrying while a handle closes. The files' sizes and last
+/// write times are compared between tries as a secondary signal: a file that is new or changed after the owners
+/// returned fails the law by name. That check sees only a write that lands before the delete succeeds, and a file a
+/// worker holds exclusively shows its change only once it is released, so it is a net under the contract and proves
+/// nothing about a worker that has already finished. Names are relative to <see cref="RootPath"/> and may be forward-slashed; a write
+/// creates any subdirectory its name names.
+/// </para></summary>
 /// <param name="prefix">The temp-directory name prefix — kept distinct per caller so a directory that survives an
 /// aborted run (a killed process, a debugger break) still names which law left it behind.</param>
-/// <param name="bestEffortDelete">Whether disposal waits a moment for handles still closing under the directory and,
-/// when one stays open, leaves the directory to the temporary root rather than failing the law: for a law that composes a
-/// host whose background work may still hold a file there as it is disposed, where what the law proves is not the
-/// host's file handling.</param>
-internal sealed class TemporaryDirectory(string prefix = "puck-test-", bool bestEffortDelete = false) : IDisposable {
-    // How many times a best-effort delete tries, and how long it waits between tries, in milliseconds.
-    private const int DeleteAttempts = 20;
+/// <param name="teardownBound">The bound on the entire teardown, including owner disposal; laws can supply a short
+/// bound to exercise a stuck owner.</param>
+internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan? teardownBound = null) : IDisposable {
+    // How long a delete waits between tries, in milliseconds, and how many paths a failure message names.
     private const int DeleteRetryMilliseconds = 50;
+    private const int NamedPaths = 12;
+
+    private static readonly AsyncLocal<CancellationToken> TeardownCancellation = new();
+
+    private readonly List<IDisposable> m_owned = [];
+    private readonly TimeSpan m_teardownBound = (((teardownBound ?? TestLiveness.Bound) > TimeSpan.Zero)
+        ? (teardownBound ?? TestLiveness.Bound)
+        : throw new ArgumentOutOfRangeException(paramName: nameof(teardownBound)));
+    private string m_teardownStep = "starting teardown";
 
     /// <summary>Gets the directory's absolute path.</summary>
     public string RootPath { get; } = Directory.CreateTempSubdirectory(prefix: prefix).FullName;
 
-    public void Dispose() {
-        if (!bestEffortDelete) {
+    private static bool TryDelete(string path, out Exception? failure) {
+        failure = null;
+
+        try {
             Directory.Delete(
-                path: RootPath,
+                path: path,
                 recursive: true
             );
-
-            return;
+        } catch (Exception error) when ((error is (IOException or UnauthorizedAccessException))) {
+            // A handle under the directory has not closed yet, or a file is open for deletion.
+            failure = error;
         }
 
-        for (var attempt = 0; ((attempt < DeleteAttempts) && Directory.Exists(path: RootPath)); attempt++) {
-            try {
-                Directory.Delete(
-                    path: RootPath,
-                    recursive: true
-                );
+        return !Directory.Exists(path: path);
+    }
+    // Every file under the directory with its size and last write time, relative to the root. A handle on the file
+    // reports them as they are now; where a worker holds the file exclusively no handle can be opened, and the
+    // directory entry's size and time stand in, which agree with the handle's while the file is unchanged.
+    private Dictionary<string, (long Length, long Written)> Snapshot() {
+        var files = new Dictionary<string, (long Length, long Written)>();
 
-                return;
-            } catch (IOException) {
-                // A handle under the directory has not closed yet.
-            } catch (UnauthorizedAccessException) {
-                // Nor has one holding a file open for deletion.
+        try {
+            foreach (var file in new DirectoryInfo(path: RootPath).EnumerateFiles(
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*"
+            )) {
+                var key = Path.GetRelativePath(path: file.FullName, relativeTo: RootPath);
+
+                try {
+                    using var stream = new FileStream(
+                        access: FileAccess.Read,
+                        mode: FileMode.Open,
+                        path: file.FullName,
+                        share: FileShare.ReadWrite | FileShare.Delete
+                    );
+
+                    files[key] = (stream.Length, File.GetLastWriteTimeUtc(fileHandle: stream.SafeFileHandle).Ticks);
+                } catch (Exception error) when ((error is (IOException or UnauthorizedAccessException))) {
+                    files[key] = (file.Length, file.LastWriteTimeUtc.Ticks);
+                }
+            }
+        } catch (Exception error) when ((error is (DirectoryNotFoundException or FileNotFoundException))) {
+            // The directory or a file went away while it was read; there is nothing left to compare.
+        }
+
+        return files;
+    }
+    private string Describe(Exception? lastFailure, List<string> strays) {
+        var remaining = (Directory.Exists(path: RootPath)
+            ? Directory.EnumerateFileSystemEntries(
+                path: RootPath,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*"
+            ).Take(count: NamedPaths).Select(selector: entry => Path.GetRelativePath(path: entry, relativeTo: RootPath)).ToArray()
+            : []
+        );
+
+        return string.Join(
+            separator: Environment.NewLine,
+            values: [
+                $"The directory {RootPath} still has an owner after the law's hosts were disposed: {(lastFailure?.Message ?? "no delete failure was recorded")}",
+                $"Still present: {((remaining.Length == 0) ? "nothing" : string.Join(separator: ", ", values: remaining))}",
+                $"Written after the owned objects were disposed: {((strays.Count == 0) ? "nothing observed" : string.Join(separator: ", ", values: strays.Distinct().Take(count: NamedPaths)))}",
+            ]
+        );
+    }
+    private void DisposeOwned(List<Exception> failures, CancellationToken cancellationToken) {
+        for (var index = (m_owned.Count - 1); (index >= 0); --index) {
+            cancellationToken.ThrowIfCancellationRequested();
+            Volatile.Write(location: ref m_teardownStep, value: $"disposing {m_owned[index].GetType().FullName}");
+            try {
+                if (m_owned[index] is IAsyncDisposable asynchronous) {
+                    asynchronous.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                } else {
+                    m_owned[index].Dispose();
+                }
+            } catch (Exception error) {
+                failures.Add(item: error);
+            }
+        }
+
+        m_owned.Clear();
+    }
+
+    /// <summary>Hands <paramref name="owner"/> to this directory, which disposes it before anything under the directory
+    /// is deleted: a host the law composed over this directory is registered here, so the delete never runs while the
+    /// host's background work is still live.</summary>
+    /// <typeparam name="T">The owner's type.</typeparam>
+    /// <param name="owner">The object whose disposal must finish before the directory is deleted.</param>
+    /// <returns><paramref name="owner"/>, so the registration reads as part of its construction.</returns>
+    public T Own<T>(T owner) where T : IDisposable {
+        m_owned.Add(item: owner);
+
+        return owner;
+    }
+
+    private void DisposeCore(CancellationToken cancellationToken) {
+        var failures = new List<Exception>();
+        var strays = new List<string>();
+
+        DisposeOwned(cancellationToken: cancellationToken, failures: failures);
+        cancellationToken.ThrowIfCancellationRequested();
+        Volatile.Write(location: ref m_teardownStep, value: $"deleting {RootPath}");
+        if (!Directory.Exists(path: RootPath)) {
+            failures.Add(item: new DirectoryNotFoundException(message: $"The directory {RootPath} was removed before its law finished."));
+        } else {
+            var previous = Snapshot();
+            Exception? lastFailure = null;
+
+            try {
+                TestLiveness.Until(
+                    reason: () => Describe(lastFailure: lastFailure, strays: strays),
+                    step: () => {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var current = Snapshot();
+
+                        foreach (var (file, state) in current) {
+                            if (!previous.TryGetValue(key: file, value: out var before) || (before != state)) {
+                                strays.Add(item: file);
+                            }
+                        }
+
+                        previous = current;
+
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var deleted = TryDelete(failure: out lastFailure, path: RootPath);
+
+                        if (!deleted) {
+                            Volatile.Write(location: ref m_teardownStep, value: Describe(lastFailure: lastFailure, strays: strays));
+                        }
+
+                        return deleted;
+                    },
+                    wait: token => {
+                        // A pause between tries; the delete has no completion signal to block on.
+                        _ = token.WaitHandle.WaitOne(millisecondsTimeout: DeleteRetryMilliseconds);
+
+                        return true;
+                    }
+                );
+            } catch (Exception error) {
+                failures.Add(item: error);
             }
 
-            Thread.Sleep(millisecondsTimeout: DeleteRetryMilliseconds);
+            if (strays.Count > 0) {
+                failures.Add(item: new InvalidOperationException(message: Describe(lastFailure: null, strays: strays)));
+            }
         }
+
+        if (failures.Count == 1) {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(source: failures[0]).Throw();
+        } else if (failures.Count > 1) {
+            throw new AggregateException(innerExceptions: failures);
+        }
+    }
+
+    public void Dispose() {
+        using var cancelled = CancellationTokenSource.CreateLinkedTokenSource(token: TeardownCancellation.Value);
+        var cancellationToken = cancelled.Token;
+        // A dedicated worker keeps a blocking owner's Dispose off the test runner and does not need a pool timer
+        // to enforce the bound. The calling thread bounds the whole teardown, including nested directories.
+        var teardown = Task.Factory.StartNew(
+            action: () => {
+                TeardownCancellation.Value = cancellationToken;
+                DisposeCore(cancellationToken: cancellationToken);
+            },
+            cancellationToken: CancellationToken.None,
+            creationOptions: TaskCreationOptions.LongRunning,
+            scheduler: TaskScheduler.Default
+        );
+
+        try {
+            if (teardown.Wait(timeout: m_teardownBound)) {
+                return;
+            }
+        } catch (AggregateException) {
+            teardown.GetAwaiter().GetResult();
+        }
+
+        cancelled.Cancel();
+        // An owner cannot be forcibly stopped. If it eventually returns, cancellation prevents disposal of its
+        // dependencies or deletion underneath it; observe the worker's eventual exception without waiting for it.
+        _ = teardown.ContinueWith(
+            continuationAction: static task => _ = task.Exception,
+            cancellationToken: CancellationToken.None,
+            continuationOptions: TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            scheduler: TaskScheduler.Default
+        );
+        throw new TimeoutException(message: $"Directory teardown exceeded {m_teardownBound} while {Volatile.Read(location: ref m_teardownStep)}. Still present under {RootPath}; teardown does not delete while an owner is blocked.");
     }
     /// <summary>Returns the absolute path of <paramref name="name"/> under this directory.</summary>
     /// <param name="name">The relative path.</param>

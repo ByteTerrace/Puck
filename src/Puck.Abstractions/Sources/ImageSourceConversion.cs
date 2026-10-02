@@ -165,6 +165,25 @@ public static class ImageSourceConversion {
             )
         );
     }
+    /// <summary>Returns the sRGB-encoded value of a linear value (IEC 61966-2-1), the inverse of
+    /// <see cref="SrgbToLinear"/>.</summary>
+    /// <param name="value">The linear value, 0 to 1; a value outside it is clamped.</param>
+    /// <returns>The encoded value, 0 to 1.</returns>
+    public static double LinearToSrgb(double value) {
+        var clamped = Math.Clamp(
+            max: 1.0,
+            min: 0.0,
+            value: value
+        );
+
+        return ((clamped <= 0.0031308)
+            ? (clamped * 12.92)
+            : ((1.055 * Math.Pow(
+                x: clamped,
+                y: (1.0 / 2.4)
+            )) - 0.055)
+        );
+    }
     /// <summary>Returns the 8-bit sRGB code of a linear value (IEC 61966-2-1): the code whose interval under
     /// <see cref="SrgbToLinear"/> holds it, so a value lying between two codes' decoded midpoints encodes to the code
     /// between them, and every code's own decoded value encodes back to it. A negative value or NaN encodes to 0 and a

@@ -1486,41 +1486,45 @@ let skyStops = [
   }
 ]
 
+// The sky keys on the skyMode row, which a seat toggles between its night key and its day key.
+timeline {
+  clocks [
+    {
+      name: "skyMode",
+      state: skyMode
+    }
+  ]
+}
+
 render {
   farDistance: 100
   sky {
     layers [
-      gradient(stops: skyStops)
-      fog(density: 0.004)
-      sunDisc(light: 0, radius: 0.018, intensity: 1.5)
+      gradient(name: "air", stops: skyStops)
+      fog(name: "haze", density: 0.004)
+      sunDisc(name: "sun", light: 0, radius: 0.018, intensity: 1.5)
     ]
-  }
-  cycle {
-    state: skyMode
+    clock: skyMode
     keys [
       {
         at: 0
-        sky {
-          layers [
-            gradient(stops: map(skyStops, stop => {
-              elevation: stop["elevation"],
-              color: "#B6B2BA"
-            }
-            )
-            )
-            fog(density: 0)
-            sunDisc(intensity: 0)
-          ]
+        layers {
+          air: gradient(stops: map(skyStops, stop => {
+            elevation: stop["elevation"],
+            color: "#B6B2BA"
+          }
+          )
+          )
+          haze: fog(density: 0)
+          sun: sunDisc(intensity: 0)
         }
       }
       {
         at: 0.5
-        sky {
-          layers [
-            gradient(stops: skyStops)
-            fog(density: 0.004)
-            sunDisc(intensity: 1.5)
-          ]
+        layers {
+          air: gradient(stops: skyStops)
+          haze: fog(density: 0.004)
+          sun: sunDisc(intensity: 1.5)
         }
       }
     ]

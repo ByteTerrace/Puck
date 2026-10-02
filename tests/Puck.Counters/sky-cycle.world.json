@@ -179,17 +179,20 @@
               "elevation": 1,
               "color": "#071020"
             }
-          ]
+          ],
+          "name": "air"
         },
         {
           "$type": "fog",
-          "density": 0.012
+          "density": 0.012,
+          "name": "haze"
         },
         {
           "$type": "sunDisc",
           "light": 0,
           "radius": 0.045,
-          "intensity": 2
+          "intensity": 2,
+          "name": "sun"
         },
         {
           "$type": "stars",
@@ -200,7 +203,8 @@
             "share": 0,
             "depth": 0.8,
             "rate": 1
-          }
+          },
+          "name": "stars"
         },
         {
           "$type": "clouds",
@@ -218,85 +222,80 @@
             0
           ],
           "spin": 0,
-          "curl": 0.3
+          "curl": 0.3,
+          "name": "clouds"
         }
-      ]
-    },
-    "cycle": {
-      "state": "skyMode",
+      ],
+      "clock": "skyMode",
       "keys": [
         {
           "at": 0,
-          "sky": {
-            "layers": [
-              {
-                "$type": "gradient",
-                "stops": [
-                  {
-                    "color": "#101829"
-                  },
-                  {
-                    "color": "#243455"
-                  },
-                  {
-                    "color": "#071020"
-                  }
-                ]
-              },
-              {
-                "$type": "fog",
-                "density": 0.012
-              },
-              {
-                "$type": "sunDisc",
-                "intensity": 2
-              },
-              {
-                "$type": "stars",
-                "brightness": 4
-              },
-              {
-                "$type": "clouds",
-                "coverage": 0.4
-              }
-            ]
+          "layers": {
+            "air": {
+              "$type": "gradient",
+              "stops": [
+                {
+                  "color": "#101829"
+                },
+                {
+                  "color": "#243455"
+                },
+                {
+                  "color": "#071020"
+                }
+              ]
+            },
+            "haze": {
+              "$type": "fog",
+              "density": 0.012
+            },
+            "sun": {
+              "$type": "sunDisc",
+              "intensity": 2
+            },
+            "stars": {
+              "$type": "stars",
+              "brightness": 4
+            },
+            "clouds": {
+              "$type": "clouds",
+              "coverage": 0.4
+            }
           }
         },
         {
           "at": 0.5,
-          "sky": {
-            "layers": [
-              {
-                "$type": "gradient",
-                "stops": [
-                  {
-                    "color": "#7E5360"
-                  },
-                  {
-                    "color": "#E39C75"
-                  },
-                  {
-                    "color": "#345C98"
-                  }
-                ]
-              },
-              {
-                "$type": "fog",
-                "density": 0.035
-              },
-              {
-                "$type": "sunDisc",
-                "intensity": 3
-              },
-              {
-                "$type": "stars",
-                "brightness": 0.2
-              },
-              {
-                "$type": "clouds",
-                "coverage": 0.65
-              }
-            ]
+          "layers": {
+            "air": {
+              "$type": "gradient",
+              "stops": [
+                {
+                  "color": "#7E5360"
+                },
+                {
+                  "color": "#E39C75"
+                },
+                {
+                  "color": "#345C98"
+                }
+              ]
+            },
+            "haze": {
+              "$type": "fog",
+              "density": 0.035
+            },
+            "sun": {
+              "$type": "sunDisc",
+              "intensity": 3
+            },
+            "stars": {
+              "$type": "stars",
+              "brightness": 0.2
+            },
+            "clouds": {
+              "$type": "clouds",
+              "coverage": 0.65
+            }
           }
         }
       ]
@@ -352,6 +351,14 @@
         "name": "skyMode",
         "kind": "Fixed",
         "value": "0.25"
+      }
+    ]
+  },
+  "timeline": {
+    "clocks": [
+      {
+        "name": "skyMode",
+        "state": "skyMode"
       }
     ]
   },

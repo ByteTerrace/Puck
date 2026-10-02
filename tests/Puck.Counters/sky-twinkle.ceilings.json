@@ -1222,7 +1222,7 @@
           "pass": "sdf.world$resolve",
           "kind": "gpu.binds.descriptor-set",
           "class": "deterministic",
-          "ceiling": 2
+          "ceiling": 3
         },
         {
           "node": "world",
@@ -3888,7 +3888,7 @@
           "pass": "sdf.world$resolve",
           "kind": "gpu.binds.descriptor-set",
           "class": "deterministic",
-          "ceiling": 2
+          "ceiling": 3
         },
         {
           "node": "world",

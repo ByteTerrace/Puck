@@ -2,7 +2,6 @@ using System.Buffers.Binary;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Puck.Abstractions.Cameras;
-using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
 
@@ -27,7 +26,6 @@ public static class SdfFrameBlock {
     // The cloud offsets' wrap period in layer units, the lattice period of the sky's noise (SdfNoisePeriodCells in
     // field/sdf-noise.hlsli, whose cells wrap to it before they are hashed), so an offset reduced by it joins without a
     // seam.
-    private const double CloudLatticePeriod = SdfVolume.NoisePeriodCells;
 
     private static readonly ShaderPipelineParameterLayout Layout = SdfWorldInterfaces.WorldParameters;
     private static readonly int AmbientScale = Offset(member: SdfWorldPackage.AmbientScale);
@@ -221,13 +219,12 @@ public static class SdfFrameBlock {
     /// copied row for row, with the host bakes the shader must not pay per pixel: every directional (light and softbox)
     /// normalized in double and rounded once (DXC's DXIL backend constant-folds a <c>normalize()</c> while its SPIR-V
     /// backend emits a runtime call; a uniform has no such asymmetry), the sun-disc angular radius baked into the
-    /// <c>pow()</c> exponent that puts the disc's edge at half brightness (k = ln 0.5 / ln cos r), the twinkle rate baked into
-    /// the phase of its period at the frame's presented tick (<see cref="TwinklePeriodTicks"/>, zero when nothing twinkles),
-    /// and the cloud drift, shear and spin integrated from the presented tick (<see cref="PresentedTick.Integrate"/>:
-    /// offsets reduced by the noise's lattice period, the angle by 2π). The kernels read the rows' indices from the
+    /// <c>pow()</c> exponent that puts the disc's edge at half brightness (k = ln 0.5 / ln cos r). The twinkle's phase and
+    /// the cloud drift, shear and spin arrive integrated to the frame's presented tick: the World's environment
+    /// resolver integrates each rate, keyed or literal, so the rows carry phases and offsets, never a rate. The kernels read the rows' indices from the
     /// generated <c>sdf-isa.hlsli</c>, and <c>frame/sdf-lights.hlsli</c> decodes each row's lanes as
     /// <see cref="SdfEnvironment"/> lays them out.</summary>
-    /// <param name="frame">The frame whose environment and presented tick the rows are baked from.</param>
+    /// <param name="frame">The frame whose environment the rows are baked from.</param>
     /// <param name="rows">The rows, <see cref="SdfEnvironment.LaneCount"/> floats.</param>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="rows"/> holds other than <see cref="SdfEnvironment.LaneCount"/>
@@ -282,48 +279,6 @@ public static class SdfFrameBlock {
 
         floats[(skyControl + 2)] = ((float)discExponent);
 
-        // A sky with no visible twinkle bakes phase zero, so a still frame's block repeats and the cadence can stand it.
-        var clock = frame.Clock;
-        var twinkle = (SdfEnvironment.TwinkleRow * 4);
-        var twinkles = (
-            (environment.StarBrightness > 0f) &&
-            (environment.StarDensity > 0f) &&
-            (environment.TwinkleShare > 0f) &&
-            (environment.TwinkleDepth > 0f) &&
-            (environment.TwinkleRate > 0f)
-        );
-
-        floats[(twinkle + 2)] = (twinkles
-            ? ((float)clock.Phase(periodTicks: TwinklePeriodTicks(rateHertz: environment.TwinkleRate)))
-            : 0f
-        );
-
-        var drift = environment.CloudDrift;
-        var shear = environment.CloudShear;
-        var cloudsC = ((SdfEnvironment.CloudsRow + 2) * 4);
-        var cloudsD = ((SdfEnvironment.CloudsRow + 3) * 4);
-
-        floats[(cloudsC + 0)] = ((float)clock.Integrate(
-            modulus: CloudLatticePeriod,
-            ratePerSecond: drift.X
-        ));
-        floats[(cloudsC + 1)] = ((float)clock.Integrate(
-            modulus: CloudLatticePeriod,
-            ratePerSecond: drift.Y
-        ));
-        floats[(cloudsC + 2)] = ((float)clock.Integrate(
-            modulus: CloudLatticePeriod,
-            ratePerSecond: shear.X
-        ));
-        floats[(cloudsC + 3)] = ((float)clock.Integrate(
-            modulus: CloudLatticePeriod,
-            ratePerSecond: shear.Y
-        ));
-        floats[(cloudsD + 0)] = ((float)clock.Integrate(
-            modulus: Math.Tau,
-            ratePerSecond: environment.CloudSpin
-        ));
-
         for (var index = 0; (index < SdfEnvironment.MaxSoftboxes); index++) {
             var row = ((SdfEnvironment.SoftboxesRow + (index * SdfEnvironment.RowsPerSoftbox)) * 4);
 
@@ -336,24 +291,6 @@ public static class SdfFrameBlock {
 
             floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
         }
-    }
-    /// <summary>Returns the star twinkle's period at a rate: the whole engine ticks nearest one cycle, at least one, so
-    /// the phase the environment bakes closes exactly at each period's end.</summary>
-    /// <param name="rateHertz">The twinkle's fundamental rate, in hertz; positive.</param>
-    /// <returns>The period, in engine ticks.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rateHertz"/> is not positive and finite.</exception>
-    public static ulong TwinklePeriodTicks(float rateHertz) {
-        if (!float.IsFinite(f: rateHertz) || (rateHertz <= 0f)) {
-            throw new ArgumentOutOfRangeException(
-                message: "The twinkle rate must be positive and finite.",
-                paramName: nameof(rateHertz)
-            );
-        }
-
-        return ((ulong)Math.Max(
-            val1: 1d,
-            val2: Math.Round(a: (EngineTicks.PerSecond / ((double)rateHertz)))
-        ));
     }
 
     // The offset a pass-block member lies at, which the environment's rows must fill exactly.

@@ -27,10 +27,10 @@ public sealed class SkyBaselineFixtureLawTests {
         var stars = Assert.Single(collection: definition.Render.Sky!.Layers!.OfType<WorldRenderSkyLayer.Stars>());
         var clouds = Assert.Single(collection: definition.Render.Sky.Layers!.OfType<WorldRenderSkyLayer.Clouds>());
 
-        Assert.True(condition: (stars.Brightness > 0f));
-        Assert.Equal(expected: (name == "twinkle"), actual: (stars.Twinkle!.Share > 0f));
-        Assert.Equal(expected: (name == "cycle"), actual: (definition.Render.Cycle is not null));
-        Assert.Equal(expected: 0f, actual: clouds.Spin);
+        Assert.True(condition: (stars.Brightness?.Literal > 0f));
+        Assert.Equal(expected: (name == "twinkle"), actual: (stars.Twinkle!.Share?.Literal > 0f));
+        Assert.Equal(expected: (name == "cycle"), actual: (definition.Render.Sky.Keys is not null));
+        Assert.Equal(expected: 0f, actual: clouds.Spin?.Literal);
 
         using var document = JsonDocument.Parse(json: File.ReadAllText(path: PathOf(path: $"tests/Puck.Counters/sky-{name}.world.json")));
         var layer = document.RootElement.GetProperty(propertyName: "render").GetProperty(propertyName: "sky").GetProperty(propertyName: "layers")[4];
@@ -51,6 +51,11 @@ public sealed class SkyBaselineFixtureLawTests {
             Assert.True(condition: JsonElement.DeepEquals(
                 element1: courtyard.RootElement.GetProperty(propertyName: "render"),
                 element2: fixture.RootElement.GetProperty(propertyName: "render")
+            ));
+            // The courtyard's sky keys on its clocks, so the fixture carries the same timeline.
+            Assert.True(condition: JsonElement.DeepEquals(
+                element1: courtyard.RootElement.GetProperty(propertyName: "timeline"),
+                element2: fixture.RootElement.GetProperty(propertyName: "timeline")
             ));
         }
     }

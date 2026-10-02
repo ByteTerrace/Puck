@@ -117,7 +117,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     [InlineData(true)]
     [Theory]
     public void PresenterPublishesTheExactProducerForSeatAndCameraOnlyLayouts(bool cameraOnly) {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json",
@@ -129,7 +129,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
                         : [new WorldViewSlot(Camera: FirstCamera, Width: 0.5f),
                             new WorldViewSlot(Width: 0.5f, X: 0.5f)]))],
                 },
-            }).Build();
+            }).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
         var frame = presenter.CaptureFrame(deltaSeconds: Delta, height: Display, interpolationAlpha: 1f, width: Display);
@@ -161,7 +161,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             inner: ((IWorldScreenPresenter)binder(arg: sp))
         ));
 
-        using var host = builder.Build();
+        var host = m_stateDirectory.Own(owner: builder.Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var index = 0UL;
@@ -217,7 +217,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             inner: ((IWorldScreenPresenter)binder(arg: sp))
         ));
 
-        using var host = builder.Build();
+        var host = m_stateDirectory.Own(owner: builder.Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
 
         for (var index = 0UL; (index < 3UL); index++) {
@@ -251,11 +251,11 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     }
     [Fact]
     public void ACameraExportExtentDoesNotResizeThePresentersDisplay() {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: World
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
 
         foreach (var (width, height) in new[] { (128U, 72U), (96U, 64U) }) {
@@ -282,12 +282,12 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
             reason: "DXC is required to compile the pane's pipeline."
         );
 
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             edit: WithPane,
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: World
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         using var instances = FakeGraphInstances.Attach(
             create: static name => new ShaderPipelineRenderNode(

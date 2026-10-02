@@ -15,9 +15,6 @@ namespace Puck.Scripting;
 public sealed class WasmModuleLoader {
     private const int DefaultMaxCachedModules = 64;
 
-    // The WebAssembly binary preamble: the four bytes '\0', 'a', 's', 'm'. Anything else is treated as WAT text.
-    private static readonly byte[] WasmMagic = [0x00, 0x61, 0x73, 0x6D];
-
     private readonly IAssetSource m_assetSource;
     private readonly ScriptingEngine m_engine;
     private readonly ContentAddressedLruCache<Module> m_moduleCache;
@@ -58,7 +55,8 @@ public sealed class WasmModuleLoader {
     private Module Compile(ReadOnlyMemory<byte> content, string name) {
         var span = content.Span;
 
-        if (span.StartsWith(value: WasmMagic)) {
+        // A module that does not begin with the binary preamble is read as WAT text.
+        if (span.StartsWith(value: WasmBinaryFormat.Magic)) {
             return Module.FromBytes(
                 bytes: span,
                 engine: m_engine.Engine,

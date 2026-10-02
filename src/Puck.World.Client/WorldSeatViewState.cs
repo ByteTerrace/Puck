@@ -47,7 +47,7 @@ public sealed class WorldSeatViewState {
 
     // The rig's authored pitch, for the live-pitch clamp: a BOUND pitch has no single authored value, so the clamp
     // is taken about the rest angle.
-    private static float AuthoredPitch(WorldViewDefaults views) => (views.SeatRig.OrbitOp?.Pitch.Literal ?? 0f);
+    private static float AuthoredPitch(WorldViewDefaults views) => (views.SeatRig.OrbitOp?.Pitch.Value.Literal ?? 0f);
     // min/max pitch bound the TOTAL orbit pitch (the authored rig's pitch plus the live delta), so the live
     // delta is clamped against the bounds shifted by the authored pitch.
     private static float ClampLivePitch(float livePitch, float authoredPitch, WorldSeatViewControl control) => Math.Clamp(

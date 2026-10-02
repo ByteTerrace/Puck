@@ -12,8 +12,9 @@ namespace Puck.Assets.Documents;
 /// which emits their raw field names as a wire object instead of the one array spelling every document uses).
 /// </summary>
 public static class DocumentJsonOptions {
-    /// <summary>Indented, camel-case, case-insensitive-on-read, string-enum JSON options — the one shape every
-    /// document store serializes through. An enum persists BY NAME, never ordinal, and a numeric enum token (the
+    /// <summary>Indented, LF-broken, camel-case, case-insensitive-on-read, string-enum JSON options — the one shape every
+    /// document store serializes through. The newline is named rather than left to <see cref="Environment.NewLine"/>,
+    /// so a document's canonical bytes, and every hash of them, are the same on every operating system. An enum persists BY NAME, never ordinal, and a numeric enum token (the
     /// old, wire-incompatible shape) is REFUSED rather than silently accepted (<c>allowIntegerValues: false</c>): a
     /// reordered enum must never silently reinterpret a persisted value. <c>PropertyNamingPolicy</c> governs
     /// PROPERTY names only, so the enum's exact declared member name is the one wire spelling regardless.</summary>
@@ -22,6 +23,7 @@ public static class DocumentJsonOptions {
         PropertyNameCaseInsensitive = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        NewLine = "\n",
         WriteIndented = true,
     };
 

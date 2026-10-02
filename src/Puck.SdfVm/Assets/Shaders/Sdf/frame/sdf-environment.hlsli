@@ -3,7 +3,7 @@
 #ifndef FRAME_SDF_ENVIRONMENT_HLSLI
 #define FRAME_SDF_ENVIRONMENT_HLSLI
 // The environment: SdfEnvironment's lanes, row for row, in the pass block's environment array, with the host bakes (unit
-// directions, the sun-disc exponent, the twinkle period, the integrated cloud offsets and spin). The generated
+// directions, the sun-disc exponent, the twinkle phase, the integrated cloud offsets and spin). The generated
 // SDF_ENV_*_ROW indices place each row, and frame/sdf-lights.hlsli decodes the lanes of each as SdfEnvironment lays them
 // out.
 float4 worldEnvRow(uint row) { return passGroup.environment[row]; }
