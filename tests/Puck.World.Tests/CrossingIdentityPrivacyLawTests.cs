@@ -932,4 +932,30 @@ public sealed class CrossingIdentityPrivacyLawTests {
 
         Assert.Equal(6L, Fact(identity: saved, key: "replayFact"));
     }
+    // A save that has no refusal to return still reports a file it cannot write. The catalog's hub names the identity
+    // whose save failed, so a console write that never reached disk is not silent; the red leg drops the refusal.
+    [Fact]
+    public void ACatalogSaveThatCannotWriteItsFileIsNarrated() {
+        var hub = new WorldOutputHub();
+        var sink = new RecordingNarrationSink();
+
+        using var attached = hub.AttachNarrationSink(sink: sink);
+        using var fixture = Fixtures.FreshServer(catalogNarration: hub);
+        var catalog = fixture.Server.Profiles;
+        var owned = catalog.BootProfile;
+        var path = Path.Combine(path1: catalog.FilePath, path2: WorldDocumentName.For(id: SafeName.Parse(candidate: owned.Id)));
+
+        File.Delete(path: path);
+        _ = Directory.CreateDirectory(path: path);
+        try {
+            catalog.Save();
+        } finally {
+            Directory.Delete(path: path);
+        }
+
+        Assert.Contains(collection: sink.Narrations, filter: narration => (
+            (narration.Channel == "identity") &&
+            narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: $"could not save identity '{owned.Id}'")
+        ));
+    }
 }

@@ -780,7 +780,8 @@ internal static class Fixtures {
     /// <param name="documentPath">The source document path for resolving relative machine content, or null for the host default.</param>
     /// <param name="landingRefusal">Optional transfer admission policy supplied by the law.</param>
     /// <param name="catalogNarration">The hub the fixture's owned-world catalog narrates through, or <see langword="null"/> for none.</param>
-    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null, Func<int, string?>? landingRefusal = null, WorldOutputHub? catalogNarration = null) {
+    /// <param name="consoleNarration">Whether the server narrates to the console, or attaches no narration sink at all.</param>
+    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null, Func<int, string?>? landingRefusal = null, WorldOutputHub? catalogNarration = null, bool consoleNarration = true) {
         // The default document's BYTES are serialized once for the whole run. Each fixture still deserializes its
         // own graph — that is what keeps one test's mutation off the next test's document — but the serialize half
         // of the round trip is the same work every time and is not worth repeating seven hundred times.
@@ -818,7 +819,7 @@ internal static class Fixtures {
             profiles: profiles,
             envelope: new WorldRenderEnvelope(),
             machines: machines,
-            narrationSink: new WorldConsoleNarrationSink(),
+            narrationSink: (consoleNarration ? new WorldConsoleNarrationSink() : null),
             landingRefusal: landingRefusal
         );
 

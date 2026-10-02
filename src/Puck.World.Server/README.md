@@ -1619,7 +1619,9 @@ rebinds to its owned identity, which adopts the carried facts and records
 durable, and `WorldOwnedWorlds.TrySave` refuses by name an identity its catalog
 does not own. A catalog file refusal is named without interrupting the home
 seat's binding or the arrival tap; the durable arrival retains the carried
-projection for recovery. An empty facts row preserves the owner's authored capacity.
+projection for recovery. A save with no caller to refuse to, such as a console
+write or a document submission, narrates its refusal on the catalog's hub. An
+empty facts row preserves the owner's authored capacity.
 Remote round trips do not adopt: the federation reservation leaf has no
 admission field, so a decoded reservation is always a peer admission, since a
 remote incarnation claim is unauthenticated. Offline replay uses a detached

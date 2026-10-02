@@ -194,10 +194,7 @@ public sealed class WorldOwnedWorlds {
                 );
 
                 m_identities.Add(item: identity);
-                _ = TrySave(
-                    identity: identity,
-                    reason: out _
-                );
+                Persist(identity: identity);
             }
         }
     }
@@ -397,10 +394,7 @@ public sealed class WorldOwnedWorlds {
                 );
             }
 
-            _ = TrySave(
-                identity: owner,
-                reason: out _
-            );
+            Persist(identity: owner);
             return new WorldDocumentSubmissionReceipt(
                 Accepted: true,
                 Reason: "owner accepted the granted operation",
@@ -471,10 +465,7 @@ public sealed class WorldOwnedWorlds {
             )],
         });
 
-        _ = TrySave(
-            identity: owner,
-            reason: out _
-        );
+        Persist(identity: owner);
         return new WorldDocumentSubmissionReceipt(
             Accepted: true,
             Reason: "owner accepted the granted operation",
@@ -817,10 +808,7 @@ public sealed class WorldOwnedWorlds {
         );
 
         m_identities.Add(item: identity);
-        _ = TrySave(
-            identity: identity,
-            reason: out _
-        );
+        Persist(identity: identity);
         reason = string.Empty;
         return identity;
     }
@@ -910,10 +898,7 @@ public sealed class WorldOwnedWorlds {
                 )]
         ));
         profile.ReplaceDocument(document: profile.Document with { Identity = definition with { Controllers = [.. (definition.Controllers ?? []), slots] } });
-        _ = TrySave(
-            identity: profile,
-            reason: out _
-        );
+        Persist(identity: profile);
     }
     /// <summary>Adopts a pulled cloud copy of an owned world: replaces the in-memory identity that shares its id (or
     /// adds a new one), then persists it locally through the ordinary save path. The caller has already validated the
@@ -963,10 +948,7 @@ public sealed class WorldOwnedWorlds {
             m_identities.Add(item: incoming);
             reason = "added a new owned world";
         }
-        _ = TrySave(
-            identity: incoming,
-            reason: out _
-        );
+        Persist(identity: incoming);
         return true;
     }
     /// <summary>Restores every identity from a previously captured checkpoint. The identity list is replaced
@@ -1068,13 +1050,28 @@ public sealed class WorldOwnedWorlds {
         reason = string.Empty;
         return true;
     }
+
+    // Saves an identity for a caller that has no refusal to return. Any refusal, a file this process cannot write
+    // included, is narrated rather than dropped, so a write that never reached disk is never silent.
+    private void Persist(WorldIdentity identity) {
+        if (
+            !TrySave(
+                identity: identity,
+                reason: out var reason
+            ) &&
+            (m_narrationHub is { HasNarrationSink: true })
+        ) {
+            m_narrationHub.Narrate(
+                channel: "identity",
+                text: $"[identity] {reason}"
+            );
+        }
+    }
+
     /// <summary>Persists every owned world.</summary>
     public void Save() {
         foreach (var identity in m_identities) {
-            _ = TrySave(
-                identity: identity,
-                reason: out _
-            );
+            Persist(identity: identity);
         }
     }
     /// <summary>Returns whether this catalog owns <paramref name="identity"/>: it is one of the identities the catalog
