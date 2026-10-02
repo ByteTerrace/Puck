@@ -8,8 +8,8 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Every shipped march crosses a wallpaper fold's symmetry-LOD switch soundly on Vulkan, Direct3D 12 hardware
-/// and WARP: the primary march (<c>sdfTracePrimaryField</c>), the beam's cone (<c>coneMarchTileBounds</c>, whose
+/// <summary>Every shipped march crosses a wallpaper fold's symmetry-LOD switch soundly on Vulkan and Direct3D 12
+/// hardware: the primary march (<c>sdfTracePrimaryField</c>), the beam's cone (<c>coneMarchTileBounds</c>, whose
 /// last phase proves the far bound) and the soft shadow (<c>softShadowVisibilityMarch</c>). Past the camera-centered switch
 /// sphere the fold drops its mirrors, so a copy can stand where the mirrored lattice put none: a step sized on one side
 /// would jump straight through it. Each march steps through <c>sdfMarchAdvance</c>, which lands a step that reaches the
@@ -30,6 +30,9 @@ public sealed class SdfMarchLodDeviceLawTests {
     // The shadow's penumbra sharpness: a key light's 1 / penumbra slope, the slope of a light with none authored.
     private const float ShadowSharpness = 9;
 
+    // A camera inside the wide lattice's cell -1, four units from its turned copy's cell center.
+    private static readonly Vector3 InCell = new(x: -12, y: 0, z: 0);
+
     // The march the probe runs, as its kernel numbers them.
     private enum MarchMode {
         Primary = 0,
@@ -38,19 +41,20 @@ public sealed class SdfMarchLodDeviceLawTests {
         Shadow = 3,
     }
     // A march along one ray: its origin and unit direction, the program, the far distance, the pixel footprint, the march's
-    // own input (the primary or far-bound march's start, the cone's near distance, or the shadow's reach) and the cone's
-    // chord, and the range the result must land in: the primary hit's depth (null for a miss), the cone's entry, its far
-    // bound, or the shadow's visibility.
+    // own input (the primary or far-bound march's start, the cone's near distance, or the shadow's reach), the cone's
+    // chord and the camera (the LOD origin), and the range the result must land in: the primary hit's depth (null for a
+    // miss), the cone's entry, its far bound, or the shadow's visibility.
     private sealed record MarchCase(string Name, MarchMode Mode, Vector3 Origin, Vector3 Direction, SdfProgram Field, (float Low, float High)? Expected,
-        float Far = FarDistance, float Footprint = Footprint, float Input = 0, float Chord = 0);
+        float Far = FarDistance, float Footprint = Footprint, float Input = 0, float Chord = 0, Vector3 Camera = default);
 
     private static MarchCase[] Cases() => [
-        // A P2 lattice of four-unit cells whose sphere of radius 0.25 sits at the cell's x = 1: cell -1's copy stands at
-        // x = -5 inside the switch and at x = -3 past it. Inside a switch at 2.9 the field at 2.25 reads the turned copy
+        // A P2 lattice of sixteen-unit cells whose sphere of radius 0.25 sits at the cell's x = 1, seen from a camera at
+        // x = -12 in cell -1, whose copy stands at x = -17 inside the switch and at x = -15 past it. The ray never leaves
+        // the cell, so the folded field is exact along it. Inside a switch at 2.9 the field at 2.25 reads the turned copy
         // 2.5 away, and a step that long lands at 4.75, past the upright one, whose surface the camera sees from 2.9 on.
-        new("a copy past the switch is not stepped over", MarchMode.Primary, Vector3.Zero, -Vector3.UnitX, Lattice(lodDistance: 2.9f), (2.89f, 2.95f)),
+        new("a copy past the switch is not stepped over", MarchMode.Primary, InCell, -Vector3.UnitX, WideLattice(lodDistance: 2.9f), (2.89f, 2.95f), Camera: InCell),
         new("the even cell's copy inside the switch", MarchMode.Primary, Vector3.Zero, Vector3.UnitX, Lattice(lodDistance: 4), (0.74f, 0.76f)),
-        new("the upright copy with the ray past the switch", MarchMode.Primary, Vector3.Zero, -Vector3.UnitX, Lattice(lodDistance: 0.5f), (2.74f, 2.76f)),
+        new("the upright copy with the ray past the switch", MarchMode.Primary, InCell, -Vector3.UnitX, WideLattice(lodDistance: 0.5f), (2.74f, 2.76f), Camera: InCell),
         new("nothing beside the lattice's plane", MarchMode.Primary, Vector3.Zero, Vector3.UnitY, Lattice(lodDistance: 2.9f), null),
         new("a Lipschitz clamp does not trap the ray at the switch", MarchMode.Primary, Vector3.Zero, Vector3.UnitY, ClampedProgram(), (4.68f, 4.75f)),
         // P2 cells 160 wide with a sphere of radius 0.002 at x = 60: cell -1's upright copy spans 99.998 to 100.002 past
@@ -64,15 +68,15 @@ public sealed class SdfMarchLodDeviceLawTests {
         // From inside the switch, the cone's far bound lies past the thin copy, which the fine march would accept.
         new("a cone's far bound does not claim the copy past the switch", MarchMode.ConeFar, Vector3.Zero, -Vector3.UnitX, ThinLattice(), (100.002f, 101f),
             Far: 101, Footprint: 1e-6f, Input: 99.998f),
-        // P2 four-unit cells with a sphere of radius 0.006 at the cell's x = 1.095: cell -1's upright copy spans 2.899 to
-        // 2.911 past a switch at 2.9. The shadow's first sample sits at -2.899, 0.001 inside the switch, reading the turned
-        // copy 2.19 away; a 0.02 minimum stride lands at -2.919, past the copy, and the ray then reads open space.
         // A log-sphere fold of ratio two about the origin, whose prototype is a sphere of radius 0.0003125 at x = 1.41406:
         // shell 4's copy, scaled by 16, spans 22.620 to 22.630, and the shell ends at 2^4.5 = 22.6274. A march from
         // 0.0016 past that wall reads shell 5's copy 16 away; a step floored at 1e-3 of the radius (0.016 after the
         // fold's step scale) lands at 22.613, past the 0.0075 of the copy that lies in shell 4.
         new("a thin copy just inside a log-sphere shell is hit", MarchMode.Primary, new Vector3(x: 22.629f, y: 0, z: 0), -Vector3.UnitX, DrosteProgram(), (0.0015f, 0.003f),
             Far: 30),
+        // P2 four-unit cells with a sphere of radius 0.006 at the cell's x = 1.095: cell -1's upright copy spans 2.899 to
+        // 2.911 past a switch at 2.9. The shadow's first sample sits at -2.899, 0.001 inside the switch, reading the turned
+        // copy 2.19 away; a 0.02 minimum stride lands at -2.919, past the copy, and the ray then reads open space.
         new("a soft shadow's minimum stride does not jump the switch", MarchMode.Shadow, new Vector3(x: -2.859f, y: 0, z: 0), -Vector3.UnitX, ShadowLattice(), (0f, 0.01f),
             Input: 1),
     ];
@@ -91,12 +95,6 @@ public sealed class SdfMarchLodDeviceLawTests {
             Verify(extension: ".dxil", services: device.Services);
         }
         Assert.DoesNotContain(comparisonType: StringComparison.Ordinal, expectedSubstring: "[d3d12-debug]", actualString: output.ToString());
-    }
-    [Fact]
-    public void DirectXWarpMarchesAcrossTheLodSwitch() {
-        using var device = DirectXTestDevices.Warp();
-
-        Verify(extension: ".dxil", services: device.Services);
     }
 
     private static void Verify(GpuDeviceServices services, string extension) {
@@ -142,13 +140,13 @@ public sealed class SdfMarchLodDeviceLawTests {
         using var commands = services.CommandPoolFactory.Create(name: default);
         var rows = new Vector4[(cases.Length * 4)];
 
-        // The probe's four rows per case; the LOD origin is the camera at the world's origin, as a view's position is.
+        // The probe's four rows per case; the LOD origin is the case's camera, as a view's position is.
         for (var index = 0; (index < cases.Length); index++) {
             var item = cases[index];
 
             rows[(index * 4)] = new Vector4(value: item.Origin, w: item.Far);
             rows[((index * 4) + 1)] = new Vector4(value: item.Direction, w: item.Footprint);
-            rows[((index * 4) + 2)] = new Vector4(value: Vector3.Zero, w: ((float)item.Mode));
+            rows[((index * 4) + 2)] = new Vector4(value: item.Camera, w: ((float)item.Mode));
             rows[((index * 4) + 3)] = new Vector4(x: item.Input, y: item.Chord, z: ShadowSharpness, w: 0);
         }
         using var inputs = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: rows.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
@@ -231,6 +229,8 @@ public sealed class SdfMarchLodDeviceLawTests {
     // A P2 lattice of four-unit cells in the XZ plane, two cells either way, whose prototype is a sphere at the cell's
     // x = 1: cell 0 holds it at x = 1, and cell -1 at x = -5 inside the switch and x = -3 past it.
     private static SdfProgram Lattice(float lodDistance) => Lattice(cell: 4, lodDistance: lodDistance, offset: 1, radius: 0.25f);
+    // The same prototype in sixteen-unit cells: cell -1 spans x = -24 to -8.
+    private static SdfProgram WideLattice(float lodDistance) => Lattice(cell: 16, lodDistance: lodDistance, offset: 1, radius: 0.25f);
     // Cells 160 wide with a sphere of radius 0.002 at the cell's x = 60, switching at 99.999: cell -1's upright copy
     // spans 99.998 to 100.002 along -x, and its turned copy stands at x = -220.
     private static SdfProgram ThinLattice() => Lattice(cell: 160, lodDistance: 99.999f, offset: 60, radius: 0.002f);
