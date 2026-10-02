@@ -151,7 +151,10 @@ internal static class DeterminismRecorder {
                 return false;
         }
     }
-    private static ulong[] Vector(WorldServer server) {
+    /// <summary>Reads the completed tick's attestation vector.</summary>
+    /// <param name="server">The authority after a completed step.</param>
+    /// <returns>The hashes in stream component order.</returns>
+    public static ulong[] Vector(WorldServer server) {
         var tick = (server.NextInputTick - 1UL);
         var vector = new ulong[DeterminismStream.Components.Count];
         var index = 0;
