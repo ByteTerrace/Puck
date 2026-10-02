@@ -1,0 +1,718 @@
+using Puck.Maths;
+
+namespace Puck.SignedDistance.Queries;
+
+// THE INTERVAL INTERPRETER: a third reading of the same compiled stream TryDistance walks, over a box of points instead
+// of one. Every point step is a faithful rounding of an exact expression (one raw or less from it, on the Q16 grid), and
+// each step here encloses that exact expression over the box with outward rounding, so the box's interval holds every
+// TryDistance answer inside it: by induction over the stream, each point value lies in its interval, and a faithful
+// rounding of a value inside a grid-ended interval stays inside it. Where the point code branches, the interval takes
+// every branch the box can reach and joins them. Each rule mirrors its TryDistance or EvaluateShape step; a step changed
+// there is a rule changed here, and SdfFieldBoundsLawTests holds every op, shape and blend's point answers inside these
+// bounds. An instruction with no inclusion rule is refused by name (BoundsRefusal), never approximated.
+public sealed partial class SdfFieldEvaluator {
+    private static readonly FixedQ4816 SuperellipsoidSphereExponent = FixedQ4816.FromInteger(value: 2L);
+
+    /// <summary>Encloses every distance <see cref="TryDistance"/> answers at a point of the box
+    /// <c>[<paramref name="lower"/>, <paramref name="upper"/>]</c>, corners included.</summary>
+    /// <param name="lower">The box's least corner.</param>
+    /// <param name="upper">The box's greatest corner, at or above <paramref name="lower"/> on every axis.</param>
+    /// <param name="distance">The enclosing interval on success; zero on failure.</param>
+    /// <returns><see langword="false"/> when the program has no shape or a corner leaves the evaluator's frame, as
+    /// <see cref="TryDistance"/> refuses; <see langword="true"/> otherwise.</returns>
+    /// <exception cref="ArgumentException"><paramref name="lower"/> exceeds <paramref name="upper"/> on an
+    /// axis.</exception>
+    /// <exception cref="NotSupportedException">The program holds an instruction with no inclusion rule; the message
+    /// names it.</exception>
+    /// <remarks>The interval is certified, not estimated: its lower endpoint is at or below the least point answer in the
+    /// box and its upper at or above the greatest. It is a conservative hull, so it widens with the box, and a rotation
+    /// or a fold that reuses a coordinate widens it further; a smaller box answers tighter.</remarks>
+    public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance) {
+        distance = FixedInterval.FromPoint(value: FixedQ4816.Zero);
+
+        if (BoundsRefusal(instructions: m_instructions) is { } refusal) {
+            throw new NotSupportedException(message: refusal);
+        }
+
+        if (
+            !m_hasShape ||
+            !lower.TryDelta(delta: out var lowerPoint, origin: FixedPosition.Zero) ||
+            !upper.TryDelta(delta: out var upperPoint, origin: FixedPosition.Zero)
+        ) {
+            return false;
+        }
+
+        if ((lowerPoint.X > upperPoint.X) || (lowerPoint.Y > upperPoint.Y) || (lowerPoint.Z > upperPoint.Z)) {
+            throw new ArgumentException(message: $"The box's lower corner {lowerPoint} exceeds its upper corner {upperPoint}.", paramName: nameof(lower));
+        }
+
+        var world = new IntervalVector3(
+            X: new FixedInterval(lower: lowerPoint.X, upper: upperPoint.X),
+            Y: new FixedInterval(lower: lowerPoint.Y, upper: upperPoint.Y),
+            Z: new FixedInterval(lower: lowerPoint.Z, upper: upperPoint.Z)
+        );
+        var local = world;
+        var distanceScale = FixedQ4816.One;
+        var result = FixedInterval.FromPoint(value: FarDistance);
+        var saved = FixedInterval.FromPoint(value: FarDistance);
+
+        // The instance cull is exact by construction (a culled instance changes no answer), so the bounds walk every
+        // instruction and need no cull of their own.
+        foreach (var instruction in m_instructions) {
+            switch (instruction.Op) {
+                case SdfOp.ResetPoint: {
+                        local = world;
+                        distanceScale = FixedQ4816.One;
+                        break;
+                    }
+                case SdfOp.Translate: {
+                        local -= Vector(instruction: instruction);
+                        break;
+                    }
+                case SdfOp.Rotate: {
+                        local = RotateBoundsByInverseQuaternion(instruction: instruction, p: local);
+                        break;
+                    }
+                case SdfOp.Scale: {
+                        var scale = Vector(instruction: instruction);
+
+                        local = new(
+                            X: (local.X / FixedInterval.FromPoint(value: scale.X)),
+                            Y: (local.Y / FixedInterval.FromPoint(value: scale.Y)),
+                            Z: (local.Z / FixedInterval.FromPoint(value: scale.Z))
+                        );
+                        distanceScale *= instruction.Data0W;
+                        break;
+                    }
+                case SdfOp.Repeat: {
+                        var spacing = Vector(instruction: instruction);
+                        var inverseSpacing = Vector1(instruction: instruction);
+
+                        local = new(
+                            X: (local.X - (Point(value: spacing.X) * FixedInterval.Round(value: (local.X * Point(value: inverseSpacing.X))))),
+                            Y: (local.Y - (Point(value: spacing.Y) * FixedInterval.Round(value: (local.Y * Point(value: inverseSpacing.Y))))),
+                            Z: (local.Z - (Point(value: spacing.Z) * FixedInterval.Round(value: (local.Z * Point(value: inverseSpacing.Z)))))
+                        );
+                        break;
+                    }
+                case SdfOp.RepeatLimited: {
+                        var spacing = Vector(instruction: instruction);
+                        var limit = Vector1(instruction: instruction);
+
+                        local = new(
+                            X: (local.X - (Point(value: spacing.X) * FixedInterval.Clamp(value: FixedInterval.Round(value: (local.X / Point(value: spacing.X))), minimum: -limit.X, maximum: limit.X))),
+                            Y: (local.Y - (Point(value: spacing.Y) * FixedInterval.Clamp(value: FixedInterval.Round(value: (local.Y / Point(value: spacing.Y))), minimum: -limit.Y, maximum: limit.Y))),
+                            Z: (local.Z - (Point(value: spacing.Z) * FixedInterval.Clamp(value: FixedInterval.Round(value: (local.Z / Point(value: spacing.Z))), minimum: -limit.Z, maximum: limit.Z)))
+                        );
+                        break;
+                    }
+                case SdfOp.SymmetryPlane: {
+                        var normal = Vector(instruction: instruction);
+                        var t = (Dot(left: local, right: normal) + Point(value: instruction.Data0W));
+                        var twiceMin = (FixedInterval.Min(first: t, second: Point(value: FixedQ4816.Zero)) * Point(value: Two));
+
+                        local = new(
+                            X: (local.X - (Point(value: normal.X) * twiceMin)),
+                            Y: (local.Y - (Point(value: normal.Y) * twiceMin)),
+                            Z: (local.Z - (Point(value: normal.Z) * twiceMin))
+                        );
+                        break;
+                    }
+                case SdfOp.Elongate: {
+                        var extents = Vector(instruction: instruction);
+
+                        local = new(
+                            X: ElongateBounds(extent: extents.X, value: local.X),
+                            Y: ElongateBounds(extent: extents.Y, value: local.Y),
+                            Z: ElongateBounds(extent: extents.Z, value: local.Z)
+                        );
+                        break;
+                    }
+                case SdfOp.Onion: {
+                        result = (FixedInterval.Abs(value: result) - Point(value: instruction.Data0X));
+                        break;
+                    }
+                case SdfOp.CellDisplace: {
+                        var cells = CellBounds(
+                            mode: ((SdfCellMode)instruction.Blend),
+                            point: (local * instruction.Data0X),
+                            randomness: instruction.Data0Z,
+                            seed: instruction.Shape
+                        );
+
+                        result += (Point(value: instruction.Data0Y) * (cells - Point(value: Half)));
+                        break;
+                    }
+                case SdfOp.Dilate: {
+                        result -= Point(value: instruction.Data0X);
+                        break;
+                    }
+                case SdfOp.PushField: {
+                        saved = result;
+                        result = FixedInterval.FromPoint(value: FarDistance);
+                        break;
+                    }
+                case SdfOp.PopField: {
+                        result = PopFieldBounds(candidate: result, instruction: instruction, saved: saved);
+                        break;
+                    }
+                case SdfOp.ShapeBlend: {
+                        if (instruction.Detail) {
+                            break;
+                        }
+
+                        var candidate = (ShapeBounds(instruction: instruction, p: local) * Point(value: distanceScale));
+
+                        result = BlendBounds(blend: instruction.Blend, candidate: candidate, current: result, smoothRadius: instruction.Data1X);
+                        break;
+                    }
+                default: {
+                        throw new NotSupportedException(message: $"The bounds interpreter has no inclusion rule for op {instruction.Op}.");
+                    }
+            }
+        }
+
+        distance = result;
+
+        return true;
+    }
+    /// <summary>Returns whether every instruction of the evaluator's program has an inclusion rule, naming the first that
+    /// does not.</summary>
+    /// <param name="refusal">The refusal naming the first instruction without a rule, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when <see cref="TryDistanceBounds"/> can enclose the program.</returns>
+    public bool HasDistanceBounds(out string? refusal) {
+        refusal = BoundsRefusal(instructions: m_instructions);
+
+        return (refusal is null);
+    }
+
+    /// <summary>Gets the ops the bounds interpreter has an inclusion rule for. Every op the point interpreter accepts
+    /// must appear here; the sync law holds the two sets equal.</summary>
+    public static IReadOnlyList<SdfOp> BoundedOps { get; } = [
+        SdfOp.ResetPoint,
+        SdfOp.Translate,
+        SdfOp.Rotate,
+        SdfOp.Scale,
+        SdfOp.Repeat,
+        SdfOp.RepeatLimited,
+        SdfOp.SymmetryPlane,
+        SdfOp.Elongate,
+        SdfOp.Onion,
+        SdfOp.CellDisplace,
+        SdfOp.Dilate,
+        SdfOp.PushField,
+        SdfOp.PopField,
+        SdfOp.ShapeBlend,
+    ];
+    /// <summary>Gets the shapes the bounds interpreter has an inclusion rule for, each with the condition on its
+    /// instruction that the rule needs (empty when it needs none).</summary>
+    public static IReadOnlyDictionary<SdfShapeType, string> BoundedShapes { get; } = new Dictionary<SdfShapeType, string> {
+        [SdfShapeType.Box] = "",
+        [SdfShapeType.ScreenSlab] = "",
+        [SdfShapeType.Capsule] = "",
+        [SdfShapeType.Sphere] = "",
+        [SdfShapeType.Torus] = "",
+        [SdfShapeType.Cylinder] = "",
+        [SdfShapeType.Plane] = "",
+        [SdfShapeType.Vesica] = "",
+        [SdfShapeType.RoundedRectangle] = "",
+        [SdfShapeType.Trapezoid] = "",
+        [SdfShapeType.ChamferedRectangle] = "",
+        [SdfShapeType.RoundCone] = "",
+        [SdfShapeType.ConvexPolygon] = "",
+        [SdfShapeType.Superellipsoid] = "the ellipsoid exponent 2 alone; another exponent needs an interval power",
+    };
+    /// <summary>Gets the shapes the point interpreter accepts that the bounds interpreter refuses by name, each with why.
+    /// The sync law holds every accepted shape to exactly one of <see cref="BoundedShapes"/> and this.</summary>
+    public static IReadOnlyDictionary<SdfShapeType, string> UnboundedShapes { get; } = new Dictionary<SdfShapeType, string> {
+        [SdfShapeType.Sweep] = "its closest parameter comes from a sample-and-refine search whose winner a box cannot follow",
+    };
+
+    // The first instruction without an inclusion rule, named, or null.
+    private static string? BoundsRefusal(CompiledInstruction[] instructions) {
+        for (var index = 0; (index < instructions.Length); index++) {
+            var instruction = instructions[index];
+
+            if ((instruction.Op != SdfOp.ShapeBlend) || instruction.Detail) {
+                continue;
+            }
+
+            var shape = ((SdfShapeType)instruction.Shape);
+
+            if (UnboundedShapes.TryGetValue(key: shape, value: out var reason)) {
+                return $"SdfFieldEvaluator has no inclusion rule for instruction {index}'s shape {shape}: {reason}.";
+            }
+
+            if ((shape == SdfShapeType.Superellipsoid) && (instruction.Data0W != SuperellipsoidSphereExponent)) {
+                return $"SdfFieldEvaluator has no inclusion rule for instruction {index}'s Superellipsoid at exponent {instruction.Data0W}: {BoundedShapes[SdfShapeType.Superellipsoid]}.";
+            }
+        }
+
+        return null;
+    }
+    private static FixedInterval Point(FixedQ4816 value) =>
+        FixedInterval.FromPoint(value: value);
+    private static FixedInterval Dot(IntervalVector3 left, FixedVector3 right) =>
+        (((left.X * Point(value: right.X)) + (left.Y * Point(value: right.Y))) + (left.Z * Point(value: right.Z)));
+    // x − clamp(x, −e, e) is x − e above e, x + e below −e and zero between: monotone in x, so its endpoints are exact.
+    private static FixedInterval ElongateBounds(FixedInterval value, FixedQ4816 extent) {
+        static FixedQ4816 Fold(FixedQ4816 x, FixedQ4816 e) =>
+            (x - FixedQ4816.Clamp(maximum: e, minimum: -e, value: x));
+
+        return new(
+            lower: (value.IsUnboundedBelow ? FixedQ4816.MinValue : Fold(x: value.Lower, e: extent)),
+            upper: (value.IsUnboundedAbove ? FixedQ4816.MaxValue : Fold(x: value.Upper, e: extent))
+        );
+    }
+    // FixedQuaternion.Rotate's two fused stages over the conjugate, each stage's three-term sum enclosed by the sum of its
+    // outward-rounded products: t = u×v + w·v, then d = u×t, then v + 2d.
+    private static IntervalVector3 RotateBoundsByInverseQuaternion(IntervalVector3 p, CompiledInstruction instruction) {
+        var ux = Point(value: -instruction.Data0X);
+        var uy = Point(value: -instruction.Data0Y);
+        var uz = Point(value: -instruction.Data0Z);
+        var w = Point(value: instruction.Data0W);
+        var tx = (((uy * p.Z) - (uz * p.Y)) + (w * p.X));
+        var ty = (((uz * p.X) - (ux * p.Z)) + (w * p.Y));
+        var tz = (((ux * p.Y) - (uy * p.X)) + (w * p.Z));
+        var dx = ((uy * tz) - (uz * ty));
+        var dy = ((uz * tx) - (ux * tz));
+        var dz = ((ux * ty) - (uy * tx));
+
+        return new(
+            X: ((p.X + dx) + dx),
+            Y: ((p.Y + dy) + dy),
+            Z: ((p.Z + dz) + dz)
+        );
+    }
+    private static FixedInterval PopFieldBounds(FixedInterval candidate, FixedInterval saved, CompiledInstruction instruction) {
+        var isStairs = (instruction.Blend is ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction));
+        var candidateScale = instruction.Data1Y;
+
+        if (candidateScale > FixedQ4816.Zero) {
+            candidate *= Point(value: candidateScale);
+        }
+
+        if (instruction.Blend == ((uint)SdfBlendOp.Morph)) {
+            var from = instruction.Data0Y;
+            var to = instruction.Data0Z;
+            var t = FixedQ4816.Clamp(
+                value: ((FixedQ4816.Zero - from) / (to - from)),
+                minimum: FixedQ4816.Zero,
+                maximum: FixedQ4816.One
+            );
+
+            return ((Point(value: (FixedQ4816.One - t)) * saved) + (Point(value: t) * candidate));
+        }
+
+        if (isStairs) {
+            var r = instruction.Data1X;
+            var n = instruction.Data1Z;
+
+            if ((n >= FixedQ4816.One) && (r > FixedQ4816.Zero)) {
+                var s = (r / n);
+                var twoS = Point(value: (s * Two));
+                var isSubtraction = (instruction.Blend == ((uint)SdfBlendOp.StairsSubtraction));
+                var u = (isSubtraction
+                    ? ((-candidate) - Point(value: r))
+                    : (candidate - Point(value: r)));
+                var argument = ((u - saved) + Point(value: s));
+                var m = (argument - (twoS * FixedInterval.Floor(value: (argument / twoS))));
+                var w = (m - Point(value: s));
+                var stairs = (Point(value: Half) * ((u + saved) + FixedInterval.Abs(value: w)));
+
+                return (isSubtraction
+                    ? FixedInterval.Max(first: FixedInterval.Max(first: saved, second: -candidate), second: -stairs)
+                    : FixedInterval.Min(first: FixedInterval.Min(first: saved, second: candidate), second: stairs));
+            }
+        }
+
+        return BlendBounds(blend: instruction.Blend, candidate: candidate, current: saved, smoothRadius: instruction.Data1X);
+    }
+    // BlendShape over intervals, operation for operation.
+    private static FixedInterval BlendBounds(FixedInterval current, FixedInterval candidate, uint blend, FixedQ4816 smoothRadius) {
+        var smoothK = FixedQ4816.Max(x: smoothRadius, y: SmoothRadiusMin);
+        var chamfer = Point(value: FixedQ4816.Max(x: smoothRadius, y: FixedQ4816.Zero));
+        var root = Point(value: SqrtHalf);
+
+        return blend switch {
+            ((uint)SdfBlendOp.SmoothUnion) => SmoothUnionBounds(a: current, b: candidate, k: smoothK),
+            ((uint)SdfBlendOp.Subtraction) => FixedInterval.Max(first: current, second: -candidate),
+            ((uint)SdfBlendOp.Intersection) => FixedInterval.Max(first: current, second: candidate),
+            ((uint)SdfBlendOp.Xor) => FixedInterval.Max(first: FixedInterval.Min(first: current, second: candidate), second: -FixedInterval.Max(first: current, second: candidate)),
+            ((uint)SdfBlendOp.SmoothIntersection) => -SmoothUnionBounds(a: -current, b: -candidate, k: smoothK),
+            ((uint)SdfBlendOp.SmoothSubtraction) => -SmoothUnionBounds(a: candidate, b: -current, k: smoothK),
+            ((uint)SdfBlendOp.GrooveUnion) => FixedInterval.Max(first: FixedInterval.Min(first: current, second: candidate), second: (chamfer - FixedInterval.Magnitude(x: current, y: candidate))),
+            ((uint)SdfBlendOp.PipeUnion) => FixedInterval.Min(first: FixedInterval.Min(first: current, second: candidate), second: (FixedInterval.Magnitude(x: current, y: candidate) - chamfer)),
+            ((uint)SdfBlendOp.GrooveSubtraction) => FixedInterval.Max(first: FixedInterval.Max(first: current, second: -candidate), second: (chamfer - FixedInterval.Magnitude(x: current, y: candidate))),
+            ((uint)SdfBlendOp.PipeSubtraction) => FixedInterval.Min(first: FixedInterval.Max(first: current, second: -candidate), second: (FixedInterval.Magnitude(x: current, y: candidate) - chamfer)),
+            ((uint)SdfBlendOp.ChamferUnion) => FixedInterval.Min(first: FixedInterval.Min(first: current, second: candidate), second: (((current + candidate) - chamfer) * root)),
+            ((uint)SdfBlendOp.ChamferIntersection) => FixedInterval.Max(first: FixedInterval.Max(first: current, second: candidate), second: (((current + candidate) + chamfer) * root)),
+            ((uint)SdfBlendOp.ChamferSubtraction) => FixedInterval.Max(first: FixedInterval.Max(first: current, second: -candidate), second: (((current - candidate) + chamfer) * root)),
+            _ => FixedInterval.Min(first: current, second: candidate),
+        };
+    }
+    // BlendSmoothUnion over intervals: the h ≤ 0 select joins both arms wherever the box reaches both.
+    private static FixedInterval SmoothUnionBounds(FixedInterval a, FixedInterval b, FixedQ4816 k) {
+        var h = FixedInterval.Clamp(
+            value: (Point(value: Half) + ((Point(value: Half) * (b - a)) / Point(value: k))),
+            minimum: FixedQ4816.Zero,
+            maximum: FixedQ4816.One
+        );
+        var oneMinusH = (Point(value: FixedQ4816.One) - h);
+        var lerp = (a + ((b - a) * oneMinusH));
+        var blended = ((h.Upper <= FixedQ4816.Zero)
+            ? b
+            : ((h.Lower > FixedQ4816.Zero)
+                ? lerp
+                : FixedInterval.Union(first: b, second: lerp)));
+
+        return (blended - ((Point(value: k) * h) * oneMinusH));
+    }
+    // SampleCells over a box: walked exactly when the box stays inside one lattice cell on every axis, otherwise bounded by
+    // the reach of the two nearest features (every feature offset lies within 1/2 + |randomness|/2 of its cell's centre, and
+    // the second nearest is no farther than the nearer of two adjacent cells' features).
+    private static FixedInterval CellBounds(IntervalVector3 point, uint seed, SdfCellMode mode, FixedQ4816 randomness) {
+        var cx = (point.X.Lower.Value >> FixedQ4816.FractionBitCount);
+        var cy = (point.Y.Lower.Value >> FixedQ4816.FractionBitCount);
+        var cz = (point.Z.Lower.Value >> FixedQ4816.FractionBitCount);
+
+        if (
+            (cx != (point.X.Upper.Value >> FixedQ4816.FractionBitCount)) ||
+            (cy != (point.Y.Upper.Value >> FixedQ4816.FractionBitCount)) ||
+            (cz != (point.Z.Upper.Value >> FixedQ4816.FractionBitCount)) ||
+            point.X.IsUnboundedBelow || point.X.IsUnboundedAbove ||
+            point.Y.IsUnboundedBelow || point.Y.IsUnboundedAbove ||
+            point.Z.IsUnboundedBelow || point.Z.IsUnboundedAbove
+        ) {
+            // Each delta component lies within |x| + 1/2 + |randomness|/2 + 1 of zero; the own cell (x = 0) bounds the
+            // nearest feature and a face neighbour bounds the second, and F2 − F1 is at most the second.
+            var reach = (FixedQ4816.Abs(value: randomness) * Half);
+            var near = ((Half + reach) + FixedQ4816.One);
+            var far = (near + FixedQ4816.One);
+            var span = FixedInterval.Magnitude(
+                x: Point(value: far),
+                y: Point(value: near),
+                z: Point(value: near)
+            );
+
+            return new(lower: FixedQ4816.Zero, upper: span.Upper);
+        }
+
+        var fraction = (point - new FixedVector3(
+            X: FixedQ4816.FromInteger(value: cx),
+            Y: FixedQ4816.FromInteger(value: cy),
+            Z: FixedQ4816.FromInteger(value: cz)
+        ));
+        var first = Point(value: FixedQ4816.MaxValue);
+        var second = Point(value: FixedQ4816.MaxValue);
+
+        for (var z = -1; (z <= 1); z++) {
+            for (var y = -1; (y <= 1); y++) {
+                for (var x = -1; (x <= 1); x++) {
+                    var h = Pcg3dLatticeNoise.Pcg3d(
+                        x: unchecked((uint)(cx + x)) ^ seed,
+                        y: unchecked((uint)(cy + y)) ^ (seed ^ 0x9E3779B9u),
+                        z: unchecked((uint)(cz + z)) ^ (seed ^ 0x85EBCA77u)
+                    );
+                    var feature = new FixedVector3(
+                        X: ((FixedQ4816.FromInteger(value: x) + Half) + (randomness * (FixedQ4816.FromRawBits(value: (h.X >> 16)) - Half))),
+                        Y: ((FixedQ4816.FromInteger(value: y) + Half) + (randomness * (FixedQ4816.FromRawBits(value: (h.Y >> 16)) - Half))),
+                        Z: ((FixedQ4816.FromInteger(value: z) + Half) + (randomness * (FixedQ4816.FromRawBits(value: (h.Z >> 16)) - Half)))
+                    );
+                    var distance = (feature - fraction).Length;
+
+                    // The two smallest of the running set, each an order statistic monotone in every argument.
+                    var lowest = FixedInterval.Min(first: first, second: distance);
+
+                    second = FixedInterval.Min(first: second, second: FixedInterval.Max(first: first, second: distance));
+                    first = lowest;
+                }
+            }
+        }
+
+        return ((mode == SdfCellMode.F1)
+            ? first
+            : (second - first));
+    }
+    private static FixedInterval ShapeBounds(CompiledInstruction instruction, IntervalVector3 p) {
+        return ((SdfShapeType)instruction.Shape) switch {
+            SdfShapeType.Sphere => (p.Length - Point(value: instruction.Data0X)),
+            SdfShapeType.Box or SdfShapeType.ScreenSlab => BoxBounds(p: p, halfExtents: Vector(instruction: instruction), cornerRadius: instruction.Data0W),
+            SdfShapeType.Torus => (FixedInterval.Magnitude(x: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: instruction.Data0X)), y: p.Y) - Point(value: instruction.Data0Y)),
+            SdfShapeType.Plane => (Dot(left: p, right: Vector(instruction: instruction)) + Point(value: instruction.Data0W)),
+            SdfShapeType.RoundCone => RoundConeBounds(p: p, lowerRadius: instruction.Data0X, upperRadius: instruction.Data0Y, height: instruction.Data0Z, b: instruction.Data0W, a: instruction.Data1Y),
+            SdfShapeType.Capsule => CapsuleBounds(p: p, endpoint: Vector(instruction: instruction), radius: instruction.Data0W, inverseLengthSquared: instruction.Data1Y),
+            SdfShapeType.Cylinder => (Extrude2DBounds(distance2D: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: instruction.Data0X)), z: p.Y, halfDepth: instruction.Data0Y) - Point(value: instruction.Data1W)),
+            SdfShapeType.Vesica => VesicaBounds(p: p, r: instruction.Data0X, d: instruction.Data0Y, b: instruction.Data0Z),
+            SdfShapeType.RoundedRectangle => (LiftedBounds(
+                p: p,
+                profile: point2D => RoundedRectangle2DBounds(p: point2D, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, cornerRadius: instruction.Data0Z),
+                liftAmount: instruction.Data0W,
+                lift: instruction.Data1Y,
+                capChamfer: instruction.Data1Z
+            ) - Point(value: instruction.Data1W)),
+            SdfShapeType.Trapezoid => (LiftedBounds(
+                p: p,
+                profile: point2D => Trapezoid2DBounds(p: point2D, r1: instruction.Data0X, r2: instruction.Data0Y, halfHeight: instruction.Data0Z),
+                liftAmount: instruction.Data0W,
+                lift: instruction.Data1Y,
+                capChamfer: instruction.Data1Z
+            ) - Point(value: instruction.Data1W)),
+            SdfShapeType.ChamferedRectangle => (LiftedBounds(
+                p: p,
+                profile: point2D => ChamferBox2DBounds(p: point2D, halfWidth: instruction.Data0X, halfHeight: instruction.Data0Y, chamfer: instruction.Data0Z),
+                liftAmount: instruction.Data0W,
+                lift: instruction.Data1Y,
+                capChamfer: instruction.Data0Z
+            ) - Point(value: instruction.Data1W)),
+            SdfShapeType.Superellipsoid => SuperellipsoidSphereBounds(p: p, radii: Vector(instruction: instruction), inverseRadii: new FixedVector3(X: instruction.Data1Y, Y: instruction.Data1Z, Z: instruction.Data1W)),
+            SdfShapeType.ConvexPolygon => (LiftedBounds(
+                p: p,
+                profile: point2D => ConvexPolygon2DBounds(p: point2D, vertices: (instruction.ConvexPolygonVertices ?? [])),
+                liftAmount: instruction.Data0W,
+                lift: instruction.Data1Y,
+                capChamfer: instruction.Data1Z
+            ) - Point(value: instruction.Data1W)),
+            _ => throw new NotSupportedException(message: $"The bounds interpreter has no inclusion rule for shape {((SdfShapeType)instruction.Shape)}."),
+        };
+    }
+    private static FixedInterval BoxBounds(IntervalVector3 p, FixedVector3 halfExtents, FixedQ4816 cornerRadius) {
+        var inset = (halfExtents - new FixedVector3(X: cornerRadius, Y: cornerRadius, Z: cornerRadius));
+        var q = (p.Abs() - inset);
+        var zero = Point(value: FixedQ4816.Zero);
+        var outside = new IntervalVector3(
+            X: FixedInterval.Max(first: q.X, second: zero),
+            Y: FixedInterval.Max(first: q.Y, second: zero),
+            Z: FixedInterval.Max(first: q.Z, second: zero)
+        ).Length;
+        var inside = FixedInterval.Min(first: FixedInterval.Max(first: q.X, second: FixedInterval.Max(first: q.Y, second: q.Z)), second: zero);
+
+        return ((outside + inside) - Point(value: cornerRadius));
+    }
+    private static FixedInterval CapsuleBounds(IntervalVector3 p, FixedVector3 endpoint, FixedQ4816 radius, FixedQ4816 inverseLengthSquared) {
+        var h = FixedInterval.Clamp(
+            value: (Dot(left: p, right: endpoint) * Point(value: inverseLengthSquared)),
+            minimum: FixedQ4816.Zero,
+            maximum: FixedQ4816.One
+        );
+
+        return (new IntervalVector3(
+            X: (p.X - (Point(value: endpoint.X) * h)),
+            Y: (p.Y - (Point(value: endpoint.Y) * h)),
+            Z: (p.Z - (Point(value: endpoint.Z) * h))
+        ).Length - Point(value: radius));
+    }
+    private static FixedInterval SuperellipsoidSphereBounds(IntervalVector3 p, FixedVector3 radii, FixedVector3 inverseRadii) {
+        var absolute = p.Abs();
+        var q = new IntervalVector3(
+            X: (absolute.X * Point(value: inverseRadii.X)),
+            Y: (absolute.Y * Point(value: inverseRadii.Y)),
+            Z: (absolute.Z * Point(value: inverseRadii.Z))
+        );
+        var minimumRadius = FixedQ4816.Min(x: radii.X, y: FixedQ4816.Min(x: radii.Y, y: radii.Z));
+
+        return ((q.Length - Point(value: FixedQ4816.One)) * Point(value: minimumRadius));
+    }
+    private static FixedInterval RoundConeBounds(IntervalVector3 p, FixedQ4816 lowerRadius, FixedQ4816 upperRadius, FixedQ4816 height, FixedQ4816 b, FixedQ4816 a) {
+        var qx = FixedInterval.Magnitude(x: p.X, y: p.Z);
+        var qy = p.Y;
+        var k = ((qx * Point(value: -b)) + (qy * Point(value: a)));
+        var top = (a * height);
+        FixedInterval? joined = null;
+
+        if (k.Lower < FixedQ4816.Zero) {
+            joined = Join(joined: joined, next: (FixedInterval.Magnitude(x: qx, y: qy) - Point(value: lowerRadius)));
+        }
+
+        if (k.Upper > top) {
+            joined = Join(joined: joined, next: (FixedInterval.Magnitude(x: qx, y: (qy - Point(value: height))) - Point(value: upperRadius)));
+        }
+
+        if ((k.Upper >= FixedQ4816.Zero) && (k.Lower <= top)) {
+            joined = Join(joined: joined, next: (((qx * Point(value: a)) + (qy * Point(value: b))) - Point(value: lowerRadius)));
+        }
+
+        return joined!.Value;
+    }
+    private static FixedInterval VesicaBounds(IntervalVector3 p, FixedQ4816 r, FixedQ4816 d, FixedQ4816 b) {
+        var qx = FixedInterval.Magnitude(x: p.X, y: p.Z);
+        var qy = FixedInterval.Abs(value: p.Y);
+        var test = (((qy - Point(value: b)) * Point(value: d)) - (qx * Point(value: b)));
+        var cap = FixedInterval.Magnitude(x: qx, y: (qy - Point(value: b)));
+        var body = (FixedInterval.Magnitude(x: (qx + Point(value: d)), y: qy) - Point(value: r));
+
+        // The point test compares two separately rounded products; their difference's interval decides it wherever it
+        // keeps one sign.
+        return ((test.Lower > FixedQ4816.Zero)
+            ? cap
+            : ((test.Upper <= FixedQ4816.Zero)
+                ? body
+                : FixedInterval.Union(first: cap, second: body)));
+    }
+    // ProjectLiftPoint and ApplyLift: an extruded profile (lift above one half) or a revolved one.
+    private static FixedInterval LiftedBounds(IntervalVector3 p, Func<IntervalVector2, FixedInterval> profile, FixedQ4816 liftAmount, FixedQ4816 lift, FixedQ4816 capChamfer) {
+        if (lift > Half) {
+            return ExtrudeChamfer2DBounds(distance2D: profile(arg: new(X: p.X, Y: p.Y)), z: p.Z, halfDepth: liftAmount, c: capChamfer);
+        }
+
+        return profile(arg: new(X: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: liftAmount)), Y: p.Y));
+    }
+    private static FixedInterval Extrude2DBounds(FixedInterval distance2D, FixedInterval z, FixedQ4816 halfDepth) {
+        var wy = (FixedInterval.Abs(value: z) - Point(value: halfDepth));
+        var zero = Point(value: FixedQ4816.Zero);
+        var inside = FixedInterval.Min(first: FixedInterval.Max(first: distance2D, second: wy), second: zero);
+        var outside = FixedInterval.Magnitude(x: FixedInterval.Max(first: distance2D, second: zero), y: FixedInterval.Max(first: wy, second: zero));
+
+        return (inside + outside);
+    }
+    private static FixedInterval ExtrudeChamfer2DBounds(FixedInterval distance2D, FixedInterval z, FixedQ4816 halfDepth, FixedQ4816 c) {
+        var wy = (FixedInterval.Abs(value: z) - Point(value: halfDepth));
+        var plain = Extrude2DBounds(distance2D: distance2D, halfDepth: halfDepth, z: z);
+        var bevel = (((distance2D + wy) + Point(value: c)) * Point(value: SqrtHalf));
+
+        return FixedInterval.Max(first: plain, second: bevel);
+    }
+    private static FixedInterval RoundedRectangle2DBounds(IntervalVector2 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 cornerRadius) {
+        var qx = ((FixedInterval.Abs(value: p.X) - Point(value: halfWidth)) + Point(value: cornerRadius));
+        var qy = ((FixedInterval.Abs(value: p.Y) - Point(value: halfHeight)) + Point(value: cornerRadius));
+        var zero = Point(value: FixedQ4816.Zero);
+        var outside = FixedInterval.Magnitude(x: FixedInterval.Max(first: qx, second: zero), y: FixedInterval.Max(first: qy, second: zero));
+        var inside = FixedInterval.Min(first: FixedInterval.Max(first: qx, second: qy), second: zero);
+
+        return ((inside + outside) - Point(value: cornerRadius));
+    }
+    private static FixedInterval ChamferBox2DBounds(IntervalVector2 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 chamfer) {
+        var qx = (FixedInterval.Abs(value: p.X) - Point(value: halfWidth));
+        var qy = (FixedInterval.Abs(value: p.Y) - Point(value: halfHeight));
+        var zero = Point(value: FixedQ4816.Zero);
+        var box = (FixedInterval.Min(first: FixedInterval.Max(first: qx, second: qy), second: zero) + FixedInterval.Magnitude(x: FixedInterval.Max(first: qx, second: zero), y: FixedInterval.Max(first: qy, second: zero)));
+        var bevel = (((qx + qy) + Point(value: chamfer)) * Point(value: SqrtHalf));
+
+        return FixedInterval.Max(first: box, second: bevel);
+    }
+    private static FixedInterval Trapezoid2DBounds(IntervalVector2 p, FixedQ4816 r1, FixedQ4816 r2, FixedQ4816 halfHeight) {
+        var k1 = new FixedVector2(X: r2, Y: halfHeight);
+        var k2 = new FixedVector2(X: (r2 - r1), Y: (Two * halfHeight));
+        var px = FixedInterval.Abs(value: p.X);
+        var zero = Point(value: FixedQ4816.Zero);
+        // p.x − min(p.x, r) is max(p.x − r, 0) exactly; r is r1 below the axis and r2 at or above it.
+        var r = ((p.Y.Upper < FixedQ4816.Zero)
+            ? Point(value: r1)
+            : ((p.Y.Lower >= FixedQ4816.Zero)
+                ? Point(value: r2)
+                : FixedInterval.Hull(first: r1, second: r2)));
+        var cax = FixedInterval.Max(first: (px - r), second: zero);
+        var cay = (FixedInterval.Abs(value: p.Y) - Point(value: halfHeight));
+        var slantLengthSquared = FixedVector2.Dot(left: k2, right: k2);
+        var projection = ((slantLengthSquared == FixedQ4816.Zero)
+            ? zero
+            : FixedInterval.Clamp(
+                value: ((((Point(value: k1.X) - px) * Point(value: k2.X)) + ((Point(value: k1.Y) - p.Y) * Point(value: k2.Y))) / Point(value: slantLengthSquared)),
+                minimum: FixedQ4816.Zero,
+                maximum: FixedQ4816.One
+            ));
+        var cbx = ((px - Point(value: k1.X)) + (Point(value: k2.X) * projection));
+        var cby = ((p.Y - Point(value: k1.Y)) + (Point(value: k2.Y) * projection));
+        var magnitude = FixedInterval.Sqrt(value: FixedInterval.Min(
+            first: (FixedInterval.Square(value: cax) + FixedInterval.Square(value: cay)),
+            second: (FixedInterval.Square(value: cbx) + FixedInterval.Square(value: cby))
+        ));
+        var surelyInside = ((cbx.Upper < FixedQ4816.Zero) && (cay.Upper < FixedQ4816.Zero));
+        var surelyOutside = ((cbx.Lower >= FixedQ4816.Zero) || (cay.Lower >= FixedQ4816.Zero));
+
+        return (surelyInside
+            ? -magnitude
+            : (surelyOutside
+                ? magnitude
+                : FixedInterval.Union(first: -magnitude, second: magnitude)));
+    }
+    // The exact polygon field over a box: the running minimum squared distance enclosed edge by edge, and the crossing
+    // parity followed while every edge's three tests keep one answer over the box; once one does not, the sign is
+    // either, and the bound is the hull of both.
+    private static FixedInterval ConvexPolygon2DBounds(IntervalVector2 p, FixedVector2[] vertices) {
+        var count = vertices.Length;
+        var firstX = (p.X - Point(value: vertices[0].X));
+        var firstY = (p.Y - Point(value: vertices[0].Y));
+        var d = (FixedInterval.Square(value: firstX) + FixedInterval.Square(value: firstY));
+        var negate = false;
+        var parityKnown = true;
+        var previous = vertices[(count - 1)];
+        var zero = FixedQ4816.Zero;
+
+        for (var i = 0; (i < count); i++) {
+            var vertex = vertices[i];
+            var e = (previous - vertex);
+            var wx = (p.X - Point(value: vertex.X));
+            var wy = (p.Y - Point(value: vertex.Y));
+            var eDotE = FixedVector2.Dot(left: e, right: e);
+            var t = FixedInterval.Clamp(
+                value: (((wx * Point(value: e.X)) + (wy * Point(value: e.Y))) / Point(value: eDotE)),
+                minimum: FixedQ4816.Zero,
+                maximum: FixedQ4816.One
+            );
+            var bx = (wx - (Point(value: e.X) * t));
+            var by = (wy - (Point(value: e.Y) * t));
+
+            d = FixedInterval.Min(first: d, second: (FixedInterval.Square(value: bx) + FixedInterval.Square(value: by)));
+
+            var c1 = Decide(always: (p.Y.Lower >= vertex.Y), never: (p.Y.Upper < vertex.Y));
+            var c2 = Decide(always: (p.Y.Upper < previous.Y), never: (p.Y.Lower >= previous.Y));
+            var cross = ((Point(value: e.X) * wy) - (Point(value: e.Y) * wx));
+            var c3 = Decide(always: (cross.Lower > zero), never: (cross.Upper <= zero));
+
+            if ((c1 is null) || (c2 is null) || (c3 is null)) {
+                parityKnown = false;
+            } else if ((c1.Value && c2.Value && c3.Value) || (!c1.Value && !c2.Value && !c3.Value)) {
+                negate = !negate;
+            }
+
+            previous = vertex;
+        }
+
+        var distance = FixedInterval.Sqrt(value: d);
+
+        return (!parityKnown
+            ? FixedInterval.Union(first: -distance, second: distance)
+            : (negate
+                ? -distance
+                : distance));
+    }
+    private static bool? Decide(bool always, bool never) =>
+        (always
+            ? true
+            : (never
+                ? false
+                : null));
+    private static FixedInterval Join(FixedInterval? joined, FixedInterval next) =>
+        ((joined is { } value)
+            ? FixedInterval.Union(first: value, second: next)
+            : next);
+
+    // A box of points: one interval per axis.
+    private readonly record struct IntervalVector3(FixedInterval X, FixedInterval Y, FixedInterval Z) {
+        public FixedInterval Length => FixedInterval.Magnitude(x: X, y: Y, z: Z);
+
+        public IntervalVector3 Abs() => new(
+            X: FixedInterval.Abs(value: X),
+            Y: FixedInterval.Abs(value: Y),
+            Z: FixedInterval.Abs(value: Z)
+        );
+
+        public static IntervalVector3 operator -(IntervalVector3 left, FixedVector3 right) => new(
+            X: (left.X - FixedInterval.FromPoint(value: right.X)),
+            Y: (left.Y - FixedInterval.FromPoint(value: right.Y)),
+            Z: (left.Z - FixedInterval.FromPoint(value: right.Z))
+        );
+        public static IntervalVector3 operator -(FixedVector3 left, IntervalVector3 right) => new(
+            X: (FixedInterval.FromPoint(value: left.X) - right.X),
+            Y: (FixedInterval.FromPoint(value: left.Y) - right.Y),
+            Z: (FixedInterval.FromPoint(value: left.Z) - right.Z)
+        );
+        public static IntervalVector3 operator *(IntervalVector3 left, FixedQ4816 right) => new(
+            X: (left.X * FixedInterval.FromPoint(value: right)),
+            Y: (left.Y * FixedInterval.FromPoint(value: right)),
+            Z: (left.Z * FixedInterval.FromPoint(value: right))
+        );
+    }
+    private readonly record struct IntervalVector2(FixedInterval X, FixedInterval Y);
+}

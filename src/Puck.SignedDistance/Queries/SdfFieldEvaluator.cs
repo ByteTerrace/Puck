@@ -705,47 +705,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             _ => throw new UnreachableException(message: $"The constructor validated every shape is supported; shape {((SdfShapeType)instruction.Shape)} reached EvaluateShape unvalidated."),
         };
     }
-    private static bool IsSupportedOp(SdfOp op) {
-        return op switch {
-            SdfOp.ResetPoint or
-            SdfOp.Translate or
-            SdfOp.Rotate or
-            SdfOp.Scale or
-            SdfOp.Elongate or
-            SdfOp.ShapeBlend or
-            SdfOp.Repeat or
-            SdfOp.RepeatLimited or
-            SdfOp.Onion or
-            SdfOp.Dilate or
-            SdfOp.CellDisplace or
-            SdfOp.SymmetryPlane or
-            SdfOp.PushField or
-            SdfOp.PopField => true,
-            _ => false,
-        };
-    }
-    private static bool IsSupportedShape(SdfShapeType shape) {
-        return shape switch {
-            SdfShapeType.Box or
-            SdfShapeType.Capsule or
-            SdfShapeType.Sphere or
-            SdfShapeType.Torus or
-            SdfShapeType.Cylinder or
-            SdfShapeType.Plane or
-            SdfShapeType.Vesica or
-            SdfShapeType.RoundedRectangle or
-            SdfShapeType.Trapezoid or
-            SdfShapeType.ChamferedRectangle or
-            SdfShapeType.RoundCone or
-            SdfShapeType.ScreenSlab or
-            SdfShapeType.Superellipsoid or
-            SdfShapeType.ConvexPolygon or
-            // strands > 1 is refused separately, at Compile time (see Compile's isSweep check) — this type-keyed
-            // gate cannot see the instruction's own strand count.
-            SdfShapeType.Sweep => true,
-            _ => false,
-        };
-    }
     // The shared sphere-trace march over this evaluator's own exact samples — see SdfFieldMarch for the accept and
     // advance rules. Every sample is exact, so the bound budget is never spent.
     private MarchOutcome March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {

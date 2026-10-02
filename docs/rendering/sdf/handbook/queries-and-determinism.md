@@ -177,6 +177,40 @@ an unproven gap and later claim the sweep was clear. For the same reason,
 hierarchical position into Q48.16; failure to represent a sample is not proof
 that a placement is clear.
 
+## Certified bounds over a region
+
+A sampled query answers about the points it sampled. `SdfFieldEvaluator` also
+answers about a whole region, by proof. `TryDistanceBounds` takes a box and
+returns a `FixedInterval` (`Puck.Maths`) that holds the field at every point of
+the box. It holds both the exact field of the program's fixed-point constants
+and every `TryDistance` answer there. It is a third reading of the same
+compiled stream, rule for rule:
+- each point step is a faithful rounding of an exact expression;
+- each rule encloses that expression over the box with outward rounding;
+- where the point code branches, the bounds take every branch the box reaches.
+
+A program holding a shape with no inclusion rule is refused by name, never
+approximated: `HasDistanceBounds` names it. Today that is `Sweep`, whose
+closest parameter comes from a search, and a `Superellipsoid` at an exponent
+other than 2.
+
+Two certified queries are built on it:
+- **`TryCertifiedSweep`** moves a sphere along a displacement by conservative
+  advancement. Each step is the certified clearance divided by the program's
+  Lipschitz bound, and the step's whole segment is then proved clear by one
+  bounds query over its box. A sphere swept this way never passes through a
+  surface, however thin the surface or however long the step. A step that only
+  samples the field at its ends tunnels through such a surface.
+- **`TryCertifiedLineOfSight`** splits a segment into boxes until each is proved
+  clear, or a point of it is proved inside. Anything it cannot prove within its
+  budget is `Undecided`.
+
+`SdfFieldBoundsLawTests` sweeps every op, shape and blend's point answers
+through boxes against the bounds, and holds the bounds interpreter's rule sets
+to the point interpreter's. `SdfCertifiedQueryLawTests` holds the sweep to a
+thin wall at speeds up to 100,000 units a step, with the fixed-step stepper as
+the red leg.
+
 ## What determinism means here
 
 Puck's determinism contract is a single sentence: **display is a pure function
