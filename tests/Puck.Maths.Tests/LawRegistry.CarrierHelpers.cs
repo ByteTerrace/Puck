@@ -7,6 +7,12 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
+    private static readonly Domain VectorWithin = new(
+        Key: "vector-within",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
     private static readonly Domain TryArithmetic = new(
         Key: "integer-try-arithmetic",
         Block: 512,
@@ -36,6 +42,12 @@ internal static partial class LawRegistry {
         ClaimCase(
             claim: Subjects.VectorUnitAxesAreExact,
             id: "vector.unit-axes-are-exact"
+        ),
+        SweptCase(
+            claim: Subjects.FixedVectorIsWithinMatchesLength,
+            domain: VectorWithin,
+            id: "vector.is-within-matches-length",
+            width: 3
         ),
         Case(
             id: "integer.try-add-and-try-narrow-vs-exact",

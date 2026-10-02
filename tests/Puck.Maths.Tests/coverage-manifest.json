@@ -9158,6 +9158,13 @@
     },
     {
       "CoveredBy": [
+        "vector.is-within-matches-length"
+      ],
+      "Id": "Puck.Maths.FixedVector3.IsWithin(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "vector.identity-and-negation",
         "vector.kinship-exact",
         "vector.norm-vs-oracle",

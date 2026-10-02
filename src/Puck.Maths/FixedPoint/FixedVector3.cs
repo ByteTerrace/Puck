@@ -582,6 +582,24 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             y: ((float)Y),
             z: ((float)Z)
         );
+    /// <summary>Returns whether <see cref="Length"/> is at most <paramref name="radius"/>: exactly the answer
+    /// <c>Length &lt;= radius</c> gives, saturation included, decided on the exact sum of squares without the square
+    /// root.</summary>
+    /// <param name="radius">The bound on the length.</param>
+    /// <returns><see langword="true"/> when the rounded length is at most <paramref name="radius"/>; always
+    /// <see langword="true"/> for <see cref="FixedQ4816.MaxValue"/>, where the length saturates, and always
+    /// <see langword="false"/> for a negative radius.</returns>
+    /// <remarks>For <c>0 ≤ R &lt; MaxValue</c> the rounded root of the raw sum of squares <c>S</c> is at most
+    /// <c>R</c> exactly when <c>S ≤ R² + R</c>, because the root rounds past <c>R</c> only once <c>√S &gt; R + ½</c>
+    /// and an integer <c>S</c> never equals <c>(R + ½)²</c>. Both sides fit 128 bits, so the compare is exact for
+    /// every vector and radius.</remarks>
+    public bool IsWithin(FixedQ4816 radius) =>
+        FixedVectorMath.IsMagnitudeAtMost(
+            bound: radius.Value,
+            x: X.Value,
+            y: Y.Value,
+            z: Z.Value
+        );
     /// <summary>Tries to get the full-width vector length.</summary>
     public bool TryLength(out FixedQ4816 length) =>
         FixedVectorMath.TryMagnitude(

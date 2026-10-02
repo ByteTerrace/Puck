@@ -13,9 +13,9 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 842 | 554 |
+| classical | — | 843 | 555 |
 | presented-twin | — | 9 | 8 |
-| in-tree-independent | — | 31 | 25 |
+| in-tree-independent | — | 32 | 26 |
 | shared-substrate | fused-substrate | 36 | 34 |
 | shared-substrate | shared-exact-kernel | 19 | 18 |
 | shared-substrate | delegation-twin | 46 | 42 |
@@ -24,14 +24,14 @@ adversarial review's job, not this file's.
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
 | structural | — | 1201 | 606 |
-| **total** | | **2334** | **780** |
+| **total** | | **2336** | **781** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 112 | 148 | 123 | 21 |
-| law: Default | 639 | 914 | 1077 | 189 |
+| law: Default | 640 | 916 | 1077 | 189 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -2315,6 +2315,8 @@ adversarial review's job, not this file's.
 | vector.identity-and-negation | law: Default | structural | — | Zero annihilates every product — Dot(Zero, v), Wedge(Zero, v) and Cross(Zero, v) are zero, and Wedge(v, v) and Cross(v, v) are zero — with no rounding anywhere | — | — | — |
 | vector.identity-and-negation | law: Default | structural | — | FixedQ4816.One is neutral for BOTH scalar operators at every swept raw — v·One == v and v/One == v — and FixedQ4816.Zero annihilates the scalar multiply, exactly and at both arities | — | — | — |
 | vector.identity-and-negation | law: Default | structural | — | Zero's norms are exactly zero, its Try surfaces accept, and its normalization is Zero, so the family's absorbing element reads the same value at every surface | — | — | — |
+| vector.is-within-matches-length | law: Default | classical | — | FixedVector3.IsWithin(radius) over vectors drawn across the whole raw carrier (the edge battery reaches three MinValue lanes, where the sum of squares is 3·2¹²⁶) at eleven radii per vector: three drawn freely, the reported length itself and its two raw neighbours, MaxValue and MaxValue − 1, zero, −1 and MinValue | Oracles.NormRoot, the nearest integer root of the exact raw Q32 sum of squares by a bracketed search whose predicate is one exact squaring, saturated to MaxValue as Length reports it, compared with each radius in BigInteger. The subject never roots: it compares the sum of squares with R² + R. A different route, so a wrong bound (R² instead of R² + R, a missed saturation edge, a negative radius admitted) fails the law at the length's own neighbours | — | — |
+| vector.is-within-matches-length | law: Default | in-tree-independent | — | the same eleven radii per vector against the shipped compare it replaces | FixedVector3.Length <= radius, the floor-then-repair nearest root behind Length, a second shipped implementation; the two must agree bit for bit, which is the property the call sites that moved onto IsWithin rely on | — | Length's own envelope is pinned by vector.space-full-width-oracle-and-length-policy |
 | vector.kinship-exact | law: Default | shared-substrate | fused-substrate | FixedVector2.Wedge | the Z lane of FixedVector3.Cross at the embedded plane (z = 0 on both operands) | FixedQ4816.RoundProductSum, BOTH overloads — the IDENTICAL member, not a sibling copy, selected by an OR gate that opens at the same 2³¹ on both sides because the two zero Z lanes contribute nothing to the OR | — |
 | vector.kinship-exact | law: Default | classical | — | BOTH sides of the twin, on the same operand pairs, in the same law | Oracles.FusedWedge and Oracles.FusedDot — ONE Oracles.RoundDyadic at shift 16 of the exact expression in BigInteger. The third leg runs INSIDE the twin, so the kinship statement never leans on a transitive bracket | — | — |
 | vector.kinship-exact | law: Default | structural | — | the plane's dot product equals the space's at the embedded plane at every swept raw, ACROSS the gate boundary: the plane gate opens at 2³¹ and the space gate at 2³⁰, so between them one side takes the narrow accumulator and the other the Int128 one and they must still agree bit-for-bit — which is the exactness of the narrow lane, stated as a fact | — | — | — |
