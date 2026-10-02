@@ -15,21 +15,34 @@ namespace Puck.World.Tests;
 /// records only the mesh and proves nothing about the card; this law refuses that on the CPU.
 /// </summary>
 public sealed class BakeImpostorCanaryGeometryLawTests {
-    // The fixture's camera: anchor, look-at point and field of view, filmed at 1024x576, as fixture.puck authors them.
-    private static readonly Vector3 Eye = new(x: 0f, y: 0.5f, z: 281f);
-    private static readonly Vector3 Target = new(x: 0f, y: 0.5f, z: 0f);
-
+    // The fixture's camera, read from its document: anchor and look-at point, filmed at 1024x576 under a field of view of 0.9.
+    private const string Fixture = "tests/Puck.World.Canaries/sdf-bake-impostor/fixture.puck";
     private const float FieldOfView = 0.9f;
+
+    private static Vector3 PointOf(string text, string operation) {
+        var match = System.Text.RegularExpressions.Regex.Match(input: text, pattern: (operation + @"\(subject: worldPoint\(point: \[([-0-9.]+), ([-0-9.]+), ([-0-9.]+)\]\)\)"));
+
+        Assert.True(condition: match.Success, userMessage: $"the fixture has no {operation} point");
+
+        return new Vector3(
+            x: float.Parse(provider: System.Globalization.CultureInfo.InvariantCulture, s: match.Groups[1].Value),
+            y: float.Parse(provider: System.Globalization.CultureInfo.InvariantCulture, s: match.Groups[2].Value),
+            z: float.Parse(provider: System.Globalization.CultureInfo.InvariantCulture, s: match.Groups[3].Value)
+        );
+    }
 
     [Fact]
     public void TheCanarysBakeIsACardAtACoarseLevelOverTheRegionsItComparesInsideEachMaterial() {
-        var definition = AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Canaries/sdf-bake-impostor/fixture.puck");
+        var definition = AuthoredGameFixtures.Load(relativePath: Fixture);
+        var text = File.ReadAllText(path: Path.Combine(path1: AuthoredGameFixtures.Root, path2: Fixture));
+
+        var (eye, target) = (PointOf(operation: "anchor", text: text), PointOf(operation: "lookAt", text: text));
         var creation = Assert.Single(collection: definition.Creations);
 
         Assert.True(condition: CreationBaker.TryBake(bake: out var bake, cancellationToken: TestContext.Current.CancellationToken, document: creation.EngineDocument, quality: WorldBakeChunk.Quality, reason: out var reason), userMessage: reason);
 
         var impostor = new SdfMeshImpostor(impostor: bake!.Impostor);
-        var camera = CameraSnapshot.LookAt(fieldOfViewRadians: FieldOfView, position: Eye, target: Target, viewportHeight: 576u, viewportWidth: 1024u);
+        var camera = CameraSnapshot.LookAt(fieldOfViewRadians: FieldOfView, position: eye, target: target, viewportHeight: 576u, viewportWidth: 1024u);
         var perUnit = SdfMeshLod.PixelsPerUnitDepth(renderHeight: 576f, tanHalfFieldOfView: camera.TanHalfFieldOfView);
         var lod = SdfMeshLod.ForImpostor(far: true, impostor: impostor);
         var pixels = lod.ProjectedPixels(cameraForward: camera.Forward, cameraPosition: camera.Position, objectToWorld: Matrix4x4.Identity, pixelsPerUnitDepth: perUnit);
@@ -50,7 +63,7 @@ public sealed class BakeImpostorCanaryGeometryLawTests {
         Assert.InRange(actual: (1.5f * metresAPixel), high: right.MaxX, low: right.MinX);
 
         foreach (var row in new[] { -0.5f, 0.5f }) {
-            var y = (Target.Y + (row * metresAPixel));
+            var y = (target.Y + (row * metresAPixel));
 
             Assert.InRange(actual: y, high: left.MaxY, low: left.MinY);
             Assert.InRange(actual: y, high: right.MaxY, low: right.MinY);
