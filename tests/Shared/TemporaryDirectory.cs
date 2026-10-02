@@ -3,10 +3,11 @@ namespace Puck.Testing;
 /// <summary>A directory under the temporary root that one law owns: created on construction, under a name no other
 /// directory takes, and torn down on dispose in a fixed order so that a host's background work never races the delete.
 /// Disposal first disposes everything the law gave to <see cref="Own"/> (last registered first, so a host goes before
-/// the services it was composed over), then watches the directory for writes that still arrive after that, then deletes
-/// it, retrying while a handle closes under a bound shared with every other wait on the thread pool
-/// (<see cref="TestLiveness.Bound"/>). A directory that cannot be deleted, or that something wrote to after its owners
-/// were disposed, fails the law naming the paths involved, so a worker a host returned from disposal without joining
+/// the services it was composed over), then deletes it, retrying while a
+/// handle closes under a bound shared with every other wait on the thread pool (<see cref="TestLiveness.Bound"/>).
+/// Each try compares the directory's files with the previous try's, so a file that grew, appeared or changed after the
+/// owners were disposed is seen even while it is held open. A directory that cannot be deleted, or that something wrote
+/// to after its owners were disposed, fails the law naming the paths involved, so a worker a host returned from disposal without joining
 /// is reported by the file it wrote instead of by an intermittent delete failure. Names are relative to
 /// <see cref="RootPath"/> and may be forward-slashed; a write creates any subdirectory its name names.</summary>
 /// <param name="prefix">The temp-directory name prefix — kept distinct per caller so a directory that survives an
@@ -15,8 +16,6 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-") : IDispos
     // How long a delete waits between tries, in milliseconds, and how many paths a failure message names.
     private const int DeleteRetryMilliseconds = 50;
     private const int NamedPaths = 12;
-    // The watcher's buffer, large enough that a burst of writes under the directory is not dropped.
-    private const int WatcherBufferBytes = 65536;
 
     private readonly List<IDisposable> m_owned = [];
 
@@ -31,21 +30,50 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-") : IDispos
                 path: path,
                 recursive: true
             );
-        } catch (Exception error) when (error is (IOException or UnauthorizedAccessException)) {
+        } catch (Exception error) when ((error is (IOException or UnauthorizedAccessException))) {
             // A handle under the directory has not closed yet, or a file is open for deletion.
             failure = error;
         }
 
         return !Directory.Exists(path: path);
     }
+    // Every file under the directory with the length and last write time a handle on it reports, relative to the
+    // root. A file that cannot be opened to read its length (one a worker holds exclusively) is recorded as locked.
+    private Dictionary<string, (long Length, long Written)> Snapshot() {
+        var files = new Dictionary<string, (long Length, long Written)>();
 
+        try {
+            foreach (var file in Directory.EnumerateFiles(
+                path: RootPath,
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*"
+            )) {
+                try {
+                    using var stream = new FileStream(
+                        access: FileAccess.Read,
+                        mode: FileMode.Open,
+                        path: file,
+                        share: FileShare.ReadWrite | FileShare.Delete
+                    );
+
+                    files[Path.GetRelativePath(path: file, relativeTo: RootPath)] = (stream.Length, File.GetLastWriteTimeUtc(fileHandle: stream.SafeFileHandle).Ticks);
+                } catch (Exception error) when ((error is (IOException or UnauthorizedAccessException))) {
+                    files[Path.GetRelativePath(path: file, relativeTo: RootPath)] = (-1L, -1L);
+                }
+            }
+        } catch (DirectoryNotFoundException) {
+            // The directory went away while it was read; there is nothing left to compare.
+        }
+
+        return files;
+    }
     private string Describe(Exception? lastFailure, List<string> strays) {
         var remaining = (Directory.Exists(path: RootPath)
             ? Directory.EnumerateFileSystemEntries(
                 path: RootPath,
                 searchOption: SearchOption.AllDirectories,
                 searchPattern: "*"
-            ).Take(count: NamedPaths).Select(selector: entry => Path.GetRelativePath(path: RootPath, relativeTo: entry)).ToArray()
+            ).Take(count: NamedPaths).Select(selector: entry => Path.GetRelativePath(path: entry, relativeTo: RootPath)).ToArray()
             : []
         );
 
@@ -89,29 +117,25 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-") : IDispos
         if (!Directory.Exists(path: RootPath)) {
             failures.Add(item: new DirectoryNotFoundException(message: $"The directory {RootPath} was removed before its law finished."));
         } else {
-            using var watcher = new FileSystemWatcher(path: RootPath) {
-                IncludeSubdirectories = true,
-                InternalBufferSize = WatcherBufferBytes,
-                NotifyFilter = (NotifyFilters.DirectoryName | NotifyFilters.FileName | NotifyFilters.Size),
-            };
-
-            void Stray(object sender, FileSystemEventArgs change) {
-                lock (strays) {
-                    strays.Add(item: Path.GetRelativePath(path: RootPath, relativeTo: change.FullPath));
-                }
-            }
-
-            watcher.Changed += Stray;
-            watcher.Created += Stray;
-            watcher.Renamed += Stray;
-            watcher.EnableRaisingEvents = true;
-
+            var previous = Snapshot();
             Exception? lastFailure = null;
 
             try {
                 TestLiveness.Until(
                     reason: () => Describe(lastFailure: lastFailure, strays: strays),
-                    step: () => TryDelete(failure: out lastFailure, path: RootPath),
+                    step: () => {
+                        var current = Snapshot();
+
+                        foreach (var (file, state) in current) {
+                            if (!previous.TryGetValue(key: file, value: out var before) || (before != state)) {
+                                strays.Add(item: file);
+                            }
+                        }
+
+                        previous = current;
+
+                        return TryDelete(failure: out lastFailure, path: RootPath);
+                    },
                     wait: token => {
                         // A pause between tries; the delete has no completion signal to block on.
                         _ = token.WaitHandle.WaitOne(millisecondsTimeout: DeleteRetryMilliseconds);
@@ -123,11 +147,8 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-") : IDispos
                 failures.Add(item: error);
             }
 
-            watcher.EnableRaisingEvents = false;
-            lock (strays) {
-                if (strays.Count > 0) {
-                    failures.Add(item: new InvalidOperationException(message: Describe(lastFailure: null, strays: strays)));
-                }
+            if (strays.Count > 0) {
+                failures.Add(item: new InvalidOperationException(message: Describe(lastFailure: null, strays: strays)));
             }
         }
 
