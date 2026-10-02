@@ -347,10 +347,10 @@ public sealed partial class SdfWorldPassesLawTests {
             m_image = null;
         }
         public void OnDeviceLost() => Dispose();
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             m_image ??= gpu.Services.ImageFactory.Create(format: Format, height: height, name: default, usage: GpuImageUsage.Sampled | GpuImageUsage.Storage, width: width);
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException(message: "The feed is captured through the view that reads it."));
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {

@@ -418,13 +418,21 @@ These are one-line cautions; the owning pages hold the derivations.
   conversion a catalog package per shipped kernel (`SourceConversionPackage`,
   its interface generated beside the kernel). The runtime declares the
   upload's cadence and extent to the scheduler itself. A new uploaded producer
-  writes its planes in `IWorldUploadFeed.TryWrite`, which a screen showing the
+  writes its planes in `IWorldUploadFeed.Write`, which a screen showing the
   source samples as the instance's converted output. CPU pixels a producer
   holds outside the set (a camera's or a capture's CPU tier, a capture fill)
   convert through the same one-pass graph on a converter of their own
   (`RenderGraphRuntime.CreateConverter`, `RenderGraphSourceConverter`, which
   shares the instance's region binding; the binder's `ConvertedPixels`), handed
-  out under a counted lease; never upload a sampled image by hand. A converter
+  out under a counted lease; never upload a sampled image by hand. A capture's
+  CPU tier (`WorldCapturePixels`) answers from its converted image, never from
+  the pixels it captured: a frame whose conversion refuses refuses the source.
+  Camera CPU tiers forward that conversion answer through `IWorldSeatCameras.Answer`.
+  A pending CPU conversion retains its pixels and advances on cadence even when no newer
+  frame arrives. A lost source forgets its old image under the outstanding leases.
+  A capture slot delegates its answer to `WorldCaptureFrame.Answer`: an ended source
+  refuses; a GPU route answers from the currently attached ring's published image,
+  and a CPU route from `WorldCapturePixels.Answer`. A converter
   builds off the frame thread, so a capture fill (`WorldCaptureFills`)
   converts whenever a screen shows or a HUD frame names an external source,
   never first on the frame a capture is armed for, which would have no image,
@@ -493,10 +501,36 @@ These are one-line cautions; the owning pages hold the derivations.
   declares unchanged keeps the tick of the render that stands). A
   `FrameCaptureRequest` carries no tick of its own: a node that names none
   records none. `puck parity`'s tick verdict holds it to the armed tick. The
-  offscreen host composes at most one frame per step
-  (`OffscreenTickHostedService.ComposesFrame`),
-  the owed frame again only while a capture waits for it, and each frame's
-  interval spans every iteration since the one before (`OffscreenFrameInterval`).
+  offscreen host's time is its tick count: it steps one tick per rendered frame
+  (`FixedStepPump.TryStep`), composing the same tick again, advancing nothing,
+  while the root reports its frame `NotYetRenderable` or a capture waits for it
+  (`OffscreenTickHostedService.ComposesFrame`, `HoldsTick`), so a slow frame
+  never bursts ticks and a capture's frame reprojects from the tick before
+  (`OffscreenTickPacingLawTests`). `IRenderRoot.ProduceFrame` returns a
+  `RootFrame`, whose completion the World's root reads from
+  `RenderGraphRuntime.Render`: rendered only when the root rendered the
+  frame and every instance it reads within the frame did too (a previous-frame
+  read, a refresh divisor, an unchanged view or a paused node stands on
+  purpose), `Refused` when a node's refused build or a package's refusal of the
+  instance (`IRenderGraphPackageFactory.RefusalOf`; `SdfWorldPasses` reports its
+  residency's refused tables, `SdfWorldResidency.Refusal`) stops it. A refusal
+  is never a wait: an offscreen host would hold its tick forever. Producers
+  answer the same three ways (`FrameRender`, from `IRenderGraphExternalProducer.Produce`,
+  `IRenderGraphSourceUpload.Write` and a World feed's `Publish` or `Write`): a
+  source waits only for what waiting can deliver (a build, a first frame on
+  another thread), and refuses when it ended, failed to open, or has no image
+  for a tick its image is a function of (`MarkProduction`). A fill's conversion
+  answers through `RenderGraphSourceConverter.Render` and `WorldCaptureFills.RenderOf`:
+  a refused fill refuses the frame, and a filled source publishes no live feed.
+  An imported source still answers when no extent or display cadence can be scheduled.
+  Such rows read `IRenderGraphSourceProducer.Answer`, which publishes no feed and
+  submits no work; only scheduled rows call `Produce`. Repeated producer answers
+  reuse their named diagnostics without allocating another string.
+  A new kind of
+  refusal states itself through `RefusalOf`, and `MarkUnproduced` in
+  `RenderGraphRuntime.Completion.cs` is the one place it becomes `Refused`
+  (`RenderGraphRuntimeLawTests.Completion`,
+  `SdfWorldResidencyBuildRefusalLawTests.ARefusedTableBuildIsTheResidencysRefusalAndAWaitIsNot`).
 - **Buffer hazards are planned, never barriered by hand.** An SDF view's scratch
   is `SdfWorldPackage.Fragment`'s resources, and the render-graph planner plans
   every barrier between its passes; see
@@ -587,8 +621,9 @@ These are one-line cautions; the owning pages hold the derivations.
   (`RenderGraphRuntime.FirstFramesCompleted`, over
   `ShaderPipelineRenderNode.HasCompletedSubmission`), and then once the root
   has produced one more frame (`WorldReadinessLatch`): the frame that
-  completes the conditions is the slowest, and the fixed-step host catches up
-  the ticks it cost in one iteration. So a GPU readback a script asks for
+  completes the conditions is the slowest, and the windowed host catches up
+  the ticks it cost in one iteration (the offscreen host steps one tick a
+  frame and owes none). So a GPU readback a script asks for
   after it (a pick, a counted pass) waits on no cold device's first frames,
   and a few ticks after it are a few frames. That is the one readiness fact:
   the console

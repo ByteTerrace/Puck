@@ -373,7 +373,7 @@ public sealed class WorldSourceInstanceLawTests {
 
         public void Dispose() => Opening.Feed?.Dispose();
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) => false;
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) => FrameRender.Waiting(reason: "the fake has no image");
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new InvalidOperationException(message: "the test source serves no capture"));
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
             output = default;

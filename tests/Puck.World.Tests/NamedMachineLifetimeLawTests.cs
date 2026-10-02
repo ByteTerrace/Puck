@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Sources;
 using Puck.Abstractions.Machines;
+using Puck.Hosting;
 using Puck.World.Machines;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -116,7 +117,7 @@ public sealed class NamedMachineLifetimeLawTests {
     }
     [Fact]
     public void AStoppedInstanceRetainsStateAndResumesWithoutReplacement() {
-        var engine = new CounterEngine();
+        var engine = new CounterEngine(withOutputs: true);
         using var host = Host(engine: engine);
         var running = Document(Row("clock"));
 
@@ -129,6 +130,16 @@ public sealed class NamedMachineLifetimeLawTests {
             840,
             ReadOnlyMemory<ScreenPadSnapshot>.Empty
         );
+        var video = host.VideoOutput(instance: "clock", output: "video");
+
+        Assert.NotNull(@object: video);
+        using var upload = new MachineVideoSourceUpload(
+            name: "clock",
+            producer: "machine",
+            output: () => host.VideoOutput(instance: "clock", output: "video")
+        );
+
+        Assert.NotNull(@object: upload.Descriptor);
         var stopped = Document(Row("clock") with { Running = false });
 
         Install(
@@ -141,6 +152,9 @@ public sealed class NamedMachineLifetimeLawTests {
             ReadOnlyMemory<ScreenPadSnapshot>.Empty
         );
         Assert.False(condition: host.InstanceState(name: "clock")!.Value.Running);
+        Assert.Null(@object: host.VideoOutput(instance: "clock", output: "video"));
+        Assert.Null(@object: upload.Descriptor);
+        Assert.Equal(expected: "machine output 'clock' is not running", actual: upload.Fault);
         var runtime = Assert.Single(collection: engine.Created);
 
         Assert.Equal(
@@ -156,6 +170,9 @@ public sealed class NamedMachineLifetimeLawTests {
             420,
             ReadOnlyMemory<ScreenPadSnapshot>.Empty
         );
+        Assert.Same(expected: video, actual: host.VideoOutput(instance: "clock", output: "video"));
+        Assert.NotNull(@object: upload.Descriptor);
+        Assert.Null(@object: upload.Fault);
         Assert.Single(collection: engine.Created);
         Assert.Equal(
             1260UL,

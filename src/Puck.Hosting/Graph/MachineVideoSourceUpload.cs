@@ -19,6 +19,10 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
     private readonly Func<IMachineVideoOutput?> m_output;
     private readonly string m_name;
     private readonly string m_producer;
+    // The answers of a write that cannot convert, built once so a steady frame allocates nothing.
+    private readonly string m_noFrame;
+    private readonly string m_noOutput;
+    private readonly string m_reshaped;
 
     private ImageSourceDescriptor? m_descriptor;
     // Whether the descriptor, the fault and the scratch region describe m_shape yet.
@@ -48,6 +52,9 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
         m_name = name;
         m_output = output;
         m_producer = producer;
+        m_noFrame = $"machine output '{name}' has completed no frame for the tick";
+        m_noOutput = $"machine output '{name}' has no output for the tick";
+        m_reshaped = $"machine output '{name}' changed shape; its region is rebuilt";
     }
 
     /// <inheritdoc/>
@@ -141,10 +148,11 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
     /// <inheritdoc/>
     public void Dispose() { }
     /// <inheritdoc/>
-    /// <remarks>Writes the output's latest complete frame, and returns <see langword="false"/> while the output has no
-    /// frame, or while its shape no longer matches the region, which the runtime rebuilds before the next frame. A write
-    /// becomes the image the source states.</remarks>
-    public bool TryWrite(long tick, GpuRegion region) {
+    /// <remarks>Writes the output's latest complete frame. A machine's frames are a function of the simulation, so an
+    /// output with none for this tick (no machine, or one that has completed no frame) refuses the tick, which only a
+    /// later tick changes; a shape that no longer matches the region waits, since the runtime rebuilds the region before
+    /// the next frame. A write becomes the image the source states.</remarks>
+    public FrameRender Write(long tick, GpuRegion region) {
         ArgumentNullException.ThrowIfNull(argument: region);
 
         var output = m_output();
@@ -153,11 +161,15 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
 
         if (
             (output is null) ||
-            (m_descriptor is null) ||
-            (region.ByteCount != m_region.Length) ||
-            (output.WriteFrame(region: m_region) <= 0L)
+            (m_descriptor is null)
         ) {
-            return false;
+            return FrameRender.Refused(reason: (m_fault ?? m_noOutput));
+        }
+        if (region.ByteCount != m_region.Length) {
+            return FrameRender.Waiting(reason: m_reshaped);
+        }
+        if (output.WriteFrame(region: m_region) <= 0L) {
+            return FrameRender.Refused(reason: m_noFrame);
         }
 
         _ = region.Write(
@@ -190,7 +202,7 @@ public sealed class MachineVideoSourceUpload : IRenderGraphSourceUpload, IImageS
             ))
         );
 
-        return true;
+        return FrameRender.Rendered;
     }
     /// <inheritdoc/>
     /// <remarks>States the last write, whatever the source declares since.</remarks>

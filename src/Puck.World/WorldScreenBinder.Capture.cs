@@ -130,9 +130,11 @@ internal sealed partial class WorldScreenBinder {
     // converted, only its divided-cadence readback frames feed the room glow. A capture of an HDR display hands over
     // half-float scRGB, which only the CPU path converts, into working values at the host's paper white.
     private void CaptureWindow(CaptureFeed feed, in FrameContext context) {
+        feed.Ended = false;
+
         if (!feed.TryEnsureSource(adapterLuid: AdapterLuidForOpen())) {
-            feed.Live = false;
             feed.Fault = $"{feed.Label} is unavailable";
+            feed.Ended = true;
             // No source to sample: drop the shared images so the next open reallocates and re-attaches from scratch.
             feed.ReleaseGpuTargets();
 
@@ -164,7 +166,6 @@ internal sealed partial class WorldScreenBinder {
             }
 
             // Live once the platform has completed its first GPU copy — the same first-frame gate the CPU path uses.
-            feed.Live = (feed.Source!.GpuRevision > 0L);
             feed.Fault = (feed.Live
                 ? null
                 : $"{feed.Label} awaiting a compositor frame"
@@ -181,23 +182,17 @@ internal sealed partial class WorldScreenBinder {
             feed.ReleaseGpuTargets();
         }
 
-        if (feed.Source!.TryCapture(surface: out var surface)) {
-            var output = feed.Source.Output;
+        var output = feed.Source!.Output;
 
-            _ = TryConvert(
-                color: ImageColorEncoding.Of(colorSpace: output.ColorSpace),
-                context: in context,
-                pixels: feed.Pixels,
-                surface: in surface
-            );
-            feed.Live = true;
+        if (feed.Pixels.Pull(
+            color: ImageColorEncoding.Of(colorSpace: output.ColorSpace),
+            context: in context,
+            paperWhiteNits: (output.IsHdr ? m_paperWhiteNits : null),
+            runtime: Runtime,
+            source: feed.Source
+        )) {
             feed.Fault = null;
-            feed.Light = (output.IsHdr
-                ? WorldImageLight.AverageScRgb(
-                    paperWhiteNits: m_paperWhiteNits,
-                    rgba: surface.Pixels.Span
-                )
-                : WorldImageLight.Average(bgra: surface.Pixels.Span));
+            feed.Light = feed.Pixels.Light;
         } else if (!feed.Live) {
             feed.Fault = $"{feed.Label} awaiting a compositor frame";
         }
@@ -286,11 +281,7 @@ internal sealed partial class WorldScreenBinder {
             service: m_windowCapture,
             profile: profile,
             source: source,
-            pixels: new ConvertedPixels(
-                content: ImageContentClass.External,
-                name: $"capture:{((monitorIndex is { } monitor) ? $"monitor {monitor}" : title)}",
-                producer: WorldImageProducerSettings.CaptureId
-            ),
+            pixels: new WorldCapturePixels(name: $"capture:{((monitorIndex is { } monitor) ? $"monitor {monitor}" : title)}"),
             gpuRoute: m_hostsOnDirectX,
             monitorIndex: monitorIndex
         ) {
@@ -554,10 +545,13 @@ internal sealed partial class WorldScreenBinder {
         INativeImageCaptureService service,
         WorldFeedProfile profile,
         INativeImageCaptureFeed? source,
-        ConvertedPixels pixels,
+        WorldCapturePixels pixels,
         bool gpuRoute = false,
         int? monitorIndex = null
     ) : IDisposable {
+        // Whether the latest pull found no source to capture (a window or monitor that is gone): the feed refuses until a
+        // later pull reacquires one.
+        public bool Ended { get; set; }
         public string? Fault { get; set; }
         public INativeImageCaptureFeed? GpuAttachedSource { get; set; }
         // The ring of simultaneous-access shared textures, with its shared fence and slot publication, the platform copies
@@ -570,13 +564,17 @@ internal sealed partial class WorldScreenBinder {
             : $"window '{Title}'"
         );
         public Vector3 Light { get; set; }
-        public bool Live { get; set; }
+        // Whether the feed holds a frame: a completed GPU copy, or a captured CPU frame, which answers rendered only once
+        // it has converted (WorldCapturePixels.Answer).
+        public bool Live => (RidesGpu
+            ? ((GpuTargets?.LatestHandle() ?? 0) != 0)
+            : Pixels.Captured);
 
         public int? MonitorIndex { get; } = monitorIndex;
         public WorldFeedProfile Profile { get; } = profile;
         public INativeImageCaptureFeed? Source { get; private set; } = source;
-        // The CPU route's pixels, converted into the image a frame samples.
-        public ConvertedPixels Pixels { get; } = pixels;
+        // The CPU route's captured frames, converted into the image a frame samples.
+        public WorldCapturePixels Pixels { get; } = pixels;
         public string Title { get; } = title;
         // Whether this feed may ride the D3D12 GPU transport (the platform copies GPU-side into GpuTargets and a frame
         // acquires their latest slot), rather than the converted CPU Pixels. Fixed at construction by the host backend.
@@ -608,7 +606,7 @@ internal sealed partial class WorldScreenBinder {
             ReleaseGpuTargets();
             Source?.Dispose();
             Source = null;
-            Pixels.Retire();
+            Pixels.Dispose();
         }
         public nint Handle() {
             if (RidesGpu) {
@@ -619,10 +617,7 @@ internal sealed partial class WorldScreenBinder {
                 );
             }
 
-            return (Live
-                ? Pixels.Handle
-                : 0
-            );
+            return Pixels.Handle;
         }
         public void NotifyDeviceLost() {
             Pixels.OnDeviceLost();
@@ -648,7 +643,7 @@ internal sealed partial class WorldScreenBinder {
             // The stale GPU attachment is left for EnsureGpuTargets to reallocate against the replacement source.
             Source?.Dispose();
             Source = null;
-            Live = false;
+            Pixels.Forget();
             Fault = null;
 
             INativeImageCaptureFeed? next;

@@ -131,6 +131,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Equal(expected: (FakeSource.Width, FakeSource.Height), actual: source.Extent);
         }
     }
+    // While the display's rate is unknown a rate source's row is refused by name, yet the runtime still asks its producer
+    // to answer each frame without producing work; an offscreen capture fill can answer rendered that way.
     [Fact]
     public void ARateSourceIsRefusedByNameWhileTheDisplayRateIsUnknown() {
         var gpu = new FakePipelineGpu();
@@ -155,6 +157,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 );
             }
 
+            Assert.Equal(expected: 4, actual: source.Answered);
             Assert.Equal(expected: 0, actual: source.Produced);
 
             // Once the display's rate is known, a 30 Hz source renders every second frame of a 60 Hz display.
@@ -293,13 +296,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public void Dispose() { }
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             var self = reads![reads.IndexOf(producer: "mirror")];
 
             Seen.Add(item: ((int)self.Lease.ImageViewHandle));
             m_completed++;
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException());
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
@@ -338,8 +341,19 @@ public sealed partial class RenderGraphRuntimeLawTests {
         private IGpuImage? m_image;
 
         public int Acquired { get; private set; }
+        public int Answered { get; private set; }
 
-        public ImageSourceDescriptor? Descriptor { get; } = new(
+        public FrameRender Availability { get; set; } = FrameRender.Waiting(reason: "the fake camera has not produced");
+
+        public FrameRender Answer {
+            get {
+                Answered++;
+
+                return Availability;
+            }
+        }
+
+        public ImageSourceDescriptor? Descriptor { get; set; } = new(
             Cadence: cadence,
             Color: ImageColorEncoding.Srgb,
             Content: ImageContentClass.External,
@@ -367,7 +381,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public void Dispose() => m_image?.Dispose();
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             m_image ??= gpu.Create(
                 format: GpuPixelFormat.R8G8B8A8Unorm,
                 height: height,
@@ -377,8 +391,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
             );
             Extent = (width, height);
             Produced++;
+            Availability = FrameRender.Rendered;
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException());
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {
@@ -429,7 +444,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         public void Dispose() { }
         public void OnDeviceLost() { }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
             Seen.Clear();
 
             for (var index = 0; (index < (reads?.Count ?? 0)); index++) {
@@ -440,7 +455,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 }
             }
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => _ = request.TryFail(error: new NotSupportedException());
         public bool TryAcquireOutput(out RenderGraphExternalOutput output) {

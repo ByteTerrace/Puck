@@ -72,11 +72,13 @@ using Puck.Hosting;
 sealed class StatusPixelRoot : IRenderRoot {
     private readonly byte[] pixels = [0x20, 0x80, 0xE0, 0xFF];
 
-    public Surface ProduceFrame(in FrameContext context) => Surface.CpuPixels(
-        pixels: pixels,
-        width: 1,
-        height: 1,
-        format: GpuPixelFormat.R8G8B8A8Unorm);
+    public RootFrame ProduceFrame(in FrameContext context) => new(
+        Render: FrameRender.Rendered,
+        Surface: Surface.CpuPixels(
+            pixels: pixels,
+            width: 1,
+            height: 1,
+            format: GpuPixelFormat.R8G8B8A8Unorm));
 
     public void Dispose() { }
 }
@@ -97,8 +99,16 @@ var context = new FrameContext(
     TargetWidth: width,
     TargetHeight: height);
 
-Surface surface = root.ProduceFrame(context: in context);
+RootFrame frame = root.ProduceFrame(context: in context);
 ```
+
+A `RootFrame` carries the surface and whether it shows the frame asked for
+(`FrameCompletion`): `Rendered`, `NotYetRenderable` with a reason (a pipeline
+still building, a graph rebuilding, an input with no output for the frame), or
+`Refused` with the refusal that stops it. A root that cannot render the frame
+may still hand out an older frame's surface. The windowed host presents
+whatever surface it gets; the offscreen host steps on only past a rendered or
+refused frame (see [host pacing](#host-pacing)).
 
 `RenderTicks` is `ElapsedTicks + AccumulatorTicks`, and
 `InterpolationAlpha` is the remainder divided by `StepTicks`. They are useful
@@ -156,7 +166,7 @@ Hosting uses several clocks because they answer different questions:
 
 | Type | Question answered | Rule |
 |---|---|---|
-| `TickClock` | How much wall time elapsed since the previous host sample? | Converts `Stopwatch` time to engine ticks and carries conversion remainder |
+| `TickClock` | How much wall time elapsed since the previous host sample? | Converts a `TimeProvider`'s timestamps to engine ticks and carries the conversion remainder |
 | `InputClock` | When did an input arrive? | Process-wide monotonic capture clock shared by input backends |
 | `OsTimeCorrelator` | Where does a native 32-bit millisecond event stamp belong on the input timeline? | Handles wraparound and clamps the result to the observed engine-time window |
 | `FrameContext` | What fixed-step instant is being presented? | Integer ticks are authoritative; seconds and interpolation are derived at the presentation seam |
@@ -164,7 +174,9 @@ Hosting uses several clocks because they answer different questions:
 `IFixedStepSimulation.RatePerSecond` must divide `EngineTicks.PerSecond`
 exactly. For each completed step, the launcher constructs a
 `FixedStepContext`, builds and applies one `CommandSnapshot`, and then calls
-`Step`. A render frame may contain zero, one, or several fixed steps.
+`Step`. A windowed frame may contain zero, one, or several fixed steps; an
+offscreen frame contains exactly one, or none when it composes an owed frame
+again.
 
 The fields most often confused in `FrameContext` have distinct meanings:
 
@@ -172,15 +184,103 @@ The fields most often confused in `FrameContext` have distinct meanings:
 |---|---|
 | `ElapsedTicks` | Simulation time after all completed steps |
 | `DeltaTicks` | Whole fixed-step advancement performed for this rendered frame |
-| `FrameDeltaTicks` | Clamped wall interval for presentation and diagnostics only |
+| `FrameDeltaTicks` | The interval the frame's presentation spans, for presentation and diagnostics only: the clamped wall interval on the windowed host, the simulation time the frame advanced offscreen |
 | `AccumulatorTicks` | Unconsumed engine ticks, always less than one normal step |
 | `StepTicks` | Fixed update period |
 | `RenderTicks` | Interpolated presentation instant: elapsed plus accumulator |
 
+## Host pacing
+
+`Puck.Launcher` has three host loops, and each drives the one
+`FixedStepPump`. They differ only in what decides when a step runs:
+
+| Host | Time | Rule |
+|---|---|---|
+| Windowed | The wall clock, paced to the display | Each frame hands `FixedStepPump.Advance` the wall interval it sampled, and the pump runs every whole step that interval covers. After a slow frame it catches up, composing one frame for several ticks, because a player's simulation keeps real time. |
+| Headless (`host.presentation: none`) | The wall clock, on a waitable-timer grid | The same `Advance` rule. A headless authority serving remote clients keeps real time, because its peers send input and expect snapshots in real time; it renders nothing, so no frame needs a tick of its own. `--unpaced` takes one step an iteration through `TryStep` and waits for nothing. |
+| Offscreen (`host.presentation: offscreen`) | Its tick count | Each iteration calls `FixedStepPump.TryStep`, which runs at most one step whatever the interval was, then composes the frame that step owes, and steps the next tick only once the root reports that frame rendered. Every tick has exactly one rendered frame, so the tick each frame shows is a function of the script, never of how long a frame took. |
+
+Offscreen, a slow frame (the first render, a rebuild, a hitch) delays the next
+tick rather than bursting several ticks into one iteration. A frame the root
+reports `NotYetRenderable` holds its tick: the host composes the same tick
+again, steps none, and narrates the hold once on standard error
+(`[offscreen] holding tick T until its frame renders: <reason>`), until the
+root renders it. A cold pipeline build, a graph rebuilding at a new extent and
+an input that produced nothing for the frame each hold the tick, so no frame
+shows an older image for a newer tick. A refused frame releases the tick, since
+nothing the host does can render it; the root names the refusal. A refusal is
+something only a change to what a build was made from retries: a node's
+refused graph, or a package's refusal of its instance, such as an SDF
+residency whose tables' build was refused. Each is reported as `Refused`, never
+as a wait the host would hold forever.
+
+Producers answer the same three ways (`FrameRender`): an external producer's
+`Produce`, an uploaded source's `Write` and a World feed's `Publish` or `Write`
+each return rendered, waiting with a reason, or refused with one. The rule is
+that **a source waits only for what waiting can deliver**: it answers waiting
+only while composing the same tick again can bring its image (a conversion
+still building, a compositor's or a probe's first frame arriving on another
+thread, a seat that may take a camera). A feed that ended or could not open (a
+window or monitor that is gone, a probe whose ring cannot be provisioned)
+refuses, and so does a source whose image is a function of the simulation with
+none for this tick (a machine that is not running or has completed no frame),
+since only a later tick can change it. Offscreen, external content renders its
+capture fill, so an external source waits only for its fill to convert, and a
+refused fill conversion refuses the frame. A filled source publishes the fill
+without publishing its live feed. A capture's CPU tier answers from its
+converted image rather than the pixels it captured, so a captured frame whose
+conversion refuses refuses too. Camera CPU tiers forward the same conversion
+answer. A captured CPU frame keeps converting when its source has no newer
+frame; losing the source forgets its old image while submitted frames retain
+their leases. A GPU capture answers from the current ring's published image,
+so a replacement ring waits for its own first copy. An instance with no installed graph,
+or an uploaded source whose opening or descriptor has no conversion graph,
+also refuses the frame until its inputs change. Completion follows the
+scheduled same-frame reads, including buffers, external producers and package
+screen reads; an unshown input and a previous-frame read do not hold a tick.
+A refusal takes precedence over an input still building. A device loss
+holds the tick whose frame it lost. A script that waits N ticks has N rendered
+frames behind it, and each frame reprojects from the frame of the tick before
+it. A tick's first composition carries one step of `DeltaTicks` and
+`FrameDeltaTicks`; composing it again, while its frame has not rendered or a
+capture still owes it, advances nothing, so presentation moves once a tick
+however many attempts its frame takes. `AccumulatorTicks` is always zero. The wall clock only keeps the loop from
+running faster than the simulation's rate: the loop waits for its next period,
+and an iteration already a period late starts the next one at once with no
+steps owed. The interval an iteration measured decides no step. Whatever it
+exceeds its one step by rebases the input pin, so input captured during a slow
+frame is due in the next step, and while the host holds its clock for a capture
+the interval is the host time the hold spends. An offscreen client of a remote
+authority steps its own ticks the same way while the authority keeps its own
+wall clock, so a client script reads what the authority did, never a tick count
+of it.
+
+All three hosts and their shared input capture clock read the same registered
+`TimeProvider`, which defaults to the system clock. Device recovery uses it for
+its reacquire budget and waits too. `OffscreenTickPacingLawTests` runs the real
+loop over a manual clock whose frames cost seconds and holds every frame to one
+tick, and a capture to the tick its frame composed; each law replays the same
+frame costs through `Advance` as its red leg, and holds a tick its root cannot
+render yet to one rendered frame, against one step an iteration as its red leg.
+The World's root reports its completion from the render graph runtime
+(`RenderGraphRuntime.Completion`): the root's image shows the frame only when
+the root rendered it and every instance it reads within the frame rendered it
+too, or stands unchanged on purpose (a refresh divisor, an unchanged view, a
+paused pane). `RenderGraphRuntimeLawTests` holds a cold build and a producer
+that keeps its older output to it.
+
+Each launcher host registers its pacing (`HostPacing`): `OneTickPerFrame`
+for the offscreen host, `WallClock` for the windowed and headless hosts.
+Whatever steps on a host's behalf reads it, so a fast-forwarding replay fork
+advances one authority tick per host step under `OneTickPerFrame` and its
+whole burst under `WallClock`. A non-boot world instance steps on its own
+accumulator at its own rate, so it keeps its bursts. The tape retains its cursor between steps, so the offscreen limit
+changes pacing without dropping recorded input.
+
 ## Render lifecycle and publication
 
-A host has one `IRenderRoot`, which produces one `Surface` a frame and is
-disposable. A root that owns device resources releases stale handles in
+A host has one `IRenderRoot`, which produces one `RootFrame` a frame (a surface
+and its completion) and is disposable. A root that owns device resources releases stale handles in
 `OnDeviceLost` and rebuilds them on a later frame, and a root holding an armed
 capture refuses it (`CaptureRequestSlot.RefuseForDeviceLoss`); device loss must
 not advance or reset simulation. The World's root, `RenderGraphRuntimeNode`,
@@ -204,6 +304,8 @@ them, a device that does not return in time, or a host with nothing to rebuild
 through ends the run; the windowed host closes, and the offscreen host faults.
 A run that ends has still drained and released the render root first, so every
 capture armed at the loss is refused by name rather than left unserved.
+After recovery the offscreen host retries the completed step's frame with the
+same frame context before it takes another step.
 
 On Direct3D 12 both hosts follow one retry rule, in
 `DirectXDeviceContext.Recreate`: a rebuild that fails in Direct3D 12 itself,
@@ -320,8 +422,13 @@ and the frame's pass-pixel budget:
   `FrameContext.DisplayHertz`, the rate its pacer targets). While the
   display's rate is unknown (zero, as offscreen) a rate source is refused: it
   does not render, and its row reads `RenderGraphInstanceStatus.Refused`. A
-  source whose producer declares nothing or no extent does not render. The
-  runtime declares an upload's state and a source producer's
+  source whose producer declares nothing or no extent does not render. An
+  imported source still answers its availability when no extent or display
+  cadence can be scheduled: an unopened feed refuses, a first frame arriving
+  on another thread waits, and an offscreen capture fill renders once it has converted.
+  These rows read `IRenderGraphSourceProducer.Answer`, which produces no work;
+  only scheduled rows call `Produce`. Repeated answers reuse their named diagnostics.
+  The runtime declares an upload's state and a source producer's
   (`IRenderGraphSourceProducer.Descriptor`) itself, after the host's. Cadence is
   counted in ticks and frames, never the wall clock.
   `RenderGraphHistory.Withdraw` takes back a render the producer could not

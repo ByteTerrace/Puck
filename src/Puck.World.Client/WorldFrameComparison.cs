@@ -161,9 +161,9 @@ public sealed class WorldFrameComparison {
             Color: ImageColorEncoding.Srgb, Cadence: ImageSourceCadence.Static, Content: ImageContentClass.Presentation);
         public string? Fault => null;
 
-        public bool TryWrite(long tick, GpuRegion region) {
+        public FrameRender Write(long tick, GpuRegion region) {
             _ = region.Write(bytes: snapshot.Image.RgbaPixels, offset: ImageSourceUploadLayout.HeaderBytes);
-            return true;
+            return FrameRender.Rendered;
         }
         public void Dispose() { }
     }

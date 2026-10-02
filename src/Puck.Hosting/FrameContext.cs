@@ -12,8 +12,10 @@ namespace Puck.Hosting;
 /// <param name="Host">The host capability seam exposed to the node, through which it resolves the device context and any host-published service.</param>
 /// <param name="ElapsedTicks">The fixed-step simulation clock: engine ticks consumed by whole update steps since the host loop started.</param>
 /// <param name="DeltaTicks">The engine ticks the simulation advances this frame — always a whole multiple of <see cref="StepTicks"/>.</param>
-/// <param name="FrameDeltaTicks">The clamped wall interval between presented host frames, for presentation animation
-/// and frame-rate observation only. Authoritative simulation must use <paramref name="DeltaTicks"/> / fixed steps.</param>
+/// <param name="FrameDeltaTicks">The interval this frame's presentation spans, for presentation animation and frame-rate
+/// observation only: the clamped wall interval between presented frames on a host paced to a display, and the
+/// simulation time the frame advanced (<paramref name="DeltaTicks"/>) on the offscreen host, whose time is its tick count.
+/// Authoritative simulation must use <paramref name="DeltaTicks"/> / fixed steps.</param>
 /// <param name="AccumulatorTicks">The engine ticks elapsed but not yet consumed by a fixed step; the render interpolation numerator.</param>
 /// <param name="StepTicks">The fixed update period in engine ticks; the render interpolation denominator.</param>
 /// <param name="TargetWidth">The pixel width the parent is asking this node to fill.</param>
@@ -37,7 +39,7 @@ public readonly record struct FrameContext(
     /// <summary>Gets the fixed-step simulation clock in seconds (<see cref="ElapsedTicks"/> as seconds).</summary>
     public double ElapsedSeconds =>
         EngineTicks.ToSeconds(ticks: ElapsedTicks);
-    /// <summary>Gets the clamped wall interval for this presented host frame. Presentation-only; never simulation time.</summary>
+    /// <summary>Gets <see cref="FrameDeltaTicks"/> in seconds: the interval this frame's presentation spans. Presentation-only; never simulation time.</summary>
     public double FrameDeltaSeconds =>
         EngineTicks.ToSeconds(ticks: FrameDeltaTicks);
     /// <summary>Gets how far this frame sits between the last and next fixed update, in <c>[0, 1)</c>, for interpolating render state.</summary>

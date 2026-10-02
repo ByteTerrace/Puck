@@ -4,8 +4,9 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: <see cref="WorldReadinessLatch"/> reads ready only once the readiness conditions hold and the
-/// host has produced a frame since a read first found them held, so the ticks the frame completing them cost are caught
-/// up before a script's first wait after readiness; a read that finds a condition broken starts the latch over.
+/// host has produced a frame since a read first found them held, so the ticks a display-paced host catches up after the
+/// frame completing them are behind a script's first wait after readiness; a read that finds a condition broken starts
+/// the latch over.
 /// </summary>
 public sealed class WorldReadinessLatchLawTests {
     [Fact]

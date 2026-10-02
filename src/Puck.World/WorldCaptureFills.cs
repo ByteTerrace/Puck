@@ -33,6 +33,19 @@ public sealed class WorldCaptureFills : IDisposable {
         m_consumesExternal = consumesExternal;
     }
 
+    /// <summary>Gets whether a fill's conversion graph is building on the thread pool.</summary>
+    public bool IsBuilding {
+        get {
+            foreach (var fill in m_fills.Values) {
+                if (fill.IsBuilding) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>Returns whether a screen source shows external content: a producer whose registered shape's content class is
     /// <see cref="ImageContentClass.External"/> (a camera, a desktop capture), or a probe, which processes a camera's
     /// frames.</summary>
@@ -58,6 +71,12 @@ public sealed class WorldCaptureFills : IDisposable {
         ? fill.Acquire()
         : 0
     );
+    /// <summary>Returns the fill conversion's answer, including why a build refused it.</summary>
+    /// <param name="rgba">The packed RGBA8 fill color.</param>
+    /// <returns>The conversion's answer, or a wait before conversion starts.</returns>
+    public FrameRender RenderOf(uint rgba) => (m_fills.TryGetValue(key: rgba, value: out var fill)
+        ? fill.Render
+        : FrameRender.Waiting(reason: "its capture fill has not started converting"));
     /// <summary>Converts the fills a frame needs, before any source of the frame resolves: whenever a consumer shows external
     /// content, whether or not the gate fills, it converts the default fill
     /// (<see cref="ImageSourceDescriptor.DefaultCaptureFill"/>), and otherwise converts nothing.</summary>

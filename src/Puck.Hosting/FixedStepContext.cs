@@ -2,8 +2,9 @@ using Puck.Commands;
 
 namespace Puck.Hosting;
 
-/// <summary>One exact fixed simulation step dispatched by the host. The launcher is the sole owner of the wall-clock
-/// accumulator; consumers receive integer engine ticks and never reconstruct steps from floating-point seconds.</summary>
+/// <summary>One exact fixed simulation step dispatched by the host. The launcher alone decides when a step runs, from the
+/// wall clock or, on the offscreen host, one step per produced frame; consumers receive integer engine ticks and never
+/// reconstruct steps from floating-point seconds.</summary>
 /// <param name="Tick">The zero-based simulation tick being advanced.</param>
 /// <param name="ElapsedTicks">The exact simulation time after this step completes.</param>
 /// <param name="StepTicks">The exact duration of one step in <see cref="EngineTicks"/>.</param>
@@ -23,7 +24,8 @@ public interface IFixedStepSimulation {
     /// ends the current burst without discarding the time still due, so the host produces its frame and the next
     /// iteration resumes the catch-up. Only the interleaving of frames between steps changes; the steps themselves,
     /// their inputs, and their order are identical either way. A host that produces no frames reads it and simply
-    /// takes the rest of its burst on its next iteration.</summary>
+    /// takes the rest of its burst on its next iteration. The offscreen host composes a frame after every step, so for it
+    /// this decides only whether the frame is composed again while it stays owed.</summary>
     bool AwaitsFrame { get; }
 
     /// <summary>Asked before every step by a host that holds its clock for owed frames (the offscreen host, whose

@@ -1533,6 +1533,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// step, resume or reset renders.</summary>
     public void OnDeviceLost() {
         Release(wait: false);
+        // The replacement device is a new build input, including for a first candidate that never installed.
+        m_pending ??= m_refusedPending;
+        ForgetRefusal();
+        m_lastSwapError = null;
         m_publicationLost = true;
         m_capture.RefuseForDeviceLoss();
     }

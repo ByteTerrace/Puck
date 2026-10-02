@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Hosting;
 using Xunit;
@@ -32,7 +31,7 @@ public sealed class OwedFrameTeardownLawTests {
     }
     private sealed class RecordingRoot(TeardownLog log) : IRenderRoot {
         public void Dispose() => log.Steps.Add(item: DisposeRoot);
-        public Surface ProduceFrame(in FrameContext context) => default;
+        public RootFrame ProduceFrame(in FrameContext context) => default;
     }
     private sealed class NoBindings : IInputBindings {
         public IReadOnlyList<CommandBinding>? Resolve(int slot, string source) => null;

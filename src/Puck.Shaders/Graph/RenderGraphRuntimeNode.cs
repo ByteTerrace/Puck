@@ -75,7 +75,9 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
     /// <inheritdoc/>
     public void OnDeviceLost() => Runtime.OnDeviceLost();
     /// <inheritdoc/>
-    public Surface ProduceFrame(in FrameContext context) {
+    /// <remarks>The frame's completion is the runtime's (<see cref="RenderGraphRuntime.Render"/>): rendered only when
+    /// the root's image shows this frame.</remarks>
+    public RootFrame ProduceFrame(in FrameContext context) {
         Prepare?.Invoke(context: in context);
         m_roots.Clear();
         m_roots.Add(item: new RenderGraphRoot(
@@ -96,7 +98,7 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
             }
         }
 
-        return Runtime.ProduceFrame(
+        var surface = Runtime.ProduceFrame(
             context: in context,
             frame: new RenderGraphFrame(
                 DisplayHeight: m_displayHeight,
@@ -109,6 +111,11 @@ public sealed class RenderGraphRuntimeNode : IRenderRoot, ICaptureRequestTarget 
                     ? 0L
                     : ((long)(context.ElapsedTicks / context.StepTicks)))
             )
+        );
+
+        return new RootFrame(
+            Render: Runtime.Render,
+            Surface: surface
         );
     }
     /// <inheritdoc/>

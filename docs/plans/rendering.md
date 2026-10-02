@@ -3002,7 +3002,7 @@ beside it. The frame group carries the deterministic tick from
 the source the shader push-constant vocabulary already specifies, ticks divided
 by the engine rate over the requested rate, refused unless that rate divides the
 engine rate exactly. A capture records the tick its regions were refreshed at,
-the offscreen host renders at most one frame per step, and `puck parity` gains a
+the offscreen host renders one frame per step, and `puck parity` gains a
 verdict that the frame shows the tick it was armed for, ordered after the state
 hash and before the pixel verdict. A scheduled capture already ends the pump's
 catch-up burst at its armed tick (`IFixedStepSimulation.AwaitsFrame`), and one
@@ -3128,17 +3128,18 @@ follow it.
    carries no tick of its own.
    `puck parity` holds it to the armed tick in a tick verdict between the state
    and pixel verdicts (`TICK-OK`, `TICK-FAILED` naming both sides' ticks). The
-   offscreen host composes at most one frame per step
-   (`OffscreenTickHostedService.ComposesFrame`), and the owed frame again only
-   while a capture waits for it, each frame's interval spanning every host
-   iteration since the frame before it (`OffscreenFrameInterval`). Laws:
+   offscreen host steps one tick per produced frame (`FixedStepPump.TryStep`)
+   and composes a frame for every step
+   (`OffscreenTickHostedService.ComposesFrame`), and the owed frame again,
+   advancing nothing, only while a capture waits for it, each frame's interval
+   the simulation time it advanced (`OffscreenTickPacingLawTests`). Laws:
    `ShaderPipelineRenderNodeLawTests.Tick` (one delivered tick writes identical
    bytes at three presentation clocks; a non-dividing rate refuses by name; a
    paused instance's capture records the tick its image was rendered at),
    `ParityComparatorTests` (a mid-burst
    capture fails the tick verdict rather than the pixel verdict),
    `WorldCaptureSchedulerLawTests` (a landed entry records its region tick) and
-   `OffscreenFrameCadenceLawTests`; every `puck parity` station holds its tick
+   `OffscreenTickPacingLawTests`; every `puck parity` station holds its tick
    verdict on both backends, and `rulepush-board` reads its tiles through the
    shared row region on both.
 6. Done: the presentation dimension. The cost report prices every binding
@@ -3429,7 +3430,7 @@ Each commit is marked with what it waits on.
    installed in the live set, the instance's latest completed image handed to
    `SdfEngineNode` with the screen's other reads) and then deleted the feed's
    `CpuSurfaceSource` upload and `IWorldImageFeed.Publish`/`AcquireFrame` for
-   uploaded feeds, leaving `IWorldUploadFeed.TryWrite` their one image path.
+   uploaded feeds, leaving `IWorldUploadFeed.Write` their one image path.
    Laws on the fake GPU: a screen's lease
    retires after the sampling slot's fence; a slot the capture producer is
    lapping is never handed out while leased; a filled external source binds

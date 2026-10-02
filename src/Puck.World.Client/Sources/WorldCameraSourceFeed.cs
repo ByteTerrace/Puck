@@ -9,6 +9,11 @@ namespace Puck.World.Client;
 /// every read names the seat and the sensor rather than a device. Every member runs on the thread that produces frames.
 /// </summary>
 public interface IWorldSeatCameras {
+    /// <summary>Returns a sensor's answer, including a refused CPU conversion, without producing work.</summary>
+    /// <param name="seat">The 1-based seat.</param>
+    /// <param name="sensor">The sensor.</param>
+    /// <returns>The sensor's image availability; waiting while the seat holds no camera with the sensor.</returns>
+    FrameRender Answer(int seat, WorldCameraSensor sensor);
     /// <summary>Acquires the latest image of a seat's sensor, held until the frame that samples it retires.</summary>
     /// <param name="seat">The 1-based seat.</param>
     /// <param name="sensor">The sensor.</param>
@@ -78,6 +83,8 @@ public sealed class WorldCameraSourceFeed : IWorldImportFeed {
     }
 
     /// <inheritdoc/>
+    public FrameRender Answer => m_cameras.Answer(seat: Seat, sensor: Sensor);
+    /// <inheritdoc/>
     /// <remarks>The extent is the one the seat's sensor delivers, or the requested one while the seat holds no camera
     /// with the sensor; the descriptor is a new record only when the extent changed.</remarks>
     public ImageSourceDescriptor Descriptor {
@@ -134,6 +141,7 @@ public sealed class WorldCameraSourceFeed : IWorldImportFeed {
     /// <remarks>The seat's cameras recover their own device objects.</remarks>
     public void NotifyDeviceLost() { }
     /// <inheritdoc/>
-    /// <remarks>The seat's cameras publish every sensor once per frame, whatever reads it.</remarks>
-    public void Publish(in FrameContext context) { }
+    /// <remarks>The seat's cameras publish every sensor once per frame, whatever reads it. A seat may take a camera with
+    /// the sensor at any time, so an absent sensor waits; a refused conversion refuses.</remarks>
+    public FrameRender Publish(in FrameContext context) => Answer;
 }

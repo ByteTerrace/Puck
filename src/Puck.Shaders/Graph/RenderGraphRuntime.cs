@@ -151,6 +151,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_set = set;
         m_standInReads = new string?[nodes.Length];
         m_taintedReads = new string?[nodes.Length];
+        ResetStale(count: nodes.Length);
         m_producerTainted = new bool[nodes.Length];
         m_unreadFrames = new long[nodes.Length];
         m_visible = new bool[nodes.Length];
@@ -957,6 +958,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
         Array.Clear(array: m_standInReads);
         Array.Clear(array: m_taintedReads);
+        ResetStale(count: m_stale.Length);
         Array.Clear(array: m_producerTainted);
         m_history = RenderGraphHistory.Empty(set: m_set);
         m_latest = null;
@@ -1107,6 +1109,29 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         m_unproduced = 0;
         CountUnread(frame: in scheduled, schedule: schedule);
 
+        // A source with no conversion graph is never scheduled. Its opening or descriptor fault still refuses any
+        // same-frame consumer that shows it, rather than certifying a stand-in as a completed frame.
+        for (var index = 0; (index < m_sources.Length); index++) {
+            if (m_sources[index] is { Graph: null }) {
+                MarkUnproduced(index: index, node: m_nodes[index]!);
+            } else if (m_set.Instances[index].IsSource &&
+                (m_producers[index] is IRenderGraphSourceProducer producer) &&
+                (schedule.Instances[index] is { } row) &&
+                ((row.Status == RenderGraphInstanceStatus.Refused) ||
+                    ((row.Status == RenderGraphInstanceStatus.Waiting) && ((row.Width == 0) || (row.Height == 0))))) {
+                // An unopened source or an unprovisioned probe has no extent to schedule, but it still answers:
+                // a refusal must reach its consumers, and a filled source can already show its 1x1 fill, including
+                // offscreen where the scheduler cannot pace a rate source against a display.
+                var production = producer.Answer;
+
+                if (production.IsRendered) {
+                    MarkCurrent(index: index);
+                } else {
+                    MarkProduction(index: index, production: production);
+                }
+            }
+        }
+
         var renders = schedule.Renders;
         var holdingConvergence = ((m_convergence is { IsActive: true } convergence) &&
             (convergence.Samples >= convergence.Request.Converge) &&
@@ -1144,25 +1169,29 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     m_capture.Forward(target: producer);
                 }
 
-                var produced = (
-                    (row.Width > 0) &&
-                    (row.Height > 0) &&
-                    producer.Produce(
+                var produced = (((row.Width > 0) && (row.Height > 0))
+                    ? producer.Produce(
                         context: in context,
                         height: ((uint)row.Height),
                         reads: reads,
                         width: ((uint)row.Width)
                     )
-                );
+                    : FrameRender.Waiting(reason: "the schedule gave it no extent"));
 
                 reads?.RetireUntaken();
 
-                if (!produced) {
+                if (!produced.IsRendered) {
                     m_unproduced++;
+                    MarkProduction(
+                        index: index,
+                        production: produced
+                    );
                     schedule.Next.Withdraw(
                         index: index,
                         previous: prior
                     );
+                } else {
+                    MarkRendered(index: index, schedule: schedule);
                 }
 
                 continue;
@@ -1175,12 +1204,26 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             // as an external producer's render is, so its cadence counts from its last converted frame.
             if (
                 (source is not null) &&
-                !source.TryWrite(
+                (source.Write(
                     node: node,
                     tick: frame.Tick
-                )
+                ) is { IsRendered: false } written)
             ) {
                 m_unproduced++;
+
+                if (written.Completion == FrameCompletion.Refused) {
+                    MarkProduction(
+                        index: index,
+                        production: written
+                    );
+                } else {
+                    MarkUnproduced(
+                        index: index,
+                        node: node,
+                        waiting: written.Reason
+                    );
+                }
+
                 schedule.Next.Withdraw(
                     index: index,
                     previous: prior
@@ -1193,6 +1236,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 schedule: schedule
             )) {
                 m_unproduced++;
+                if (!MarkReadStale(index: index, schedule: schedule)) {
+                    MarkStale(
+                        index: index,
+                        reason: $"the instance '{m_set.Instances[index].Name}' reads a buffer with no completed output"
+                    );
+                }
 
                 continue;
             }
@@ -1243,6 +1292,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             if (node.FrameCounter == submitted) {
                 m_unproduced++;
+                MarkUnproduced(
+                    index: index,
+                    node: node
+                );
 
                 // A source whose conversion has not built yet is asked again, since its cadence may never ask twice.
                 if (source is not null) {
@@ -1261,6 +1314,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 m_convergence!.Count();
             }
 
+            MarkRendered(
+                index: index,
+                schedule: schedule
+            );
             m_previous[index] = m_current[index];
             m_current[index] = new Output(
                 Buffer: node.LatestOutputBuffer(),
@@ -1277,6 +1334,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             schedule: schedule,
             tick: frame.Tick
         );
+        Complete();
 
         return RootImage();
     }

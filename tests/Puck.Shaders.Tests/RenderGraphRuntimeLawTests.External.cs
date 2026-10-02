@@ -792,6 +792,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public int Disposals { get; private set; }
         public (uint Width, uint Height) Extent { get; private set; }
         public GpuPixelFormat Format => GpuPixelFormat.R8G8B8A8Unorm;
+        // Why the producer ended, refusing every frame after, or null while it may produce.
+        public string? Ended { get; set; }
         public bool Holding { get; set; }
         public nint Image => m_image!.ImageHandle;
         public nint ImageView => m_image!.ImageViewHandle;
@@ -829,9 +831,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
             m_image?.Dispose();
             m_image = null;
         }
-        public bool Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+        public FrameRender Produce(in FrameContext context, uint width, uint height, RenderGraphExternalReads? reads = null) {
+            if (Ended is { } ended) {
+                return FrameRender.Refused(reason: ended);
+            }
             if (Holding) {
-                return false;
+                return FrameRender.Waiting(reason: "the fake world is holding");
             }
 
             m_image ??= m_gpu.Create(
@@ -854,7 +859,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 writer: m_write
             );
 
-            return true;
+            return FrameRender.Rendered;
         }
         public void RequestCapture(FrameCaptureRequest request) => m_capture.Arm(
             pendingPath: PendingCapturePath,

@@ -92,6 +92,10 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             : m_lease
         );
     }
+
+    // The latest refused engine build, which only a change to what it was built from retries, or null while none is.
+    public Exception? Refusal => m_refusal;
+
     // Names where the holder's engine build stands while it has no engine: refused, not yet asked for, its lease still
     // being taken (the deployed kernels loading), or its set's build and that build's progress. Builds a string, so it
     // is read only to report.
