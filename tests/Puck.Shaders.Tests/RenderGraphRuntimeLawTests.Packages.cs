@@ -360,12 +360,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var asked = view.AskedUnreadBy[PackageView].Count;
         var newcomerAsked = false;
 
-        for (var frame = 0; (frame < 40) && !newcomerAsked; frame++) {
+        for (var frame = 0; ((frame < 40) && !newcomerAsked); frame++) {
             var before = (view.AskedUnreadBy.TryGetValue(key: Second, value: out var seen) ? seen.Count : 0);
 
             ProducePackageFrame(frameIndex: index++, parked: true, runtime: runtime);
             // The kept view carries the three frames it was parked for before the reconfiguration, and one more a frame.
-            Assert.Equal(expected: (3L + frame), actual: view.AskedUnreadBy[PackageView][asked + frame]);
+            Assert.Equal(expected: (3L + frame), actual: view.AskedUnreadBy[PackageView][(asked + frame)]);
             if (view.AskedUnreadBy.TryGetValue(key: Second, value: out var after) && (after.Count > before)) {
                 // The newcomer counted nothing before the reconfiguration, so its first question carries only the frames
                 // parked since.
@@ -494,7 +494,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
             owner: this,
             part: context.Part!
         );
+
         public Dictionary<string, List<long>> AskedUnreadBy { get; } = [];
+
         public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
             AskedUnread.Add(item: unreadFrames);
             if (!AskedUnreadBy.TryGetValue(key: instance, value: out var asked)) {
