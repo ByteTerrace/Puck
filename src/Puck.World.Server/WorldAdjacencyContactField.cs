@@ -44,6 +44,7 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
     }
 
     private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
+        var entryVelocity = velocity;
         var resolution = m_inner.ResolveSweep(
             orientation: in orientation,
             position: ref position,
@@ -52,6 +53,12 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             velocity: ref velocity,
             volumes: volumes
         );
+
+        // A refusal on either side of the seam is the whole step's: no neighbour is consulted past it, and the body keeps
+        // its start and the velocity it came with.
+        if (resolution.Refusal != ContactRefusal.None) {
+            return resolution;
+        }
 
         foreach (var projection in m_source.Visuals()) {
             if (!TryMapIntoNeighbour(
@@ -174,6 +181,13 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
                     velocity: ref neighbourVelocity,
                     volumes: volumes
                 );
+            }
+
+            if (neighbourResolution.Refusal != ContactRefusal.None) {
+                position = previousPosition;
+                velocity = entryVelocity;
+
+                return neighbourResolution;
             }
 
             if (

@@ -94,6 +94,8 @@ public sealed partial class WorldBody {
         var velocity = (m_planarVelocity + (FixedVector3.UnitY * m_verticalVelocity));
         var resolution = default(ContactResolution);
 
+        m_sweepRefusal = ContactRefusal.None;
+
         if (
             (m_contactField is { } field) &&
             (m_collider is { } collider)
@@ -121,19 +123,25 @@ public sealed partial class WorldBody {
             );
         }
 
-        m_previousPosition = trajectory.PreviousPosition;
-        m_position = next;
-        m_planarVelocity = new FixedVector3(
-            X: velocity.X,
-            Y: FixedQ4816.Zero,
-            Z: velocity.Z
-        );
-        m_verticalVelocity = velocity.Y;
-        m_grounded = resolution.Grounded;
-        m_lastContactCount = (resolution.Grounded
-            ? 1
-            : 0
-        );
+        // A refused sweep is a full block (WorldBody.SweepRefusal.cs): the arrival keeps the pose, velocity and contact
+        // facts it was installed with, and only the segment's consumption below advances.
+        if (resolution.Refusal != ContactRefusal.None) {
+            m_sweepRefusal = resolution.Refusal;
+        } else {
+            m_previousPosition = trajectory.PreviousPosition;
+            m_position = next;
+            m_planarVelocity = new FixedVector3(
+                X: velocity.X,
+                Y: FixedQ4816.Zero,
+                Z: velocity.Z
+            );
+            m_verticalVelocity = velocity.Y;
+            m_grounded = resolution.Grounded;
+            m_lastContactCount = (resolution.Grounded
+                ? 1
+                : 0
+            );
+        }
         var consumedThrough = Math.Max(
             val1: trajectory.ConsumedThroughEngineTick,
             val2: destinationCompletedEngineTick

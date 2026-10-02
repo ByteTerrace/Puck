@@ -493,11 +493,14 @@ public sealed partial class WorldBody {
 
     /// <summary>Gets a best-effort world-space linear velocity for a KINEMATIC body — the tangent planar velocity
     /// plus the vertical channel along the body's own up axis. Used only so a kinematic body pushing a rigid one
-    /// contributes its true closing speed to the impulse; a kinematic body never reads its own velocity from here.</summary>
-    internal FixedVector3 ApproximateWorldVelocity() => (IsRigid
+    /// contributes its true closing speed to the impulse; a kinematic body never reads its own velocity from here.
+    /// A rigid body's is its rigid velocity.</summary>
+    /// <returns>The body's world-space linear velocity.</returns>
+    public FixedVector3 ApproximateWorldVelocity() => (IsRigid
         ? m_rigidVelocity
         : (m_planarVelocity + (m_up * m_verticalVelocity))
     );
+
     /// <summary>Builds (or refreshes) this body's persistent <see cref="FixedRigidBody"/> handle — the vehicle
     /// <see cref="Puck.Physics.FixedTwoBodyKernel"/> reads/writes for dynamic-vs-dynamic contact
     /// (<see cref="WorldPopulation.ResolveDynamicContacts"/>). A rigid body's handle is dynamic (its own mass/inertia,
@@ -631,6 +634,12 @@ public sealed partial class WorldBody {
             return;
         }
 
+        // A refused sweep is a full block: the body does not move this tick (WorldBody.SweepRefusal.cs). The capture
+        // precedes damping and gravity, so a refused tick leaves the velocity it began with.
+        var motion = CaptureMotion();
+
+        m_sweepRefusal = ContactRefusal.None;
+
         // Every subsequent read of `rigid` in this call — including the reference ResolveRigidContact receives below
         // — is this body's live-Scale-consistent copy (see ScaleRigid's own remarks), never the kit-shared authored
         // facet: a shrunk body's mass, inertia, substep bound, and contact-point lever arm all shrink with it.
@@ -727,6 +736,14 @@ public sealed partial class WorldBody {
                     velocity: ref velocity,
                     volumes: scaledColliderVolumes
                 );
+            }
+
+            // The substeps stop at a refusal, and every one before it is undone with the rest of the tick's motion.
+            if (resolution.Refusal != ContactRefusal.None) {
+                m_sweepRefusal = resolution.Refusal;
+                RestoreMotion(motion: in motion);
+
+                return;
             }
 
             m_position = bodyOrigin;

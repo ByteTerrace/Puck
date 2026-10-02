@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -187,7 +188,11 @@ public sealed partial class WorldBody {
 
         var previousPosition = m_position;
         var desiredPosition = (carrier.m_position + carrier.m_orientation.Rotate(vector: (carry.Offset * carrier.m_scale)));
+        // A refused sweep is a full block for this body alone (WorldBody.SweepRefusal.cs): it stays as it was, and the
+        // carrier is handed no correction, so a refusal never reaches it.
+        var motion = CaptureMotion();
 
+        m_sweepRefusal = ContactRefusal.None;
         m_orientation = carrier.m_orientation;
 
         if (
@@ -198,7 +203,7 @@ public sealed partial class WorldBody {
             var sweptPosition = desiredPosition;
             var sweptVelocity = (desiredPosition - previousPosition);
 
-            field.ResolveSweep(
+            var resolution = field.ResolveSweep(
                 orientation: in m_orientation,
                 position: ref sweptPosition,
                 previousPosition: in previousPosition,
@@ -206,6 +211,13 @@ public sealed partial class WorldBody {
                 velocity: ref sweptVelocity,
                 volumes: volumes
             );
+
+            if (resolution.Refusal != ContactRefusal.None) {
+                m_sweepRefusal = resolution.Refusal;
+                RestoreMotion(motion: in motion);
+
+                return;
+            }
 
             var blockCorrection = (sweptPosition - desiredPosition);
 

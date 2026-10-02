@@ -2,6 +2,7 @@ using Puck.Maths;
 using Puck.World.Protocol;
 using Puck.Physics.Motion;
 using Puck.Physics.Navigation;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -1068,6 +1069,23 @@ public sealed partial class WorldPopulation {
                 outputs: m_durableStateOutputs,
                 tick: tick
             );
+        }
+
+        // A body whose sweep is refused stays put; it is never silent. Each transition, refused or recovered, is
+        // narrated once, after every body has moved this tick, and body.where carries the refusal while it holds.
+        for (var index = 0; (index < m_entries.Length); index++) {
+            if (
+                (m_entries[index].Body is { } body) &&
+                body.TryTakeSweepTransition(refusal: out var refusal) &&
+                (NarrationHub is { HasNarrationSink: true })
+            ) {
+                NarrationHub.Narrate(
+                    channel: "body.sweep",
+                    text: ((refusal == ContactRefusal.None)
+                        ? $"[body.sweep: body {index} recovered at tick {tick}]"
+                        : $"[body.sweep: body {index} refused at tick {tick} ({refusal}): the step's sweep could not run, so the body did not move]")
+                );
+            }
         }
     }
     /// <summary>Returns a value indicating whether solid world geometry leaves the sight-offset segment between two live bodies unobstructed —

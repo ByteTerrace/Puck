@@ -211,7 +211,19 @@ sphere's start, that the Q48.16 carrier cannot hold, and a capsule core past its
 piece ceiling (which only a body's runtime scale reaches once validation has
 admitted it). The resolution names it in `ContactRefusal`, the body keeps the
 position it started the step from, its velocity comes back as it came, and no
-sweep or endpoint push runs; nothing is wrapped or clamped.
+sweep or endpoint push runs; nothing is wrapped or clamped. In the World a
+refused sweep is a full block: the body does not move this tick. `WorldBody`
+captures its motion state before the step integrates (the fields
+`WorldBody.SweepRefusal.cs` lists) and restores it, for a walking, rigid,
+carried or arriving body alike, while its action triggers, timers and
+followers stand, since time does pass. A refusal is local to the refused body:
+a carrier under a refused carried body is handed no correction. The population
+narrates each transition once on the `body.sweep` channel, refused and
+recovered, and `body.where` reads `sweep=refused(...)` while the refusal holds.
+A body approaching the carrier's end is ordinarily held a step sooner by its
+sweep, whose box reaches the end before any core's start does and proves no
+ground there; the refusal is met by a body already past that point, posed or
+arriving there.
 
 Each sweep takes an explicit bounds-query budget
 (`DefaultSweepBoundsQueryBudget`, 64) and the contact skin as its contact

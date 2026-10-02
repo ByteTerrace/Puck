@@ -827,6 +827,16 @@ the population-wide `sleeping` count. A rigid kit's own rest latch
 (`WorldBody.Resting`) is a distinct, older mechanism—a rigid body never
 reaches this one at all (`Advance` returns before it).
 
+A refused contact sweep (`ContactRefusal`, from `FixedFieldContactSolver`) is a
+full block: the body does not move this tick. `WorldBody.SweepRefusal.cs`
+captures the body's motion state before the step integrates and restores it
+for a walking, rigid, carried or arriving body, so its pose, velocity and
+grounded fact read as they did before, while action triggers, timers and
+followers stand. A carrier is never handed a refused carried body's correction.
+`WorldPopulation.CompleteStep` narrates each transition once on `body.sweep`
+(refused, then recovered), and `body.where` trails `sweep=refused(<reason>)`
+while the refusal holds (absent otherwise).
+
 Checkpoint restoration preserves the sleep tick, any partially accumulated
 idle floor, and a pending contact-field wake. It records whether the body's
 field observation was current, rather than depending on a process-local
