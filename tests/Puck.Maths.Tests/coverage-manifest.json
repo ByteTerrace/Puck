@@ -7820,6 +7820,14 @@
     },
     {
       "CoveredBy": [
+        "scalar.smoothstep-correctly-rounded",
+        "scalar.smoothstep-edges"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.Smoothstep(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "deep.fixed-transcendental-envelope",
         "scalar.sqrt-exact"
       ],

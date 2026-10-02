@@ -4,9 +4,9 @@
 //! dotnet run --project src/Puck.Cli -c Release -- wasm-stdlib
 //! ```
 //!
-//! A bit-exact Rust port of `FixedQ4816`'s six algorithm-pinned transcendentals
-//! (`src/Puck.Maths/FixedPoint/FixedQ4816.cs`'s `Atan2`, `Sin`/`Cos` (via `SinCos`), `Exp2`, `Log2`, and
-//! `Pow`) — the table-plus-polynomial recipe `fixed.rs`'s module doc calls "specified only by a
+//! A bit-exact Rust port of `FixedQ4816`'s seven algorithm-pinned functions
+//! (`src/Puck.Maths/FixedPoint/FixedQ4816.cs`'s `Atan2`, `Sin`/`Cos` (via `SinCos`), `Exp2`, `Log2`, `Pow`,
+//! and `Smoothstep`) — the table-plus-polynomial and exact-integer recipes `fixed.rs`'s module doc calls "specified only by a
 //! particular algorithm", not a closed-form spec. The 128-entry interval tables and the polynomial
 //! coefficients below are read from the live `FixedQ4816` type by the tools verb named above, never
 //! transcribed by hand — see `fixed_vectors.rs` for the known-answer proof that this port still agrees
@@ -14,7 +14,7 @@
 //! output; if the host's algorithm ever changes, regenerating both files is how the port catches up.
 //!
 //! Every function here is guest code now: there is no host round-trip and no WASM import. `fixed.rs`
-//! re-exports these six under its own public names, so an addon author's call sites never change.
+//! re-exports these seven under its own public names, so an addon author's call sites never change.
 
 use crate::fixed::{FRACTION_BITS, ONE, ZERO};
 
@@ -950,4 +950,54 @@ pub fn pow(x: i64, y: i64) -> i64 {
     } else {
         i64::MAX
     }
+}
+
+/// The Hermite smoothstep of `value` between `edge0` and `edge1` — ported from `FixedQ4816.Smoothstep`: the
+/// ratio floored once to Q62 from full-width differences, its cubic `3r^2*2^62 - 2r^3` formed exactly at Q186
+/// as a high and a low word, then rounded once to Q16 with ties to even. Equal edges are the step.
+#[must_use]
+pub fn smoothstep(edge0: i64, edge1: i64, value: i64) -> i64 {
+    const SHIFT: u32 = 186 - 16 - 64;
+
+    if edge0 == edge1 {
+        return if value < edge0 { ZERO } else { ONE };
+    }
+
+    let mut numerator = (value as i128) - (edge0 as i128);
+    let mut denominator = (edge1 as i128) - (edge0 as i128);
+
+    if denominator < 0 {
+        numerator = -numerator;
+        denominator = -denominator;
+    }
+
+    if numerator <= 0 {
+        return ZERO;
+    }
+
+    if numerator >= denominator {
+        return ONE;
+    }
+
+    let ratio = (((numerator as u128) << 62) / (denominator as u128)) as u64;
+    let square = (ratio as u128) * (ratio as u128);
+    let cube_low = ((square as u64) as u128) * (ratio as u128);
+    let cube_high = (((square >> 64) as u64) as u128) * (ratio as u128) + (cube_low >> 64);
+    let cube_low_word = cube_low as u64;
+    let tripled = square * 3;
+    let term_high = tripled >> 2;
+    let term_low = ((tripled & 3) as u64) << 62;
+    let doubled_high = (cube_high << 1) | u128::from(cube_low_word >> 63);
+    let doubled_low = cube_low_word << 1;
+    let curve_low = term_low.wrapping_sub(doubled_low);
+    let curve_high = term_high - doubled_high - u128::from(term_low < doubled_low);
+    let mut quotient = curve_high >> SHIFT;
+    let discarded = curve_high & ((1u128 << SHIFT) - 1);
+    let half = 1u128 << (SHIFT - 1);
+
+    if discarded > half || (discarded == half && (curve_low != 0 || (quotient & 1) != 0)) {
+        quotient += 1;
+    }
+
+    quotient as i64
 }

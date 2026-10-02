@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 840 | 552 |
+| classical | — | 842 | 554 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 31 | 25 |
 | shared-substrate | fused-substrate | 36 | 34 |
@@ -23,15 +23,15 @@ adversarial review's job, not this file's.
 | shared-substrate | intra-presented | 82 | 47 |
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
-| structural | — | 1200 | 605 |
-| **total** | | **2331** | **778** |
+| structural | — | 1201 | 606 |
+| **total** | | **2334** | **780** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 112 | 148 | 123 | 21 |
-| law: Default | 637 | 912 | 1076 | 189 |
+| law: Default | 639 | 914 | 1077 | 189 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -1968,6 +1968,9 @@ adversarial review's job, not this file's.
 | scalar.sincos-vs-series | law: Default | structural | — | Pythagorean residual \|sin^2 + cos^2 - 2^32\| stays under 4*2^16*u + 4*u^2 in BigInteger, with u the integer ceiling of the same full-range ULP budget. | — | — | — |
 | scalar.sincos-vs-series | law: Default | structural | — | the origin is exact: SinCos(Zero) is (Zero, One) with no rounding anywhere | — | — | — |
 | scalar.sincos-vs-series | law: Default | structural | — | Exactly odd sine and even cosine at every swept signed raw except MinValue, which has no signed negation; magnitude-first reduction and quadrant reflection preserve identical magnitudes. | — | — | — |
+| scalar.smoothstep-correctly-rounded | law: Default | classical | — | FixedQ4816.Smoothstep at edges drawn over the whole raw carrier in both orientations — including pairs at the two extremes, whose difference needs 65 signed bits — at a value drawn over the whole carrier (so the clamps are reached) and again at a value placed inside the edges at a drawn fraction, so the interior is swept whatever the edges' distance apart; and, per draw, at a true tie, t = o/64 for an odd o, in both orientations | Oracles.Smoothstep: the exact rational N²(3D − 2N)/D³ for N = value − edge0 and D = edge1 − edge0, in BigInteger, scaled by 2¹⁶ and rounded ONCE, ties to even, by Oracles.RoundRationalTiesToEven. A different route from the subject, which floors the ratio to Q62 before an exact cubic: the oracle never quantizes the ratio. BIT-EXACT outside a band of 2⁻⁴⁴ ULP about each rounding midpoint, inside which either neighbour is accepted; the subject's documented bound beyond the half ULP is 1.5·2⁻⁴⁶ ULP, below that band. True ties are exact on both sides, so the tie leg is bit-exact and pins the ties-to-even rule | — | — |
+| scalar.smoothstep-correctly-rounded | law: Default | structural | — | the curve is monotone in the value: at the interior value and its two raw neighbours the results never reverse the edges' direction (non-decreasing for edge0 < edge1, non-increasing for edge0 > edge1, the step at equal edges included). ENVELOPE: neighbouring raws only; the oracle agreement leg carries order over wider gaps, since two correctly rounded values of a monotone curve are themselves ordered | — | — | — |
+| scalar.smoothstep-edges | law: Default | classical | — | FixedQ4816.Smoothstep at six edge pairs in both orientations, the carrier extremes MinValue/MaxValue among them, and at five equal-edge steps | exact hand-derived expectations from the definition: Zero at edge0 and one raw beyond it, One at edge1 and one raw beyond it, exactly One/2 at the midpoint of an even span (t = 1/2 gives t²(3 − 2t) = 1/2), and at equal edges the step value < edge0 ? Zero : One | — | — |
 | scalar.sqrt-exact | law: Default | classical | — | FixedQ4816.Sqrt — both lanes, the 64-bit hardware-seeded integer root below raw < 2⁴⁸ and the double-seeded UInt128 estimate settled by exact comparison above it | Oracles.IntegerSquareRoot(raw << 16) — the exact ⌊√⌋ by a bit-length seed and Newton descent in BigInteger, settled by the exact predicate r² ≤ v < (r+1)², lifted to the nearest integer in the claim body by the tie-free remainder test (an integer radicand is nearer (r+1)² exactly when v − r² > r). BIT-EXACT on both sides: the documented contract is the correctly rounded root, not an approximation, so this is the one transcendental with no envelope at all. Puck.Maths' own BigIntegerFunctions.SquareRoot is deliberately NOT used | — | — |
 | scalar.sqrt-exact | law: Default | structural | — | the defining predicate holds directly on the returned raw: raw·2¹⁶ − result² lies in (−result, result], the nearest-integer condition (result − ½)² ≤ raw·2¹⁶ < (result + ½)² written over integers, checked in BigInteger, which pins the answer without reference to how either side computed it | — | — | — |
 | scalar.sqrt-exact | law: Default | structural | — | the documented non-positive policy: every raw at or below zero returns Zero, MinValue included, and Sqrt never throws | — | — | — |
