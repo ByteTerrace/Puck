@@ -101,6 +101,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly IWorldEmbodiedSeats m_seats;
     private readonly WorldRoutedSeatTurns m_routedTurns;
     private readonly WorldStateRoot m_stateRoot;
+    // Fixed at composition and null in every production composition: told of each traveler route wrapper this host
+    // newly creates, after the wrapper and its published endpoint exist and before the seat's claim is held and
+    // published — see the constructor's travelerRouteStarted.
+    private readonly Action<WorldRemoteAuthority>? m_travelerRouteStarted;
 
     private readonly Dictionary<string, WorldInstance> m_instances = new(comparer: StringComparer.Ordinal);
     // Whether the instance's own document came from a composed image this process already held when the instance
@@ -1284,7 +1288,14 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <param name="catalogFingerprint">The stable fingerprint of the selected host machine catalog.</param>
     /// <param name="machineCatalog">The selected host machine catalog, or null for structural-only test hosts.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null) {
+    /// <param name="travelerRouteStarted">Told of each traveler route wrapper a committed federated transfer newly
+    /// creates for a followed local seat, on the thread publishing the transfer, after the wrapper and its published
+    /// endpoint exist and before the seat's commit turn is held and its claim published through
+    /// <see cref="WorldRemoteAuthority.PublishClaim"/>. A later crossing by the same seat reuses the cached wrapper and
+    /// publishes its claim without the route gate, and is not reported. A route observed on the wrapper inside the
+    /// callback reaches no seat until the claim stands. Null in every production composition; a verification harness
+    /// passes it to place an observed route before, during or after the claim.</param>
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null) {
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
         ArgumentNullException.ThrowIfNull(argument: stateRoot);
@@ -1300,6 +1311,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         m_machineCatalog = machineCatalog;
         m_machineHostFactory = machineHostFactory;
         m_admitsSpawn = admitsSpawn;
+        m_travelerRouteStarted = travelerRouteStarted;
     }
 
     /// <summary>Admits <paramref name="row"/> into the registry under its own name — the one place a row enters this

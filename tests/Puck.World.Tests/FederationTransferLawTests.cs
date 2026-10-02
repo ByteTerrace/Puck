@@ -3,7 +3,6 @@ using System.Net;
 using System.Numerics;
 using System.Text;
 
-using Puck.Attestation;
 using Puck.Maths;
 using Puck.Networking;
 using Puck.Testing;
@@ -12,6 +11,7 @@ using Puck.World.Server;
 
 using Xunit;
 using Puck.Physics.Motion;
+using static Puck.World.Tests.FederationSigning;
 
 namespace Puck.World.Tests;
 
@@ -63,15 +63,6 @@ public sealed partial class FederationTransferLawTests {
                     Mobility: Mobility(index: 0)
                 )]
         );
-    /// <summary>The SignsDirectly admission row a peer must author to trust <paramref name="oracle"/>'s own key.</summary>
-    private static WorldAdmissionEntry TrustEntryFor(LocalKeySigningOracle oracle) => new(
-        Domain: oracle.Domain,
-        Subject: oracle.Subject,
-        Mode: WorldAdmissionTrustMode.SignsDirectly,
-        Algorithm: AttestationAlgorithms.EcdsaP256Sha256,
-        PublicKey: Convert.ToBase64String(inArray: oracle.PublicKeySubjectPublicKeyInfo),
-        Grants: []
-    );
 
     [Fact]
     public void AutonomousTransfer_RefusesAnUnsupportedProducerBeforeCommit() {
