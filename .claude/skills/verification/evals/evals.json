@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Finish a delegated lane that changed a render-graph law and two Puck.Shaders sources. The brief grants no GPU. What do you run before handing back?",
-      "expected_output": "Checks `puck --help` from a lane-named copy of the worktree's own built CLI for `gate` and `laws prove`; without them, merges the integration tip, builds the solution with zero warnings, runs `puck affected --since` the merge base without `--run`, runs the plan's suites, proves the changed law red with the fix withheld and green with it restored, runs `lengths --check`, `comment-smells --check` and `format --check --file-list`, and lists the plan's canary and parity lines as GPU legs owed in the hand-back report.",
+      "expected_output": "Merges the integration branch's current tip, then runs `puck gate` without `--gpu` from a lane-named copy of the head's own built CLI kept outside the checkout, against the integration branch the brief names, and reports its verdict without repeating by hand a step the gate ran. Proves the changed law with `puck laws prove` rather than by reverting files in the shared tree. Lists the affected plan's canary and parity lines as GPU legs owed in the hand-back report, under Needs you, Changed and Found.",
       "files": []
     },
     {
@@ -17,6 +17,36 @@
       "id": 3,
       "prompt": "A build of the lane failed with transient errors, then the test step ran with --no-build and passed. Is the lane verified?",
       "expected_output": "No. A failed build leaves old binaries in place, so the tests measured old code; rebuilds until the build exits 0 after the last edit, keeps the full log in a lane-named file, and only then runs the tests.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "You withheld a fix to prove a new law red. The rebuild stopped on an unrelated compile error, you ran the law anyway, and it passed. Can the law fail?",
+      "expected_output": "Draws no conclusion from that run: the failed build left the binaries built with the fix, so the run tested the fixed code. Repairs the withheld tree until its build exits 0, confirms that before running, and only then reads the law's result; prefers `puck laws prove`, which refuses a proof whose build failed in either phase.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "With the fix withheld, the test run for a new law reports Total: 1, Failed: 0, Skipped: 1 and a nonzero exit code. Is the red leg proved?",
+      "expected_output": "No. A skipped or unselected test executed nothing, so neither a nonzero exit code nor the absence of a pass is a red leg; a red leg is the law failing at the assertion it was written for. Reads the counts on every leg, runs the law where it executes (or with what its skip condition needs), or reports the leg as unproved; uses `puck laws prove`, which refuses a proof in which a selected test was skipped.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "To prove a regex fix's law red, you used a one-line text substitution to put the old pattern back, rebuilt successfully, and the law failed. Done?",
+      "expected_output": "Not until the withheld tree is confirmed to differ from the fixed one exactly by the old pattern: diffs the mutated file against the fixed copy, because quoting and escaping in a substitution can produce a different mutant whose failure says nothing about the fix. Redoes the withholding with an exact edit, or with `puck laws prove --file-list`/`--fix` against the real old text, and records how the red leg was proved.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "You hold a GPU grant. Before the leg, a process search for the World's name in running command lines always reports one match, so you conclude another GPU job is running. What do you do?",
+      "expected_output": "Suspects the check before the machine: a search by name or command line can match its own query. Excludes the checking process (by its own id or a pattern that cannot match itself), confirms whether a real World or GPU process remains, and runs the leg only when none does; never skips or delays a granted leg on a detector that matched itself.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "A granted parity run is in progress on this machine. Meanwhile you want to check your skill edits with `puck docs links` and `puck docs citations`. Which can run now?",
+      "expected_output": "Runs `puck docs links` now, since it only reads files. Holds `puck docs citations` until the GPU leg ends: without `--enumeration` it builds and boots Puck.World headless and windowed, which is a GPU leg and competes for the device. Runs it serially afterwards, or passes a verb list with `--enumeration`, or leaves it to whoever holds the grant, and says which in the report.",
       "files": []
     }
   ]
