@@ -5742,6 +5742,245 @@
     },
     {
       "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval..ctor(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Abs(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arc-functions-enclose-the-series",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Acos(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arc-functions-enclose-the-series",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Asin(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.atan2-encloses-the-series",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Atan2(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Clamp(Puck.Maths.FixedInterval,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Contains(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Contains(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.circular-encloses-the-series",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Cos(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Entire",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Floor(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval.FromPoint(Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Hull(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval.IsUnboundedAbove",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval.IsUnboundedBelow",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Lower",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Magnitude(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Magnitude(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Max(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Min(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Round(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.circular-encloses-the-series",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Sin(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Sqrt(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Square(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.edges"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Union(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.Upper",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.op_Addition(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.op_Division(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.edges",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.op_Multiply(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull",
+        "interval.inclusion-isotonic"
+      ],
+      "Id": "Puck.Maths.FixedInterval.op_Subtraction(Puck.Maths.FixedInterval,Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "interval.arithmetic-is-the-directed-hull"
+      ],
+      "Id": "Puck.Maths.FixedInterval.op_UnaryNegation(Puck.Maths.FixedInterval)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "mass-properties.fraction-bit-count-bound"
       ],
       "Id": "Puck.Maths.FixedMassProperties.MaximumFractionBitCount",

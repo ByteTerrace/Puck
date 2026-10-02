@@ -1,0 +1,313 @@
+[
+  {
+    "Id": "interval.arithmetic-is-the-directed-hull",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Abs"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Square"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Sqrt"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Min"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Max"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Magnitude"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Round"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Floor"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Clamp"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Hull"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Contains"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Lower"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Upper"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedInterval\u0027s sum, difference, negation, product, quotient, absolute value, square, root, rounding, floor, clamp, minimum, maximum and two- and three-dimensional norm over interval pairs drawn across the whole raw carrier and folded by a drawn shift (so bounded operands of every magnitude and the carrier extremes alike are reached): each result must EQUAL the directed hull, the floor of the exact least result and the ceiling of the exact greatest, with the carrier extremes standing for the unbounded ends",
+        "Against": "Oracles.IntervalProduct, IntervalQuotient, IntervalRoot, IntervalMagnitude and DirectedRaw: the exact corner products, quotients, roots and sums of squares in BigInteger, each rounded once by an exact floor or ceiling. The subject shifts Int128 products arithmetically and settles UInt128 roots by one squaring; the oracle divides and searches in arbitrary width. Equality, not containment, so a nearest rounding, a padded endpoint or a missed corner fails. ENVELOPE: the unbounded-sentinel policy (an extreme operand makes a product or quotient the whole line) is transcribed from the type\u0027s documentation, not derived",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the same intervals against the shipped round-to-nearest point operators at three operands inside each: the point sum, difference, product, quotient, absolute value, root, minimum and FixedVector3.Length must lie inside the interval result wherever the exact point result stays in the carrier",
+        "Against": "FixedQ4816\u0027s own operators and FixedVector3.Length, the evaluations a certified bound must hold; a wrapped point result is outside the type\u0027s guarantee and is skipped, as the type documents",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "interval.inclusion-isotonic",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Abs"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Square"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Sqrt"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Min"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Max"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Magnitude"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Sin"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Cos"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Atan2"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Asin"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Acos"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "shrinking either operand never widens a result: for every FixedInterval operation, the result at sub-intervals placed by drawn fractions inside the drawn operands lies inside the result at the drawn operands, over intervals across the whole carrier folded by a drawn shift",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "interval.circular-encloses-the-series",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Sin"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Cos"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedInterval.Sin and Cos over angle intervals starting across the carrier\u0027s turn reduction with widths from one raw to several turns: at both endpoints and an interior angle, the exact value\u0027s enclosure and the shipped point value lie inside; an extremum provably inside makes the endpoint exactly \u00B11; and with the extrema accounted the endpoints sit within two raws of the exact supremum and infimum",
+        "Against": "Oracles.EncloseSinCos, the radian reduction against a Machin-derived \u03C0 at 384 bits and the alternating Taylor series, and Oracles.ProvablyReachesExtrema, which places each crest and trough against the same 384-bit circle and reports only what it can prove. The subject reads the shipped SinCos at its endpoints and places extrema against PiQ61 with a four-raw slack",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "interval.atan2-encloses-the-series",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Atan2"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedInterval.Atan2 over boxes of every width and position: at the four corners and an interior point, the exact angle\u0027s enclosure and the shipped point angle lie inside; away from the origin and the negative real axis the endpoints sit within two raws of the exact corner extremes",
+        "Against": "Oracles.EncloseAtan2, the quadrant split by definition and the alternating arctangent series at 128 bits; the subject reads the shipped Atan2 at the corners and widens by one raw",
+        "Shared": "",
+        "Citation": "the shipped Atan2\u0027s sub-raw envelope is pinned by scalar.atan2-vs-series",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "interval.arc-functions-enclose-the-series",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Asin"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Acos"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedInterval.Asin and Acos over operand intervals folded to about \u00B11.2, clamped to [\u22121, 1]: at both clamped endpoints and an interior operand the exact angle\u0027s enclosure lies inside, and the endpoints sit within three raws of the exact endpoint angles (a raw for the Q16 root bracket, one for the shipped arctangent, one for the widening)",
+        "Against": "Oracles.EncloseArcSine and EncloseArcCosine: the root \u221A(1 \u2212 v\u00B2) bracketed at Q40 by an exact integer search and the angle of each bracket enclosed by the arctangent series. The subject brackets the root at Q16 and reads the shipped Atan2; both rest on the one identity acos v = atan2(\u221A(1 \u2212 v\u00B2), v), and the leg names the series and the finer bracket as the independent part",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "interval.edges",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Sin"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Cos"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Atan2"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Entire"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "FromPoint"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "op_Division"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "IsUnboundedBelow"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "IsUnboundedAbove"
+      },
+      {
+        "Type": "Puck.Maths.FixedInterval",
+        "Name": "Union"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the fixed points: sin reaches one across the raws either side of \u03C0/2; cos at zero is one; sin over the whole line is [\u22121, 1]; atan2 over a box holding the origin and over a box across the cut is the whole circle [\u2212205888, 205888]; an unbounded sum stays unbounded; an unbounded product with zero is zero; a quotient by an interval holding zero is the whole line; a reversed interval is refused",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

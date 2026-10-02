@@ -19,6 +19,12 @@ module follows. This file is a short map of what lives where.
 | `src/fixed_vectors.rs` | GENERATED—12,000 known-answer `cargo test` vectors for `fixed_generated.rs`'s six functions, computed by calling the real `FixedQ4816` at generation time. Same regenerate verb as above; never hand-edit. |
 | `src/fixed_tests.rs` | Hand-written known-answer `cargo test` vectors for `fixed.rs`'s hand-written functions, including the round-half-to-even tie cases for `mul`/`div` and the floor-boundary cases for `sqrt`. |
 
+The `fixed` mirror covers the scalar `FixedQ4816` surface a script calls, and
+nothing else from `Puck.Maths`: the vector, rotation and interval types
+(`FixedInterval` among them) stay host-side, because no WASM consumer reads
+them. A type joins the mirror when a script needs it, with its generated port
+and known-answer vectors.
+
 Depend on this crate from your own addon with a path dependency:
 
 ```toml
