@@ -104,10 +104,12 @@ fold-safe bounds where required.
 
 A wallpaper fold's symmetry LOD (`lodDistance`) is a discontinuity of its own:
 past a sphere of that radius around the camera the fold drops its mirrors, so a
-copy can stand where the mirrored lattice has none. Every march step stops at
-that sphere (the step bound `map()` publishes), so a step measured on one side
-never jumps through a copy that exists only on the other
-(`SdfMarchLodDeviceLawTests`).
+copy can stand where the mirrored lattice has none. The step bound `map()`
+publishes includes the world-space gap to that sphere, independently of the
+program's Lipschitz scale (`SdfMarchLodDeviceLawTests`). Its positive floor,
+`lodDistance * 1e-4`, permits crossing the switch and can skip a copy thinner
+than that floor. Soft shadows also impose a minimum stride that can exceed the
+switch gap. Exact traversal across the discontinuity remains uncovered.
 
 Plain repetition is exact only when the prototype fits within its centered
 cell. Cell jitter also requires conservative spacing; containment does not

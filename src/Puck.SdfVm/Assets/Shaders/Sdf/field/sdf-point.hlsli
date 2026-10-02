@@ -28,9 +28,10 @@ SdfHit sdfIsaErrorHit() {
 // correct.
 static float3 sdfLodOrigin = float3(0.0, 0.0, 0.0);
 
-// The FOLD-SAFE STEP BOUND: the distance (in the same Lipschitz-clamped units as the returned field) from the last
-// map sample to the nearest fold-cell boundary of any radial fold on its chain, or to any wallpaper fold's
-// symmetry-LOD switch — or SDF_STEP_BOUND_NONE when the program folds nothing. A folded field measures only the NEAREST cell's copy, so its VALUE can OVERESTIMATE true
+// The FOLD-SAFE STEP BOUND: a world-travel bound from the last map sample to the nearest fold-cell boundary of any
+// radial fold on its chain, or to any wallpaper fold's symmetry-LOD switch. Local fold gaps receive the program's
+// Lipschitz correction; the world-space LOD gap does not. The boundary floors permit small crossings.
+// SDF_STEP_BOUND_NONE means no fold bound. A folded field measures only the NEAREST cell's copy, so its VALUE can OVERESTIMATE true
 // distance near a cell boundary (the neighbor cell's geometry may be closer — the containment ≠ nearest-copy class
 // the Repeat/CellJitter crease verdict documents); the sound marchable field is min(value, boundary gap). Marchers
 // therefore STEP — and build cone-clearance proofs — with min(distance, sdfMapStepBound) while still TERMINATING on

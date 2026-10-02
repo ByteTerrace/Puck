@@ -147,6 +147,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // warp's expansion) at the single return. Deliberately NOT reset by RESET: another chain's fold boundary still
     // bounds where this sample can safely step — a global min is conservative, never unsound.
     float walkStepBound = SDF_STEP_BOUND_NONE;
+    // The LOD sphere is in world space; its gap needs no domain or program Lipschitz correction.
+    float lodStepBound = SDF_STEP_BOUND_NONE;
     // The texturing half of an active wallpaper fold: the cell key times the fold's material stride, added to the
     // material id of later shape wins in the chain (never to the screen sentinel). Reset with the chain.
     int parityMaterialDelta = 0;
@@ -828,12 +830,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     float lodRadius = distance(worldPosition, sdfLodOrigin);
                     bool lodSimplify = ((data1.z > 0.0) && (lodRadius > data1.z));
 
-                    // LOD-SAFE STEP BOUND (see sdfMapStepBound): across the LOD sphere the field switches between the
-                    // mirrored and the simplified lattice, so a value measured on one side says nothing about a copy
-                    // that exists only on the other. A step therefore stops at the switch, the world-space gap from
-                    // this sample to it; the floor keeps a sample on the switch from stalling the march.
+                    // Across the LOD sphere a copy can exist on only one side. Its world-space gap limits the advance;
+                    // the relative floor permits crossing at the switch and can skip geometry thinner than that floor.
                     if (data1.z > 0.0) {
-                        walkStepBound = min(walkStepBound, max(abs(lodRadius - data1.z), (data1.z * SDF_WALLPAPER_LOD_GAP_FLOOR)));
+                        lodStepBound = min(lodStepBound, max(abs(lodRadius - data1.z), (data1.z * SDF_WALLPAPER_LOD_GAP_FLOOR)));
                     }
                     float2 cellIndex;
                     float2 folded = sdfWallpaperFoldCell(float2(localPosition[axisA], localPosition[axisB]), group, data0.xy, data0.zw, data1.xy, lodSimplify, cellIndex);
@@ -1089,10 +1089,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // Consumers receive the clamped field. Primary acceptance uses that field with its footprint threshold; shadow
     // penumbra estimation separately removes the global clamp — see softShadowVisibility in surface/sdf-occlusion.hlsli.
     result.distance *= stepScale;
-    // Publish the fold-safe step bound in the SAME clamped units as the returned distance: stepScale = 1/L covers the
-    // whole chain's worst-case expansion, so the clamped gap remains a conservative world-travel bound even when a
-    // non-conformal warp (twist/bend) sits upstream of the fold. SDF_STEP_BOUND_NONE stays effectively unbounded.
-    sdfMapStepBound = (walkStepBound * stepScale);
+    // Local radial-fold gaps need the chain's expansion correction. The camera-centered LOD sphere already supplies
+    // a world-space gap, independent of the field's Lipschitz scale.
+    sdfMapStepBound = min((walkStepBound * stepScale), lodStepBound);
 
     return result;
 }
