@@ -42,6 +42,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     /// boot presentation paints it with.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains) {
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: endpoint);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);

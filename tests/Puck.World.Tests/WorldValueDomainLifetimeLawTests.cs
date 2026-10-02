@@ -47,11 +47,11 @@ public sealed class WorldValueDomainLifetimeLawTests {
         },
         value: value
     );
-    private static float Fov(WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains) => WorldCameraRigCompiler.Compile(
+    private static float Fov(WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains, int camera = 0) => WorldCameraRigCompiler.Compile(
         definition: definition,
         domains: domains,
         mirror: mirror,
-        program: definition.Cameras[0].Rig
+        program: definition.Cameras[camera].Rig
     ).Resolve(
         anchor: in Origin,
         clock: new SdfCameraClock(AuthoritativeTick: 0UL, PresentationSeconds: 0f)
@@ -145,9 +145,65 @@ public sealed class WorldValueDomainLifetimeLawTests {
 
         Assert.Equal(expected: 0.5f, actual: Fov(definition: world.Current, mirror: world.Mirror, domains: domains));
 
-        domains.Restart();
+        domains.Restart(mirror: world.Mirror);
 
         Assert.Equal(expected: 0, actual: domains.Tracked);
         Assert.Equal(expected: OrbitRig.DefaultFieldOfViewRadians, actual: Fov(definition: world.Current, mirror: world.Mirror, domains: domains));
+    }
+    [Fact]
+    public void A_camera_that_is_hidden_keeps_its_history_for_as_long_as_it_is_authored() {
+        static WorldCamera Camera(string name) => new(
+            Anchor: null,
+            Name: name,
+            RenderHeight: 240u,
+            RenderWidth: 320u,
+            Rig: new WorldCameraProgram(
+                Name: $"{name}-rig",
+                Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: Bound)],
+                Version: WorldCameraProgram.CurrentVersion
+            )
+        );
+        static WorldDefinition Two(double value) => WorldValueDomainLawTests.WithRow(
+            definition: Fixtures.BuildDocument() with { CamerasRaw = [Camera(name: "a"), Camera(name: "b")] },
+            value: value
+        );
+
+        var domains = new WorldValueDomainGuard();
+        var world = new WorldValueDomainLawTests.LiveWorld(definition: Two(value: 0.5d));
+
+        domains.Report = static _ => { };
+
+        Assert.Equal(expected: 0.5f, actual: Fov(definition: world.Current, mirror: world.Mirror, domains: domains, camera: 0));
+
+        // Camera A is hidden: nothing resolves it while unrelated installs pass and the other camera keeps resolving.
+        world.Set(definition: Two(value: 0.5d));
+        Assert.Equal(expected: 0.5f, actual: Fov(definition: world.Current, mirror: world.Mirror, domains: domains, camera: 1));
+        world.Set(definition: Two(value: 0.5d));
+        Assert.Equal(expected: 0.5f, actual: Fov(definition: world.Current, mirror: world.Mirror, domains: domains, camera: 1));
+
+        // Its row goes out of range while it is hidden, and it is shown again: still authored, so it holds what it had.
+        world.Set(definition: Two(value: 4d));
+
+        Assert.Equal(expected: 0.5f, actual: Fov(definition: world.Current, mirror: world.Mirror, domains: domains, camera: 0));
+    }
+    [Fact]
+    public void A_restored_timeline_starts_only_its_own_world_fresh() {
+        var domains = new WorldValueDomainGuard();
+        var restored = new WorldValueDomainLawTests.LiveWorld(definition: FieldOfView(program: "probe-rig", value: 0.5d));
+        var other = new WorldValueDomainLawTests.LiveWorld(definition: FieldOfView(program: "probe-rig", value: 0.5d));
+
+        domains.Report = static _ => { };
+
+        Assert.Equal(expected: 0.5f, actual: Fov(definition: restored.Current, mirror: restored.Mirror, domains: domains));
+        Assert.Equal(expected: 0.5f, actual: Fov(definition: other.Current, mirror: other.Mirror, domains: domains));
+
+        restored.Set(definition: FieldOfView(program: "probe-rig", value: 4d));
+        other.Set(definition: FieldOfView(program: "probe-rig", value: 4d));
+
+        domains.Restart(mirror: restored.Mirror);
+
+        // The restored world has no history; the independent one keeps its held value.
+        Assert.Equal(expected: OrbitRig.DefaultFieldOfViewRadians, actual: Fov(definition: restored.Current, mirror: restored.Mirror, domains: domains));
+        Assert.Equal(expected: 0.5f, actual: Fov(definition: other.Current, mirror: other.Mirror, domains: domains));
     }
 }

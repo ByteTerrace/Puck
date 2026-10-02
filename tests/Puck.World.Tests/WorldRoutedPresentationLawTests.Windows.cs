@@ -222,6 +222,100 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         Assert.Equal(expected: new SdfSky().Block.CloudScale, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
     }
+    // A world's lifetime and its document are one publication: a reader of the destination's delivered document sees, in
+    // one snapshot, the document and the number of replacements that brought it, so it can never pair a new world's
+    // lifetime with the old world's document. A writer replaces the world over and over while a reader samples.
+    [Fact]
+    public void AReplacementIsPublishedWithItsLifetimeInOneSnapshot() {
+        var activations = Enumerable.Range(count: 2000, start: 0).Select(selector: static _ => Guid.NewGuid()).ToArray();
+        var expected = new Dictionary<Guid, int>(capacity: activations.Length);
+
+        for (var index = 0; (index < activations.Length); index++) {
+            expected[activations[index]] = (index + 1);
+        }
+
+        var worlds = activations.Select(selector: static (_, index) => WorldValueDomainLawTests.WithRow(
+            definition: AwayDocument(),
+            value: index
+        )).ToArray();
+
+        using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
+
+        var finished = 0;
+        var torn = 0;
+        var samples = 0L;
+        var writer = new Thread(start: () => {
+            for (var index = 0; (index < activations.Length); index++) {
+                north.Mirror.DeliverDefinition(definition: worlds[index], version: new WorldDocumentVersion(Activation: activations[index], Sequence: 0L));
+            }
+
+            Volatile.Write(location: ref finished, value: 1);
+        });
+
+        writer.Start();
+
+        do {
+            var delivered = north.Mirror.Document;
+
+            samples++;
+
+            // Each activation's first document arrives with exactly the lifetime of its place in the sequence, and the
+            // definition it carries is that world's own.
+            if (
+                expected.TryGetValue(key: delivered.Version.Activation, value: out var lifetime) &&
+                ((delivered.Lifetime != lifetime) || !ReferenceEquals(objA: delivered.Definition, objB: worlds[(lifetime - 1)]))
+            ) {
+                torn++;
+            }
+        } while (Volatile.Read(location: ref finished) == 0);
+
+        writer.Join();
+
+        Assert.True(condition: (samples > 0L));
+        Assert.Equal(actual: torn, expected: 0);
+        Assert.Equal(expected: activations.Length, actual: north.Mirror.Document.Lifetime);
+    }
+    // The type system makes the guard a required argument of every consumer; a null reaching one through reflection, a
+    // default path or a nullable-oblivious caller is refused at the door, naming the argument, never stored to fail on a
+    // later frame.
+    [Fact]
+    public void EveryConsumerOfTheValueDomainGuardRefusesNullByName() {
+        var document = AwayDocument();
+        var mirror = ClientFixtures.StateMirror(definition: document);
+        var program = new WorldCameraProgram(
+            Name: "p",
+            Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 1f))],
+            Version: WorldCameraProgram.CurrentVersion
+        );
+        using var north = Endpoint(definition: document, identity: Away, position: AwayPose);
+
+        static void Names(Action refusing) {
+            var thrown = Assert.Throws<ArgumentNullException>(testCode: refusing);
+
+            Assert.Equal(expected: "domains", actual: thrown.ParamName);
+        }
+
+        Names(refusing: () => _ = new WorldEnvironmentResolve(domains: null!));
+        Names(refusing: () => _ = new WorldThemeResolve(domains: null!));
+        Names(refusing: () => _ = WorldMarkerAlphas.Resolve(domains: null!, index: 0, marker: new WorldMarkerRow(Id: "m", Source: new WorldMarkerSource.Speakers(), Icon: "i", Ring: null, Style: new WorldMarkerStyle(ChipAlpha: 1f, Size: 1f, RingAlpha: 1f, RingColor: new BindableColor(Raw: "#000000"))), mirror: mirror));
+        Names(refusing: () => _ = WorldCameraRigCompiler.Compile(definition: document, domains: null!, mirror: mirror, program: program));
+        Names(refusing: () => _ = new WorldCameraRigCompiler.Cache().Resolve(definition: document, domains: null!, mirror: mirror, program: program));
+        Names(refusing: () => _ = new WorldSeatViewState().ResolveChase(bodyOrientation: System.Numerics.Quaternion.Identity, definition: document, domains: null!, mirror: mirror, views: WorldViewDefaults.Absent));
+        Names(refusing: () => _ = WorldSessionSceneEmitter.ResolveCamera(cameraName: null, domains: null!, height: 1u, mirror: north.Mirror, width: 1u));
+        Names(refusing: () => _ = new WorldSessionSceneEmitter(domains: null!, effectiveCameraName: null, mirror: north.Mirror));
+        Names(refusing: () => _ = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, domains: null!, endpoint: north, hostFrame: static () => null));
+
+        // The two roots that take a long list of services refuse the guard before anything else.
+        foreach (var type in new[] { typeof(WorldFramePresenter), Assert.IsAssignableFrom<Type>(@object: Type.GetType(typeName: "Puck.World.WorldScreenBinder, Puck.World")) }) {
+            var constructor = Assert.Single(collection: type.GetConstructors());
+            var arguments = constructor.GetParameters().Select(selector: static parameter => (parameter.ParameterType.IsValueType
+                ? Activator.CreateInstance(type: parameter.ParameterType)
+                : null)).ToArray();
+            var thrown = Assert.IsType<ArgumentNullException>(@object: Assert.IsType<System.Reflection.TargetInvocationException>(@object: Record.Exception(testCode: () => constructor.Invoke(parameters: arguments))).InnerException);
+
+            Assert.Equal(expected: "domains", actual: thrown.ParamName);
+        }
+    }
     // A routed view's sky clock (its stars' twinkle, its clouds' drift, its media's motion) is the destination's presented
     // tick: the sky it shows moves as its world does, whatever the viewer's own world has reached. Its presentation time
     // is still the viewer's frame's.

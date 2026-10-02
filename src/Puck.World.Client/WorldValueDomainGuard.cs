@@ -30,11 +30,12 @@ public readonly record struct WorldValueSite(string Section, int Index = -1, str
 /// transition of a binding, once when it leaves its domain and once when it returns, never once per frame.
 /// <para>
 /// The last valid value is state, owned by the binding instance in its world: one entry per field, site and state
-/// binding of one <see cref="WorldStateMirror"/>. An entry lives while its binding is resolved: an install of a document
-/// that follows a stretch in which nothing resolved the binding releases it, so a binding a document removed or renamed
-/// away, and one another field's reading of the same row would otherwise keep, goes within one further install. A
+/// binding of one <see cref="WorldStateMirror"/>. An entry lives while the installed document authors its binding, whether
+/// or not a frame is resolving it: an install of a document that no longer binds the field to that state binding
+/// releases it, so a binding that is removed and added again starts fresh whatever else reads its row, and a hidden
+/// camera keeps its history. A
 /// different world in the mirror (<see cref="WorldStateMirror.BeginLifetime"/>) and a restored timeline
-/// (<see cref="Restart"/>) start every binding fresh, and so does the mirror's own disposal. An input that has not changed since the entry last saw it
+/// (<see cref="Restart(WorldStateMirror)"/>) start every binding fresh, and so does the mirror's own disposal. An input that has not changed since the entry last saw it
 /// returns the value presented then and does no counted work (<see cref="Checks"/>).
 /// </para>
 /// <para>
@@ -76,10 +77,16 @@ public sealed class WorldValueDomainGuard {
         }
     }
 
-    /// <summary>Starts every binding of every world fresh, as a restored timeline does: what the guard kept about the
+    /// <summary>Starts every binding of one world fresh, as a restored timeline does: what the guard kept about the
     /// timeline that was running (the last valid value of a binding, and whether it was reported) describes a state
-    /// that no longer is.</summary>
-    public void Restart() => m_worlds.Clear();
+    /// that no longer is. Another world's bindings are untouched.</summary>
+    /// <param name="mirror">The state mirror of the world whose timeline was restored.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
+    public void Restart(WorldStateMirror mirror) {
+        ArgumentNullException.ThrowIfNull(argument: mirror);
+
+        _ = m_worlds.Remove(key: mirror);
+    }
     /// <summary>Returns a resolved value mapped into its field's domain.</summary>
     /// <param name="mirror">The state mirror the value was resolved through, which names the world the binding lives
     /// in.</param>
@@ -142,9 +149,6 @@ public sealed class WorldValueDomainGuard {
                     value: entry
                 );
             } else if (entry.Raw.Equals(obj: value)) {
-                entry.Epoch = world.Epoch;
-                world.Touched = true;
-
                 return entry.Used;
             }
 
@@ -166,10 +170,8 @@ public sealed class WorldValueDomainGuard {
                 entry.HasValid = true;
             }
 
-            entry.Epoch = world.Epoch;
             entry.Raw = value;
             entry.Used = used;
-            world.Touched = true;
 
             if (invalid != entry.Invalid) {
                 entry.Invalid = invalid;
@@ -210,34 +212,28 @@ public sealed class WorldValueDomainGuard {
         );
     }
     private sealed class Entry {
-        public int Epoch { get; set; }
         public bool HasValid { get; set; }
         public bool Invalid { get; set; }
         public float Raw { get; set; }
         public float Used { get; set; }
         public float Valid { get; set; }
     }
-    // One world's entries, which the guard drops with the world's mirror. A binding is kept for as long as it is resolved:
-    // an epoch is the stretch between two installs of a document in which a binding was resolved at least once, and an
-    // install that follows an epoch drops the entries nothing resolved during that epoch. A binding a document removed or
-    // renamed away is not resolved again, so its entry goes within one further install, while a binding resolved every
-    // frame is kept through any number of them. A different world, or a restored timeline, drops them all.
+    // One world's entries, which the guard drops with the world's mirror. An entry lives while the installed document
+    // authors its binding: a document install that no longer binds the field to that state binding releases the entry, so
+    // a binding that is removed and added again starts fresh, whatever else reads its row, and a binding nothing is
+    // resolving at the moment (a hidden camera) keeps its history for as long as the document keeps authoring it. A
+    // different world in the mirror drops them all.
     private sealed class World(WorldStateMirror mirror) {
         private int m_installs = mirror.Installs;
         private int m_lifetime = mirror.Lifetime;
 
         public Dictionary<Key, Entry> Entries { get; } = [];
 
-        public int Epoch { get; private set; }
-        public bool Touched { get; set; }
-
         public void Follow(WorldStateMirror mirror) {
             if (m_lifetime != mirror.Lifetime) {
                 m_installs = mirror.Installs;
                 m_lifetime = mirror.Lifetime;
                 Entries.Clear();
-                Epoch = 0;
-                Touched = false;
 
                 return;
             }
@@ -248,15 +244,15 @@ public sealed class WorldValueDomainGuard {
 
             m_installs = mirror.Installs;
 
-            if (!Touched) {
-                return;
-            }
+            var manifest = mirror.Manifest;
 
-            Epoch++;
-            Touched = false;
+            foreach (var (key, _) in Entries.ToArray()) {
+                var binding = key.Binding;
 
-            foreach (var (key, entry) in Entries.ToArray()) {
-                if (entry.Epoch < (Epoch - 1)) {
+                if (!manifest.Authors(
+                    binding: in binding,
+                    path: key.Site.PathOf(field: key.Field)
+                )) {
                     _ = Entries.Remove(key: key);
                 }
             }

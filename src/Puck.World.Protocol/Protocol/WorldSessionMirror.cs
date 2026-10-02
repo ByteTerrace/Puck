@@ -61,7 +61,6 @@ public sealed class WorldSessionMirror : IClientSink {
     private readonly WorldDocumentStateView m_stateView;
 
     private int m_followedLifetime;
-    private int m_lifetime;
 
     // The field rows one snapshot's cells moved (ApplyFieldCells's output), used only under m_followGate.
     private readonly int[] m_movedFields = new int[WorldFieldCapacity.MaxFields];
@@ -316,15 +315,13 @@ public sealed class WorldSessionMirror : IClientSink {
             return;
         }
 
-        // A different activation is a different world; FollowState tells the state mirror.
-        if (current.Version.Activation != version.Activation) {
-            _ = Interlocked.Increment(location: ref m_lifetime);
-        }
-
+        // A different activation is a different world. The lifetime is published in the same snapshot as the document it
+        // describes, so FollowState can never see a world's lifetime beside the previous world's document.
         Volatile.Write(
             location: ref m_document,
             value: new WorldDeliveredDocument(
                 Definition: definition,
+                Lifetime: (current.Lifetime + ((current.Version.Activation != version.Activation) ? 1 : 0)),
                 Version: version
             )
         );
@@ -597,7 +594,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 m_pendingEverything = false;
             }
 
-            var lifetime = Volatile.Read(location: ref m_lifetime);
+            var lifetime = Volatile.Read(location: ref m_document).Lifetime;
 
             for (; (m_followedLifetime < lifetime); m_followedLifetime++) {
                 state.BeginLifetime();

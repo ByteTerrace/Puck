@@ -217,6 +217,6 @@ public sealed class WorldCameraOperandDomainLawTests {
         Assert.Equal(expected: High, actual: Chase(), tolerance: 1e-6f);
         Assert.Equal(expected: High, actual: Chase(), tolerance: 1e-6f);
         Assert.Single(collection: reports);
-        Assert.Contains(expectedSubstring: $"camera program 'seat-rig'.operations[0].weight reads 2 from state.{WorldValueDomainLawTests.Row}", actualString: reports[0]);
+        Assert.Contains(expectedSubstring: $"views.seatRig.operations[0].weight reads 2 from state.{WorldValueDomainLawTests.Row}", actualString: reports[0]);
     }
 }

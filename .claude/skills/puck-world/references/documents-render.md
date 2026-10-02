@@ -76,12 +76,15 @@ beyond a closed end clamps to it, and a value that is not finite or lies at or
 beyond an open end holds the binding's last valid value (the field's engine
 default before it has presented one). The guard keeps that value per binding in
 its world (one entry per field, site and state binding of a `WorldStateMirror`).
-An entry lives while its binding is resolved: a document install that follows a
-stretch in which nothing resolved it releases it, so a removed or renamed binding
-and a re-added one start fresh whatever else reads their row. A different world in
-the mirror (`WorldStateMirror.BeginLifetime`, begun when a delivery names another
-activation) and a restored timeline (`WorldValueDomainGuard.Restart`) start every
-binding fresh, and so does the mirror's own disposal. The guard reports a binding when it leaves its domain and when it returns, never once per
+An entry lives while the installed document authors its binding, resolved or
+not: a document install that no longer binds the field to that state binding
+(`WorldPresentationManifest.Authors`, by document path and binding) releases it,
+so a removed binding that is added again starts fresh whatever else reads its
+row, and a hidden camera keeps its history. A different world in the mirror
+(`WorldStateMirror.BeginLifetime`; a session mirror publishes the lifetime in the
+same `WorldDeliveredDocument` snapshot as the document) and a restored timeline
+(`WorldValueDomainGuard.Restart(mirror)`, for that world only) start its bindings
+fresh, and so does the mirror's own disposal. The guard reports a binding when it leaves its domain and when it returns, never once per
 frame (`[world.value: …]`, wired in `WorldPostBuildWiring`), and does no counted
 work (`Checks`) while a binding's input is unchanged. A coupled threshold (a
 gradient's stop elevations, the curvature ink band) may not bind a row, so no end

@@ -73,13 +73,29 @@ public sealed class WorldPresentationManifest {
     private readonly WorldPresentationBinding[] m_bindings;
     private readonly WorldPresentationBinding[] m_bodyBindings;
     private readonly WorldClock[] m_clocks;
+    private readonly Lazy<HashSet<(string Path, StateBinding Binding)>> m_authored;
     private readonly Dictionary<object, WorldPresentationBinding[]> m_templates;
 
-    private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings, WorldClock[] clocks, Dictionary<object, WorldPresentationBinding[]> templates) {
+    private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings, WorldClock[] clocks, Dictionary<object, WorldPresentationBinding[]> templates, WorldDefinition? definition = null) {
+        m_authored = new Lazy<HashSet<(string Path, StateBinding Binding)>>(valueFactory: () => ((definition is null)
+            ? []
+            : [.. WorldKeyedValues.BoundOf(definition: definition).Where(predicate: static bound => bound.Value.State.HasValue).Select(selector: static bound => (bound.Path, bound.Value.State!.Value))]));
         m_bindings = bindings;
         m_bodyBindings = bodyBindings;
         m_clocks = clocks;
         m_templates = templates;
+    }
+
+    /// <summary>Returns whether the document authors a presentation scalar at a path bound to a state binding: the
+    /// identity of a bound field, which lasts exactly as long as the document keeps authoring it.</summary>
+    /// <param name="path">The document path of the field, such as <c>render.sky.layers[0].softness</c>.</param>
+    /// <param name="binding">The state binding the field is bound to.</param>
+    /// <returns><see langword="true"/> when the document binds that field to that binding.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+    public bool Authors(string path, in StateBinding binding) {
+        ArgumentNullException.ThrowIfNull(argument: path);
+
+        return m_authored.Value.Contains(item: (path, binding));
     }
 
     /// <summary>Gets the reads that last as long as the document, each once, in document order.</summary>
@@ -203,7 +219,8 @@ public sealed class WorldPresentationManifest {
                     comparer: ReferenceEqualityComparer.Instance,
                     elementSelector: static pair => pair.Value.ToArray(),
                     keySelector: static pair => pair.Key
-                )
+                ),
+                definition: definition
             )
         );
     }

@@ -248,8 +248,11 @@ public static class WorldPostBuildWiring {
             report(arg1: message, arg2: true);
             consoleOutput.WriteErrorLine(value: message);
         };
-        // A restored timeline is a state the held values do not describe: every binding starts fresh.
-        services.GetRequiredService<WorldReplayTape>().TimelineRestored += valueDomains.Restart;
+        // A restored timeline is a state the held values of its world do not describe: that world's bindings start
+        // fresh, through the state mirror the boot instance's presentation reads. Another world's are untouched.
+        var restoredState = services.GetRequiredService<WorldClient>().StateMirror;
+
+        services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => valueDomains.Restart(mirror: restoredState);
 
         services.GetRequiredService<WorldCompareCapture>().Report = result => {
             // Only late settlements reach this callback; synchronous refusals are counted by Submit itself.

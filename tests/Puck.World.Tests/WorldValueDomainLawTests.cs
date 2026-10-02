@@ -43,9 +43,7 @@ public sealed class WorldValueDomainLawTests {
     }
 
     // How a test authors a field into a document and reads back what the presentation made of it.
-    // A report names the field where the presentation finds it, which is the document path unless the case says
-    // otherwise (ReportPath).
-    private sealed record Case(Func<BindableScalar, WorldDefinition> Author, string Path, Func<WorldDefinition, WorldStateMirror, WorldValueDomainGuard, float>? Present = null, float[]? Controls = null, string? ReportPath = null);
+    private sealed record Case(Func<BindableScalar, WorldDefinition> Author, string Path, Func<WorldDefinition, WorldStateMirror, WorldValueDomainGuard, float>? Present = null, float[]? Controls = null);
 
     private static readonly IReadOnlyDictionary<WorldValueField, Case> Cases = new Dictionary<WorldValueField, Case> {
         [WorldValueFields.DirectionalWeight] = Lit(author: s => new WorldRenderLight.Directional(Weight: s), present: static e => e.Lights[0].Weight, member: "weight"),
@@ -106,8 +104,6 @@ public sealed class WorldValueDomainLawTests {
                 ],
             },
             Path: "cameras[0].rig.operations[0].weight",
-            // A compiled rig knows its program by name, not where the document declares it.
-            ReportPath: "camera program 'probe-rig'.operations[0].weight",
             // The blend's field of view is the two programs' interpolated by the presented weight.
             Present: static (definition, mirror, domains) => ((WorldCameraRigCompiler.Compile(
                 definition: definition,
@@ -124,7 +120,6 @@ public sealed class WorldValueDomainLawTests {
                 CamerasRaw = [Camera(name: "probe", rig: Program(name: "probe-rig", operations: new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: s)))],
             },
             Path: "cameras[0].rig.operations[0].fieldOfViewRadians",
-            ReportPath: "camera program 'probe-rig'.operations[0].fieldOfViewRadians",
             Present: static (definition, mirror, domains) => WorldCameraRigCompiler.Compile(
                 definition: definition,
                 domains: domains,
@@ -471,7 +466,7 @@ public sealed class WorldValueDomainLawTests {
         Assert.True(condition: (transitions >= 2), userMessage: "the sequence must leave the domain and return");
         Assert.Equal(expected: transitions, actual: domains.Reported);
         Assert.Equal(expected: transitions, actual: reports.Count);
-        Assert.Contains(expectedSubstring: $"{(authoring.ReportPath ?? authoring.Path)} reads", actualString: reports[0]);
+        Assert.Contains(expectedSubstring: $"{authoring.Path} reads", actualString: reports[0]);
         Assert.Contains(expectedSubstring: $"state.{Row}", actualString: reports[0]);
         Assert.Contains(expectedSubstring: "outside", actualString: reports[0]);
         Assert.Contains(expectedSubstring: "recovered", actualString: reports[1]);

@@ -321,12 +321,38 @@ public static class WorldCameraRigCompiler {
 
             return slot;
         }
-        // Where an operand sits in the program, which a report names: the program's own name, since a compiled rig
-        // knows its program by name, not where the document declares it.
-        private static WorldValueSite SiteOf(WorldCameraProgram program, int index) => new(
+        // Where an operand sits in the document, which a report names and the guard's entry for the binding is keyed
+        // by: the program's own place in it (the seat rig, the camera rig, or a camera's rig), so the operand is
+        // addressed as the document addresses it, whatever the program is called. A program the document does not
+        // declare is named by its own name.
+        private WorldValueSite SiteOf(WorldCameraProgram program, int index) => new(
             Index: index,
-            Section: $"camera program '{program.Name}'.operations"
+            Section: $"{LocationOf(program: program)}.operations"
         );
+        private string LocationOf(WorldCameraProgram program) {
+            var views = definition.ViewsRaw;
+
+            if (ReferenceEquals(objA: views?.SeatRig, objB: program)) {
+                return "views.seatRig";
+            }
+
+            if (ReferenceEquals(objA: views?.CameraRig, objB: program)) {
+                return "views.cameraRig";
+            }
+
+            var cameras = definition.Cameras;
+
+            for (var index = 0; (index < cameras.Count); index++) {
+                if (ReferenceEquals(
+                    objA: cameras[index].Rig,
+                    objB: program
+                )) {
+                    return $"cameras[{index}].rig";
+                }
+            }
+
+            return $"camera program '{program.Name}'";
+        }
         private List<SdfCameraOp> TranslateOperations(WorldCameraProgram program) {
             var authored = program.Operations;
             var operations = new List<SdfCameraOp>(capacity: authored.Count);
