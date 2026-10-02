@@ -17,7 +17,9 @@ public readonly record struct IrradianceEstimate(Double3 Irradiance, int Paths, 
 public sealed class IrradianceReference {
     private static readonly int[] Primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71];
 
-    private const double SurfaceOffset = 0.002;
+    // The height a path's rays launch from, with its interval certified (IrradianceCells.Launch): clear of the march's
+    // accept threshold, so the first sample of a ray is not read as its own surface.
+    private const double LaunchHeight = 0.004;
 
     private readonly IrradianceField m_field;
     private readonly IrradianceSurfaces m_surfaces;
@@ -117,9 +119,14 @@ public sealed class IrradianceReference {
             u: RadicalInverse(index: path, primeBase: Primes[(2 * bounce)]),
             v: RadicalInverse(index: path, primeBase: Primes[((2 * bounce) + 1)])
         );
-        var ray = m_field.Cast(direction: direction, maxDistance: m_exitDistance, origin: (point + (normal * SurfaceOffset)));
 
         resolved = true;
+
+        if (IrradianceCells.Launch(field: m_field, height: LaunchHeight, normal: normal, surface: point) is not { } launch) {
+            return Double3.Zero;
+        }
+
+        var ray = m_field.Cast(direction: direction, maxDistance: m_exitDistance, origin: launch.Point);
 
         if (ray.Kind == IrradianceRayKind.Miss) {
             return m_surfaces.Sky(arg: direction);

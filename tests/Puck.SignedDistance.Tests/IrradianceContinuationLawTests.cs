@@ -87,8 +87,10 @@ public sealed class IrradianceContinuationLawTests {
         // already crossed and found empty; every coarse ray beyond the end sees the dark far wall.
         Assert.Equal(expected: 0.0, actual: model.RadianceOf(key: fine, ray: ray)!.Value.X, precision: 12);
 
-        // Red leg: without the check the plate's light enters through the coarse corner behind the end.
-        var leaky = Corridor(intervalCheck: false);
+        // Red leg: a continuation reading each corner's nearest ray by direction, without the beyond-the-end test, lets
+        // the plate's light in through the coarse corner behind the end. (Reprojection by the stored hit chooses only
+        // rays that end beyond it, so it carries the test too.)
+        var leaky = Corridor(intervalCheck: false, reprojection: false);
 
         Assert.True(condition: (leaky.RadianceOf(key: fine, ray: ray)!.Value.X > 0.1));
     }
@@ -137,7 +139,7 @@ public sealed class IrradianceContinuationLawTests {
     // A sealed dark box from x = -2 to 12 holding a small bright plate at x = 0.5 on the X axis. The fine probe at
     // (0, 1, 0) looks along +X above the plate; its ray ends at x = 1.5, in the coarse cell whose least corner, the origin,
     // looks along +X straight at the plate.
-    private static IrradianceCacheModel Corridor(bool intervalCheck) {
+    private static IrradianceCacheModel Corridor(bool intervalCheck, bool reprojection = true) {
         var builder = new SdfProgramBuilder();
         var dark = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
         var bright = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
@@ -154,7 +156,7 @@ public sealed class IrradianceContinuationLawTests {
         var model = new IrradianceCacheModel(
             field: new IrradianceField(program: builder.Build()),
             levels: [Fine, Coarse],
-            options: new IrradianceModelOptions(ExitDistance: 200.0, IntervalCheck: intervalCheck),
+            options: new IrradianceModelOptions(ExitDistance: 200.0, HitReprojection: reprojection, IntervalCheck: intervalCheck),
             surfaces: new IrradianceSurfaces(
                 albedo: static _ => Double3.Zero,
                 emission: static material => ((material == 1) ? new Double3(X: 10.0, Y: 10.0, Z: 10.0) : Double3.Zero)

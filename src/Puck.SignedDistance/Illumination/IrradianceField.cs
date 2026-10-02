@@ -38,6 +38,9 @@ public sealed class IrradianceField {
         m_evaluator = new SdfFieldEvaluator(program: program);
     }
 
+    /// <summary>Gets the program's step scale, the clamp that makes its field 1-Lipschitz: a clamped distance reads
+    /// at most this share of the true distance along a clear line.</summary>
+    public double StepScale => ((double)m_evaluator.StepScale);
     /// <summary>Gets the count of rays and segments cast through the field since construction.</summary>
     public long Casts { get; private set; }
     /// <summary>Gets the count of point distance and gradient queries since construction.</summary>
@@ -129,6 +132,37 @@ public sealed class IrradianceField {
             Kind: ((hit.Confidence == WorldQueryConfidence.Exact) ? IrradianceRayKind.Hit : IrradianceRayKind.Unresolved),
             Material: hit.Material,
             Point: new Double3(X: ((double)point.X), Y: ((double)point.Y), Z: ((double)point.Z))
+        );
+    }
+    /// <summary>Sweeps a sphere along a ray through the field and returns how far its centre travelled before the sphere
+    /// first touched a surface: a ray that stops on anything within <paramref name="radius"/> of its line.</summary>
+    /// <param name="origin">The sphere's starting centre, in world units; it must start clear by more than the radius.</param>
+    /// <param name="direction">The direction; it need not be unit length.</param>
+    /// <param name="radius">The sphere's radius, in world units.</param>
+    /// <param name="maxDistance">The farthest distance, in world units, the centre travels.</param>
+    /// <returns>What the sweep ended on; for a hit, <see cref="IrradianceRay.Distance"/> is the centre's travel.</returns>
+    public IrradianceRay Sweep(Double3 origin, Double3 direction, double radius, double maxDistance) {
+        Casts++;
+
+        var unit = direction.Normalize();
+
+        if (!m_evaluator.SphereCast(
+            dir: ToVector(value: unit),
+            hit: out var hit,
+            maxDist: FixedQ4816.FromDouble(value: maxDistance),
+            origin: ToPosition(point: origin),
+            radius: FixedQ4816.FromDouble(value: radius)
+        )) {
+            return new IrradianceRay(Distance: maxDistance, Kind: IrradianceRayKind.Miss, Material: 0, Point: (origin + (unit * maxDistance)));
+        }
+
+        var distance = ((double)hit.Distance);
+
+        return new IrradianceRay(
+            Distance: distance,
+            Kind: ((hit.Confidence == WorldQueryConfidence.Exact) ? IrradianceRayKind.Hit : IrradianceRayKind.Unresolved),
+            Material: hit.Material,
+            Point: (origin + (unit * distance))
         );
     }
     /// <summary>Tests whether the straight segment between two points crosses no surface. The whole segment is

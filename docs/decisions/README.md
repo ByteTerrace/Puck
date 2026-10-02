@@ -33,7 +33,8 @@ contracts belong in the subsystem guides; proposed changes belong in
   content class, hit-to-source mapping, temporal reconstruction, HDR output,
   and assets derived from SDFs; and
   [global illumination](rendering.md#global-illumination): a world-space cache
-  traced through the field and shared by every view of a world.
+  traced through the field and shared by every view of a world, guaranteeing no
+  light through sealed geometry and conserved energy, and bounding the rest.
 - [Worlds and federation](../architecture/worlds.md): authority, admission,
   transfers, and the relationships between worlds.
 

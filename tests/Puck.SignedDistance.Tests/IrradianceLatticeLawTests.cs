@@ -88,19 +88,56 @@ public sealed class IrradianceLatticeLawTests {
         }
     }
     [Fact]
-    public void AcceptanceStopsOnlyNearASurface() {
-        // A ray grazing 0.1 above a wall's face for its whole length.
-        for (var travelled = 0.5; (travelled <= 20.0); travelled += 0.5) {
-            Assert.False(condition: IrradianceAcceptance.Accepts(clampedDistance: 0.1, travelled: travelled));
-        }
+    public void AHitIsAcceptedOnlyWithinTheSurfaceEpsilon() {
+        // A sample 0.1 from a wall is never a hit, however far the ray has come: acceptance has no travel term.
+        Assert.False(condition: IrradianceAcceptance.Accepts(clampedDistance: 0.1));
+        Assert.True(condition: IrradianceAcceptance.Accepts(clampedDistance: 0.0009));
 
-        Assert.True(condition: IrradianceAcceptance.Accepts(clampedDistance: 0.0009, travelled: 0.0));
-        Assert.True(condition: IrradianceAcceptance.Accepts(clampedDistance: 0.039, travelled: 10.0));
+        // And a real ray grazing 0.1 above a 200-unit wall stores no hit: it marches on and, its step budget spent long
+        // before the wall ends, is unresolved.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: System.Numerics.Vector3.One));
 
-        // Red leg: acceptance at a 128-ray cone's radius (0.18 rad) stops the same grazing ray on empty space.
-        static bool ConeAccepts(double clampedDistance, double travelled) => (clampedDistance <= (0.18 * travelled));
+        _ = builder.Translate(offset: new System.Numerics.Vector3(x: 100f, y: -0.5f, z: 0f));
+        _ = builder.Box(halfExtents: new System.Numerics.Vector3(x: 100f, y: 0.5f, z: 5f), material: material, round: 0f);
 
-        Assert.True(condition: ConeAccepts(clampedDistance: 0.1, travelled: 1.0));
+        var field = new IrradianceField(program: builder.Build());
+        var ray = field.Cast(direction: new Double3(X: 1.0, Y: 0.0, Z: 0.0), maxDistance: 150.0, origin: new Double3(X: 0.0, Y: 0.1, Z: 0.0));
+
+        Assert.Equal(expected: IrradianceRayKind.Unresolved, actual: ray.Kind);
+
+        // Red leg: a travel-scaled rule, max(0.001, 0.004 t), stops the same ray on empty space from t = 25 on.
+        static bool TravelScaled(double clampedDistance, double travelled) => (clampedDistance <= Math.Max(val1: 0.001, val2: (0.004 * travelled)));
+
+        Assert.True(condition: TravelScaled(clampedDistance: 0.1, travelled: 25.0));
+    }
+    [Fact]
+    public void ALaunchNeverStepsOverAThinSlab() {
+        // A floor at y = 0 under a slab spanning 0.0012 to 0.0018, inside the interval an unchecked offset skips.
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: System.Numerics.Vector3.One));
+
+        _ = builder.Plane(material: material, normal: System.Numerics.Vector3.UnitY, offset: 0f);
+        _ = builder.ResetPoint();
+        _ = builder.Translate(offset: new System.Numerics.Vector3(x: 0f, y: 0.0015f, z: 0f));
+        _ = builder.Box(halfExtents: new System.Numerics.Vector3(x: 1f, y: 0.0003f, z: 1f), material: material, round: 0f);
+
+        var field = new IrradianceField(program: builder.Build());
+        var up = new Double3(X: 0.0, Y: 1.0, Z: 0.0);
+        var surfaces = IrradianceScenes.Uniform(albedo: 0.0, emission: 0.0, sky: 1.0);
+
+        Assert.Null(@object: IrradianceCells.Launch(field: field, height: 0.075, normal: up, surface: Double3.Zero));
+        Assert.Equal(expected: 0.0, actual: new IrradianceReference(exitDistance: 50.0, field: field, surfaces: surfaces).Estimate(bounces: 0, normal: up, paths: 64, point: Double3.Zero).Irradiance.X);
+
+        // Beside the slab the launch is certified to its full height, with its clearance bound.
+        var open = IrradianceCells.Launch(field: field, height: 0.075, normal: up, surface: new Double3(X: 3.0, Y: 0.0, Z: 0.0));
+
+        Assert.NotNull(@object: open);
+        Assert.Equal(expected: 0.075, actual: open.Value.Point.Y, precision: 9);
+        Assert.True(condition: (open.Value.Clearance > 0.0));
+
+        // Red leg: an unchecked offset (the reference's own launch height of 0.004) starts above the slab and sees the sky.
+        Assert.Equal(expected: IrradianceRayKind.Miss, actual: field.Cast(direction: up, maxDistance: 40.0, origin: new Double3(X: 0.0, Y: 0.004, Z: 0.0)).Kind);
     }
     [Fact]
     public void ClassificationNeverDropsAProbeASurfaceCellNeeds() {

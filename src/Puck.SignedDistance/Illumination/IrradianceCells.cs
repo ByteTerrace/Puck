@@ -21,6 +21,10 @@ public readonly record struct IrradianceProbePlacement(IrradianceProbeClass Clas
     /// <summary>Gets whether the probe is traced and read.</summary>
     public bool IsLit => ((Class == IrradianceProbeClass.Active) || (Class == IrradianceProbeClass.Relocated));
 }
+/// <summary>A point launched off a surface, with a lower bound on its clearance the launch certified.</summary>
+/// <param name="Point">The launched point, in world units.</param>
+/// <param name="Clearance">A lower bound, in world units, on the distance from the point to any surface.</param>
+public readonly record struct IrradianceLaunch(Double3 Point, double Clearance);
 /// <summary>An oriented plane: points with <c>dot(Normal, p) − Offset</c> below zero lie on component 0's side.</summary>
 /// <param name="Normal">The unit normal, pointing toward component 1.</param>
 /// <param name="Offset">The plane's offset along its normal, in world units.</param>
@@ -48,9 +52,15 @@ public static class IrradianceCells {
     public const double ReceiverBias = 0.05;
     /// <summary>The tolerance, as a fraction of the spacing, a separating plane fits its surface points within.</summary>
     public const double PlaneTolerance = 0.1;
+    /// <summary>The height, in world units, of a launch's first certified sample: the accept threshold, so what lies
+    /// below it is the surface itself at the march's resolution.</summary>
+    public const double LaunchStart = IrradianceAcceptance.SurfaceEpsilon;
+    /// <summary>The share of a launch sample's expected clamped clearance (its height times the program's step scale)
+    /// it may fall short by and still be certified.</summary>
+    public const double LaunchSlack = 0.25;
 
+    private const int LaunchSteps = 32;
     private const int RelocationSteps = 4;
-    private const double SurfaceOffset = 0.002;
 
     /// <summary>Places a probe: its class and position against the field.</summary>
     /// <param name="field">The field.</param>
@@ -202,7 +212,7 @@ public static class IrradianceCells {
     /// <param name="field">The field.</param>
     /// <param name="partition">The receiver's cell's partition.</param>
     /// <param name="corners">The cell's eight corners' placements.</param>
-    /// <param name="point">The receiver's point, already moved off its surface (<see cref="ReceiverPoint"/>).</param>
+    /// <param name="point">The receiver's point, already launched off its surface (<see cref="Launch"/>).</param>
     /// <returns>A mask of the corners the receiver reads, bit n for corner n; zero when it reaches none.</returns>
     public static int ReadableCorners(IrradianceField field, IrradianceCellPartition partition, IReadOnlyList<IrradianceProbePlacement> corners, Double3 point) {
         ArgumentNullException.ThrowIfNull(argument: field);
@@ -236,23 +246,45 @@ public static class IrradianceCells {
 
         return 0;
     }
-    /// <summary>Moves a receiver's surface point along its normal from a fixed 0.002 offset, by the bias or, where
-    /// a ray from that offset meets another surface, halfway to it. The initial offset interval is not tested and can
-    /// cross a nearer thin surface; a launch that proves that interval clear remains open.</summary>
+    /// <summary>Launches a point off a surface along its normal with a certificate that the whole interval it crosses
+    /// is free: samples step outward from <see cref="LaunchStart"/>, each the end of the previous sample's clear ball,
+    /// and each must read a clamped distance of at least <c>(1 − LaunchSlack)</c> times its height times the program's
+    /// step scale, so the balls overlap from below the accept threshold up to the launch. A sample that reads
+    /// less has another surface nearer than the normal's clear interval allows; the launch stops at the last certified
+    /// sample, before that surface, and never steps across it.</summary>
     /// <param name="field">The field.</param>
-    /// <param name="surface">The receiver's surface point, in world units.</param>
-    /// <param name="normal">The receiver's unit normal.</param>
-    /// <param name="spacing">The spacing of the level it reads, in world units.</param>
-    /// <returns>The receiver's point.</returns>
-    public static Double3 ReceiverPoint(IrradianceField field, Double3 surface, Double3 normal, double spacing) {
+    /// <param name="surface">The surface point, in world units.</param>
+    /// <param name="normal">The surface's unit normal, facing the side the point launches into.</param>
+    /// <param name="height">The height, in world units, the launch aims for.</param>
+    /// <returns>The launched point and a lower bound on its clearance, or <see langword="null"/> when not even the
+    /// first sample is certified, so a surface lies within the accept threshold's order of the point and the receiver
+    /// reads no light.</returns>
+    public static IrradianceLaunch? Launch(IrradianceField field, Double3 surface, Double3 normal, double height) {
         ArgumentNullException.ThrowIfNull(argument: field);
 
-        var start = (surface + (normal * SurfaceOffset));
-        var bias = (ReceiverBias * spacing);
-        var ray = field.Cast(direction: normal, maxDistance: bias, origin: start);
-        var travel = ((ray.Kind == IrradianceRayKind.Miss) ? bias : (0.5 * ray.Distance));
+        var target = Math.Max(val1: height, val2: LaunchStart);
+        var travel = LaunchStart;
+        IrradianceLaunch? last = null;
 
-        return (start + (normal * travel));
+        for (var step = 0; (step < LaunchSteps); step++) {
+            var point = (surface + (normal * travel));
+
+            if (!field.TryClampedDistance(distance: out var distance, material: out _, point: point) || (distance < (((1.0 - LaunchSlack) * field.StepScale) * travel))) {
+                return last;
+            }
+
+            if ((travel + distance) >= target) {
+                // The target lies inside this sample's clear ball; its clearance is at least what the ball leaves there.
+                var reach = (target - travel);
+
+                return new IrradianceLaunch(Clearance: (distance - reach), Point: (surface + (normal * target)));
+            }
+
+            last = new IrradianceLaunch(Clearance: distance, Point: point);
+            travel += distance;
+        }
+
+        return last;
     }
 
     private static int MaskOf(int component, IrradianceCellPartition partition) {

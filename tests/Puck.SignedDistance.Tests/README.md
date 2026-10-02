@@ -18,14 +18,16 @@ half of a sampling check whose device half, `BakeSamplingDeviceLawTests` in
 `tests/Puck.World.Tests`, samples the same probes on Vulkan, Direct3D 12 and WARP.
 
 The `Irradiance*LawTests` hold the radiance cache's CPU reference and CPU model
-(`Puck.SignedDistance.Illumination`) to closed forms and to each other: the
-furnace's finite-bounce series, form factors, sealed rooms that stay exactly
-dark through 0.05 m walls, a sealed hall whose middle never reads the sky, a
-continuation that never counts an interval twice, the lattice's layout and the
-host schedule. Review laws cover pockets between samples, actual evaluator hit
-positions, world exits and geometry invalidation beyond fine reach and around
-relocated origins. Counterexamples identify the result each withheld fix admits.
-The CPU laws are the GPU cache's reference, not a check of it.
+(`Puck.SignedDistance.Illumination`) to the cache's contract. Two properties are
+exact: no light through sealed geometry (sealed rooms dark through 0.05 m walls,
+a sealed pocket inside one cell, a slab inside a launch interval, receiver
+proofs and their reuse) and conserved energy (the furnace's finite-bounce series
+on one level and two, with unresolved grazing rays present). Every other error
+is a number held against the reference: interpolation within a cell,
+continuation merging, light-view sampling, grazing rays and the proof
+allowance. The lattice, the schedule and the evaluator's own hit points have
+laws of their own. Each law's red leg is a model mutation shown failing; the
+CPU laws are the GPU cache's reference, not a check of it.
 
 ## Verification
 

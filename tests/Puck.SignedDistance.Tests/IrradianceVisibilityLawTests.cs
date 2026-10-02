@@ -83,7 +83,7 @@ public sealed class IrradianceVisibilityLawTests {
         var reference = new IrradianceReference(exitDistance: 60.0, field: field, surfaces: surfaces).Estimate(bounces: 2, normal: Up, paths: 2048, point: under);
 
         var mask = model.ReadableCorners(level: 0, normal: Up, surface: under);
-        var cell = IrradianceLattice.CellOf(level: Room, levelIndex: 0, point: IrradianceCells.ReceiverPoint(field: field, normal: Up, spacing: Room.Spacing, surface: under));
+        var cell = IrradianceLattice.CellOf(level: Room, levelIndex: 0, point: IrradianceCells.Launch(field: field, height: (IrradianceCells.ReceiverBias * Room.Spacing), normal: Up, surface: under)!.Value.Point);
 
         Assert.True(condition: (mask > 0));
 
