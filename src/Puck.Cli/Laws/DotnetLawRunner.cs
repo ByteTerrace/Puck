@@ -14,8 +14,9 @@ internal sealed class DotnetLawRunner : ILawRunner {
         .Where(predicate: static line => (line.Length > 0))];
 
     /// <inheritdoc/>
-    public LawBuild Build(string tree, string project) {
+    public LawBuild Build(string tree, string project, CancellationToken cancellationToken) {
         var build = CliProcess.RunCaptured(
+            cancellationToken: cancellationToken,
             arguments: ["build", project, "-c", CliOptions.DefaultConfiguration, "-v", "q", "-nologo", "--disable-build-servers", "-p:NuGetAudit=false"],
             fileName: "dotnet",
             input: string.Empty,
@@ -41,8 +42,9 @@ internal sealed class DotnetLawRunner : ILawRunner {
         );
     }
     /// <inheritdoc/>
-    public LawRun Run(string tree, string project, string law, string results) {
+    public LawRun Run(string tree, string project, string law, string results, CancellationToken cancellationToken) {
         var run = CliProcess.RunCaptured(
+            cancellationToken: cancellationToken,
             arguments: ["test", project, "-c", CliOptions.DefaultConfiguration, "--no-build", "-nologo", "--filter", $"FullyQualifiedName~{law}", "--logger", $"trx;LogFileName={ReportName}", "--results-directory", results],
             fileName: "dotnet",
             input: string.Empty,
@@ -54,12 +56,24 @@ internal sealed class DotnetLawRunner : ILawRunner {
             path2: ReportName
         );
 
-        return (File.Exists(path: report)
-            ? LawProof.ReadReport(report: File.ReadAllText(path: report))
-            : new LawRun(
-                Error: $"dotnet test exited {run.ExitCode}{(run.TimedOut ? " after its deadline" : string.Empty)} and wrote no report: {string.Join(separator: " | ", values: Lines(text: (run.Stdout + run.Stderr)).TakeLast(count: 5))}",
-                Failures: [],
-                Total: 0
-            ));
+        return ReadRun(run: run, report: (File.Exists(path: report) ? File.ReadAllText(path: report) : null));
+    }
+    /// <summary>Judges the report together with process completion; a partial or aborted run is never evidence.</summary>
+    /// <param name="run">The test process's outcome.</param>
+    /// <param name="report">Its TRX report, or null when none was written.</param>
+    /// <returns>The executed tests, or a named refusal reason.</returns>
+    public static LawRun ReadRun(CliProcessResult run, string? report) {
+        if (run.TimedOut || (report is null)) {
+            return new LawRun(Error: $"dotnet test exited {run.ExitCode}{(run.TimedOut ? " after its deadline" : string.Empty)} without a completed run: {string.Join(separator: " | ", values: Lines(text: (run.Stdout + run.Stderr)).TakeLast(count: 5))}", Failures: [], Tests: []);
+        }
+        var parsed = LawProof.ReadReport(report: report);
+
+        if ((run.ExitCode != 0) && ((run.ExitCode != 1) || (parsed.Failures.Count == 0))) {
+            return parsed with { Error = $"dotnet test exited {run.ExitCode} without a matching test-failure verdict." };
+        }
+        if ((run.ExitCode == 0) && (parsed.Failures.Count > 0)) {
+            return parsed with { Error = "dotnet test exited 0 despite reported failures." };
+        }
+        return parsed;
     }
 }

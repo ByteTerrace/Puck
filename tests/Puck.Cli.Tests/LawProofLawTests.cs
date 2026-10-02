@@ -16,28 +16,36 @@ public sealed class LawProofLawTests {
     private const string Project = "tests/Lib.Tests/Lib.Tests.csproj";
 
     private sealed class FakeRunner : ILawRunner {
+        public Action<string, CancellationToken>? BeforeBuild { get; init; }
+        public LawBuild? BuildResult { get; init; }
         public List<string> Builds { get; } = [];
+        public Func<string, LawRun>? Report { get; init; }
         public List<string> Runs { get; } = [];
 
-        public LawBuild Build(string tree, string project) {
+        public LawBuild Build(string tree, string project, CancellationToken cancellationToken) {
             Builds.Add(item: tree);
+            BeforeBuild?.Invoke(arg1: tree, arg2: cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (BuildResult is not null) { return BuildResult; }
 
             return ((File.ReadAllText(path: Path.Combine(path1: tree, path2: FixPath)) == "unbuildable")
                 ? new LawBuild(Errors: [$"{tree}/{FixPath}(1,1): error CS0000: unbuildable"], Succeeded: false)
                 : new LawBuild(Errors: [], Succeeded: true));
         }
-        public LawRun Run(string tree, string project, string law, string results) {
+        public LawRun Run(string tree, string project, string law, string results, CancellationToken cancellationToken) {
             Assert.Equal(actual: project, expected: Project);
             Runs.Add(item: tree);
 
             var content = File.ReadAllText(path: Path.Combine(path1: tree, path2: FixPath));
+
+            if (Report is not null) { return Report(arg: content); }
 
             return new LawRun(
                 Error: null,
                 Failures: ((content == "fixed")
                     ? []
                     : [new LawFailure(Message: $"Assert.Equal() Failure: {content}", Test: $"Lib.Tests.{law}")]),
-                Total: 1
+                Tests: [$"Lib.Tests.{law}"]
             );
         }
     }
@@ -174,5 +182,209 @@ public sealed class LawProofLawTests {
         Assert.Contains(actualString: error, expectedSubstring: "is not in the history of HEAD");
         Assert.Empty(collection: runner.Builds);
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AProjectOutsideTheProvenTreeIsRefusedBeforeBuilding(bool absolute) {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+
+        checkout.Write(name: FixPath, text: "fixed");
+        _ = checkout.Commit(message: "lib: fix");
+        var runner = new FakeRunner { BuildResult = new LawBuild(Errors: ["external project reached the build runner"], Succeeded: false) };
+        var outside = (absolute ? Path.Combine(path1: checkout.Root, path2: Project) : "../../Outside.csproj");
+
+        File.WriteAllText(path: Path.Combine(path1: scratch.RootPath, path2: "Outside.csproj"), contents: "<Project />");
+
+        var (exitCode, _, error) = ConsoleCapture.RunSplit(run: () => LawProof.Prove(
+            repositoryRoot: checkout.Root, law: Law, project: outside, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratchRoot: scratch.RootPath));
+
+        Assert.Empty(collection: runner.Builds);
+        Assert.Equal(actual: exitCode, expected: CliExit.Refused);
+        Assert.Contains(actualString: error, expectedSubstring: "outside the proven tree");
+        File.Delete(path: Path.Combine(path1: scratch.RootPath, path2: "Outside.csproj"));
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+    }
+    [Fact]
+    public void ProofGitCommandsNeverInvokeTheCallersHooks() {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        // Git runs this hook after both worktree creation and checkout of an uncommitted fix.
+        checkout.Write(name: ".git/proof-hooks/post-checkout", text: "#!/bin/sh\nprintf touched > \"$(git rev-parse --git-common-dir)/proof-hook-ran\"\n");
+        if (!OperatingSystem.IsWindows()) {
+            File.SetUnixFileMode(path: Path.Combine(path1: checkout.Root, path2: ".git/proof-hooks/post-checkout"), mode: UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        _ = checkout.Git("config", "core.hooksPath", Path.Combine(path1: checkout.Root, path2: ".git/proof-hooks"));
+        checkout.Write(name: FixPath, text: "fixed");
+        var runner = new FakeRunner();
+
+        var (exitCode, _, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [FixPath], Revision: null), runner: runner, scratch: scratch);
+
+        Assert.True(condition: (exitCode == CliExit.Success), userMessage: error);
+        Assert.False(condition: File.Exists(path: Path.Combine(path1: checkout.Root, path2: ".git/proof-hook-ran")));
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: $" M {FixPath}\n");
+    }
+    [Fact]
+    public void CancellationReachesTheRunnerAndRemovesTheWorktree() {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var cancellation = new CancellationTokenSource();
+
+        checkout.Write(name: FixPath, text: "fixed");
+        _ = checkout.Commit(message: "lib: fix");
+        var runner = new FakeRunner {
+            BeforeBuild = (_, token) => {
+                Assert.Equal(expected: cancellation.Token, actual: token);
+                cancellation.Cancel();
+            },
+        };
+
+        Assert.Throws<OperationCanceledException>(testCode: () => ConsoleCapture.RunSplit(run: () => LawProof.Prove(
+            repositoryRoot: checkout.Root, law: Law, project: null, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratchRoot: scratch.RootPath, cancellationToken: cancellation.Token)));
+
+        Assert.Empty(collection: runner.Runs);
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+        Assert.IsAssignableFrom<System.CommandLine.Invocation.AsynchronousCommandLineAction>(@object: LawsCommand.Create().Subcommands.Single().Action);
+    }
+    [Fact]
+    public void AnExceptionRemovesEvenALockedProofWorktree() {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+
+        checkout.Write(name: FixPath, text: "fixed");
+        _ = checkout.Commit(message: "lib: fix");
+        var runner = new FakeRunner {
+            BeforeBuild = (tree, _) => {
+                checkout.Git("worktree", "lock", tree);
+                throw new InvalidOperationException(message: "runner failed");
+            },
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(testCode: () => Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch));
+
+        Assert.Equal(expected: "runner failed", actual: exception.Message);
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+    }
+    [InlineData("NotExecuted")]
+    [InlineData("Skipped")]
+    [InlineData("Error")]
+    [InlineData("Timeout")]
+    [InlineData("Inconclusive")]
+    [Theory]
+    public void ASelectedTestThatDoesNotExecuteCannotProveALaw(string outcome) {
+        var run = LawProof.ReadReport(report: $"""
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results><UnitTestResult testName="Holds" outcome="{outcome}" />
+              <UnitTestResult testName="Other" outcome="Passed" /></Results>
+            </TestRun>
+            """);
+
+        Assert.NotNull(@object: run.Error);
+        Assert.Contains(expectedSubstring: "Holds", actualString: run.Error);
+    }
+    [InlineData(0, true, "Passed")]
+    [InlineData(1, false, "Passed")]
+    [InlineData(2, false, "Failed")]
+    [InlineData(0, false, "Failed")]
+    [Theory]
+    public void AnAbortedOrInconsistentProcessCannotProveALaw(int exitCode, bool timedOut, string outcome) {
+        var process = new CliProcessResult(ExitCode: exitCode, OutputLines: [], Stderr: "", Stdout: "", TimedOut: timedOut);
+        var run = DotnetLawRunner.ReadRun(report: $"""
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results><UnitTestResult testName="Holds" outcome="{outcome}" /></Results>
+            </TestRun>
+            """, run: process);
+
+        Assert.NotNull(@object: run.Error);
+    }
+    [Fact]
+    public void AFailedTestMustRunAgainWithTheFixRestored() {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+
+        checkout.Write(name: FixPath, text: "fixed");
+        _ = checkout.Commit(message: "lib: fix");
+        var runner = new FakeRunner {
+            Report = content => ((content == "fixed")
+            ? new LawRun(Error: null, Failures: [], Tests: ["Other"])
+            : new LawRun(Tests: ["Holds", "Other"], Failures: [new LawFailure(Message: "broken", Test: "Holds")], Error: null)),
+        };
+
+        var (exitCode, _, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
+
+        Assert.Equal(actual: exitCode, expected: CliExit.Refused);
+        Assert.Contains(actualString: error, expectedSubstring: "executed different tests");
+        AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+    }
+    [Fact]
+    public void AHostCrashWithReportedFailuresIsNotARedLeg() {
+        var process = new CliProcessResult(ExitCode: 1, OutputLines: [], Stderr: "", Stdout: "", TimedOut: false);
+        var run = DotnetLawRunner.ReadRun(report: """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results><UnitTestResult testName="Holds" outcome="Failed" /></Results>
+              <ResultSummary outcome="Failed"><RunInfos><RunInfo outcome="Error">
+                <Text>The test host crashed.</Text>
+              </RunInfo></RunInfos></ResultSummary>
+            </TestRun>
+            """, run: process);
+
+        Assert.NotNull(@object: run.Error);
+    }
+    [Fact]
+    public void AProofRefusesLinksBeforeMirroringOrBuilding() {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        var link = Path.Combine(path1: checkout.Root, path2: "src/Lib/Link.cs");
+
+        _ = checkout.Git("config", "core.symlinks", "true");
+        try {
+            File.CreateSymbolicLink(path: link, pathToTarget: Path.Combine(path1: checkout.Root, path2: FixPath));
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {
+            Assert.Skip(reason: $"symbolic links are unavailable: {exception.Message}");
+            return;
+        }
+        try {
+            _ = checkout.Commit(message: "lib: link");
+            checkout.Write(name: FixPath, text: "fixed");
+            _ = checkout.Commit(message: "lib: fix");
+            var runner = new FakeRunner();
+
+            var (exitCode, _, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratch: scratch);
+
+            Assert.Empty(collection: runner.Builds);
+            Assert.Equal(actual: exitCode, expected: CliExit.Refused);
+            Assert.Contains(actualString: error, expectedSubstring: "link in the proven tree");
+            Assert.Equal(expected: "fixed", actual: checkout.Read(name: FixPath));
+            AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
+        } finally {
+            File.Delete(path: link);
+        }
+    }
+    [Fact]
+    public void CleanupNeverPrunesAnotherWorktreesRegistration() {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var other = new TemporaryDirectory(prefix: "puck-laws-other-law-");
+        var otherTree = other.PathOf(name: "tree");
+
+        _ = checkout.Git("worktree", "add", "--detach", "--quiet", otherTree, "HEAD");
+        Directory.Delete(path: otherTree, recursive: true);
+        _ = checkout.Git("config", "gc.worktreePruneExpire", "now");
+        var before = checkout.Git("worktree", "list", "--porcelain");
+
+        checkout.Write(name: FixPath, text: "fixed");
+        _ = checkout.Commit(message: "lib: fix");
+
+        var (exitCode, _, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: new FakeRunner(), scratch: scratch);
+
+        Assert.True(condition: (exitCode == CliExit.Success), userMessage: error);
+        var registrations = checkout.Git("worktree", "list", "--porcelain");
+        var otherEntry = $"worktree {Puck.Abstractions.PuckPaths.Normalize(path: otherTree)}";
+
+        Assert.Contains(actualString: before, expectedSubstring: otherEntry);
+        Assert.Contains(actualString: registrations, expectedSubstring: otherEntry);
+        Assert.Equal(expected: 2, actual: registrations.Split(separator: '\n').Count(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "worktree ")));
+        Assert.Empty(collection: Directory.EnumerateFileSystemEntries(path: scratch.RootPath));
     }
 }

@@ -49,8 +49,9 @@ internal static class GateCommand {
                    --merge-base, so commits the target gained after the branch left it are not counted.
                    --gpu adds --gpu: the chosen canaries, then parity, one after the other.
                 4. puck format --check over the changed C# and .puck sources, puck lengths --check,
-                   puck comment-smells --check, puck docs links and puck schema --check. Nothing is
-                   rewritten.
+                   puck comment-smells --check, puck docs links, puck schema --check,
+                   puck architecture --check, puck registry --check, puck vocabulary --check,
+                   puck shaders generate --check and puck branding --check. Nothing is rewritten.
               Each step's full output goes to gate.log in the run's directory, which the summary names
               and the run keeps; the CLI copy is removed. Run it from a CLI outside the checkout: the
               build rewrites src/Puck.Cli/bin.

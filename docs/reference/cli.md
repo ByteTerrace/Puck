@@ -760,7 +760,9 @@ against the merge base of `HEAD` and the branch it lands on, `--merge-base`
    runs the chosen canaries and then parity.
 4. The repository checks, each in its check form only: `puck format --check`
    over the changed C# and `.puck` sources, `puck lengths --check`,
-   `puck comment-smells --check`, `puck docs links` and `puck schema --check`.
+   `puck comment-smells --check`, `puck docs links`, `puck schema --check`,
+   `puck architecture --check`, `puck registry --check`, `puck vocabulary --check`,
+   `puck shaders generate --check` and `puck branding --check`.
    Nothing in the checkout is rewritten.
 
 A failed step fails the gate, and the later steps still run. Each step's full
@@ -778,6 +780,11 @@ gate: lengths passed
 gate: comment-smells passed
 gate: docs links passed
 gate: schema passed
+gate: architecture passed
+gate: registry passed
+gate: vocabulary passed
+gate: shaders generate passed
+gate: branding passed
 gate: passed; full output in ../../Temp/puck-gate-x1y2/gate.log
 ```
 
@@ -812,10 +819,14 @@ The proof never touches the working tree. It adds a detached git worktree of
 and untracked files into it. There it withholds the fix, builds the law's
 project in Release and runs the law, which must fail. It then restores the fix,
 builds and runs again, and the law must pass. Outcomes come from the test run's
-TRX report, never its console text, and a run that selects no test is refused
-rather than read as a pass. The worktree, its registration and the temporary
-directory are removed whatever the outcome, so concurrent proofs never share a
-file.
+TRX report together with the process's completion verdict. A run that selects
+no test, skips a selected test, aborts or executes different tests between legs
+is refused. Both legs execute the same tests, and every selected test must
+finish with a passed or failed outcome. Caller Git hooks are disabled, and
+projects outside the proof tree and links in it are refused. Cancellation kills
+and waits for the active child process before cleanup. Cleanup removes the
+proof's worktree, its own registration and its temporary directory, and reports
+any removal failure; it never prunes another worktree's registration.
 
 ```text
 Law: BackgroundBuildLawTests (tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj)
@@ -834,7 +845,8 @@ calls what the fix added, narrow the withheld paths with `--file-list` to the
 change the law judges.
 
 Exit codes: 0 proven, 1 cannot fail or fails with the fix, 2 refused (a build
-failed, the law selects no test, or the fix cannot be withheld).
+failed, the test run cannot be judged, or the fix cannot be withheld), 130
+cancelled after cleanup.
 
 ## `puck canary`—real-World behavioral proofs
 

@@ -153,6 +153,11 @@ internal static class GateRun {
         steps.Add(item: ("comment-smells", ["comment-smells", "--check"]));
         steps.Add(item: ("docs links", ["docs", "links"]));
         steps.Add(item: ("schema", ["schema", "--check"]));
+        steps.Add(item: ("architecture", ["architecture", "--check"]));
+        steps.Add(item: ("registry", ["registry", "--check"]));
+        steps.Add(item: ("vocabulary", ["vocabulary", "--check"]));
+        steps.Add(item: ("shaders generate", ["shaders", "generate", "--check"]));
+        steps.Add(item: ("branding", ["branding", "--check"]));
 
         var failed = new List<string>();
 
