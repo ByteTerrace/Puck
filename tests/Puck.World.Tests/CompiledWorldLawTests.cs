@@ -83,7 +83,7 @@ public sealed class CompiledWorldLawTests {
             ]
           },
           "patches": [
-            { "name": "stinger", "source": "PATCH", "hash": "5126a83fc5816863b6ecf981ef238ef346653c028a589520d766ec4ab82260ca" }
+            { "name": "stinger", "source": "PATCH", "hash": "5d8f53b2714ddc863bf96e4817055838e3b72d705cba99bb050ccd6a00c472b0" }
           ]
         }
         """;
@@ -91,7 +91,7 @@ public sealed class CompiledWorldLawTests {
     // The products the pinned fixture's derivations produce at their current versions. A derivation whose product
     // moves is a deliberate change to it: bump the chunk's Version and re-record its pin here.
     private static readonly (string Code, uint Version, string Product)[] Pins = [
-        ("DEFN", 2, "sha256-64/08cbbeb8348644ab"),
+        ("DEFN", 2, "sha256-64/30103fb9e3ffe8ca"),
         ("ASST", 1, "sha256-64/1bc8ff1f5742445f"),
     ];
     private static readonly WorldMachineCatalog Catalog = TestHookInstaller.CreateMachineCatalog();

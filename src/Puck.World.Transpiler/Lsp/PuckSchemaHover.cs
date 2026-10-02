@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Units;
+using Puck.World.Authoring;
 using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Lsp;
@@ -37,10 +38,10 @@ internal sealed class PuckSchemaHover {
     }
 
     internal string? Describe(DocumentNode document, IReadOnlyList<SyntaxNode> path, string word, int offset) {
-        if (document.Schema is not null and not "puck.world.definition.v1" and not "puck.creation.v1") {
+        if (document.Schema is not null and not WorldDefinition.SchemaVersion and not CreationDocument.CurrentSchema) {
             return null;
         }
-        var current = ((Cursor?)((document.Schema == "puck.creation.v1")
+        var current = ((Cursor?)((document.Schema == CreationDocument.CurrentSchema)
             ? m_creation
             : new Cursor(
                 Node: m_schema.Root,

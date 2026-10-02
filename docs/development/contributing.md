@@ -121,6 +121,33 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 
 ## Verification
 
+### Verify a change
+
+`puck gate` is how a change is verified, by agents and people alike. Run it
+from a copy of the candidate's own CLI outside the checkout. It builds the
+solution and stops on a failed build; copies the CLI that build wrote into a
+directory of its own; runs the suites, test worlds and catalog check the change
+reaches, read against the merge base with the target branch so the target's
+newer commits are not counted; and runs `format`, `lengths`, `comment-smells`,
+`docs links`, `schema`, `architecture`, `registry`, `vocabulary`, `shaders generate`,
+`branding`, `formats` and `canary-ceilings` in their check forms only. `puck gate --gpu` adds the
+affected canaries and parity, one after the other, on a machine with no
+competing build or GPU work. The suites and canaries come from
+[`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs),
+chosen from the project graph and recorded canary coverage, and nothing wider.
+The full sets run only when the owner asks for them. See
+[`puck gate`](../reference/cli.md#puck-gatethe-change-scoped-gate) for the
+steps and the log the run keeps.
+
+A new law proves its own fix: `puck laws prove <law> --fix <commit>`, or
+`--file-list` naming the files of an uncommitted fix, withholds the fix in a
+worktree of its own, requires the law to fail there and pass once the fix is
+restored, and prints the evidence block for the commit body. A law that passes
+with its fix withheld cannot fail and is reported so; a build that fails in
+either phase is refused rather than counted. Never prove a law by hand-reverting
+files in a shared tree. See
+[`puck laws prove`](../reference/cli.md#puck-laws-provea-law-against-its-fix).
+
 ### Engine changes and verification coverage
 
 `Puck.Post` remains quarantined under `experimental/Puck.Post` and outside the
@@ -149,11 +176,6 @@ baseline. It requires both GPU backends but does not take over a display. Use it
 for render-path, shader, presenter, or capture changes. Its authored stations
 exercise specific contracts; passing them does not establish correctness for
 every possible scene. See `puck parity --help` for the current command surface.
-
-`puck affected --run` is how a change is verified: it runs the suites, canaries
-and parity the change can reach, chosen from the project graph and recorded
-canary coverage (see [`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs)),
-and nothing wider. The full sets run only when the owner asks for them.
 
 `puck canary --merge` runs the full canary set. It runs every
 [real-World canary](../reference/cli.md#puck-canaryreal-world-behavioral-proofs)
@@ -347,8 +369,9 @@ dotnet test tests/Puck.Cli.Tests -c Release --filter "FullyQualifiedName~Officia
 ```
 
 CI's `artifacts` workflow always publishes the browser before any test project
-runs, so this is a local-run-only step; the fixture's own failure message
-names the command when the bundle is missing.
+runs, so this is a local-run-only step. Without the bundle the tree-building
+tests skip by name, and the skip reason names the publish command; they never
+fail for the missing prerequisite.
 
 ## Working with world documents
 
@@ -558,6 +581,22 @@ meant to establish.
   (SMELL002/SMELL003). Rewrite or delete the comment, then
   `puck comment-smells`. Both ledgers are
   [ratchet ledgers](../reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers).
+- A strictly versioned format token (a wire key, checkpoint or journal
+  version, replay shape token, baker version, magic, or `puck.<name>.vN`
+  schema) is recorded in `FormatVersions.json`. Bump the constant, then run
+  `puck formats`; formatting preserves the canonical digest.
+  `puck formats --check` fails on any disagreement. A codec
+  edited without a bump moves the recorded digest and fails the check, so the
+  author decides whether the token should move, and two lanes that bump one
+  format conflict in the ledger instead of colliding at run time.
+  [`puck formats`](../reference/cli.md#puck-formatsstrict-format-tokens).
+- The cost of the canary gate selections is recorded in `CanaryCeilings.json`,
+  never declared by hand. A change that adds or removes canary cost runs
+  `puck canary-ceilings` and states the new `puck canary --merge --plan`
+  counts in its commit; `puck canary-ceilings --check` requires each recorded
+  count to equal its plan. When a merge conflicts in the file, rerun the verb
+  rather than recomputing counts.
+  [`puck canary-ceilings`](../reference/cli.md#puck-canary-ceilingsrecorded-gate-costs).
 - A call through an unmanaged function pointer (`delegate* unmanaged`, any
   calling convention) may not use a signature that mentions a type parameter
   except behind a pointer: `Puck.Analyzers` fails the build with INTEROP001,

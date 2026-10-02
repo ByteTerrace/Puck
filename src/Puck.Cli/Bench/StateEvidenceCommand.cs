@@ -88,7 +88,7 @@ internal static class StateEvidenceCommand {
             return 2;
         }
         var report = BuildInventory(repositoryRoot: root);
-        var json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(report, new JsonSerializerOptions { NewLine = "\n", WriteIndented = true });
 
         if (output is null) {
             Console.WriteLine(value: json);

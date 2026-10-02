@@ -192,9 +192,9 @@ The policy is enforced below every loading path (boot, insert, replacement,
 reload, restore, replay) after trusted preparation and before runtime creation,
 over exact source and executable bytes and the provider-verified format, with
 selection under separate operator authority. The `puck.cartridge.v1` admission preset,
-`GamingBrickContentPolicies`, sits in the machine-neutral `Puck.Machines` with no
-production consumer; it moves beside the format it names, in
-`Puck.GamingBricks.Forge`, when the machine host first invokes it.
+`GamingBrickContentPolicies`, sits beside the format it names in
+`Puck.GamingBricks.Forge` and has no production consumer yet; the machine host
+is its first.
 
 **Check:** raw ROM rejection, relabeled input, changed source or output pins,
 valid new user-authored content, allowlist acceptance and rejection, and a

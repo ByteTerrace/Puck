@@ -584,7 +584,7 @@ public static partial class WorldDocumentEmitter {
         }
 
         root["documentId"] = name;
-        root["schema"] = WorldDocumentVocabulary.Schema;
+        root["schema"] = WorldDefinition.SchemaVersion;
         world = root;
 
         return true;

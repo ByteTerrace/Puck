@@ -13,11 +13,11 @@ public static class CartridgeLanguageServices {
     /// <param name="document">The current parsed buffer.</param>
     /// <returns>LSP completion items owned by this schema.</returns>
     public static JsonArray? Completions(DocumentNode document) {
-        if (document.Schema != CartridgeVocabulary.Schema) { return null; }
+        if (document.Schema != CartridgeDocument.SchemaId) { return null; }
         var items = new JsonArray();
 
         Add(
-            insertText: "schema: \"puck.cartridge.v1\"",
+            insertText: $"schema: \"{CartridgeDocument.SchemaId}\"",
             label: "schema"
         );
         Add(
@@ -82,7 +82,7 @@ public static class CartridgeLanguageServices {
     /// <param name="diagnostics">The shared diagnostic bag.</param>
     /// <returns>Whether the document selected the cartridge vocabulary.</returns>
     public static bool Diagnose(DocumentNode document, string? sourcePath, DiagnosticBag diagnostics) {
-        if (document.Schema != CartridgeVocabulary.Schema) { return false; }
+        if (document.Schema != CartridgeDocument.SchemaId) { return false; }
         var sourceMap = new SourceMap();
         var lowered = CartridgeDocumentEmitter.LowerWithDiagnostics(
             document,

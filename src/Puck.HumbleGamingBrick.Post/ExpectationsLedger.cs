@@ -23,7 +23,7 @@ internal static partial class ExpectationsLedger {
         public required string Suite { get; init; }
     }
     [JsonSerializable(typeof(EntryDto[]))]
-    [JsonSourceGenerationOptions(WriteIndented = true)]
+    [JsonSourceGenerationOptions(NewLine = "\n", WriteIndented = true)]
     private sealed partial class EntryDtoJsonContext : JsonSerializerContext;
 
     /// <summary>Resolves the committed <c>Expectations.json</c> in the running checkout, independently of compiler
