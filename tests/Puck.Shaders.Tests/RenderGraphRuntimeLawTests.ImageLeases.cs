@@ -228,6 +228,148 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Assert.Equal(expected: read, actual: scene.Produce(footprints: filmed, roots: MainRoot).ImageHandle);
         }
     }
+    /// <summary>A paused root stands for the camera when a reconfiguration retires the camera and replaces the root's
+    /// graph with one that reads nothing, and a later drain retires every finished submission's leases. The root's output
+    /// stood for the retired camera, so it resolves to nothing: the display is handed nothing in its place, a capture of
+    /// the root is never moved to its node and waits, naming why, and no command ever names the camera's released
+    /// image.</summary>
+    [Fact]
+    public void APausedRootStandingForARetiredCameraNeverServesItsReleasedImage() {
+        using var scene = new StandingScene(
+            ["main"],
+            Set(
+                Instance(name: "camera"),
+                Instance(name: "spare"),
+                Instance("main", reads: new RenderGraphRead(Producer: "camera"))
+            ),
+            Graph(pipeline: CameraGraph()),
+            Graph(pipeline: CameraGraph()),
+            Graph(OverGraph(reader: false), ("world", "camera"))
+        );
+        RenderGraphFootprint[] filmed = [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0)];
+        RenderGraphRoot[] roots = [
+            .. MainRoot,
+            new RenderGraphRoot(Height: 1.0, Instance: "spare", Width: 1.0),
+        ];
+
+        scene.Gpu.ReadbackSupported = true;
+        _ = scene.ProduceUntilMainStandsForCamera(
+            footprints: filmed,
+            named: [],
+            roots: roots
+        );
+
+        var main = scene.Node(instance: "main");
+
+        main.Paused = true;
+        Assert.True(
+            condition: scene.Runtime.TryReconfigure(
+                graphs: [null, Graph(pipeline: ScreensGraph(pool: false))],
+                refusal: out var refusal,
+                root: "main",
+                set: Set(
+                    Instance(name: "spare"),
+                    Instance(name: "main")
+                )
+            ),
+            userMessage: refusal?.Message
+        );
+        TestLiveness.Until(
+            reason: () => "The paused root never installed its replacement.",
+            step: () => {
+                _ = scene.Produce(footprints: [], named: [], roots: roots);
+
+                return !main.HasPendingCandidate;
+            }
+        );
+
+        // Nothing names the spare instance any more: its release drains the device and retires every finished lease.
+        var shown = scene.Produce(footprints: [], named: [], roots: MainRoot);
+
+        Assert.Equal(
+            actual: scene.Runtime.Latest!.Instances[scene.Runtime.Instances.IndexOf(name: "spare")].Status,
+            expected: RenderGraphInstanceStatus.Unnamed
+        );
+        Assert.Equal(
+            actual: shown.ImageHandle,
+            expected: 0
+        );
+
+        var request = CaptureRequest();
+
+        scene.Runtime.RequestCapture(request: request);
+
+        for (var frame = 0; (frame < 4); frame++) {
+            _ = scene.Produce(footprints: [], named: [], roots: MainRoot);
+        }
+
+        Assert.False(condition: request.Completion.IsCompleted);
+        Assert.Empty(collection: scene.Gpu.Readbacks);
+        Assert.Contains(
+            expectedSubstring: "retired",
+            actualString: scene.Runtime.UnservedCaptureReasonOf(instance: "main")
+        );
+        Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
+    }
+    /// <summary>A view may stand for the camera's previous frame, and a root may stand for the view's previous frame: the
+    /// root's output would need the camera's output from two frames ago, older than the two each instance records. The set
+    /// is refused at install, naming the chain, rather than resolving to nothing. A chain crossing one previous-frame
+    /// read, or one whose root draws over the view rather than standing for it, installs.</summary>
+    [Fact]
+    public void AChainOfStandingOutputsAcrossTwoPreviousFrameReadsIsRefusedAtInstall() {
+        var gpu = new FakePipelineGpu();
+        var recorders = new Recorders(Camera, Over);
+        var refusal = Refusal(
+            gpu,
+            recorders,
+            Set(
+                Instance(name: "camera"),
+                Instance("view", reads: new RenderGraphRead(PreviousFrame: true, Producer: "camera")),
+                Instance("main", reads: new RenderGraphRead(PreviousFrame: true, Producer: "view"))
+            ),
+            "main",
+            Graph(pipeline: CameraGraph()),
+            Graph(OverGraph(reader: false), ("world", "camera")),
+            Graph(OverGraph(reader: false), ("world", "view"))
+        );
+
+        Assert.Equal(
+            actual: (refusal.Code, Names: string.Join(separator: " ", values: refusal.Names)),
+            expected: (RenderGraphRuntimeRefusalCode.StandingChain, Names: "main view camera")
+        );
+
+        // One previous-frame read in the chain resolves through the two recorded outputs.
+        using (Runtime(
+            gpu,
+            recorders,
+            Set(
+                Instance(name: "camera"),
+                Instance("view", reads: new RenderGraphRead(Producer: "camera")),
+                Instance("main", reads: new RenderGraphRead(PreviousFrame: true, Producer: "view"))
+            ),
+            "main",
+            Graph(pipeline: CameraGraph()),
+            Graph(OverGraph(reader: false), ("world", "camera")),
+            Graph(OverGraph(reader: false), ("world", "view"))
+        )) {
+        }
+
+        // A root that draws over the view's previous frame stands for nothing.
+        using (Runtime(
+            gpu,
+            recorders,
+            Set(
+                Instance(name: "camera"),
+                Instance("view", reads: new RenderGraphRead(PreviousFrame: true, Producer: "camera")),
+                Instance("main", reads: new RenderGraphRead(PreviousFrame: true, Producer: "view"))
+            ),
+            "main",
+            Graph(pipeline: CameraGraph()),
+            Graph(OverGraph(reader: false), ("world", "camera")),
+            Graph(ScreensGraph(false, "near"), ("near", "view"))
+        )) {
+        }
+    }
     /// <summary>A view stands for the camera, and a kept root's installed graph reads the view. A reconfiguration retires
     /// both while the root's replacement waits in the driver: the root keeps sampling the image it bound, the camera's,
     /// under a lease, though neither the view nor the camera holds it any more; once the replacement installs, the image
@@ -358,7 +500,15 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         view.WaitForBuild();
 
-        for (var frame = 0; (frame < 6); frame++) {
+        // The view installs, releases its hold and renders its own images while the root's read stays pending until the
+        // root waits on it. Then the queue catches up, as a device's does, and the image goes once nothing holds it.
+        for (var frame = 0; (frame < 4); frame++) {
+            _ = scene.Produce(footprints: shown, roots: MainRoot);
+        }
+
+        scene.Gpu.CompletedThrough = long.MaxValue;
+
+        for (var frame = 0; (frame < 8); frame++) {
             _ = scene.Produce(footprints: shown, roots: MainRoot);
         }
 

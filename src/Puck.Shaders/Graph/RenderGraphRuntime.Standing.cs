@@ -37,16 +37,22 @@ public sealed partial class RenderGraphRuntime {
     private readonly List<int> m_released = [];
 
     // What an output's image is when it is not the instance's own: another graph instance's output (Producer at least
-    // zero), at the frame read or, for a previous-frame read, the frame before it; or an image bound for one frame only
-    // (Producer -1, Frame that frame). A stand-in is the runtime's own and lives until the device is lost or the runtime
-    // disposed, which clear every output, so an output publishing one is the instance's own.
+    // zero), at the frame read or, for a previous-frame read, the frame before it; an image bound for one frame only
+    // (Producer -1, Frame that frame); or an image of an instance that retired in a reconfiguration (Producer -2), which
+    // resolves to nothing. A stand-in is the runtime's own and lives until the device is lost or the runtime disposed,
+    // which clear every output, so an output publishing one is the instance's own.
     private readonly record struct Standing(int Producer, long Frame, bool PreviousFrame = false) {
         public static Standing Own => new(
             Frame: -1L,
             Producer: -1
         );
-        public bool IsOwn => ((Producer < 0) && (Frame < 0L));
-        public bool IsOneFrame => ((Producer < 0) && (Frame >= 0L));
+        public static Standing Retired => new(
+            Frame: -1L,
+            Producer: -2
+        );
+        public bool IsOwn => ((Producer == -1) && (Frame < 0L));
+        public bool IsOneFrame => ((Producer == -1) && (Frame >= 0L));
+        public bool IsRetired => (Producer == -2);
     }
 
     // The newest completed output of a producer that is no newer than a frame, as recorded, standing or not.
@@ -83,6 +89,9 @@ public sealed partial class RenderGraphRuntime {
                 return ((standing.Frame == m_latest?.Frame)
                     ? resolved
                     : Output.None);
+            }
+            if (standing.IsRetired) {
+                return Output.None;
             }
 
             frame -= (standing.PreviousFrame ? 1L : 0L);
@@ -204,8 +213,9 @@ public sealed partial class RenderGraphRuntime {
             schedule.Next.Forget(index: released);
         }
     }
-    // A kept instance's output in a reconfigured set: what it stands for renumbered into the new set, or none when its
-    // producer retires, since the retired producer's images go with it.
+    // A kept instance's output in a reconfigured set: what it stands for renumbered into the new set, or, when its
+    // producer retires, an output standing for a retired image, which resolves to nothing and is never the instance's own,
+    // so no reader binds it and no capture moves to the node still publishing it.
     private static Output Renumbered(in Output output, int[] renumbered) {
         var standing = output.StandsFor;
 
@@ -216,7 +226,9 @@ public sealed partial class RenderGraphRuntime {
         var producer = renumbered[standing.Producer];
 
         return ((producer < 0)
-            ? Output.None
+            ? (Output.None with {
+                StandsFor = Standing.Retired,
+            })
             : (output with {
                 StandsFor = (standing with {
                     Producer = producer,

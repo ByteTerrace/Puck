@@ -578,12 +578,24 @@ another instance's own output. A capture moves to an instance's node only while
 its output resolves to an image, and the instances a captured output stands for
 keep their graphs while the capture waits.
 
-Standing chains with multiple previous-frame edges can require an image older
-than the runtime's two recorded outputs. For example, a root reading a view's
-previous frame, where that view stands for a camera's previous frame, needs
-the camera's output from two frames ago. Once that record is gone, the chain
-resolves to nothing and a reader binds a stand-in. Supporting such chains
-requires an intermediate drawn output or additional retained history.
+Every instance records its two latest outputs, and its node keeps exactly those
+images, so a standing output reaches back at most one frame. A set in which
+outputs could stand for one another across two previous-frame reads, such as a
+root that may stand for a view's previous frame while the view may stand for a
+camera's previous frame, would need an output two frames old: the runtime
+refuses it when it installs, naming the chain
+(`RenderGraphRuntimeRefusalCode.StandingChain`). A chain counts only inputs a
+graph's default output may stand for, so a pass that draws over such a read
+breaks it, and a loop that returns to an instance ends at that instance's own
+image, which it never stands for.
+
+When the producer a kept instance's output stands for retires in a
+reconfiguration, that output stands for a retired image: it resolves to nothing,
+is never taken for the instance's own image, and a capture of the instance does
+not move to its node until the instance has rendered again, naming why while it
+waits. A node also holds the other instance's image it currently publishes under
+a lease of its own, retired once a newer publication displaces it, so a capture
+already forwarded to it reads a live image whatever retired.
 
 Image lifetime is tracked per image and per reader (`GpuImageLeases`, in
 `Puck.Hosting`). Every image an instance's node creates is one of the runtime's
@@ -620,13 +632,6 @@ An external image is bound in the layout its producer declares for its lease,
 which is the layout the producer's own submissions leave it in, and the planner
 plans its barriers from it. `PostProcessPackage` serves every post-process
 package and `OverlayPackage` serves `overlay`.
-
-A paused instance has one open lifetime gap across a reconfiguration. When the
-producer its output stands for retires, the instance's recorded output becomes
-nothing, which the capture guard reads as the node's own image, while the node
-still publishes the retired producer's image. Once a drain retires the frame
-leases and the replacement graph drops the binding hold, a capture forwarded to
-that node reads an image that is already released.
 
 An instance whose `ExternalPackage` names a package no external producer or
 upload serves, but a recorder does, is a package instance: when the package

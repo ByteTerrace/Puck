@@ -186,6 +186,36 @@ public sealed partial class ShaderPipelineRenderNode {
             ));
         }
     }
+    // Holds a published image another instance owns (a package that drew nothing stands for it) under a lease of the
+    // node's own while it is the image the node publishes, retired like a displaced image of its own: however the owner
+    // retires, a capture the node serves from it without rendering reads a live image.
+    private void HoldPublication(in Surface surface) {
+        if (
+            (m_publishedBinding is null) ||
+            (m_images is null) ||
+            (surface.ImageHandle == 0)
+        ) {
+            return;
+        }
+
+        foreach (var held in m_held) {
+            if (held.Handle == surface.ImageHandle) {
+                return;
+            }
+        }
+
+        if (m_images.TryLease(
+            imageHandle: surface.ImageHandle,
+            lease: out var lease
+        )) {
+            m_held.Add(item: new HeldImage(
+                Bytes: 0UL,
+                Handle: surface.ImageHandle,
+                Image: new HeldBindingRetirement(lease: lease),
+                Leased: true
+            ));
+        }
+    }
     // Makes a surface the published one. The surface it displaces stays published as the one before it; a held image
     // that is now neither retires once every reader that could still sample it has submitted.
     private void Publish(Surface surface) {
@@ -196,11 +226,16 @@ public sealed partial class ShaderPipelineRenderNode {
         m_lastSurface = surface;
         // A render publishes, and a reset owes its own initialization frame, so neither is still missing a lost image.
         m_publicationLost = false;
+        HoldPublication(surface: in surface);
 
         for (var index = (m_held.Count - 1); (index >= 0); index--) {
             var held = m_held[index];
 
-            if (IsPublished(imageHandle: held.Handle)) {
+            // Readers resolve another instance's image to its owner and lease it there, so the node holds that image only
+            // while it is the one the node publishes now, which a capture it serves without rendering reads.
+            if (held.Leased
+                ? (held.Handle == m_lastSurface.ImageHandle)
+                : IsPublished(imageHandle: held.Handle)) {
                 continue;
             }
 
@@ -298,6 +333,7 @@ public sealed partial class ShaderPipelineRenderNode {
         CancelBuilds();
         ReleaseGraph();
     }
+
     /// <summary>Gets how many submissions the node has made.</summary>
     internal long SubmissionCount => m_submissions;
     /// <summary>Gets the fence of the node's latest submission, or <see langword="null"/> when it has made none since its
@@ -376,7 +412,8 @@ public sealed partial class ShaderPipelineRenderNode {
     }
 
     // An image behind a published surface, taken out of the objects that replaced it.
-    private readonly record struct HeldImage(nint Handle, IDisposable Image, ulong Bytes);
+    // Leased marks an image another instance owns that the node publishes, held under the node's lease on it.
+    private readonly record struct HeldImage(nint Handle, IDisposable Image, ulong Bytes, bool Leased = false);
     // Objects replaced by an install or a selection, or a held image no longer published, waiting for the submission
     // that retires them: the fence of the node's latest submission when they were replaced, or, for an image, the
     // fence of the submission made RetirementLag submissions after it stopped being published.

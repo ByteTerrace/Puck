@@ -275,7 +275,7 @@ public sealed partial class ShaderPipelineRenderNode {
             }
         }
         foreach (var held in m_held) {
-            if (held.Handle == imageHandle) {
+            if (!held.Leased && (held.Handle == imageHandle)) {
                 return true;
             }
         }

@@ -245,7 +245,6 @@ public sealed partial class RenderGraphRuntimeLawTests {
             actual: (Status: scene.Runtime.Latest!.Instances[scene.Set.IndexOf(name: "camera")].Status, Owned: scene.Node(instance: "camera").OwnedBytes),
             expected: (Status: RenderGraphInstanceStatus.Unnamed, Owned: 0UL)
         );
-        Assert.True(condition: scene.Gpu.IsReleased(handle: aliased.ImageHandle));
         Assert.Equal(
             actual: scene.Node(instance: "main").FrameCounter,
             expected: (rendered + 1UL)
@@ -262,6 +261,9 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 roots: MainRoot
             );
         }
+
+        // The root held the camera's image while it published it; once its own publications displaced it, the image went.
+        Assert.True(condition: scene.Gpu.IsReleased(handle: aliased.ImageHandle));
     }
     /// <summary>A root refreshed once in 64 frames draws nothing over the camera while a probe root keeps the camera
     /// rendering every frame. The camera then replaces its graph, which retires every image but its two latest. The root
@@ -373,7 +375,8 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         scene.Gpu.Recording = true;
 
-        for (var frame = 0; (frame < 4); frame++) {
+        // The view publishes the camera's image until its own renders displace it, and holds it until then.
+        for (var frame = 0; (frame < 8); frame++) {
             _ = scene.Produce(footprints: [shown], named: [], roots: MainRoot);
         }
 

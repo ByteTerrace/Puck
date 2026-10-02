@@ -16,6 +16,9 @@ public sealed partial class ShaderPipelineRenderNode {
     // hold on that producer (HoldBinding).
     private readonly Dictionary<string, GpuImageLease> m_bindingHolds = new(comparer: StringComparer.Ordinal);
 
+    // The table the node's images belong to and its publications of other instances' images are leased from, if any.
+    private readonly GpuImageLeases? m_images;
+
     // The frame slot of the node's latest submission, whose lease list retires once that submission has finished.
     private int m_latestSlot;
 

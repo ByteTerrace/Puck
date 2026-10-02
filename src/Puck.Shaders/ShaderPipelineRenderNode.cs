@@ -118,6 +118,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             ledger: m_work,
             services: (images?.Wrap(services: deviceContext.Services) ?? deviceContext.Services)
         );
+        m_images = images;
         m_device = deviceContext;
         m_pipelines = pipelines;
         m_directX = hostsOnDirectX;

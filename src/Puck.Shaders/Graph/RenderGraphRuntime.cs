@@ -38,6 +38,9 @@ public enum RenderGraphRuntimeRefusalCode : byte {
     /// <summary>An external instance was given a graph, declares an output that is not an image, or names a package no
     /// external producer serves.</summary>
     ExternalProducer = 9,
+    /// <summary>Instances could stand for one another's outputs across two previous-frame reads, which would need an output
+    /// older than the two each instance records.</summary>
+    StandingChain = 10,
 }
 /// <summary>A refused set of graphs.</summary>
 /// <param name="Code">Why it was refused.</param>
@@ -645,7 +648,18 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             inputs[index] = bindings;
         }
 
-        refusal = null;
+        refusal = RefuseStandingChains(
+            graphs: graphs,
+            inputs: inputs,
+            producers: producers,
+            set: set
+        );
+
+        if (refusal is not null) {
+            inputs = null;
+
+            return false;
+        }
 
         return true;
     }
@@ -972,6 +986,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         }
         if (m_sources[index]?.Fault is { } fault) {
             return $"the instance '{name}' has produced no output: {fault}";
+        }
+        if (m_current[index].StandsFor.IsRetired) {
+            return $"the instance '{name}' published the image of an instance that retired, and has not rendered since";
         }
         if (
             !m_nodes[index]!.IsReady ||
