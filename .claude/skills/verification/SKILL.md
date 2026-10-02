@@ -189,6 +189,16 @@ Re-run a failed leg once, alone, with nothing else running on the machine.
 
 The same rule applies to load-sensitive CPU tests.
 
+## Tests that create a repository
+
+A test that creates a scratch git repository under the temporary directory
+disables automatic maintenance in it (`maintenance.auto=false` and `gc.auto=0`
+in its configuration). Maintenance that a scratch repository's own commands
+start in the background outlives the test and has removed files from other
+worktrees on the machine. A lane that sees files vanish from an unrelated
+worktree while such a test runs suspects this first and checks whether the two
+repositories share an object store, alternates or a common directory.
+
 ## What a finished lane proves
 
 A lane is finished when its final head, with the integration branch's current
