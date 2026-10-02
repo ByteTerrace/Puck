@@ -1236,7 +1236,7 @@
           "pass": "sdf.world$resolve",
           "kind": "gpu.descriptor-writes",
           "class": "deterministic",
-          "ceiling": 3
+          "ceiling": 1
         },
         {
           "node": "world",
@@ -3902,7 +3902,7 @@
           "pass": "sdf.world$resolve",
           "kind": "gpu.descriptor-writes",
           "class": "deterministic",
-          "ceiling": 3
+          "ceiling": 1
         },
         {
           "node": "world",

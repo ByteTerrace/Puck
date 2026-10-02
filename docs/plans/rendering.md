@@ -4600,7 +4600,7 @@ resolution, and stay there.
   the `motion` debug view, the previous view and previous poses, so that view
   renders until its motion settles.
 - **Parity boots with reconstruction off.** The parity world's render levers
-  pin reconstruction, dynamic resolution and march seeding off, so every
+  pin reconstruction and dynamic resolution off, so every
   existing station keeps its pixel contract. Reconstruction gets stations of its
   own: a `captures` row may state `converge: N`, which resets the captured
   instance's history on the armed tick and serves the Nth frame composed at that
@@ -4614,10 +4614,10 @@ resolution, and stay there.
   presentation, jitter indices 0 to N-1, on both backends and at any speed, and
   the tick verdict still reads the armed tick.
 - **Every costed stage has an off-switch at the floor tier.** Reconstruction
-  (`world.temporal`), dynamic resolution (`world.dynamic-resolution`), march
-  seeding (`world.march-seed`) and sharpening (`world.upscale-sharpness 0`) are
-  session levers (`WorldSessionLevers`), and the quality presets in
-  `quality.puck` gain a row for each of the first three. Which of them `low`
+  (`world.temporal`), dynamic resolution (`world.dynamic-resolution`) and
+  sharpening (`world.upscale-sharpness 0`) are session levers
+  (`WorldSessionLevers`), and the quality presets in `quality.puck` gain a row
+  for each of the first two. Which of them `low`
   turns on is the lead's decision from the counted rows, below.
 - **Camera and session views reconstruct only when asked.** A camera view or
   a session view, which screens show at their declared extent, reconstructs
@@ -4913,31 +4913,36 @@ counted rows recorded in the same change.
      forced extent's capture within tolerance of its reference.
    - Counted-cost gate: zero created objects across the sweep; per-frame counts
      scale with the render extent the frame chose.
-7. **P15-7, march seeding.** The previous frame's depth starts the march where
-   it is safe to.
-   - Delivers: primary takes a candidate start from the history surface's ray
-     parameter, reprojected by the camera's motion, and starts there only when a
-     ball test proves the segment from the beam's tile start to the candidate
-     empty: one field evaluation at the segment's midpoint whose distance,
-     divided by the program's Lipschitz bound (`SdfProgram.Lipschitz.cs`),
-     covers half the segment. Otherwise it starts at the tile start, as today. A
-     program without a finite bound never seeds. By construction it cannot skip
-     a surface nearer than the candidate, including one that has moved in front
-     since the previous frame.
-   - Touches: `march/sdf-primary.hlsli`, `march/sdf-pixel.hlsli`,
-     `SdfWorldPackage.Values`, `SdfProgram.Lipschitz.cs` (the bound in the pass
-     block), `tests/Puck.Counters` (a panning leg).
-   - Done when: a CPU law over `SdfFieldEvaluator` holds the ball test's claim
-     against adversarial occluders placed inside the segment; a `march-seed`
-     canary's occluder moving in front of a seeded surface shows the same
-     identity census as seeding off and pixels within the stated tolerance.
-   - Counted-cost gate: primary's `gpu.march.steps` falls on the still and
-     panning legs, and its ceiling is re-recorded lower in this change; the ball
-     test's evaluation counts as a step.
+7. **P15-7, march seeding.** Investigated and not pursued; the engine has no
+   march seeding ([rendering decisions](../decisions/rendering.md)).
+   - What was measured: primary took a candidate start from the history
+     surface's ray distance, reprojected by the camera's motion, and started there
+     only when one field evaluation at the midpoint of the segment from the beam's
+     tile start proved the segment empty (a ball test, its evaluation counted as a
+     march step). On the RTX 2060's floor tier at 1920x1080 with reconstruction
+     on, primary's `gpu.march.steps` rose with seeding on: 476,615 to 514,550 on
+     the still leg and 607,186 to 652,765 on the panning leg (Vulkan; Direct3D 12
+     within three steps), surface steps flat.
+   - Outcomes on the still leg: 78,080 pixels sought a seed; 15,251 had no
+     candidate, 32,080 failed the ball test and 30,749 started at their candidate.
+     The panning leg: 97,024, 26,324, 35,214 and 35,486. Each accepted seed saved
+     0.81 steps on the still leg and 0.71 on the panning leg against the one
+     evaluation every tested seed costs, so even a gate that tested only the
+     seeds it would accept loses.
+   - A gate that tests the ball only when the segment exceeds β times the
+     march's own first step at the tile start (an evaluation the march makes
+     anyway) only approaches break-even: primary steps rise 1.23% and 1.42% at
+     β = 2, 0.22% and 0.05% at β = 4, and 0 and 2 steps at β = 8.
+   - Research note, open: a seed pays only if one accepted proof saves more than
+     one evaluation, which the midpoint ball cannot, since the beam already
+     starts primary near the surface and the march still converges from the
+     candidate. A proof that also covers the convergence after the candidate,
+     so an accepted seed lands within the acceptance band, is the formulation
+     worth studying before seeding returns.
 8. **P15-8, the floor tier's defaults.** The lead's call from the counted rows.
    - Delivers: the counters workload recorded with each lever off and on at the
      floor tier, in the configurations the first open decision below lists, and `quality.puck`'s `low`, `medium` and `high`
-     rows for the three levers as the lead decides.
+     rows for the two levers as the lead decides.
    - Touches: `quality.puck`, `tests/Puck.Counters`, the ceilings file.
    - Done when: the chosen defaults' ceilings are recorded and `puck counters
      --check` passes on the RTX 2060.
@@ -4949,8 +4954,7 @@ counted rows recorded in the same change.
   written, bytes uploaded and device-local bytes for: reconstruction off at
   half scale (today's shape after P15-4); reconstruction on at half scale;
   reconstruction on at the quarter tier, which the upscaler may make acceptable
-  where the spatial path is not; each with seeding off and on, over the still
-  and panning legs. The memory to expect at that extent: the history color and
+  where the spatial path is not; each over the still and panning legs. The memory to expect at that extent: the history color and
   the history surface at eight bytes a pixel each, in two frame slots, about
   66 MB a view, and the output at the output extent, about 33 MB, against the
   render-extent color's 18.7 MB at half scale.
