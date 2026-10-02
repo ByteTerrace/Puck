@@ -461,7 +461,7 @@ public sealed class CurveFollowLawTests {
         var result = tape.StopRecording();
 
         Assert.Null(@object: result.VerifyFault);
-        Assert.NotNull(value: result.Verdict);
+        Assert.NotNull(@object: result.Verdict);
     }
     [Fact]
     public void CurveFollowProducer_SwitchingProducersRestartsTheArcAtZero_RatherThanResuming() {

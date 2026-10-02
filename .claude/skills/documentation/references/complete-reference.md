@@ -26,7 +26,7 @@ to make, it is stale; update it in the same change and say so.
 |---|---|---|---|
 | Every `README.md` outside `.claude/` — the root README, and project and sub-folder READMEs under `src/`, `tests/` and `experimental/` — plus everything under `docs/`. The `src/Puck.Maths/*/README.md` wings additionally take the shape §3 gives them | **People**, including middle- and high-school students | Human narrative | §3 |
 | XML documentation comments on code members | **Developers reading the API**, in an editor or in generated reference output | Reference | §4 |
-| `.claude/skills/*/SKILL.md`; `CLAUDE.md`; other `.claude/` agent material | **Agents mid-task** | Operational | §5 |
+| `.claude/skills/*/SKILL.md`; `AGENTS.md`; other `.claude/` agent material | **Agents mid-task** | Operational | §5 |
 
 Two kinds of Markdown fall outside all three rows and take no register from this
 skill: the root legal and governance files (`LICENSE.md`,
@@ -287,7 +287,7 @@ without a build (`symbol-analysis`).
 
 ### When the documentation and the behavior disagree
 
-Correct one of them, in the same change, per `CLAUDE.md` rule 2. When the
+Correct one of them, in the same change, per `AGENTS.md` rule 2. When the
 divergence is in `Puck.Maths` and cannot be corrected in this change, it is
 **pinned in the law suite, never patched in prose** — [`maths-laws`](../../maths-laws/SKILL.md)
 owns that register, its factory, and the rule that the register closes only by
@@ -378,14 +378,15 @@ appears inside longer type names.
    exactly the second class, and you should be able to say why each is correct.
 
 The sweep surface for a **skill** rename is the directory name, the frontmatter
-`name`, sibling `SKILL.md` routing tables, `CLAUDE.md`'s skill list, and any
+`name`, sibling `SKILL.md` routing tables, `AGENTS.md`'s skill list, and any
 document under `docs/` that names the skill.
 
 ### Placement and scope rules
 
 - **The engine manual starts at `docs/README.md`.** Its overview, getting-started
   guide and topic pages help developers and agents learn and navigate the engine.
-  Manual topics own library usage and detailed human contracts; package READMEs
+  The manual explains current behavior and limitations without requiring a
+  source investigation first. Manual topics own library usage and detailed human contracts; package READMEs
   identify their component and link to those topics. XML comments own member
   contracts. Existing specialized source references retain their ownership until
   migrated; never copy them into a competing manual page.
@@ -418,7 +419,7 @@ document under `docs/` that names the skill.
   nothing. Everything else committed under `docs/api/` — `docfx.json`,
   `index.md`, `toc.yml`, and that folder's `.gitignore` — is hand-maintained,
   and `docs/api/index.md` is an ordinary document the root `README.md` routes to.
-- **A stale document is evidence, not law.** `CLAUDE.md` rule 2: documents,
+- **A stale document is evidence, not law.** `AGENTS.md` rule 2: documents,
   skills, gates, comments, and precedent are evidence. A stale one discovered
   mid-task is corrected in that same change — never obeyed, and never used to
   water down the change you were asked to make.

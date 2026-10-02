@@ -60,7 +60,7 @@ internal sealed partial class WorldScreenBinder {
                 seat: camera.Seat,
                 sensor: camera.Sensor
             ),
-            CaptureSlotFeed { Feed: { GpuRoute: true, Source: { } source } } => source.GpuFenceOrder,
+            CaptureSlotFeed { Feed: { RidesGpu: true, Source: { } source } } => source.GpuFenceOrder,
             ProbeSourceFeed probe => probe.Feed.Order,
             _ => null,
         });

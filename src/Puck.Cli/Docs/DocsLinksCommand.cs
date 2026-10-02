@@ -45,7 +45,7 @@ internal static class DocsLinksCommand {
         "docs/project-map.md",
         "docs/game/README.md",
     ];
-    // CLAUDE.md rule 1 pins these paths as existing only in git history; docs/project-map.md states exactly
+    // AGENTS.md rule 1 pins these paths as existing only in git history; docs/project-map.md states exactly
     // that where it names them, so their non-resolution is correct, not a broken citation.
     private static readonly string[] HistoricalCitations = ["src/Puck", "src/Puck.Avatars"];
     // A file a build writes into its own output rather than one the checkout holds: cited by name, never tracked.

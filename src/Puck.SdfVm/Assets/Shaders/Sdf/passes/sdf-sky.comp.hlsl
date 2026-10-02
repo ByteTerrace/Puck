@@ -17,7 +17,7 @@
 #define SDF_SCREEN_SOURCES
 #include "sdf-world.hlsli"
 
-// It writes the set's view's output image through output, as Stage 1 does.
+// It writes the set's view's output image through output, as Stage 1 does, and in a temporal view its reactivity.
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -40,9 +40,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // Empty SDF tiles can still contain participating media. Match the views stage's miss; a live tile replaces
     // this result with its own integration clipped to the surface, so emission is never added twice.
-    color = shadeVolumes(color, view.position.xyz, rayDirection, worldRayDistanceAt(view, rayDirection, worldNearDistance(view)), worldFarDistance(view), id.xy);
+    float covered;
+    color = shadeVolumes(color, view.position.xyz, rayDirection, worldRayDistanceAt(view, rayDirection, worldNearDistance(view)), worldFarDistance(view), id.xy, covered);
 
     output[id.xy] = float4(color, 1.0);
     sdfWorkTexels = 1u;
+    // A temporal view's reactivity starts here for every pixel: the views pass overwrites the ones it shades.
+    if (passGroup.temporal != 0u) {
+        reactivityRW[sdfReactivityIndex(id.xy, viewIndex, rectDims)] = covered;
+    }
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

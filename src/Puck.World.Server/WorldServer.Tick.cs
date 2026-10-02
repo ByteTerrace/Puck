@@ -62,7 +62,7 @@ public sealed partial class WorldServer {
             expectedBorder: expectedBorder
         );
     /// <inheritdoc cref="WorldTick.CommitTransfer"/>
-    public bool CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) =>
+    public WorldTransferStatus CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason) =>
         m_tick.CommitTransfer(
             members: members,
             reason: out reason,

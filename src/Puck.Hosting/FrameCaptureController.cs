@@ -92,7 +92,7 @@ public sealed class FrameCaptureController : IDisposable {
     private static Surface ResolvePixels(Surface surface, IPresentSurfaceReadback? readback) {
         if (
             surface.IsEmpty ||
-            surface.IsCpuPixels
+            (surface.IsCpuPixels && Surface.IsSurfaceFormat(format: surface.Format))
         ) {
             return surface;
         }
@@ -109,6 +109,9 @@ public sealed class FrameCaptureController : IDisposable {
 
         if (!captured.IsCpuPixels) {
             throw new InvalidOperationException(message: "Surface readback returned a non-CPU surface.");
+        }
+        if (!Surface.IsSurfaceFormat(format: captured.Format)) {
+            throw new InvalidOperationException(message: "Surface readback must encode float pixels into an 8-bit capture format.");
         }
 
         // A float working image reads back through the display encode's SDR, in RGBA8; any other keeps its format.

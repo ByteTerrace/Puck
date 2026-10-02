@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Client;
@@ -8,7 +7,7 @@ using Puck.World.Server;
 namespace Puck.World;
 
 public sealed partial class WorldInstanceHost {
-    private static void CloseAdjacency(WorldInstance instance, in AdjacencyEdgeHit hit, string reason) {
+    private static void CloseAdjacency(WorldInstance instance, in WorldAdjacencyFaceHit hit, string reason) {
         CloseAdjacencyEdge(
             instance: instance,
             adjacencyName: hit.Adjacency.Name.Value,
@@ -162,16 +161,6 @@ public sealed partial class WorldInstanceHost {
         m_authorityEndpoints[identity] = endpoint;
         return endpoint;
     }
-    // The bodies that can travel: every active body holding an entry body, whether a local seat, an admitted peer's
-    // traveller, or a body the world's own program authors. The seam scan and the portal scan both read this one test,
-    // so a seam and a door can never disagree about who crosses them.
-    private static bool TryTraveller(WorldPopulation population, int index, [NotNullWhen(returnValue: true)] out WorldBody? body) {
-        body = (population.IsActive(index: index)
-            ? population.EntryBody(index: index)
-            : null);
-
-        return (body is not null);
-    }
     private static string TravellerName(int index, int localSeatCount) => ((index < localSeatCount)
         ? $"seat {(index + 1)}"
         : $"body:{index}");
@@ -183,32 +172,15 @@ public sealed partial class WorldInstanceHost {
     // junction tie is distributed by a stable hash of the entity generation and authority identity over the sorted
     // eligible edges—not document order. Each body transfers independently, which is what keeps a melee straddling a
     // seam live instead of sweeping unrelated party members through it.
-    private void ScanInstanceAdjacencies(WorldInstance instance, bool resolveOnly = false) {
-        if (instance.Server.Definition.Adjacencies is not { Count: > 0 } adjacencies) {
-            if (resolveOnly) {
-                for (var index = 0; (index < instance.Server.Population.Capacity); index++) {
-                    instance.Server.Population.EntryBody(index: index)?.ClearPendingContinuum();
-                }
-            }
+    private void ScanInstanceAdjacencies(WorldInstance instance) {
+        if (instance.Server.Definition.Adjacencies is not { Count: > 0 }) {
             return;
         }
 
         var population = instance.Server.Population;
-        var candidates = new List<AdjacencyEdgeHit>[population.Capacity];
         var heldSeats = HeldCrossingSeats(instance: instance);
 
-        _ = WorldAdjacencyPolicy.TryReciprocalHysteresis(
-            definition: instance.Server.Definition,
-            depth: out var reciprocalHysteresis,
-            reason: out _
-        );
-        _ = WorldAdjacencyPolicy.TryVerticalOwnershipDeadband(
-            definition: instance.Server.Definition,
-            depth: out var verticalOwnershipDeadband,
-            reason: out _
-        );
-
-        for (var seat = 0; (!resolveOnly && (seat < population.Capacity)); seat++) {
+        for (var seat = 0; (seat < population.Capacity); seat++) {
             var announced = m_announcedCrossingHolds.TryGetValue(
                 key: (instance.Name, seat),
                 value: out var announcedTransferId
@@ -239,117 +211,15 @@ public sealed partial class WorldInstanceHost {
             }
         }
 
-        foreach (var adjacency in adjacencies) {
-            if (adjacency is null) {
-                continue;
-            }
-
-            var frame = adjacency.Boundary.CompileFrame();
-            var ownershipThreshold = FixedQ4816.Max(
-                x: FixedQ4816.FromDouble(value: adjacency.Hysteresis),
-                y: WorldAdjacencyPolicy.OwnershipThreshold(
-                    frame: in frame,
-                    reciprocalHysteresis: reciprocalHysteresis,
-                    verticalOwnershipDeadband: verticalOwnershipDeadband
-                )
-            );
-
-            for (var seat = 0; (seat < population.Capacity); seat++) {
-                if (!TryTraveller(
-                    body: out var body,
-                    index: seat,
-                    population: population
-                )) {
-                    continue;
-                }
-                if (
-                    resolveOnly &&
-                    (body.PendingContinuum is null)
-                ) {
-                    continue;
-                }
-                if (
-                    !resolveOnly &&
-                    heldSeats.ContainsKey(key: seat)
-                ) {
-                    continue;
-                }
-
-                // A remotely committed arrival bypasses this host's PublishCommittedTransfer path, but escrow
-                // retains the authenticated source border on the destination authority. Handoff occurs at the far
-                // side of the boundary's own ownership threshold, so a mapped arrival starts at least that far
-                // inside the new owner: a wall carries the reciprocal contact hysteresis, a floor/ceiling the
-                // vertical ownership deadband. Test both ends of this step: a genuine reversal may cross the
-                // whole deadband in one tick and must not be stranded outside its owner merely because its settled
-                // endpoint is outward again.
-                if (
-                    instance.Server.TryTransferArrivalBorder(
-                    bodyIndex: seat,
-                    border: out var arrivalBorder
-                ) &&
-                    string.Equals(
-                    a: arrivalBorder,
-                    b: $"adjacency/{adjacency.Counterpart}",
-                    comparisonType: StringComparison.Ordinal
-                )
-                ) {
-                    var previousOutward = FixedVector3.Dot(
-                        left: (body.FixedPreviousPosition - frame.Origin),
-                        right: frame.Normal
-                    );
-                    var outward = FixedVector3.Dot(
-                        left: (body.FixedPosition - frame.Origin),
-                        right: frame.Normal
-                    );
-
-                    if (
-                        (previousOutward > -ownershipThreshold) &&
-                        (outward > -ownershipThreshold)
-                    ) {
-                        continue;
-                    }
-
-                    _ = instance.Server.ClearTransferArrivalBorder(
-                        bodyIndex: seat,
-                        expectedBorder: arrivalBorder
-                    );
-                }
-
-                var crossing = WorldAdjacencyRegion.Sweep(
-                    frame: frame,
-                    from: body.FixedPreviousPosition,
-                    to: body.FixedPosition,
-                    outwardThreshold: ownershipThreshold
-                );
-
-                if (!crossing.Crossed) {
-                    continue;
-                }
-
-                (candidates[seat] ??= []).Add(item: new AdjacencyEdgeHit(
-                    Adjacency: adjacency,
-                    Seat: seat,
-                    Frame: frame,
-                    SeamU: crossing.SeamU,
-                    SeamV: crossing.SeamV,
-                    Parameter: crossing.Parameter
-                ));
-            }
-        }
+        var candidates = WorldAdjacencyOwnership.Sweep(
+            held: heldSeats.ContainsKey,
+            pendingOnly: false,
+            server: instance.Server
+        );
 
         for (var seat = 0; (seat < candidates.Length); seat++) {
-            if (
-                resolveOnly &&
-                (population.EntryBody(index: seat)?.PendingContinuum is null)
-            ) {
-                continue;
-            }
             if (candidates[seat] is not { Count: > 0 } hits) {
                 population.EntryBody(index: seat)?.ClearPendingContinuum();
-                continue;
-            }
-
-            if (resolveOnly) {
                 continue;
             }
 
@@ -487,7 +357,7 @@ public sealed partial class WorldInstanceHost {
     // through a face between two samples.
     private void ScanPortalFace(WorldInstance instance, WorldPopulation population, WorldPlacement placement, WorldPlacementFace face, WorldPlacementPortal portal, WorldFaceAperture aperture, PortalEdgeHit?[] winners) {
         for (var seat = 0; (seat < population.Capacity); seat++) {
-            if (!TryTraveller(
+            if (!WorldAdjacencyOwnership.TryTraveller(
                 body: out var body,
                 index: seat,
                 population: population
@@ -680,7 +550,6 @@ public sealed partial class WorldInstanceHost {
         );
     }
 
-    private readonly record struct AdjacencyEdgeHit(WorldAdjacency Adjacency, int Seat, WorldFaceFrame Frame, FixedQ4816 SeamU, FixedQ4816 SeamV, FixedQ4816 Parameter);
     // One edge-triggered portal hit, collected during a scan rather than acted on immediately — see
     // ScanInstancePortals' own remarks on why every hit in one scan is gathered before any of them resolves. Claim
     // carries the crossing parameter and the face's own identity, which is what decides a seat's ONE winner when its

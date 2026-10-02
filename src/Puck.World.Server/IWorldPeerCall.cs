@@ -19,16 +19,17 @@ public interface IWorldPeerCall {
     /// <summary>Commits a previously reserved transfer on the peer this call addresses. A local peer always answers
     /// <see cref="WorldTransferStep.Answered"/>; a remote peer whose transport failed answers
     /// <see cref="WorldTransferStep.Unreachable"/> — the caller's evidence that a commit the destination may or may
-    /// not have applied is IN DOUBT, never a plain refusal.</summary>
+    /// not have applied is in doubt, never a plain refusal. An answered <see cref="WorldTransferStatus.Uncertain"/>
+    /// is in doubt the same way: the destination cannot yet say whether its arrival is durable.</summary>
     /// <param name="sourceAuthority">The reserving authority's own endpoint identity.</param>
     /// <param name="transferId">The source-scoped transfer id the reservation was minted under.</param>
     /// <param name="members">The traveler set being committed.</param>
-    /// <param name="accepted">Whether the destination's own verdict accepted the commit — meaningful only when this
-    /// method returns <see cref="WorldTransferStep.Answered"/>.</param>
-    /// <param name="reason">The refusal reason when <paramref name="accepted"/> is <see langword="false"/>; empty
-    /// on acceptance.</param>
+    /// <param name="status">The destination's own verdict — <see cref="WorldTransferStatus.Committed"/>,
+    /// <see cref="WorldTransferStatus.Uncertain"/>, or <see cref="WorldTransferStatus.Missing"/> for a refusal —
+    /// meaningful only when this method returns <see cref="WorldTransferStep.Answered"/>.</param>
+    /// <param name="reason">The refusal or uncertainty detail; empty on a commit.</param>
     /// <returns>What this answer is evidence of.</returns>
-    WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason);
+    WorldTransferStep Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out WorldTransferStatus status, out string reason);
     /// <summary>Acknowledges a committed transfer, closing it on the peer this call addresses — matching
     /// <see cref="WorldServer.AcknowledgeTransfer"/>.</summary>
     /// <param name="sourceAuthority">The reserving authority's own endpoint identity.</param>

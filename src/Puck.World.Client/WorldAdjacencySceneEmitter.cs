@@ -45,7 +45,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // The per-face worst-case reservation: generous for the shipped quilt's own solid census (ground + two walls +
     // a corner post) with headroom for a live-edited neighbour, without letting one border's content spend the whole
     // program's word budget. A capacity constant, not a world-tunable — see this
-    // emitter's own remarks and CLAUDE.md's authored-vs-constant rule: every world wants THE SAME adjacency-instance
+    // emitter's own remarks and AGENTS.md's authored-vs-constant rule: every world wants THE SAME adjacency-instance
     // ceiling, because it sizes the reservation this emitter itself declares, never gameplay feel.
     internal const int MaxInstancesPerBand = WorldAdjacencyGeometry.MaximumPlacementsPerBand;
 

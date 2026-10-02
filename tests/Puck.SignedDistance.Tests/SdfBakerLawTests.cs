@@ -62,6 +62,7 @@ public sealed class SdfBakerLawTests {
         var (program, reach) = Scene(name: name);
 
         return SdfBaker.Bake(
+            cancellationToken: TestContext.Current.CancellationToken,
             center: Vector3.Zero,
             materials: Materials,
             program: program,
@@ -337,6 +338,7 @@ public sealed class SdfBakerLawTests {
 
         foreach (var program in ((SdfProgram[])[warped, detailOnly])) {
             _ = Assert.ThrowsAny<ArgumentException>(testCode: () => SdfBaker.Bake(
+                cancellationToken: TestContext.Current.CancellationToken,
                 center: Vector3.Zero,
                 materials: Materials,
                 program: program,

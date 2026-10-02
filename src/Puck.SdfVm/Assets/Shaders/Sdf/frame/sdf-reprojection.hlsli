@@ -38,9 +38,24 @@ bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint
     }
     return true;
 }
-// Pixel positions use continuous render coordinates, with the first pixel center at (0.5, 0.5), and positive Y down.
-// The returned ray parameter is Euclidean distance along the preceding camera's normalized ray. A cut or a point
-// behind that camera has no correspondence. The caller decides whether the position lies inside its history image.
+// A view's camera rows, as SdfFrameBlock.WritePreviousView lays them: position and validity, right and tan(fov / 2),
+// up and aspect, forward, render extent and jitter in render pixels, then the near distance and the unjittered frustum
+// offset. Projects a point, given relative to the view's eye, into the view's unjittered render pixels: continuous
+// coordinates with the first pixel center at (0.5, 0.5) and positive Y down. A point not beyond the near plane has none.
+bool sdfProjectView(float4 rows[6], float3 relative, out float2 pixel) {
+    pixel = float2(0.0, 0.0);
+    float forward = dot(relative, rows[3].xyz);
+    if (forward <= max(rows[5].x, 0.0)) {
+        return false;
+    }
+    float2 tangent = (float2(dot(relative, rows[1].xyz), dot(relative, rows[2].xyz)) / forward);
+    float2 ndc = ((tangent - rows[5].yz) / (float2(rows[2].w, 1.0) * rows[1].w));
+    pixel = ((ndc * float2(0.5, -0.5) + 0.5) * rows[4].xy);
+    return true;
+}
+// The preceding view's pixel positions are its jittered render coordinates: where its own sample grid sampled the
+// point. The returned ray parameter is Euclidean distance along the preceding camera's normalized ray. A cut or a
+// point behind that camera has no correspondence. The caller decides whether the position lies inside its history image.
 bool sdfReprojection(uint record, float3 currentPoint, out float2 previousPixel, out float previousT) {
     previousPixel = float2(0.0, 0.0);
     previousT = 0.0;
@@ -52,14 +67,10 @@ bool sdfReprojection(uint record, float3 currentPoint, out float2 previousPixel,
         return false;
     }
     float3 relative = (previousPoint - passGroup.previousView[0].xyz);
-    float forward = dot(relative, passGroup.previousView[3].xyz);
-    if (forward <= max(passGroup.previousView[5].x, 0.0)) {
+    if (!sdfProjectView(passGroup.previousView, relative, previousPixel)) {
         return false;
     }
-    float2 tangent = (float2(dot(relative, passGroup.previousView[1].xyz), dot(relative, passGroup.previousView[2].xyz)) / forward);
-    float2 ndc = ((tangent - passGroup.previousView[5].yz) /
-        (float2(passGroup.previousView[2].w, 1.0) * passGroup.previousView[1].w));
-    previousPixel = ((ndc * float2(0.5, -0.5) + 0.5) * passGroup.previousView[4].xy);
+    previousPixel -= passGroup.previousView[4].zw;
     previousT = length(relative);
     return true;
 }

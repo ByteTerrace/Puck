@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Sources;
 
 namespace Puck.Abstractions.Tests;
@@ -8,6 +9,7 @@ namespace Puck.Abstractions.Tests;
 /// producer writes it and holds the reference's pixels to values derived from the arithmetic by hand: a palette lookup is
 /// the palette entry itself, a gray NV12 sample is its luma rescaled, a chroma offset moves red and green by the closed
 /// forms of its matrix, and a perceptual-quantizer code decodes to the luminance its inverse encodes.
+/// <see cref="ImageSourceWorkingSpaceLawTests"/> holds the transfer pass's working values at known luminances.
 /// </summary>
 public sealed class ImageSourceConversionLawTests {
     private static byte[] Region(ImagePixelFormat format, ImageColorEncoding color, uint width, uint height, out ImageSourceUploadHeader header) {
@@ -316,8 +318,9 @@ public sealed class ImageSourceConversionLawTests {
             );
         }
 
-        // A 10-bit R10G10B10A2 pixel whose three channels encode the reference white decodes to 1 in the transfer pass.
-        var code = ((uint)Math.Round(a: (Encode(nits: ImageSourceConversion.ReferenceWhiteNits) * 1023.0)));
+        // A 10-bit R10G10B10A2 pixel whose three channels encode the paper white converts to a working value of one.
+        const double PaperWhite = 203.0;
+        var code = ((uint)Math.Round(a: (Encode(nits: PaperWhite) * 1023.0)));
         var region = Region(
             color: new ImageColorEncoding(
                 Primaries: ImageColorPrimaries.Bt2020,
@@ -334,18 +337,20 @@ public sealed class ImageSourceConversionLawTests {
             value: code | (code << 10) | (code << 20) | (3U << 30)
         );
 
-        var linear = new float[4];
+        var working = new float[4];
 
-        ImageSourceConversion.ToLinear(
-            linear: linear,
-            region: region
+        ImageSourceConversion.ToWorking(
+            paperWhiteNits: PaperWhite,
+            region: region,
+            working: working
         );
 
-        // One 10-bit code near the reference white spans about 0.3% of its luminance.
-        Assert.Equal(expected: 1.0, actual: linear[0], tolerance: 0.004);
-        Assert.Equal(expected: linear[0], actual: linear[1]);
-        Assert.Equal(expected: linear[0], actual: linear[2]);
-        Assert.Equal(expected: 1.0f, actual: linear[3]);
+        // One 10-bit code near the paper white spans about 0.3% of its luminance, under 0.2% once encoded; a neutral
+        // sample stays neutral through BT.2020 to BT.709 to within the matrix's rounding.
+        Assert.Equal(expected: 1.0, actual: working[0], tolerance: 0.002);
+        Assert.Equal(expected: working[0], actual: working[1], tolerance: 1e-5);
+        Assert.Equal(expected: working[0], actual: working[2], tolerance: 1e-5);
+        Assert.Equal(expected: 1.0f, actual: working[3]);
     }
     [Fact]
     public void AnSrgbCodeDecodesThroughTheIecCurve() {
@@ -362,15 +367,20 @@ public sealed class ImageSourceConversionLawTests {
 
         new byte[] { 0, 51, 255, 128 }.CopyTo(array: region, index: ((int)header.Plane0Offset));
 
-        var linear = new float[4];
+        var working = new float[4];
 
-        ImageSourceConversion.ToLinear(
-            linear: linear,
-            region: region
+        ImageSourceConversion.ToWorking(
+            paperWhiteNits: DisplayOutput.SdrWhiteNits,
+            region: region,
+            working: working
         );
 
-        // A linear source passes its codes through at their own scale.
-        Assert.Equal(actual: linear, expected: new[] { 0f, ((float)(51.0 / 255.0)), 1f, ((float)(128.0 / 255.0)) });
+        // A linear source at the SDR paper white is scRGB at its own scale, encoded on the sRGB curve: 0.2 lies above the
+        // curve's linear segment, and alpha passes through.
+        Assert.Equal(expected: 0f, actual: working[0]);
+        Assert.Equal(expected: ((1.055 * Math.Pow(x: (51.0 / 255.0), y: (1.0 / 2.4))) - 0.055), actual: working[1], tolerance: 1e-6);
+        Assert.Equal(expected: 1.0, actual: working[2], tolerance: 1e-6);
+        Assert.Equal(expected: ((float)(128.0 / 255.0)), actual: working[3]);
         Assert.Equal(expected: (0.02 / 12.92), actual: ImageSourceConversion.SrgbToLinear(value: 0.02), tolerance: 1e-15);
         Assert.Equal(expected: Math.Pow(x: (0.555 / 1.055), y: 2.4), actual: ImageSourceConversion.SrgbToLinear(value: 0.5), tolerance: 1e-15);
     }
@@ -382,6 +392,8 @@ public sealed class ImageSourceConversionLawTests {
         Assert.Equal(expected: ImageSourceConversion.Nv12Pass, actual: ImageSourceConversion.PassOf(color: ImageColorEncoding.Yuv(matrix: ImageYuvMatrix.Bt601, range: ImageYuvRange.Full), format: ImagePixelFormat.Nv12));
         Assert.Equal(expected: ImageSourceConversion.TransferPass, actual: ImageSourceConversion.PassOf(color: new ImageColorEncoding(Primaries: ImageColorPrimaries.Bt2020, Transfer: ImageTransferFunction.Pq), format: ImagePixelFormat.R10G10B10A2Unorm));
         Assert.Equal(expected: ImageSourceConversion.TransferPass, actual: ImageSourceConversion.PassOf(color: new ImageColorEncoding(Primaries: ImageColorPrimaries.Bt709, Transfer: ImageTransferFunction.Linear), format: ImagePixelFormat.R8G8B8A8Unorm));
+        Assert.Equal(expected: ImageSourceConversion.TransferPass, actual: ImageSourceConversion.PassOf(color: ImageColorEncoding.Of(colorSpace: DisplayColorSpace.ScRgb), format: ImagePixelFormat.R16G16B16A16Float));
+        Assert.Equal(expected: ImageSourceConversion.TransferPass, actual: ImageSourceConversion.PassOf(color: ImageColorEncoding.Srgb, format: ImagePixelFormat.R16G16B16A16Float));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => ImageSourceConversion.PassOf(color: new ImageColorEncoding(Primaries: ImageColorPrimaries.Bt2020, Transfer: ImageTransferFunction.Pq), format: ImagePixelFormat.Nv12));
     }
     [Fact]

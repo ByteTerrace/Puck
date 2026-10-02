@@ -140,56 +140,17 @@ internal static partial class CanaryManifestLoader {
             element: element,
             member: "capture"
         );
-        var extent = CliStrictJson.ReadRequiredArray(
+
+        var (width, height) = ReadImageExtent(
+            context: context,
+            element: element
+        );
+        var (left, top, right, bottom) = ReadImageRegion(
             context: context,
             element: element,
-            member: "extent",
-            refusal: Refusal
-        );
-
-        if (
-            (extent.GetArrayLength() != 2) ||
-            !extent[0].TryGetInt32(value: out var width) ||
-            !extent[1].TryGetInt32(value: out var height) ||
-            (width <= 0) ||
-            (height <= 0)
-        ) {
-            throw new CanaryManifestRefusal(message: $"{context} extent must be two positive whole pixel counts, [width, height]; the capture's extent is part of the claim.");
-        }
-
-        var region = CliStrictJson.ReadRequiredArray(
-            context: context,
-            element: element,
-            member: "region",
-            refusal: Refusal
-        );
-        var edges = new double[4];
-
-        for (var index = 0; (index < 4); index++) {
-            if (
-                (region.GetArrayLength() != 4) ||
-                (region[index].ValueKind != JsonValueKind.Number) ||
-                !region[index].TryGetDouble(value: out edges[index]) ||
-                !double.IsFinite(d: edges[index]) ||
-                (edges[index] < 0) ||
-                (edges[index] > 1)
-            ) {
-                throw new CanaryManifestRefusal(message: $"{context} region must be four normalized edges in [0, 1], [left, top, right, bottom].");
-            }
-        }
-
-        var (left, top, right, bottom) = (edges[0], edges[1], edges[2], edges[3]);
-
-        if (CanaryAssertions.RegionPixelCount(
-            bottom: bottom,
             height: height,
-            left: left,
-            right: right,
-            top: top,
             width: width
-        ) == 0) {
-            throw new CanaryManifestRefusal(message: $"{context} region holds no pixel center at {width}x{height}; an empty region passes vacuously.");
-        }
+        );
 
         var reduceText = CliStrictJson.ReadRequiredString(
             context: context,
@@ -241,19 +202,11 @@ internal static partial class CanaryManifestLoader {
             throw new CanaryManifestRefusal(message: $"{context} toleranceCodes must be a whole number of 8-bit codes in 0..255.");
         }
 
-        // Stated, never defaulted, like framesAgree's agree: the two directions are opposite proofs.
-        if (!element.TryGetProperty(
-            propertyName: "holds",
-            value: out var holdsElement
-        )) {
-            throw new CanaryManifestRefusal(message: $"{context} imageRegion must state holds explicitly as true or false.");
-        }
-
-        var holds = holdsElement.ValueKind switch {
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            _ => throw new CanaryManifestRefusal(message: $"{context} holds must be true or false."),
-        };
+        var holds = ReadHolds(
+            context: context,
+            element: element,
+            type: "imageRegion"
+        );
 
         return new CanaryImageRegionAssertion(
             Bottom: bottom,
@@ -270,5 +223,154 @@ internal static partial class CanaryManifestLoader {
             Top: top,
             Width: width
         );
+    }
+    private static CanaryImageDifferenceAssertion ReadImageDifferenceAssertion(JsonElement element, string context) {
+        CliStrictJson.RequireOnlyMembers(
+            element: element,
+            context: context,
+            unknownMemberDetail: UnknownMemberDetail,
+            refusal: Refusal,
+            "capture",
+            "extent",
+            "holds",
+            "maximumMeanCodes",
+            "name",
+            "reference",
+            "region",
+            "type"
+        );
+
+        var name = CliStrictJson.ReadRequiredString(
+            context: context,
+            element: element,
+            member: "name",
+            refusal: Refusal
+        );
+        var capture = ReadRunRelativePath(
+            context: context,
+            element: element,
+            member: "capture"
+        );
+        var reference = ReadRunRelativePath(
+            context: context,
+            element: element,
+            member: "reference"
+        );
+
+        var (width, height) = ReadImageExtent(
+            context: context,
+            element: element
+        );
+        var (left, top, right, bottom) = ReadImageRegion(
+            context: context,
+            element: element,
+            height: height,
+            width: width
+        );
+
+        if (
+            !element.TryGetProperty(
+                propertyName: "maximumMeanCodes",
+                value: out var maximumElement
+            ) ||
+            (maximumElement.ValueKind != JsonValueKind.Number) ||
+            !maximumElement.TryGetDouble(value: out var maximumMeanCodes) ||
+            !double.IsFinite(d: maximumMeanCodes) ||
+            (maximumMeanCodes < 0) ||
+            (maximumMeanCodes > 255)
+        ) {
+            throw new CanaryManifestRefusal(message: $"{context} maximumMeanCodes must be a number of 8-bit codes in [0, 255].");
+        }
+
+        return new CanaryImageDifferenceAssertion(
+            Bottom: bottom,
+            Capture: capture,
+            Height: height,
+            Holds: ReadHolds(
+                context: context,
+                element: element,
+                type: "imageDifference"
+            ),
+            Left: left,
+            MaximumMeanCodes: maximumMeanCodes,
+            Name: name,
+            Reference: reference,
+            Right: right,
+            Top: top,
+            Width: width
+        );
+    }
+    // A capture's expected extent, [width, height]: part of every image claim, since a claim about another image decides
+    // nothing.
+    private static (int Width, int Height) ReadImageExtent(JsonElement element, string context) {
+        var extent = CliStrictJson.ReadRequiredArray(
+            context: context,
+            element: element,
+            member: "extent",
+            refusal: Refusal
+        );
+
+        if (
+            (extent.GetArrayLength() != 2) ||
+            !extent[0].TryGetInt32(value: out var width) ||
+            !extent[1].TryGetInt32(value: out var height) ||
+            (width <= 0) ||
+            (height <= 0)
+        ) {
+            throw new CanaryManifestRefusal(message: $"{context} extent must be two positive whole pixel counts, [width, height]; the capture's extent is part of the claim.");
+        }
+
+        return (width, height);
+    }
+    // A normalized region, [left, top, right, bottom], that holds at least one pixel center of the extent.
+    private static (double Left, double Top, double Right, double Bottom) ReadImageRegion(JsonElement element, string context, int width, int height) {
+        var region = CliStrictJson.ReadRequiredArray(
+            context: context,
+            element: element,
+            member: "region",
+            refusal: Refusal
+        );
+        var edges = new double[4];
+
+        for (var index = 0; (index < 4); index++) {
+            if (
+                (region.GetArrayLength() != 4) ||
+                (region[index].ValueKind != JsonValueKind.Number) ||
+                !region[index].TryGetDouble(value: out edges[index]) ||
+                !double.IsFinite(d: edges[index]) ||
+                (edges[index] < 0) ||
+                (edges[index] > 1)
+            ) {
+                throw new CanaryManifestRefusal(message: $"{context} region must be four normalized edges in [0, 1], [left, top, right, bottom].");
+            }
+        }
+
+        if (CanaryAssertions.RegionPixelCount(
+            bottom: edges[3],
+            height: height,
+            left: edges[0],
+            right: edges[2],
+            top: edges[1],
+            width: width
+        ) == 0) {
+            throw new CanaryManifestRefusal(message: $"{context} region holds no pixel center at {width}x{height}; an empty region passes vacuously.");
+        }
+
+        return (edges[0], edges[1], edges[2], edges[3]);
+    }
+    // Stated, never defaulted, like framesAgree's agree: the two directions are opposite proofs.
+    private static bool ReadHolds(JsonElement element, string context, string type) {
+        if (!element.TryGetProperty(
+            propertyName: "holds",
+            value: out var holdsElement
+        )) {
+            throw new CanaryManifestRefusal(message: $"{context} {type} must state holds explicitly as true or false.");
+        }
+
+        return holdsElement.ValueKind switch {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw new CanaryManifestRefusal(message: $"{context} holds must be true or false."),
+        };
     }
 }

@@ -31,9 +31,14 @@
       "default": "Native"
     },
     "upscaleSharpness": {
-      "description": "The boot reduced-resolution reconstruction blend (0 bilinear .. 1 Catmull-Rom).",
+      "description": "The boot reconstruction sharpness: the spatial resolve\u0027s blend (0 bilinear .. 1 Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect\u0027s own extent.",
       "type": "number",
       "default": 0
+    },
+    "temporal": {
+      "description": "Whether the world\u0027s own views boot reconstructing over time (world.temporal): each jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.",
+      "type": "boolean",
+      "default": false
     },
     "low": {
       "$ref": "./common.schema.json#/$defs/WorldQualityPreset",

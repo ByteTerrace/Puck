@@ -286,6 +286,7 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.ShadowMask,
             WorldSessionLevers.Shadows,
             WorldSessionLevers.TargetHertz,
+            WorldSessionLevers.Temporal,
             WorldSessionLevers.UpscaleSharpness,
         ];
 

@@ -87,10 +87,10 @@ internal sealed record CanaryLeg(
 // the copy; before a leg's first boot it copies the package to <run>/<OutputName>. Alter, a logical path inside the
 // package, then has a line appended in the leg's copy, so its pin no longer holds.
 internal sealed record CanaryPackage(string SourcePath, string OutputName, string? Alter);
-// A second boot of a leg: the World relaunches on a document the first boot wrote into the leg's run directory, under
-// the same state directory, and runs its own script. Assertions read both boots' streams in order; each boot's
+// A second boot of a leg: the World relaunches on a document the first boot wrote into the leg's run directory, or, with
+// no file name, on the leg's own world again, under the same state directory, and runs its own script. Assertions read both boots' streams in order; each boot's
 // commands are accounted against its own process.
-internal sealed record CanaryRelaunch(IReadOnlyList<CanaryCommandClaim> Commands, string ScriptPath, string WorldFileName);
+internal sealed record CanaryRelaunch(IReadOnlyList<CanaryCommandClaim> Commands, string ScriptPath, string? WorldFileName);
 // One listener in a federated mesh leg: its own world document, its own driving script, addressed by Id everywhere
 // a manifest assertion or a peer's admission row needs to name it. Deliberately silent about HOW it is hosted — see
 // CANARY-SHAPE.md item 7 — so a future non-Process launch strategy (a Silo grain standing in for one entry) is an
@@ -171,6 +171,24 @@ internal sealed record CanaryImageRegionAssertion(
     CanaryImageReduce Reduce,
     double Right,
     int ToleranceCodes,
+    double Top,
+    int Width
+) : CanaryAssertion(Name: Name);
+/// <summary>One capture held to a reference capture over a normalized region: the reference, whose extent is a whole
+/// multiple of the capture's on both axes, is box-filtered down to the capture's extent, each region pixel's difference
+/// is the mean of its absolute RGB differences in 8-bit codes, and their mean must not exceed <c>MaximumMeanCodes</c>.
+/// <c>Holds</c> false requires the bound to fail — never a missing capture, a wrong extent, or a reference that is no
+/// whole multiple of it, which fail either way.</summary>
+internal sealed record CanaryImageDifferenceAssertion(
+    double Bottom,
+    string Capture,
+    int Height,
+    bool Holds,
+    double Left,
+    double MaximumMeanCodes,
+    string Name,
+    string Reference,
+    double Right,
     double Top,
     int Width
 ) : CanaryAssertion(Name: Name);
