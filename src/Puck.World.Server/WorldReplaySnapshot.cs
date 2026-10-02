@@ -171,6 +171,12 @@ public abstract record WorldReplayEntry {
     /// what a MATCH proves.</para></summary>
     /// <param name="Adjacency">The authored <c>adjacencies</c> row name that refreshed.</param>
     internal sealed record LinkDelivery(string Adjacency) : WorldReplayEntry;
+    /// <summary>A local seat a committed transfer landed in the recorded world (<see cref="WorldServer.ArrivalTap"/>).
+    /// Re-drive lands it through the same <see cref="WorldTransferEscrow.LandSeat"/> at the same pre-step position, its
+    /// profile re-seated on the pinned rates (<paramref name="Profile"/>) as a recorded seat's is.</summary>
+    /// <param name="Value">The arrival, with no profile of its own.</param>
+    /// <param name="Profile">The occupant's pinned profile, or <see langword="null"/>.</param>
+    internal sealed record Arrival(WorldSeatArrival Value, WorldReplayProfilePin? Profile) : WorldReplayEntry;
 }
 /// <summary>One recorded tick's server-facing input — the exact <see cref="IServerLink"/> traffic the live session
 /// applied that tick, captured at the loopback: the synchronous <see cref="Authority"/> stream (commands, grants, and
@@ -273,9 +279,9 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 5 carries each peer event entry's accumulated arrival turn. Refuse earlier tapes at intake instead of
-    // reporting their old shape as a simulation divergence.
-    private const uint ShapeToken = 5u;
+    // Shape 6 carries each local seat a committed transfer lands in the recorded world. Refuse earlier tapes at intake
+    // instead of reporting their old shape as a simulation divergence.
+    private const uint ShapeToken = 6u;
 
     /// <summary>Gets the record-start world definition as its canonical UTF-8 JSON — the rehydrated starting state.</summary>
     public required byte[] DefinitionJson { get; init; }
@@ -472,6 +478,13 @@ public sealed partial class WorldReplaySnapshot {
                     server.Events.ObserveLinkDelivery(adjacencyName: linkDelivery.Adjacency);
 
                     break;
+                case WorldReplayEntry.Arrival arrival:
+                    _ = server.TransferEscrow.LandSeat(arrival: Landed(
+                        arrival: arrival,
+                        defaults: server.Definition.PlayerDefaults
+                    ));
+
+                    break;
                 case WorldReplayEntry.RateLever:
                     // Deliberately a no-op: a paused span recorded zero ticks live, so re-driving exactly
                     // Ticks.Count steps already reproduces the identical stepping cadence with no lever to apply.
@@ -500,43 +513,6 @@ public sealed partial class WorldReplaySnapshot {
             var submission = intent;
 
             server.EnqueueIntent(submission: in submission);
-        }
-    }
-    /// <summary>Re-joins this recording's seats into <paramref name="server"/> and re-seats each profiled one on a
-    /// detached handle carrying its pinned locomotion rates — the recorded values, never the live catalog's current
-    /// ones, which are only read for the drift report. Shared by the offline <see cref="Drive"/> and the live drive's
-    /// boot image.</summary>
-    /// <param name="server">A server at its boot image, with no seat joined yet.</param>
-    /// <param name="population">That server's population.</param>
-    /// <param name="definition">The embedded definition, for the pinned handle's player defaults.</param>
-    /// <param name="profiles">The live catalog the drift report reads.</param>
-    internal void SeatRecordedSeats(WorldServer server, WorldPopulation population, WorldDefinition definition, WorldOwnedWorlds profiles) {
-        foreach (var seat in Seats) {
-            // Seat(slot) directly: there is no PlayerRoster (and so no claim) behind this join to ask PrincipalOf of.
-            _ = server.ApplySession(request: new SessionRequest.Join(
-                Principal: Principal.Seat(slot: seat.Slot),
-                Slot: seat.Slot,
-                IdentityName: seat.Profile?.Name,
-                WireProtocolKey: WorldProtocol.WireProtocolKey
-            ));
-
-            if (seat.Profile is not { } pin) {
-                continue;
-            }
-
-            ReportProfileDrift(
-                pin: pin,
-                profiles: profiles
-            );
-            population.SetSeatProfile(
-                slot: seat.Slot,
-                profile: WorldIdentity.Pinned(
-                    name: pin.Name,
-                    moveSpeed: pin.MoveSpeed,
-                    turnSpeed: pin.TurnSpeed,
-                    defaults: definition.PlayerDefaults
-                )
-            );
         }
     }
     // The mount pin compares index-by-index: mount order is document order, and the recording pins the whole receipt
@@ -814,6 +790,8 @@ public sealed partial class WorldReplaySnapshot {
                 }
             case 15:
                 return new WorldReplayEntry.LinkDelivery(Adjacency: reader.ReadString(field: "link delivery adjacency"));
+            case 19:
+                return ReadArrivalEntry(reader: ref reader);
             case 16 or 17 or 18:
                 return ReadSessionEntry(
                     kind: kind,
@@ -883,17 +861,6 @@ public sealed partial class WorldReplaySnapshot {
 
         return (entries, grants);
     }
-    private static WorldReplayProfilePin? ReadProfilePin(ref WireReader reader) => reader.ReadOptional(readValue: static (ref WireReader r) => {
-        var name = r.ReadString(field: "seat profile name");
-        var moveSpeed = r.ReadNullableFixed();
-        var turnSpeed = r.ReadNullableFixed();
-
-        return new WorldReplayProfilePin(
-            MoveSpeed: moveSpeed,
-            Name: name,
-            TurnSpeed: turnSpeed
-        );
-    });
     private static WorldQuery ReadQueryLeaf(ref WireReader reader) => ReadLeaf<WorldQuery>(
         reader: ref reader,
         tryDecode: WorldSubmissionCodec.TryDecodeQuery,
@@ -1247,6 +1214,13 @@ public sealed partial class WorldReplaySnapshot {
             case WorldReplayEntry.SessionEvent session:
                 WriteSessionEntry(
                     serverEvent: session.Value,
+                    writer: writer
+                );
+
+                break;
+            case WorldReplayEntry.Arrival arrival:
+                WriteArrivalEntry(
+                    arrival: arrival,
                     writer: writer
                 );
 
@@ -1918,13 +1892,9 @@ public sealed partial class WorldReplaySnapshot {
             items: recording.Seats,
             writeItem: static (w, seat) => {
                 w.WriteInt32(value: seat.Slot);
-                w.WriteOptional(
-                    value: seat.Profile,
-                    writeValue: static (pinWriter, pin) => {
-                        pinWriter.WriteString(value: pin.Name);
-                        pinWriter.WriteNullableFixed(value: pin.MoveSpeed);
-                        pinWriter.WriteNullableFixed(value: pin.TurnSpeed);
-                    }
+                WriteProfilePin(
+                    pin: seat.Profile,
+                    writer: w
                 );
             }
         );

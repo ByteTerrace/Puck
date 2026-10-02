@@ -726,39 +726,66 @@ public sealed partial class WorldTransferEscrow {
         }
 
         var landed = new List<int>(capacity: members.Count);
+        var arrivals = new List<WorldSeatArrival>(capacity: (lease.Request.PeerAdmission ? 0 : members.Count));
 
         for (var index = 0; (index < members.Count); index++) {
             var slot = lease.Slots[index];
             var reservationMember = lease.Request.Members[index];
-            var principal = reservationMember.Principal;
+            var member = members[index];
+            var profile = (member.Profile ?? reservationMember.Identity);
+            // The occupant is identified before it is placed (Land): placing resolves contact, and the identity is
+            // what tells contact that a neighbour's record of the slot it departed from shows this same occupant.
+            var mobility = reservationMember.Mobility!.Value.Advance();
             SessionReply reply;
 
-            var occupant = new WorldTransferredOccupant(
-                CatalogRig: reservationMember.CatalogRig,
-                TravelTurn: members[index].TravelTurn
-            );
-
             if (lease.Request.PeerAdmission) {
+                var occupant = new WorldTransferredOccupant(
+                    CatalogRig: reservationMember.CatalogRig,
+                    TravelTurn: member.TravelTurn
+                );
+
                 reply = (reservationMember.Source.IsLive
                     ? m_server.GrantTable.AdmitTransferredPeer(
-                        slot: slot,
                         occupant: occupant,
+                        slot: slot,
                         verdict: lease.Arrival
                     )
                     : m_server.GrantTable.AdmitTransferredEntity(
-                        slot: slot,
-                        source: reservationMember.Source,
                         identity: reservationMember.Identity,
-                        occupant: occupant
+                        occupant: occupant,
+                        slot: slot,
+                        source: reservationMember.Source
                     )
                 );
+
+                if (reply.Accepted) {
+                    Land(
+                        bodyColor: reservationMember.BodyColor,
+                        border: lease.Request.Border,
+                        catalogRig: reservationMember.CatalogRig,
+                        member: member,
+                        mobility: in mobility,
+                        profile: profile,
+                        slot: slot
+                    );
+                }
             } else {
-                reply = m_server.ApplySession(request: new SessionRequest.Join(
-                    IdentityName: null,
-                    Principal: principal,
-                    Slot: slot,
-                    WireProtocolKey: WorldProtocol.WireProtocolKey
-                ));
+                var arrival = new WorldSeatArrival(
+                    BodyColor: reservationMember.BodyColor,
+                    Border: lease.Request.Border,
+                    CatalogRig: reservationMember.CatalogRig,
+                    Member: member,
+                    Mobility: mobility,
+                    Principal: reservationMember.Principal,
+                    Profile: profile,
+                    Slot: slot
+                );
+
+                reply = LandSeat(arrival: arrival);
+
+                if (reply.Accepted) {
+                    arrivals.Add(item: arrival);
+                }
             }
 
             if (!reply.Accepted) {
@@ -779,57 +806,7 @@ public sealed partial class WorldTransferEscrow {
                 return false;
             }
 
-            var member = members[index];
-
-            var profile = (member.Profile ?? reservationMember.Identity);
-
-            if (profile is not null) {
-                m_server.Population.SetSeatProfile(
-                    profile: profile,
-                    slot: slot
-                );
-            }
-            m_server.Population.SetBodyColor(
-                slot: slot,
-                color: reservationMember.BodyColor
-            );
-            m_server.Population.SetCatalogRig(
-                slot: slot,
-                catalogRig: reservationMember.CatalogRig
-            );
-            m_server.Population.SetTravelTurn(
-                slot: slot,
-                travelTurn: member.TravelTurn
-            );
-
-            // The occupant is identified before it is placed: placing resolves contact, and the identity is what
-            // tells contact that a neighbour's record of the slot it departed from shows this same occupant.
-            var committedMobility = reservationMember.Mobility!.Value.Advance();
-
-            m_server.Population.SetMobility(
-                index: slot,
-                mobility: in committedMobility
-            );
-
-            if (member.HasMappedArrival) {
-                m_server.Population.ApplyMappedArrival(
-                    slot: slot,
-                    motionProgramName: member.BodyMotionProgramName,
-                    position: member.Position,
-                    yawRadians: member.YawRadians,
-                    planarVelocity: member.PlanarVelocity,
-                    verticalVelocity: member.VerticalVelocity,
-                    actionContinuity: (member.ActionContinuity ?? new WorldTransferActionContinuity(
-                        Channels: [],
-                        Registers: []
-                    )),
-                    continuum: member.Continuum,
-                    destinationCompletedEngineTick: m_server.CompletedEngineTicks
-                );
-            }
-
             landed.Add(item: slot);
-            m_borderAdmissions[slot] = lease.Request.Border;
         }
 
         m_committed.Add(item: key);
@@ -876,7 +853,87 @@ public sealed partial class WorldTransferEscrow {
         m_committedIncarnations[key] = committedIncarnations;
         reason = string.Empty;
 
+        // Reported once the whole cohort has landed, so a recording holds only arrivals that stood.
+        foreach (var arrival in arrivals) {
+            m_server.ArrivalTap?.Invoke(obj: arrival);
+        }
+
         return true;
+    }
+
+    /// <summary>Lands one local seat at its reserved slot: joins it under its principal, then writes the occupant the
+    /// commit carried onto it. The one landing a live commit and a replay's re-drive both apply.</summary>
+    /// <param name="arrival">The arrival.</param>
+    /// <returns>The join's verdict; nothing is written onto a refused seat.</returns>
+    public SessionReply LandSeat(WorldSeatArrival arrival) {
+        ArgumentNullException.ThrowIfNull(argument: arrival);
+
+        var reply = m_server.ApplySession(request: new SessionRequest.Join(
+            IdentityName: null,
+            Principal: arrival.Principal,
+            Slot: arrival.Slot,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        ));
+
+        if (reply.Accepted) {
+            Land(
+                bodyColor: arrival.BodyColor,
+                border: arrival.Border,
+                catalogRig: arrival.CatalogRig,
+                member: arrival.Member,
+                mobility: arrival.Mobility,
+                profile: arrival.Profile,
+                slot: arrival.Slot
+            );
+        }
+
+        return reply;
+    }
+
+    // Writes an admitted occupant's carried state onto its slot: the profile, appearance and arrival turn, its committed
+    // mobility identity, and, for a mapped arrival, the pose and motion the commit carried.
+    private void Land(int slot, WorldIdentity? profile, Vector3 bodyColor, byte catalogRig, in WorldMobilityIdentity mobility, string border, WorldTransferCommitMember member) {
+        if (profile is not null) {
+            m_server.Population.SetSeatProfile(
+                profile: profile,
+                slot: slot
+            );
+        }
+        m_server.Population.SetBodyColor(
+            color: bodyColor,
+            slot: slot
+        );
+        m_server.Population.SetCatalogRig(
+            catalogRig: catalogRig,
+            slot: slot
+        );
+        m_server.Population.SetTravelTurn(
+            slot: slot,
+            travelTurn: member.TravelTurn
+        );
+        m_server.Population.SetMobility(
+            index: slot,
+            mobility: in mobility
+        );
+
+        if (member.HasMappedArrival) {
+            m_server.Population.ApplyMappedArrival(
+                actionContinuity: (member.ActionContinuity ?? new WorldTransferActionContinuity(
+                    Channels: [],
+                    Registers: []
+                )),
+                continuum: member.Continuum,
+                destinationCompletedEngineTick: m_server.CompletedEngineTicks,
+                motionProgramName: member.BodyMotionProgramName,
+                planarVelocity: member.PlanarVelocity,
+                position: member.Position,
+                slot: slot,
+                verticalVelocity: member.VerticalVelocity,
+                yawRadians: member.YawRadians
+            );
+        }
+
+        m_borderAdmissions[slot] = border;
     }
 
     public void ReclaimExpired(ulong tick) {

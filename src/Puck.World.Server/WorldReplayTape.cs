@@ -225,6 +225,7 @@ public sealed partial class WorldReplayTape {
         m_liveServer.RebuildTap = null;
         m_liveServer.ScreenOpTap = null;
         m_liveServer.ServerEventTap = null;
+        m_liveServer.ArrivalTap = null;
     }
     // Read straight off the live handle in the simulation's own fixed-point currency — never through the float
     // accessors, which would quantize a rate that is already exact.
@@ -715,6 +716,10 @@ public sealed partial class WorldReplayTape {
             }
         };
         m_liveServer.LinkDeliveryTap = adjacency => m_currentAuthority.Add(item: new WorldReplayEntry.LinkDelivery(Adjacency: adjacency));
+        m_liveServer.ArrivalTap = arrival => m_currentAuthority.Add(item: new WorldReplayEntry.Arrival(
+            Profile: PinProfile(profile: arrival.Profile),
+            Value: (arrival with { Profile = null })
+        ));
         m_transport.UndoTap = (count, actor) => m_currentAuthority.Add(item: new WorldReplayEntry.Undo(
             Actor: actor,
             Count: count
