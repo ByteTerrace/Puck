@@ -103,6 +103,10 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
                 innerException: exception,
                 reason: $"no Vulkan loader: {exception.Message}"
             );
+        } catch {
+            output?.Dispose();
+
+            throw;
         }
 
         // No installable client driver makes vkCreateInstance fail (VK_ERROR_INCOMPATIBLE_DRIVER).
@@ -135,7 +139,7 @@ public sealed class VulkanInstanceFactory : IVulkanInstanceFactory {
             // tell a clean run from one the layer never watched. The prefix is not [vulkan-debug], which a run's checks
             // fail on.
             if (enableValidation) {
-                (debugOutput ?? Console.Error).WriteLine(value: ((0 != debugMessengerHandle)
+                VulkanDebugOutput.Writer(userData: (output?.UserData ?? 0)).WriteLine(value: ((0 != debugMessengerHandle)
                     ? VulkanInstance.ValidationLiveLine
                     : VulkanInstance.ValidationNotLiveLine));
             }
