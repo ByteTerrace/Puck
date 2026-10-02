@@ -555,6 +555,73 @@ public sealed class WorldArtifactBuildLawTests {
         );
     }
     [Fact]
+    public void AFailedBuildQuotesOnlyErrorDiagnosticsAndCapsDistinctErrorsAtFive() {
+        using var checkout = new Checkout();
+        string[] diagnostics = [
+            "C:/x/error/Library.cs(1,1): error CS1002: ; expected [C:/x/Library.csproj]",
+            "MSBUILD : error MSB1009: Project file does not exist.",
+            "CSC : error CS0006: Metadata file could not be found.",
+            "error NETSDK1004: Assets file not found.",
+            "error NU1101: Unable to find package Missing.",
+        ];
+        string[] noise = [
+            "C:/x/Library.cs(1,1): warning CS1030: #warning: 'reported error: one' [C:/x/Library.csproj]",
+            "C:/x/Library.cs(2,1): warning CS1030: #warning: 'reported error: two' [C:/x/Library.csproj]",
+            "C:/x/Library.cs(3,1): warning CS1030: #warning: 'reported error: three' [C:/x/Library.csproj]",
+            "C:/x/Library.cs(4,1): warning CS1030: #warning: 'reported error: four' [C:/x/Library.csproj]",
+            "C:/x/Library.cs(5,1): warning CS1030: #warning: 'reported error: five' [C:/x/Library.csproj]",
+            "warning NU1900: error: could not load vulnerability data.",
+            "a message mentioning error: without a diagnostic",
+            "C:/x/error/Library.cs -> C:/x/error/Library.dll",
+            "    0 Error(s)",
+        ];
+        var stdout = string.Join(separator: "\r\n", values: ((string[])[
+            " \t ", .. noise,
+            .. diagnostics.Select(selector: static line => $"  12>{line}"),
+            "Build FAILED.", .. diagnostics,
+            "error MSB4018: This sixth error is kept only in the log.",
+            " \t ",
+        ]));
+        const string Stderr = "error MSB9999: This seventh error is kept only in the log.\r\n";
+
+        Assert.False(condition: WorldArtifactBuild.TryResolve(
+            artifact: out _,
+            builder: (string outputDirectory, TimeSpan timeout, out CliProcessResult? build, out string error) => {
+                build = new CliProcessResult(
+                    ExitCode: 1,
+                    OutputLines: [],
+                    Stderr: Stderr,
+                    Stdout: stdout,
+                    TimedOut: false
+                );
+                error = "the Puck.World build exited 1.";
+
+                return false;
+            },
+            error: out var refusal,
+            logDirectory: checkout.LogDirectory,
+            repositoryRoot: checkout.Root,
+            store: checkout.Store,
+            timeout: TimeSpan.FromMinutes(value: 2),
+            verb: "law"
+        ));
+
+        var log = Path.Combine(path1: checkout.LogDirectory, path2: WorldArtifactBuild.BuildLogName);
+
+        Assert.Equal(
+            actual: refusal,
+            expected: string.Join(separator: Environment.NewLine, values: ((string[])[
+                "the Puck.World build exited 1. First errors:",
+                .. diagnostics.Select(selector: static line => $"  {line}"),
+                $"Its whole output is in {CliPaths.ToDisplay(fullPath: log)}.",
+            ]))
+        );
+        Assert.Equal(
+            actual: File.ReadAllText(path: log),
+            expected: $"{stdout}{Environment.NewLine}--- stderr ---{Environment.NewLine}{Stderr}"
+        );
+    }
+    [Fact]
     public void AProjectAddedToTheClosureSinceItsLastRestoreIsRestoredBeforeTheBuild() {
         using var directory = new TemporaryDirectory();
         var budget = TimeSpan.FromMinutes(value: 3);

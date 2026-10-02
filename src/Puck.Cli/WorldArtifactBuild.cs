@@ -53,8 +53,9 @@ internal static partial class WorldArtifactBuild {
     // key covers it, so a change here is never answered with a build made the old way.
     private static readonly string[] BuildArguments = BuildCommand(project: WorldArtifactClosure.WorldProject);
 
-    // An MSBuild diagnostic of error severity: `file(line,col): error CODE: text` or `MSBUILD : error CODE: text`.
-    [GeneratedRegex(pattern: @"(?:^|[\s:])error(?: [A-Za-z]+[0-9]+)?\s*:")]
+    // An error at the start or after an origin; the origin cannot contain an earlier diagnostic severity, so a
+    // warning whose message mentions `error:` never becomes an error line.
+    [GeneratedRegex(pattern: @"^(?:(?:(?!\b(?:warning|error)(?: [A-Za-z]+[0-9]+)?\s*:).)+:\s*)?error(?: [A-Za-z]+[0-9]+)?\s*:")]
     private static partial Regex ErrorLine();
     private static string[] BuildCommand(string project) => ["build", "--disable-build-servers", project, "-c", "Release", "--nologo", "-p:NuGetAudit=false"];
     // A failed build's refusal: why it failed, its first error lines (or its last lines when none is an error), and

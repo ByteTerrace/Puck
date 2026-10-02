@@ -1242,7 +1242,8 @@ its last restore is restored before it builds. A run that builds keeps the
 build's standard output and error in `world-build.log` in its own scratch run
 directory. A failed build's refusal quotes the output's first error lines, or
 its last lines when none is an error, and names that log. `puck test` keeps its
-run directory when it holds that log.
+run directory when the build fails and the directory holds that log; otherwise
+it removes the directory unless `--keep` is supplied.
 
 None of these verbs builds in place. `Puck.World` has a build-time reference to
 `Puck.Cli`, whose build compiles the shipped `.puck` worlds, so an in-place
