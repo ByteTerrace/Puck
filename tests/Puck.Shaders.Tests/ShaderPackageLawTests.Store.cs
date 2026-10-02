@@ -219,9 +219,10 @@ public sealed partial class ShaderPackageLawTests {
 
         var (_, toolchain, source, package) = await StrandedPackage(fixture: fixture);
         var store = Path.GetDirectoryName(path: package)!;
-        // Writer A finds the package directory with no manifest. While it is about to remove it, writer B runs whole,
-        // and then A loses its compiler, so whatever A removes it cannot rebuild.
+        // Writer A finds the package directory with no manifest. Before A removes it, writer B starts on the calling
+        // thread: it must wait for A rather than enter recovery. Then A loses its compiler and cannot rebuild.
         var paused = 0;
+        var otherRemoving = false;
         var other = ((Task<(ShaderPackageResult Result, string Package)>?)null);
         var aToolchain = fixture.Output(name: "toolchain-a");
 
@@ -233,6 +234,7 @@ public sealed partial class ShaderPackageLawTests {
         var writerB = new ShaderPackager(
             compiler: fixture.Compiler(runner: new PackageRunner(), toolchain: toolchain),
             reflectDxil: false,
+            removingAbandoned: _ => otherRemoving = true,
             store: store
         );
         var writerA = new ShaderPackager(
@@ -243,15 +245,22 @@ public sealed partial class ShaderPackageLawTests {
                     return;
                 }
 
-                other = Task.Run(cancellationToken: Token, function: () => writerB.StoreAsync(cancellationToken: Token, name: "graph", source: source));
-                // An unguarded writer B publishes within this wait; one waiting for A's lock cannot.
-                _ = Task.WhenAny(task1: other, task2: Task.Delay(cancellationToken: Token, delay: TimeSpan.FromSeconds(value: 3))).GetAwaiter().GetResult();
+                other = writerB.StoreAsync(cancellationToken: Token, name: "graph", source: source);
+                // StoreAsync reaches recovery before its first compilation await. Without its lock, B calls its
+                // recovery callback before this call returns, regardless of thread-pool scheduling or compile speed.
+                Assert.False(condition: otherRemoving);
                 DeleteCompiler(toolchain: aToolchain);
             },
             store: store
         );
 
-        _ = await writerA.StoreAsync(cancellationToken: Token, name: "graph", source: source);
+        try {
+            _ = await writerA.StoreAsync(cancellationToken: Token, name: "graph", source: source);
+        } finally {
+            if (other is not null) {
+                _ = await other;
+            }
+        }
 
         Assert.NotNull(@object: other);
 
@@ -262,6 +271,21 @@ public sealed partial class ShaderPackageLawTests {
             actual: ShaderPackager.KeyOf(manifest: ShaderPackager.Open(package: package)),
             expected: writerB.KeyOf(name: "graph", source: source)
         );
+    }
+    [Fact]
+    public async Task A_package_lock_reports_a_permanent_open_failure_instead_of_waiting_for_a_holder() {
+        using var fixture = new Fixture(name: "transitive");
+        // The package component fits the host's 255-character limit; its .lock sibling does not. No writer holds it,
+        // and no amount of waiting can make that name openable. The failure is an IOException whose kind the host chooses
+        // (PathTooLongException on some, a plain IOException on Windows).
+        var package = fixture.Output(name: new string(c: 'a', count: 252));
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
+
+        stop.CancelAfter(delay: TestLiveness.Bound);
+
+        _ = await Assert.ThrowsAnyAsync<IOException>(testCode: async () => {
+            using var held = await ShaderPackager.LockPackageAsync(cancellationToken: stop.Token, package: package);
+        });
     }
 
     // A store holding a published package whose manifest, the commit record a publication writes last, is gone: what a

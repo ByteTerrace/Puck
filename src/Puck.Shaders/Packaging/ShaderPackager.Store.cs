@@ -121,10 +121,18 @@ public sealed partial class ShaderPackager {
 
         // Recovery, publication and removal of one package hold its lock, so no other writer removes or replaces it
         // between this writer's look at it and its write.
-        using (await LockPackageAsync(
-            cancellationToken: cancellationToken,
-            package: package
-        ).ConfigureAwait(continueOnCapturedContext: false)) {
+        IDisposable held;
+
+        try {
+            held = await LockPackageAsync(
+                cancellationToken: cancellationToken,
+                package: package
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception exception) when (IsSourceRefusal(exception: exception)) {
+            return (Refusal(exception: exception), package);
+        }
+
+        using (held) {
             if (IsCommitted(package: package)) {
                 var kept = await LoadAsync(
                     cancellationToken: cancellationToken,
@@ -169,6 +177,8 @@ public sealed partial class ShaderPackager {
     /// <returns>The held lock, released when disposed.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled while another
     /// holder held the lock.</exception>
+    /// <exception cref="IOException">The lock cannot be opened for a reason other than sharing contention.</exception>
+    /// <exception cref="UnauthorizedAccessException">The lock cannot be created or opened with write access.</exception>
     public static async Task<IDisposable> LockPackageAsync(string package, CancellationToken cancellationToken = default) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: package);
 
@@ -184,7 +194,7 @@ public sealed partial class ShaderPackager {
                     path: path,
                     share: FileShare.None
                 );
-            } catch (IOException) {
+            } catch (IOException exception) when (IsPackageLockContention(exception: exception)) {
                 await Task.Delay(
                     cancellationToken: cancellationToken,
                     delay: TimeSpan.FromMilliseconds(value: 50)
@@ -193,6 +203,12 @@ public sealed partial class ShaderPackager {
         }
     }
 
+    // Windows reports ERROR_SHARING_VIOLATION as an HRESULT. Unix FileStream reports flock's EWOULDBLOCK as raw
+    // errno: 35 on Darwin and FreeBSD, 11 on Linux. A missing path, full disk or failed device is not another holder.
+    private static bool IsPackageLockContention(IOException exception) =>
+        (OperatingSystem.IsWindows()
+            ? (exception.HResult == unchecked((int)0x80070020))
+            : (exception.HResult == ((OperatingSystem.IsMacOS() || OperatingSystem.IsFreeBSD()) ? 35 : 11)));
     // Whether a store directory holds a published package: its manifest, the commit record a publication writes last.
     private static bool IsCommitted(string package) => File.Exists(path: Path.Combine(
         path1: package,

@@ -2326,7 +2326,8 @@ Every writer that recovers, publishes or removes a package holds that
 package's lock, the file beside its directory named `<key>.lock`, which the
 operating system releases with the writer's handle however it ends. One writer
 therefore never removes a package another has just published between looking
-at it and removing it, and two writers of one key build it once.
+at it and removing it, and two writers of one key build it once. A writer waits
+only for sharing contention; other errors opening the lock fail the operation.
 
 The store may be a link, or lie below one (a redirected profile, a junctioned
 build tree, a platform's linked temporary root): it is wherever its path leads.
