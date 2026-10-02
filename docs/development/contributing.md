@@ -558,6 +558,22 @@ meant to establish.
   (SMELL002/SMELL003). Rewrite or delete the comment, then
   `puck comment-smells`. Both ledgers are
   [ratchet ledgers](../reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers).
+- A strictly versioned format token (a wire key, checkpoint or journal
+  version, replay shape token, baker version, magic, or `puck.<name>.vN`
+  schema) is recorded in `FormatVersions.json`. Bump the constant, then run
+  `puck formats`; formatting preserves the canonical digest.
+  `puck formats --check` fails on any disagreement. A codec
+  edited without a bump moves the recorded digest and fails the check, so the
+  author decides whether the token should move, and two lanes that bump one
+  format conflict in the ledger instead of colliding at run time.
+  [`puck formats`](../reference/cli.md#puck-formatsstrict-format-tokens).
+- The cost of the canary gate selections is recorded in `CanaryCeilings.json`,
+  never declared by hand. A change that adds or removes canary cost runs
+  `puck canary-ceilings` and states the new `puck canary --merge --plan`
+  counts in its commit; `puck canary-ceilings --check` requires each recorded
+  count to equal its plan. When a merge conflicts in the file, rerun the verb
+  rather than recomputing counts.
+  [`puck canary-ceilings`](../reference/cli.md#puck-canary-ceilingsrecorded-gate-costs).
 - A call through an unmanaged function pointer (`delegate* unmanaged`, any
   calling convention) may not use a signature that mentions a type parameter
   except behind a pointer: `Puck.Analyzers` fails the build with INTEROP001,

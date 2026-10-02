@@ -72,6 +72,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
+| [`puck canary-ceilings`](#puck-canary-ceilingsrecorded-gate-costs) | records the World boots and summed leg budget of the two canary gate selections in `CanaryCeilings.json`, or checks it with `--check`; a recorded count must equal its plan. |
 | [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on both real machines, the evidence the cartridge cost model's weights come from. |
 | [`puck comment-smells`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `CommentSmells.json`, the ratchet ledger the comment-smell build error (SMELL001–SMELL004) reads, or checks it with `--check`; a recorded count only falls. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--bundle` inlines world imports, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; a `.world.json` path compiles to its compiled world alone. |
@@ -84,6 +85,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
+| [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format token, or checks it with `--check`. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
@@ -928,10 +930,11 @@ manifests, so the output is the same on every machine, and a GPU selection can
 be costed on a machine without a GPU. The two gate selections, the automatic
 set (`puck canary`, `--capability automatic`, and `puck landing`) and
 `--merge`, are each held to a ceiling of World boots and summed leg budget
-declared in `src/Puck.Cli/Canary/CanaryCeilings.cs`. A gate whose plan exceeds
-its ceiling is refused with exit 2 before anything builds, naming both numbers.
-A change that deliberately grows a gate raises the ceiling in the same change
-and states the new `--plan` counts.
+recorded in `CanaryCeilings.json` ([`puck canary-ceilings`](#puck-canary-ceilingsrecorded-gate-costs)).
+A gate whose plan exceeds its recorded ceiling is refused with exit 2 before
+anything builds, naming both numbers. A change that deliberately grows a gate
+records the rise with `puck canary-ceilings` in the same change and states the
+new `--plan` counts.
 
 A selection with an offscreen or windowed proof on a named backend warms the
 engine's pipeline cache before any leg starts. The runner boots the first
@@ -2840,6 +2843,80 @@ Each ledger has one spelling, the one its verb writes: entries in ordinal key or
 one final line feed. `--check` reports a ledger whose bytes differ from that form as drift, even when every count
 holds, so a hand edit that reorders or respaces an entry fails the check rather than churning the next rewrite.
 Running the verb without `--check` rewrites the ledger in its canonical form.
+
+## `puck canary-ceilings`—recorded gate costs
+
+`CanaryCeilings.json` at the repository root records what the two gate selections of
+[`puck canary`](#puck-canaryreal-world-behavioral-proofs), the automatic set and `--merge`, cost: World boots and
+the summed per-leg timeouts, as `--plan` counts them over the checked-in manifests. The ledger is generated; nothing
+in the source declares a ceiling by hand.
+
+```text
+puck canary-ceilings            write CanaryCeilings.json from the manifests' plans
+puck canary-ceilings --check    write nothing; exit 1 when a recorded count differs from its plan in
+                                either direction, or the ledger's bytes differ from what the verb writes
+```
+
+A run or `--plan` of a gate selection is refused before anything builds when its plan *exceeds* the recorded count.
+`--check` is stricter, and requires equality, for two reasons. A rise is a deliberate change, so the lane that adds
+cost records it in the same change and states the new counts in its commit. A fall is recorded too: otherwise the
+headroom a lane freed would be spendable by any other lane without a reviewed change. Equality also settles
+concurrent changes. Two lanes that record different counts edit the same lines and conflict at merge; two lanes
+that record the same count merge cleanly to a ledger that no longer equals the combined plan, so `--check` fails
+until `puck canary-ceilings` records the merged manifests' real counts. The resolver reruns the verb and never
+recomputes a count by hand.
+
+The verb refuses (exit 2) when any manifest fails to load, since a plan over a partial set would record a falsely
+low cost. CI runs `puck canary-ceilings --check` in the `ledgers` job of `verify.yml`.
+
+## `puck formats`—strict format tokens
+
+`FormatVersions.json` at the repository root lists every strictly versioned wire, persisted, or cache format the
+tracked `src/` tree declares, each with its current token and declaring file. It is generated from the source, so
+the constants remain the one source of truth and the ledger is their checked-in mirror.
+
+```text
+puck formats            write FormatVersions.json from the source
+puck formats --check    write nothing; exit 1 for an unrecorded, stale, bumped, reshaped, or moved format,
+                        or a ledger whose bytes differ from what the verb writes
+```
+
+A declaration is a format when it is a `const`, a `static readonly` field, or a static or expression-bodied property
+whose initializer is one of two things:
+
+- a named document schema literal, a string of the form `puck.<name>.v<N>` such as `puck.world.definition.v1`;
+- a literal under one of the recognized token member names (`WireKey`, `WireProtocolKey`, `ProtocolKey`,
+  `Revision`, `ShapeToken`, `SupportedVersion`, `CurrentVersion`, `Format`, `FormatVersion`, `SupportedFormat`,
+  `Version`, `Magic`, `JournalMagic`, `JournalVersion`, `PackMagic`, `PackVersion`, `CompilerVersion`,
+  `AbiVersion`, `TokenAlgorithm`). A numeric
+  token whose bytes are a four- to eight-character printable code is spelled as that text, so the key
+  `0x354445464B435550` is recorded as `PUCKFED5`.
+
+Declarations under a `*.Post` project and generated files are outside the ledger. An entry that is none of these
+needs its member added to the recognized names in `FormatVersionsLedger`, which is a deliberate edit of the verb.
+
+An entry holds its id (`Type.Member`), the file declaring it, its token and a `shape` digest, each on a line of its
+own. The digest covers canonical syntax of the declaring file and its partial siblings (`Stem.cs` and
+`Stem.*.cs` beside it), source-declared field and property types, record constructor types and base types,
+including their data dependencies. Shared World wire leaves also feed the wire, replay, checkpoint, federation
+and journal digests; snapshot identities cover their machine project's source and the shared state reader,
+writer and image layout. A version-shaped string inside an object initializer is an identity, not a schema literal.
+The digest is what lets two lanes collide. Git merges two identical edits of one line without a conflict,
+and two lanes that bump a codec to the same next token write the same token line; they changed the codec
+differently, so their digest lines differ and conflict. A lane that edits a codec without bumping its token fails
+`--check` with a `reshaped` finding until the author reruns `puck formats`, which is the moment to decide whether
+the encoding changed and the token should too. This also covers document schemas: a field change under an
+unchanged schema token requires recording its new shape.
+
+The digest uses the existing formatter's syntactic and null-pattern normalizers before hashing syntax structure
+without trivia. Parentheses do not contribute an extra node, but operator grouping remains in the tree. Resolved
+call arguments are identified by parameter position, and only expressions the formatter considers safe to reorder
+are sorted. Local and parameter names are replaced by declaration identities; `nameof` retains its resulting text.
+Formatting, comments and local renames preserve the digest, while changed argument binding and evaluation order
+move it. Unresolved calls retain their written syntax. These are conservative source fingerprints: an implementation
+edit within the covered files can require recording even when its encoding stays the same.
+
+CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
 
 ## `puck baselines`—test baselines
 

@@ -28,6 +28,8 @@ public sealed record WorldExtensionConfiguration(string Schema, string World, Gu
     IReadOnlyList<WorldExtensionEmbeddingSettings>? Embeddings = null, IReadOnlyList<WorldExtensionParticipantSettings>? Participants = null) {
     /// <summary>The largest configuration file, in bytes, a host reads.</summary>
     public const int MaximumFileBytes = 1048576;
+    /// <summary>The one supported extension configuration schema.</summary>
+    public const string CurrentSchema = "puck.world.extensions.v1";
 
     private static void CheckDuplicates(JsonElement value) {
         if (value.ValueKind == JsonValueKind.Object) {
@@ -57,7 +59,7 @@ public sealed record WorldExtensionConfiguration(string Schema, string World, Gu
         )
             ?? throw new JsonException(message: "Extension configuration must be an object."));
 
-        if (value.Schema != "puck.world.extensions.v1") { throw new JsonException(message: "Unsupported extension configuration schema."); }
+        if (value.Schema != CurrentSchema) { throw new JsonException(message: "Unsupported extension configuration schema."); }
         return value;
     }
     /// <summary>Reads and parses the host-selected configuration file through the confined file reader, the one way
