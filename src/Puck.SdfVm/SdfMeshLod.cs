@@ -85,7 +85,8 @@ public readonly record struct SdfMeshLod(Vector3 Center, float Radius, float Swi
 /// <summary>
 /// Chooses, for one view, which draws of a frame it records: every draw without a <see cref="SdfMeshLod"/>, and of each
 /// baked placement's pair the one its projected diameter selects. It keeps each draw's last choice so the hysteresis of
-/// <see cref="SdfMeshLod.SelectFar"/> holds across the view's frames, and forgets them when the draw list changes.
+/// <see cref="SdfMeshLod.SelectFar"/> holds across the view's frames, including revisions and reordering of the draw list.
+/// A draw keeps its choice while its identity and LOD agree; absent identities are forgotten.
 /// </summary>
 /// <param name="work">The counters the choices count into, or <see langword="null"/> for the process's
 /// (<see cref="ProcessWork"/>).</param>
@@ -105,15 +106,13 @@ public sealed class SdfMeshLodSelector(WorkCounterSet? work = null) {
     );
 
     private readonly WorkCounterSet m_work = (work ?? ProcessWork);
-    private bool[] m_far = [];
-
-    private IReadOnlyList<SdfMeshDraw>? m_draws;
-    private long m_revision;
+    private Dictionary<object, (SdfMeshLod Lod, bool Far)> m_choices = [];
+    private Dictionary<object, (SdfMeshLod Lod, bool Far)> m_next = [];
 
     /// <summary>Chooses the draws one view records this frame.</summary>
     /// <param name="draws">The frame's draws.</param>
-    /// <param name="revision">The draws' revision (<c>SdfFrame.MeshDrawsRevision</c>): a new list, or the same list at a
-    /// new revision, forgets the last frame's choices.</param>
+    /// <param name="impostorsAvailable">Whether the frame packed its impostor atlases successfully. Without them every
+    /// pair records its mesh, since an unpacked card has no surface.</param>
     /// <param name="cameraPosition">The view's camera position.</param>
     /// <param name="cameraForward">The view's camera forward axis.</param>
     /// <param name="pixelsPerUnitDepth">The view's <see cref="SdfMeshLod.PixelsPerUnitDepth"/>.</param>
@@ -121,7 +120,7 @@ public sealed class SdfMeshLodSelector(WorkCounterSet? work = null) {
     /// <paramref name="draws"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="recorded"/> is shorter than <paramref name="draws"/>.</exception>
-    public void Select(IReadOnlyList<SdfMeshDraw> draws, long revision, Vector3 cameraPosition, Vector3 cameraForward, float pixelsPerUnitDepth, Span<bool> recorded) {
+    public void Select(IReadOnlyList<SdfMeshDraw> draws, bool impostorsAvailable, Vector3 cameraPosition, Vector3 cameraForward, float pixelsPerUnitDepth, Span<bool> recorded) {
         ArgumentNullException.ThrowIfNull(argument: draws);
 
         if (recorded.Length < draws.Count) {
@@ -131,16 +130,7 @@ public sealed class SdfMeshLodSelector(WorkCounterSet? work = null) {
             );
         }
 
-        if (
-            !ReferenceEquals(objA: draws, objB: m_draws) ||
-            (revision != m_revision) ||
-            (m_far.Length != draws.Count)
-        ) {
-            m_far = new bool[draws.Count];
-            m_draws = draws;
-            m_revision = revision;
-        }
-
+        m_next.Clear();
         var near = 0L;
         var far = 0L;
 
@@ -152,17 +142,19 @@ public sealed class SdfMeshLodSelector(WorkCounterSet? work = null) {
                 continue;
             }
 
-            var selected = lod.SelectFar(
+            var wasFar = (m_choices.TryGetValue(key: draw.Identity, value: out var previous) &&
+                (previous.Lod == lod) && previous.Far);
+            var selected = (impostorsAvailable && lod.SelectFar(
                 pixels: lod.ProjectedPixels(
                     cameraForward: cameraForward,
                     cameraPosition: cameraPosition,
                     objectToWorld: draw.ObjectToWorld,
                     pixelsPerUnitDepth: pixelsPerUnitDepth
                 ),
-                wasFar: m_far[index]
-            );
+                wasFar: wasFar
+            ));
 
-            m_far[index] = selected;
+            m_next[draw.Identity] = (lod, selected);
             recorded[index] = (selected == lod.Far);
 
             if (recorded[index]) {
@@ -174,6 +166,7 @@ public sealed class SdfMeshLodSelector(WorkCounterSet? work = null) {
             }
         }
 
+        (m_choices, m_next) = (m_next, m_choices);
         m_work.Add(amount: near, kind: Near);
         m_work.Add(amount: far, kind: Far);
     }

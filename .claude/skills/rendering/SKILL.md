@@ -265,7 +265,9 @@ These are one-line cautions; the owning pages hold the derivations.
   impostor's sphere. `SdfMeshLodSelector` (the mesh part's recorder, one per view)
   records exactly one of the pair: the card once the sphere projects under the
   impostor's view edge in render pixels (`SdfMeshLod`, hysteresis included), so the
-  choice is made on the CPU from that view's own camera, never in a shader; the
+  choice is made on the CPU from that view's own camera, never in a shader. The
+  choice follows draw identity through list revisions and reordering, and a frame
+  without packed impostor atlases records each pair's mesh. The
   `sdf.mesh.lod` source counts the draws recorded. Impostors have their own atlases
   (`SdfMeshAtlas` packs any `SdfTextureSet`, the mesh's `SdfMeshTextures` or an
   `SdfMeshImpostor`, never both in one atlas). The card pipeline is a second entry

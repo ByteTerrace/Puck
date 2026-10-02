@@ -12,7 +12,8 @@ namespace Puck.SdfVm.Tests;
 /// forward depth of its center, in render pixels; the switch is the impostor's view edge in texels; an impostor hands back
 /// to its mesh only past that edge by the stated hysteresis; a camera within a radius of the sphere along its axis is
 /// never far. A draw without a level of detail is recorded in every view. The choice is made per view from that view's
-/// own camera, so one frame's draws serve two views at two distances, and a changed draw list forgets the last frame.
+/// own camera, so one frame's draws serve two views at two distances. Draw identities retain hysteresis through list
+/// revisions and reordering; a missing impostor atlas keeps every placement visible as its mesh.
 /// </summary>
 public sealed class SdfMeshLodLawTests {
     // A standard-tier impostor's view edge, and so its switch, is sixteen pixels.
@@ -48,16 +49,16 @@ public sealed class SdfMeshLodLawTests {
     private static float DepthOf(SdfMeshDraw draw, float pixels) =>
         ((((2f * draw.Lod!.Value.Radius) * new Vector3(x: draw.ObjectToWorld.M11, y: draw.ObjectToWorld.M12, z: draw.ObjectToWorld.M13).Length()) * PixelsPerUnit) / pixels);
     // What a view whose camera stands at `depth` before the origin, looking along +Z, records of a draw list.
-    private static bool[] Select(SdfMeshLodSelector selector, SdfMeshDraw[] draws, float depth, long revision = 0L) {
+    private static bool[] Select(SdfMeshLodSelector selector, SdfMeshDraw[] draws, float depth, bool impostorsAvailable = true) {
         var recorded = new bool[draws.Length];
 
         selector.Select(
             cameraForward: Vector3.UnitZ,
             cameraPosition: new Vector3(x: 0f, y: 0f, z: -depth),
             draws: draws,
+            impostorsAvailable: impostorsAvailable,
             pixelsPerUnitDepth: PixelsPerUnit,
-            recorded: recorded,
-            revision: revision
+            recorded: recorded
         );
 
         return recorded;
@@ -174,16 +175,44 @@ public sealed class SdfMeshLodLawTests {
         Assert.Equal(actual: close, expected: [true, true, false]);
     }
     [Fact]
-    public void ANewRevisionForgetsTheLastChoiceAndTheCountsFollowTheRecordedDraws() {
+    public void AReplacementListRetainsTheChoiceByIdentityAndTheCountsFollowTheRecordedDraws() {
         var counts = new WorkCounterSet(kinds: SdfMeshLodSelector.ProcessWork.WorkKinds, name: SdfMeshLodSelector.SourceName);
         var selector = new SdfMeshLodSelector(work: counts);
         var draws = Pair(scale: 1f, position: Vector3.Zero);
         var edgeDepth = DepthOf(draw: draws[0], pixels: 16f);
 
         Assert.Equal(expected: [false, true], actual: Select(depth: (edgeDepth * 1.1f), draws: draws, selector: selector));
-        // Inside the band an impostor holds; the same draws at a new revision are chosen afresh, from the near side.
+        // A static rebuild replaces and reorders the list without replacing either representation's identity.
         Assert.Equal(expected: [false, true], actual: Select(depth: (edgeDepth * 0.96f), draws: draws, selector: selector));
-        Assert.Equal(expected: [true, false], actual: Select(depth: (edgeDepth * 0.96f), draws: draws, revision: 1L, selector: selector));
-        Assert.Equal(expected: (1L, 2L), actual: (counts.Read(kind: SdfMeshLodSelector.Near), counts.Read(kind: SdfMeshLodSelector.Far)));
+        Assert.Equal(expected: [true, false], actual: Select(depth: (edgeDepth * 0.96f), draws: [draws[1], draws[0]], selector: selector));
+        Assert.Equal(expected: (0L, 3L), actual: (counts.Read(kind: SdfMeshLodSelector.Near), counts.Read(kind: SdfMeshLodSelector.Far)));
+        // A different placement at those indices must not inherit the previous placement's choice.
+        draws = [draws[0] with { Identity = "other near" }, draws[1] with { Identity = "other far" }];
+        Assert.Equal(expected: [true, false], actual: Select(depth: (edgeDepth * 0.96f), draws: draws, selector: selector));
+    }
+    [Fact]
+    public void MovingAnotherMeshDoesNotEraseAStaticPairsHysteresis() {
+        var pair = Pair(scale: 1f, position: Vector3.Zero);
+        var selector = Selector();
+        var edgeDepth = DepthOf(draw: pair[0], pixels: 16f);
+        SdfMeshDraw[] draws = [.. pair, pair[0] with { Identity = "moving", Lod = null }];
+
+        _ = Select(depth: (edgeDepth * 1.1f), draws: draws, selector: selector);
+        for (var frame = 0; (frame < 20); frame++) {
+            // WorldSceneMeshDraws republishes a revision whenever its pool moves a mesh.
+            draws = [.. pair, draws[2] with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: frame, yPosition: 0f, zPosition: 0f) }];
+            Assert.Equal(expected: [false, true, true], actual: Select(
+                depth: (edgeDepth * (((frame % 2) == 0) ? 0.96f : 1.04f)), draws: draws, selector: selector));
+        }
+    }
+    [Fact]
+    public void AnUnavailableAtlasRecordsTheMeshEvenAfterTheCardWasSelected() {
+        var draws = Pair(scale: 1f, position: Vector3.Zero);
+        var selector = Selector();
+
+        Assert.Equal(expected: [true, false], actual: Select(depth: 400f, draws: draws, impostorsAvailable: false, selector: selector));
+        Assert.Equal(expected: [false, true], actual: Select(depth: 400f, draws: draws, selector: selector));
+        Assert.Equal(expected: [true, false], actual: Select(depth: 400f, draws: draws, impostorsAvailable: false, selector: selector));
+        Assert.Equal(expected: [false, true], actual: Select(depth: 400f, draws: draws, selector: selector));
     }
 }

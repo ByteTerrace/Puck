@@ -88,23 +88,35 @@ struct SdfImpostorViews {
     uint2 cell[3];
     float3 weight;
 };
+// Opposite halves of each outer edge meet on the lower hemisphere. Continue the grid across an edge by reflecting
+// its out-of-range coordinate and reversing the other axis; clamping would select different views on its two sides.
+uint2 sdfImpostorWrapCell(int2 cell, int views) {
+    if ((cell.x < 0) || (cell.x >= views)) {
+        cell.x = ((cell.x < 0) ? (-cell.x - 1) : (2 * views - cell.x - 1));
+        cell.y = (views - cell.y - 1);
+    }
+    if ((cell.y < 0) || (cell.y >= views)) {
+        cell.y = ((cell.y < 0) ? (-cell.y - 1) : (2 * views - cell.y - 1));
+        cell.x = (views - cell.x - 1);
+    }
+    return (uint2)cell;
+}
 SdfImpostorViews sdfImpostorViewsAt(SdfImpostor impostor, float3 toward) {
     float views = (float)impostor.views;
     float2 grid = (((sdfImpostorEncode(toward) * 0.5 + 0.5) * views) - 0.5);
     float2 base = floor(grid);
     float2 f = (grid - base);
-    float2 last = float2(views - 1.0, views - 1.0);
     SdfImpostorViews chosen;
 
     if ((f.x + f.y) < 1.0) {
-        chosen.cell[0] = (uint2)clamp(base, 0.0, last);
-        chosen.cell[1] = (uint2)clamp((base + float2(1.0, 0.0)), 0.0, last);
-        chosen.cell[2] = (uint2)clamp((base + float2(0.0, 1.0)), 0.0, last);
+        chosen.cell[0] = sdfImpostorWrapCell((int2)base, (int)impostor.views);
+        chosen.cell[1] = sdfImpostorWrapCell((int2)base + int2(1, 0), (int)impostor.views);
+        chosen.cell[2] = sdfImpostorWrapCell((int2)base + int2(0, 1), (int)impostor.views);
         chosen.weight = float3((1.0 - f.x - f.y), f.x, f.y);
     } else {
-        chosen.cell[0] = (uint2)clamp((base + float2(1.0, 1.0)), 0.0, last);
-        chosen.cell[1] = (uint2)clamp((base + float2(1.0, 0.0)), 0.0, last);
-        chosen.cell[2] = (uint2)clamp((base + float2(0.0, 1.0)), 0.0, last);
+        chosen.cell[0] = sdfImpostorWrapCell((int2)base + int2(1, 1), (int)impostor.views);
+        chosen.cell[1] = sdfImpostorWrapCell((int2)base + int2(1, 0), (int)impostor.views);
+        chosen.cell[2] = sdfImpostorWrapCell((int2)base + int2(0, 1), (int)impostor.views);
         chosen.weight = float3((f.x + f.y - 1.0), (1.0 - f.y), (1.0 - f.x));
     }
 

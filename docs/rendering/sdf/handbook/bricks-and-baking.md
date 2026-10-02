@@ -386,7 +386,10 @@ that edge by a quarter. The choice is the CPU's, made from each view's own camer
 (two views at two distances choose apart), and the `sdf.mesh.lod` source counts the
 draws recorded as `near` and `far`. The impostor's five textures pack into their own
 atlases (`SdfMeshImpostor`, `SdfMeshAtlas` over impostors), bound in the World set of
-every pass and, for the depth, in the mesh pass's own set.
+every pass and, for the depth, in the mesh pass's own set. Each view retains its
+choice by draw identity through list revisions and reordering, so motion of another
+mesh does not erase hysteresis. When the impostor atlases cannot be packed, every
+baked placement records its mesh.
 
 The mesh pass draws the cards after its meshes, through a second pipeline. The
 vertex stage places a card on the plane perpendicular to the view that touches the
@@ -394,7 +397,8 @@ sphere's near side, centered on the ray through the sphere's center, as wide as 
 sphere's silhouette can be on that plane. The card's fragment stage
 (`sdf-mesh-impostor.frag.hlsl`) takes the pixel's ray into the prototype's unit-sphere
 coordinates (`frame/sdf-mesh-impostor.hlsli`) and, for each of the three views of
-the grid nearest the direction toward the camera, weighted as a triangle of the grid,
+the grid nearest the direction toward the camera, weighted as a triangle of the grid
+continued across the octahedral edges by reflection,
 marches it through the sphere in eight steps against that view's depth, refining the
 first step behind the surface linearly. The ray's hit is the weighted mean of the
 views that hit, and a pixel is covered when views holding half the weight agree; the
@@ -406,8 +410,12 @@ passes shade a card pixel from the same views: albedo, normal and emission blend
 view weight and texel coverage (`frame/sdf-mesh-impostor-surface.hlsli`), each
 sampled at the level the pixel's footprint wants, bilinear inside the view's tile,
 with each texel's own material: the impostor stores a material plane (R8, the
-program material id, never blended), and the card takes the texel of the most-weighted covering view at level
-zero, added to the draw's material as a mesh's texel entry is. `SdfImpostorOracle` states the trace in doubles over the decoded depth,
+program material id, never blended), and the card takes the nearest texel at level
+zero from the view with the greatest filtered coverage weight, added to the draw's
+material as a mesh's texel entry is. Filtered coverage can select an uncovered
+level-zero material texel at a silhouette; material coverage remains a merge blocker.
+Primary stores that
+material in the visibility record, shared by picking and lighting. `SdfImpostorOracle` states the trace in doubles over the decoded depth,
 and `SdfImpostorLawTests` hold it to the field's sphere and box.
 
 ---

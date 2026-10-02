@@ -60,7 +60,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly byte[] m_meshPushedIndex = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
     // The mesh part's choice among each baked placement's mesh and impostor draws, and per frame slot which tables' impostor
     // depth atlas, at which revision, its set last bound.
-    private readonly SdfMeshLodSelector m_lod = new();
+    private SdfMeshLodSelector m_lod = new();
     private readonly SdfWorldTables?[] m_impostorDepthTables = [];
     private readonly long[] m_impostorDepthRevisions = [];
     private bool[] m_recorded = [];
@@ -352,6 +352,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }
         }
 
+        m_lod = new SdfMeshLodSelector();
         m_view = current;
     }
     // Which screen indices a residency binds.
@@ -479,12 +480,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             cameraForward: camera.Forward,
             cameraPosition: camera.Position,
             draws: draws,
+            impostorsAvailable: (tables.ImpostorAtlas is not null),
             pixelsPerUnitDepth: SdfMeshLod.PixelsPerUnitDepth(
                 renderHeight: recording.Height,
                 tanHalfFieldOfView: camera.TanHalfFieldOfView
             ),
-            recorded: m_recorded,
-            revision: tables.MeshRevision
+            recorded: m_recorded
         );
         tables.WriteMeshTables(
             set: set,

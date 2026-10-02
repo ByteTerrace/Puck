@@ -38,11 +38,22 @@ internal sealed class SdfImpostorOracle(SdfBakedImpostor impostor) {
 
         var (bx, bz) = (Math.Floor(d: gx), Math.Floor(d: gz));
         var (fx, fz) = ((gx - bx), (gz - bz));
-        int Clamp(double value) => ((int)Math.Clamp(max: (views - 1.0), min: 0.0, value: value));
+        (int I, int J) Wrap(double x, double y) {
+            var (i, j) = (((int)x), ((int)y));
+            if ((i < 0) || (i >= views)) {
+                i = ((i < 0) ? (-i - 1) : (((2 * views) - i) - 1));
+                j = ((views - j) - 1);
+            }
+            if ((j < 0) || (j >= views)) {
+                j = ((j < 0) ? (-j - 1) : (((2 * views) - j) - 1));
+                i = ((views - i) - 1);
+            }
+            return (i, j);
+        }
 
         return (((fx + fz) < 1.0)
-            ? ((Clamp(value: bx), Clamp(value: bz)), (Clamp(value: (bx + 1.0)), Clamp(value: bz)), (Clamp(value: bx), Clamp(value: (bz + 1.0))), ((1.0 - fx) - fz), fx, fz)
-            : ((Clamp(value: (bx + 1.0)), Clamp(value: (bz + 1.0))), (Clamp(value: (bx + 1.0)), Clamp(value: bz)), (Clamp(value: bx), Clamp(value: (bz + 1.0))), ((fx + fz) - 1.0), (1.0 - fz), (1.0 - fx)));
+            ? (Wrap(x: bx, y: bz), Wrap(x: (bx + 1.0), y: bz), Wrap(x: bx, y: (bz + 1.0)), ((1.0 - fx) - fz), fx, fz)
+            : (Wrap(x: (bx + 1.0), y: (bz + 1.0)), Wrap(x: (bx + 1.0), y: bz), Wrap(x: bx, y: (bz + 1.0)), ((fx + fz) - 1.0), (1.0 - fz), (1.0 - fx)));
     }
     /// <summary>Marches a ray through the impostor's views.</summary>
     /// <param name="start">The ray's point at parameter zero, in the sphere's unit coordinates (center zero, radius one).</param>

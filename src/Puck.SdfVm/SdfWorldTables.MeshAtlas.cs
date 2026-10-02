@@ -8,8 +8,8 @@ namespace Puck.SdfVm;
 // mesh pass's set. An atlas is repacked only when the distinct texture sets the frame's draws name change, which a bake
 // landing or leaving does, and a repack first waits the device idle, since every view samples them; it then moves the
 // binding revision, so the sets are rewritten before any pass binds them. A frame whose draws name no texture set binds the
-// sampled filler at every atlas, and a set of textures too large to pack draws its meshes untextured, or its impostors not
-// at all.
+// sampled filler at every atlas, and a set of textures too large to pack draws its meshes untextured, or its baked
+// placements through their mesh representation.
 public sealed partial class SdfWorldTables {
     private readonly AtlasSlot m_meshAtlasSlot = new(usages: SdfMeshTextures.Usages.Count);
     private readonly AtlasSlot m_impostorAtlasSlot = new(usages: SdfMeshImpostor.Usages.Count);
@@ -56,7 +56,7 @@ public sealed partial class SdfWorldTables {
             }
         }
 
-        return Stage(slot: m_impostorAtlasSlot, what: "the impostor atlases were not packed, so their impostors are not drawn");
+        return Stage(slot: m_impostorAtlasSlot, what: "the impostor atlases were not packed, so their placements draw as meshes");
     }
     private void AddDistinct(SdfTextureSet item) {
         foreach (var candidate in m_atlasScratch) {

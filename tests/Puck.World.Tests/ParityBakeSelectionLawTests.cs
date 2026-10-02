@@ -69,9 +69,9 @@ public sealed class ParityBakeSelectionLawTests {
             cameraForward: camera.Forward,
             cameraPosition: camera.Position,
             draws: draws,
+            impostorsAvailable: true,
             pixelsPerUnitDepth: perUnit,
-            recorded: recorded,
-            revision: 0L
+            recorded: recorded
         );
 
         for (var index = 0; (index < draws.Count); index++) {

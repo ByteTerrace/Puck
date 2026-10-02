@@ -18,13 +18,15 @@ namespace Puck.SdfVm.Tests;
 /// the impostor flag, the sphere, the grid and the atlas rectangle, and every other draw's carries none of them.
 /// </summary>
 public sealed class SdfMeshImpostorLawTests {
-    private static readonly SdfMaterial[] Materials = [new(Albedo: new Vector3(x: 0.8f, y: 0.2f, z: 0.1f))];
+    private static readonly SdfMaterial[] Materials = [new(Albedo: Vector3.One), new(Albedo: new Vector3(x: 0.8f, y: 0.2f, z: 0.1f))];
 
     private static SdfBake Bake(float radius) {
         var builder = new SdfProgramBuilder();
 
-        _ = builder.AddMaterial(material: Materials[0]);
-        _ = builder.ResetPoint().Sphere(material: 0, radius: radius);
+        foreach (var material in Materials) {
+            _ = builder.AddMaterial(material: material);
+        }
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 1f, y: 2f, z: 3f)).Sphere(material: 1, radius: radius);
 
         return SdfBaker.Bake(
             center: new Vector3(x: 1f, y: 2f, z: 3f),
@@ -36,7 +38,7 @@ public sealed class SdfMeshImpostorLawTests {
     }
 
     [Fact]
-    public void AnImpostorHoldsTheBakesFourTexturesInTheirDeclaredFormats() {
+    public void AnImpostorHoldsTheBakesFiveTexturesInTheirDeclaredFormats() {
         var bake = Bake(radius: 0.5f);
         var impostor = new SdfMeshImpostor(impostor: bake.Impostor);
 
@@ -65,6 +67,8 @@ public sealed class SdfMeshImpostorLawTests {
         var atlas = SdfMeshAtlas.Pack(textures: [small, large, small]);
         var alignment = SdfMeshAtlas.AlignmentOf(levels: atlas.Levels);
 
+        Assert.Contains(collection: small.Textures[0].Decode(level: 0).Where(predicate: static (_, index) => ((index % 4) == 3)), filter: static alpha => (alpha > 0));
+        Assert.Contains(expected: ((byte)1), collection: small.Textures.Single(predicate: static texture => (texture.Usage == SdfBakeTextureUsage.Material)).Levels[0]);
         Assert.Equal(expected: 2, actual: atlas.MeshCount);
         Assert.Equal(expected: (small.Levels, 4), actual: (atlas.Levels, small.Levels));
         Assert.Equal(actual: alignment, expected: 32);
@@ -82,14 +86,21 @@ public sealed class SdfMeshImpostorLawTests {
             for (var usage = 0; (usage < impostor.Textures.Count); usage++) {
                 var format = SdfTextureSet.FormatOf(usage: impostor.UsageOrder[usage]);
                 var unit = ((int)GpuPixelFormats.UnitBytes(format: format));
-                var source = impostor.Textures[usage].Levels[0];
-                var columns = ((int)GpuPixelFormats.BlocksAcross(texels: ((uint)impostor.Width)));
-                var atlasColumns = ((int)GpuPixelFormats.BlocksAcross(texels: ((uint)atlas.Width)));
+                var unitTexels = (GpuPixelFormats.IsBlockCompressed(format: format) ? 4 : 1);
+                var atlasOffset = 0;
 
-                for (var row = 0; (row < columns); row++) {
-                    var target = (((((y / 4) + row) * atlasColumns) + (x / 4)) * unit);
+                for (var level = 0; (level < atlas.Levels); level++) {
+                    var source = impostor.Textures[usage].Levels[level];
+                    var columns = ((((impostor.Width >> level) + unitTexels) - 1) / unitTexels);
+                    var rows = ((((impostor.Height >> level) + unitTexels) - 1) / unitTexels);
+                    var atlasColumns = ((((atlas.Width >> level) + unitTexels) - 1) / unitTexels);
 
-                    Assert.True(condition: atlas.Chains[usage].AsSpan(length: (columns * unit), start: target).SequenceEqual(other: source.AsSpan(length: (columns * unit), start: ((row * columns) * unit))), userMessage: $"usage {usage} row {row} moved");
+                    for (var row = 0; (row < rows); row++) {
+                        var target = (atlasOffset + ((((((y >> level) / unitTexels) + row) * atlasColumns) + ((x >> level) / unitTexels)) * unit));
+
+                        Assert.True(condition: atlas.Chains[usage].AsSpan(length: (columns * unit), start: target).SequenceEqual(other: source.AsSpan(length: (columns * unit), start: ((row * columns) * unit))), userMessage: $"usage {usage} level {level} row {row} moved");
+                    }
+                    atlasOffset += ((int)GpuPixelFormats.LevelByteLength(format: format, height: ((uint)(atlas.Height >> level)), width: ((uint)(atlas.Width >> level))));
                 }
             }
         }

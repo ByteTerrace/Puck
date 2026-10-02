@@ -102,6 +102,14 @@ public sealed partial class SdfVisibilityLawTests {
         }
     }
     [Fact]
+    public void ACardPublishesItsTexelMaterialBeforePickingAndLightingReadTheRecord() {
+        var primary = CodeOf(path: "march/sdf-primary.hlsli");
+        // The card's entry must reach primary's winning material before it is stored, not be a private correction
+        // in the lighting pass. Picking copies that same V row. Deleting the card branch breaks this contract.
+        Assert.Matches(actualString: primary, expectedRegexPattern: @"(?s)if\s*\(sdfMeshIsImpostor\(meshHit\.draw\)\)\s*\{\s*material\s*\+=\s*sdfImpostorSurfaceAt\([^;]+\)\.material\s*;\s*\}.*visibility\.material\s*=\s*material\s*;.*sdfStoreVisibility\(");
+        Assert.DoesNotContain(expectedSubstring: "impostorSurface.material", actualString: CodeOf(path: "shade/sdf-light-stage.hlsli"));
+    }
+    [Fact]
     public void NoKernelSpellsTheIdentityFieldsOrTheSlotSentinelByHand() {
         var spellers = Directory.EnumerateFiles(path: Root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
             .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '/', oldChar: '\\'))
