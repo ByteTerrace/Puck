@@ -1,23 +1,24 @@
 {
-  "seed": 3958237715,
+  "seed": 1658239511,
   "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
-  "seed_note": "Drawn at random from 32 bits. The first draw put 11 of 14 cases in train, so seeds were redrawn (1 draws in all) until train held 8 or 9 of the 14; the redraw looked at case counts only, before any case had been run.",
+  "seed_note": "Drawn at random from 32 bits. The seed that split the first 14 cases left 4 of the 15 current cases in test, so seeds were redrawn (1 draws in all, the earlier ones included) until train held 9 or 10 of the 15; the redraw looked at case counts only, before any case had been run.",
   "train": [
-    "c01-lane-handback",
-    "c02-flake-vs-failure",
     "c07-world-tests-during-gpu",
     "c08-two-dot-is-not-ancestry",
-    "c09-mutant-is-what-you-meant",
     "c10-batch-with-integration-head",
-    "c11-older-timestamp-restore",
-    "c13-scan-law-cannot-fail",
-    "c14-scratch-repo-maintenance"
+    "c14-scratch-repo-maintenance",
+    "v01-lane-handback-no-gpu",
+    "v04-failed-build-law-passes",
+    "v05-skipped-red-leg",
+    "v07-process-search-self-match",
+    "v08-citations-during-parity"
   ],
   "test": [
-    "c03-stale-binaries",
+    "c02-flake-vs-failure",
     "c04-skip-is-not-red",
-    "c05-gpu-idle-detector",
-    "c06-docs-citations-during-gpu",
-    "c12-ledger-rerecorded"
+    "c11-older-timestamp-restore",
+    "c12-ledger-rerecorded",
+    "c13-scan-law-cannot-fail",
+    "v06-mutant-by-substitution"
   ]
 }
