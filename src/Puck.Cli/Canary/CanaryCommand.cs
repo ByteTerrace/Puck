@@ -373,12 +373,16 @@ internal static partial class CanaryCommand {
             Console.WriteLine(value: $"canary: selected {manifests.Count} proof(s){scoped}.");
         }
 
+        // The builds' directories hold their logs and the stub's output; a run whose proofs all held deletes them.
+        var worldBuildDirectory = BuildRunDirectory(id: "world");
+        string? stubBuildDirectory = null;
+
         // Every leg launches one World: the --world-artifact named, or the build keyed by this checkout's sources, reused
         // when an earlier run built it and leased until the last leg has exited (see WorldArtifactBuild).
         if (!WorldArtifactBuild.TryResolveNamed(
             error: out var buildError,
             lease: out var world,
-            logDirectory: BuildRunDirectory(id: "world"),
+            logDirectory: worldBuildDirectory,
             named: worldArtifact,
             path: out var artifact,
             repositoryRoot: repositoryRoot,
@@ -404,6 +408,8 @@ internal static partial class CanaryCommand {
         if (manifests.Any(predicate: static manifest => (manifest.BootShape == CanaryBootShape.Stub))) {
             const string StubProject = "src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj";
             var stubDirectory = BuildRunDirectory(id: "stub");
+
+            stubBuildDirectory = stubDirectory;
             var stubOutput = Path.Combine(path1: stubDirectory, path2: "output");
 
             stubArtifact = Path.Combine(path1: stubOutput, path2: "Puck.Launcher.Stub.exe");
@@ -578,8 +584,20 @@ internal static partial class CanaryCommand {
                 );
             }
 
-            // The run's shader packages are evidence only when a proof did not hold.
-            budget.Packages.Conclude(passed: ((reported == proofs.Count) && !failed && !infrastructureFailed && (unsupported.Count == 0) && !cancellation.IsCancellationRequested));
+            // The run's shader packages and build directories are evidence only when a proof did not hold.
+            var held = ((reported == proofs.Count) && !failed && !infrastructureFailed && (unsupported.Count == 0) && !cancellation.IsCancellationRequested);
+
+            budget.Packages.Conclude(passed: held);
+
+            foreach (var directory in ((string?[])[worldBuildDirectory, stubBuildDirectory])) {
+                if ((directory is { }) && Directory.Exists(path: directory)) {
+                    RunDirectory.Conclude(
+                        passed: held,
+                        path: directory,
+                        report: Console.Error
+                    );
+                }
+            }
         }
 
         PrintTally(
