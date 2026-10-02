@@ -18,6 +18,7 @@ using Puck.Cli.Docs;
 using Puck.Cli.Firmware;
 using Puck.Cli.FontAtlas;
 using Puck.Cli.Format;
+using Puck.Cli.Formats;
 using Puck.Cli.Landing;
 using Puck.Cli.Mcp;
 using Puck.Cli.NuGet;
@@ -118,6 +119,7 @@ internal static class PuckRootCommand {
             BrandingCommand.Create(),
             BundleCommand.Create(),
             CanaryCommand.Create(),
+            CanaryCeilingsCommand.Create(),
             CartridgeCostCommand.Create(),
             RatchetCommand.CreateCommentSmells(),
             CompileCommand.Create(),
@@ -130,6 +132,7 @@ internal static class PuckRootCommand {
             FirmwareCommand.Create(),
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
+            FormatsCommand.Create(),
             LandingCommand.Create(),
             RatchetCommand.CreateLengths(),
             LintCommand.Create(),
