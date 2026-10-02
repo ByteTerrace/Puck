@@ -138,6 +138,95 @@ public sealed partial class ShaderPackageLawTests {
             expectedSubstring: ShaderClosureRefusedException.PackageAbsent
         );
     }
+
+    // A store holding a published package whose manifest, the commit record a publication writes last, is gone: what a
+    // clean or rebuild that stopped part way leaves, and what a publication cut short would leave at its final path.
+    private static async Task<(ShaderPackager Packager, string Toolchain, string Source, string Package)> StrandedPackage(Fixture fixture) {
+        var toolchain = Toolchain(fixture: fixture);
+        var packager = new ShaderPackager(
+            compiler: fixture.Compiler(
+                runner: new PackageRunner(),
+                toolchain: toolchain
+            ),
+            reflectDxil: false,
+            store: fixture.Output(name: "store")
+        );
+        var source = fixture.PathOf(logicalPath: "transitive.graph.json");
+
+        var (first, package) = await packager.StoreAsync(
+            cancellationToken: Token,
+            name: "graph",
+            source: source
+        );
+
+        Assert.True(
+            condition: (first.Status == ShaderPipelineLoadStatus.Compiled),
+            userMessage: first.Message
+        );
+        File.Delete(path: Path.Combine(
+            path1: package,
+            path2: ShaderPackageManifest.FileName
+        ));
+        Assert.NotEmpty(collection: Directory.EnumerateFiles(path: package, searchOption: SearchOption.AllDirectories, searchPattern: "*"));
+
+        return (packager, toolchain, source, package);
+    }
+
+    [Fact]
+    public async Task A_store_directory_with_no_manifest_is_replaced_by_the_next_store() {
+        using var fixture = new Fixture(name: "transitive");
+
+        var (packager, _, source, package) = await StrandedPackage(fixture: fixture);
+
+        // An interrupted publication's staging sibling sits beside it too; it never names a package.
+        Directory.CreateDirectory(path: (package + ".partial-abandoned"));
+        File.WriteAllText(
+            contents: "a staged file",
+            path: Path.Combine(
+                path1: (package + ".partial-abandoned"),
+                path2: "staged.hlsl"
+            )
+        );
+
+        var (next, again) = await packager.StoreAsync(
+            cancellationToken: Token,
+            name: "graph",
+            source: source
+        );
+
+        Assert.True(
+            condition: (next.Status == ShaderPipelineLoadStatus.Compiled),
+            userMessage: next.Message
+        );
+        Assert.Equal(
+            actual: again,
+            expected: package
+        );
+        Assert.Equal(
+            actual: ShaderPackager.KeyOf(manifest: ShaderPackager.Open(package: package)),
+            expected: packager.KeyOf(name: "graph", source: source)
+        );
+    }
+    [Fact]
+    public async Task A_store_directory_with_no_manifest_is_a_miss_never_a_package() {
+        using var fixture = new Fixture(name: "transitive");
+
+        var (packager, toolchain, source, _) = await StrandedPackage(fixture: fixture);
+
+        // With no compiler, the remains are refused as absent, never loaded as a package.
+        DeleteCompiler(toolchain: toolchain);
+
+        var missed = packager.LoadSource(
+            cancellationToken: Token,
+            name: "graph",
+            path: source
+        );
+
+        Assert.Contains(
+            actualString: missed.Message,
+            expectedSubstring: ShaderClosureRefusedException.PackageAbsent
+        );
+    }
     [Fact]
     public async Task An_edited_source_misses_the_store_and_compiles_or_is_refused_by_name() {
         using var fixture = new Fixture(name: "transitive");

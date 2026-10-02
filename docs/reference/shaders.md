@@ -2314,6 +2314,15 @@ fit a package, or a pass that does not compile fails the build, and a package
 no row names any more is removed, both from the store and, after the copy,
 from the output's `Assets/worlds/packages`.
 
+A package is written beside its directory and moved into place whole, with its
+manifest written last: the manifest is its commit record. A store directory
+with files and no manifest is what a publication cut short, or a clean or
+rebuild that stopped part way, left behind. It is never loaded as a package (a
+load treats it as a miss) and the next store removes it and writes the package
+in its place, so no interrupted build wedges a later one. `puck shaders package`
+still refuses an output holding files and no manifest, since a directory a
+person names is not the store's to remove.
+
 The World's packager is given the store, so `LoadSource` computes a source row's
 key the same way, without compiling, and loads the stored package with that
 key. The row's watch still covers the source's own files, and its identity is

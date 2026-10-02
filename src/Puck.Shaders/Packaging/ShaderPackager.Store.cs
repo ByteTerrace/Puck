@@ -71,7 +71,11 @@ public sealed partial class ShaderPackager {
         ));
     }
     /// <summary>Writes a source's package into the <see cref="Store"/> under its key, compiling it with this packager's
-    /// compiler, unless the store already holds a package with that key, which is verified and kept.</summary>
+    /// compiler, unless the store already holds a package with that key, which is verified and kept.
+    /// <para>A package is written beside its directory and moved into place whole, its manifest written last: the manifest
+    /// is the package's commit record. A store directory holding files but no manifest is therefore never a package, but
+    /// what an interrupted publication or a partial removal (a clean or rebuild that stopped part way) left behind, and the
+    /// store removes it before writing the package in its place.</para></summary>
     /// <param name="source">The graph document or one-off shader source.</param>
     /// <param name="name">The instance name, which names a one-off shader's pipeline and its one pass.</param>
     /// <param name="cancellationToken">The token that cancels the build.</param>
@@ -96,7 +100,7 @@ public sealed partial class ShaderPackager {
             store: store
         );
 
-        if (IsPackage(path: package)) {
+        if (IsCommitted(package: package)) {
             var kept = await LoadAsync(
                 cancellationToken: cancellationToken,
                 package: package
@@ -114,6 +118,14 @@ public sealed partial class ShaderPackager {
             }
         }
 
+        // The store owns every directory under it, and one with no manifest is an abandoned publication.
+        if (Directory.Exists(path: package) && !IsCommitted(package: package)) {
+            Directory.Delete(
+                path: package,
+                recursive: true
+            );
+        }
+
         var built = await BuildAsync(
             cancellationToken: cancellationToken,
             name: name,
@@ -124,6 +136,11 @@ public sealed partial class ShaderPackager {
         return (built, package);
     }
 
+    // Whether a store directory holds a published package: its manifest, the commit record a publication writes last.
+    private static bool IsCommitted(string package) => File.Exists(path: Path.Combine(
+        path1: package,
+        path2: ShaderPackageManifest.FileName
+    ));
     private static bool IsSourceRefusal(Exception exception) =>
         (exception is ShaderClosureRefusedException or IOException or UnauthorizedAccessException or JsonException or ArgumentException or InvalidDataException or ShaderPipelineCompilationException);
     private static string Key(string document, string name, IEnumerable<(string Path, string Pin)> files, IEnumerable<(string Name, string Interface, string Declarations)> passes) {
@@ -179,7 +196,8 @@ public sealed partial class ShaderPackager {
 
             key = surveyed;
 
-            if (IsPackage(path: package)) {
+            // A store directory with no manifest is an abandoned publication, not a package, so it is a miss.
+            if (IsCommitted(package: package)) {
                 var loaded = LoadAsync(
                     cancellationToken: cancellationToken,
                     package: package,
