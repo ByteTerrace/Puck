@@ -511,24 +511,35 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    // Every presentation scalar a document binds to a state row starts within its field's domain: the value its row
-    // holds as the document loads. Only a load judges it. A live document's rows hold whatever its rules and console
-    // writes last set, which the presentation clamps into the domain, so revalidating an applied mutation, a journal
-    // replay or an embedded snapshot never reads them.
+    // Every presentation scalar a document binds to a state row starts within its field's domain: the value the binding
+    // presents as the document loads, which is its row's eased follower unless the binding reads the stored truth with
+    // $target. Only a load judges it. A live document's rows hold whatever its rules and console writes last set, which
+    // the presentation maps into the domain, so revalidating an applied mutation, a journal replay or an embedded
+    // snapshot never reads them.
     private static void ValidateBoundStarts(WorldDefinition definition, List<string> errors) {
         foreach (var (path, value, field) in WorldKeyedValues.BoundOf(definition: definition)) {
             var binding = value.State.GetValueOrDefault();
 
             if (
-                WorldStateReader.TryReadValue(
-                definition: definition,
-                engineTick: 0UL,
-                key: binding.Key,
-                row: out _,
-                rowName: binding.Row,
-                tick: 0UL,
-                value: out var cell
-            ) &&
+                (binding.Target
+                    ? WorldStateReader.TryReadValue(
+                        definition: definition,
+                        engineTick: 0UL,
+                        key: binding.Key,
+                        row: out _,
+                        rowName: binding.Row,
+                        tick: 0UL,
+                        value: out var cell
+                    )
+                    : WorldStateReader.TryReadEasedValue(
+                        definition: definition,
+                        engineTick: 0UL,
+                        key: binding.Key,
+                        row: out _,
+                        rowName: binding.Row,
+                        tick: 0UL,
+                        value: out cell
+                    )) &&
                 WorldStateReader.TryNumber(
                 number: out var start,
                 value: cell

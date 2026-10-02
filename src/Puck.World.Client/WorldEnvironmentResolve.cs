@@ -29,7 +29,7 @@ public sealed class WorldEnvironmentResolve {
     private static readonly SdfSky Unauthored = new();
     private readonly List<(int Slot, double Value)> m_bound = [];
 
-    private readonly WorldValueDomainReports? m_domains;
+    private readonly WorldValueDomainGuard? m_domains;
 
     private readonly SdfLights[] m_outputLights = [new SdfLights(), new SdfLights()];
     private readonly SdfSky[] m_outputSky = [new SdfSky(), new SdfSky()];
@@ -51,9 +51,8 @@ public sealed class WorldEnvironmentResolve {
     private PresentedTick m_tick;
 
     /// <summary>Initializes a new instance of the <see cref="WorldEnvironmentResolve"/> class.</summary>
-    /// <param name="domains">The reports a bound value presented outside its field's domain goes to, or
-    /// <see langword="null"/> to clamp it without reporting.</param>
-    public WorldEnvironmentResolve(WorldValueDomainReports? domains = null) => m_domains = domains;
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions, or <see langword="null"/> to map without either.</param>
+    public WorldEnvironmentResolve(WorldValueDomainGuard? domains = null) => m_domains = domains;
 
     /// <summary>Gets how many times this resolver has resolved the environment rather than copying its last
     /// resolution.</summary>
@@ -273,9 +272,11 @@ public sealed class WorldEnvironmentResolve {
             mirror: mirror
         );
 
-        return WorldValueDomainReports.Clamp(
+        return WorldValueDomainGuard.Resolve(
             domains: m_domains,
+            fallback: fallback,
             field: field,
+            mirror: mirror,
             scalar: in value,
             site: in site,
             value: mirror.Scalar(
@@ -299,9 +300,11 @@ public sealed class WorldEnvironmentResolve {
             mirror: mirror
         );
 
-        return WorldValueDomainReports.Clamp(
+        return WorldValueDomainGuard.Resolve(
             domains: m_domains,
+            fallback: fallback,
             field: field,
+            mirror: mirror,
             scalar: value.Value,
             site: in site,
             value: mirror.Angle(

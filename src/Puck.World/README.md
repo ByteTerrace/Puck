@@ -2077,19 +2077,26 @@ Every scalar or angle a presentation section authors declares one domain
 curvature gains and ink band, a stop's elevation, the fog's density, the sun
 disc's radius and intensity, the stars' brightness and twinkle, the clouds'
 coverage, softness and scale, the theme's bloom and scrim alphas, a marker's
-chip and ring alphas, and a camera program's blend weight. The validator refuses a literal or a key outside
+chip and ring alphas, and a camera program's operands (blend weight, path
+fraction, orbit angles, field of view, select key). The validator refuses a literal or a key outside
 its field's domain by name, and a load refuses a field bound to a state row
-whose starting value lies outside it. A row a rule or a console write later
-moves outside the domain refuses nothing: the presentation maps the value it
-reads into the domain, a closed end to itself and an open end to the nearest
-float inside it. A cloud's softness, a layer's or a volume's, lies in
-`[SdfSky.MinCloudSoftness, 1]`: its floor, 1e-6, keeps the kernel's
-`smoothstep` band two distinct edges wide at every threshold, so a softness
-written to 0 presents 1e-6. The mapping is a function of the current value alone, so a
-seek, a replay or a capture presents what the state says. The first stray value
-of each field and row is reported once, on stderr, the console and a toast, as
+whose starting value, the one the binding presents (the eased follower, or the
+stored value for `.$target`), lies outside it. A row a rule or a console write later
+moves outside the domain refuses nothing: a finite value beyond a closed end is
+clamped to it, and a value that is not finite or lies at or beyond an open end holds
+the last value the binding presented from a valid one. A cloud's softness, a layer's
+or a volume's, lies in `[SdfSky.MinCloudSoftness, 1]`: its floor, 1e-6, keeps the
+kernel's `smoothstep` band two distinct edges wide at every threshold, so a
+softness written to 0 presents 1e-6. A camera's field of view lies in
+`[CameraSnapshot.MinFieldOfViewRadians, π)`, the angles a camera is built with. A
+held value is the one thing that makes the mapping depend on history: a
+presentation rebuilt from state alone (a seek, a replay, a capture) has no last valid
+value yet and presents the field's engine default until the row is valid. Each
+binding is reported twice at most per excursion, once when it leaves its domain and
+once when it returns, on stderr, the console and a toast, as
 `[world.value: render.sky.layers[3].softness reads 0 from state.cloudSoft,
-outside [1E-06, 1]; presenting 1E-06]`.
+outside [1E-06, 1]; presenting 1E-06]` and `[world.value: … within [1E-06, 1];
+recovered]`.
 
 ## Engine boundaries worth knowing
 

@@ -242,7 +242,7 @@ public static class WorldPostBuildWiring {
 
         // A bound value a presentation clamps into its field's domain reaches the same fan-out as a document reload's
         // diagnostic, and stderr, where a piped script reads it.
-        services.GetRequiredService<WorldValueDomainReports>().Report = message => {
+        services.GetRequiredService<WorldValueDomainGuard>().Report = message => {
             report(arg1: message, arg2: true);
             consoleOutput.WriteErrorLine(value: message);
         };

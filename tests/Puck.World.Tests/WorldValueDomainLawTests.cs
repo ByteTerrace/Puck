@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.Overlays;
@@ -15,17 +16,36 @@ namespace Puck.World.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: every bindable presentation scalar declares one domain (<see cref="WorldValueFields"/>), and
 /// both the validator and the presentation read it. The validator refuses a literal, a key, or (at load) a bound row's
-/// starting value outside it, naming the field; the presentation maps whatever value a bound row presents into it with
-/// <see cref="WorldValueDomain.Clamp"/>, a pure function of the value, and reports the first stray value of each field
-/// and row once.
+/// starting value outside it, naming the field. The presentation maps whatever a bound row presents by one rule: a value
+/// inside is presented as it is, a finite value beyond a closed end is clamped to it, and a value that is not finite or
+/// lies at or beyond an open end holds the binding's last valid value. Each binding is reported when it leaves its domain
+/// and when it returns, never once per frame, and does no counted work while its input is unchanged.
 /// </summary>
 public sealed class WorldValueDomainLawTests {
     internal const string Row = "bound";
 
+    /// <summary>One world as a presentation sees it live: a document whose state rows change, and the one state mirror
+    /// that follows it, so a binding keeps its identity across the writes a law makes.</summary>
+    internal sealed class LiveWorld {
+        public LiveWorld(WorldDefinition definition) {
+            Current = definition;
+            Mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => Current));
+            Mirror.Install(engineTick: 0UL, tick: 0UL);
+        }
+
+        public WorldDefinition Current { get; private set; }
+        public WorldStateMirror Mirror { get; }
+
+        public void Set(WorldDefinition definition) {
+            Current = definition;
+            Mirror.Install(engineTick: 0UL, tick: 0UL);
+        }
+    }
+
     // How a test authors a field into a document and reads back what the presentation made of it.
     // A report names the field where the presentation finds it, which is the document path unless the case says
     // otherwise (ReportPath).
-    private sealed record Case(Func<BindableScalar, WorldDefinition> Author, string Path, Func<WorldDefinition, WorldStateMirror, WorldValueDomainReports, float>? Present = null, float[]? Controls = null, string? ReportPath = null);
+    private sealed record Case(Func<BindableScalar, WorldDefinition> Author, string Path, Func<WorldDefinition, WorldStateMirror, WorldValueDomainGuard, float>? Present = null, float[]? Controls = null, string? ReportPath = null);
 
     private static readonly IReadOnlyDictionary<WorldValueField, Case> Cases = new Dictionary<WorldValueField, Case> {
         [WorldValueFields.DirectionalWeight] = Lit(author: s => new WorldRenderLight.Directional(Weight: s), present: static e => e.Lights[0].Weight, member: "weight"),
@@ -126,6 +146,12 @@ public sealed class WorldValueDomainLawTests {
     private const float HighFov = 1.5f;
     private const float LowFov = 0.5f;
 
+    // The fields whose values must stay ordered against a neighbour: a gradient's stops and the curvature ink band.
+    public static TheoryData<string> Coupled => [
+        Key(field: WorldValueFields.StopElevation),
+        Key(field: WorldValueFields.CurvatureInkLow),
+        Key(field: WorldValueFields.CurvatureInkHigh),
+    ];
     public static TheoryData<string> Restricted => [.. WorldValueFields.All.Where(predicate: static candidate => (candidate.Domain.IsRestricted && !LiteralOnly.Contains(item: candidate))).Select(selector: static candidate => Key(field: candidate))];
     public static TheoryData<string> Shapes => [
         "closed:[0, 1]",
@@ -154,7 +180,7 @@ public sealed class WorldValueDomainLawTests {
         RenderRaw = WorldRenderDefaults.Absent with { Lighting = lighting, Sky = sky },
     };
     private static WorldDefinition Layer(WorldRenderSkyLayer layer) => Render(sky: new WorldRenderSky(Layers: [layer]));
-    private static WorldResolvedEnvironment Environment(WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainReports domains) => new WorldEnvironmentResolve(domains: domains).Resolve(
+    private static WorldResolvedEnvironment Environment(WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains) => new WorldEnvironmentResolve(domains: domains).Resolve(
         definition: definition,
         mirror: mirror,
         revision: 0
@@ -207,15 +233,17 @@ public sealed class WorldValueDomainLawTests {
         Path: $"markers[0].style.{member}",
         Present: (definition, mirror, domains) => present(arg: WorldMarkerAlphas.Resolve(domains: domains, index: 0, marker: definition.Markers[0], mirror: mirror))
     );
+
     // The document with the bound row holding a value: the state a load reads, or a live write leaves.
-    internal static WorldDefinition WithRow(WorldDefinition definition, double value) => definition.WithWorldState(rows: [
-        .. definition.State.Where(predicate: static row => !string.Equals(a: row.Name.Value, b: Row, comparisonType: StringComparison.Ordinal)),
+    internal static WorldDefinition WithRow(WorldDefinition definition, double value, string row = Row) => definition.WithWorldState(rows: [
+        .. definition.State.Where(predicate: candidate => !string.Equals(a: candidate.Name.Value, b: row, comparisonType: StringComparison.Ordinal)),
         new WorldStateRow(
-            Name: CellName.Parse(candidate: Row),
+            Name: CellName.Parse(candidate: row),
             Kind: CellKind.Fixed,
             Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: value).Value))]
         ),
     ]);
+
     // The number a presentation reads the bound row as.
     private static float Presented(double value) {
         Assert.True(condition: WorldStateReader.TryNumber(number: out var number, value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: value).Value)));
@@ -271,7 +299,7 @@ public sealed class WorldValueDomainLawTests {
     }
     [MemberData(nameof(Shapes))]
     [Theory]
-    public void Clamp_lands_inside_its_domain_from_below_at_inside_and_above(string shape) {
+    public void Map_clamps_a_finite_number_to_a_closed_end_and_holds_one_that_has_no_nearest_number(string shape) {
         var domain = shape switch {
             "closed:[0, 1]" => WorldValueDomain.Unit,
             "closed:[-1, 1]" => new WorldValueDomain(Maximum: 1f, Minimum: -1f),
@@ -303,26 +331,40 @@ public sealed class WorldValueDomainLawTests {
         Assert.True(condition: domain.Contains(value: domain.Highest));
         Assert.False(condition: domain.Contains(value: MathF.BitDecrement(x: domain.Lowest)));
 
-        if (domain.MinimumOpen) {
-            // An open end clamps to the nearest float inside it.
-            Assert.Equal(expected: MathF.BitIncrement(x: domain.Minimum), actual: domain.Clamp(value: domain.Minimum));
-        }
-
         foreach (var value in values) {
-            var clamped = domain.Clamp(value: value);
+            // The rule, stated apart from the domain's own members: a number that is not finite, or at or beyond an open
+            // end, has no admissible nearest number, so it needs a hold; any other number is clamped to the closed ends.
+            var needsHold = (
+                !float.IsFinite(f: value) ||
+                (domain.MinimumOpen && (value <= domain.Minimum)) ||
+                (domain.MaximumOpen && (value >= domain.Maximum))
+            );
+
+            var mapped = domain.Map(value: value);
+
+            Assert.Equal(expected: needsHold, actual: mapped.Holds);
+
+            if (needsHold) {
+                // A hold is an outcome, never a thrown error: the frame path has no exception to meet.
+                Assert.Equal(expected: WorldValueMapping.Hold, actual: mapped);
+
+                continue;
+            }
+
+            var clamped = mapped.Value;
 
             Assert.True(condition: domain.Contains(value: clamped), userMessage: $"{shape}: {value} clamped to {clamped}, outside {domain}");
+            Assert.Equal(
+                expected: Math.Clamp(max: domain.Maximum, min: domain.Minimum, value: value),
+                actual: clamped
+            );
 
             if (domain.Contains(value: value)) {
                 Assert.Equal(actual: clamped, expected: value);
-            } else if ((value < domain.Lowest) || float.IsNaN(f: value)) {
-                Assert.Equal(expected: domain.Lowest, actual: clamped);
-            } else {
-                Assert.Equal(expected: domain.Highest, actual: clamped);
             }
 
-            // Pure: the same value always maps to the same value.
-            Assert.Equal(expected: clamped, actual: domain.Clamp(value: value));
+            // Pure: the same value always maps to the same outcome.
+            Assert.Equal(expected: mapped, actual: domain.Map(value: value));
         }
     }
     [MemberData(nameof(Restricted))]
@@ -366,34 +408,71 @@ public sealed class WorldValueDomainLawTests {
     }
     [MemberData(nameof(Bindable))]
     [Theory]
-    public void The_presentation_clamps_each_bound_field_into_its_declared_domain(string key) {
+    public void The_presentation_maps_each_bound_field_by_its_declared_domain(string key) {
         var field = FieldOf(key: key);
         var domain = field.Domain;
         var authoring = Cases[field];
         var bound = authoring.Author(arg: new BindableScalar(binding: $"state.{Row}"));
-        var domains = new WorldValueDomainReports();
+        var domains = new WorldValueDomainGuard();
         var reports = new List<string>();
-        var written = new List<double> { (domain.Lowest - 1d), domain.Minimum, Inside(domain: domain) };
+        var quarter = ((domain.Highest < float.MaxValue)
+            ? (domain.Lowest + ((domain.Highest - domain.Lowest) / 4f))
+            : (domain.Lowest + 0.25f));
+        var written = new List<double> { Inside(domain: domain), (domain.Lowest - 1d), domain.Minimum, quarter };
 
         domains.Report = reports.Add;
 
         if (domain.Highest < float.MaxValue) {
             written.Add(item: (domain.Highest + 1d));
+            written.Add(item: domain.Maximum);
         }
 
-        foreach (var value in written) {
-            var live = WithRow(definition: bound, value: value);
-            var presented = authoring.Present!(arg1: live, arg2: ClientFixtures.StateMirror(definition: live), arg3: domains);
+        written.Add(item: Inside(domain: domain));
+
+        // The first value is the load's: valid, and the value a hold falls back to.
+        var world = new LiveWorld(definition: WithRow(definition: bound, value: written[0]));
+        var last = Presented(value: written[0]);
+        var outside = false;
+        var transitions = 0;
+
+        Assert.Equal(expected: last, actual: authoring.Present!(arg1: world.Current, arg2: world.Mirror, arg3: domains), tolerance: 1e-6f);
+
+        foreach (var value in written.Skip(count: 1)) {
+            world.Set(definition: WithRow(definition: bound, value: value));
+
+            var raw = Presented(value: value);
+            // The rule, stated apart from the domain's own members: hold the last valid value for a number at or beyond
+            // an open end, clamp any other to the closed ends.
+            var holds = (
+                (domain.MinimumOpen && (raw <= domain.Minimum)) ||
+                (domain.MaximumOpen && (raw >= domain.Maximum))
+            );
+            var expected = (holds
+                ? last
+                : Math.Clamp(max: domain.Maximum, min: domain.Minimum, value: raw));
+            var presented = authoring.Present!(arg1: world.Current, arg2: world.Mirror, arg3: domains);
 
             Assert.True(condition: domain.Contains(value: presented), userMessage: $"{authoring.Path} written {value} presented {presented}, outside {domain}");
-            Assert.Equal(expected: domain.Clamp(value: Presented(value: value)), actual: presented, tolerance: 1e-6f);
+            Assert.Equal(actual: presented, expected: expected, tolerance: 1e-6f);
+
+            if (!holds) {
+                last = expected;
+            }
+
+            if (domain.Contains(value: raw) == outside) {
+                outside = !outside;
+                transitions++;
+            }
         }
 
-        // One field at one site bound to one row reports once, however often its row strays.
-        Assert.Equal(expected: 1, actual: domains.Reported);
-        Assert.Single(collection: reports);
+        // One report when the binding leaves its domain and one when it returns, however often or far its row strays.
+        Assert.True(condition: (transitions >= 2), userMessage: "the sequence must leave the domain and return");
+        Assert.Equal(expected: transitions, actual: domains.Reported);
+        Assert.Equal(expected: transitions, actual: reports.Count);
         Assert.Contains(expectedSubstring: $"{(authoring.ReportPath ?? authoring.Path)} reads", actualString: reports[0]);
         Assert.Contains(expectedSubstring: $"state.{Row}", actualString: reports[0]);
+        Assert.Contains(expectedSubstring: "outside", actualString: reports[0]);
+        Assert.Contains(expectedSubstring: "recovered", actualString: reports[1]);
     }
     [Fact]
     public void A_bound_row_starting_outside_its_fields_domain_is_refused_at_load_naming_the_field() {
@@ -425,13 +504,13 @@ public sealed class WorldValueDomainLawTests {
         );
         Assert.True(condition: Admits(definition: Layer(layer: new WorldRenderSkyLayer.Clouds(Softness: SdfSky.MinCloudSoftness)), reason: out var reason), userMessage: reason);
 
-        var domains = new WorldValueDomainReports();
+        var domains = new WorldValueDomainGuard();
         var reports = new List<string>();
         var resolve = new WorldEnvironmentResolve(domains: domains);
 
         domains.Report = reports.Add;
 
-        // An unvalidated literal below the floor still presents the floor; a literal reports nothing.
+        // An unvalidated literal below the floor still presents the floor; a literal is no binding and reports nothing.
         Assert.Equal(
             expected: SdfSky.MinCloudSoftness,
             actual: resolve.Resolve(definition: literal, mirror: ClientFixtures.StateMirror(definition: literal), revision: 0).Sky.Block.CloudSoftness
@@ -443,12 +522,14 @@ public sealed class WorldValueDomainLawTests {
 
         Assert.True(condition: Admits(definition: WithRow(definition: bound, value: 0.5d), reason: out var boundReason), userMessage: boundReason);
 
+        var world = new LiveWorld(definition: WithRow(definition: bound, value: 0.5d));
+
         foreach (var value in new[] { 0d, -1d }) {
-            var live = WithRow(definition: bound, value: value);
+            world.Set(definition: WithRow(definition: bound, value: value));
 
             Assert.Equal(
                 expected: SdfSky.MinCloudSoftness,
-                actual: resolve.Resolve(definition: live, mirror: ClientFixtures.StateMirror(definition: live), revision: 0).Sky.Block.CloudSoftness
+                actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 0).Sky.Block.CloudSoftness
             );
         }
 
@@ -493,5 +574,248 @@ public sealed class WorldValueDomainLawTests {
                 filter: error => ((error.Path == "volumes[0].softness") && error.Message.Contains(comparisonType: StringComparison.Ordinal, value: $"within {domain}"))
             );
         }
+    }
+
+    // A field read directly: the world is named by its mirror, the binding by its row, the site by its section.
+    private static float Resolve(WorldValueDomainGuard guard, WorldStateMirror mirror, WorldValueField field, float value, float fallback = 0.25f, string row = Row) => WorldValueDomainGuard.Resolve(
+        domains: guard,
+        fallback: fallback,
+        field: field,
+        mirror: mirror,
+        scalar: new BindableScalar(binding: $"state.{row}"),
+        site: new WorldValueSite(Section: "probe"),
+        value: value
+    );
+    private static WorldDefinition CloudSoftnessBoundTo(string row, double value) => WithRow(
+        definition: Layer(layer: new WorldRenderSkyLayer.Clouds(Softness: new BindableScalar(binding: $"state.{row}"))),
+        row: row,
+        value: value
+    );
+
+    [Fact]
+    public void A_value_that_cannot_be_clamped_holds_the_last_valid_value_and_reports_each_transition() {
+        var domains = new WorldValueDomainGuard();
+        var reports = new List<string>();
+        var mirror = new LiveWorld(definition: WithRow(definition: Fixtures.BuildDocument(), value: 0.5d)).Mirror;
+        var coverage = WorldValueFields.CloudCoverage;
+
+        domains.Report = reports.Add;
+
+        // Not a number and either infinity have no admissible nearest number: the binding keeps what it last presented
+        // from a valid input, and none of the three is mapped to an end of the domain.
+        (float Written, float Presented, int Reports)[] steps = [
+            (0.5f, 0.5f, 0),
+            (float.NaN, 0.5f, 1),
+            (float.PositiveInfinity, 0.5f, 1),
+            (float.NegativeInfinity, 0.5f, 1),
+            (0.7f, 0.7f, 2),
+            // A finite value beyond a closed end clamps to it, and is reported only on leaving the domain.
+            (3f, 1f, 3),
+            (-4f, 0f, 3),
+            (0.2f, 0.2f, 4),
+        ];
+
+        foreach (var (written, presented, count) in steps) {
+            Assert.Equal(expected: presented, actual: Resolve(field: coverage, guard: domains, mirror: mirror, value: written));
+            Assert.Equal(expected: count, actual: reports.Count);
+            Assert.Equal(expected: count, actual: domains.Reported);
+        }
+
+        Assert.Equal(expected: 3L, actual: domains.Holds);
+        Assert.Contains(expectedSubstring: "reads NaN from state.bound", actualString: reports[0]);
+        Assert.Contains(expectedSubstring: "holding 0.5", actualString: reports[0]);
+        Assert.Contains(expectedSubstring: "recovered", actualString: reports[1]);
+        Assert.Contains(expectedSubstring: "presenting 1", actualString: reports[2]);
+        Assert.Contains(expectedSubstring: "recovered", actualString: reports[3]);
+
+        // A value at an open end is not clamped to the nearest number either: a sun disc of radius zero holds.
+        var radius = WorldValueFields.SunDiscRadius;
+
+        Assert.Equal(expected: 0.5f, actual: Resolve(field: radius, guard: domains, mirror: mirror, row: "radius", value: 0.5f));
+        Assert.Equal(expected: 0.5f, actual: Resolve(field: radius, guard: domains, mirror: mirror, row: "radius", value: 0f));
+        Assert.Equal(expected: radius.Domain.Maximum, actual: Resolve(field: radius, guard: domains, mirror: mirror, row: "radius", value: 2f));
+
+        // Before a binding has presented a valid value, the field's fallback stands in for it.
+        var fresh = new LiveWorld(definition: WithRow(definition: Fixtures.BuildDocument(), value: 0.5d)).Mirror;
+
+        Assert.Equal(expected: 0.25f, actual: Resolve(field: coverage, guard: domains, mirror: fresh, value: float.NaN));
+    }
+    [Fact]
+    public void An_unchanged_input_does_no_counted_work() {
+        var domains = new WorldValueDomainGuard();
+        var mirror = new LiveWorld(definition: WithRow(definition: Fixtures.BuildDocument(), value: 0.5d)).Mirror;
+
+        for (var frame = 0; (frame < 100); frame++) {
+            Assert.Equal(expected: 0.5f, actual: Resolve(field: WorldValueFields.CloudCoverage, guard: domains, mirror: mirror, value: 0.5f));
+        }
+
+        Assert.Equal(expected: 1L, actual: domains.Checks);
+
+        // A stray value that stays put is not checked again either; only a changed input is.
+        for (var frame = 0; (frame < 100); frame++) {
+            Assert.Equal(expected: 0.5f, actual: Resolve(field: WorldValueFields.CloudCoverage, guard: domains, mirror: mirror, value: float.NaN));
+        }
+
+        Assert.Equal(expected: 2L, actual: domains.Checks);
+
+        // Through the environment resolve, a bound softness that no write moves is checked once however many frames.
+        var resolve = new WorldEnvironmentResolve(domains: domains);
+        var world = new LiveWorld(definition: CloudSoftnessBoundTo(row: Row, value: 0.5d));
+        var before = domains.Checks;
+
+        for (var frame = 0; (frame < 50); frame++) {
+            Assert.Equal(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: frame).Sky.Block.CloudSoftness);
+        }
+
+        Assert.Equal(expected: (before + 1L), actual: domains.Checks);
+    }
+    [MemberData(nameof(Coupled))]
+    [Theory]
+    public void A_coupled_threshold_cannot_bind_a_row_so_no_end_is_ever_clamped_alone(string key) {
+        var field = FieldOf(key: key);
+        var authoring = Cases[field];
+        var control = ((field == WorldValueFields.CurvatureInkHigh)
+            ? SdfCurvature.DefaultInkHigh
+            : ((field == WorldValueFields.CurvatureInkLow)
+                ? 0f
+                : -0.5f));
+
+        // The ends of an ordered pair are judged together, as literals and on one clock; a row's value cannot promise
+        // the order, and a presentation clamping one end at a time could cross them, so neither end binds.
+        Assert.True(condition: Admits(definition: authoring.Author(arg: new BindableScalar(literal: control)), reason: out var reason), userMessage: reason);
+        Laws.Refuses(
+            definition: WithRow(definition: authoring.Author(arg: new BindableScalar(binding: $"state.{Row}")), value: control),
+            needle: "may not bind a state row"
+        );
+    }
+    [Fact]
+    public void Worlds_binding_the_same_field_to_rows_of_one_name_report_and_hold_each_for_itself() {
+        var domains = new WorldValueDomainGuard();
+        var reports = new List<string>();
+        var resolve = new WorldEnvironmentResolve(domains: domains);
+        var first = new LiveWorld(definition: CloudSoftnessBoundTo(row: "cloudSoft", value: 0.5d));
+        var second = new LiveWorld(definition: CloudSoftnessBoundTo(row: "cloudSoft", value: 0.5d));
+
+        domains.Report = reports.Add;
+
+        foreach (var world in new[] { first, second }) {
+            Assert.Equal(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 0).Sky.Block.CloudSoftness);
+        }
+
+        foreach (var world in new[] { first, second }) {
+            world.Set(definition: CloudSoftnessBoundTo(row: "cloudSoft", value: 0d));
+            _ = resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 1);
+        }
+
+        // Both worlds' bindings left their domain; the second is not taken for the first.
+        Assert.Equal(expected: 2, actual: reports.Count);
+        Assert.All(collection: reports, action: report => Assert.Contains(actualString: report, expectedSubstring: "render.sky.layers[0].softness reads 0 from state.cloudSoft"));
+
+        // Each world holds the last valid value of its own binding.
+        var held = new WorldValueDomainGuard();
+        var one = new LiveWorld(definition: WithRow(definition: Fixtures.BuildDocument(), value: 0.5d)).Mirror;
+        var other = new LiveWorld(definition: WithRow(definition: Fixtures.BuildDocument(), value: 0.5d)).Mirror;
+
+        _ = Resolve(field: WorldValueFields.CloudCoverage, guard: held, mirror: one, value: 0.2f);
+        _ = Resolve(field: WorldValueFields.CloudCoverage, guard: held, mirror: other, value: 0.9f);
+
+        Assert.Equal(expected: 0.2f, actual: Resolve(field: WorldValueFields.CloudCoverage, guard: held, mirror: one, value: float.NaN));
+        Assert.Equal(expected: 0.9f, actual: Resolve(field: WorldValueFields.CloudCoverage, guard: held, mirror: other, value: float.NaN));
+        Assert.Equal(expected: 2, actual: held.Tracked);
+    }
+    [Fact]
+    public void A_binding_replaced_by_another_releases_what_the_guard_kept_for_it() {
+        var domains = new WorldValueDomainGuard();
+        var resolve = new WorldEnvironmentResolve(domains: domains);
+        var world = new LiveWorld(definition: CloudSoftnessBoundTo(row: "cloud0", value: 0.5d));
+
+        domains.Report = static _ => { };
+
+        for (var generation = 0; (generation < 40); generation++) {
+            var row = $"cloud{generation}";
+
+            // The binding names a row of its own that starts valid, then strays; the document then drops the row.
+            world.Set(definition: CloudSoftnessBoundTo(row: row, value: 0.5d));
+            _ = resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: (generation * 2));
+            world.Set(definition: CloudSoftnessBoundTo(row: row, value: 0d));
+            _ = resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: ((generation * 2) + 1));
+
+            // The live document binds one row; the guard holds that binding and no retired one.
+            Assert.Equal(expected: 1, actual: domains.Tracked);
+        }
+
+        Assert.Equal(expected: 40L, actual: domains.Reported);
+    }
+    [Fact]
+    public void A_worlds_state_is_released_with_the_world() {
+        var domains = new WorldValueDomainGuard();
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static WeakReference Observe(WorldValueDomainGuard domains) {
+            var world = new LiveWorld(definition: WithRow(definition: Fixtures.BuildDocument(), value: 0.5d));
+
+            _ = Resolve(field: WorldValueFields.CloudCoverage, guard: domains, mirror: world.Mirror, value: 0.4f);
+
+            return new WeakReference(target: world.Mirror);
+        }
+
+        var gone = Observe(domains: domains);
+
+        for (var attempt = 0; ((attempt < 10) && gone.IsAlive); attempt++) {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+
+        Assert.False(condition: gone.IsAlive);
+        Assert.Equal(expected: 0, actual: domains.Tracked);
+    }
+    [Fact]
+    public void Admission_judges_the_value_a_binding_presents_not_the_row_it_follows() {
+        var slow = new DynamicsRow(Damping: 1f, Frequency: 0.25f, Name: "slow", Response: 0f);
+        var scrim = Cases[WorldValueFields.ScrimAlpha];
+        var floor = WorldThemeCapacity.ScrimMinAlpha;
+
+        // A row eased toward `target` from `start`: its follower reads `start` at tick zero, its stored truth `target`.
+        WorldDefinition Eased(string token, double target, double start) => EasedDocument(token: token).WithWorldState(rows: [
+            new WorldStateRow(
+                Name: CellName.Parse(candidate: Row),
+                Kind: CellKind.Fixed,
+                Dynamics: new StateDynamics(Row: slow.Name),
+                Cells: [
+                    new StateCell(
+                        Key: WorldStateRow.SlotKey,
+                        Value: CellValue.Fixed(rawBits: FixedQ4816.FromDouble(value: target).Value),
+                        Clock: new StateCellClock(Y0: FixedQ4816.FromDouble(value: start).Value)
+                    ),
+                ]
+            ),
+        ]);
+
+        WorldDefinition EasedDocument(string token) {
+            var document = scrim.Author(arg: new BindableScalar(binding: token));
+
+            return (document with { DynamicsRaw = [.. document.Dynamics, slow] });
+        }
+
+        var eased = $"state.{Row}";
+        var stored = $"state.{Row}.$target";
+        var inside = 0.9d;
+        var outside = 0d;
+
+        Assert.True(condition: (outside < floor), userMessage: "the control needs a value below the scrim floor");
+
+        // The binding presents the follower: stored 0 below the floor does not refuse a follower that starts at 0.9.
+        Assert.True(condition: Admits(definition: Eased(start: inside, target: outside, token: eased), reason: out var easedReason), userMessage: easedReason);
+        // The same row read as stored truth presents 0 and is refused.
+        Laws.Refuses(
+            definition: Eased(start: inside, target: outside, token: stored),
+            needle: $"theme.color.scrimPanel.alpha binds {stored} whose starting value {outside} lies outside"
+        );
+        // Reversed, the follower starts below the floor while the stored truth is inside it.
+        Laws.Refuses(
+            definition: Eased(start: outside, target: inside, token: eased),
+            needle: $"theme.color.scrimPanel.alpha binds {eased} whose starting value {outside} lies outside"
+        );
+        Assert.True(condition: Admits(definition: Eased(start: outside, target: inside, token: stored), reason: out var storedReason), userMessage: storedReason);
     }
 }

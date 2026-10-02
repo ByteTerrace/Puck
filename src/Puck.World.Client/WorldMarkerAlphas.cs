@@ -9,12 +9,11 @@ public readonly record struct WorldMarkerAlphas(float Chip, float Ring) {
     /// <param name="mirror">The state mirror the opacities read through.</param>
     /// <param name="marker">The marker row.</param>
     /// <param name="index">The row's index in the document's <c>markers</c> section, which a report names.</param>
-    /// <param name="domains">The reports a bound opacity presented outside its domain goes to, or
-    /// <see langword="null"/> to clamp it without reporting.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound opacity and reports its transitions, or <see langword="null"/> to map without either.</param>
     /// <returns>The opacities.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mirror"/> or <paramref name="marker"/> is
     /// <see langword="null"/>.</exception>
-    public static WorldMarkerAlphas Resolve(WorldStateMirror mirror, WorldMarkerRow marker, int index, WorldValueDomainReports? domains) {
+    public static WorldMarkerAlphas Resolve(WorldStateMirror mirror, WorldMarkerRow marker, int index, WorldValueDomainGuard? domains) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: marker);
 
@@ -27,9 +26,11 @@ public readonly record struct WorldMarkerAlphas(float Chip, float Ring) {
         var ring = 0f;
 
         if ((marker.Ring is not null) && (marker.Style.RingAlpha is { } ringAlpha)) {
-            ring = WorldValueDomainReports.Clamp(
+            ring = WorldValueDomainGuard.Resolve(
                 domains: domains,
+                fallback: 0f,
                 field: WorldValueFields.MarkerRingAlpha,
+                mirror: mirror,
                 scalar: in ringAlpha,
                 site: in site,
                 value: mirror.Scalar(
@@ -40,9 +41,11 @@ public readonly record struct WorldMarkerAlphas(float Chip, float Ring) {
         }
 
         return new WorldMarkerAlphas(
-            Chip: WorldValueDomainReports.Clamp(
+            Chip: WorldValueDomainGuard.Resolve(
                 domains: domains,
+                fallback: 0f,
                 field: WorldValueFields.MarkerChipAlpha,
+                mirror: mirror,
                 scalar: in chip,
                 site: in site,
                 value: mirror.Scalar(

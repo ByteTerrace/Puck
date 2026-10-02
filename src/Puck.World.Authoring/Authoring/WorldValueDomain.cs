@@ -5,7 +5,8 @@ namespace Puck.World.Authoring;
 /// <summary>
 /// The numbers a presentation field admits: an interval whose either end is closed or open, or unbounded. One domain
 /// serves the validators, which refuse an authored or bound starting value outside it, and the presentation, which
-/// maps a bound value that moves outside it back in with <see cref="Clamp"/>. A world field's domain is its row of
+/// maps a bound value that moves outside it back in with <see cref="Map"/>: a clamp, or where no clamp is admissible, a
+/// hold of the binding's last valid value. A world field's domain is its row of
 /// <c>WorldValueFields</c>.
 /// </summary>
 /// <param name="Minimum">The lower end, or negative infinity for none.</param>
@@ -60,21 +61,40 @@ public readonly record struct WorldValueDomain(float Minimum, float Maximum, boo
         (value >= Lowest) &&
         (value <= Highest)
     );
-    /// <summary>Maps a number into the domain, as a pure function of the number alone: a number inside is returned
-    /// as it is, a number below <see cref="Lowest"/> (or not a number) becomes <see cref="Lowest"/>, and a number above
-    /// <see cref="Highest"/> becomes <see cref="Highest"/>. A closed end clamps to itself; an open end clamps to the
-    /// nearest float inside it.</summary>
+    /// <summary>Maps a number into the domain, as a pure function of the number alone: a number inside is returned as
+    /// it is, and a finite number beyond a closed end becomes that end. A number that is not finite, or lies at or
+    /// beyond an open end, has no admissible nearest number, so the outcome is a hold: the presentation keeps the last
+    /// value the binding presented from a valid one.</summary>
     /// <param name="value">The number.</param>
-    /// <returns>A number the domain admits.</returns>
-    public float Clamp(float value) => ((value >= Lowest)
-        ? MathF.Min(
-            x: value,
-            y: Highest
-        )
-        : Lowest);
+    /// <returns>The clamped number, or a hold.</returns>
+    public WorldValueMapping Map(float value) => ((
+        !float.IsFinite(f: value) ||
+        (MinimumOpen && (value <= Minimum)) ||
+        (MaximumOpen && (value >= Maximum))
+    )
+        ? WorldValueMapping.Hold
+        : new WorldValueMapping(
+            Holds: false,
+            Value: Math.Clamp(
+                max: Maximum,
+                min: Minimum,
+                value: value
+            )
+        ));
     /// <inheritdoc/>
     public override string ToString() => string.Create(
         provider: CultureInfo.InvariantCulture,
         handler: $"{((MinimumOpen || float.IsNegativeInfinity(f: Minimum)) ? '(' : '[')}{(float.IsNegativeInfinity(f: Minimum) ? "-inf" : Minimum.ToString(provider: CultureInfo.InvariantCulture))}, {(float.IsPositiveInfinity(f: Maximum) ? "inf" : Maximum.ToString(provider: CultureInfo.InvariantCulture))}{((MaximumOpen || float.IsPositiveInfinity(f: Maximum)) ? ')' : ']')}"
+    );
+}
+/// <summary>What <see cref="WorldValueDomain.Map"/> makes of a number: a number the domain admits, or a hold.</summary>
+/// <param name="Holds">Whether the number has no admissible nearest number, so the binding holds its last valid
+/// value.</param>
+/// <param name="Value">The number the domain admits; zero, and meaningless, when <paramref name="Holds"/>.</param>
+public readonly record struct WorldValueMapping(bool Holds, float Value) {
+    /// <summary>Gets the outcome that keeps the last valid value.</summary>
+    public static WorldValueMapping Hold { get; } = new(
+        Holds: true,
+        Value: 0f
     );
 }

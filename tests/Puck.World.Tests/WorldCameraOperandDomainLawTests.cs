@@ -4,6 +4,7 @@ using Puck.Assets.Documents;
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.World.Client;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -92,8 +93,8 @@ public sealed class WorldCameraOperandDomainLawTests {
         );
     }
     private static void AssertBuildsACamera((Vector3 Eye, Vector3 Target, float FovRadians) pose, string context) {
-        Assert.True(condition: float.IsFinite(f: pose.Eye.X) && float.IsFinite(f: pose.Eye.Y) && float.IsFinite(f: pose.Eye.Z), userMessage: $"{context}: eye {pose.Eye}");
-        Assert.True(condition: float.IsFinite(f: pose.Target.X) && float.IsFinite(f: pose.Target.Y) && float.IsFinite(f: pose.Target.Z), userMessage: $"{context}: target {pose.Target}");
+        Assert.True(condition: (float.IsFinite(f: pose.Eye.X) && float.IsFinite(f: pose.Eye.Y) && float.IsFinite(f: pose.Eye.Z)), userMessage: $"{context}: eye {pose.Eye}");
+        Assert.True(condition: (float.IsFinite(f: pose.Target.X) && float.IsFinite(f: pose.Target.Y) && float.IsFinite(f: pose.Target.Z)), userMessage: $"{context}: target {pose.Target}");
 
         _ = CameraSnapshot.LookAt(
             fieldOfViewRadians: pose.FovRadians,
@@ -160,5 +161,62 @@ public sealed class WorldCameraOperandDomainLawTests {
             context: $"field of view row written {written}",
             pose: Present(definition: live)
         );
+    }
+    [Fact]
+    public void The_seat_chase_rig_reports_a_bound_blend_weight_a_live_write_moves_out_of_its_domain() {
+        const float Low = 0.5f;
+        const float High = 1.5f;
+
+        static WorldCamera Framing(string name, float fieldOfView) => new(
+            Anchor: null,
+            Name: name,
+            RenderHeight: 240u,
+            RenderWidth: 320u,
+            Rig: new WorldCameraProgram(
+                Name: $"{name}-rig",
+                Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: fieldOfView))],
+                Version: WorldCameraProgram.CurrentVersion
+            )
+        );
+
+        // views.seatRig blends two framings by a weight bound to a row that starts inside [0, 1].
+        var seatRig = new WorldCameraProgram(
+            Name: "seat-rig",
+            Operations: [new WorldCameraProgramOp.Blend(A: "low-rig", B: "high-rig", Weight: new BindableScalar(binding: $"state.{WorldValueDomainLawTests.Row}"))],
+            Version: WorldCameraProgram.CurrentVersion
+        );
+        var views = WorldViewDefaults.Absent with { SeatRigRaw = seatRig };
+        var document = Fixtures.BuildDocument() with {
+            CamerasRaw = [Framing(fieldOfView: Low, name: "low"), Framing(fieldOfView: High, name: "high")],
+            ViewsRaw = views,
+        };
+        var world = new WorldValueDomainLawTests.LiveWorld(definition: WorldValueDomainLawTests.WithRow(definition: document, value: 0.5d));
+        var domains = new WorldValueDomainGuard();
+        var reports = new List<string>();
+        var seat = new WorldSeatViewState();
+
+        domains.Report = reports.Add;
+
+        float Chase() => seat.ResolveChase(
+            bodyOrientation: Quaternion.Identity,
+            definition: world.Current,
+            domains: domains,
+            mirror: world.Mirror,
+            views: views
+        ).Resolve(
+            anchor: in Origin,
+            clock: new SdfCameraClock(AuthoritativeTick: 0UL, PresentationSeconds: 0f)
+        ).FovRadians;
+
+        Assert.Equal(expected: 1f, actual: Chase(), tolerance: 1e-6f);
+        Assert.Empty(collection: reports);
+
+        // A live write moves the row to 2: the weight presents 1, the second framing, and the sink hears of it once.
+        world.Set(definition: WorldValueDomainLawTests.WithRow(definition: document, value: 2d));
+
+        Assert.Equal(expected: High, actual: Chase(), tolerance: 1e-6f);
+        Assert.Equal(expected: High, actual: Chase(), tolerance: 1e-6f);
+        Assert.Single(collection: reports);
+        Assert.Contains(expectedSubstring: $"camera program 'seat-rig'.operations[0].weight reads 2 from state.{WorldValueDomainLawTests.Row}", actualString: reports[0]);
     }
 }

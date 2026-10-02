@@ -1224,12 +1224,15 @@ definition every frame, so a `world.row.set render …` lands on the next frame
 without a program rebuild; `render.tonemap` reaches the root graph
 (`WorldViewGraphHost.BeginFrame`), which it recomposes, never an SDF kernel. Creation volumes become `SdfFrame.Volumes`, not
 instructions. A bindable scalar's domain is its row in `WorldValueFields`, which
-the validator judges and the resolve clamps every resolved value into
-(`WorldValueDomainReports.Clamp`), so no value a bound row strays to reaches a
-record. A domain a kernel needs away from zero (a `smoothstep` width, a divisor)
-is closed at a floor proved for the kernel, such as `SdfSky.MinCloudSoftness`
-for both cloud bands, never open at zero, whose clamp target the GPU may flush,
-so the kernel names no bound of its own. Plain-float ranges live
+the validator judges and the resolve maps every resolved value through
+(`WorldValueDomain.Map`, applied by `WorldValueDomainGuard.Resolve`): a finite
+value beyond a closed end clamps to it, and a value that is not finite or lies at
+or beyond an open end holds the binding's last valid value, so no value a bound
+row strays to reaches a record. A domain a kernel needs away from zero (a
+`smoothstep` width, a divisor) is closed at a floor proved for the kernel, such
+as `SdfSky.MinCloudSoftness` for both cloud bands and
+`CameraSnapshot.MinFieldOfViewRadians` for a camera, never open at zero, whose
+clamp target the GPU may flush, so the kernel names no bound of its own. Plain-float ranges live
 in `WorldDefinitionValidator`. A new render field needs its domain or validator
 bound, its field on the record that carries it (a
 light's on `SdfLight`, the sky's on `SdfSkyBlock`, `SdfSkyStop` or `SdfSoftbox`,

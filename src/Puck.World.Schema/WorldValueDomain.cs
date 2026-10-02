@@ -21,8 +21,8 @@ public sealed record WorldValueField(Type Owner, string Member, WorldValueDomain
 /// <summary>
 /// The declaration of every bindable presentation scalar's domain, one row per <see cref="BindableScalar"/> and
 /// <see cref="BindableAngle"/> member of the document model. The validator judges a field's literal, keys and bound
-/// starting value against its row, and the presentation clamps the field's resolved value into the same row's domain,
-/// so the two never disagree. A member whose every finite number is admissible declares <see cref="WorldValueDomain.Finite"/>.
+/// starting value against its row, and the presentation maps the field's resolved value through the same row's domain
+/// (<see cref="WorldValueDomain.Map"/>), so the two never disagree. A member whose every finite number is admissible declares <see cref="WorldValueDomain.Finite"/>.
 /// A plain-number member whose domain a kernel depends on (<see cref="VolumeSoftness"/>) has a row too, judged where
 /// its document is validated.
 /// </summary>

@@ -40,9 +40,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     /// scene's frame takes; <see langword="null"/> before the first.</param>
     /// <param name="bodyColor">The color each avatar is painted with by body index: a local seat keeps the color the
     /// boot presentation paints it with.</param>
-    /// <param name="domains">The reports a bound value presented outside its field's domain goes to, or
-    /// <see langword="null"/> to clamp it without reporting.</param>
-    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainReports? domains = null) {
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions, or <see langword="null"/> to map without either.</param>
+    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard? domains = null) {
         ArgumentNullException.ThrowIfNull(argument: endpoint);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
