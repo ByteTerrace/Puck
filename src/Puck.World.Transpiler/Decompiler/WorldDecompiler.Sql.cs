@@ -289,7 +289,7 @@ public static partial class WorldDecompiler {
                 var sqlBlockText = sbCandidate.ToString();
 
                 var candidateDoc = (string.IsNullOrWhiteSpace(value: nativeText)
-                    ? $"schema: \"{WorldDocumentVocabulary.Schema}\"\n\n{sqlBlockText}"
+                    ? $"schema: \"{WorldDefinition.SchemaVersion}\"\n\n{sqlBlockText}"
                     : $"{nativeText.TrimEnd()}\n\n{sqlBlockText}");
 
                 var diagnostics = new DiagnosticBag();
@@ -388,7 +388,7 @@ public static partial class WorldDecompiler {
     }
     private static bool VerifyCandidateTable(string sqlText, IReadOnlyList<JsonObject> originalRows, EmbeddingLock? embeddings = null) {
         try {
-            var puckSource = $"schema: \"puck.world.definition.v1\"\n\nsql {{\n{sqlText}\n}}\n";
+            var puckSource = $"schema: \"{WorldDefinition.SchemaVersion}\"\n\nsql {{\n{sqlText}\n}}\n";
             var diagnostics = new DiagnosticBag();
             var parseResult = PuckParser.ParseDocumentWithDiagnostics(
                 source: puckSource,

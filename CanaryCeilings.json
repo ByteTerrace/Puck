@@ -1,0 +1,13 @@
+{
+    "format": 1,
+    "ceilings": {
+        "automatic": {
+            "legBudgetSeconds": 3010,
+            "worldBoots": 78
+        },
+        "merge": {
+            "legBudgetSeconds": 18290,
+            "worldBoots": 332
+        }
+    }
+}

@@ -32,7 +32,7 @@ public sealed class CreationBakeLawTests {
     // The bake pack of this file's world at the baker's current version. A change to what the baker produces moves
     // SdfBaker.Version and re-records this pin.
     private const uint PinnedVersion = 9;
-    private const string PinnedProduct = "sha256-64/6a01e98f613d2426";
+    private const string PinnedProduct = "sha256-64/ca94fce5dde7986f";
 
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 

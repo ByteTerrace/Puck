@@ -121,6 +121,7 @@ public sealed class WorldCaptureScheduler {
     private static readonly JsonSerializerOptions ManifestSerializerOptions = new() {
         Converters = { new JsonStringEnumConverter(namingPolicy: JsonNamingPolicy.CamelCase) },
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        NewLine = "\n",
         WriteIndented = true,
     };
 

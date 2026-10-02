@@ -5752,7 +5752,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `sky-cycle` (the courtyard's toggle between two keys). The `sky-clock`
      canary, which holds the view equal one period apart, landed with P18-2.
    - Touches: `tests/Puck.Parity`, `tests/Puck.Counters`,
-     `tests/Puck.World.Canaries`, `src/Puck.Cli/Canary/CanaryCeilings.cs`.
+     `tests/Puck.World.Canaries`, `CanaryCeilings.json`.
    - Done when: the station holds on both backends; each canary is shown failing
      once on a broken leg (the stars' brightness zeroed); the sky leg's rows are recorded on the RTX 2060 at the floor
      tier, and show today's costs: every pass re-rendering on a drift frame.
@@ -5953,8 +5953,12 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      pixel's fog is its samples' coverage-weighted fog exactly. Media clip at
      the harmonic mean of the samples' distances, exact for a footprint of one
      surface; a medium lying between two surfaces of one footprint is the one
-     case not reproduced sample by sample. The CPU reference is
-     `SdfSurfaceTransport` (`SdfSurfaceTransportLawTests`). The default look
+     case not reproduced sample by sample. A pixel the resolve copies whole
+     from one render sample, as every pixel of a temporal epoch's first frame at
+     native scale is, carries the sample's ray distance itself in its transport
+     word, and the composite derives its transport at the one `precise` site a
+     native pixel reaches, so that frame equals the spatial frame to the bit.
+     The CPU reference is `SdfSurfaceTransport` (`SdfSurfaceTransportLawTests`). The default look
      is the two-stop gradient and fog `SdfSky` starts from, as data. The CPU
      reference for the run composition is `SdfSkyRuns`. `gpu.sky.evaluations` is a
      kernel-counted kind beside the march steps and texels written; the field

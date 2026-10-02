@@ -162,5 +162,5 @@ internal sealed class AccuracyCoinStage : IPostStage<PostContext> {
 }
 /// <summary>The source-generated serializer for the AccuracyCoin outcome ledger.</summary>
 [JsonSerializable(typeof(Dictionary<string, string>))]
-[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSourceGenerationOptions(NewLine = "\n", WriteIndented = true)]
 internal sealed partial class AccuracyCoinJsonContext : JsonSerializerContext;

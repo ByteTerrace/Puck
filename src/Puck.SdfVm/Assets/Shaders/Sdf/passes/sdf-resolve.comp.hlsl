@@ -16,9 +16,12 @@
 //   frame's sample grid and its history restarts from this frame's samples;
 // - surviving history is clipped to the 3x3's YCoCg, coverage and transport box, its weight lowered by the reactivity,
 //   and joined by this frame's samples; until a full sample's weight is gathered the spatial path shows through.
-// The first frame of an epoch reads no history and is the spatial path's frame exactly. The history surface holds the
+// The first frame of an epoch reads no history and writes the spatial path's color and transport word, computed at the
+// one site below that both paths run, so it is the spatial path's frame exactly. Where the output has the render grid's
+// extent and no jitter, each pixel is its render sample copied whole, and its transport word carries that sample's ray
+// distance, which the composite turns into transport with a native view's own arithmetic. The history surface holds the
 // gathered weight, capped at one jitter period of full-weight samples. Beside the lit image it writes each output
-// pixel's transport, packed as two half floats, which the composite scales the fog's in-scatter by and clips the volumes
+// pixel's transport word (sdf-transport.hlsli), which the composite scales the fog's in-scatter by and clips the volumes
 // by. The sky never enters the history: the sky and composite passes follow this one.
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../isa/sdf-resolve.interface.hlsli"
@@ -114,11 +117,21 @@ float2 sdfResolveTransportAt(int2 pixel, uint2 render, float coverage) {
     return (sdfVisibilityHit(visibility) ? sdfSampleTransport(coverage, visibility.t) : float2(0.0, 0.0));
 }
 // The spatial path: the lit color and its transport at a continuous render-grid position, each reconstructed from the
-// same taps with one set of weights, or, where the output has the grid's extent and no jitter, the render pixel itself.
-void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, uint4 current, out float4 color, out float2 transport) {
+// same taps with one set of weights, and the transport word the composite reads; or, where the output has the grid's
+// extent and no jitter, the render pixel itself, whose word is its sample's ray distance (sdfTransportSampleWord), read
+// from the record exactly where a native view's composite reads it.
+void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, uint4 current, out float4 color, out float2 transport, out uint word) {
     if (exact) {
+        float t = 0.0;
+
         color = puckReconstructionTapWithin(currentColor, int2(pixel), render, uint2(0, 0), current);
-        transport = sdfResolveTransportAt(int2(pixel), render, color.a);
+        if (SDF_VISIBILITY_CURRENT(pixel, cullBounds)) {
+            SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, render));
+
+            t = (sdfVisibilityHit(visibility) ? visibility.t : 0.0);
+        }
+        transport = sdfSampleTransport(color.a, t);
+        word = sdfTransportSampleWord(t);
         return;
     }
 
@@ -138,6 +151,7 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, u
     }
     color = puckReconstructionCombine(footprint, colors);
     transport = puckReconstructionCombine(footprint, transports).xy;
+    word = sdfPackTransport(transport);
 }
 
 [numthreads(8, 8, 1)]
@@ -153,13 +167,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     bool unjittered = (!temporal || all(jitter == 0.0));
     float4 spatial;
     float2 spatialTransport;
+    uint spatialWord;
 
     sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (unjittered ? float2(0.0, 0.0) : jitter)),
-        (unjittered && all(render == extent)), render, current, spatial, spatialTransport);
+        (unjittered && all(render == extent)), render, current, spatial, spatialTransport, spatialWord);
     if (!temporal) {
         output[id.xy] = spatial;
         sdfWorkTexels = 1u;
-        transportRW[((id.y * extent.x) + id.x)] = sdfPackTransport(spatialTransport);
+        transportRW[((id.y * extent.x) + id.x)] = spatialWord;
         puckCountWork(sdfWorkSteps, sdfWorkTexels);
         return;
     }
@@ -305,7 +320,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float4 accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
     float2 accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
     float4 resolved = (accepted ? lerp(spatial, accumulated, saturate(total)) : spatial);
-    float2 resolvedTransport = (accepted ? lerp(spatialTransport, accumulatedTransport, saturate(total)) : spatialTransport);
 
     uint word = (SdfHistorySurfaceWords * ((id.y * extent.x) + id.x));
 
@@ -315,7 +329,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
     bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
 
-    transportRW[((id.y * extent.x) + id.x)] = sdfPackTransport(resolvedTransport);
+    transportRW[((id.y * extent.x) + id.x)] = (accepted ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, saturate(total))) : spatialWord);
     historyColorRW[id.xy] = (reusable ? clamp(accumulated, -65504.0, 65504.0) : float4(0.0, 0.0, 0.0, 0.0));
     historySurfaceRW[word] = hitIdentity;
     historySurfaceRW[word + 1u] = (f32tof16(hit ? hitT : 0.0) | (f32tof16(reusable ? min(total, SdfHistoryWeightCap) : 0.0) << 16u));

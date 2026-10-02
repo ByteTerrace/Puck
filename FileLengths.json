@@ -31,7 +31,7 @@
         "tests/Puck.Maths.Tests/Oracles.Vectors.cs": 2035,
         "tests/Puck.Maths.Tests/Oracles.cs": 2094,
         "tests/Puck.Maths.Tests/Subjects.FixedKinematics.cs": 2145,
-        "tests/Puck.Maths.Tests/Subjects.HypercomplexFamily.cs": 2272,
+        "tests/Puck.Maths.Tests/Subjects.HypercomplexFamily.cs": 2271,
         "tests/Puck.Maths.Tests/Subjects.PresentedPhase2ClaimsAndContinuedFractions.cs": 2230,
         "tests/Puck.Maths.Tests/Subjects.PresentedPhase4BraidingAndMorphisms.cs": 2120,
         "tests/Puck.Maths.Tests/Subjects.PresentedPhase4ZetaAndKnots.cs": 2369,
