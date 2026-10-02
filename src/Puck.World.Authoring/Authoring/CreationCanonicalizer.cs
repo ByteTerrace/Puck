@@ -1157,12 +1157,12 @@ public static partial class CreationCanonicalizer {
                                     Path: $"{opPath}.limit"
                                 ));
                             } else if (
-                                (limit.X > ShapeDomainOp.Repeat.UnboundedLimit) ||
-                                (limit.Y > ShapeDomainOp.Repeat.UnboundedLimit) ||
-                                (limit.Z > ShapeDomainOp.Repeat.UnboundedLimit)
+                                (limit.X > SdfDomainOps.UnboundedRepeatLimit) ||
+                                (limit.Y > SdfDomainOps.UnboundedRepeatLimit) ||
+                                (limit.Z > SdfDomainOps.UnboundedRepeatLimit)
                             ) {
                                 errors.Add(item: new(
-                                    Message: $"limit exceeds {ShapeDomainOp.Repeat.UnboundedLimit}, which an absent limit already means.",
+                                    Message: $"limit exceeds {SdfDomainOps.UnboundedRepeatLimit}, which an absent limit already means.",
                                     Path: $"{opPath}.limit"
                                 ));
                             }
@@ -1750,7 +1750,7 @@ public static partial class CreationCanonicalizer {
                 : 0f)
             ),
             ShapeDomainOp.Repeat repeat => new ShapeDomainOp.Repeat(
-                Limit: NormalizeCellLimit(value: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))),
+                Limit: NormalizeCellLimit(value: (repeat.Limit ?? new Vector3(value: SdfDomainOps.UnboundedRepeatLimit))),
                 Origin: NormalizeOptionalOrigin(value: repeat.Origin),
                 Spacing: NormalizeSpacing(value: repeat.Spacing)
             ),
@@ -1787,7 +1787,7 @@ public static partial class CreationCanonicalizer {
             ? value
             : 0f),
             min: 0f,
-            max: ShapeDomainOp.Repeat.UnboundedLimit
+            max: SdfDomainOps.UnboundedRepeatLimit
         );
     private static Vector3 NormalizeCellLimit(Vector3 value) =>
         new(

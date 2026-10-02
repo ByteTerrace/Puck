@@ -233,6 +233,22 @@ These are one-line cautions; the owning pages hold the derivations.
   unbounded limit (`SdfWallpaperFold.IsUnbounded`, one axis at the sentinel) has
   no bound: `SdfProgram.HasUnmaskableInfluence` and `ShapeDomainOps.Reach` both
   answer it, with `SdfProgram.UnmaskableBoundRadius`, never a number of cells.
+  An infinite `Repeat`, or a `RepeatLimited` with a limit at
+  `SdfDomainOps.UnboundedRepeatLimit` on any axis (`SdfDomainOps.IsUnboundedRepeat`,
+  `ShapeDomainOp.Repeat.IsUnbounded`), is the same answer: there is one sentinel,
+  and no 1e6-cells radius anywhere.
+- **Bounds compose through the set operations.** `SdfBoundAlgebra` is the one
+  statement: an intersection takes the smaller operand bound (unbounded and
+  finite is finite), a subtraction its subject's, a union the larger (one
+  unbounded operand makes it unbounded), a smooth variant the same plus the
+  halo the program adds. `HasUnmaskableInfluence` folds a field scope's shapes
+  through it, so an unbounded lattice clipped inside a scope packs its clipper's
+  bound; at depth 0 a fold with no edge, an intersection, a field op and a
+  `Plane` stay unmaskable, because they read the one global accumulator. An
+  authored bound is composed the same way only for an instance that holds the
+  whole creation as one scope (`RenderReach`'s `composeBlends`, passed by
+  `WorldPlacementStamper` for a scoped placement); the dynamic pool's per-shape
+  and per-group instances hold subsets and keep the largest shape's reach.
 
 ## Prototype bakes
 

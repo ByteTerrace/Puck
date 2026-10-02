@@ -996,6 +996,13 @@ public sealed partial class SdfProgram {
     /// hole) lives strictly inside the union hull — inside any covering bound — so masking an Xor instance with a
     /// covering, union-margin bound is exactly as safe as masking a union member (see MaxSmoothBlendRadius's sizing
     /// note).</para>
+    /// <para>The folds with no edge. A point fold whose lattice is unbounded (<see cref="SdfWallpaperFold.IsUnbounded"/>, an
+    /// infinite <see cref="SdfOp.Repeat"/>, a <see cref="SdfOp.RepeatLimited"/> at <see cref="SdfDomainOps.UnboundedRepeatLimit"/>)
+    /// puts copies of every shape after it at every distance until the next <see cref="SdfOp.ResetPoint"/>, so such a shape is an
+    /// unbounded operand. Inside a scope the operands compose through <see cref="SdfBoundAlgebra"/>: intersected with a
+    /// finite shape it is bounded by that shape, subtracted from one it is bounded by it, and only a union with it, or
+    /// the scope's whole field, leaves the scope unbounded. An unbounded scope is an unbounded instance. At depth 0 each
+    /// shape is its own operand of the world's field, so an unbounded one is an unbounded instance.</para>
     /// <para>No bound inflation closes either gap, because the far-field answer is not the accumulator. Such an instance
     /// therefore packs <see cref="UnmaskableBoundRadius"/>, a bound so large that the beam prepass's sphere-vs-cone test
     /// passes for every tile and the instance is always evaluated — the same graceful degradation <c>AnalyzeSegment</c>
@@ -1005,6 +1012,13 @@ public sealed partial class SdfProgram {
     /// <returns><see langword="true"/> when the slice has unbounded influence.</returns>
     internal bool HasUnmaskableInfluence(int first, int end) {
         var scopeDepth = 0;
+        // A point fold with no edge (an unbounded wallpaper or repeat) makes every shape after it unbounded until the
+        // next ResetPoint. A scope touches only the field, so it never ends one.
+        var foldUnbounded = false;
+        // The open scope's field, as a bound under SdfBoundAlgebra (0 for finite, UnmaskableBoundRadius for none), and
+        // whether a shape has joined it. The cap is one scope deep (SdfProgramBuilder.MaxFieldScopeDepth).
+        var scopeBound = 0f;
+        var scopeHasShape = false;
 
         for (var index = first; (index < end); index++) {
             var instruction = m_instructions[index];
@@ -1016,13 +1030,21 @@ public sealed partial class SdfProgram {
                 return true;
             }
 
-            // A wallpaper fold with an unbounded limit repeats its prototype over a lattice with no edge, at any depth of
-            // scope: its copies stand at every distance, so no finite bound contains it (SdfWallpaperFold.IsUnbounded).
+            if (instruction.Op == SdfOp.ResetPoint) {
+                foldUnbounded = false;
+
+                continue;
+            }
+
+            // A fold whose lattice has no edge repeats what follows at every distance, whatever scope it stands in.
             if (
-                (instruction.Op == SdfOp.WallpaperFold) &&
-                SdfWallpaperFold.IsUnbounded(limit: new Vector2(x: instruction.Data1.X, y: instruction.Data1.Y))
+                (instruction.Op == SdfOp.Repeat) ||
+                ((instruction.Op == SdfOp.RepeatLimited) && SdfDomainOps.IsUnboundedRepeat(limit: new Vector3(x: instruction.Data1.X, y: instruction.Data1.Y, z: instruction.Data1.Z))) ||
+                ((instruction.Op == SdfOp.WallpaperFold) && SdfWallpaperFold.IsUnbounded(limit: new Vector2(x: instruction.Data1.X, y: instruction.Data1.Y)))
             ) {
-                return true;
+                foldUnbounded = true;
+
+                continue;
             }
 
             // A PushField reseeds the accumulator, so an accumulator-reading op INSIDE the scope (scopeDepth > 0) reads
@@ -1032,6 +1054,8 @@ public sealed partial class SdfProgram {
             // depth, can be unmaskable (an intersection-family compose composes the whole scope against the parent).
             if (instruction.Op == SdfOp.PushField) {
                 scopeDepth++;
+                scopeBound = 0f;
+                scopeHasShape = false;
 
                 continue;
             }
@@ -1046,12 +1070,14 @@ public sealed partial class SdfProgram {
 
                 scopeDepth--;
 
+                // The closed scope composes into the instance as one operand: unbounded if the scope's own field is.
+                // Union and subtraction composes both leave the influence where the scope's field is, so an unbounded
+                // scope is an unbounded instance; an intersection compose reads the parent accumulator outright.
                 if (
                     (scopeDepth == 0) &&
                     (
-                        (instruction.Blend == ((uint)SdfBlendOp.Intersection)) ||
-                        (instruction.Blend == ((uint)SdfBlendOp.SmoothIntersection)) ||
-                        (instruction.Blend == ((uint)SdfBlendOp.ChamferIntersection))
+                        SdfBoundAlgebra.IsIntersection(blend: ((SdfBlendOp)instruction.Blend)) ||
+                        (scopeBound >= UnmaskableBoundRadius)
                     )
                 ) {
                     return true;
@@ -1060,8 +1086,26 @@ public sealed partial class SdfProgram {
                 continue;
             }
 
-            // Ops nested in a scope are already handled by the scope's own compose (above): skip them.
+            // Ops nested in a scope are handled by the scope's own compose, which bounds them as a field: a shape joins
+            // the scope's field by its blend, so the scope is as bounded as SdfBoundAlgebra says its operands leave it.
             if (scopeDepth > 0) {
+                if (instruction.Op == SdfOp.ShapeBlend) {
+                    var operand = (foldUnbounded
+                        ? UnmaskableBoundRadius
+                        : 0f
+                    );
+
+                    scopeBound = (scopeHasShape
+                        ? SdfBoundAlgebra.Compose(
+                            accumulated: scopeBound,
+                            blend: ((SdfBlendOp)instruction.Blend),
+                            operand: operand
+                        )
+                        : operand
+                    );
+                    scopeHasShape = true;
+                }
+
                 continue;
             }
 
@@ -1081,11 +1125,12 @@ public sealed partial class SdfProgram {
                 continue;
             }
 
-            if (
-                (instruction.Blend == ((uint)SdfBlendOp.Intersection)) ||
-                (instruction.Blend == ((uint)SdfBlendOp.SmoothIntersection)) ||
-                (instruction.Blend == ((uint)SdfBlendOp.ChamferIntersection))
-            ) {
+            if (SdfBoundAlgebra.IsIntersection(blend: ((SdfBlendOp)instruction.Blend))) {
+                return true;
+            }
+
+            // At depth 0 every shape is its own operand of the world's field: one with no edge leaves the instance none.
+            if (foldUnbounded) {
                 return true;
             }
         }

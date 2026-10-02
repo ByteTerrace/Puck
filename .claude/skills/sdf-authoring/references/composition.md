@@ -63,8 +63,11 @@ refuses the other thirteen groups by name. Content may cross the mirrors: the
 field then reads short, which costs march steps but skips nothing. A square
 group's `limit` is a whole number of cells; a hex group (P3M1, P6M) takes none,
 since a hex lattice has no continuous clamp, so bound a hex wallpaper by
-intersecting it with a bounding shape inside a field scope (`PushField`). A
-`cell` is refused when its reciprocal exceeds 1e18.
+intersecting it with a bounding shape inside a field scope (`PushField`); the
+instance's cull bound then composes through the blends (`SdfBoundAlgebra`), so
+the clipped lattice is as cullable as its clipper, while the same lattice with a
+shape unioned in has no bound and is never culled by radius. An absent repeat
+limit is unbounded the same way. A `cell` is refused when its reciprocal exceeds 1e18.
 
 Mirror a part with a `symmetry` fold, never with a negative scale — negative
 scale components are refused by name because emission reads magnitudes.

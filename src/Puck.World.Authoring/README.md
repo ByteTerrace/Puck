@@ -354,9 +354,9 @@ draws. An op with no expansion is refused by name on a solid placement.
 | `$type` | Builder call | Contact |
 |---|---|---|
 | `symmetry` | `SymmetryPlane(normal, offset)` | 2 copies |
-| `repeat` | `RepeatLimited(spacing, limit)`, sandwiched between a translate to and from `origin` | one copy per lattice cell; needs a whole-number `limit` (an absent one is unbounded and refuses) |
+| `repeat` | `RepeatLimited(spacing, limit)`, sandwiched between a translate to and from `origin` | one copy per lattice cell; needs a whole-number `limit` (an absent one is unbounded and refuses, and has no render reach: it answers the program's unmaskable sentinel) |
 | `polar` | `RepeatPolar(count, axis, mirror, materialStride)`, sandwiched between a translate to and from `origin` | `count` copies, doubled when `mirror` is set |
-| `wallpaper` | `WallpaperFold(group, cell, limit, plane, materialStride)`, mirror groups only; `limit` a whole number of cells for a square group, unbounded (absent) for a hex group, which is bounded by intersecting it | none—refused on a solid placement |
+| `wallpaper` | `WallpaperFold(group, cell, limit, plane, materialStride)`, mirror groups only; `limit` a whole number of cells for a square group, unbounded (absent) for a hex group, which is bounded by intersecting it (a scoped placement's render bound composes through its blends, so the intersected creation is as bounded as its clipper) | none—refused on a solid placement |
 
 `repeat`/`polar` carry an optional `origin` (creation units; null = the creation
 root, unchanged behaviour)—the point their fold centres on instead of the

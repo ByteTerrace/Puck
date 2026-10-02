@@ -7943,13 +7943,17 @@ export type WorldPrototype = {
          */
         spacing: unknown;
         /**
-         * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedLimit per axis, far past any authored reach).
+         * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedRepeatLimit per axis, a lattice with no edge).
          */
         limit?: unknown;
         /**
          * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
          */
         origin?: unknown;
+        /**
+         * Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program's own answer (IsUnboundedRepeat) decides it.
+         */
+        isUnbounded?: boolean;
       } | {
         $type?: "polar";
         /**

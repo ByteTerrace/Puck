@@ -18469,18 +18469,22 @@
                               },
                               "limit": {
                                 "default": null,
-                                "description": "The per-axis repeat-cell limit \u2014 the lattice spans cell indices -limit..\u002Blimit (null = UnboundedLimit per axis, far past any authored reach)."
+                                "description": "The per-axis repeat-cell limit \u2014 the lattice spans cell indices -limit..\u002Blimit (null = UnboundedRepeatLimit per axis, a lattice with no edge)."
                               },
                               "origin": {
                                 "default": null,
                                 "description": "The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root \u2014 the lattice of physical copies is unchanged, so a null origin is byte-identical to today\u0027s fold."
+                              },
+                              "isUnbounded": {
+                                "type": "boolean",
+                                "description": "Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program\u0027s own answer (IsUnboundedRepeat) decides it."
                               }
                             },
                             "required": [
                               "spacing"
                             ],
                             "additionalProperties": false,
-                            "description": "Bounded linear domain repeat \u2014 Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is UnboundedLimit and does not expand."
+                            "description": "Bounded linear domain repeat \u2014 Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is unbounded (UnboundedRepeatLimit per axis) and does not expand."
                           },
                           {
                             "properties": {

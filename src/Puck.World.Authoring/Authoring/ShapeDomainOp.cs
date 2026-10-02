@@ -33,18 +33,20 @@ public abstract record ShapeDomainOp {
     /// creation origin).</param>
     public sealed record Symmetry(DocumentVector3 Normal, float? Offset = null) : ShapeDomainOp;
     /// <summary>Bounded linear domain repeat — <see cref="SdfDomainOp.Repeat"/>. Expands for contact only when the
-    /// limit is a whole number within the copy budget; an absent limit is <see cref="Repeat.UnboundedLimit"/> and does
-    /// not expand.</summary>
+    /// limit is a whole number within the copy budget; an absent limit is unbounded
+    /// (<see cref="SdfDomainOps.UnboundedRepeatLimit"/> per axis) and does not expand.</summary>
     /// <param name="Spacing">The per-axis cell spacing, creation units (clamped to >= 0.001 per axis, matching the
     /// builder's own floor).</param>
     /// <param name="Limit">The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null =
-    /// <see cref="UnboundedLimit"/> per axis, far past any authored reach).</param>
+    /// <see cref="SdfDomainOps.UnboundedRepeatLimit"/> per axis, a lattice with no edge).</param>
     /// <param name="Origin">The point the lattice folds around, creation units (null = the creation origin, the
     /// fold this op has always used). Cell selection centres on this point instead of the creation root — the
     /// lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.</param>
     public sealed record Repeat(DocumentVector3 Spacing, DocumentVector3? Limit = null, DocumentVector3? Origin = null) : ShapeDomainOp {
-        /// <summary>The per-axis repeat-cell limit an absent <see cref="Limit"/> means.</summary>
-        public const float UnboundedLimit = 1000000f;
+        /// <summary>Whether the lattice has no edge: its limit, or an absent one, reaches
+        /// <see cref="SdfDomainOps.UnboundedRepeatLimit"/> on any axis. The program's own answer
+        /// (<see cref="SdfDomainOps.IsUnboundedRepeat"/>) decides it.</summary>
+        public bool IsUnbounded => SdfDomainOps.IsUnboundedRepeat(limit: (Limit?.Value ?? new Vector3(value: SdfDomainOps.UnboundedRepeatLimit)));
     }
     /// <summary>Angular domain repeat — <see cref="SdfDomainOp.Polar"/>. Its sectors expand to one rigid copy each,
     /// so contact carries the full ring.</summary>
@@ -133,7 +135,7 @@ public static class ShapeDomainOps {
             Offset: (symmetry.Offset ?? 0f)
         ),
             ShapeDomainOp.Repeat repeat => new SdfDomainOp.Repeat(
-            Limit: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit)),
+            Limit: (repeat.Limit ?? new Vector3(value: SdfDomainOps.UnboundedRepeatLimit)),
             Origin: (repeat.Origin?.Value ?? Vector3.Zero),
             Spacing: repeat.Spacing
         ),
@@ -180,7 +182,9 @@ public static class ShapeDomainOps {
     /// creation origin, in creation units — the term a render bound adds so a folded lattice is not culled down to
     /// the un-folded shape's own sphere. Ops compose, so each op's displacement bound is summed: a symmetry plane
     /// through the origin is an origin-preserving isometry (0); an offset plane displaces by twice its offset; a
-    /// repeat lattice reaches its per-axis limit times its spacing, unaffected by its own origin (a repeat's fold is
+    /// repeat lattice reaches its per-axis limit times its spacing (an unbounded one, <see cref="ShapeDomainOp.Repeat.IsUnbounded"/>,
+    /// has no bound at all and answers <see cref="SdfProgram.UnmaskableBoundRadius"/> like an unbounded wallpaper below),
+    /// unaffected by its own origin (a repeat's fold is
     /// a pure translation, so its physical copies sit at the same offsets from the shape's own position regardless
     /// of where cell selection centres — only a polar fold's rotation pivot moves the copies, by twice the pivot's
     /// distance from the creation origin); a wallpaper lattice reaches its per-axis limit times its spacing, and one with
@@ -201,7 +205,9 @@ public static class ShapeDomainOps {
         foreach (var op in ops) {
             reach += op switch {
                 ShapeDomainOp.Symmetry symmetry => (2f * MathF.Abs(x: (symmetry.Offset ?? 0f))),
-                ShapeDomainOp.Repeat repeat => (repeat.Spacing.Value * (repeat.Limit?.Value ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))).Length(),
+                ShapeDomainOp.Repeat repeat => (repeat.IsUnbounded
+                    ? SdfProgram.UnmaskableBoundRadius
+                    : (repeat.Spacing.Value * repeat.Limit!.Value).Length()),
                 ShapeDomainOp.Polar polar => (2f * (polar.Origin?.Length() ?? 0f)),
                 ShapeDomainOp.Wallpaper wallpaper => WallpaperReach(wallpaper: wallpaper),
                 _ => 0f,

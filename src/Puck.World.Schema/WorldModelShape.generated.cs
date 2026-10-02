@@ -1757,6 +1757,7 @@ public static partial class WorldModelShape {
                 M("spacing", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.ShapeDomainOp.Repeat), "Spacing", Read | Write),
                 M("limit", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.ShapeDomainOp.Repeat), "Limit", Read | Write),
                 M("origin", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.ShapeDomainOp.Repeat), "Origin", Read | Write),
+                M("isUnbounded", typeof(global::System.Boolean), typeof(global::Puck.World.Authoring.ShapeDomainOp.Repeat), "IsUnbounded", Read),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.ShapeDomainOp.Symmetry), true, JsonTypeInfoKind.Object, null,

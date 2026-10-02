@@ -138,14 +138,41 @@ unless it is positive and finite and its reciprocal is at most
 a float resolves a cell. The builder, `SdfProgram` admission and the creation
 canonicalizer state each rule once, through `LimitRefusal` and `CellRefusal`.
 A fold whose limit is unbounded (`SdfWallpaperFold.IsUnbounded`) has copies at every
-distance, so its influence has no bound: its instance packs the unmaskable
-sentinel and the stamper's reach for it is that sentinel, where a million cells of
-a small pitch would be a radius a camera can leave behind. The hex reduction
+distance, so its influence has no bound, and so has an infinite `Repeat` or a
+`RepeatLimited` whose limit reaches `SdfDomainOps.UnboundedRepeatLimit`: such a
+shape's bound is the unmaskable sentinel, and the stamper's reach for it is that
+sentinel, where a million cells of a small pitch would be a radius a camera can
+leave behind. An influence with no bound still composes (see
+[bounds compose through set operations](#bounds-compose-through-set-operations)). The hex reduction
 clamps its fold-plane point to `MaximumHexCoordinate` before the multiply, which
 keeps every axial sum within float's finite range for any cell the rule admits and
 leaves the fold continuous. `SdfWallpaperFoldLawTests` folds pairs across every cell wall of finite,
 fractional and unbounded limits and of cells from ten micro-units to three
 thousand, and holds every configuration a builder accepts to the same stretch.
+
+## Bounds compose through set operations
+
+An instance's cull bound is the radius of a sphere outside which its field is at
+least the distance to the sphere; the sentinel `SdfProgram.UnmaskableBoundRadius`
+stands for no such sphere. `SdfBoundAlgebra` composes the bounds of a field's
+operands through its set operations, and the program and the authoring stamper
+both read it:
+
+| Operation | Field | Bound |
+|---|---|---|
+| Intersection | `max(a, b)` | the smaller: it is at least either operand, so an unbounded operand imposes nothing and unbounded with finite is finite |
+| Subtraction `a - b` | `max(a, -b)` | `a`'s: it is at least `a`, whatever `b` is |
+| Union | `min(a, b)` | the larger: one unbounded operand makes the union unbounded |
+| Smooth variant | the blend's own | the same, plus its blend radius, which is the halo `SdfProgram` adds once to the instance |
+
+Transforms, scales and repeats compose as they always have. The algebra holds over
+a field scope, whose shapes join one field by their blends: inside `PushField` an
+unbounded lattice intersected with a box is as bounded as the box, a box minus a
+lattice keeps the box's bound, and a lattice with a box unioned in is unbounded.
+Outside a scope every intersection, field op and fold with no edge reads the one
+global accumulator, so a flat instance holding one is unmaskable. A `Plane` is
+unmaskable wherever it stands, and `SdfBoundAlgebraLawTests` samples the field
+past each packed bound and holds it at least the distance to that bound.
 
 A log-sphere fold changes its field across spheres: each shell holds the
 prototype at its own scale, and the shell boundaries are spheres about the
