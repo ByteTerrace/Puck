@@ -36,6 +36,12 @@
       "prompt": "A Codex implementation pass ended with a question and no edits: may it temporarily remove a project reference so the prescribed build does not also build another project? How do you proceed?",
       "expected_output": "Treats the pass as not done. Answers from the brief and the repository rules (here: keep the prescribed command and the project file unchanged, since a transitive build through an existing reference is expected), writes the answer to a prompt file, and continues the same thread with the companion's `task --resume-last`, telling it to finish without further questions. Tightens future briefs so the pass answers its own questions from the code and the brief.",
       "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "A qualification run is building from a clean worktree while executing canary, counters and parity legs serially. A review-and-fix pass is ready to launch with --write, and its edits seem unrelated to those workloads. Where and when do you launch it?",
+      "expected_output": "Does not launch a writing pass into the tree supplying the active run, even for apparently unrelated edits. Waits until that run finishes or uses a separate review worktree at the intended head. Recognizes that a mid-run edit changes the source state the run reuses, so the clean starting tree does not make concurrent writes safe.",
+      "files": []
     }
   ]
 }

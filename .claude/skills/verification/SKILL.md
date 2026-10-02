@@ -59,7 +59,9 @@ failure messages before accepting a red leg.
   needs its failure message to be judged.
 - Do not edit the source tree while a canary, parity or test run is going:
   canaries rebuild from source, and tests read baselines, schemas and generated
-  tables from it.
+  tables from it. Apply the
+  [review launch restriction](../review-passes/SKILL.md#before-launching) when
+  scheduling a pass alongside a run.
 - Verify the operation itself: read its output and its exit status, since an
   exit code of 0 is not a verdict. After moving a tool or document, run its
   real consumer at the new location.
@@ -111,6 +113,11 @@ during verification hides the drift the check exists to report.
 
 ## Prove each law's red leg
 
+Prefer type enforcement over a source-scan law when the compiler can enforce
+the contract. Make a required dependency a required, non-null parameter; let
+the compiler check every call site. Do not substitute a regex over constructor
+calls: it misses target-typed `new(...)` and gives false assurance.
+
 A law or canary that passes proves nothing until it has been seen to fail when
 the behavior it pins is wrong. A law that passes with the fix withheld pins
 nothing, however plausible it reads.
@@ -123,6 +130,12 @@ brief requires a manual proof, use these steps:
 
 1. Withhold the fix and keep the law, in a scratch worktree of your own, never
    by reverting or stashing files in a shared tree.
+   In a probe or script, point Git at the scratch tree with `git -C <tree>`
+   rather than a directory change. Where a script must change directory, make
+   a failed change stop it (`cd <tree> || exit 1`, or `set -e`): after
+   `cd <tree>; git ...`, a `cd` line followed by Git lines, or
+   `cd <tree> && git a; git b`, a failed `cd` leaves the later Git commands
+   running against the real repository.
 2. Rebuild, and confirm the build exited 0 after the withholding: a failed
    build leaves the previous binaries, and a run against them tests the fix.
 3. Run the law. It must fail at the assertion it was written for, with the
@@ -184,6 +197,17 @@ overrides.
   the change means to move pixels or simulation state, and otherwise once at
   the lane's end. The `rendering` skill owns which canaries a render change
   owes.
+- Treat `puck counters --check` on a non-recording device as partial ledger
+  evidence under the
+  [rules](../../../docs/reference/cli.md#puck-counterswork-counter-collector).
+  It judges `deterministic` ceilings, including required zeros, but skips
+  `per-backend-deterministic` values, including zero ceilings. Require each
+  backend's recorded device identity to match before claiming the whole ledger
+  was judged; use the recording device (the floor GPU) for a re-record.
+- Stop a counters re-record when a `deterministic` count disagrees between
+  backends. Find and fix the cause before recording again or committing the
+  ledger. Inspect the differences and exit status even when `--record` writes
+  a file: it writes the ceilings before returning a backend-mismatch failure.
 
 ### GPU process checks and script runs
 
