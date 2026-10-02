@@ -189,7 +189,7 @@ public static class VulkanPresenterServiceRegistration {
         services.AddVulkanPresenter();
         services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
         // The renderer's presentation counters (presentation.skipped), discovered by any counter readout.
-        services.AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>().Presentation);
+        services.AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<PresentationWork>());
         services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
             Name: "vulkan",
             Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()
@@ -249,6 +249,8 @@ public static class VulkanPresenterServiceRegistration {
         // Neutral presentation preferences (present mode + surface format); a consumer may register its own
         // before calling this to override the defaults (Vsync + R8G8B8A8).
         services.TryAddSingleton(instance: new PresentationOptions());
+        // The renderer's presentation counters, a source of their own: a counter readout resolves them without the renderer.
+        services.TryAddSingleton(implementationFactory: static _ => new PresentationWork(name: "presentation.vulkan"));
         services.TryAddSingleton(implementationFactory: static sp => new VulkanRenderer(
             commandBufferRecorder: sp.GetRequiredService<IVulkanCommandBufferRecorder>(),
             commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
@@ -261,6 +263,7 @@ public static class VulkanPresenterServiceRegistration {
             options: sp.GetRequiredService<VulkanRendererOptions>(),
             physicalDeviceApi: sp.GetRequiredService<IVulkanPhysicalDeviceApi>(),
             physicalDeviceSelector: sp.GetRequiredService<IVulkanPhysicalDeviceSelector>(),
+            presentation: sp.GetRequiredService<PresentationWork>(),
             presentationOptions: sp.GetRequiredService<PresentationOptions>(),
             renderPassFactory: sp.GetRequiredService<IVulkanRenderPassFactory>(),
             surfaceFactory: sp.GetRequiredService<IVulkanSurfaceFactory>(),
