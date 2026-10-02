@@ -73,8 +73,12 @@ public static class DerivationsCommand {
 
     public static Command Create() {
         var check = CliOptions.Check(description: "Compare generated fingerprints against source; write nothing and exit 1 naming each stale derivation.");
-        var command = new Command(description: """
-            Generate source-provenance keys for bakes and list each transitive source symbol grouped by assembly.
+        var command = new Command(
+            description: "Generate or check bake fingerprints from their transitive source dependencies, and list the reach by assembly.",
+            name: "derivations"
+        ) { check };
+
+        command.Detail(detail: """
             Loads the solution's bake producer and its full Release project reference graph, rebinding metadata to source. The shared
             csharp-tokens-v1 token framing hashes declaration ids, syntax and ordered semantic bindings in canonical order. Type headers are
             separate from member bodies; partial declarations, implicit calls and in-repo virtual/interface dispatch
@@ -89,7 +93,7 @@ public static class DerivationsCommand {
             Next slices: other compiled-world chunk versions, shader packages, GpuPipelineCacheStore content keys,
             and kernel sets. External implementation changes, reflection and dynamic dispatch are outside this
             source-syntax fingerprint; source is evaluated in the solution's Release configuration.
-            """, name: "derivations") { check };
+            """);
 
         command.SetAction(action: async parseResult => await RunAsync(check: parseResult.GetValue(option: check)));
         return command;
