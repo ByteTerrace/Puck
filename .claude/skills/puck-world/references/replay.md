@@ -134,7 +134,8 @@ and the copy narrates through the live catalog's hub. A re-driven home arrival
 owned identity, never the catalog's, and
 `WorldReplaySnapshot.ReportAdoptionDrift` reports on `replay.profile`, as
 `ReportProfileDrift` does for a pin, where that copy differs from the taped
-projection: the name, either rate, and any fact the tape did not carry. The
+projection: the name, either rate, and every differing fact in ordinal key
+order, including a taped fact the current identity's capacity refuses. The
 live drive refuses a tape that lands travelers. The re-drive mounts its own guest set
 through the injected `addonHostFactory` rather than reusing the live
 session's.
@@ -548,6 +549,8 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   after `SeatRecordedSeats` joins the recorded seats on their pinned rates.
   `WorldServer.RestoreCheckpoint` resets clocks, decisions,
   rule latches, fields, grants, held input, events, and population together.
+  The replay boot restore keeps the pinned seat identities detached and leaves
+  the owned catalog unchanged; recovery's home-seat rebind does not run here.
   `VerifyMountedAddons` then pins the live receipts. On
   success `LoopbackTransport.InputMasked = true` and the mode is
   `Replaying`. The authority clock rewinds to the boot image. Hosts call

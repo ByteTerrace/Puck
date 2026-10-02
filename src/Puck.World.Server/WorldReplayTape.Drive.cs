@@ -298,7 +298,7 @@ public sealed partial class WorldReplayTape {
                 m_liveServer.Extensions.CompleteReplay();
                 return "the boot-image rebuild of the tape's embedded definition was refused (the [world.definition rejected: …] line above names why)";
             }
-            m_liveServer.RestoreCheckpoint(checkpoint: checkpoint!);
+            m_liveServer.Persistence.RestoreCheckpoint(checkpoint: checkpoint!, restoreOwnedIdentities: false);
             return null;
         });
     }

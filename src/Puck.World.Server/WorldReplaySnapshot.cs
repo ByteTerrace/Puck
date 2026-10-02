@@ -1176,8 +1176,8 @@ public sealed partial class WorldReplaySnapshot {
     }
 
     /// <summary>Reports, as a pinned seat's drift is reported, where the identity a re-driven home arrival bound differs
-    /// from the projection its tape carried: the name, either rate, and every fact the bound identity holds that the
-    /// projection did not. The bound identity is the owner's identity as it stands now with the carried facts and
+    /// from the projection its tape carried: the name, either rate, and every fact whose presence or value differs,
+    /// in ordinal key order. The bound identity is the owner's identity as it stands now with the carried facts and
     /// records adopted, so an edit made to it after the recording reaches the re-drive, and this names it rather than
     /// letting it surface as an unexplained divergence. Nothing here refuses.</summary>
     /// <param name="narrationHub">The hub the report is narrated through, or <see langword="null"/> for none.</param>
@@ -1214,19 +1214,27 @@ public sealed partial class WorldReplaySnapshot {
             used: LiveUsed
         );
 
-        var carried = (taped.Facts?.Cells ?? []);
+        var carried = (taped.Facts?.Cells ?? []).ToDictionary(keySelector: static cell => cell.Key, elementSelector: static cell => cell.Value.AsInt);
+        var adopted = (bound.Facts?.Cells ?? []).ToDictionary(keySelector: static cell => cell.Key, elementSelector: static cell => cell.Value.AsInt);
 
-        foreach (var cell in (bound.Facts?.Cells ?? [])) {
-            if (!carried.Any(predicate: candidate => (candidate.Key == cell.Key))) {
-                narrationHub.Narrate(
-                    channel: "replay.profile",
-                    text: $"[replay.profile: '{taped.Name}' fact '{cell.Key}' drifted since record-start — taped none, live {cell.Value.AsInt}; {LiveUsed}]"
-                );
+        foreach (var key in carried.Keys.Concat(second: adopted.Keys).Distinct().OrderBy(keySelector: static key => key.Value, comparer: StringComparer.Ordinal)) {
+            var had = carried.TryGetValue(key: key, value: out var before);
+            var has = adopted.TryGetValue(key: key, value: out var after);
+
+            if ((had == has) && (before == after)) {
+                continue;
             }
+            var tapedValue = (had ? before.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "none");
+            var boundValue = (has ? after.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "none");
+
+            narrationHub.Narrate(
+                channel: "replay.profile",
+                text: $"[replay.profile: '{taped.Name}' fact '{key}' drifted since record-start — taped {tapedValue}, live {boundValue}; {LiveUsed}]"
+            );
         }
     }
 
-    private const string LiveUsed = "the home arrival bound the LIVE identity, so this verdict reflects the edit";
+    private const string LiveUsed = "the home arrival used a detached copy of the current owned identity, so this verdict reflects the difference";
     private const string PinnedUsed = "the replay used the PINNED value, so this verdict reports the recording, not the edit";
 
     // Compared on the RAW fixed lane, never on the rendered decimal: a drift too small to show in four places is still

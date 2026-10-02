@@ -62,30 +62,24 @@ public sealed partial class WorldInstanceHost {
         };
         return true;
     }
-    // A member restored after its source restarted holds the restored catalog's identity, which the checkpoint may have
-    // rewound past facts and records the seat wrote before it departed. The commit's projection is this authority's
-    // own departing state, so a rollback that reseats the member adopts it back.
+    // Recovery restores departure facts before the row resumes. A rollback saves the current owned identity, including
+    // writes made while the outcome was in doubt; the departing projection must never overwrite those newer values.
     private static bool RestoreDetachedMember(WorldInstance source, ulong transferId, LandedMember member, WorldTransferCommitMember commit) => source.Server.ExecuteAuthorityOperation(operation: () => {
         if (!RestoreDetachedBody(commit: commit, member: member, source: source, transferId: transferId)) {
             return false;
         }
         if (
-            member.AdoptsDeparture &&
             (member.Profile is { } owned) &&
-            (commit.Profile is { } departing) &&
-            !source.Server.Profiles.TryAdopt(
-                carried: WorldIdentity.FromProjection(
-                    defaults: source.Server.Definition.PlayerDefaults,
-                    projection: in departing
-                ),
-                owned: owned,
+            source.Server.Profiles.Owns(identity: owned) &&
+            !source.Server.Profiles.TrySave(
+                identity: owned,
                 reason: out var reason
             ) &&
             source.Server.Output.HasNarrationSink
         ) {
             source.Server.Output.Narrate(
                 channel: "world.identity",
-                text: $"[world.identity: world:{owned.Id} rolled back and did not adopt everything it departed with — {reason}]"
+                text: $"[world.identity: world:{owned.Id} rolled back but its identity could not be saved — {reason}]"
             );
         }
         return true;
@@ -199,7 +193,8 @@ public sealed partial class WorldInstanceHost {
                 }
                 // This handle is retained only for the source's own use: a rollback reseats it and a publication mirrors
                 // it. The commit still carries the projection; a seat of this authority's own rebinds to its restored
-                // catalog's identity, as it was before the restart, and adopts the projection back if it rolls back.
+                // catalog's identity, as it was before the restart. A checkpoint already includes its current facts;
+                // only RedoDeparture restores a logged projection newer than that checkpoint.
                 var owned = ((pending.CommitMembers[ordinal].Profile is { } projection)
                     ? row.Server.HomeSeatIdentity(
                         id: projection.Id,
@@ -223,7 +218,6 @@ public sealed partial class WorldInstanceHost {
                     Peer: member.Peer,
                     Position: member.Position,
                     Profile: profile,
-                    AdoptsDeparture: (owned is not null),
                     FollowedSeatMask: member.FollowedSeatMask,
                     SourceGrants: [.. member.SourceGrants],
                     SourcePrincipal: Principal.Console,

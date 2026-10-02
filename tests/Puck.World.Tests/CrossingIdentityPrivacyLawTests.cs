@@ -649,6 +649,42 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.Null(@object: Fact(identity: owned, key: "copyFact"));
         AssertUnchanged(before: before, catalog: catalog, owned: owned);
     }
+    // Reducing the owned facts capacity can prevent a taped fact from being adopted. No surplus live key is needed
+    // for that drift, and every missing fact must be reported in ordinal key order through the catalog's hub.
+    [Fact]
+    public void VerifyingAHomeArrivalReportsFactsTheOwnedCapacityRefuses() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-refused-drift-");
+        var hub = new WorldOutputHub();
+        var sink = new RecordingNarrationSink();
+
+        using var attached = hub.AttachNarrationSink(sink: sink);
+        using var fixture = Fixtures.FreshServer(catalogNarration: hub);
+        var catalog = fixture.Server.Profiles;
+        var owned = catalog.BootProfile;
+
+        Assert.True(condition: catalog.TrySetFact(identity: owned, key: Name(value: "zFact"), value: 6, changed: out _, reason: out var reason), userMessage: reason);
+        Assert.True(condition: catalog.TrySetFact(identity: owned, key: Name(value: "homeFact"), value: 3, changed: out _, reason: out reason), userMessage: reason);
+        var tape = RecordHomeArrival(carried: 1, directory: directory.RootPath, fixture: fixture);
+        var facts = owned.Facts!;
+
+        owned.WriteState(row: facts with { Capacity = 1, Cells = [.. facts.Cells!.Where(predicate: cell => (cell.Key == Name(value: "homeFact")))] });
+        owned.ReplaceDocument(document: owned.Document! with {
+            Identity = owned.Document!.Identity! with { Facts = new WorldIdentityFacts(State: facts.Name, Capacity: 1) },
+        });
+        Assert.True(condition: catalog.TrySave(identity: owned, reason: out reason), userMessage: reason);
+        var before = sink.Narrations.Count;
+
+        _ = tape.Verify(name: "arrivals");
+        var drift = sink.Narrations.Skip(count: before)
+            .Where(predicate: static narration => ((narration.Channel == "replay.profile") && narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: " fact '")))
+            .Select(selector: static narration => narration.Text).ToArray();
+
+        Assert.Equal(expected: 2, actual: drift.Length);
+        Assert.Contains(expectedSubstring: "fact 'replayFact'", actualString: drift[0]);
+        Assert.Contains(expectedSubstring: "taped 1, live none", actualString: drift[0]);
+        Assert.Contains(expectedSubstring: "fact 'zFact'", actualString: drift[1]);
+        Assert.Contains(expectedSubstring: "taped 6, live none", actualString: drift[1]);
+    }
     // THE LAW: a restored checkpoint rebinds a seat this authority owns to its restored catalog identity, and only that
     // seat. A fresh local seat and a seat that came home bind the catalog's identity, so a fact written after the
     // restore reaches the catalog and its saved document; a visitor carrying the owner's id keeps its travelling row.
@@ -769,5 +805,131 @@ public sealed class CrossingIdentityPrivacyLawTests {
             .Single(predicate: static document => (document.Identity?.Id.ToString() == OwnerId));
 
         Assert.Equal(4L, Fact(identity: new WorldIdentity(defaults: restarted.Source.Server.Definition.PlayerDefaults, document: saved), key: "beforeDeparture"));
+    }
+    // A recovered departure restores the owner's state before live writes resume. An abort must retain newer facts
+    // and record fields, including when another checkpoint and restart intervene before the abort is resolved.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnAbortedCrossingKeepsIdentityWritesMadeAfterRecovery(bool restartAgain) {
+        using var world = CrossingWorld.Build();
+        var catalog = world.Source.Server.Profiles;
+
+        Assert.True(condition: catalog.ReplaceFromSync(document: OwnedDocument(), reason: out var reason), userMessage: reason);
+        var owned = Owned(identity: catalog.FindById(id: OwnerId));
+
+        world.Source.Server.Population.SetSeatProfile(profile: owned, slot: 0);
+        world.CheckpointSource();
+        Assert.True(condition: owned.TryWriteRecord(record: Name(value: "stats"), field: Name(value: "score"), value: CellValue.Int(value: 4), reason: out reason), userMessage: reason);
+        Assert.True(condition: catalog.TrySetFact(identity: owned, key: Name(value: "homeFact"), value: 4, changed: out _, reason: out reason), userMessage: reason);
+        Assert.True(condition: catalog.TrySetFact(identity: owned, key: Name(value: "beforeDeparture"), value: 4, changed: out _, reason: out reason), userMessage: reason);
+        world.SourceLog.CrashAfter = typeof(WorldCrossingRecord.Departure);
+        _ = Assert.Throws<AuthorityCrashedException>(testCode: () => world.Cross());
+        var departure = Assert.IsType<WorldCrossingRecord.Departure>(@object: Assert.Single(collection: world.SourceLog.Read()).Record);
+
+        world.Destination.Server.AbortTransfer(sourceAuthority: world.Source.Server.AuthorityIdentity, transferId: departure.Transfer.TransferId);
+        using var restarted = world.Restart(sourceDied: true, destinationDied: false);
+        var restoredCatalog = restarted.Source.Server.Profiles;
+        var restoredOwner = restoredCatalog.FindById(id: OwnerId)!;
+
+        Assert.True(condition: restoredOwner.TryWriteRecord(record: Name(value: "stats"), field: Name(value: "score"), value: CellValue.Int(value: 9), reason: out reason), userMessage: reason);
+        Assert.True(condition: restoredCatalog.TrySetFact(identity: restoredOwner, key: Name(value: "homeFact"), value: 9, changed: out _, reason: out reason), userMessage: reason);
+        restarted.CheckpointSource();
+        using var secondRestart = (restartAgain ? restarted.Restart(sourceDied: true, destinationDied: false) : null);
+        var resolved = (secondRestart ?? restarted);
+
+        resolved.Step(ticks: PastEveryLease);
+        var finalCatalog = resolved.Source.Server.Profiles;
+        var finalOwner = finalCatalog.FindById(id: OwnerId)!;
+
+        Assert.Same(expected: finalOwner, actual: ArrivedAt(id: OwnerId, server: resolved.Source.Server));
+        Assert.Equal(9L, Fact(identity: finalOwner, key: "homeFact"));
+        Assert.Equal("9", Record(field: "score", identity: finalOwner));
+        Assert.Equal(4L, Fact(identity: finalOwner, key: "beforeDeparture"));
+        Assert.Empty(collection: resolved.Host.CaptureRow(row: resolved.Source.Instance).InDoubtTransfers);
+        var saved = Directory.GetFiles(path: finalCatalog.FilePath)
+            .Select(selector: static path => WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path)))
+            .Single(predicate: static document => (document.Identity?.Id.ToString() == OwnerId));
+        var savedOwner = new WorldIdentity(defaults: resolved.Source.Server.Definition.PlayerDefaults, document: saved);
+
+        Assert.Equal(9L, Fact(identity: savedOwner, key: "homeFact"));
+        Assert.Equal("9", Record(field: "score", identity: savedOwner));
+        Assert.Equal(4L, Fact(identity: savedOwner, key: "beforeDeparture"));
+    }
+    // Restoring a replay's boot checkpoint must keep the pinned seat detached even when its name is also an owned id.
+    // Otherwise the ordinary home-seat rebind replaces the pinned rate with the owner's later rate and saves replay facts.
+    [Fact]
+    public void ALiveReplayBootKeepsPinnedIdentityRatesOutOfTheCatalog() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-drive-");
+        using var fixture = Fixtures.FreshServer();
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+        var owned = catalog.BootProfile;
+
+        owned.SetMoveSpeed(value: 3f);
+        Assert.True(condition: catalog.TrySave(identity: owned, reason: out var reason), userMessage: reason);
+        Assert.True(condition: server.ApplySession(request: new SessionRequest.Join(Principal: Principal.Seat(slot: 0), Slot: 0,
+            IdentityName: owned.Name, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        var tape = Tape(server: server, directory: directory.RootPath);
+
+        Assert.True(condition: tape.TryBeginRecording(name: "arrivals", refusal: out var refusal), userMessage: refusal);
+        fixture.Step();
+        tape.NoteTick();
+        _ = tape.StopRecording();
+        var pinnedRate = owned.FixedMoveSpeed;
+
+        owned.SetMoveSpeed(value: 9f);
+        Assert.True(condition: catalog.TrySave(identity: owned, reason: out reason), userMessage: reason);
+        var before = Saved(catalog: catalog, owned: owned);
+
+        Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: null, name: "arrivals", refusal: out refusal, toTick: null), userMessage: refusal);
+        var driven = server.Population.EntryBody(index: 0)!.Profile!;
+
+        Assert.Equal(expected: pinnedRate, actual: driven.FixedMoveSpeed);
+        Assert.Null(@object: driven.Document);
+        Assert.True(condition: catalog.TrySetFact(identity: driven, key: Name(value: "drivenFact"), value: 5, changed: out _, reason: out reason), userMessage: reason);
+        Assert.Null(@object: Fact(identity: catalog.FindById(id: owned.Id)!, key: "drivenFact"));
+        AssertUnchanged(before: before, catalog: catalog, owned: owned);
+        _ = tape.CancelDrive();
+    }
+    // Once an arrival is durable, an identity-file failure cannot interrupt its seat rebind or its arrival tap.
+    // A directory at the catalog file's path forces an actual storage failure without relying on file permissions.
+    [Fact]
+    public void ADurableHomeArrivalKeepsItsOwnedBindingWhenTheCatalogCannotSave() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-save-refusal-");
+        using var fixture = Fixtures.FreshServer();
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+        var owned = catalog.BootProfile;
+        var sink = new RecordingNarrationSink();
+        var log = new CapturingCrossingLog();
+
+        using var attached = server.AttachNarrationSink(sink: sink);
+
+        server.InstallCrossingLog(log: log);
+        var path = Path.Combine(path1: catalog.FilePath, path2: WorldDocumentName.For(id: SafeName.Parse(candidate: owned.Id)));
+
+        File.Delete(path: path);
+        _ = Directory.CreateDirectory(path: path);
+        try {
+            WorldReplayTape? tape = null;
+            var failure = Xunit.Record.Exception(testCode: () => tape = RecordHomeArrival(carried: 5, directory: directory.RootPath, fixture: fixture));
+
+            Assert.Null(@object: failure);
+            Assert.Single(collection: log.Entries);
+            Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+            Assert.Equal(5L, Fact(identity: owned, key: "replayFact"));
+            Assert.Contains(collection: sink.Narrations, filter: static narration => narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: "could not save"));
+            using var stream = File.OpenRead(path: tape!.PathFor(name: "arrivals"));
+            var recorded = WorldReplaySnapshot.Read(stream: stream);
+
+            Assert.Single(collection: recorded.Ticks.SelectMany(selector: static tick => tick.Authority).OfType<WorldReplayEntry.Arrival>());
+        } finally {
+            Directory.Delete(path: path);
+        }
+        Assert.True(condition: catalog.TrySetFact(identity: owned, key: Name(value: "replayFact"), value: 6, changed: out _, reason: out var reason), userMessage: reason);
+        var saved = new WorldIdentity(document: WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: path)), defaults: server.Definition.PlayerDefaults);
+
+        Assert.Equal(6L, Fact(identity: saved, key: "replayFact"));
     }
 }

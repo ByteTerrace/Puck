@@ -661,10 +661,11 @@ does not exist yet, so an owner adopts whatever a visited world wrote onto its t
 Remote round trips do not adopt: a remote incarnation claim is unauthenticated, and a federation
 reservation has no field that could ask for a local seat, so it is always a peer admission. Remote
 home adoption remains deferred. Checkpoint restore rebinds a local home seat to its restored owned
-identity; a visitor with a colliding id keeps its travelling projection. When a source restarts and
-an in-doubt crossing then aborts, the restored seat holds its owned identity, which adopts the
-facts and records of the departure's logged projection: they are the authority's own, and facts
-written between the checkpoint and the departure exist nowhere else.
+identity; a visitor with a colliding id keeps its travelling projection. Recovery applies a logged
+departure's facts and records to the owned identity before live writes resume: they are the
+authority's own state newer than its checkpoint. An in-doubt transfer already captured in a
+checkpoint uses that checkpoint's catalog. An eventual abort reseats and saves the current owned
+identity, so neither the departure's facts nor owner writes made while recovery waits are lost.
 
 Replay verification saves no identity. A re-driven home arrival binds a detached copy of the
 owned identity as it stands now, with the carried facts and records adopted, and reports on

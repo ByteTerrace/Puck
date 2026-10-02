@@ -996,7 +996,7 @@ public sealed class WorldOwnedWorlds {
     /// <para>Only an identity this catalog owns is saved. A visitor — an identity another authority's traveler
     /// arrived as — is refused by name, so a destination never writes a traveler into its own catalog.</para></summary>
     /// <param name="identity">The identity to persist.</param>
-    /// <param name="reason">Why the identity was refused, or empty when it was saved.</param>
+    /// <param name="reason">Why the identity was refused or its file could not be saved, or empty on success.</param>
     /// <returns><see langword="true"/> when the identity was saved.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="identity"/> is <see langword="null"/>.</exception>
     public bool TrySave(WorldIdentity identity, out string reason) {
@@ -1032,15 +1032,30 @@ public sealed class WorldOwnedWorlds {
             before = null;
         }
 
-        _ = WorldDefinitionSerialization.SavePreservingBasis(
-            basisPath: out _,
-            catalog: m_machineCatalog,
-            catalogFingerprint: m_catalogFingerprint,
-            definition: document,
-            imports: out _,
-            note: out var note,
-            path: path
-        );
+        string note;
+
+        try {
+            _ = WorldDefinitionSerialization.SavePreservingBasis(
+                basisPath: out _,
+                catalog: m_machineCatalog,
+                catalogFingerprint: m_catalogFingerprint,
+                definition: document,
+                imports: out _,
+                note: out note,
+                path: path
+            );
+            if (
+                (before is null) ||
+                !before.AsSpan().SequenceEqual(other: File.ReadAllBytes(path: path))
+            ) {
+                m_revision++;
+            }
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            // An arrival may already be durable. Report the file refusal so its caller can finish binding the owned
+            // identity and recording the arrival, rather than stranding a committed seat on its travelling copy.
+            reason = $"could not save identity '{identity.Id}': {exception.Message}";
+            return false;
+        }
 
         if (note.Length > 0) {
             if (m_narrationHub is { HasNarrationSink: true }) {
@@ -1050,13 +1065,6 @@ public sealed class WorldOwnedWorlds {
                 );
             }
         }
-        if (
-            (before is null) ||
-            !before.AsSpan().SequenceEqual(other: File.ReadAllBytes(path: path))
-        ) {
-            m_revision++;
-        }
-
         reason = string.Empty;
         return true;
     }

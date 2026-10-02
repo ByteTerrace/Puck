@@ -1930,8 +1930,7 @@ public sealed partial class WorldInstanceHost {
         IReadOnlyList<WorldGrant> SourceGrants,
         Principal SourcePrincipal,
         WorldMobilityIdentity Mobility,
-        byte FollowedSeatMask = 0,
-        bool AdoptsDeparture = false
+        byte FollowedSeatMask = 0
     );
     private sealed record InDoubtTransfer(
         PendingTransfer Transfer,

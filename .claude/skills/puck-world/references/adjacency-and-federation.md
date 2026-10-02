@@ -63,9 +63,10 @@ record is durable. A rolled-back arrival changes no owned identity. An empty pro
 preserves the owner's authored name and capacity before its first write. Remote round trips do
 not adopt: a federation reservation has no admission field, so it is always a peer admission and
 can never claim a local seat, since a remote incarnation claim is unauthenticated. A crossing
-whose source restarts and then aborts reseats the restored owned identity, which adopts the
-departure's logged projection, so facts written between the checkpoint and the departure
-survive. A replay's re-driven home arrival binds a detached copy and saves nothing.
+whose source restarts restores its logged departure's facts and records before live writes
+resume. A transfer already in the checkpoint uses that checkpoint's catalog. An abort reseats
+and saves the current owned identity, preserving both the departing facts and later owner
+writes while recovery waits. A replay's re-driven home arrival binds a detached copy and saves nothing.
 Foreign-written
 facts are unsigned until provenance attestation for carried state exists. The
 [rulepush package](../../../../worlds/rulepush/README.md) relies on this: a level

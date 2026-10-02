@@ -223,6 +223,28 @@ public sealed partial class WorldInstanceHost {
         // The checkpoint may predate the cohort's departure: its members are detached again by identity, wherever they
         // stand. A member the checkpoint never held has nothing to detach.
         row.Server.ExecuteAuthorityOperation(operation: () => {
+            // This log entry is newer than the checkpoint. Restore this authority's own departing state now, before
+            // live writes resume, rather than adopting an old projection when an eventual abort returns the seat.
+            // Restoring a checkpoint's retained transfer never does this: that catalog already includes later writes.
+            for (var ordinal = 0; (ordinal < restored[0].Landed.Count); ordinal++) {
+                var member = restored[0].Landed[ordinal];
+
+                if (
+                    (member.Profile is { } owned) &&
+                    row.Server.Profiles.Owns(identity: owned) &&
+                    (record.CommitMembers[ordinal].Profile is { } departing) &&
+                    !owned.TryAdopt(
+                        carried: WorldIdentity.FromProjection(defaults: row.Server.Definition.PlayerDefaults, projection: in departing),
+                        reason: out var reason
+                    ) &&
+                    row.Server.Output.HasNarrationSink
+                ) {
+                    row.Server.Output.Narrate(
+                        channel: "world.identity",
+                        text: $"[world.identity: world:{owned.Id} recovered its departure but did not adopt everything it departed with — {reason}]"
+                    );
+                }
+            }
             foreach (var member in record.Landed) {
                 for (var slot = 0; (slot < row.Server.Population.Capacity); slot++) {
                     if (row.Server.Population.ResolveIncarnation(
