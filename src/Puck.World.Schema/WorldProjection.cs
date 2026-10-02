@@ -421,7 +421,7 @@ public static class WorldProjection {
     // that may not read the cell, or, for a value read per body, every cell of its row, is sent no value derived from
     // it.
     private static void RefuseHiddenBindings(WorldDefinition definition, StateArena arena, IReadOnlyList<WorldBoundValue> bound, Principal? recipient) {
-        foreach (var (path, binding) in bound) {
+        foreach (var (path, binding, _, _) in bound) {
             if (definition.State.FirstOrDefault(predicate: row => string.Equals(
                 a: row.Name.Value,
                 b: binding.Row,
@@ -468,7 +468,7 @@ public static class WorldProjection {
 
         var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        foreach (var (_, binding) in bound) {
+        foreach (var (_, binding, _, _) in bound) {
             if (definition.State.FirstOrDefault(predicate: row => string.Equals(
                 a: row.Name.Value,
                 b: binding.Row,

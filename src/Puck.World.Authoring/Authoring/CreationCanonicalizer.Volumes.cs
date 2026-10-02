@@ -105,15 +105,12 @@ public static partial class CreationCanonicalizer {
                 errors,
                 (path + ".coverage")
             );
-            ValidateUnitRange(
-                volume.Softness,
-                "softness",
-                errors,
-                (path + ".softness")
-            );
-            if (volume.Softness is 0f) {
+            if (
+                (volume.Softness is { } softness) &&
+                !VolumeDocument.SoftnessDomain.Contains(value: softness)
+            ) {
                 errors.Add(item: new(
-                    Message: "softness must be positive.",
+                    Message: $"softness {softness} must be finite and within {VolumeDocument.SoftnessDomain}.",
                     Path: (path + ".softness")
                 ));
             }

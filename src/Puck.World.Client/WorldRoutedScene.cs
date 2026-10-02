@@ -40,7 +40,9 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     /// scene's frame takes; <see langword="null"/> before the first.</param>
     /// <param name="bodyColor">The color each avatar is painted with by body index: a local seat keeps the color the
     /// boot presentation paints it with.</param>
-    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor) {
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
+    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains) {
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: endpoint);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
@@ -50,6 +52,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
         m_emitter = new WorldSessionSceneEmitter(
             bodyColor: bodyColor,
             castsAvatarShadows: true,
+            domains: domains,
             effectiveCameraName: null,
             mirror: endpoint.Mirror
         );

@@ -210,6 +210,9 @@ public static class WorldKeyResolver {
             : 0d),
         _ => t,
     });
+    // Two finite keys blend inside the interval they span: the difference is taken in double, where two floats of
+    // opposite sign and near-maximal magnitude cannot overflow it, so the result never leaves [from, to].
+    private static float Lerp(float from, double t, float to) => ((float)(from + ((to - ((double)from)) * t)));
     /// <summary>Returns a keyed scalar at a phase, blended linearly.</summary>
     /// <param name="track">The track.</param>
     /// <param name="span">The clock's span.</param>
@@ -221,10 +224,12 @@ public static class WorldKeyResolver {
             span: span,
             track: track
         );
-        var a = track.Keys[from].Value;
-        var b = track.Keys[to].Value;
 
-        return ((float)(a + ((b - a) * t)));
+        return Lerp(
+            from: track.Keys[from].Value,
+            t: t,
+            to: track.Keys[to].Value
+        );
     }
     /// <summary>Returns a keyed angle at a phase, blended along the shorter arc between the two keys' angles: from
     /// 350° to 10° it passes 0°, never 180°.</summary>
@@ -300,8 +305,8 @@ public static class WorldKeyResolver {
         var b = track.Keys[to].Value;
 
         return new Vector2(
-            x: ((float)(a.X + ((b.X - a.X) * t))),
-            y: ((float)(a.Y + ((b.Y - a.Y) * t)))
+            x: Lerp(from: a.X, t: t, to: b.X),
+            y: Lerp(from: a.Y, t: t, to: b.Y)
         );
     }
     /// <summary>Returns a keyed three-component vector at a phase, blended linearly and never normalized.</summary>
@@ -319,9 +324,9 @@ public static class WorldKeyResolver {
         var b = track.Keys[to].Value;
 
         return new Vector3(
-            x: ((float)(a.X + ((b.X - a.X) * t))),
-            y: ((float)(a.Y + ((b.Y - a.Y) * t))),
-            z: ((float)(a.Z + ((b.Z - a.Z) * t)))
+            x: Lerp(from: a.X, t: t, to: b.X),
+            y: Lerp(from: a.Y, t: t, to: b.Y),
+            z: Lerp(from: a.Z, t: t, to: b.Z)
         );
     }
     /// <summary>Returns two colours blended in linear light.</summary>

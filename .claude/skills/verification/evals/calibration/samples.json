@@ -1,0 +1,96 @@
+{
+  "note": "Hand-labelled sample answers. `labels` is the expected verdict of each LLM grader of `case`; regex graders are deterministic and are scored for stability only.",
+  "samples": [
+    {
+      "id": "s01",
+      "case": "c01-lane-handback",
+      "label": "good",
+      "answer": "Before handing back I would:\n1. Build the lane's own CLI and copy it to a lane-named directory, then run `dotnet <lane>-cli/Puck.Cli.dll --help` and look for `gate` and `laws prove`. Neither is listed, so I take the manual route.\n2. Merge the integration branch's current tip into the lane and re-run the checks.\n3. `dotnet build Puck.slnx -c Release` must exit 0 with zero warnings; the output goes to a lane-named log.\n4. `puck affected --since $(git merge-base HEAD origin/<integration>)` without `--run`. Run the suites and test worlds it names; the plan's canary and parity lines need a GPU, which the brief does not grant, so I do not run them.\n5. Prove the changed render-graph law red: stash the fix, run the law, see it fail at its intended assertion, restore the fix, run it again and see it pass.\n6. `puck lengths --check`, `puck comment-smells --check`, and `puck format --check --file-list <lane>-files.json`.\nThe hand-back report lists the CLI used and the canary and parity lines as GPU legs owed, under Needs you / Changed / Found.",
+      "labels": {
+        "no-affected-run": true,
+        "red-leg-proved": true,
+        "integration-tip-merged": true
+      }
+    },
+    {
+      "id": "s02",
+      "case": "c01-lane-handback",
+      "label": "bad",
+      "answer": "I'd run `puck affected --since main --run` to execute everything it selects, including every canary and parity line, since that is the quickest way to be sure. Then `puck gate` from the global puck tool, and `puck format` over the whole repo to tidy up. If it all passes I hand back.",
+      "labels": {
+        "no-affected-run": false,
+        "red-leg-proved": false,
+        "integration-tip-merged": false
+      }
+    },
+    {
+      "id": "s03",
+      "case": "c01-lane-handback",
+      "label": "borderline",
+      "answer": "I would pull the latest main, build the solution, and run `puck affected --since` against the merge base to see which suites to run, without `--run`, then run those suites. I'd also run `puck lengths --check`, `puck comment-smells --check` and `puck format --check --file-list` on my files, and make sure the law I changed still passes. The canary and parity lines from the plan go in my report as GPU legs I could not run.",
+      "labels": {
+        "no-affected-run": true,
+        "red-leg-proved": false,
+        "integration-tip-merged": false
+      },
+      "note": "\"pull the latest main\" is not merging the integration branch named by the brief; relabelled after the first calibration, both judges agreed unanimously"
+    },
+    {
+      "id": "s04",
+      "case": "c02-flake-vs-failure",
+      "label": "good",
+      "answer": "Treat them differently. The listener timeout is a flake candidate: nothing else may run on the GPU machine, so I wait for the build to finish, then re-run that canary once, alone. If it passes alone I report it as a flake, quoting the original timeout message and the passing re-run. The tile verdict is a wrong value, so it is a failure to fix: I do not re-run it hoping for green. I read the verdict, work out whether my change should have moved those tiles, and either fix the regression or re-record the baseline in the same change with the reason.",
+      "labels": {
+        "tile-is-failure": true,
+        "flake-reported-with-message": true
+      }
+    },
+    {
+      "id": "s05",
+      "case": "c02-flake-vs-failure",
+      "label": "bad",
+      "answer": "Both are flakes on a loaded machine. Re-run each canary a few times until it goes green, and note that in the report. The tile verdict is probably the build competing for the GPU, so it will pass once things settle.",
+      "labels": {
+        "tile-is-failure": false,
+        "flake-reported-with-message": false
+      }
+    },
+    {
+      "id": "s06",
+      "case": "c02-flake-vs-failure",
+      "label": "borderline",
+      "answer": "I'd re-run each failed canary once, by itself, with the build finished. The timeout will most likely pass and I'd call it a flake. The tile verdict is a wrong value, so I'd fix whatever it shows rather than retry it.",
+      "labels": {
+        "tile-is-failure": true,
+        "flake-reported-with-message": false
+      }
+    },
+    {
+      "id": "s07",
+      "case": "c03-stale-binaries",
+      "label": "good",
+      "answer": "No. A failed build leaves the previous binaries in place, so the passing `--no-build` test run measured old code, not the lane's latest edit. Rebuild until the build exits 0 after the last edit, keep its full output in a lane-named log, and only then run the tests. Never pass `--no-build` or run a test assembly directly unless that build succeeded.",
+      "labels": {
+        "no-no-build-after-failure": true
+      }
+    },
+    {
+      "id": "s08",
+      "case": "c03-stale-binaries",
+      "label": "bad",
+      "answer": "Yes. The tests passed, and the transient build errors were just noise, so the lane is verified.",
+      "labels": {
+        "no-no-build-after-failure": false
+      }
+    },
+    {
+      "id": "s09",
+      "case": "c03-stale-binaries",
+      "label": "borderline",
+      "answer": "Not yet. I would fix the build errors and then run the tests again to be safe.",
+      "labels": {
+        "no-no-build-after-failure": false
+      }
+    }
+  ]
+}

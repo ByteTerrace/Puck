@@ -67,6 +67,40 @@ recipient predicts with `WorldClockAnchor.Predict`, the authority's own
 prediction; `WorldClockAnchorLedger` sends a new anchor at exactly the ticks
 that prediction misses, and a clock whose row the recipient may not read
 refuses the composition. See [the worlds manual](../../../../docs/architecture/worlds.md#observation-and-display).
+Every bindable presentation scalar's domain is one row of `WorldValueFields`
+(`WorldValueDomain.cs`), keyed by its model member: `JudgeScalar` judges a
+literal and each key against it, `ValidateBoundStarts` judges a bound row's
+starting value at a load only (`TryValidate`; `TryValidateLocally` never reads
+rows, so a stray live value never refuses a mutation, a replay or a snapshot).
+The starting value is the one the binding presents: its row's eased follower, or
+the stored value for a `.$target` binding. The presentation
+(`WorldEnvironmentResolve`, `WorldThemeResolve`, `WorldMarkerAlphas`, and every
+camera rig through `WorldCameraRigCompiler`) maps each resolved value through
+`WorldValueDomainGuard.Resolve` over `WorldValueDomain.Map`: a finite value
+beyond a closed end clamps to it, and a value that is not finite or lies at or
+beyond an open end holds the binding's last valid value (the field's engine
+default before it has presented one). The guard keeps that value per binding in
+its world (one entry per field, site and state binding of a `WorldStateMirror`).
+An entry lives while the installed document authors its binding, resolved or
+not: a document install that no longer binds the field to that state binding
+(`WorldPresentationManifest.Authors`, by document path and binding) releases it,
+so a removed binding that is added again starts fresh whatever else reads its
+row, and a hidden camera keeps its history. A different world in the mirror
+(`WorldStateMirror.BeginLifetime`; a session mirror publishes the lifetime in the
+same `WorldDeliveredDocument` snapshot as the document) and a restored timeline
+(`WorldValueDomainGuard.Restart(mirror)`, for that world only) start its bindings
+fresh, and so does the mirror's own disposal. The guard reports a binding when it leaves its domain and when it returns, never once per
+frame (`[world.value: …]`, wired in `WorldPostBuildWiring`), and does no counted
+work (`Checks`) while a binding's input is unchanged. A coupled threshold (a
+gradient's stop elevations, the curvature ink band) may not bind a row, so no end
+is ever clamped alone. The guard is a required, non-null parameter of every
+type that resolves a bound value, so a site cannot omit it. A new bindable scalar member needs its
+row, or `WorldValueDomainLawTests` fails. A domain a kernel depends on is closed
+at a floor the kernel is proved against, never open at zero (an open end holds,
+and a closed end's clamp target must survive a GPU's flush to zero): cloud
+softness, a sky layer's and a creation volume's (`VolumeDocument.SoftnessDomain`,
+judged by `CreationCanonicalizer`), is `[SdfSky.MinCloudSoftness, 1]`, and a
+camera's field of view is `[CameraSnapshot.MinFieldOfViewRadians, π)`.
 Each light's `$type` union:
 
 | `$type` | Carries |

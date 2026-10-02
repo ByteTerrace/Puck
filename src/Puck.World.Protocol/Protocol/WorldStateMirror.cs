@@ -1,7 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Counting;
 using Puck.Hosting;
-using Puck.Maths;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 
@@ -78,6 +77,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
 
     private int m_freeCount;
     private int m_generation;
+    private int m_lifetime;
     private int m_installs;
     private WorldPresentationManifest? m_manifest;
 
@@ -137,6 +137,10 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
     /// <see cref="Unregister"/>: a consumer that keeps what a lookup answered, a slot's index or -1, looks it up again
     /// when this moves, since the index may since have been retired and reused, or the binding registered.</summary>
     public int Generation => m_generation;
+    /// <summary>Gets a counter that moves when the world this mirror reads is replaced by another
+    /// (<see cref="BeginLifetime"/>): a holder that keeps something it learned about the previous world's values drops it
+    /// when this moves, where an <see cref="Install"/> of the same world's next document keeps it.</summary>
+    public int Lifetime => m_lifetime;
     /// <summary>Gets the number of live slots: registered, or acquired and not yet retired.</summary>
     public int SlotCount => (m_slotCount - m_freeCount);
     /// <summary>Gets the tick the slots were last read as of.</summary>
@@ -161,6 +165,10 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
     /// <see cref="Install"/> and whose templates a body's lease acquires when the body arrives.</summary>
     public WorldPresentationManifest Manifest => m_view.Manifest;
 
+    /// <summary>Marks that the world this mirror reads has been replaced by another, so nothing a holder learned about the
+    /// previous world's values carries over: its next <see cref="Install"/> installs a different world's document, not the
+    /// next document of the same one.</summary>
+    public void BeginLifetime() => m_lifetime++;
     /// <summary>Finds the registered slot a binding reads through with a conversion: one the installed document's
     /// presentation manifest or an owner's registered set records. It registers nothing, reads nothing and allocates
     /// nothing, so a binding nothing registered reads no cell.</summary>
@@ -1179,7 +1187,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
         m_reads.Increment();
         entry.Sample = sample;
         entry.PreviousValue = (hadNumber ? previousValue : sample.Value);
-        entry.HasNumber = TryConvertNumber(
+        entry.HasNumber = WorldStateReader.TryNumber(
             number: out var number,
             value: sample.Value
         );
@@ -1254,36 +1262,6 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
         ) {
             m_revision++;
             entry.Changed = m_revision;
-        }
-    }
-
-    internal static bool TryConvertNumber(CellValue value, out double number) {
-        if (!value.HasValue) {
-            number = 0d;
-
-            return false;
-        }
-
-        switch (value.Kind) {
-            case CellKind.Int:
-                number = value.AsInt;
-
-                return true;
-            case CellKind.Fixed:
-                number = ((double)FixedQ4816.FromRawBits(value: value.AsFixed));
-
-                return true;
-            case CellKind.Bool:
-                number = (value.AsBool
-                    ? 1d
-                    : 0d
-                );
-
-                return true;
-            default:
-                number = 0d;
-
-                return false;
         }
     }
 

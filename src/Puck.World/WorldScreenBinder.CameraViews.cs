@@ -128,6 +128,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
         if (m_anchors is WorldClient client) {
             registration.Rig = WorldCameraRigCompiler.Compile(
                 definition: client.Definition,
+                domains: m_domains,
                 mirror: client.StateMirror,
                 program: camera.Rig
             );

@@ -26,10 +26,15 @@ public interface IWorldKeyTrack {
 /// <see cref="BindableVector3"/>.</param>
 /// <param name="Track">The value's keys.</param>
 public readonly record struct WorldKeyedValue(string Path, object Value, IWorldKeyTrack Track);
-/// <summary>One bindable a document binds to a state cell: where it sits and the cell it reads.</summary>
-/// <param name="Path">The value's document path, in JSON member names.</param>
+/// <summary>One bindable a document binds to a state cell: where it sits, the cell it reads, and, for a presentation
+/// scalar in a field the document model declares (<see cref="WorldValueFields"/>), its scalar form and that field.</summary>
+/// <param name="Path">The value's document path, in JSON member names (<c>render.sky.layers[3].softness</c>).</param>
 /// <param name="Binding">The state cell the value reads.</param>
-public readonly record struct WorldBoundValue(string Path, StateBinding Binding);
+/// <param name="Value">The bound scalar, a <see cref="BindableAngle"/> as its scalar form, when the value is a scalar in
+/// a declared field; otherwise <see langword="null"/>.</param>
+/// <param name="Field">The field the value fills, or <see langword="null"/> for a value that fills no declared scalar
+/// field.</param>
+public readonly record struct WorldBoundValue(string Path, StateBinding Binding, BindableScalar? Value, WorldValueField? Field);
 /// <summary>
 /// Finds every keyed value a document authors, wherever the document places a bindable that can carry keys
 /// (<see cref="BindableColor"/>, <see cref="BindableScalar"/>, <see cref="BindableAngle"/>,
@@ -67,7 +72,8 @@ public static class WorldKeyedValues {
         return walk.Found;
     }
     /// <summary>Returns every bindable a document binds to a state cell, in document order: each a reading of that
-    /// cell wherever it is presented.</summary>
+    /// cell wherever it is presented, and, for a presentation scalar in a field the document model declares
+    /// (<see cref="WorldValueFields"/>), its scalar form and that field.</summary>
     /// <param name="definition">The document.</param>
     /// <returns>The bound values.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
@@ -189,7 +195,9 @@ public static class WorldKeyedValues {
         public List<WorldBoundValue> Bound { get; } = [];
         public List<WorldKeyedValue> Found { get; } = [];
 
-        public void Visit(object? value, string path, WorldModelType? declared) {
+        // The field is the one the member holding the value declares, or null for a value no member declares (a
+        // dictionary's or a list's element).
+        public void Visit(object? value, string path, WorldModelType? declared, WorldValueField? field = null) {
             if ((value is null) || (value is string)) {
                 return;
             }
@@ -202,9 +210,18 @@ public static class WorldKeyedValues {
                         Value: value
                     ));
                 } else if (BindingOf(value: value) is { } binding) {
+                    var scalar = (value switch {
+                        BindableScalar bindable => bindable,
+                        BindableAngle angle => angle.Value,
+                        _ => ((BindableScalar?)null),
+                    });
+                    var declaredScalar = ((field is not null) && scalar.HasValue);
+
                     Bound.Add(item: new WorldBoundValue(
                         Binding: binding,
-                        Path: path
+                        Field: (declaredScalar ? field : null),
+                        Path: path,
+                        Value: (declaredScalar ? scalar : null)
                     ));
                 }
 
@@ -264,6 +281,10 @@ public static class WorldKeyedValues {
                     foreach (var (property, name) in MembersOf(shape: shape)) {
                         Visit(
                             declared: WorldModelShape.Of(type: property.PropertyType),
+                            field: WorldValueFields.Of(
+                                member: property.Name,
+                                owner: property.DeclaringType!
+                            ),
                             path: ((path.Length == 0)
                                 ? name
                                 : $"{path}.{name}"),

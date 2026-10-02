@@ -10,12 +10,13 @@ namespace Puck.World.Client;
 /// <see cref="WorldEnvironmentResolve"/>: recomputed only when the definition revision or its timeline moves, a
 /// <see cref="WorldStateMirror"/> slot one of its own <c>state.&lt;row&gt;</c> tokens or state clocks reads changes, or
 /// the presented tick moves while one of its tokens is keyed on a tick clock or a moving anchor; never for a slot some
-/// other consumer binds. A keyed token resolves through the mirror as every keyed value does.
-/// <see cref="WorldThemeCapacity.ScrimMinAlpha"/> clamps every resolved scrim alpha here, unconditionally — a no-op
-/// for an already-validated literal, the actual floor enforcement for a state binding the validator could not check
-/// at boot.
+/// other consumer binds. A keyed token resolves through the mirror as every keyed value does. Every bindable scalar is
+/// mapped into its field's declared domain (<see cref="WorldValueFields"/>), which holds a scrim alpha a live write
+/// moves below <see cref="WorldThemeCapacity.ScrimMinAlpha"/> at that floor.
 /// </summary>
 public sealed class WorldThemeResolve {
+    private readonly WorldValueDomainGuard m_domains;
+
     private ThemeReads? m_reads;
     private int m_generation;
     private OverlayThemeValues m_resolved;
@@ -27,7 +28,7 @@ public sealed class WorldThemeResolve {
 
     // The mirror reads one resolve makes, noting every slot a bound token reads so the next frame can ask whether any
     // of them moved.
-    private sealed class ThemeReads(WorldStateMirror mirror) {
+    private sealed class ThemeReads(WorldStateMirror mirror, WorldValueDomainGuard domains) {
         public List<(int Slot, double Value)> Bound { get; } = [];
         public WorldStateMirror Mirror { get; } = mirror;
 
@@ -46,16 +47,23 @@ public sealed class WorldThemeResolve {
                 fallback: fallback
             );
         }
-        public float Scalar(in BindableScalar scalar, float fallback) {
+        public float Scalar(in BindableScalar scalar, float fallback, WorldValueField field, in WorldValueSite site) {
             Note(
                 binding: scalar.State,
                 conversion: WorldStateConversion.Number
             );
             NoteKeys(keys: scalar.Keys);
 
-            return Mirror.Scalar(
+            return domains.Resolve(
                 fallback: fallback,
-                scalar: in scalar
+                field: field,
+                mirror: Mirror,
+                scalar: in scalar,
+                site: in site,
+                value: Mirror.Scalar(
+                    fallback: fallback,
+                    scalar: in scalar
+                )
             );
         }
 
@@ -196,16 +204,19 @@ public sealed class WorldThemeResolve {
             mirror: mirror
         ),
         ScrimChip: ResolveScrim(
+            mirror: mirror,
             scrim: color.ScrimChip,
-            mirror: mirror
+            section: "theme.color.scrimChip"
         ),
         ScrimPanel: ResolveScrim(
+            mirror: mirror,
             scrim: color.ScrimPanel,
-            mirror: mirror
+            section: "theme.color.scrimPanel"
         ),
         ScrimStrip: ResolveScrim(
+            mirror: mirror,
             scrim: color.ScrimStrip,
-            mirror: mirror
+            section: "theme.color.scrimStrip"
         ),
         SurfaceBase: ResolveColor(
             color: color.SurfaceBase,
@@ -331,14 +342,16 @@ public sealed class WorldThemeResolve {
             mirror: mirror
         ),
         BloomHaloAlpha: ResolveScalar(
-            scalar: elevation.BloomHaloAlpha,
-            mirror: mirror
+            field: WorldValueFields.BloomHaloAlpha,
+            mirror: mirror,
+            scalar: elevation.BloomHaloAlpha
         ),
         BloomHaloBlur: elevation.BloomHaloBlur,
         BloomHaloSpread: elevation.BloomHaloSpread,
         BloomHeldInsetAlpha: ResolveScalar(
-            scalar: elevation.BloomHeldInsetAlpha,
-            mirror: mirror
+            field: WorldValueFields.BloomHeldInsetAlpha,
+            mirror: mirror,
+            scalar: elevation.BloomHeldInsetAlpha
         ),
         BloomHeldInsetBlur: elevation.BloomHeldInsetBlur,
         BloomHeldInsetSpread: elevation.BloomHeldInsetSpread,
@@ -347,20 +360,23 @@ public sealed class WorldThemeResolve {
             mirror: mirror
         ),
         BloomNeutralHaloAlpha: ResolveScalar(
-            scalar: elevation.BloomNeutralHaloAlpha,
-            mirror: mirror
+            field: WorldValueFields.BloomNeutralHaloAlpha,
+            mirror: mirror,
+            scalar: elevation.BloomNeutralHaloAlpha
         ),
         BloomNeutralRingAlpha: ResolveScalar(
-            scalar: elevation.BloomNeutralRingAlpha,
-            mirror: mirror
+            field: WorldValueFields.BloomNeutralRingAlpha,
+            mirror: mirror,
+            scalar: elevation.BloomNeutralRingAlpha
         ),
         BloomPositive: ResolveBloomHue(
             hue: elevation.BloomPositive,
             mirror: mirror
         ),
         BloomRingAlpha: ResolveScalar(
-            scalar: elevation.BloomRingAlpha,
-            mirror: mirror
+            field: WorldValueFields.BloomRingAlpha,
+            mirror: mirror,
+            scalar: elevation.BloomRingAlpha
         ),
         BloomRingWidth: elevation.BloomRingWidth,
         BloomWarning: ResolveBloomHue(
@@ -416,21 +432,22 @@ public sealed class WorldThemeResolve {
         Radius2: radius.Radius2,
         Radius3: radius.Radius3
     );
-    private static float ResolveScalar(BindableScalar scalar, ThemeReads mirror) => mirror.Scalar(
+    private static float ResolveScalar(BindableScalar scalar, WorldValueField field, ThemeReads mirror) => mirror.Scalar(
         fallback: 0f,
-        scalar: scalar
+        field: field,
+        scalar: scalar,
+        site: new WorldValueSite(Section: "theme.elevation")
     );
-    private static OverlayThemeValues.Scrim ResolveScrim(WorldThemeScrim scrim, ThemeReads mirror) {
+    private static OverlayThemeValues.Scrim ResolveScrim(WorldThemeScrim scrim, string section, ThemeReads mirror) {
         var alpha = mirror.Scalar(
             fallback: 0f,
-            scalar: scrim.Alpha
+            field: WorldValueFields.ScrimAlpha,
+            scalar: scrim.Alpha,
+            site: new WorldValueSite(Section: section)
         );
 
         return new OverlayThemeValues.Scrim(
-            Alpha: MathF.Max(
-                x: alpha,
-                y: WorldThemeCapacity.ScrimMinAlpha
-            ),
+            Alpha: alpha,
             Color: ResolveColor(
                 color: scrim.Color,
                 mirror: mirror
@@ -479,6 +496,10 @@ public sealed class WorldThemeResolve {
         TitleWeight: type.TitleWeight
     );
 
+    /// <summary>Initializes a new instance of the <see cref="WorldThemeResolve"/> class.</summary>
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
+    public WorldThemeResolve(WorldValueDomainGuard domains) => m_domains = (domains ?? throw new ArgumentNullException(paramName: nameof(domains)));
+
     /// <summary>Gets how many times this resolver has resolved the theme rather than answering from its cache.</summary>
     public int Resolutions => m_resolutions;
 
@@ -511,7 +532,10 @@ public sealed class WorldThemeResolve {
                 objA: m_reads?.Mirror,
                 objB: mirror
             )) {
-                m_reads = new ThemeReads(mirror: mirror);
+                m_reads = new ThemeReads(
+                    domains: m_domains,
+                    mirror: mirror
+                );
             }
 
             m_reads!.Bound.Clear();

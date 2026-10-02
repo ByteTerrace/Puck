@@ -228,7 +228,7 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
                     Yaw: new BindableScalar(literal: 0f),
                     Pitch: new BindableScalar(literal: 0f)
                 ),
-                new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0f)),
+                new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 1f)),
             ]
         ),
         SeatControlRaw: new WorldSeatViewControl(

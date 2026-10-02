@@ -395,6 +395,9 @@ public static class WorldBootComposition {
             contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
         ));
 
+        // Where every presentation reports a bound value it clamps into its field's domain; WorldPostBuildWiring routes
+        // the reports to the host's diagnostic fan-out.
+        services.AddSingleton<WorldValueDomainGuard>();
         // The screen binder — owns the declared screens' CPU-fed GPU sources (test patterns, the shared webcam,
         // window captures) and READS Server.WorldMachineHost's outputs for a machine-owning index (it no longer
         // boots, steps, or owns a machine itself — see WorldMachineHost's own remarks). CORE (not presentation-only)
@@ -426,6 +429,7 @@ public static class WorldBootComposition {
                 // never resolves either backend, so this bool only matters once presentation composes.
                 hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX,
                 paperWhiteNits: sp.GetRequiredService<WorldHostSettings>().PaperWhiteNits,
+                domains: sp.GetRequiredService<WorldValueDomainGuard>(),
                 // A session-sourced face's destination/reference lookup and resolver-owned instance — CORE, not
                 // presentation-only, so an observation lease attaches (and a destination instance starts) in every
                 // boot shape, exactly like WorldMachineHost's own boot-time machine start.
@@ -1215,7 +1219,8 @@ public static class WorldBootComposition {
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             bakes: sp.GetRequiredService<WorldBakeSchedule>(),
-            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>())
+            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>()),
+            domains: sp.GetRequiredService<WorldValueDomainGuard>()
         ) {
             // An offscreen capture shows bound state exactly as of the tick it is armed for.
             PinsStateFraction = true,
@@ -1579,7 +1584,8 @@ public static class WorldBootComposition {
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             bakes: sp.GetRequiredService<WorldBakeSchedule>(),
-            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>())
+            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>()),
+            domains: sp.GetRequiredService<WorldValueDomainGuard>()
         ).AttachTo(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
         // The overlay's glyph pack, loaded once, and the default render graph, which draws the overlay when the pack

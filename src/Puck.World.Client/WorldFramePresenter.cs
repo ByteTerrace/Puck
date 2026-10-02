@@ -135,7 +135,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // This frame's bounded volumes: the static placements' baked ones, then the stamp pool's slot-riding ones, in
     // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
-    private readonly WorldEnvironmentResolve m_environment = new();
+
+    private readonly WorldValueDomainGuard m_domains;
+    private readonly WorldEnvironmentResolve m_environment;
+
     // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
     private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
     private readonly Vector3[] m_lastSeatAnchorPosition = new Vector3[PlayerRoster.MaxSlots];
@@ -238,9 +241,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         for (var index = 0; (index < markers.Count); index++) {
             var marker = markers[index];
             var icon = m_resolveIcon(marker.Icon);
-            var chipAlpha = mirror.Scalar(
-                fallback: 0f,
-                scalar: marker.Style.ChipAlpha
+
+            var (chipAlpha, ringAlpha) = WorldMarkerAlphas.Resolve(
+                domains: m_domains,
+                index: index,
+                marker: marker,
+                mirror: mirror
             );
             var wantsRing = (marker.Ring is not null);
             var ringColor = (wantsRing
@@ -249,13 +255,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     mirror: mirror
                 )
                 : default
-            );
-            var ringAlpha = ((wantsRing && (marker.Style.RingAlpha is { } authoredRingAlpha))
-                ? mirror.Scalar(
-                    fallback: 0f,
-                    scalar: authoredRingAlpha
-                )
-                : 0f
             );
 
             if (marker.Source is WorldMarkerSource.Speakers) {
@@ -603,6 +602,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         var chase = view.ResolveChase(
             bodyOrientation: bodyOrientation,
             definition: definition,
+            domains: m_domains,
             mirror: state,
             views: views
         );
@@ -817,6 +817,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private IWorldCameraProgramRig ResolveCameraModeRig(WorldCameraProgram cameraRig, WorldDefinition definition, WorldStateMirror mirror, int slot) =>
         (m_cameraModeRigCache[slot] ??= new WorldCameraRigCompiler.Cache()).Resolve(
             definition: definition,
+            domains: m_domains,
             mirror: mirror,
             program: cameraRig
         );
@@ -948,6 +949,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         return cache.Resolve(
             definition: definition,
+            domains: m_domains,
             mirror: m_client.StateMirror,
             program: program
         );
@@ -1774,8 +1776,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <param name="bakes">The schedule pumped once per captured frame to keep the definition's creation bakes current,
     /// or <see langword="null"/> for a presentation that bakes nothing.</param>
     /// <param name="editor">Each seat's editor state, or <see langword="null"/> for a fresh one with nothing moved.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldBakeSchedule? bakes = null, WorldEditorSeats? editor = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, WorldValueDomainGuard domains, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldBakeSchedule? bakes = null, WorldEditorSeats? editor = null) {
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         Editor = (editor ?? new WorldEditorSeats());
         ArgumentNullException.ThrowIfNull(argument: client);
@@ -1800,6 +1804,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         m_markers = markers;
         m_resolveIcon = resolveIcon;
+        m_domains = domains;
+        m_environment = new WorldEnvironmentResolve(domains: domains);
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             m_markerChips[slot] = [];

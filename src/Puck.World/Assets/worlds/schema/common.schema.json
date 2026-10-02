@@ -8552,7 +8552,7 @@
       "title": "StatePoolSnapshot"
     },
     "WorldThemeScrim": {
-      "description": "One scrim\u0027s fill color plus its own alpha, split apart so a world can retheme opacity independent of hue \u2014 the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha is clamped to ScrimMinAlpha at resolve time when it is a state binding (see WorldDefinitionValidator\u0027s theme validation for the literal-authoring floor).",
+      "description": "One scrim\u0027s fill color plus its own alpha, split apart so a world can retheme opacity independent of hue \u2014 the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha lies between ScrimMinAlpha and one; a bound alpha a live write moves below the floor presents at it.",
       "type": "object",
       "properties": {
         "color": {

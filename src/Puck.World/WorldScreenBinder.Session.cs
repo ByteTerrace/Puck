@@ -121,6 +121,7 @@ internal sealed partial class WorldScreenBinder {
     // per-slot teardown.
     private void RegisterSessionView(SessionFeed feed) {
         var emitter = new WorldSessionSceneEmitter(
+            domains: m_domains,
             mirror: feed.Mirror,
             effectiveCameraName: feed.EffectiveCamera
         );

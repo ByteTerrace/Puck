@@ -17,7 +17,7 @@
             "token": "6"
         },
         "AssetChunk.Version": {
-            "shape": "3cd61f6b47a7568d",
+            "shape": "5dee26bc214c95a3",
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
             "token": "1"
         },
@@ -82,12 +82,12 @@
             "token": "PWLD"
         },
         "CreationDocument.CurrentSchema": {
-            "shape": "efa08a5a44acc711",
+            "shape": "a1420e814d99e51f",
             "source": "src/Puck.World.Authoring/Authoring/CreationDocument.cs",
             "token": "puck.creation.v1"
         },
         "DefinitionChunk.Version": {
-            "shape": "3cd61f6b47a7568d",
+            "shape": "5dee26bc214c95a3",
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
             "token": "2"
         },
@@ -267,12 +267,12 @@
             "token": "21"
         },
         "WorldAuthorityReceiptSnapshot.CurrentSchema": {
-            "shape": "1b3e533f01d32314",
+            "shape": "ddf8fd1613ff9787",
             "source": "src/Puck.World.Server/WorldAuthorityReceiptSnapshot.cs",
             "token": "puck.world.receipts.v1"
         },
         "WorldAuthorityRecoveryRootCodec.Schema": {
-            "shape": "e905f743227ff48b",
+            "shape": "c77028c9f1c7b15a",
             "source": "src/Puck.World.Server/WorldAuthorityRecoveryRoot.cs",
             "token": "puck.authority.recovery-root.v1"
         },
@@ -297,12 +297,12 @@
             "token": "PWBK"
         },
         "WorldCameraProgram.CurrentVersion": {
-            "shape": "6cc99aafee4f8016",
+            "shape": "8542caec663dba43",
             "source": "src/Puck.World.Schema/WorldCameraProgram.cs",
             "token": "puck.camera.program.v1"
         },
         "WorldCaptureManifest.SchemaId": {
-            "shape": "55e97ce2766698fd",
+            "shape": "65028e1b0e54f763",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -312,7 +312,7 @@
             "token": "PUCKWCC3"
         },
         "WorldCounterpartAttestation.SchemaVersion": {
-            "shape": "180b3bede570f09c",
+            "shape": "3ed74ef1aa3c51c2",
             "source": "src/Puck.World.Schema/WorldCounterpartAttestation.cs",
             "token": "puck.world.counterpart-attestation.v1"
         },
@@ -327,7 +327,7 @@
             "token": "puck.counters.report.v1"
         },
         "WorldDefinition.SchemaVersion": {
-            "shape": "180b3bede570f09c",
+            "shape": "3ed74ef1aa3c51c2",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
@@ -337,12 +337,12 @@
             "token": "puck.world.extensions.v1"
         },
         "WorldFederationCodec.WireKey": {
-            "shape": "f3e0faba652a762e",
+            "shape": "84ee8169b3045d52",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED6"
         },
         "WorldProjectionDocument.SchemaVersion": {
-            "shape": "180b3bede570f09c",
+            "shape": "3ed74ef1aa3c51c2",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },
@@ -362,7 +362,7 @@
             "token": "puck.world.qualification-exercise.v1"
         },
         "WorldReleaseFixtureArchive.Schema": {
-            "shape": "83db3c263efe5638",
+            "shape": "fb55746bc2ba3d4a",
             "source": "src/Puck.World.Server/WorldReleaseFixtureArchive.cs",
             "token": "puck.world.release-fixture.v1"
         },
@@ -392,12 +392,12 @@
             "token": "puck.world.rewind.closed-group.v1"
         },
         "WorldReplaySnapshot.Magic": {
-            "shape": "f528ebdcfda7eee0",
+            "shape": "fed0da113baae53a",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
         "WorldReplaySnapshot.ShapeToken": {
-            "shape": "f528ebdcfda7eee0",
+            "shape": "fed0da113baae53a",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "6"
         },
