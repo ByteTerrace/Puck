@@ -1,4 +1,6 @@
+using System.Numerics;
 using System.Text.RegularExpressions;
+using Puck.SignedDistance;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -23,12 +25,11 @@ public sealed partial class SdfSkySamplingLawTests {
             Assert.True(condition: (load.Index >= (guard.Index + guard.Length)));
         }
     }
-
     [Fact]
     public void EverySkyFieldEvaluationCountsIncludingFogAndFallback() {
         var sources = Directory.EnumerateFiles(path: Root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
             .Select(selector: path => (Path: path, Code: CodeOf(path: path)))
-            .Where(predicate: static source => !source.Path.EndsWith(value: "sdf-sky.hlsli", comparisonType: StringComparison.Ordinal))
+            .Where(predicate: static source => !source.Path.EndsWith(comparisonType: StringComparison.Ordinal, value: "sdf-sky.hlsli"))
             .Where(predicate: static source => GradientCallPattern().IsMatch(input: source.Code))
             .ToArray();
 
@@ -36,22 +37,23 @@ public sealed partial class SdfSkySamplingLawTests {
         foreach (var source in sources) {
             Assert.Equal(expected: GradientCallPattern().Matches(input: source.Code).Count,
                 actual: CountedGradientPattern().Matches(input: source.Code).Count);
-            Assert.Contains(expectedSubstring: "puckCountSky(evaluations);", actualString: source.Code);
+            Assert.Contains(actualString: source.Code, expectedSubstring: "puckCountSky(evaluations);");
             // A fogged partial hit may also need the in-place fallback. An assignment of one loses the fog's count.
             Assert.Equal(expected: ["evaluations = 0u;"],
                 actual: CounterAssignmentPattern().Matches(input: source.Code).Select(selector: static match => match.Value));
         }
     }
-
     [Fact]
-    public void DisabledFogDoesNotEvaluateTheGradient() => Assert.Matches(
-        expectedRegexPattern: @"if \(\(litColor.a > 0.0\) && \(t > 0.0\) && \(sdfSky\[0\].FogDensity > 0.0\)\) \{[^{}]*sdfSkyGradient\(",
-        actualString: CodeOf(path: "passes/sdf-composite.comp.hlsl")
-    );
+    public void DisabledFogDoesNotEvaluateTheGradient() {
+        // The composite evaluates the fog's gradient only under a positive in-scatter weight, which a zero density makes
+        // exactly zero: its transmittance is exactly one.
+        Assert.Matches(expectedRegexPattern: @"if \(fog > 0\.0\) \{[^{}]*sdfSkyGradient\(", actualString: CodeOf(path: "passes/sdf-composite.comp.hlsl"));
+        Assert.Matches(expectedRegexPattern: @"\(\(density > 0\.0\) \? exp\(-density \* t\) : 1\.0\)", actualString: CodeOf(path: "shade/sdf-transport.hlsli"));
+        Assert.Equal(expected: 0f, actual: SdfSurfaceTransport.Sample(fogDensity: 0f, sample: new SdfRenderSample(Color: Vector3.One, Coverage: 1f, Distance: 100f)).Fog);
+    }
 
     private static string CodeOf(string path) =>
         LineCommentPattern().Replace(input: File.ReadAllText(path: Path.Combine(path1: Root, path2: path)), replacement: string.Empty);
-
     [GeneratedRegex(pattern: @"//[^\n]*")]
     private static partial Regex LineCommentPattern();
     [GeneratedRegex(pattern: @"float4 runBase = skyBase.Load\(tap\);\s*if \(runBase.a <= 0.0\) \{\s*continue;\s*\}\s*weight \*= runBase.a;")]

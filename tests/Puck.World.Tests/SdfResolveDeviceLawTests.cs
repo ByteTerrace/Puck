@@ -91,14 +91,14 @@ public sealed class SdfResolveDeviceLawTests {
         using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)GpuKernelCounters.RowBytes), usage: GpuBufferUsage.Storage);
-        // The dispatch box, in 8x8 groups, over the whole render grid; every record a miss; one distance an output pixel.
+        // The dispatch box, in 8x8 groups, over the whole render grid; every record a miss; one transport word an output pixel.
         var box = new byte[16];
 
         BinaryPrimitives.WriteUInt32LittleEndian(destination: box.AsSpan(start: 8), value: ((RenderWidth + 7) / 8));
         BinaryPrimitives.WriteUInt32LittleEndian(destination: box.AsSpan(start: 12), value: ((RenderHeight + 7) / 8));
         using var cullBounds = services.BufferFactory.CreateHostVisible(data: box, name: default, usage: GpuBufferUsage.Storage);
         using var visibility = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)RenderWidth) * RenderHeight) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage);
-        using var distance = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)width) * height) * sizeof(float)), usage: GpuBufferUsage.Storage);
+        using var transport = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)width) * height) * sizeof(uint)), usage: GpuBufferUsage.Storage);
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width);
         using var upload = services.SurfaceTransferFactory.CreateUpload();
         var sourceView = upload.Upload(pixels: source, format: GpuPixelFormat.R8G8B8A8Unorm, width: RenderWidth, height: RenderHeight);
@@ -119,7 +119,7 @@ public sealed class SdfResolveDeviceLawTests {
                 [Binding(member: ShaderWorkCounters.Buffer)] = counters,
                 [Binding(member: SdfWorldPackage.CullBounds)] = cullBounds,
                 [Binding(member: SdfWorldPackage.VisibilityRecords)] = visibility,
-                [Binding(member: SdfWorldPackage.SurfaceDistanceWritten)] = distance,
+                [Binding(member: SdfWorldPackage.TransportWritten)] = transport,
             };
             var sets = new List<(uint Group, nint Set)>();
 

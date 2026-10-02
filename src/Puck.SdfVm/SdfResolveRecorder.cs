@@ -6,7 +6,7 @@ namespace Puck.SdfVm;
 
 // Reconstruction uses the residency's optional reloadable pipeline: native views allocate none of its GPU resources.
 // The pass binds the residency's World set, whose tables sdfReprojection reads, and its pass group: the render-grid
-// color, the visibility records and the dispatch box it reads the grid through, the lit image and the surface distance it
+// color, the visibility records and the dispatch box it reads the grid through, the lit image and the surface transport it
 // writes, and, in the temporal fragment, the reactivity and the history of the preceding frame and of this one. A spatial
 // resolve binds the tables' fillers at the temporal members. The sky and the composite follow it, so it leaves the render
 // to the composite to complete.
@@ -28,7 +28,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         SdfWorldPackage.HistoryColor,
         SdfWorldPackage.HistorySurface,
     ];
-    // The temporal fragment's resolve outputs after the lit image and the surface distance, by the member each binds at,
+    // The temporal fragment's resolve outputs after the lit image and the surface transport, by the member each binds at,
     // in port order.
     private static readonly string[] TemporalOutputs = [
         SdfWorldPackage.HistoryColorWritten,
@@ -126,7 +126,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
 
         bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.CurrentColor), descriptorSetHandle: set, imageViewHandle: recording.Inputs[0].Image.ImageViewHandle);
         bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: SdfWorldPackage.Output), descriptorSetHandle: set, imageViewHandle: recording.Outputs[0].Image.ImageViewHandle);
-        tables.WriteInterfaceBuffer(buffer: recording.Outputs[1].Buffer!, layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.SurfaceDistanceWritten, set: set);
+        tables.WriteInterfaceBuffer(buffer: recording.Outputs[1].Buffer!, layout: SdfWorldInterfaces.ResolveParameters.Layout, member: SdfWorldPackage.TransportWritten, set: set);
         for (var port = 0; (port < Inputs.Length); port++) {
             tables.WriteInterfaceBuffer(buffer: recording.Inputs[(port + 1)].Buffer!, layout: SdfWorldInterfaces.ResolveParameters.Layout, member: Inputs[port], set: set);
         }

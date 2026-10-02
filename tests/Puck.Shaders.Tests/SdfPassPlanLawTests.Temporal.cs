@@ -12,7 +12,7 @@ public sealed partial class SdfPassPlanLawTests {
         Packages: [new RenderGraphPackagePass(Name: Sdf, Package: RenderGraphPackageCatalog.SdfWorld, Outputs: [SdfWorldPackage.Color])]));
 
     // The temporal resolve reads the history the previous frame wrote and writes this frame's, both at the output extent
-    // and one storage a frame slot, beside the lit image and the surface distance; the reactivity views writes is one
+    // and one storage a frame slot, beside the lit image and the surface transport; the reactivity views writes is one
     // transient render-extent buffer the resolve consumes within the frame. The sky never enters the history: the sky
     // and composite passes follow the resolve.
     [Fact]
@@ -24,7 +24,7 @@ public sealed partial class SdfPassPlanLawTests {
         var surface = Storage(plan: plan, version: SdfWorldPackage.Parts.HistorySurface);
         var reactivity = Storage(plan: plan, version: SdfWorldPackage.Parts.Reactivity);
         var lit = Storage(plan: plan, version: SdfWorldPackage.Parts.Lit);
-        var distance = Storage(plan: plan, version: SdfWorldPackage.Parts.SurfaceDistance);
+        var transport = Storage(plan: plan, version: SdfWorldPackage.Parts.Transport);
 
         Assert.All(collection: [color, surface], action: static storage => {
             Assert.True(condition: storage.Declaration.History);
@@ -44,7 +44,7 @@ public sealed partial class SdfPassPlanLawTests {
             actual: resolve.Accesses.Where(predicate: static access => access.PreviousFrame).Select(selector: static access => access.Storage).Order()
         );
         Assert.Equal(
-            expected: new[] { lit.Index, distance.Index, color.Index, surface.Index }.Order(),
+            expected: new[] { lit.Index, transport.Index, color.Index, surface.Index }.Order(),
             actual: resolve.Accesses.Where(predicate: static access => (!access.PreviousFrame && access.Use.Access.HasFlag(flag: GpuAccess.ShaderWrite))).Select(selector: static access => access.Storage).Order()
         );
         Assert.Contains(collection: resolve.Accesses, filter: access => ((access.Storage == reactivity.Index) && !access.Use.Writes));

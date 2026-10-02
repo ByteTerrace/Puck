@@ -5808,19 +5808,33 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      and each kernel's table bindings to the generated interface.
 5. **P18-5, the sky once, and a composite last.** Landed.
    - Landed: views shades hits only into the lit image (`SdfWorldPackage.Parts.Lit`,
-     premultiplied, coverage in alpha, a miss uncovered); `sky`
+     premultiplied by coverage and by each hit's fog transmittance, coverage in
+     alpha, a miss uncovered); `sky`
      (`passes/sdf-sky-runs.comp.hlsl`) writes the gradient's offset and the
      cloud run's scale and offset as half-float images on the render grid where a
      pixel or a neighbour of views' color is not wholly covered, and marks the
-     texels it evaluated; `composite` (`passes/sdf-composite.comp.hlsl`) fogs the
-     lit image toward the gradient by its ray distance, composes the runs beneath
-     it by its coverage (filtered from the evaluated texels, the disc and stars
-     evaluated at the pixel), and integrates the bounded media. Both read the
-     sky interface (`SdfWorldInterfaces.SkyParameters`) and record through
-     `SdfSkyRecorder`. A native view reads views' lit image and visibility records,
-     current only inside the dispatch box; a reduced or temporal view's resolve
-     writes the lit image and each pixel's surface distance at the output extent,
-     its history holding coverage with color and never the sky. The default look
+     texels it evaluated; `composite` (`passes/sdf-composite.comp.hlsl`) adds the
+     fog's in-scatter of the gradient by the surface transport's weight, composes
+     the runs beneath the lit image by its coverage (filtered from the evaluated
+     texels, the disc and stars evaluated at the pixel), and integrates the
+     bounded media over the surface share to its transport's distance and over
+     the sky share to the far distance. Both read the sky interface
+     (`SdfWorldInterfaces.SkyParameters`) and record through `SdfSkyRecorder`. A
+     native view reads views' lit image and visibility records, current only
+     inside the dispatch box; a reduced or temporal view's resolve writes the lit
+     image and each pixel's surface transport at the output extent, its history
+     holding coverage and transport with color and never the sky.
+     The surface transport is two numbers a render sample, computed from the
+     sample's own ray distance and premultiplied by its coverage: the fog's
+     in-scatter weight, coverage times one minus transmittance, and coverage
+     over distance. The resolve reads each transport tap beside its color tap
+     over one footprint (`reconstruction.hlsli`'s footprint and combine), and
+     accumulates it with the Gaussian and history weights color has, so a
+     pixel's fog is its samples' coverage-weighted fog exactly. Media clip at
+     the harmonic mean of the samples' distances, exact for a footprint of one
+     surface; a medium lying between two surfaces of one footprint is the one
+     case not reproduced sample by sample. The CPU reference is
+     `SdfSurfaceTransport` (`SdfSurfaceTransportLawTests`). The default look
      is the two-stop gradient and fog `SdfSky` starts from, as data. The CPU
      reference for the run composition is `SdfSkyRuns`. `gpu.sky.evaluations` is a
      kernel-counted kind beside the march steps and texels written; the field
@@ -5851,6 +5865,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      a device law counts zero field evaluations in the sky pass for a pixel
      covered with all its neighbours and one for a pixel that misses;
      a shader law requires the composite's fog and fallback evaluations to count;
+     `SdfSurfaceTransportLawTests` hold a quarter-covered pixel of a two-sample
+     row upscaled to four to its covered share's fog and a medium behind its
+     edge to its sky share, on the CPU reference within 1e-5 a channel (red leg:
+     the distance of the one sample under the pixel's center fails both);
      `SkyRunCompositionLawTests` hold the run composition to one ordered
      evaluation of the whole stack, on a CPU reference within a stated float
      tolerance, for stars beneath clouds and for a mixed stack (`over`, `add`,
@@ -5861,7 +5879,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Counted-cost gate: `gpu.sky.evaluations` includes about (1 − h) × P field
      evaluations per view, the dilated edge, composite fallbacks and fog gradients
      at output resolution. The committed ceilings require a recording that
-     includes the composite's fog work; each pass reports its own row.
+     includes the composite's fog work; each pass reports its own row. The
+     surface transport adds no storage: its word replaces the surface distance's,
+     and the history surface keeps three words by holding the distance and the
+     gathered weight as half floats. An edge pixel whose media reach past its
+     surface integrates them once more, counted in the composite's march steps.
 6. **P18-6, a cadence per pass.**
    - Landed foundation: the graph can retain private intermediate resources
      and leave a pass standing while its signature, extent, inputs and outputs
@@ -5882,7 +5904,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Done when: a law over the fake device drives one change of each class
      over a still camera and holds each frame to exactly its class's
      dispatches, with the barriers the plan states: a cloud drift, a twinkle, a
-     fog edit and a moving volume to `sky` and `composite`; a keyed light
+     fog colour edit and a moving volume to `sky` and `composite`; a fog density
+     edit, which each hit's transmittance in the lit image carries, to `views`,
+     `resolve`, `sky` and `composite`; a keyed light
      colour to `views`, `sky` and `composite` (and, from P18-9, a keyed colour
      on a lighting-visible layer to those and `sky.environment`); an orbiting
      shadowed body to those and `shadow` (red leg:
@@ -5992,7 +6016,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       colour below a surface), and the bounded media authored under it by
       creations, lit by bodies.
     - Deletes: `WorldRenderSkyLayer.Fog` and the fog density lane.
-    - Touches: the records, `composite`, `shade/shade-volumes.hlsli`,
+    - Carries each kind's transmittance and in-scatter weight per render sample
+      as the surface transport carries the fog's (`shade/sdf-transport.hlsli`),
+      so the resolve reconstructs them with the color's weights.
+    - Touches: the records, `composite`, `shade/sdf-transport.hlsli`,
+      `shade/shade-volumes.hlsli`,
       `CreationStampEmitter`'s volume emission, `tests/Puck.Parity`.
     - Done when: a law holds height fog's integral along a ray to its closed
       form (red leg: a ray parallel to the base); an `atmosphere` canary holds

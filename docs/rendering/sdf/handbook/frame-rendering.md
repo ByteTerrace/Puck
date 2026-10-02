@@ -210,10 +210,12 @@ sets the reconstruction blend.
 Views shades only the pixels a surface covers. It writes the **lit image**: each
 pixel's shaded color premultiplied by its **coverage**, with the coverage in the
 alpha, which is one for a solid hit, the silhouette's share on an edge beside the
-sky, and zero for a miss. In a native view a pixel outside the dispatch box is
-never written, so the passes after views read it as uncovered; in a reduced or
-temporal view the resolve reconstructs the lit image, coverage with color, and
-each pixel's surface distance at the output extent.
+sky, and zero for a miss. The color has already passed through the fog between
+the camera and the hit (see [surface transport](#surface-transport)). In a native
+view a pixel outside the dispatch box is never written, so the passes after views
+read it as uncovered; in a reduced or temporal view the resolve reconstructs the
+lit image, coverage with color, and each pixel's surface transport at the output
+extent.
 
 The sky's layers compose in their authored order, and the sky is cut into
 **runs** without reordering it: the gradient is a field run, the sun disc and the
@@ -230,21 +232,75 @@ scale and offset, and the runs compose as the stack does
   and each pixel evaluated counts one `gpu.sky.evaluations`. A reduced view's sky therefore costs its render
   grid's uncovered pixels, not its output's.
 - The `composite` pass (`passes/sdf-composite.comp.hlsl`) writes the view's
-  color. With positive fog density it fogs the lit image toward the gradient by
-  its ray distance, scaled by its coverage, and counts that gradient evaluation
-  in `gpu.sky.evaluations`; zero density evaluates no fog gradient. Where the
-  coverage is below one it composes the runs beneath it,
-  filtered from the texels the sky evaluated (or evaluated in place, and counted,
-  where it evaluated none beside the pixel, counted separately from fog), the disc and the stars evaluated at
-  the pixel so they stay sharp, and puts the
-  lit image over them by its coverage, so a silhouette blends toward the full sky
-  at its pixel. The bounded media integrate last, clipped to the surface's ray
-  distance or the far distance on a miss.
+  color. It adds the fog's glow, the gradient scaled by the surface transport's
+  in-scatter weight, and counts that gradient evaluation in
+  `gpu.sky.evaluations`; zero fog density gives a zero weight and evaluates no
+  gradient. Where the coverage is below one it composes the runs beneath the
+  lit image, filtered from the texels the sky evaluated (or evaluated in place,
+  and counted separately from the fog, where it evaluated none beside the
+  pixel), the disc and the stars evaluated at the pixel so they stay sharp, and
+  puts the lit image over them by its coverage, so a silhouette blends toward
+  the full sky at its pixel. The bounded media integrate last, over each share
+  of the pixel separately: the surface share up to the surface transport's
+  distance, and the sky share up to the far distance.
 
 An unauthored world renders the default look: the two-stop gradient and fog
 `SdfSky` starts from, read like any authored sky. A debug view's lit image is
-its whole picture, so the sky evaluates nothing and the composite passes it
-through.
+its whole picture, so it is not fogged, the sky evaluates nothing and the
+composite passes it through.
+
+### Surface transport
+
+Fog and media depend on how far away a surface is, and a reduced or temporal
+view's output pixel is a weighted blend of several render samples, each at its
+own distance. A single distance per output pixel cannot describe that blend: at
+an edge where a quarter of the pixel is a wall 100 units away and the rest is
+sky, the sample under the pixel's center may be the sky's, and the wall's quarter
+would then receive no fog at all. Instead each render sample carries its own
+transport, in the same premultiplied form as its color, so that blending samples
+blends their transport by exactly the same weights.
+
+For a sample with coverage `a`, color `C` and ray distance `t`, the fog lets
+through `T = exp(-density · t)` of the surface's light and replaces the rest with
+the sky's gradient `G`. Its contribution to the pixel is
+`a · (T · C + (1 − T) · G)`, and the uncovered share `1 − a` shows the sky `S`.
+For a weighted blend of samples `i` with weights `wᵢ`:
+
+```text
+Σ wᵢ · [aᵢ (Tᵢ Cᵢ + (1 − Tᵢ) G) + (1 − aᵢ) S]
+  = Σ wᵢ aᵢ Tᵢ Cᵢ  +  G · Σ wᵢ aᵢ (1 − Tᵢ)  +  (1 − Σ wᵢ aᵢ) · S
+```
+
+Each sum is linear in the samples, so each can be filtered like color. Views
+writes the first, `aᵢ Tᵢ Cᵢ`, as the lit image's color; the alpha holds `aᵢ`.
+The resolve computes the second, the **in-scatter weight** `aᵢ (1 − Tᵢ)`, from
+each sample's own visibility record, and reads it beside the color at every tap
+of the same reconstruction footprint (`reconstruction.hlsli`'s footprint and
+combine); the temporal path sums it with the same Gaussian weights and
+reprojects it with the same history weights. The composite then adds `G` times
+the resolved weight and the sky runs times one minus the resolved coverage, so a
+pixel's fog is its samples' fog, exactly, whatever the footprint. The gradient
+is evaluated once at the output pixel's own direction, as the sky's runs are.
+
+A bounded medium does not blend the same way, because whether it lies in front of
+a surface depends on that surface's distance. The composite therefore splits the
+pixel into its surface share, of the resolved coverage, and its sky share, the
+rest, and clips each share's media at its own end: the sky share at the far
+distance, and the surface share at the harmonic mean of its samples' distances,
+which the transport carries as its second number, `aᵢ / tᵢ` (scaled to stay
+precise as a half float). Where a footprint holds one surface, that mean is the
+surface's own distance, so a medium behind an edge reaches only the sky share
+and never paints over the surface. Where a footprint spans a step between two
+surfaces, the harmonic mean lies toward the nearer one; a medium lying between
+the two is the one case the clip does not reproduce sample by sample.
+
+The transport costs no extra memory: it is one word of two half floats an output
+pixel, the size of a single float distance, and the history surface fits it in
+its three words by holding the distance and the weight as half floats. `SdfSurfaceTransport` is the CPU reference, and
+`SdfSurfaceTransportLawTests` hold the blend to the per-sample result. Because
+each hit's transmittance is in the lit image, a change of fog density reaches
+views and the resolve, while a change of the fog's color, the gradient, reaches
+only the composite.
 
 ## Temporal reconstruction
 
@@ -265,17 +321,19 @@ one allocation a frame slot each, that the next frame reads through
 - The **history color** holds, per output pixel, the weighted mean of every sample
   the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
   premultiplied as the lit image is.
-- The **history surface** holds three words per output pixel: the ray distance and
-  the visibility identity of the nearest of the render samples the resolve read,
-  and the samples' summed weight, capped at one jitter period of full-weight
-  samples.
+- The **history surface** holds three words per output pixel: the visibility
+  identity of the nearest of the render samples the resolve read; that sample's
+  ray distance and the samples' summed weight, capped at one jitter period of
+  full-weight samples, as two half floats; and the weighted mean of the samples'
+  surface transport.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads, inside the dispatch box: one where a screen
 covers the pixel, and, since the material model cannot tell steady emission from
 animated, the share of the pixel's color its material emits. Coverage stays in
-the color's alpha. The sky and the bounded media never enter the history: they
-composite after the resolve.
+the color's alpha. The sky, the fog's glow and the bounded media never enter the
+history: they composite after the resolve. The fog's transmittance does, inside
+the lit color and the transport, as a property of each sample's surface.
 
 The temporal resolve takes, for each output pixel, the 3x3 render samples
 nearest its center, each weighted by a Gaussian of its distance in output
@@ -287,7 +345,8 @@ position is rejected when the history surface there names another identity or a
 ray distance more than 5% from the reprojected one; the pixel then shows the
 spatial path at this frame's sample grid and its history restarts. Surviving
 history is clipped to the 3x3's YCoCg box, weighted down by the reactivity, and
-joined by this frame's samples.
+joined by this frame's samples. The transport history is clamped to the 3x3's
+range, as coverage is, and joined with the same weights.
 
 History epochs are free: a reset sets the instance's frame count to zero, and the
 resolve then reads no history, so the first frame after a cut, a follow or a

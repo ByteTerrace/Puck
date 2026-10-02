@@ -12,6 +12,7 @@
 #include "../surface/sdf-surface.hlsli"
 #include "../surface/sdf-shadow.hlsli"
 #include "../shade/sdf-light-stage.hlsli"
+#include "../shade/sdf-transport.hlsli"
 #include "../debug/sdf-debug-views.hlsli"
 
 #ifdef SDF_VIEWS_PASS
@@ -37,9 +38,11 @@ float sdfSurfaceReactivity(SdfSurfaceSample s, float3 color) {
     return saturate(dot((material.albedo * material.emissive), Luma) / max(dot(color, Luma), 1.0e-4));
 }
 // The views stage: the pixel's light stage over its surface sample and the debug view, with the pixel's coverage and
-// reactivity (sdfSurfaceReactivity). The sky, the fog and the bounded volumes are the composite's, so a moving medium
-// never enters a temporal view's history. A debug view draws the whole pixel, so it covers it. A lane past the render
-// extent returns black, which the caller never stores.
+// reactivity (sdfSurfaceReactivity). A hit's color leaves through the fog's transmittance over its own ray distance
+// (sdf-transport.hlsli), so the resolve filters it with the coverage as one premultiplied quantity; the fog's in-scatter,
+// the sky and the bounded volumes are the composite's, so a moving medium never enters a temporal view's history. A
+// debug view draws the whole pixel, so it covers it and is not fogged. A lane past the render extent returns black,
+// which the caller never stores.
 float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     coverage = 0.0;
     reactivity = 0.0;
@@ -59,9 +62,11 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
 
     if (p.viewMode != 0) {
         coverage = 1.0;
+
+        return sdfDebugView(p, s, color);
     }
 
-    return sdfDebugView(p, s, color);
+    return (sdfDebugView(p, s, color) * (s.hit ? sdfFogTransmittance(s.t) : 1.0));
 }
 #endif
 

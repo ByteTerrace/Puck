@@ -102,7 +102,7 @@ of its passes. The upload and the view's passes, in order:
 | `shadow` | `sdf-world-shadow.comp` | The key light's soft shadow into the record's K row, with its own candidate mask; skips a frame whose soft shadows are off or that has no shadow light (`Skips`). |
 | `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss left uncovered. |
 | `sky` | `sdf-sky-runs.comp` | The sky's field runs on the render grid, from views' color, only where a pixel or one of its neighbours is not wholly covered: the gradient's offset, then the cloud run's scale and offset, the base's alpha marking an evaluated texel. Counts `gpu.sky.evaluations`. Binds the sky interface (`SdfWorldInterfaces.SkyParameters`) and the World set. |
-| `composite` | `sdf-composite.comp` | The view's color: the lit image fogged toward the gradient, the sky's runs in their authored order, filtered from the texels the sky evaluated, beneath it by its coverage (the disc and stars evaluated at the pixel), then the bounded media. |
+| `composite` | `sdf-composite.comp` | The view's color: the lit image (already through each hit's fog transmittance) plus the gradient by the surface transport's in-scatter weight, the sky's runs in their authored order, filtered from the texels the sky evaluated, beneath it by its coverage (the disc and stars evaluated at the pixel), then the bounded media over the surface share to the transport's distance and over the sky share to the far distance. |
 
 The ceiling (`SdfViewSnapshot.RenderCeiling`) alone selects the fragment
 (`SdfWorldPasses.FragmentOf`) and is the whole render-extent revision, so a
@@ -111,7 +111,7 @@ a frame of one graph at another's grid. A view at a native ceiling uses
 `SdfWorldPackage.NativeFragment`, eleven passes whose composite writes `color`,
 and ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
 `Fragment`: views writes `currentColor` (one transient allocation) at the active
-render grid, then `sdf-resolve.comp` writes the lit image and the surface distance
+render grid, then `sdf-resolve.comp` writes the lit image and the surface transport
 at the output grid, the sky evaluates its runs on the render grid from views' color, and the composite follows the resolve at the output grid, reading its render grid from the recording
 (`RenderGraphPackageRecording.RenderWidth`), the node's one resolution of it.
 Scratch is allocated at the render ceiling; current-grid changes, a layout

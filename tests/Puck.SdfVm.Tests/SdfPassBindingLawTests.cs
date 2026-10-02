@@ -19,7 +19,7 @@ public sealed class SdfPassBindingLawTests {
     // The kernels each light and sky table is bound by, and no other.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
         (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, .. ViewsKernels]),
-        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, .. ViewsKernels]),
+        (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyStops, [SdfKernel.Sky, SdfKernel.Composite]),
         (SdfKernelInterfaces.Softboxes, ViewsKernels),
     ];

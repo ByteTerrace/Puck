@@ -1,7 +1,7 @@
 // Bounded flow/cloud volumes (Puck.SignedDistance.SdfVolume, a participating medium, never a distance-field shape):
 // sdfVolumes, eleven float4 rows a volume, paired with SdfWorldTables.PackVolumes, which bakes each medium's motion from
 // the frame's presented tick, so no pass reads a clock. The composite pass alone integrates them, after the surface and
-// the sky, clipped to each pixel's ray distance.
+// the sky, clipping the pixel's surface share at its surface and its sky share at the far distance.
 #ifndef SDF_SHADE_VOLUMES_HLSLI
 #define SDF_SHADE_VOLUMES_HLSLI
 #include "../field/sdf-noise.hlsli"
@@ -163,15 +163,24 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
     transmissionOut = transmission;
 }
 
-// Composites every bounded volume whose slab intersects the ray between `nearDistance`, the ray distance where it
-// crosses the camera's own near plane (worldNearDistance, zero for a camera whose image begins at its eye), and
-// `surfaceDistance`, so a volume never paints before the near plane or through solid geometry. Select the next
-// farthest intersecting volume, integrate it, and composite immediately. This preserves the previous entry-distance
-// ordering (including index ties) without per-pixel arrays or an unrolled copy of the integrator for every capacity
-// slot. Overlapping media still composite as whole volumes; this is not a combined-density integral through their
-// overlap. `covered` is one where any volume composites over the ray's span, which a temporal view treats as reactive.
-float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float nearDistance, float surfaceDistance, uint2 pixel, out float covered) {
+// Composites every bounded volume over a pixel's two shares, each clipped where its own rays end, so a volume never
+// paints before the near plane or through solid geometry: the surface share, premultiplied by its coverage
+// `surfaceCoverage`, between `nearDistance` (the ray distance where the ray crosses the camera's own near plane,
+// worldNearDistance, zero for a camera whose image begins at its eye) and `surfaceDistance`, and the sky share beside it,
+// premultiplied by the rest of the pixel, between `nearDistance` and `farDistance`. A volume composes over a share of
+// weight w as w times its radiance plus its transmission times the share. Select the next farthest intersecting volume,
+// integrate it, and composite immediately. This preserves the previous entry-distance ordering (including index ties)
+// without per-pixel arrays or an unrolled copy of the integrator for every capacity slot. A volume that ends before the
+// surface integrates once for both shares; one the surface clips integrates again over the surface share's span.
+// Overlapping media still composite as whole volumes; this is not a combined-density integral through their overlap.
+// `covered` is one where any volume composites over the ray's span, which a temporal view treats as reactive.
+float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance, float3 sky, float3 rayOrigin, float3 rayDirection, float nearDistance, float farDistance, uint2 pixel, out float covered) {
     covered = 0.0;
+    bool surfaceShare = (surfaceCoverage > 0.0);
+    bool skyShare = (surfaceCoverage < 1.0);
+    float skyCoverage = (1.0 - surfaceCoverage);
+    // The span a volume is selected over: the farther share's.
+    float spanEnd = (skyShare ? farDistance : surfaceDistance);
     float dither = ((sdfR2Dither(pixel) * 2.0) - 1.0);
     float previousNear = 3.402823e+38;
     uint previousIndex = SdfVolumeCount;
@@ -185,7 +194,7 @@ float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float n
             float3 localOrigin = sdfVolumeLocalPoint(v, rayOrigin);
             float3 localDirection = sdfVolumeLocalDirection(v, rayDirection);
             float2 interval = sdfVolumeSlabInterval(localOrigin, localDirection, v.halfExtent);
-            if (min(interval.y, surfaceDistance) <= max(interval.x, nearDistance)) continue;
+            if (min(interval.y, spanEnd) <= max(interval.x, nearDistance)) continue;
             bool beforeCursor = interval.x < previousNear || (interval.x == previousNear && index < previousIndex);
             bool nearerChoice = interval.x > selectedNear || (interval.x == selectedNear && index > selected);
             if (beforeCursor && (selected == SdfVolumeCount || nearerChoice)) {
@@ -198,17 +207,28 @@ float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float n
         float3 localOrigin = sdfVolumeLocalPoint(v, rayOrigin);
         float3 localDirection = sdfVolumeLocalDirection(v, rayDirection);
         float2 interval = sdfVolumeSlabInterval(localOrigin, localDirection, v.halfExtent);
+        float begin = max(interval.x, nearDistance);
+        float skyEnd = min(interval.y, farDistance);
+        float surfaceEnd = min(interval.y, surfaceDistance);
         v.intensity *= sdfVolumeIntensityScale(v);
-        float3 radiance; float transmission;
-        sdfIntegrateVolume(v, localOrigin, localDirection, max(interval.x, nearDistance), min(interval.y, surfaceDistance),
-            dither, radiance, transmission);
-        color = radiance + transmission * color;
+        float3 radiance = float3(0.0, 0.0, 0.0);
+        float transmission = 1.0;
+        if (skyShare) {
+            sdfIntegrateVolume(v, localOrigin, localDirection, begin, skyEnd, dither, radiance, transmission);
+            sky = ((skyCoverage * radiance) + (transmission * sky));
+        }
+        if (surfaceShare && (surfaceEnd > begin)) {
+            if (!skyShare || (surfaceEnd < skyEnd)) {
+                sdfIntegrateVolume(v, localOrigin, localDirection, begin, surfaceEnd, dither, radiance, transmission);
+            }
+            surface = ((surfaceCoverage * radiance) + (transmission * surface));
+        }
         covered = 1.0;
         previousNear = selectedNear;
         previousIndex = selected;
     }
 
-    return color;
+    return (surface + sky);
 }
 
 #endif

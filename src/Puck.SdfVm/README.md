@@ -87,7 +87,7 @@ it runs once per view as a pass of the view's `sdf.world` instance, into that
 instance's render grid. Native views use `SdfWorldPackage.NativeFragment`, whose sky and composite read
 the lit image and the visibility records views left. Views whose render-scale
 ceiling is below native use `SdfWorldPackage.Fragment`: its `sdf-resolve.comp`
-reconstructs the lit image and each pixel's surface distance at the output extent
+reconstructs the lit image and each pixel's surface transport at the output extent
 from the render-grid color, which is one transient allocation, and the sky and
 composite follow it, so the sky is never resampled or kept in history. The graph
 planner decides every barrier. `place` then places the output in its seat rect,

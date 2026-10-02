@@ -19,18 +19,20 @@ public static partial class SdfWorldPackage {
     public const string HistoryColor = "historyColor";
     /// <summary>The history color the resolve writes for the next frame.</summary>
     public const string HistoryColorWritten = "historyColorRW";
-    /// <summary>The preceding frame's history surface: per output pixel <see cref="HistorySurfaceWords"/> words, the ray
-    /// distance as a float's bits and the visibility identity of the nearest render-extent sample the resolve read, then
-    /// the sample weight the pixel has gathered as a float's bits.</summary>
+    /// <summary>The preceding frame's history surface: per output pixel <see cref="HistorySurfaceWords"/> words, the
+    /// visibility identity of the nearest render-extent sample the resolve read, then its ray distance and the sample
+    /// weight the pixel has gathered as two half floats, the distance low, then the accumulated surface transport as
+    /// <see cref="Parts.Transport"/> packs it.</summary>
     public const string HistorySurface = "historySurface";
     /// <summary>The history surface the resolve writes for the next frame.</summary>
     public const string HistorySurfaceWritten = "historySurfaceRW";
-    /// <summary>The words one output pixel holds in the history surface: its ray distance, its identity and its gathered
-    /// weight. KEEP IN SYNC with <c>SdfHistorySurfaceWords</c> in <c>passes/sdf-resolve.comp.hlsl</c>.</summary>
+    /// <summary>The words one output pixel holds in the history surface: its identity, its ray distance with its gathered
+    /// weight, and its transport. KEEP IN SYNC with <c>SdfHistorySurfaceWords</c> in
+    /// <c>passes/sdf-resolve.comp.hlsl</c>.</summary>
     public const uint HistorySurfaceWords = 3;
 
     /// <summary>The resolve interface: the common frame values, the render-grid color, the resolved lit image and surface
-    /// distance it writes, the visibility records and the dispatch box it reads the render grid through, and what the
+    /// transport it writes, the visibility records and the dispatch box it reads the render grid through, and what the
     /// temporal mode reads and writes beside them: the reactivity, the history color and surface of the preceding frame
     /// and of this one, and the World group's tables <c>sdfReprojection</c> reads poses from. A spatial resolve binds a
     /// filler at each temporal member. It adds no bindings to native passes.</summary>
@@ -44,7 +46,7 @@ public static partial class SdfWorldPackage {
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: Output, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),
             Read(element: ShaderValueType.Uint, name: CullBounds),
-            Written(element: ShaderValueType.Float, name: SurfaceDistanceWritten),
+            Written(element: ShaderValueType.Uint, name: TransportWritten),
             Read(element: ShaderValueType.Float, name: Reactivity),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: HistoryColor, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: HistorySurface),
@@ -57,7 +59,7 @@ public static partial class SdfWorldPackage {
 
     /// <summary>The reduced render-grid fragment. Traversal and shading use the render extent, and so does the color the
     /// views pass shades, which the resolve pass reads within the frame: one transient allocation every frame slot
-    /// shares. The resolve writes the lit image and each output pixel's surface distance at the output extent, from the
+    /// shares. The resolve writes the lit image and each output pixel's surface transport at the output extent, from the
     /// render grid's samples inside the dispatch box, and the sky and the composite run at the output extent over them;
     /// only the published color the composite writes has one image per frame slot. Native views use
     /// <see cref="NativeFragment"/> and allocate no resolve resources; a view that reconstructs over time uses
@@ -68,15 +70,15 @@ public static partial class SdfWorldPackage {
     /// extent: the history color and the history surface, each one allocation a frame slot that the next frame reads
     /// (<see cref="ResourceReference.PreviousFrame"/>), zero until the resolve first writes it. The resolve reads the
     /// visibility records and the dispatch box to reproject each pixel through <c>sdfReprojection</c>, and writes the lit
-    /// image, the surface distance, the history color and the history surface. The sky never enters the history: it is
+    /// image, the surface transport, the history color and the history surface. The sky never enters the history: it is
     /// evaluated and composited after the resolve.</summary>
     public static RenderGraphPackageFragment TemporalFragment => TemporalDeclaration.Value;
 
     // The resolve's inputs in either mode, in port order: the render-grid color, then the visibility records and the
     // dispatch box the samples are read through.
     private static string[] ResolveInputs => [CurrentColor, Parts.ShadowVisibility, Parts.CullBounds];
-    // The resolve's outputs in either mode, in port order: the lit image and the surface distance.
-    private static string[] ResolveOutputs => [Parts.Lit, Parts.SurfaceDistance];
+    // The resolve's outputs in either mode, in port order: the lit image and the surface transport.
+    private static string[] ResolveOutputs => [Parts.Lit, Parts.Transport];
     // The sky's inputs in either mode, in port order: the render-grid color views writes, whose coverage says where the sky
     // is seen, and the dispatch box it is current inside. The sky evaluates its field runs on the render grid, and the
     // composite reads them at the output extent.
@@ -97,7 +99,7 @@ public static partial class SdfWorldPackage {
                     }),
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: CurrentColor, transient: true) with { Dimensions = ShaderPipelineDimensions.Render() },
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, transient: true),
-                Buffer(count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)], name: Parts.SurfaceDistance, sizeBytes: null, strideBytes: sizeof(float)),
+                Buffer(count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)], name: Parts.Transport, sizeBytes: null, strideBytes: sizeof(uint)),
                 .. SkyResources.Select(selector: static resource => resource with { Dimensions = ShaderPipelineDimensions.Render() }),
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, transient: false),
             ],
@@ -107,7 +109,7 @@ public static partial class SdfWorldPackage {
                     : pass)),
                 Pass(inputs: ResolveInputs, name: Resolve, outputs: ResolveOutputs) with { Members = ResolveMembers },
                 Pass(inputs: SkyInputs, name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
-                Pass(inputs: [Parts.Lit, Parts.SurfaceDistance, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
+                Pass(inputs: [Parts.Lit, Parts.Transport, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
             ]
         );
 

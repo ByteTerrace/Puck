@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 // The sky's field runs and the composite (SdfWorldPackage.Parts.Sky and Parts.Composite), which read the sky interface
 // (SdfWorldInterfaces.SkyParameters). The sky runs on the render grid, reading the color views writes with the dispatch box
 // it is current inside, in every fragment; the composite runs at the output extent, reading a native view's lit image with
-// the visibility records and the box, or a reduced or temporal view's resolved lit image and surface distance. Both bind
+// the visibility records and the box, or a reduced or temporal view's resolved lit image and surface transport. Both bind
 // the residency's World set, whose tables hold the sky block and stops, the volumes and the dynamic transforms, and a pass
 // group binding each port at its member and a filler at every member the pass does not read or write. Their block holds
 // the frame's common values, the temporal ones every part of a frame writes alike among them, and ResolvedSurface, which
@@ -23,7 +23,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     // The interface's image members a port reads through, and those a port writes through.
     private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, SdfWorldPackage.SkyScaleImage, SdfWorldPackage.SkyOffsetImage];
     private static readonly string[] StorageMembers = [SdfWorldPackage.SkyBaseWritten, SdfWorldPackage.SkyScaleWritten, SdfWorldPackage.SkyOffsetWritten, SdfWorldPackage.Output];
-    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.CullBounds, SdfWorldPackage.SurfaceDistanceRead];
+    private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.CullBounds, SdfWorldPackage.TransportRead];
 
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly RenderGraphFragmentPass m_fragmentPass;
@@ -155,7 +155,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         SdfWorldPackage.Parts.Lit or SdfWorldPackage.CurrentColor => SdfWorldPackage.LitImage,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,
         SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecords,
-        SdfWorldPackage.Parts.SurfaceDistance => SdfWorldPackage.SurfaceDistanceRead,
+        SdfWorldPackage.Parts.Transport => SdfWorldPackage.TransportRead,
         SdfWorldPackage.Parts.SkyBase => SdfWorldPackage.SkyBaseImage,
         SdfWorldPackage.Parts.SkyScale => SdfWorldPackage.SkyScaleImage,
         SdfWorldPackage.Parts.SkyOffset => SdfWorldPackage.SkyOffsetImage,

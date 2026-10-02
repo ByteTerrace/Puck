@@ -567,13 +567,16 @@ public static partial class SdfWorldPackage {
         /// <summary>The composite: the sky's runs in their authored order, the lit image over them by its coverage, then
         /// the fog and the bounded media, into the view's color.</summary>
         public const string Composite = "composite";
-        /// <summary>The lit image: the hits' shaded color premultiplied by coverage, the coverage in its alpha (one for a
-        /// solid hit, the silhouette's weight on an edge, zero on a miss), written by views in a native view and, at the
-        /// output extent, by the resolve in a reduced or temporal one.</summary>
+        /// <summary>The lit image: the hits' shaded color premultiplied by coverage and by the fog's transmittance over each
+        /// hit's ray distance, the coverage in its alpha (one for a solid hit, the silhouette's weight on an edge, zero on a
+        /// miss), written by views in a native view and, at the output extent, by the resolve in a reduced or temporal
+        /// one.</summary>
         public const string Lit = "lit";
-        /// <summary>The ray distance of each output pixel's surface, zero for a miss, which the resolve writes for the
-        /// composite in a reduced or temporal view.</summary>
-        public const string SurfaceDistance = "surfaceDistance";
+        /// <summary>Each output pixel's surface transport, which the resolve writes for the composite in a reduced or
+        /// temporal view, reconstructed from the render samples with the lit image's weights: one word a pixel, two half
+        /// floats, the low the fog's in-scatter weight (coverage times one minus transmittance), the high the coverage over
+        /// the ray distance, scaled (<c>shade/sdf-transport.hlsli</c>).</summary>
+        public const string Transport = "transport";
         /// <summary>The sky's lowest field run, which composes over nothing, so its offset alone.</summary>
         public const string SkyBase = "skyBase";
         /// <summary>The scale of the sky's field run above its point run.</summary>
@@ -605,7 +608,8 @@ public static partial class SdfWorldPackage {
         public const string Reactivity = "reactivity";
         /// <summary>The history color: the resolved color, one image a frame slot, read by the next frame.</summary>
         public const string HistoryColor = "historyColor";
-        /// <summary>The history surface: each output pixel's ray distance and identity, read by the next frame.</summary>
+        /// <summary>The history surface: each output pixel's identity, ray distance, gathered weight and accumulated
+        /// transport, read by the next frame.</summary>
         public const string HistorySurface = "historySurface";
     }
 }

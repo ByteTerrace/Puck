@@ -36,7 +36,7 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.Equal(expected: ((40UL * 30) * 64), actual: visibility.Declaration.ResolveSizeBytes(counts: counts));
         var output = plan.Pipeline.Storages.Single(predicate: static storage => storage.Versions.Contains(value: SdfWorldPackage.Color));
         var lit = Storage(plan: plan.Pipeline, version: SdfWorldPackage.Parts.Lit);
-        var distance = Storage(plan: plan.Pipeline, version: SdfWorldPackage.Parts.SurfaceDistance);
+        var transport = Storage(plan: plan.Pipeline, version: SdfWorldPackage.Parts.Transport);
         var current = Storage(plan: plan.Pipeline, version: SdfWorldPackage.CurrentColor);
 
         Assert.Equal(expected: ShaderPipelineDimensions.Relative(), actual: output.Declaration.Dimensions);
@@ -47,8 +47,8 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.Contains(collection: resolve.Parameters.Interface.Members, filter: static member => (member.Name == SdfWorldPackage.UpscaleSharpness));
         Assert.DoesNotContain(collection: SdfWorldPackage.Values, filter: static member => (member.Name == SdfWorldPackage.UpscaleSharpness));
         // Reconstruction reads the render-grid color through the visibility records and the dispatch box, and writes the
-        // lit image and the surface distance at the output extent; the composite alone writes the output.
-        Assert.Equal(expected: new[] { lit.Index, distance.Index }.Order(), actual: resolve.Accesses.Where(predicate: static access => access.Use.Access.HasFlag(flag: GpuAccess.ShaderWrite)).Select(selector: static access => access.Storage).Distinct().Order());
+        // lit image and the surface transport at the output extent; the composite alone writes the output.
+        Assert.Equal(expected: new[] { lit.Index, transport.Index }.Order(), actual: resolve.Accesses.Where(predicate: static access => access.Use.Access.HasFlag(flag: GpuAccess.ShaderWrite)).Select(selector: static access => access.Storage).Distinct().Order());
         Assert.Contains(collection: resolve.Accesses, filter: access => ((access.Storage == current.Index) && !access.Use.Writes));
         Assert.Contains(collection: resolve.Accesses, filter: access => ((access.Storage == visibility.Index) && !access.Use.Writes));
         Assert.Equal(expected: ShaderPipelineDimensions.Relative(), actual: resolve.Extent);
@@ -69,13 +69,13 @@ public sealed partial class SdfPassPlanLawTests {
                 expected: (outputExtent.Any(predicate: version => (storage.Versions.Contains(value: version) || storage.Versions.Contains(value: $"{Sdf}${version}"))) ? ShaderPipelineDimensions.Relative() : ShaderPipelineDimensions.Render()),
                 actual: storage.Declaration.Dimensions
             ));
-        Assert.All(collection: plan.Pipeline.Storages.Where(predicate: storage => ((storage.Declaration.Count is not null) && (storage.Index != distance.Index))),
+        Assert.All(collection: plan.Pipeline.Storages.Where(predicate: storage => ((storage.Declaration.Count is not null) && (storage.Index != transport.Index))),
             action: static storage => Assert.DoesNotContain(collection: storage.Declaration.Count!.SelectMany(selector: static term => term.Per), expected: ShaderPipelineCountBasis.Extent));
     }
     // A reduced view owns what the native graph at its render ceiling owns, with the ceiling's color held once as the
     // render-grid color, since views shades it and the resolve reads it inside one frame, and at the output extent
     // instead of the ceiling what the resolve and the composite write: the color a frame slot, and once each the lit
-    // image and the surface distance, four bytes an output pixel. The sky's three runs stay at the ceiling. At 1920x1080
+    // image and the surface transport, four bytes an output pixel. The sky's three runs stay at the ceiling. At 1920x1080
     // and half scale that is 62,208,000 bytes more.
     [Fact]
     public void AReducedViewAddsOnlyItsOutputExtentPassesOverTheNativeGraphAtItsCeiling() {
@@ -83,8 +83,8 @@ public sealed partial class SdfPassPlanLawTests {
         var reduced = render with { Height = 1080, RenderHeight = 540, RenderWidth = 960, Width = 1920 };
         const ulong Output = ((1920UL * 1080) * 8);
         const ulong RenderColor = ((960UL * 540) * 8);
-        const ulong Distance = ((1920UL * 1080) * 4);
-        const ulong Expected = ((((InFlight * (Output - RenderColor)) + (Output - RenderColor)) + Distance) + RenderColor);
+        const ulong Transport = ((1920UL * 1080) * 4);
+        const ulong Expected = ((((InFlight * (Output - RenderColor)) + (Output - RenderColor)) + Transport) + RenderColor);
 
         Assert.Equal(actual: Expected, expected: 62_208_000UL);
         Assert.Equal(

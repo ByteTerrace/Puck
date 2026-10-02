@@ -3,8 +3,8 @@
 // resolve left for them. The sky runs on the render grid and reads the color views wrote, and a native view's composite
 // reads views' lit image and visibility records: each current only inside the dispatch box cull-args wrote, outside which
 // the beam proved every tile empty, so a pixel there reads as a miss. A reduced or temporal view's composite reads the
-// resolve's at the output extent, written for every pixel (passGroup.resolvedSurface). A pixel's sky direction is its
-// unjittered one, so the sky never moves with a temporal view's samples.
+// resolve's lit image and transport at the output extent, written for every pixel (passGroup.resolvedSurface). A pixel's
+// sky direction is its unjittered one, so the sky never moves with a temporal view's samples.
 #ifndef PASSES_SDF_SKY_PASS_HLSLI
 #define PASSES_SDF_SKY_PASS_HLSLI
 #define SDF_DYNAMIC_TRANSFORMS
@@ -13,8 +13,9 @@
 #include "../frame/sdf-visibility.hlsli"
 #include "../frame/sdf-work.hlsli"
 #include "../shade/sdf-sky.hlsli"
+#include "../shade/sdf-transport.hlsli"
 
-// Whether the lit image and the surface distance at a pixel were written this frame.
+// Whether the lit image and the surface transport at a pixel were written this frame.
 bool sdfSkyPassCurrent(uint2 pixel) {
     return ((passGroup.resolvedSurface != 0u) || SDF_VISIBILITY_CURRENT(pixel, cullBounds));
 }
@@ -25,18 +26,23 @@ float4 sdfSkyPassLit(int2 pixel) {
 
     return (sdfSkyPassCurrent(clamped) ? lit.Load(int3(clamped, 0)) : float4(0.0, 0.0, 0.0, 0.0));
 }
-// The ray distance of the surface a pixel shows, or zero for a miss.
-float sdfSkyPassSurfaceDistance(uint2 pixel) {
+// The transport of the surface share a pixel shows, of coverage `coverage` (sdf-transport.hlsli): its fog's in-scatter
+// weight, at most its coverage, and the ray distance its media are clipped at, zero where it shows no surface. A native
+// view's pixel is its one render sample, whose transport its own record gives; a resolved one's is the resolve's.
+void sdfSkyPassSurface(uint2 pixel, float coverage, out float fog, out float distance) {
+    float2 surface = float2(0.0, 0.0);
+
     if (passGroup.resolvedSurface != 0u) {
-        return surfaceDistance[((pixel.y * passGroup.extent.x) + pixel.x)];
-    }
-    if (!SDF_VISIBILITY_CURRENT(pixel, cullBounds)) {
-        return 0.0;
-    }
+        surface = sdfUnpackTransport(transport[((pixel.y * passGroup.extent.x) + pixel.x)]);
+    } else if (SDF_VISIBILITY_CURRENT(pixel, cullBounds)) {
+        SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, passGroup.imageExtent));
 
-    SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, passGroup.imageExtent));
-
-    return (sdfVisibilityHit(visibility) ? visibility.t : 0.0);
+        if (sdfVisibilityHit(visibility)) {
+            surface = sdfSampleTransport(coverage, visibility.t);
+        }
+    }
+    fog = clamp(surface.x, 0.0, coverage);
+    distance = sdfTransportDistance(coverage, surface);
 }
 // The pixel's view without the sample's jitter.
 ViewportData sdfSkyPassView() {
