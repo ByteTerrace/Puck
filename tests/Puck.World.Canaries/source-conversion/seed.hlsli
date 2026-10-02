@@ -1,6 +1,6 @@
 // The producer stand-in, which seed.hlsl and seed-discriminating.hlsl each include after their own generated interface:
-// writes a 32x32 palette-indexed region, a 32x32 NV12 region, a 32x32 BGRA8 region and a 32x32 sRGB-encoded RGBA8 region
-// in the uploaded-source layout (ImageSourceUploadLayout),
+// writes a 32x32 palette-indexed region, a 32x32 NV12 region, a 32x32 BGRA8 region, a 32x32 sRGB-encoded RGBA8 region and
+// a 32x32 half-float scRGB region in the uploaded-source layout (ImageSourceUploadLayout),
 // which the shipped conversion passes then read. The pass runs over the frame, at least 16x16, and thread t = 16y + x,
 // for x below 16, writes word t of each plane it covers. SourceConversionCanaryFixtureTests rebuilds both regions in C#
 // from the same rules and derives every expected color through the CPU reference.
@@ -10,7 +10,8 @@
 // quadrant: top left (235, 128, 128), top right (63, 102, 240), bottom left (126, 128, 168), bottom right (81, 90, 110).
 // RGBA region: header naming B8G8R8A8, then 32x32 pixels stored B, G, R, A by quadrant from rgbaOf. Transfer region:
 // header naming R8G8B8A8 under the sRGB transfer function, then 32x32 pixels stored R, G, B, A by quadrant from
-// encodedOf.
+// encodedOf. HDR region: header naming R16G16B16A16Float under the linear (scRGB) transfer function, then 32x32 pixels
+// stored as half floats R, G, B, A by quadrant from scRgbOf, two words a pixel.
 #ifndef SEED_NV12_MATRIX
 #define SEED_NV12_MATRIX 1u
 #endif
@@ -52,6 +53,21 @@ uint3 encodedOf(uint q) {
     return uint3(16u, 240u, 96u);
 }
 
+// scRGB values, one at 80 cd/m², each exact in a half float: 1000 cd/m² white, then SDR white, 200 cd/m² and 400 cd/m²
+// red, the last with a green channel below zero.
+float3 scRgbOf(uint q) {
+    if (q == 0u) {
+        return float3(12.5, 12.5, 12.5);
+    }
+    if (q == 1u) {
+        return float3(1.0, 0.5, 0.25);
+    }
+    if (q == 2u) {
+        return float3(2.5, 1.25, 0.0);
+    }
+    return float3(5.0, -0.25, 0.0625);
+}
+
 uint quadrant(uint x, uint y) {
     return ((x >= 16u) ? 1u : 0u) + ((y >= 16u) ? 2u : 0u);
 }
@@ -91,6 +107,20 @@ void main(uint3 id : SV_DispatchThreadID) {
         // Width, height, format (R8G8B8A8 = 1), color (BT.709 matrix, limited, the leg's transfer function), pixels at 32.
         transferRegion.Store4(0, uint4(32u, 32u, 1u, (1u | (SEED_TRANSFER << 16))));
         transferRegion.Store4(16, uint4(32u, 128u, 0u, 0u));
+        // Width, height, format (R16G16B16A16Float = 6), color (BT.709 matrix, limited, linear), pixels at 32 with a
+        // 256-byte stride.
+        hdrRegion.Store4(0, uint4(32u, 32u, 6u, (1u | (1u << 16))));
+        hdrRegion.Store4(16, uint4(32u, 256u, 0u, 0u));
+    }
+
+    if (t < 256u) {
+        // Pixels t, t + 256, t + 512 and t + 768 of the half-float region, two words each: red and green, blue and alpha.
+        for (uint k = 0u; (k < 4u); k++) {
+            uint pixel = (t + (256u * k));
+            float3 value = scRgbOf(quadrant((pixel % 32u), (pixel / 32u)));
+
+            hdrRegion.Store2((32u + (pixel * 8u)), uint2((f32tof16(value.r) | (f32tof16(value.g) << 16)), (f32tof16(value.b) | (f32tof16(1.0) << 16))));
+        }
     }
 
     if (t < 256u) {

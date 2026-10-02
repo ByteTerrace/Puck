@@ -27,7 +27,12 @@ staged, chosen by handing the runtime the device's own memory profile with no
 host-visible device-local bytes, and holds a capture of each tick's image to the
 CPU reference byte for byte; its Direct3D 12 hardware leg turns the debug layer
 on and fails on any `[d3d12-debug]` line, so the law runs alone in
-`DebugLayerCollection`. The device laws share `tests/Shared`'s
+`DebugLayerCollection`. `SurfaceEncoderUploadDeviceLawTests` hands
+`SurfaceEncoder.ReadSurface` CPU pixels in both float working formats on the
+same three devices, uploaded and drawn through the display encode in SDR, and
+holds each RGBA8 channel within one code of the value's own code, headroom
+saturating to 255; it shares that collection for the same debug-layer leg.
+The device laws share `tests/Shared`'s
 `HeadlessVulkanDevice` and `DirectXTestDevices`. `SharedFenceLawTests` orders a
 Direct3D 11 writer and a Direct3D 12 or Vulkan reader by a shared fence alone.
 

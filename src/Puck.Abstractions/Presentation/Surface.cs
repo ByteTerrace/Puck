@@ -15,8 +15,8 @@ public enum SurfaceKind : byte {
 }
 /// <summary>
 /// The rendered pixels a node hands its host to composite. Factory methods enforce that exactly one payload is
-/// populated, that the format is one its payload carries (<see cref="IsSurfaceFormat"/> for CPU pixels and a shared
-/// texture, <see cref="IsImageFormat"/> for a same-device image), and that CPU storage exactly matches the declared
+/// populated, that the format is one its payload carries (<see cref="IsSurfaceFormat"/> for a shared texture,
+/// <see cref="IsImageFormat"/> for CPU pixels and a same-device image), and that CPU storage exactly matches the declared
 /// extent. The default value is the valid empty surface.
 /// </summary>
 public readonly record struct Surface {
@@ -40,8 +40,8 @@ public readonly record struct Surface {
         SharedHandle = sharedHandle;
     }
 
-    /// <summary>Gets the texel format: a surface format (<see cref="IsSurfaceFormat"/>), or for a same-device image any
-    /// image format (<see cref="IsImageFormat"/>); zero for the empty surface.</summary>
+    /// <summary>Gets the texel format: a surface format (<see cref="IsSurfaceFormat"/>) for a shared texture, or any image
+    /// format (<see cref="IsImageFormat"/>) for CPU pixels and a same-device image; zero for the empty surface.</summary>
     public GpuPixelFormat Format { get; }
     /// <summary>Gets the surface height in pixels.</summary>
     public uint Height { get; }
@@ -77,26 +77,29 @@ public readonly record struct Surface {
                 nameof(format),
                 format,
                 (image
-                    ? "A same-device image's format is R8G8B8A8Unorm, B8G8R8A8Unorm, R16G16B16A16Float or R32G32B32A32Float."
-                    : "A surface's CPU pixels or shared texture are R8G8B8A8Unorm or B8G8R8A8Unorm.")
+                    ? "CPU pixels and a same-device image are R8G8B8A8Unorm, B8G8R8A8Unorm, R16G16B16A16Float or R32G32B32A32Float."
+                    : "A surface's shared texture is R8G8B8A8Unorm or B8G8R8A8Unorm.")
             );
         }
 
         _ = RequiredByteLength(
+            format: format,
             height: height,
             width: width
         );
     }
 
-    /// <summary>Gets whether a surface's CPU pixels or shared texture may carry a format: the two 8-bit four-channel
-    /// unsigned normalized orders, which every capture sink, video encoder and cross-device transfer reads.</summary>
+    /// <summary>Gets whether a surface's shared texture may carry a format, and whether a consumer that reads only 8-bit
+    /// pixels reads it: the two 8-bit four-channel unsigned normalized orders, which every capture sink, video encoder
+    /// and cross-device transfer reads.</summary>
     /// <param name="format">The format.</param>
     /// <returns><see langword="true"/> for <see cref="GpuPixelFormat.R8G8B8A8Unorm"/> and
     /// <see cref="GpuPixelFormat.B8G8R8A8Unorm"/>.</returns>
     public static bool IsSurfaceFormat(GpuPixelFormat format) =>
         (format is GpuPixelFormat.R8G8B8A8Unorm or GpuPixelFormat.B8G8R8A8Unorm);
-    /// <summary>Gets whether a same-device image may carry a format: a surface format, or a four-channel float working
-    /// format, which a consumer on the same device samples as it is and a display or a capture encodes.</summary>
+    /// <summary>Gets whether CPU pixels or a same-device image may carry a format: a surface format, or a four-channel
+    /// float format, which a consumer samples or converts as it is and a display or a capture encodes; a capture of an
+    /// HDR display hands its pixels over in <see cref="GpuPixelFormat.R16G16B16A16Float"/>.</summary>
     /// <param name="format">The format.</param>
     /// <returns><see langword="true"/> for a surface format (<see cref="IsSurfaceFormat"/>),
     /// <see cref="GpuPixelFormat.R16G16B16A16Float"/> and <see cref="GpuPixelFormat.R32G32B32A32Float"/>.</returns>
@@ -104,15 +107,17 @@ public readonly record struct Surface {
         IsSurfaceFormat(format: format) ||
         (format is GpuPixelFormat.R16G16B16A16Float or GpuPixelFormat.R32G32B32A32Float)
     );
-    /// <summary>Creates a surface backed by exactly one tightly packed four-byte texel for every declared pixel.</summary>
+    /// <summary>Creates a surface backed by exactly one tightly packed texel of its format for every declared pixel, in
+    /// any image format (<see cref="IsImageFormat"/>).</summary>
     public static Surface CpuPixels(ReadOnlyMemory<byte> pixels, uint width, uint height, GpuPixelFormat format) {
         ValidateCommon(
             format: format,
             height: height,
-            image: false,
+            image: true,
             width: width
         );
         var requiredByteLength = RequiredByteLength(
+            format: format,
             height: height,
             width: width
         );
@@ -135,8 +140,9 @@ public readonly record struct Surface {
             width: width
         );
     }
-    /// <summary>Returns the byte length required by a tightly packed supported surface extent.</summary>
-    public static int RequiredByteLength(uint width, uint height) => checked((int)(checked((((ulong)width) * height)) * 4UL));
+    /// <summary>Returns the byte length a tightly packed extent of a format occupies: one texel of
+    /// <see cref="GpuPixelFormats.UnitBytes"/> per pixel.</summary>
+    public static int RequiredByteLength(uint width, uint height, GpuPixelFormat format) => checked((int)(checked((((ulong)width) * height)) * GpuPixelFormats.UnitBytes(format: format)));
     /// <summary>Creates a surface whose image view belongs to the consumer's device chain, in any image format
     /// (<see cref="IsImageFormat"/>).</summary>
     public static Surface SameDeviceImage(nint imageHandle, nint imageViewHandle, uint width, uint height, GpuPixelFormat format) {

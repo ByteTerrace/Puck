@@ -422,6 +422,7 @@ public static class WorldBootComposition {
                 // camera rides its GPU tier on both hosts (see WorldScreenBinder.TryProvisionSharedRing). Headless
                 // never resolves either backend, so this bool only matters once presentation composes.
                 hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX,
+                paperWhiteNits: sp.GetRequiredService<WorldHostSettings>().PaperWhiteNits,
                 // A session-sourced face's destination/reference lookup and resolver-owned instance — CORE, not
                 // presentation-only, so an observation lease attaches (and a destination instance starts) in every
                 // boot shape, exactly like WorldMachineHost's own boot-time machine start.
