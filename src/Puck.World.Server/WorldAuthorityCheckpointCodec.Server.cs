@@ -359,6 +359,37 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     // ---- server section ----
 
+    // A base origin names a loaded file only relative to the world's document directory, the root the restoring host
+    // supplies, or names a hosted world's store identity that resolves against nothing. Either way a decoded path is
+    // forward-slashed, not rooted, and never climbs out of a root.
+    private static (WorldBaseOrigin Origin, WorldCheckpointAnchor Anchor) ReadBaseOrigin(ref WireReader reader) {
+        var kind = reader.ReadByte();
+        var path = reader.ReadNullableString(field: "server base origin path", maxBytes: MaxStringBytes);
+        var depth = reader.ReadInt32();
+        var anchor = reader.ReadByte();
+        var loaded = (kind is ((byte)WorldBaseOriginKind.Load) or ((byte)WorldBaseOriginKind.Reload));
+
+        if (
+            !reader.Failed &&
+            ((kind > ((byte)WorldBaseOriginKind.JournalHorizon)) ||
+            (loaded != (path is not null)) ||
+            ((path is not null) && ((path.Length == 0) || !WorldCheckpointPaths.IsRelativeUnderRoot(path: path))) ||
+            (anchor is not (((byte)WorldCheckpointAnchor.None) or ((byte)WorldCheckpointAnchor.World))) ||
+            ((anchor == ((byte)WorldCheckpointAnchor.World)) && (path is null)) ||
+            (depth < 0))
+        ) {
+            reader.Fail(
+                detail: $"server base origin (kind {kind}, '{path}', anchor {anchor}, depth {depth}) is not a loaded file named under its root",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return (new WorldBaseOrigin(
+            Depth: depth,
+            Kind: ((WorldBaseOriginKind)kind),
+            Path: path
+        ), ((WorldCheckpointAnchor)anchor));
+    }
     private static byte[] EncodeServer(WorldServerCheckpoint section) {
         var writer = new WireWriter();
 
@@ -373,7 +404,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer.WriteBlock(value: section.BaseDefinitionJson);
         }
 
-        writer.WriteString(value: section.BaseOrigin);
+        writer.WriteByte(value: ((byte)section.BaseOrigin.Kind));
+        writer.WriteNullableString(value: section.BaseOrigin.Path);
+        writer.WriteInt32(value: section.BaseOrigin.Depth);
+        writer.WriteByte(value: ((byte)section.BaseOriginAnchor));
         writer.WriteArray(
             items: section.ArenaKeys,
             writeItem: WriteArenaKey
@@ -488,10 +522,8 @@ public static partial class WorldAuthorityCheckpointCodec {
                 field: "server base definition",
                 maxBytes: MaxSectionBytes
             ));
-        var baseOrigin = reader.ReadString(
-            field: "server base origin",
-            maxBytes: MaxStringBytes
-        );
+
+        var (baseOrigin, baseOriginAnchor) = ReadBaseOrigin(reader: ref reader);
         var arenaKeys = reader.ReadArray(
             field: "server arena keys",
             maximum: StateCapacity.MaxCellKeys,
@@ -640,6 +672,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             ArenaKeys: arenaKeys,
             BaseDefinitionJson: baseDefinitionJson,
             BaseOrigin: baseOrigin,
+            BaseOriginAnchor: baseOriginAnchor,
             Decisions: decisions,
             DefinitionJson: definitionJson,
             Intents: intents,

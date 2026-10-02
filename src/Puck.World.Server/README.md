@@ -1651,14 +1651,19 @@ section in an order derived from its own entries, never from insertion order.
 A checkpoint is durable and crosses machines (silo recovery, federation,
 determinism attestation), so it names no machine-local path. An owned world's
 asset directory is written relative to a root the restoring host supplies
-(`WorldOwnedDocumentAnchor`): the owned-world catalog's directory, where a
+(`WorldCheckpointAnchor`): the owned-world catalog's directory, where a
 loaded owned document lives, or the hosting world's document directory, where
 a seeded one resolves its assets. The closer root wins. A capture refuses an
 owned world whose directory lies under neither root; the codec refuses a
 directory that is rooted or climbs out of its root; and a restore refuses by
 name, before restoring anything, an owned world whose directory does not
-resolve where it is restored. `CheckpointAssetAnchorLawTests` holds these
-rules.
+resolve where it is restored. The journal base's origin (`WorldBaseOrigin`)
+follows the same rule: a base loaded from a file names that file relative to
+the world's document directory, which the loader set to the file's own, and a
+restore resolves it against the restoring world's directory or refuses by name.
+A base whose origin is a hosted world's store identity names no file on any
+machine, so the checkpoint keeps that name as written and anchors it nowhere.
+`CheckpointAssetAnchorLawTests` holds these rules.
 
 ## The tick (`WorldTick*.cs`)
 
@@ -2299,9 +2304,11 @@ reports exactly the changed cells; a replay-edit names its landing tick and a
 no-op edit names none; the budget holds and counts its evictions; a later
 keyframe adds only what changed; and a steady recorded tick allocates nothing.
 `HistoryBoundaryLawTests.cs` holds the boundary laws, and
-`HistoryRefusalLawTests.cs` the pins and refusals: a recorded reload whose
-content changes between the preflight and its re-applied step is refused by name
-in a live seek, a diff's shadow, and a replay-edit's edited run; a replay-edit
+`HistoryRefusalLawTests.cs` the read-once rule and the refusals: a recorded
+reload is read once, by the preflight, and a live seek, a diff's shadow and
+both of a replay-edit's runs re-apply those verified bytes, so a file that
+changes after the read can neither refuse from inside a step nor reach the
+world; a live tick behind the head cuts the future before it appends; a replay-edit
 refuses a span it cannot re-simulate and an edit it cannot move; and a live
 session at the keyframe and a recorded session event each refuse on their own.
 

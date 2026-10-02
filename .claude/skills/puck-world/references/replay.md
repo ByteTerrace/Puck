@@ -607,6 +607,13 @@ The contracts a change must keep:
   machine hosts restore over running machines. Checkpoints preserve armed music
   transitions as well as the music clock. Capture refuses a document whose score
   differs from the still-running boot music plan.
+- **Refuse before moving; read once.** Every refusal precedes the first change
+  to the live world. A recorded reload is read once, by the preflight, and the
+  re-simulation installs those verified bytes, so a file changing mid-seek can
+  neither refuse from inside a step nor reach the world.
+- **Append only at the head.** A live tick behind the head cuts the future
+  before it appends, so no recorded entry lies ahead of the cursor that a seek
+  did not scan to get there; a seek scans only from where it starts.
 - **Refuse uncaptured state.** Seek checks under the authority gate for pending
   input and provider contributions, live sessions, addon guests, screen
   operations, unsupported machines and external obligations. Recorded spans
@@ -626,8 +633,9 @@ The contracts a change must keep:
   (matches, paused), `body.where 0`, `world.history step 40`, `world.history
   diff 30 90`, `world.history resume`. `HistoryBoundaryLawTests.cs` covers
   capture isolation, replay-edit placement, restore context and named refusals;
-  `HistoryRefusalLawTests.cs` the rebuild content pins (seek, diff shadow,
-  replay-edit edited run), the replay-edit span and edit refusals, and the live
+  `HistoryRefusalLawTests.cs` the read-once rule for recorded reloads (the
+  preflight reads each file once and every run re-applies those verified
+  bytes), the append-at-head invariant, the replay-edit span and edit refusals, and the live
   session and session event refusals apart from each other.
 
 ## Rules for changes

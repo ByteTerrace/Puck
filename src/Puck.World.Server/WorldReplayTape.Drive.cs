@@ -348,7 +348,7 @@ public sealed partial class WorldReplayTape {
             expectedMutationOutcomes: drive.ExpectedMutationOutcomes,
             input: drive.Source.Ticks[drive.Cursor],
             population: m_liveServer.Population,
-            rebuildContentPin: NarrateRebuildContentPin,
+            rebuildSource: rebuild => (null, NarrateRebuildContentPin(rebuild: rebuild)),
             replayedMutationOutcomes: drive.ReplayedMutationOutcomes,
             server: m_liveServer
         );

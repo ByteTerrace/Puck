@@ -399,7 +399,10 @@ public sealed partial class WorldPersistence {
 
             Host.Document.AdoptBase(
                 definition: candidate,
-                origin: $"the journal depth horizon (host.journalDepth {depth})"
+                origin: new WorldBaseOrigin(
+                    Depth: depth,
+                    Kind: WorldBaseOriginKind.JournalHorizon
+                )
             );
             Host.Document.Journal.RemoveRange(
                 count: excess,
@@ -578,6 +581,17 @@ public sealed partial class WorldPersistence {
 
             Host.Engagement.AssertCheckpointQuiescent();
 
+            if (!TryNameBaseOrigin(
+                anchor: out var baseOriginAnchor,
+                origin: out var baseOrigin,
+                reason: out var originReason
+            )) {
+                checkpoint = null;
+                reason = originReason;
+
+                return false;
+            }
+
             if (!Host.Profiles.TryCapture(
                 checkpoint: out var ownedWorlds,
                 reason: out var ownedReason
@@ -640,7 +654,8 @@ public sealed partial class WorldPersistence {
                 )],
                 DefinitionJson: definitionJson,
                 BaseDefinitionJson: BaseJson(definitionJson: definitionJson),
-                BaseOrigin: Host.Document.BaseOrigin,
+                BaseOrigin: baseOrigin,
+                BaseOriginAnchor: baseOriginAnchor,
                 Journal: journal,
                 LastCompletedTick: Host.Tick.CompletedTick,
                 LastCompletedEngineTicks: Host.Tick.CompletedEngineTicks,
@@ -695,6 +710,58 @@ public sealed partial class WorldPersistence {
         RestoreCheckpointCore(admission: admission, checkpoint: checkpoint);
     }
 
+    // A base loaded from a file names that file relative to the base's own document directory, which the loader set to
+    // the file's directory, so a checkpoint carries the file's name and not where this machine keeps it. A base whose
+    // origin is no file on this machine — a hosted world's store identity — is already a portable name and is kept.
+    private bool TryNameBaseOrigin(out WorldCheckpointAnchor anchor, out WorldBaseOrigin origin, out string reason) {
+        anchor = WorldCheckpointAnchor.None;
+        origin = Host.Document.BaseOrigin;
+        reason = string.Empty;
+
+        if (origin.Path is not { } path) {
+            return true;
+        }
+
+        if (!Path.IsPathFullyQualified(path: path)) {
+            if (((path.Length > 0) && WorldCheckpointPaths.IsRelativeUnderRoot(path: path))) {
+                return true;
+            }
+
+            reason = $"the journal base names an origin that is neither a file on this machine nor a portable name, so a durable checkpoint cannot name it ({origin})";
+
+            return false;
+        }
+
+        if (
+            (Host.Document.Base.DocumentDirectory is not { } directory) ||
+            (WorldCheckpointPaths.RelativeUnder(path: path, root: directory) is not { Length: > 0 } relative)
+        ) {
+            reason = $"the journal base was loaded from a file outside its document directory, so a durable checkpoint cannot name it ({origin})";
+
+            return false;
+        }
+
+        anchor = WorldCheckpointAnchor.World;
+        origin = (origin with { Path = relative });
+
+        return true;
+    }
+    private static WorldBaseOrigin ResolveBaseOrigin(WorldBaseOrigin origin, WorldCheckpointAnchor anchor, string? directory) {
+        if ((anchor != WorldCheckpointAnchor.World) || (origin.Path is not { } relative)) {
+            return origin;
+        }
+
+        if (directory is null) {
+            throw new InvalidOperationException(message: $"the checkpoint's journal base names '{relative}' beside the world's document directory, and the restoring world has none");
+        }
+
+        return (origin with {
+            Path = WorldCheckpointPaths.Resolve(
+                relative: relative,
+                root: directory
+            ),
+        });
+    }
     private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission) {
         var server = checkpoint.Server;
 
@@ -703,6 +770,12 @@ public sealed partial class WorldPersistence {
         }
 
         Host.Population.Fields?.ValidateCheckpoint(checkpoint: checkpoint.Fields!);
+
+        var restoredOrigin = ResolveBaseOrigin(
+            anchor: server.BaseOriginAnchor,
+            directory: admission.Definition.DocumentDirectory,
+            origin: server.BaseOrigin
+        );
         // Population validation is deliberately before any server field changes below. A malformed cached route
         // must refuse the entire restore atomically, not fail after the definition, clocks, or journal were replaced.
         Host.Population.ValidateCheckpoint(checkpoint: checkpoint.Population);
@@ -737,7 +810,7 @@ public sealed partial class WorldPersistence {
         Host.Document.AdoptDefinition(definition: restoredDefinition);
         Host.Document.AdoptBase(
             definition: restoredBase,
-            origin: server.BaseOrigin
+            origin: restoredOrigin
         );
         Host.Document.Journal.Clear();
         foreach (var (tick, engineTick, mutation) in server.Journal) {

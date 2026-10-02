@@ -380,12 +380,14 @@ public sealed partial class WorldReplaySnapshot {
     /// pinned outcome, in entry order.</param>
     /// <param name="replayedMutationOutcomes">Receives each re-enqueued mutation's actual outcome once the next
     /// <see cref="WorldServer.Step"/> drains it, in the same order.</param>
-    /// <param name="rebuildContentPin">Resolves the CAS pin a recorded rebuild is enqueued under: the entry's own
-    /// hash for the offline drive (a disagreement then refuses by name from inside the step), or
-    /// <see langword="null"/> for the live drive, which must never let a refusal throw out of the running session's
-    /// step and narrates the disagreement itself instead.</param>
+    /// <param name="rebuildSource">Resolves how a recorded rebuild re-applies. <c>Verified</c> is the document a caller
+    /// already read and proved against the entry's recorded hash — a history re-simulation reads each file once,
+    /// before anything moves — or <see langword="null"/> to re-read the path inside the step. <c>Pin</c> is the CAS
+    /// pin the rebuild is enqueued under: the entry's own hash for the offline drive (a disagreement then refuses by
+    /// name from inside the step), or <see langword="null"/> for the live drive, which must never let a refusal throw
+    /// out of the running session's step and narrates the disagreement itself instead.</param>
     /// <exception cref="WorldReplayCodecException">An authority-entry kind this apply does not handle.</exception>
-    internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, string?> rebuildContentPin) {
+    internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, (WorldDefinition? Verified, string? Pin)> rebuildSource) {
         foreach (var entry in input.Authority) {
             switch (entry) {
                 case WorldReplayEntry.Command command:
@@ -430,20 +432,26 @@ public sealed partial class WorldReplaySnapshot {
 
                     break;
                 case WorldReplayEntry.Rebuild rebuild:
-                    // Deliberately NO Definition: Load/Reload re-read rebuild.PathHint fresh inside
+                    // Without a verified document a Load/Reload re-reads rebuild.PathHint fresh inside
                     // WorldServer.ApplyRebuild (called from DrainPendingOps below), which is the content-address
-                    // proof — a stored copy would let a moved file pass unnoticed. expectedContentHash is what
-                    // makes this a REPLAY drive rather than a live one: ApplyRebuild refuses BY NAME, before
-                    // installing anything, when the resolved candidate's hash disagrees with what was recorded.
+                    // proof — a stored copy would let a moved file pass unnoticed. A verified document is one the
+                    // caller read and proved against the recorded hash before the step, so it carries that hash and
+                    // the pin holds by construction. The pin is what makes this a REPLAY drive: ApplyRebuild refuses
+                    // by name, before installing anything, when the candidate's hash disagrees with the recording.
+                    var (verified, pin) = rebuildSource(rebuild);
+
                     server.EnqueueRebuild(
                         request: new WorldRebuildRequest(
+                            ContentHash: ((verified is null)
+                                ? null
+                                : rebuild.ContentHash),
+                            Definition: verified,
+                            Force: rebuild.Force,
                             Kind: rebuild.Kind,
-                            Definition: null,
-                            PathHint: rebuild.PathHint,
-                            Force: rebuild.Force
+                            PathHint: rebuild.PathHint
                         ),
                         principal: rebuild.Actor,
-                        expectedContentHash: rebuildContentPin(rebuild)
+                        expectedContentHash: pin
                     );
 
                     break;
@@ -1646,7 +1654,7 @@ public sealed partial class WorldReplaySnapshot {
                 expectedMutationOutcomes: expectedMutationOutcomes,
                 input: Ticks[tick],
                 population: population,
-                rebuildContentPin: static rebuild => rebuild.ContentHash,
+                rebuildSource: static rebuild => (null, rebuild.ContentHash),
                 replayedMutationOutcomes: replayedMutationOutcomes,
                 server: server
             );

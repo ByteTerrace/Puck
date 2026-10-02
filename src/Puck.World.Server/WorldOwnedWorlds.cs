@@ -1,4 +1,3 @@
-using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 using Puck.Assets.Documents;
 using Puck.Commands;
@@ -728,24 +727,24 @@ public sealed class WorldOwnedWorlds {
 
         for (var index = 0; (index < documents.Length); index++) {
             var document = m_identities[index].Document!;
-            var anchor = WorldOwnedDocumentAnchor.None;
+            var anchor = WorldCheckpointAnchor.None;
             string? relative = null;
 
             if (document.DocumentDirectory is { } directory) {
-                var underCatalog = RelativeUnder(directory: directory, root: m_directory);
+                var underCatalog = WorldCheckpointPaths.RelativeUnder(path: directory, root: m_directory);
                 var underWorld = ((m_worldDirectory is { } world)
-                    ? RelativeUnder(directory: directory, root: world)
+                    ? WorldCheckpointPaths.RelativeUnder(path: directory, root: world)
                     : null);
 
                 // The closer root wins: a catalog kept inside the world's directory names its own documents itself.
                 (anchor, relative) = ((underCatalog, underWorld) switch {
-                    ( { } c, { } w) => ((c.Length <= w.Length) ? (WorldOwnedDocumentAnchor.Catalog, c) : (WorldOwnedDocumentAnchor.World, w)),
-                    ( { } c, null) => (WorldOwnedDocumentAnchor.Catalog, c),
-                    (null, { } w) => (WorldOwnedDocumentAnchor.World, w),
-                    _ => (WorldOwnedDocumentAnchor.None, null),
+                    ( { } c, { } w) => ((c.Length <= w.Length) ? (WorldCheckpointAnchor.Catalog, c) : (WorldCheckpointAnchor.World, w)),
+                    ( { } c, null) => (WorldCheckpointAnchor.Catalog, c),
+                    (null, { } w) => (WorldCheckpointAnchor.World, w),
+                    _ => (WorldCheckpointAnchor.None, null),
                 });
 
-                if (anchor == WorldOwnedDocumentAnchor.None) {
+                if (anchor == WorldCheckpointAnchor.None) {
                     checkpoint = null;
                     reason = $"owned world '{m_identities[index].Id}' resolves its assets in a directory under neither the owned-world catalog nor the hosting world's directory, so a durable checkpoint cannot name it";
 
@@ -769,29 +768,16 @@ public sealed class WorldOwnedWorlds {
         return true;
     }
 
-    // A directory's path under a root, forward-slashed and empty for the root itself, or null when it lies outside.
-    private static string? RelativeUnder(string directory, string root) {
-        var full = PuckPaths.Normalize(path: directory).TrimEnd(trimChar: '/');
-        var anchor = PuckPaths.Normalize(path: root).TrimEnd(trimChar: '/');
-
-        if (string.Equals(a: full, b: anchor, comparisonType: PuckPaths.Comparison)) {
-            return string.Empty;
-        }
-
-        return (full.StartsWith(value: (anchor + "/"), comparisonType: PuckPaths.Comparison)
-            ? full[(anchor.Length + 1)..]
-            : null);
-    }
     // The asset directory a checkpointed document resolves to under this catalog's roots, or the reason it cannot.
     private bool TryResolve(WorldOwnedDocumentCheckpoint document, out string? directory, out string reason) {
         directory = null;
         reason = string.Empty;
 
-        if (document.Anchor == WorldOwnedDocumentAnchor.None) {
+        if (document.Anchor == WorldCheckpointAnchor.None) {
             return true;
         }
 
-        var root = ((document.Anchor == WorldOwnedDocumentAnchor.Catalog)
+        var root = ((document.Anchor == WorldCheckpointAnchor.Catalog)
             ? m_directory
             : m_worldDirectory);
 
@@ -801,10 +787,10 @@ public sealed class WorldOwnedWorlds {
             return false;
         }
 
-        var resolved = PuckPaths.Normalize(path: Path.Join(
-            path1: root,
-            path2: (document.RelativeDirectory ?? string.Empty)
-        ));
+        var resolved = WorldCheckpointPaths.Resolve(
+            relative: (document.RelativeDirectory ?? string.Empty),
+            root: root
+        );
 
         if (!Directory.Exists(path: resolved)) {
             reason = $"its assets resolve to '{resolved}', which does not exist here";

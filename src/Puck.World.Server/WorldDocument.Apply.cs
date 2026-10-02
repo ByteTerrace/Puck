@@ -791,13 +791,18 @@ public sealed partial class WorldDocument {
         // Reset targets the base WITHOUT moving it (the whole point: repeated resets always land on the same base
         // until the next save/load). Load/Reload REPLACE the base — the newly installed document becomes what the
         // NEXT reset targets, exactly like a swap always has.
-        string origin;
+        WorldBaseOrigin origin;
 
         if (request.Kind == WorldRebuildKind.Reset) {
             origin = m_baseOrigin;
         } else {
             m_base = candidate;
-            origin = $"'{request.PathHint}' ({verb})";
+            origin = new WorldBaseOrigin(
+                Kind: ((request.Kind == WorldRebuildKind.Load)
+                    ? WorldBaseOriginKind.Load
+                    : WorldBaseOriginKind.Reload),
+                Path: request.PathHint
+            );
             m_baseOrigin = origin;
             // Installed as of this point: a later live commit resolves against the candidate's own directory too.
             Host.PipelineSources = rebuildPipelineSources;

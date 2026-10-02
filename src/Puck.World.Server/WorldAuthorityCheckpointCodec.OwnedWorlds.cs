@@ -27,9 +27,9 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         if (
             !reader.Failed &&
-            ((anchor > ((byte)WorldOwnedDocumentAnchor.World)) ||
-            ((anchor == ((byte)WorldOwnedDocumentAnchor.None)) != (relative is null)) ||
-            ((relative is not null) && !IsRelativeUnderRoot(path: relative)))
+            ((anchor > ((byte)WorldCheckpointAnchor.World)) ||
+            ((anchor == ((byte)WorldCheckpointAnchor.None)) != (relative is null)) ||
+            ((relative is not null) && !WorldCheckpointPaths.IsRelativeUnderRoot(path: relative)))
         ) {
             reader.Fail(
                 detail: $"owned world asset directory (anchor {anchor}, '{relative}') is not a forward-slashed path under its root",
@@ -38,31 +38,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         return new WorldOwnedDocumentCheckpoint(
-            Anchor: ((WorldOwnedDocumentAnchor)anchor),
+            Anchor: ((WorldCheckpointAnchor)anchor),
             DefinitionJson: definitionJson,
             RelativeDirectory: relative
         );
-    }
-    private static bool IsRelativeUnderRoot(string path) {
-        if (path.Length == 0) {
-            return true;
-        }
-
-        if (
-            path.Contains(value: '\\') ||
-            path.Contains(value: ':') ||
-            path.StartsWith(value: '/')
-        ) {
-            return false;
-        }
-
-        foreach (var segment in path.Split(separator: '/')) {
-            if (segment is "" or "." or "..") {
-                return false;
-            }
-        }
-
-        return true;
     }
     private static bool TryDecodeOwnedWorlds(byte[] bytes, out string reason, out WorldOwnedWorldsCheckpoint section) {
         var reader = new WireReader(bytes: bytes);

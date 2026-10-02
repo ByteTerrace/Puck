@@ -247,14 +247,14 @@
             "token": "puck.world-artifact-key.v2"
         },
         "WorldAuthorityCheckpointCodec.Magic": {
-            "shape": "b14e5ce0ad1b9296",
+            "shape": "32d2334d74d298d4",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "PCKP"
         },
         "WorldAuthorityCheckpointCodec.SupportedVersion": {
-            "shape": "b14e5ce0ad1b9296",
+            "shape": "32d2334d74d298d4",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
-            "token": "18"
+            "token": "19"
         },
         "WorldAuthorityReceiptSnapshot.CurrentSchema": {
             "shape": "719e98c037324127",
@@ -292,7 +292,7 @@
             "token": "puck.camera.program.v1"
         },
         "WorldCaptureManifest.SchemaId": {
-            "shape": "c522cd4905644b42",
+            "shape": "61d8a2678a6ab3fd",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -327,7 +327,7 @@
             "token": "puck.world.extensions.v1"
         },
         "WorldFederationCodec.WireKey": {
-            "shape": "c93a9d4002e552df",
+            "shape": "34b26534484fb734",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED5"
         },
@@ -382,12 +382,12 @@
             "token": "puck.world.rewind.closed-group.v1"
         },
         "WorldReplaySnapshot.Magic": {
-            "shape": "ecee9e69f35b3a88",
+            "shape": "834d095102d53846",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
         "WorldReplaySnapshot.ShapeToken": {
-            "shape": "ecee9e69f35b3a88",
+            "shape": "834d095102d53846",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "5"
         },

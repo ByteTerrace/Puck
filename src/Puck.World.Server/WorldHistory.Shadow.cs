@@ -259,10 +259,14 @@ public sealed partial class WorldHistory {
             refusal = spanRefusal;
             return false;
         }
-        foreach (var edit in edits) {
-            if (RecordedEntryRefusal(entry: edit) is { } editRefusal) {
-                refusal = editRefusal;
-                return false;
+        // Edits recorded at the cursor's tick lie inside the span just verified; pending ones were never recorded, so
+        // they are verified here, once, like any other entry.
+        if (!fromCursorTick) {
+            foreach (var edit in edits) {
+                if (RecordedEntryRefusal(entry: edit) is { } editRefusal) {
+                    refusal = editRefusal;
+                    return false;
+                }
             }
         }
         ulong? controlDiverged = null;
@@ -310,7 +314,7 @@ public sealed partial class WorldHistory {
                     expectedMutationOutcomes: editedExpected,
                     input: editedInput,
                     population: edited.Server.Population,
-                    rebuildContentPin: static rebuild => rebuild.ContentHash,
+                    rebuildSource: VerifiedRebuild,
                     replayedMutationOutcomes: editedReplayed,
                     server: edited.Server
                 );
@@ -448,6 +452,9 @@ public sealed partial class WorldHistory {
     /// matched.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shadow"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The span leaves the window.</exception>
+    /// <exception cref="InvalidOperationException">The span holds an entry history cannot re-simulate — a crossing, a
+    /// screen operation, an addon edit, or a recorded reload whose content no longer matches its recorded hash. The
+    /// span is checked, and every reload it names read once, before the shadow moves.</exception>
     public ulong? Resimulate(WorldHistoryShadow shadow, ulong from, ulong to, Func<ulong, WorldReplayTickInput, WorldReplayTickInput>? rewrite = null, Action<ulong, WorldServer>? observe = null) {
         ArgumentNullException.ThrowIfNull(argument: shadow);
 
@@ -458,6 +465,10 @@ public sealed partial class WorldHistory {
             (from > to)
         ) {
             throw new ArgumentOutOfRangeException(paramName: nameof(to));
+        }
+
+        if (RecordedSpanRefusal(from: from, to: to) is { } refusal) {
+            throw new InvalidOperationException(message: refusal);
         }
 
         return Resimulate(

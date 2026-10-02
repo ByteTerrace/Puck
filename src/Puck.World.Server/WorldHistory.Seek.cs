@@ -105,7 +105,9 @@ public sealed partial class WorldHistory {
             val2: target
         );
 
-        foreach (var (tick, entry) in EntriesBetween(from: Math.Min(val1: m_cursor, val2: start), to: upper)) {
+        // From the seek's start: an entry between the cursor and a later keyframe is one a backward seek already
+        // scanned to reach the cursor (Append's invariant).
+        foreach (var (tick, entry) in EntriesBetween(from: start, to: upper)) {
             if (Unrewindable(entry: entry) is { } reason) {
                 return $"at tick {tick} {reason}; rewinding across it would leave the other side of it standing";
             }
@@ -220,7 +222,7 @@ public sealed partial class WorldHistory {
             expectedMutationOutcomes: expected,
             input: input,
             population: server.Population,
-            rebuildContentPin: static rebuild => rebuild.ContentHash,
+            rebuildSource: VerifiedRebuild,
             replayedMutationOutcomes: replayed,
             server: server
         );

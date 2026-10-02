@@ -267,7 +267,17 @@ public sealed partial class WorldHistory {
     private ulong Oldest => m_segments[0].KeyframeTick;
 
     // Appends one tick to the newest span, copying its input out of the capture's reused accumulators.
-    private void Append(in WorldReplayTickInput input, ulong authoritativeHash, ulong stepTicks) {
+    // Entries append only at the head, and only once the cursor is the head: a live tick behind the head cuts the
+    // future first (BranchAtCursor). So no recorded entry ever lies ahead of the cursor unless a seek crossed it to get
+    // there, and that seek's own scan refused it — which is why a seek scans only from where it starts.
+    private void Append(ulong tick, in WorldReplayTickInput input, ulong authoritativeHash, ulong stepTicks) {
+        if (
+            (m_cursor != Head) ||
+            (tick != (Head + 1UL))
+        ) {
+            throw new InvalidOperationException(message: $"tick {tick} would append behind the cursor (cursor {m_cursor}, head {Head}); the future behind a cursor is cut before a live tick appends");
+        }
+
         var segment = m_segments[^1];
         var offset = segment.Count;
 
@@ -702,7 +712,8 @@ public sealed partial class WorldHistory {
         Append(
             authoritativeHash: authoritativeHash,
             input: in input,
-            stepTicks: m_server.Tick.LastStepTicks
+            stepTicks: m_server.Tick.LastStepTicks,
+            tick: tick
         );
         m_cursor = tick;
         m_counters = (m_counters with {

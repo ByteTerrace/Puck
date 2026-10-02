@@ -6,11 +6,11 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// The history's refusals that the review left without laws of their own. A recorded reload is pinned to its recorded
-/// content at the moment it re-applies — in a live seek, in a diff's shadow, and in a replay-edit's edited run — so
-/// content that changes after the preflight read is refused by name rather than installed. A replay-edit refuses a
-/// span it cannot re-simulate and an edit it cannot move. A live session at a seek and a session event recorded in its
-/// window are refused each on its own account.
+/// The history's refusals and the read-once rule behind them. A recorded reload is read once, before anything moves,
+/// and proved against its recorded hash; a live seek, a diff's shadow, and both of a replay-edit's runs re-apply those
+/// verified bytes, so content that changes after the read can neither refuse from inside a step nor reach the world.
+/// A replay-edit refuses a span it cannot re-simulate and an edit it cannot move. A live session at a seek and a
+/// session event recorded in its window are refused each on its own account.
 /// </summary>
 public sealed class HistoryRefusalLawTests {
     // Serves one document by path: the recorded bytes until it is armed, then the recorded bytes for the next
@@ -19,6 +19,7 @@ public sealed class HistoryRefusalLawTests {
         private int m_armedReads;
         private int? m_flipAfter;
 
+        public int ArmedReads => m_armedReads;
         public int ChangedReads { get; private set; }
 
         public void Arm(int flipAfter) {
@@ -81,44 +82,40 @@ public sealed class HistoryRefusalLawTests {
         return false;
     }
 
+    // Each law reads the recorded reload exactly once — the preflight — and the file changes right after that read.
+    // The operation completes from the bytes the preflight verified, so a change after it can neither refuse from
+    // inside a step nor reach the world.
     [Fact]
-    public void ASeekPinsARecordedReloadToItsRecordedContentWhenItReApplies() {
+    public void ASeekReadsARecordedReloadOnceAndReAppliesTheVerifiedBytes() {
         using var directory = new TemporaryDirectory(prefix: "puck-history-pin-seek-");
 
         var (harness, documents, loaded) = RecordedReload(directory: directory);
 
         using (harness) {
             _ = harness.SeekAndProve(target: (loaded - 1UL));
-            // The preflight reads the recorded bytes; the re-applied reload reads changed ones.
             documents.Arm(flipAfter: 1);
-
-            var refused = Assert.Throws<InvalidDataException>(testCode: () => harness.History.TrySeek(
-                documentPath: null, refusal: out _, report: out _, target: loaded
-            ));
-
-            Assert.Contains(expectedSubstring: "content hash mismatch", actualString: refused.Message);
-            Assert.Equal(expected: 1, actual: documents.ChangedReads);
+            _ = harness.SeekAndProve(target: (loaded + 2UL));
+            Assert.Equal(expected: (1, 0), actual: (documents.ArmedReads, documents.ChangedReads));
+            Assert.Equal(expected: Fixtures.BuildDocument().Host.Title, actual: harness.Fixture.Server.Definition.Host.Title);
         }
     }
     [Fact]
-    public void ADiffsShadowPinsARecordedReloadToItsRecordedContentWhenItReApplies() {
+    public void ADiffsShadowReadsARecordedReloadOnceAndReAppliesTheVerifiedBytes() {
         using var directory = new TemporaryDirectory(prefix: "puck-history-pin-diff-");
 
         var (harness, documents, loaded) = RecordedReload(directory: directory);
 
         using (harness) {
             documents.Arm(flipAfter: 1);
-
-            var refused = Assert.Throws<InvalidDataException>(testCode: () => harness.History.TryDiff(
-                diff: out _, divergedAt: out _, documentPath: null, from: (loaded - 1UL), refusal: out _, to: loaded
-            ));
-
-            Assert.Contains(expectedSubstring: "content hash mismatch", actualString: refused.Message);
-            Assert.Equal(expected: 1, actual: documents.ChangedReads);
+            Assert.True(condition: harness.History.TryDiff(
+                diff: out _, divergedAt: out var divergedAt, documentPath: null, from: (loaded - 1UL), refusal: out var refusal, to: (loaded + 2UL)
+            ), userMessage: refusal);
+            Assert.Null(@object: divergedAt);
+            Assert.Equal(expected: (1, 0), actual: (documents.ArmedReads, documents.ChangedReads));
         }
     }
     [Fact]
-    public void AReplayEditsEditedRunPinsARecordedReloadToItsRecordedContentWhenItReApplies() {
+    public void AReplayEditReadsARecordedReloadOnceForBothItsRuns() {
         using var directory = new TemporaryDirectory(prefix: "puck-history-pin-edit-");
 
         var (harness, documents, loaded) = RecordedReload(directory: directory);
@@ -128,16 +125,27 @@ public sealed class HistoryRefusalLawTests {
                 Principal: Principal.Console,
                 Row: new WorldStateRow(Kind: CellKind.Int, Name: CellName.Parse(candidate: "edited"))
             ));
-            // The preflight and the control run read the recorded bytes; the edited run reads changed ones.
-            documents.Arm(flipAfter: 2);
-
-            var refused = Assert.Throws<InvalidDataException>(testCode: () => harness.History.TryReplayEdit(
-                documentPath: null, refusal: out _, report: out _, ticksBack: ((int)((harness.Tick - loaded) + 3UL))
-            ));
-
-            Assert.Contains(expectedSubstring: "content hash mismatch", actualString: refused.Message);
-            Assert.Equal(expected: 1, actual: documents.ChangedReads);
+            documents.Arm(flipAfter: 1);
+            Assert.True(condition: harness.History.TryReplayEdit(
+                documentPath: null, refusal: out var refusal, report: out var report, ticksBack: ((int)((harness.Tick - loaded) + 3UL))
+            ), userMessage: refusal);
+            Assert.Null(@object: report!.ControlDivergedAt);
+            Assert.Equal(expected: (1, 0), actual: (documents.ArmedReads, documents.ChangedReads));
         }
+    }
+    // The append invariant a seek relies on: a live tick behind the head cuts the future first and lands at the new
+    // head, so nothing recorded ever lies ahead of the cursor that a seek did not scan to get there.
+    [Fact]
+    public void ALiveTickBehindTheHeadAppendsAtTheCutHead() {
+        using var harness = new WorldHistoryHarness(seed: 47UL);
+
+        harness.Steps(count: 30);
+        _ = harness.SeekAndProve(target: 12UL);
+        harness.Step();
+
+        Assert.Equal(expected: (13UL, 13UL), actual: (harness.History.CursorTick, harness.History.HeadTick));
+        Assert.Equal(expected: harness.Live[13UL], actual: harness.History.RecordedHash(tick: 13UL));
+        Assert.All(collection: harness.History.KeyframeTicks, action: static tick => Assert.True(condition: (tick <= 13UL)));
     }
 
     private static bool TryReplayEditAcrossCrossing(bool crossing, out string refusal) {
