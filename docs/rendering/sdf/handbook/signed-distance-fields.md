@@ -99,6 +99,13 @@ elsewhere in this handbook and the [technical reference](../reference/README.md)
   full-resolution march skip huge regions instead of stepping through them
   one small hop at a time.
 
+A field can also jump. A repeated pattern that simplifies past a distance
+from the camera holds different geometry on each side of that distance, so a
+step sized on one side proves nothing about the other. The march stops at
+such a switch, steps just past it, and measures the field again on the far
+side before it continues; [Lipschitz and field correctness](../reference/lipschitz-and-field-correctness.md#discontinuous-folds)
+explains the rule and why it costs at most two steps a switch.
+
 ## Why Puck interprets a program instead of compiling a shader
 
 A conventional real-time renderer with procedural shapes usually compiles a

@@ -28,9 +28,10 @@ SdfHit sdfIsaErrorHit() {
 // correct.
 static float3 sdfLodOrigin = float3(0.0, 0.0, 0.0);
 
-// The FOLD-SAFE STEP BOUND: a world-travel bound from the last map sample to the nearest fold-cell boundary of any
-// radial fold on its chain, or to any wallpaper fold's symmetry-LOD switch. Local fold gaps receive the program's
-// Lipschitz correction; the world-space LOD gap does not. The boundary floors permit small crossings.
+// The FOLD-SAFE STEP BOUND: a world-travel bound, in the same Lipschitz-clamped units as the returned field, from the
+// last map sample to the nearest fold-cell boundary of any radial fold on its chain. The boundary floor permits small
+// crossings. A wallpaper fold's symmetry-LOD switch is not in it: a march crosses the switch (sdfMarchAdvance), and a
+// ball proof reads sdfMapBallClearance, which adds the switch gap below.
 // SDF_STEP_BOUND_NONE means no fold bound. A folded field measures only the NEAREST cell's copy, so its VALUE can OVERESTIMATE true
 // distance near a cell boundary (the neighbor cell's geometry may be closer — the containment ≠ nearest-copy class
 // the Repeat/CellJitter crease verdict documents); the sound marchable field is min(value, boundary gap). Marchers
@@ -41,6 +42,18 @@ static float3 sdfLodOrigin = float3(0.0, 0.0, 0.0);
 // the sdfLodOrigin pattern); a consumer reads it immediately after the map call it pairs with.
 #define SDF_STEP_BOUND_NONE 1.0e30
 static float sdfMapStepBound = SDF_STEP_BOUND_NONE;
+
+// THE SYMMETRY-LOD SHELL of the last map sample. Every wallpaper fold's switch is a sphere of its lodDistance about
+// sdfLodOrigin, so the switches are concentric and the sample lies in one shell between two of them, where each fold's
+// LOD side is fixed: sdfMapLodInner is the largest switch radius the sample lies past (0 when none), sdfMapLodOuter the
+// smallest it lies within (SDF_STEP_BOUND_NONE when none), and sdfMapLodGap the world-space distance to the nearer of
+// the two (SDF_STEP_BOUND_NONE when the program has no switch). Inside its shell the field is one lattice's; across a
+// wall it is another's, and a value measured on one side says nothing about a copy that exists only on the other.
+// World units: the switch is measured from the camera, outside every warp, so no Lipschitz correction applies.
+// Written by mapCore on EVERY call, like sdfMapStepBound.
+static float sdfMapLodGap = SDF_STEP_BOUND_NONE;
+static float sdfMapLodInner = 0.0;
+static float sdfMapLodOuter = SDF_STEP_BOUND_NONE;
 
 // The MATERIAL BLEND CHANNEL (material-blend-at-seams). A smooth blend blends the two operands' DISTANCE smoothly, but
 // result.material is an integer that can only carry ONE winner — so the material snaps as a HARD cut at the geometric

@@ -23,7 +23,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         if (mode.x > 0.0) {
             sdfProgramLayout = sdfLoadProgramLayout();
             SdfHit hit = map(float3(seed.midpoint, 0.0, 0.0));
-            clearance = min(hit.distance, sdfMapStepBound);
+            clearance = sdfMapBallClearance(hit.distance);
             // An explicit tighter bound tests the caller's fold-safe contract without inventing another field.
             clearance = min(clearance, mode.y);
         }

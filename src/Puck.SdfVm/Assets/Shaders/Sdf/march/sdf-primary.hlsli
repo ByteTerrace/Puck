@@ -24,6 +24,9 @@ SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) 
         sdfMaterialBlendWeight = 0.0;
         sdfMaterialBlendOther = 0;
         sdfMapStepBound = SDF_STEP_BOUND_NONE;
+        sdfMapLodGap = SDF_STEP_BOUND_NONE;
+        sdfMapLodInner = 0.0;
+        sdfMapLodOuter = SDF_STEP_BOUND_NONE;
         SdfHit hit;
         hit.distance = SDF_FAR_DISTANCE;
         hit.material = 0;
@@ -86,8 +89,11 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         // FOLD-SAFE split: STEP (sizing, unbounding spheres, the slope EMA) on min(value, sdfMapStepBound) —
         // the sound marchable field near a fold boundary — but TERMINATE on the raw value (exact in the owning
         // cell; the bound never invents a phantom boundary hit). Fold-free programs: the min is the identity.
+        // `clearance` proves the ray clear on this sample's side of any LOD switch; `radius`, the unbounding sphere
+        // the relaxation tests, also stops at the switch, since a ball reaching across it proves nothing there.
         float fieldDistance = hit.distance;
-        float radius = min(fieldDistance, sdfMapStepBound);
+        float clearance = min(fieldDistance, sdfMapStepBound);
+        float radius = min(clearance, sdfMapLodGap);
         float hitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
         // The closest-approach candidate (see its declaration): every evaluated sample competes, INCLUDING one an
         // overshoot retreat is about to skip — that skipped sample is exactly the one the exhaustion arm exists
@@ -164,13 +170,30 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
 
         // The depth this step leaves from (after any retreat above) — the plain-step fallback below re-steps from it.
         float stepFrom = traveled;
+        // A step that crosses an LOD switch lands within this of it, where a surface accepts without refinement.
+        float crossingTolerance = ((0.5 * PrimaryConvergeFraction) * hitThreshold);
+        float switchAt;
+        bool proven = false;
 
 #ifdef SDF_STRICT_MARCH
         if (refine) {
             stepLength = radius;
         }
 
-        traveled += stepLength;
+        // A retreat steps back inside the previous sample's ball, which no switch crosses.
+        if (overshoot) {
+            traveled += stepLength;
+        }
+        else {
+            traveled = sdfMarchAdvance(rayOrigin, rayDirection, stepFrom, clearance, stepLength, crossingTolerance,
+                min(farBound, farDistance), proven, switchAt);
+        }
+
+        // A proven step needs no disjoint-sphere test.
+        if (proven) {
+            previousRadius = 0.0;
+            stepLength = 0.0;
+        }
 #else
         // Update the slope EMA from the step that reached this sample (skip the very first sample; an
         // overshoot-retreat step already reset slopeM above). Only reached when the shared accept check did
@@ -187,7 +210,23 @@ SdfPrimaryMarch sdfTracePrimaryField(float3 rayOrigin, float3 rayDirection, floa
         precise float advance = (radius * omega);
         previousRadius = radius;
         stepLength = advance;
-        traveled += stepLength;
+
+        // A retreat's plain step stays inside the previous sample's ball, which no switch crosses.
+        if (overshoot) {
+            traveled += stepLength;
+        }
+        else {
+            traveled = sdfMarchAdvance(rayOrigin, rayDirection, stepFrom, clearance, advance, crossingTolerance,
+                min(farBound, farDistance), proven, switchAt);
+        }
+
+        // A proven step (across an LOD switch, or the clearance in its place) needs no disjoint-sphere test, and
+        // the relaxation restarts from it, as after a teleport.
+        if (proven) {
+            previousRadius = 0.0;
+            stepLength = 0.0;
+            slopeM = -1.0;
+        }
 #endif
         // A far exit may only be taken on a VALIDATED step. An over-relaxed step (omega > 1: stepLength > radius)
         // is not proven clear by the 1-Lipschitz bound — only the next sample's disjoint-sphere test can reject a

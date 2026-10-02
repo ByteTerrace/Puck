@@ -188,6 +188,13 @@ These are one-line cautions; the owning pages hold the derivations.
   tints its parent.
 - **Path (shape 21) is presentation-only.** The fixed-point evaluator refuses
   it.
+- **A wallpaper fold's LOD switch is crossed, never bounded.** `sdfMapStepBound`
+  carries fold-cell gaps only; `mapCore` publishes the sample's LOD shell
+  (`sdfMapLodGap`, `sdfMapLodInner`, `sdfMapLodOuter`). Every march takes its
+  next sample from `sdfMarchAdvance` (`field/sdf-map.hlsli`), passing its own
+  proven clearance, intended advance, acceptance distance and end; a new march
+  does the same, and a ball proof reads `sdfMapBallClearance`. A crossing is a
+  proven step: a relaxed march resets its relaxation after one.
 
 ## Prototype bakes
 

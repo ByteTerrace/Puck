@@ -21,6 +21,13 @@ segment bounds can also provide a safe distance to potentially relevant work.
 The step is the minimum of all applicable conservative limits after converting
 them to a common distance scale.
 
+A wallpaper fold's symmetry-LOD switch is crossed rather than bounded: a step
+that reaches it lands just past it and samples the other side, as
+[Lipschitz and field correctness](lipschitz-and-field-correctness.md#discontinuous-folds)
+describes. A crossing is a proven step, so the relaxed march validates nothing
+for it and restarts its relaxation from the landing, as it does after a
+teleport.
+
 ## Candidate acceleration techniques
 
 Curvature-guided stepping and non-linear root refinement may reduce work near

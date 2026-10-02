@@ -8,43 +8,75 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>The shipped primary march (<c>sdfTracePrimaryField</c>) reaches the tested wallpaper copies across their
-/// symmetry-LOD switch on Vulkan, Direct3D 12 hardware and WARP. Past the camera-centered switch sphere, the fold drops its
-/// mirrors, so a copy can stand where the mirrored lattice put none: a step sized by the field on one side would jump
-/// straight through it. The march reads the switch gap through <c>sdfMapStepBound</c>. Wallpaper has no
-/// fixed evaluator, so the cases have an analytic oracle: a P2 lattice of four-unit cells whose prototype is a sphere of
-/// radius 0.25 at the cell's x = 1. An odd cell turns its copy half way inside the switch and keeps it upright past it,
-/// so cell -1's copy stands at x = -5 inside the switch and at x = -3 past it. A mirror alone (PM) cannot show the
-/// hazard: dropping a mirror only removes copies, so nothing stands past the switch that the mirrored lattice lacks.</summary>
+/// <summary>Every shipped march crosses a wallpaper fold's symmetry-LOD switch soundly on Vulkan, Direct3D 12 hardware
+/// and WARP: the primary march (<c>sdfTracePrimaryField</c>), the beam's cone (<c>coneMarchTileBounds</c> and
+/// <c>coneMarchFarBound</c>) and the soft shadow (<c>softShadowVisibilityMarch</c>). Past the camera-centered switch
+/// sphere the fold drops its mirrors, so a copy can stand where the mirrored lattice put none: a step sized on one side
+/// would jump straight through it. Each march steps through <c>sdfMarchAdvance</c>, which lands a step that reaches the
+/// switch just past it, within the march's own acceptance distance, and samples the other side there. Wallpaper has no
+/// fixed evaluator, so the cases have an analytic oracle: a P2 lattice whose prototype is a sphere off its cell's
+/// center, so an odd cell turns its copy half way inside the switch and keeps it upright past it. A mirror alone (PM)
+/// cannot show the hazard: dropping a mirror only removes copies, so nothing stands past the switch that the mirrored
+/// lattice lacks. The thin cases each sample within a hundredth of the switch, where a step floored at a fixed
+/// fraction of the LOD distance, or a soft shadow's minimum stride, jumps the copy.</summary>
 [Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
 public sealed class SdfMarchLodDeviceLawTests {
     private const string Kernel = "sdf-march-lod.comp";
     private const float FarDistance = 100;
     private const float Footprint = (1f / 1024);
+    // The shadow's penumbra sharpness: a key light's 1 / penumbra slope, the slope of a light with none authored.
+    private const float ShadowSharpness = 9;
 
-    // A ray from the origin, the LOD switch's distance, and the depth range a hit must land in (null for a miss).
-    private sealed record MarchCase(string Name, Vector3 Direction, float LodDistance, (float Near, float Far)? Hit, SdfProgram? Field = null);
+    // The march the probe runs, as its kernel numbers them.
+    private enum MarchMode {
+        Primary = 0,
+        Cone = 1,
+        ConeFar = 2,
+        Shadow = 3,
+    }
+    // A march along one ray: its origin and unit direction, the program, the far distance, the pixel footprint, the march's
+    // own input (the primary or far-bound march's start, the cone's near distance, or the shadow's reach) and the cone's
+    // chord, and the range the result must land in: the primary hit's depth (null for a miss), the cone's entry, its far
+    // bound, or the shadow's visibility.
+    private sealed record MarchCase(string Name, MarchMode Mode, Vector3 Origin, Vector3 Direction, SdfProgram Field, (float Low, float High)? Expected,
+        float Far = FarDistance, float Footprint = Footprint, float Input = 0, float Chord = 0);
 
     private static MarchCase[] Cases() => [
-        // Inside the switch at 2.9, cell -1's turned copy stands at -5; past it the upright copy spans 2.75 to 3.25, so
-        // the surface the camera sees along -x begins at the switch. At 2.25, inside the switch, the field reads the
-        // turned copy 2.5 away, and a step that long lands at 4.75, past the upright one.
-        new("a copy past the switch is not stepped over", -Vector3.UnitX, 2.9f, (2.89f, 2.95f)),
-        new("the even cell's copy inside the switch", Vector3.UnitX, 4, (0.74f, 0.76f)),
-        new("the upright copy with the ray past the switch", -Vector3.UnitX, 0.5f, (2.74f, 2.76f)),
-        new("nothing beside the lattice's plane", Vector3.UnitY, 2.9f, null),
-        new("a Lipschitz clamp does not trap the ray at the switch", Vector3.UnitY, 3, (4.68f, 4.75f), ClampedProgram()),
+        // A P2 lattice of four-unit cells whose sphere of radius 0.25 sits at the cell's x = 1: cell -1's copy stands at
+        // x = -5 inside the switch and at x = -3 past it. Inside a switch at 2.9 the field at 2.25 reads the turned copy
+        // 2.5 away, and a step that long lands at 4.75, past the upright one, whose surface the camera sees from 2.9 on.
+        new("a copy past the switch is not stepped over", MarchMode.Primary, Vector3.Zero, -Vector3.UnitX, Lattice(lodDistance: 2.9f), (2.89f, 2.95f)),
+        new("the even cell's copy inside the switch", MarchMode.Primary, Vector3.Zero, Vector3.UnitX, Lattice(lodDistance: 4), (0.74f, 0.76f)),
+        new("the upright copy with the ray past the switch", MarchMode.Primary, Vector3.Zero, -Vector3.UnitX, Lattice(lodDistance: 0.5f), (2.74f, 2.76f)),
+        new("nothing beside the lattice's plane", MarchMode.Primary, Vector3.Zero, Vector3.UnitY, Lattice(lodDistance: 2.9f), null),
+        new("a Lipschitz clamp does not trap the ray at the switch", MarchMode.Primary, Vector3.Zero, Vector3.UnitY, ClampedProgram(), (4.68f, 4.75f)),
+        // P2 cells 160 wide with a sphere of radius 0.002 at x = 60: cell -1's upright copy spans 99.998 to 100.002 past
+        // a switch at 99.999. A march starting 0.001 inside the switch reads the turned copy 120 away; a step floored at
+        // 0.01 lands at 100.008, past the upright copy, which is only 0.004 thick.
+        new("a thin copy just past the switch is hit", MarchMode.Primary, Vector3.Zero, -Vector3.UnitX, ThinLattice(), (99.998f, 100.0005f),
+            Far: 101, Footprint: 1e-6f, Input: 99.998f),
+        // The same thin copy bounds a ray-thin cone's entry at the switch, never past it or nowhere.
+        new("a cone does not take the switch gap as clearance", MarchMode.Cone, Vector3.Zero, -Vector3.UnitX, ThinLattice(), (99.99f, 99.9995f),
+            Far: 101, Footprint: 1e-6f, Input: 99.998f),
+        // From inside the switch, the cone's far bound lies past the thin copy, which the fine march would accept.
+        new("a cone's far bound does not claim the copy past the switch", MarchMode.ConeFar, Vector3.Zero, -Vector3.UnitX, ThinLattice(), (100.002f, 101f),
+            Far: 101, Footprint: 1e-6f, Input: 99.998f),
+        // P2 four-unit cells with a sphere of radius 0.006 at the cell's x = 1.095: cell -1's upright copy spans 2.899 to
+        // 2.911 past a switch at 2.9. The shadow's first sample sits at -2.899, 0.001 inside the switch, reading the turned
+        // copy 2.19 away; a 0.02 minimum stride lands at -2.919, past the copy, and the ray then reads open space.
+        new("a soft shadow's minimum stride does not jump the switch", MarchMode.Shadow, new Vector3(x: -2.859f, y: 0, z: 0), -Vector3.UnitX, ShadowLattice(), (0f, 0.01f),
+            Input: 1),
     ];
 
     [Fact]
-    public void VulkanStopsEveryStepAtTheLodSwitch() {
+    public void VulkanMarchesAcrossTheLodSwitch() {
         using var device = HeadlessVulkanDevice.Create(applicationName: nameof(SdfMarchLodDeviceLawTests));
 
         Verify(extension: ".spv", services: device.Services);
     }
     [Fact]
-    public void DirectXStopsEveryStepAtTheLodSwitch() {
+    public void DirectXMarchesAcrossTheLodSwitch() {
         using var output = new StringWriter();
 
         using (var device = DirectXTestDevices.Debug(output: output)) {
@@ -53,7 +85,7 @@ public sealed class SdfMarchLodDeviceLawTests {
         Assert.DoesNotContain(comparisonType: StringComparison.Ordinal, expectedSubstring: "[d3d12-debug]", actualString: output.ToString());
     }
     [Fact]
-    public void DirectXWarpStopsEveryStepAtTheLodSwitch() {
+    public void DirectXWarpMarchesAcrossTheLodSwitch() {
         using var device = DirectXTestDevices.Warp();
 
         Verify(extension: ".dxil", services: device.Services);
@@ -67,14 +99,19 @@ public sealed class SdfMarchLodDeviceLawTests {
         for (var index = 0; (index < cases.Length); index++) {
             var item = cases[index];
             var result = results[index];
-            var found = (result.Y == 1);
 
-            if (item.Hit is { } hit) {
-                if (!found || !(result.X >= hit.Near) || !(result.X <= hit.Far)) {
-                    failures.Add(item: $"{item.Name}: found {found} at {result.X} after {result.Z} steps, expected a hit in [{hit.Near}, {hit.Far}]");
+            if (item.Mode == MarchMode.Primary) {
+                var found = (result.Y == 1);
+
+                if (item.Expected is { } hit) {
+                    if (!found || !(result.X >= hit.Low) || !(result.X <= hit.High)) {
+                        failures.Add(item: $"{item.Name}: found {found} at {result.X} after {result.Z} steps, expected a hit in [{hit.Low}, {hit.High}]");
+                    }
+                } else if (found) {
+                    failures.Add(item: $"{item.Name}: found a surface at {result.X}, expected none");
                 }
-            } else if (found) {
-                failures.Add(item: $"{item.Name}: found a surface at {result.X}, expected none");
+            } else if ((item.Expected is { } range) && (!(result.X >= range.Low) || !(result.X <= range.High))) {
+                failures.Add(item: $"{item.Name}: read {result}, expected x in [{range.Low}, {range.High}]");
             }
         }
         Assert.True(condition: (failures.Count == 0), userMessage: string.Join(separator: Environment.NewLine, values: failures));
@@ -95,11 +132,16 @@ public sealed class SdfMarchLodDeviceLawTests {
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R32G32B32A32Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: ((uint)cases.Length));
         using var readback = services.SurfaceTransferFactory.CreateReadback();
         using var commands = services.CommandPoolFactory.Create(name: default);
-        var rows = new Vector4[(cases.Length * 2)];
+        var rows = new Vector4[(cases.Length * 4)];
 
+        // The probe's four rows per case; the LOD origin is the camera at the world's origin, as a view's position is.
         for (var index = 0; (index < cases.Length); index++) {
-            rows[(index * 2)] = new Vector4(value: Vector3.Zero, w: FarDistance);
-            rows[((index * 2) + 1)] = new Vector4(value: cases[index].Direction, w: Footprint);
+            var item = cases[index];
+
+            rows[(index * 4)] = new Vector4(value: item.Origin, w: item.Far);
+            rows[((index * 4) + 1)] = new Vector4(value: item.Direction, w: item.Footprint);
+            rows[((index * 4) + 2)] = new Vector4(value: Vector3.Zero, w: ((float)item.Mode));
+            rows[((index * 4) + 3)] = new Vector4(x: item.Input, y: item.Chord, z: ShadowSharpness, w: 0);
         }
         using var inputs = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: rows.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         var buffers = new List<IGpuStorageBuffer>();
@@ -125,7 +167,7 @@ public sealed class SdfMarchLodDeviceLawTests {
             recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: set, group: 3, pipelineLayoutHandle: pipeline.LayoutHandle);
 
             for (var index = 0; (index < cases.Length); index++) {
-                var program = (cases[index].Field ?? Program(lodDistance: cases[index].LodDistance));
+                var program = cases[index].Field;
                 var buffer = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: program.Words), name: default, usage: GpuBufferUsage.Storage);
 
                 buffers.Add(item: buffer);
@@ -170,12 +212,19 @@ public sealed class SdfMarchLodDeviceLawTests {
     }
     // A P2 lattice of four-unit cells in the XZ plane, two cells either way, whose prototype is a sphere at the cell's
     // x = 1: cell 0 holds it at x = 1, and cell -1 at x = -5 inside the switch and x = -3 past it.
-    private static SdfProgram Program(float lodDistance) {
+    private static SdfProgram Lattice(float lodDistance) => Lattice(cell: 4, lodDistance: lodDistance, offset: 1, radius: 0.25f);
+    // Cells 160 wide with a sphere of radius 0.002 at the cell's x = 60, switching at 99.999: cell -1's upright copy
+    // spans 99.998 to 100.002 along -x, and its turned copy stands at x = -220.
+    private static SdfProgram ThinLattice() => Lattice(cell: 160, lodDistance: 99.999f, offset: 60, radius: 0.002f);
+    // Four-unit cells with a sphere of radius 0.006 at the cell's x = 1.095, switching at 2.9: cell -1's upright copy
+    // spans 2.899 to 2.911 along -x, and its turned copy stands at x = -5.095.
+    private static SdfProgram ShadowLattice() => Lattice(cell: 4, lodDistance: 2.9f, offset: 1.095f, radius: 0.006f);
+    private static SdfProgram Lattice(float cell, float lodDistance, float offset, float radius) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        _ = builder.WallpaperFold(cell: new Vector2(value: 4), group: SdfWallpaperGroup.P2, limit: new Vector2(value: 2), lodDistance: lodDistance)
-            .Translate(offset: new Vector3(x: 1, y: 0, z: 0)).Sphere(material: material, radius: 0.25f);
+        _ = builder.WallpaperFold(cell: new Vector2(value: cell), group: SdfWallpaperGroup.P2, limit: new Vector2(value: 2), lodDistance: lodDistance)
+            .Translate(offset: new Vector3(x: offset, y: 0, z: 0)).Sphere(material: material, radius: radius);
 
         return builder.Build();
     }

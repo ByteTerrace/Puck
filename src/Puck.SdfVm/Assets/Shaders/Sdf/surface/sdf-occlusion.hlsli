@@ -13,10 +13,14 @@
 // boundary (sdfMapStepBound) and the occlusion test reads the raw clearance in clamped units against the primary
 // march's own accept threshold; the estimate divides a clearance by the world-unit distance travelled, so its
 // clearance is de-scaled first (a clamped clearance would narrow a program's shadows with its stepScale bake).
-float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase, float stepScale, float reach) {
-    bool fastMarch = worldUseFastSoftShadowMarch();
+// The stride's floor, ShadowStepMin, steps through an occluder thinner than it on either side of a wallpaper LOD
+// switch, but never through the switch itself: sdfMarchAdvance lands a stride that reaches the switch just past it,
+// within the occlusion test's own threshold, and the march samples the other side there before striding on.
+// The march takes the shadow-march quality and the key light's penumbra sharpness; softShadowVisibility reads both
+// from the view.
+float softShadowVisibilityMarch(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase, float stepScale, float reach,
+    bool fastMarch, float sharpness) {
     int stepBudget = (fastMarch ? FastShadowSteps : ShadowSteps);
-    float sharpness = (1.0 / worldShadowPenumbraSlope());
     float3 origin = (surfacePoint + (surfaceNormal * ShadowBias));
     float traveled = ShadowBias;
     float visibility = 1.0;
@@ -48,8 +52,11 @@ float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lig
         float ceiling = (fastMarch
             ? max(FastShadowStepMax, (traveled * FastShadowStepFarSlope))
             : max(ShadowStepNear, (traveled * ShadowStepFarSlope)));
+        float stride = clamp(radius, ShadowStepMin, ceiling);
+        bool proven;
+        float switchAt;
 
-        traveled += clamp(radius, ShadowStepMin, ceiling);
+        traveled = sdfMarchAdvance(origin, lightDirection, traveled, stride, stride, ((0.5 * SurfaceEpsilon) * stepScale), reach, proven, switchAt);
 
         if (traveled > reach) {
             break;
@@ -60,6 +67,10 @@ float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lig
     visibility = saturate(visibility);
 
     return ((visibility * visibility) * (3.0 - (2.0 * visibility)));
+}
+float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase, float stepScale, float reach) {
+    return softShadowVisibilityMarch(surfacePoint, surfaceNormal, lightDirection, instanceMaskBase, stepScale, reach,
+        worldUseFastSoftShadowMarch(), (1.0 / worldShadowPenumbraSlope()));
 }
 // Normal-ladder ambient occlusion (calcAO): from the hit, step a short ladder of fixed rungs OUTWARD along
 // the surface normal; at each rung compare the distance expected to travel (h) against what the field actually reports

@@ -40,6 +40,19 @@ struct TileBounds {
     float farBound;
 };
 
+// A cone step through sdfMarchAdvance, the march step across a symmetry-LOD switch. Every beam cone's apex is the
+// view's camera, which sdf-beam also makes the LOD origin, and every ray of the cone is unit, so each ray meets a switch
+// sphere at the depth its center ray does: the slab a step proves lies on one side of the switch exactly when the
+// center ray's segment does. The cone's proven step is its clearance and its advance at once. A crossing lands at most
+// `tolerance` past the switch and reports the switch's depth in switchAt (SDF_STEP_BOUND_NONE otherwise): every cone
+// point in that sliver lies within tolerance plus the cone's radius of the landing sample, so a landing that passes
+// its clear test covers the sliver, and one that fails it bounds an entry at the switch, the earliest unproven depth.
+float coneMarchAdvance(float3 origin, TileCone cone, float t, float step, float tolerance, float limit, out float switchAt) {
+    bool proven;
+
+    return sdfMarchAdvance(origin, cone.centerDirection, t, step, step, tolerance, limit, proven, switchAt);
+}
+
 // F1 TAIL PHASE. Proves the FAR BOUND: the depth past which the tile's cone cannot produce any
 // hit the fine march would ACCEPT, all the way to the far distance. Marches forward from `startT` with a FOOTPRINT-INFLATED
 // clearance threshold — the load-bearing correctness fact. The fine march accepts a hit at fieldDistance <
@@ -52,7 +65,8 @@ struct TileBounds {
 // max(SurfaceEpsilon, footprint*t') can NEVER fire — so the ray renders skyColor whether it exits at farBound or marches
 // on, i.e. the far exit is OUTPUT-IDENTICAL on the shipped shading path (only step counts and the termination debug view
 // change). The same rule is what the primary march's exhaustion arm accepts a closest-approach candidate against, so the proof
-// covers that arm too. FOLD-SAFE like the gap phases (the bounded clearance rides sdfMapStepBound). Total function: no
+// covers that arm too. FOLD-SAFE like the gap phases (the bounded clearance rides sdfMapStepBound), and it crosses an
+// LOD switch through coneMarchAdvance as they do. Total function: no
 // proven clear-to-far span within the budget => the far distance.
 float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase, float footprint, float startT) {
     float3 origin = view.position.xyz;
@@ -79,7 +93,11 @@ float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase,
                 clear = true;
             }
 
-            t += (clearance / (1.0 + spread)); // conservative step across the inflated-clear span
+            // Conservative step across the inflated-clear span. A landing past an LOD switch ends the span unless it
+            // clears the sliver behind it, which it does for every fine-march threshold when the sliver is no longer
+            // than SurfaceEpsilon or the footprint at the switch.
+            float switchAt;
+            t = coneMarchAdvance(origin, cone, t, (clearance / (1.0 + spread)), min(SurfaceEpsilon, (footprint * t)), farDistance, switchAt);
         }
         else {
             // Footprint geometry (or its cone margin) is present here — any earlier clear span does NOT reach the far
@@ -120,6 +138,8 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
     // ENTRY: the Lipschitz-clamped field clears the cone by map(center) - chord*t.
     // Advancing by clearance/(1+chord) stays conservative, including when the entry budget ends early.
     float t = worldSurfaceNearDistance(view);
+    // The LOD switch the step to the current sample crossed, the earliest depth that step left unproven.
+    float reachedSwitch = SDF_STEP_BOUND_NONE;
     bool foundEntry = false;
     int entrySteps = entryOnly ? IndependentConeMarchSteps : ConeMarchSteps;
 
@@ -128,18 +148,19 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
         // FOLD-SAFE: the clearance proof rides min(value, sdfMapStepBound). A folded field's raw value can
         // overestimate near a fold boundary, and a cone proof built on it classifies tiles straight through shell
         // geometry (the Droste tile-shatter). min with the published boundary gap
-        // is an honest unbounding sphere of the TRUE field, so entry, TileEmpty, and the gap proofs stay sound; a
-        // fold-free program publishes SDF_STEP_BOUND_NONE and this min is the identity.
+        // is an honest unbounding sphere of the TRUE field on this sample's side of any LOD switch, and
+        // coneMarchAdvance never lets a step carry it across one, so entry, TileEmpty, and the gap proofs stay sound;
+        // a fold-free program publishes SDF_STEP_BOUND_NONE and this min is the identity.
         float clearance = (min(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase), sdfMapStepBound) - (cone.chord * t));
         sdfWorkSteps += 1u;
 
         if (clearance <= ConeEpsilon) {
-            b.entry = t;
+            b.entry = min(t, reachedSwitch);
             foundEntry = true;
             break;
         }
 
-        t += (clearance / (1.0 + cone.chord));
+        t = coneMarchAdvance(origin, cone, t, (clearance / (1.0 + cone.chord)), (0.5 * ConeEpsilon), farDistance, reachedSwitch);
 
         if (t > farDistance) {
             return b; // TileEmpty entry, no gap — cull-args drops the tile
@@ -147,11 +168,11 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
     }
 
     if (entryOnly) {
-        if (!foundEntry) b.entry = t;
+        if (!foundEntry) b.entry = min(t, reachedSwitch);
         return b; // Gap and far-bound sentinels leave all remaining work to primary rays.
     }
     if (!foundEntry) {
-        b.entry = t; // step budget exhausted at the entry band — matches coneMarchTile's fallthrough `return t`
+        b.entry = min(t, reachedSwitch); // step budget exhausted at the entry band — matches coneMarchTile's fallthrough `return t`
         // F1 leak #2: a budget-exhausted grazing tile is marked LIVE (all its pixels fine-march from t). Prove the far
         // bound from here so sky pixels that clear the near band exit early instead of running to the far distance.
         b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
@@ -176,7 +197,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
             if (clearance > ConeEpsilon) {
                 b.firstExit = t;               // start of a proven-clear span
                 clear = true;
-                t += (clearance / (1.0 + cone.chord)); // conservative step within the clear span
+                t = coneMarchAdvance(origin, cone, t, (clearance / (1.0 + cone.chord)), (0.5 * ConeEpsilon), farDistance, reachedSwitch);
             }
             else {
                 // Still inside/near the entry band. Early-abandon a cone that is only descending deeper (a ground/wall
@@ -203,7 +224,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
         }
         else {
             if (clearance <= ConeEpsilon) {
-                b.secondEntry = t;             // cone re-enters geometry — gap = [firstExit, secondEntry]
+                b.secondEntry = min(t, reachedSwitch); // cone re-enters geometry — gap = [firstExit, secondEntry]
                 // F1 leak #4: past the ONE proven gap there was no far information. Prove the far bound from the second
                 // band so a ray that clears it exits early instead of marching the second band's sky to the far distance.
                 b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
@@ -211,7 +232,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
                 return b; // one gap is the 90% win (Larsson clamps to one re-entry)
             }
 
-            t += (clearance / (1.0 + cone.chord)); // stay conservative across the clear span
+            t = coneMarchAdvance(origin, cone, t, (clearance / (1.0 + cone.chord)), (0.5 * ConeEpsilon), farDistance, reachedSwitch);
         }
 
         if (t > farDistance) {

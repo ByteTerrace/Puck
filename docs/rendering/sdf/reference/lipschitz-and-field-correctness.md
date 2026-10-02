@@ -104,12 +104,41 @@ fold-safe bounds where required.
 
 A wallpaper fold's symmetry LOD (`lodDistance`) is a discontinuity of its own:
 past a sphere of that radius around the camera the fold drops its mirrors, so a
-copy can stand where the mirrored lattice has none. The step bound `map()`
-publishes includes the world-space gap to that sphere, independently of the
-program's Lipschitz scale (`SdfMarchLodDeviceLawTests`). Its positive floor,
-`lodDistance * 1e-4`, permits crossing the switch and can skip a copy thinner
-than that floor. Soft shadows also impose a minimum stride that can exceed the
-switch gap. Exact traversal across the discontinuity remains uncovered.
+copy can stand where the mirrored lattice has none. A field value measured on
+one side of the switch says nothing about the other, so no step is sized across
+it. Every switch is a sphere about the camera, so the switches of all folds are
+concentric, and `map()` publishes the shell between two of them that holds the
+sample: its inner and outer walls and the world-space gap to the nearer one,
+which takes no Lipschitz correction because the switch is measured outside
+every warp.
+
+Every march (primary, the beam's cone, soft shadows and the overshoot view)
+steps through one rule, `sdfMarchAdvance` in `field/sdf-map.hlsli`:
+
+- A step that stays inside the shell is unchanged, so a sample far from every
+  switch pays one comparison.
+- A step that would leave the shell stops where the ray meets the wall. When
+  the sample's own side is clear that far, the march crosses: it lands just
+  past the wall, by at most the march's own acceptance distance, and samples
+  the other side there before it steps again. Geometry on the far side within
+  that sliver is within the acceptance distance of the landing sample, so the
+  landing accepts it. When the near side is not clear to the wall, the step is
+  that clearance, which stays inside the shell.
+- A crossing is one step of the march's budget. A line meets a sphere at most
+  twice, every sample of a ray reads the same two intersections, and a crossing
+  lands strictly past its own, so a march crosses each switch at most twice,
+  in and out. A camera ray starts at the switch's center and crosses each
+  switch once. A program with K distinct `lodDistance` values costs at most 2K
+  crossings.
+
+A ball proof, such as a reprojected march seed, reads `sdfMapBallClearance`,
+which stops at the switch. Soft shadows still stride through an occluder
+thinner than their minimum stride on either side, but never across a switch.
+The rule is exact up to the float rounding of the switch test itself: a
+grazing ray whose landing rounds back onto the side it left crosses again from
+there, a tolerance further on. `SdfMarchLodDeviceLawTests` holds every march on
+the device, and `SdfMarchLodCrossingLawTests` holds a CPU reference march of
+the rule to its no-skip property and its crossing bound.
 
 Plain repetition is exact only when the prototype fits within its centered
 cell. Cell jitter also requires conservative spacing; containment does not

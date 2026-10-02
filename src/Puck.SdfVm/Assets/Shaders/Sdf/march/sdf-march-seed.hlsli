@@ -38,7 +38,8 @@ bool sdfPrepareMarchSeed(float start, float projectedDistance, float pixelFootpr
 
 // seed must come from successful sdfPrepareMarchSeed; a refused neutral result is not a proposal.
 // clearance is the current field's positive lower bound at midpoint: already multiplied by the program StepScale
-// and limited by the fold-safe step bound. Never use abs(distance), raw unscaled distance, or scale it a second time.
+// and limited to the sample's ball (sdfMapBallClearance: the fold-safe step bound and the LOD switch gap). Never use
+// abs(distance), raw unscaled distance, or scale it a second time.
 // The ball contains the whole skipped interval and its acceptance band; equality does not prove it empty.
 bool sdfMarchSeedClears(SdfMarchSeed seed, float clearance) {
     return isfinite(clearance) && clearance > 0.0 && clearance > seed.radius;

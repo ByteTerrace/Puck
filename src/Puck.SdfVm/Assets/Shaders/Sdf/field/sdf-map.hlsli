@@ -72,6 +72,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // Every call publishes a fresh fold-safe step bound (stale bounds from a previous sample would be unsound); the
     // fold cases below tighten walkStepBound and the single return publishes it in clamped units.
     sdfMapStepBound = SDF_STEP_BOUND_NONE;
+    sdfMapLodGap = SDF_STEP_BOUND_NONE;
+    sdfMapLodInner = 0.0;
+    sdfMapLodOuter = SDF_STEP_BOUND_NONE;
     // The material blend channel starts CLEARED every call (a previous sample's seam must never leak — the same
     // soundness discipline sdfMapStepBound follows); the shared blend tail rebuilds it as smooth composes execute.
     if (trackMaterial) {
@@ -147,8 +150,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // warp's expansion) at the single return. Deliberately NOT reset by RESET: another chain's fold boundary still
     // bounds where this sample can safely step — a global min is conservative, never unsound.
     float walkStepBound = SDF_STEP_BOUND_NONE;
-    // The LOD sphere is in world space; its gap needs no domain or program Lipschitz correction.
-    float lodStepBound = SDF_STEP_BOUND_NONE;
+    // The sample's symmetry-LOD shell (see sdfMapLodGap), in world units: like walkStepBound, never reset by RESET.
+    float lodGap = SDF_STEP_BOUND_NONE;
+    float lodInner = 0.0;
+    float lodOuter = SDF_STEP_BOUND_NONE;
     // The texturing half of an active wallpaper fold: the cell key times the fold's material stride, added to the
     // material id of later shape wins in the chain (never to the screen sentinel). Reset with the chain.
     int parityMaterialDelta = 0;
@@ -830,10 +835,14 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     float lodRadius = distance(worldPosition, sdfLodOrigin);
                     bool lodSimplify = ((data1.z > 0.0) && (lodRadius > data1.z));
 
-                    // Across the LOD sphere a copy can exist on only one side. Its world-space gap limits the advance;
-                    // the relative floor permits crossing at the switch and can skip geometry thinner than that floor.
-                    if (data1.z > 0.0) {
-                        lodStepBound = min(lodStepBound, max(abs(lodRadius - data1.z), (data1.z * SDF_WALLPAPER_LOD_GAP_FLOOR)));
+                    // The switch is a wall of the sample's LOD shell, on the side lodSimplify chose, so the shell and
+                    // the lattice this sample evaluates can never disagree.
+                    if (lodSimplify) {
+                        lodInner = max(lodInner, data1.z);
+                        lodGap = min(lodGap, (lodRadius - data1.z));
+                    } else if (data1.z > 0.0) {
+                        lodOuter = min(lodOuter, data1.z);
+                        lodGap = min(lodGap, (data1.z - lodRadius));
                     }
                     float2 cellIndex;
                     float2 folded = sdfWallpaperFoldCell(float2(localPosition[axisA], localPosition[axisB]), group, data0.xy, data0.zw, data1.xy, lodSimplify, cellIndex);
@@ -1089,9 +1098,13 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // Consumers receive the clamped field. Primary acceptance uses that field with its footprint threshold; shadow
     // penumbra estimation separately removes the global clamp — see softShadowVisibility in surface/sdf-occlusion.hlsli.
     result.distance *= stepScale;
-    // Local radial-fold gaps need the chain's expansion correction. The camera-centered LOD sphere already supplies
-    // a world-space gap, independent of the field's Lipschitz scale.
-    sdfMapStepBound = min((walkStepBound * stepScale), lodStepBound);
+    // Publish the fold-safe step bound in the SAME clamped units as the returned distance: stepScale = 1/L covers the
+    // whole chain's worst-case expansion, so the clamped gap remains a conservative world-travel bound even when a
+    // non-conformal warp (twist/bend) sits upstream of the fold. SDF_STEP_BOUND_NONE stays effectively unbounded.
+    sdfMapStepBound = (walkStepBound * stepScale);
+    sdfMapLodGap = lodGap;
+    sdfMapLodInner = lodInner;
+    sdfMapLodOuter = lodOuter;
 
     return result;
 }
@@ -1125,6 +1138,120 @@ float mapDistance(float3 worldPosition) {
 
 float mapDistanceMasked(float3 worldPosition, uint instanceMaskBase) {
     return mapCore(worldPosition, instanceMaskBase, false).distance;
+}
+
+// The ball clearance of the last map sample: no geometry of any lattice, on either side of a symmetry-LOD switch,
+// lies within it of the sample. A proof by one ball (a reprojected march seed) reads this; a march steps through
+// sdfMarchAdvance instead.
+float sdfMapBallClearance(float distance) {
+    return min(distance, min(sdfMapStepBound, sdfMapLodGap));
+}
+
+// Where the ray rayOrigin + t * rayDirection (unit; offset = rayOrigin - sdfLodOrigin, along = dot(offset,
+// rayDirection)) meets the switch sphere of `radius`, in ray parameter; false when it misses. Taken from the ray's
+// origin, never from a sample, so every sample of one ray reads the same two roots. q = -(b + sign(b) sqrt(D)) and
+// c / q avoid the cancellation of -b +- sqrt(D).
+bool sdfLodSwitchRoots(float3 offset, float along, float radius, out float nearRoot, out float farRoot) {
+    float c = (dot(offset, offset) - (radius * radius));
+    float discriminant = ((along * along) - c);
+
+    nearRoot = SDF_STEP_BOUND_NONE;
+    farRoot = SDF_STEP_BOUND_NONE;
+
+    if (discriminant < 0.0) {
+        return false;
+    }
+
+    float root = sqrt(discriminant);
+    float q = -(along + ((along >= 0.0) ? root : -root));
+    float other = ((q != 0.0) ? (c / q) : 0.0);
+
+    nearRoot = min(q, other);
+    farRoot = max(q, other);
+
+    return true;
+}
+
+// The next float above a non-negative ray parameter.
+float sdfLodNextUp(float value) {
+    return asfloat(asuint(max(value, 1.0e-30)) + 1u);
+}
+
+// THE MARCH STEP ACROSS A SYMMETRY-LOD SWITCH, which every marcher takes (primary, the beam's cone, soft shadows and
+// the overshoot view). A marcher samples the field at rayOrigin + traveled * rayDirection and asks here where its
+// next sample goes, in ray parameter:
+//   clearance  how far along the ray the sample's own side is proven clear: the field limited by sdfMapStepBound
+//              (a cone passes its own advance, a soft shadow its own stride), never limited by sdfMapLodGap;
+//   advance    the step the marcher would take with no switch (over-relaxed, or raised to a minimum stride);
+//   tolerance  the marcher's acceptance distance: a surface within it of a sample is accepted there (for a cone,
+//              it fails the clear test there);
+//   limit      the ray parameter the march ends at.
+// A step that stays inside the sample's LOD shell (sdfMapLodGap) is returned unchanged with `proven` false, so a
+// relaxed step is still validated by the marcher's own test. Otherwise the ray leaves the shell where it meets a
+// wall, the outer wall's far root or the inner wall's near root. When the sample's side is clear to that root, the
+// march CROSSES: it lands `beyond` past the root, the least of the tolerance, half the arrival chord and half the
+// way to the limit, and the marcher samples the arrival side there before stepping on (`switchAt` is the root).
+// When it is not, the step is the clearance, which stays in the shell. Either is `proven`: the marcher validates
+// nothing and resets any relaxation.
+// NO SKIP: the sample's side is clear up to the root, and arrival-side geometry within the beyond segment lies within
+// the tolerance of the landing sample, which accepts it. A chord shorter than twice the tolerance is landed on at its
+// middle, so a grazing pass through a switch sphere is still sampled on its arrival side.
+// AT MOST TWO CROSSINGS PER SWITCH: a line meets a sphere at most twice, every sample of a ray reads the same roots,
+// a crossing lands strictly past its root, and a marcher never retreats behind a proven step; the next crossing needs
+// a root at or past the sample. A march crosses each switch sphere at most twice (in and out), so a program with K
+// distinct lodDistances costs at most 2K crossings, one budgeted step each. A camera ray starts at sdfLodOrigin, so
+// it meets each switch once, at t = lodDistance. The walls are taken from the sample's side, so a sample the switch
+// test places on the far side of a root by rounding crosses from where it stands: the march can never step a
+// lattice's clearance across the wrong side, and only a landing that rounds back onto the departure side (a grazing
+// ray within float spacing of the sphere) spends one more crossing, each a tolerance further on.
+// A sample whose shell lies beyond both its clearance and its advance pays one compare.
+float sdfMarchAdvance(float3 rayOrigin, float3 rayDirection, float traveled, float clearance, float advance,
+    float tolerance, float limit, out bool proven, out float switchAt) {
+    proven = false;
+    switchAt = SDF_STEP_BOUND_NONE;
+
+    if (max(clearance, advance) <= sdfMapLodGap) {
+        return (traveled + advance);
+    }
+
+    float3 offset = (rayOrigin - sdfLodOrigin);
+    float along = dot(offset, rayDirection);
+    float nearRoot;
+    float farRoot;
+    float next = SDF_STEP_BOUND_NONE;
+    float after = SDF_STEP_BOUND_NONE;
+
+    // The sample lies within its outer wall, so the ray leaves through it at the far root, or here at the latest.
+    if (sdfMapLodOuter < SDF_STEP_BOUND_NONE) {
+        next = (sdfLodSwitchRoots(offset, along, sdfMapLodOuter, nearRoot, farRoot) ? max(farRoot, traveled) : traveled);
+    }
+    // The sample lies past its inner wall; a ray whose chord through that sphere lies ahead enters it at the near
+    // root, or here when it already runs inside the chord.
+    if (sdfMapLodInner > 0.0) {
+        if (sdfLodSwitchRoots(offset, along, sdfMapLodInner, nearRoot, farRoot)) {
+            float entry = max(nearRoot, traveled);
+
+            if ((nearRoot < farRoot) && (entry < farRoot) && (entry < next)) {
+                next = entry;
+                after = farRoot;
+            }
+        }
+    }
+
+    if (!(sdfMapLodGap < clearance) && ((traveled + advance) < next)) {
+        return (traveled + advance);
+    }
+
+    proven = true;
+
+    if ((next < SDF_STEP_BOUND_NONE) && ((next - traveled) <= clearance)) {
+        switchAt = next;
+        float beyond = ((next < limit) ? min(tolerance, (0.5 * (min(after, limit) - next))) : tolerance);
+
+        return max((next + beyond), sdfLodNextUp(next));
+    }
+
+    return (traveled + clearance);
 }
 
 #endif
