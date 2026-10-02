@@ -154,8 +154,8 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
 
             Assert.True(condition: WorldProjection.TryToDefinition(definition: out var hydrated, projection: projection, reason: out var reason), userMessage: reason);
 
-            var expected = Packed(environment: new WorldEnvironmentResolve().Resolve(definition: host, mirror: ClientFixtures.StateMirror(definition: host), revision: 0));
-            var actual = Packed(environment: new WorldEnvironmentResolve().Resolve(definition: hydrated, mirror: ClientFixtures.StateMirror(definition: hydrated), revision: 0));
+            var expected = Packed(environment: new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: host, mirror: ClientFixtures.StateMirror(definition: host), revision: 0));
+            var actual = Packed(environment: new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: hydrated, mirror: ClientFixtures.StateMirror(definition: hydrated), revision: 0));
 
             Assert.Equal(actual: actual.Lights, expected: expected.Lights);
             Assert.Equal(actual: actual.Block, expected: expected.Block);
