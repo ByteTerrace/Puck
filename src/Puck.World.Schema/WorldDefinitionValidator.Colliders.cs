@@ -10,6 +10,8 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        var refusedBefore = errors.Count;
+
         switch (collider) {
             case WorldCollider.Sphere sphere:
                 RequirePositive(
@@ -100,5 +102,18 @@ public static partial class WorldDefinitionValidator {
                 break;
         }
 
+        // A collider the kind checks admitted compiles; each volume's core spheres, half its least radius, must be at
+        // least one raw, or the certified sweep moves a point and a capsule's core sweeps its lower end alone.
+        if (errors.Count != refusedBefore) {
+            return;
+        }
+
+        var volumes = (FixedWorldCollider.Compile(collider: collider, creations: creations)?.Volumes ?? []);
+
+        for (var index = 0; (index < volumes.Length); index++) {
+            if (!FixedFieldContactSolver.VolumeCoreSweeps(volume: in volumes[index])) {
+                errors.Add(item: $"{path} volume {index} ({volumes[index].Kind}) has a radius or least half extent under the {FixedFieldContactSolver.MinimumColliderRadiusRaws} raws (2⁻¹⁵ units) a moving body's certified sweep needs for its core; widen it.");
+            }
+        }
     }
 }

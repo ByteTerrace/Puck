@@ -30,6 +30,26 @@ public sealed class CapsuleSweepCeilingLawTests {
         }
     }
     [Fact]
+    public void AColliderRadiusUnderTwoRawsIsRefusedByNameAndTwoRawsAreAdmitted() {
+        // 1e-6 units quantizes to no raw at all: the core spheres a moving body's sweep moves would be points, and a
+        // capsule's core would sweep its lower end alone. Two raws, 2⁻¹⁵ units, is the least radius whose half is a raw.
+        var source = Fixtures.BuildDocument();
+
+        WorldDefinition WithSeatCollider(WorldCollider collider) => (source with {
+            KitRowsRaw = [.. source.Kits.Select(selector: kit => kit with { Collider = collider })],
+        });
+        var least = (FixedFieldContactSolver.MinimumColliderRadiusRaws / 65536f);
+
+        foreach (var collider in ((WorldCollider[])[new WorldCollider.Sphere(Radius: 1e-6f), new WorldCollider.Capsule(Endpoint: new(x: 0f, y: 0.001f, z: 0f), Radius: 1e-6f), new WorldCollider.Box(HalfExtents: new(x: 1f, y: 1e-6f, z: 1f), Rotation: new(w: 1f, x: 0f, y: 0f, z: 0f))])) {
+            Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: WithSeatCollider(collider: collider), reason: out var reason), userMessage: $"{collider} was admitted");
+            Assert.Contains(actualString: reason, expectedSubstring: $"under the {FixedFieldContactSolver.MinimumColliderRadiusRaws} raws");
+        }
+
+        foreach (var collider in ((WorldCollider[])[new WorldCollider.Sphere(Radius: least), new WorldCollider.Capsule(Endpoint: new(x: 0f, y: (100f / 65536f), z: 0f), Radius: least)])) {
+            Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: WithSeatCollider(collider: collider), reason: out var reason), userMessage: reason);
+        }
+    }
+    [Fact]
     public void ACapsuleAtTheCeilingIsAdmitted() {
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: WithSeatCapsule(length: 22f, radius: 0.35f), reason: out var reason), userMessage: reason);
     }

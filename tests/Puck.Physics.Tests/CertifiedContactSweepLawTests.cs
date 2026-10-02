@@ -286,6 +286,24 @@ public sealed class CertifiedContactSweepLawTests {
         Assert.True(condition: (Read(value: reached.Z) > (WallZ + WallHalfThickness)), userMessage: $"the capsule's middle passed the bar to {Read(value: reached.Z)}");
         Assert.Equal(expected: ((long)FixedFieldContactSolver.MaximumCapsuleSweepPieces), actual: work.Read(kind: FixedContactSweepWork.Sweeps));
     }
+    [Fact]
+    public void ACapsuleAtTheLeastAdmittedRadiusSweepsItsWholeCore() {
+        // Two raws, the least radius validation admits: its core spheres are one raw, and a hundred-raw core takes 51
+        // of them. A bar four raws thick crosses the core's middle, fifty raws from either end sphere.
+        var radius = FixedQ4816.FromRawBits(value: FixedFieldContactSolver.MinimumColliderRadiusRaws);
+        var lower = new FixedVector3(X: FixedQ4816.Zero, Y: radius, Z: FixedQ4816.Zero);
+        var capsule = new FixedBodyColliderVolume[] { new(Kind: FixedBodyColliderKind.Capsule, Center: lower, Endpoint: (lower + new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromRawBits(value: 100L), Z: FixedQ4816.Zero)), HalfExtents: default, Rotation: FixedQuaternion.Identity, Radius: radius) };
+
+        Assert.True(condition: FixedFieldContactSolver.VolumeCoreSweeps(volume: in capsule[0]));
+        Assert.False(condition: FixedFieldContactSolver.VolumeCoreSweeps(volume: capsule[0] with { Radius = FixedQ4816.FromRawBits(value: (FixedFieldContactSolver.MinimumColliderRadiusRaws - 1L)) }));
+
+        var evaluator = Wall(halfExtents: new Vector3(x: 8f, y: (2f / 65536f), z: WallHalfThickness), y: (52f / 65536f));
+        var work = new FixedContactSweepWork();
+        var reached = Sweep(previous: Z(z: -95.0), solver: Solver(evaluator: evaluator, work: work), target: Z(z: -150.0), volumes: capsule);
+
+        Assert.True(condition: (Read(value: reached.Z) > (WallZ + WallHalfThickness)), userMessage: $"the capsule's middle passed the bar to {Read(value: reached.Z)}");
+        Assert.Equal(expected: 51L, actual: work.Read(kind: FixedContactSweepWork.Sweeps));
+    }
     public static TheoryData<string> CarrierEndSteps() => ["a core past +2^47", "a core past -2^47", "a displacement across the carrier"];
     [MemberData(memberName: nameof(CarrierEndSteps))]
     [Theory]

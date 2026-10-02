@@ -770,6 +770,27 @@ public sealed class FixedFieldContactSolver(
         return false;
     }
 
+    /// <summary>The least radius, in raws, a collider volume's sphere radius or least half extent may quantize to: half
+    /// of it, the radius of the core spheres a moving body's certified sweep moves, must be at least one raw. Below it
+    /// the core is a point (half a raw rounds to zero, to even), and a capsule's core then sweeps its lower end alone.
+    /// Collider validation refuses a volume past it by name (<see cref="VolumeCoreSweeps"/>).</summary>
+    public const long MinimumColliderRadiusRaws = 2L;
+
+    /// <summary>Returns whether a collider volume's core spheres have a radius of at least one raw: its sphere or
+    /// capsule radius, or a box's least half extent, at least <see cref="MinimumColliderRadiusRaws"/>.</summary>
+    /// <param name="volume">The compiled collider volume.</param>
+    /// <returns><see langword="true"/> when the certified sweep moves a core sphere, not a point.</returns>
+    public static bool VolumeCoreSweeps(in FixedBodyColliderVolume volume) =>
+        (ColliderRadius(volume: in volume).Value >= MinimumColliderRadiusRaws);
+
+    // The radius a volume's core spheres take half of: a sphere's or capsule's own, or a box's least half extent.
+    private static FixedQ4816 ColliderRadius(in FixedBodyColliderVolume volume) => ((volume.Kind == FixedBodyColliderKind.Box)
+        ? FixedQ4816.Min(x: volume.HalfExtents.X, y: FixedQ4816.Min(x: volume.HalfExtents.Y, y: volume.HalfExtents.Z))
+        : volume.Radius);
+    // A core sphere's radius: half the volume's least radius, so a body resting against a surface keeps half its radius
+    // of clearance and its sweep never stalls there.
+    private static FixedQ4816 CoreRadius(in FixedBodyColliderVolume volume) =>
+        (ColliderRadius(volume: in volume) / Two);
     // Walks every core sphere of every volume: a sphere or box volume's centre, and a capsule's core segment covered by
     // spheres spaced closer than their radius. Each core sphere's radius is half the volume's least radius, so a body
     // resting against a surface keeps half its radius of clearance and its sweep never stalls there. Without a sweep
@@ -783,7 +804,7 @@ public sealed class FixedFieldContactSolver(
 
             switch (volume.Kind) {
                 case FixedBodyColliderKind.Sphere:
-                    refusal = Core(certified: certified, delta: in delta, least: ref least, offset: lowerOffset, previousPosition: in previousPosition, radius: (volume.Radius / Two), reached: ref reached);
+                    refusal = Core(certified: certified, delta: in delta, least: ref least, offset: lowerOffset, previousPosition: in previousPosition, radius: CoreRadius(volume: in volume), reached: ref reached);
                     break;
                 case FixedBodyColliderKind.Box:
                     refusal = Core(
@@ -792,13 +813,13 @@ public sealed class FixedFieldContactSolver(
                         least: ref least,
                         offset: lowerOffset,
                         previousPosition: in previousPosition,
-                        radius: (FixedQ4816.Min(x: volume.HalfExtents.X, y: FixedQ4816.Min(x: volume.HalfExtents.Y, y: volume.HalfExtents.Z)) / Two),
+                        radius: CoreRadius(volume: in volume),
                         reached: ref reached
                     );
                     break;
                 case FixedBodyColliderKind.Capsule: {
                         var core = (orientation.Rotate(vector: volume.Endpoint) - lowerOffset);
-                        var radius = (volume.Radius / Two);
+                        var radius = CoreRadius(volume: in volume);
 
                         if (!TryCapsuleSweepPieces(coreLength: core.Length, pieces: out var pieces, radius: volume.Radius)) {
                             return ContactRefusal.OversizedCapsuleCore;

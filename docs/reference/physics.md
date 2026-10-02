@@ -196,7 +196,9 @@ step starts. It sweeps every core sphere of every collider volume through
   query a single core may spend at `DefaultSweepBoundsQueryBudget` (64), so its
   sweep costs at most that budget squared. Collider validation refuses a kit
   capsule whose core needs more, measured at the longest length any body
-  orientation rounds it to (`CapsuleCoreFitsSweep`);
+  orientation rounds it to (`CapsuleCoreFitsSweep`), and any volume whose
+  radius or least half extent quantizes under `MinimumColliderRadiusRaws` (2
+  raws), whose half-raw core would round to a point (`VolumeCoreSweeps`);
 - the least fraction any core proves is the body's, and the body moves that far.
   The fractions compare on the sweep's own 2⁻³² grid (`UnitInterval32`), since
   a long step's cores can differ by less than 2⁻¹⁶ of it;
