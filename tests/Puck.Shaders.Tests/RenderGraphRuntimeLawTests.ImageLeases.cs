@@ -38,6 +38,87 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.Equal(expected: 0, actual: scene.Runtime.PendingDisplayLeases);
         Assert.Empty(collection: scene.Gpu.UsesAfterRelease);
     }
+    /// <summary>A paused root replaces its standing camera image with a capture copy or one drawn frame. Once the
+    /// camera retires and the device drains, the displaced publication releases its lease without any further root
+    /// submissions. The root keeps publishing the replacement while the camera image is disposed exactly once.</summary>
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ADisplacedPublicationRetiresWithoutAnotherRender(bool captureCopy) {
+        using var scene = new StandingScene(
+            ["main"],
+            Set(
+                Instance(name: "camera"),
+                Instance(name: "spare"),
+                Instance("main", reads: new RenderGraphRead(Producer: "camera"))
+            ),
+            Graph(pipeline: CameraGraph()),
+            Graph(pipeline: CameraGraph()),
+            Graph(OverGraph(reader: false), ("world", "camera"))
+        );
+        RenderGraphFootprint[] filmed = [new RenderGraphFootprint(Consumer: "main", Height: 1.0, Producer: "camera", Width: 1.0)];
+        RenderGraphRoot[] roots = [
+            .. MainRoot,
+            new RenderGraphRoot(Height: 1.0, Instance: "spare", Width: 1.0),
+        ];
+
+        TestLiveness.Until(
+            reason: () => "The camera, spare and root never settled.",
+            step: () => {
+                _ = scene.Produce(footprints: filmed, named: [], roots: roots);
+
+                return scene.Runtime.IsSettled;
+            }
+        );
+        var aliased = scene.ProduceUntilMainStandsForCamera(footprints: filmed, named: [], roots: roots);
+        var main = scene.Node(instance: "main");
+
+        main.Paused = true;
+
+        if (captureCopy) {
+            scene.Gpu.ReadbackSupported = true;
+            var request = CaptureRequest();
+
+            scene.Runtime.RequestCapture(request: request);
+            _ = scene.Produce(footprints: filmed, named: [], roots: roots);
+            Assert.True(condition: request.Completion.IsCompleted);
+            Assert.Null(@object: Outcome(request: request).Error);
+            Assert.Null(@object: main.PublishedBinding);
+        }
+
+        Assert.True(condition: scene.Runtime.TryReconfigure(
+            graphs: [null, Graph(pipeline: ScreensGraph(pool: false))],
+            refusal: out var refusal,
+            root: "main",
+            set: Set(Instance(name: "spare"), Instance(name: "main"))
+        ), userMessage: refusal?.Message);
+        TestLiveness.Until(
+            reason: () => "The paused root never installed its replacement.",
+            step: () => {
+                _ = scene.Produce(footprints: [], named: [], roots: roots);
+
+                return !main.HasPendingCandidate;
+            }
+        );
+
+        if (!captureCopy) {
+            main.Step();
+            _ = scene.Produce(footprints: [], named: [], roots: roots);
+        }
+
+        var submissions = scene.Gpu.SubmissionsMade;
+        // Releasing the spare drains all readers' leases, including those on the retired camera's image.
+        for (var frame = 0; (frame < 8); frame++) {
+            var shown = scene.Produce(footprints: [], named: [], roots: MainRoot);
+
+            Assert.NotEqual(expected: 0, actual: shown.ImageHandle);
+            Assert.NotEqual(expected: aliased.ImageHandle, actual: shown.ImageHandle);
+            Assert.Equal(expected: submissions, actual: scene.Gpu.SubmissionsMade);
+        }
+
+        Assert.Equal(expected: 1, actual: scene.Gpu.CreatedObjects.Single(predicate: created =>
+            (created.Handle == aliased.ImageHandle)).DisposeCount);
+    }
     [Fact]
     public void AStandingPreviousFrameOutputShowsThePreviousCameraImage() {
         using var scene = new StandingScene(
@@ -369,6 +450,70 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Graph(ScreensGraph(false, "near"), ("near", "view"))
         )) {
         }
+    }
+    /// <summary>A package that turns a buffer into an image always draws, so its previous-frame buffer read breaks a
+    /// standing chain even when a root may stand for that package's previous image.</summary>
+    [Fact]
+    public void APreviousFrameBufferReadBreaksAStandingChain() {
+        const string View = "test.buffer-view";
+        var catalog = new RenderGraphPackageCatalog(packages: [
+            .. Catalog.Packages,
+            new RenderGraphPackage(
+                Id: View,
+                Inputs: [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeRead, count: null, strideBytes: null)],
+                Members: [],
+                Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
+                Summary: "A view drawn from a buffer."
+            ),
+        ]);
+        var plan = new RenderGraphCompiler(packages: catalog).Compile(definition: new RenderGraphDefinition(
+            Name: "buffer-view",
+            Outputs: ["image"],
+            Packages: [new RenderGraphPackagePass(Inputs: ["pool"], Name: "view", Outputs: ["image"], Package: View)],
+            Resources: [
+                new ShaderPipelineResource(Initialization: ShaderPipelineInitialization.External,
+                    Kind: ShaderPipelineResourceKind.Buffer, Name: "pool", SizeBytes: PoolBytes),
+                Image(name: "image"),
+            ],
+            Schema: RenderGraphSchemas.Graph
+        ));
+        using var runtime = Runtime(
+            new FakePipelineGpu(),
+            new Recorders(Pool, View, Over),
+            Set(
+                Instance("pool", output: ShaderPipelineResourceKind.Buffer),
+                Instance("view", reads: new RenderGraphRead(Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: true, Producer: "pool")),
+                Instance("main", reads: new RenderGraphRead(PreviousFrame: true, Producer: "view"))
+            ),
+            "main",
+            Graph(pipeline: PoolGraph()),
+            Graph(new CompiledShaderPipeline(plan: plan.Pipeline, shaders: new Dictionary<string, CompiledShader>()), ("pool", "pool")),
+            Graph(OverGraph(reader: false), ("world", "view"))
+        );
+    }
+    /// <summary>A package whose output is retained as history must draw into its own image, so it breaks a standing
+    /// chain across two previous-frame instance reads.</summary>
+    [Fact]
+    public void AHistoryOutputBreaksAStandingChain() {
+        var definition = OverGraph(reader: false).Plan.Definition;
+        var history = Compile(definition: definition with {
+            Resources = [.. definition.Resources.Select(selector: resource => ((resource.Name == "composed")
+                ? resource with { History = true, Initialization = ShaderPipelineInitialization.Zero }
+                : resource))],
+        });
+        using var runtime = Runtime(
+            new FakePipelineGpu(),
+            new Recorders(Camera, Over),
+            Set(
+                Instance(name: "camera"),
+                Instance("view", reads: new RenderGraphRead(PreviousFrame: true, Producer: "camera")),
+                Instance("main", reads: new RenderGraphRead(PreviousFrame: true, Producer: "view"))
+            ),
+            "main",
+            Graph(pipeline: CameraGraph()),
+            Graph(history, ("world", "camera")),
+            Graph(OverGraph(reader: false), ("world", "view"))
+        );
     }
     /// <summary>A view stands for the camera, and a kept root's installed graph reads the view. A reconfiguration retires
     /// both while the root's replacement waits in the driver: the root keeps sampling the image it bound, the camera's,

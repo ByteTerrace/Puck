@@ -585,8 +585,9 @@ root that may stand for a view's previous frame while the view may stand for a
 camera's previous frame, would need an output two frames old: the runtime
 refuses it when it installs, naming the chain
 (`RenderGraphRuntimeRefusalCode.StandingChain`). A chain counts only inputs a
-graph's default output may stand for, so a pass that draws over such a read
-breaks it, and a loop that returns to an instance ends at that instance's own
+graph's default output may stand for, so a pass that must draw over such a read
+breaks it, including a buffer-to-image pass or a pass retaining its output as
+history, and a loop that returns to an instance ends at that instance's own
 image, which it never stands for.
 
 When the producer a kept instance's output stands for retires in a
@@ -594,8 +595,10 @@ reconfiguration, that output stands for a retired image: it resolves to nothing,
 is never taken for the instance's own image, and a capture of the instance does
 not move to its node until the instance has rendered again, naming why while it
 waits. A node also holds the other instance's image it currently publishes under
-a lease of its own, retired once a newer publication displaces it, so a capture
-already forwarded to it reads a live image whatever retired.
+a lease of its own, retired once a newer publication displaces it, including a
+capture's copy. Retiring that lease waits for no future render: submissions that
+read the image hold their own leases. A capture already forwarded to the node
+reads a live image whatever retired.
 
 Image lifetime is tracked per image and per reader (`GpuImageLeases`, in
 `Puck.Hosting`). Every image an instance's node creates is one of the runtime's

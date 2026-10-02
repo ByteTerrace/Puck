@@ -101,14 +101,14 @@ public sealed partial class ShaderPipelineRenderNode {
         );
         m_frameLeases.MoveTo(destination: m_slots[slot].Leases);
         m_latestSlot = slot;
-        m_lastSurface = Surface.SameDeviceImage(
+        m_publishedBinding = null;
+        Publish(surface: Surface.SameDeviceImage(
             copy.ImageHandle,
             copy.ImageViewHandle,
             copy.Width,
             copy.Height,
             copy.Format
-        );
-        m_publishedBinding = null;
+        ));
         m_publishedLayout = m_outputLayout;
         m_publishedStateTick = m_captureSourceTick;
     }

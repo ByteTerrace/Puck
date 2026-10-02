@@ -97,13 +97,19 @@ public sealed partial class RenderGraphRuntime {
         return null;
     }
     // The external versions a graph's default output may stand for: following package passes in order, an output at a
-    // position stands for the input at that position, or for whatever that input stands for, unless the input is read at
-    // its previous frame, for which no output stands.
+    // position stands for the input at that position, or for whatever that input stands for, only when the node can
+    // leave that pass standing. A pass whose buffers, history or other accesses require a draw breaks the chain.
     private static HashSet<string> StandableVersions(ShaderPipelinePlan plan) {
         var standing = new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal);
 
         foreach (var pass in plan.Passes) {
             if (pass.Package is not { } step) {
+                continue;
+            }
+            if (ShaderPipelineRenderNode.AliasRefusalOf(
+                plan: plan,
+                planned: pass
+            ) is not null) {
                 continue;
             }
 

@@ -187,7 +187,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
     }
     // Holds a published image another instance owns (a package that drew nothing stands for it) under a lease of the
-    // node's own while it is the image the node publishes, retired like a displaced image of its own: however the owner
+    // node's own while it is the image the node publishes: however the owner
     // retires, a capture the node serves from it without rendering reads a live image.
     private void HoldPublication(in Surface surface) {
         if (
@@ -240,6 +240,15 @@ public sealed partial class ShaderPipelineRenderNode {
             }
 
             m_held.RemoveAt(index: index);
+
+            if (held.Leased) {
+                // Every submission that reads this image holds its own lease, including this node's. Dropping the
+                // publication needs no future submission, which a paused node may never make.
+                held.Image.Dispose();
+
+                continue;
+            }
+
             m_retired.Add(item: new RetiredGraph(
                 afterSubmission: (m_submissions + RetirementLag),
                 bytes: held.Bytes,
