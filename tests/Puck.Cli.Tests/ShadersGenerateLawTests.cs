@@ -178,7 +178,7 @@ public sealed class ShadersGenerateLawTests {
                 _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
                 File.WriteAllText(contents: ((!restoredMissingDeclaration && string.Equals(a: path, b: OverlayPath, comparisonType: StringComparison.Ordinal)) ? "// stale\n" : text), path: full);
             }
-            Assert.Equal(actual: CliGit.Run(root.FullName, "init", "-q").ExitCode, expected: 0);
+            GitScratchCheckout.Initialize(repository: root.FullName);
             Assert.Equal(actual: CliGit.Run(root.FullName, "add", "-A").ExitCode, expected: 0);
             if (restoredMissingDeclaration) {
                 Assert.Equal(actual: CliGit.Run(root.FullName, "rm", "-f", "--", unstagedPath).ExitCode, expected: 0);

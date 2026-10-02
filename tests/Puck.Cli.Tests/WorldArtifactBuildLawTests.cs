@@ -51,7 +51,7 @@ public sealed class WorldArtifactBuildLawTests {
                 name: "docs/guide.md",
                 text: "# Guide\n"
             );
-            Git("init", "--quiet", "--initial-branch=main");
+            GitScratchCheckout.Initialize(repository: m_directory.RootPath);
             Git("add", "--all");
             Commit(message: "initial");
         }

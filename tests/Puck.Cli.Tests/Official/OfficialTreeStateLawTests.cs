@@ -31,7 +31,7 @@ public sealed class OfficialTreeStateLawTests {
                 name: ".gitignore",
                 text: "*.scratch\n"
             );
-            Git("init", "--quiet", "--initial-branch=main");
+            GitScratchCheckout.Initialize(repository: m_directory.RootPath);
 
             if (commit) {
                 Git("add", "--all");
