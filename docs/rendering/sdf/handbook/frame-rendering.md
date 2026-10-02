@@ -549,7 +549,7 @@ disassembly or trace the code path instead.
 - The pass order and what each pass must respect when edited:
   [the rendering skill's kernel reference](../../../../.claude/skills/rendering/references/kernels.md)
   and the fragment in
-  [`src/Puck.Shaders/Graph/SdfWorldPackage.cs`](../../../../src/Puck.Shaders/Graph/SdfWorldPackage.cs).
+  [`src/Puck.Shaders.Model/Graph/SdfWorldPackage.cs`](../../../../src/Puck.Shaders.Model/Graph/SdfWorldPackage.cs).
 - Measurement method and the register-pressure lesson:
   [SDF performance](performance.md).
 - The uniform-grid cull rationale and why a per-frame BVH was rejected for it:

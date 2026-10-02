@@ -303,7 +303,7 @@ parity station. P10 is complete: all nine of its steps have landed, step 2's
 shared row regions, step 8's field rows and step 9's `bound` parity station
 included. Its one open check is the floor-tier parity leg on floor hardware, a
 deferred hardware check. The spike's [pass interface](../reference/shaders.md#pass-interfaces)
-lives in `src/Puck.Shaders/Interface/`. It interfaces variants of
+lives in `src/Puck.Shaders.Model/Interface/`. It interfaces variants of
 `sdf-film-grain.frag.hlsl` and a pixelate compute pass whose only copy is
 the spike's fixture under `tests/Puck.Shaders.Tests`, each with a frame group
 at set and space 0 and a pass group at set and space 3, because a group's

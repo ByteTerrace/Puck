@@ -776,7 +776,7 @@ through the interfaces `SdfWorldInterfaces` declares, and the display encode
 (both swapchain compositors, a node's preview and a capture's encode) binds its
 one group, `DisplayEncodeLayout`, at set 3. The code
 lives in
-`src/Puck.Shaders/Interface/`; the spike's two variant passes and their laws
+`src/Puck.Shaders.Model/Interface/`; the spike's two variant passes and their laws
 live in `tests/Puck.Shaders.Tests`.
 
 `ShaderInterface` names its members in declaration order. Each member has a

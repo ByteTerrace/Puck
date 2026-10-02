@@ -123,10 +123,10 @@ public sealed class SdfResolveDeviceLawTests {
         block.CopyTo(array: padded, index: 0);
         using var constants = services.BufferFactory.CreateHostVisible(data: padded, name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBlock = services.BufferFactory.CreateHostVisible(data: new byte[padded.Length], name: default, usage: GpuBufferUsage.Uniform);
-        using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: Math.Max(val1: 4096UL, val2: (((ulong)(SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * width) * height)), usage: GpuBufferUsage.Storage);
+        using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: Math.Max(val1: 4096UL, val2: ((((ulong)(SdfWorldPackage.HistorySurfaceWords * sizeof(uint))) * width) * height)), usage: GpuBufferUsage.Storage);
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
         using var historyOutput = (temporal ? services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width) : null);
-        using var historySurface = (temporal ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (((ulong)(SdfWorldPackage.HistorySurfaceWords * sizeof(uint)) * width) * height), usage: GpuBufferUsage.Storage) : null);
+        using var historySurface = (temporal ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)(SdfWorldPackage.HistorySurfaceWords * sizeof(uint))) * width) * height), usage: GpuBufferUsage.Storage) : null);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)GpuKernelCounters.RowBytes), usage: GpuBufferUsage.Storage);
         // The dispatch box, in 8x8 groups, over the whole render grid; every record a miss; one transport word an output pixel.
         var box = new byte[16];
