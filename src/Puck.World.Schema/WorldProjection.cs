@@ -523,9 +523,24 @@ public static class WorldProjection {
     public static string? Uncarried(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
         foreach (var clock in (definition.Timeline.Clocks ?? [])) {
-            if (clock is null) {
-                continue;
+            if ((clock is null) || string.IsNullOrWhiteSpace(value: clock.Name) || !names.Add(item: clock.Name)) {
+                return "projection clocks must be non-null and named uniquely.";
+            }
+
+            if (!double.IsFinite(d: clock.Span) || (clock.Span <= 0d)) {
+                return $"projection clock '{clock.Name}' must have a finite positive span.";
+            }
+
+            if (clock.IsTickClock) {
+                if ((clock.Anchor is not null) || !WorldClocks.TryWholeTicks(seconds: clock.PeriodSeconds!.Value, ticks: out _) ||
+                    ((clock.StartSeconds is { } start) && (!double.IsFinite(d: start) || (start < 0d) || (start >= clock.Span)))) {
+                    return $"projection tick clock '{clock.Name}' must have a whole-tick period, a start inside its span, and no anchor.";
+                }
+            } else if (clock.StartSeconds is not null) {
+                return $"projection anchored clock '{clock.Name}' cannot carry a tick clock's start.";
             }
 
             if (clock.IsStateClock) {
@@ -609,7 +624,7 @@ public static class WorldProjection {
         try {
             projection = JsonSerializer.Deserialize(
                 utf8Json: utf8Json,
-                jsonTypeInfo: WorldJsonContext.Default.WorldProjectionDocument
+                jsonTypeInfo: WorldJsonContext.Untrusted.WorldProjectionDocument
             );
         } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
             reason = $"the projection is not a valid {WorldProjectionDocument.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
@@ -674,6 +689,14 @@ public static class WorldProjection {
         ArgumentNullException.ThrowIfNull(argument: projection);
 
         definition = null;
+
+        // Nullable annotations do not constrain collection elements on the JSON boundary.
+        if ((projection.Kits is null) || projection.Kits.Any(predicate: static kit => (kit is null)) ||
+            (projection.Observations?.Any(predicate: static row => ((row is null) || (row.Cells is null) || row.Cells.Any(predicate: static cell => (cell is null)))) == true)) {
+            reason = "projection kits, observations and observed cells must be non-null rows.";
+
+            return false;
+        }
 
         var state = WorldFieldsSection.ToStateSection(composite: projection.Fields);
 

@@ -684,8 +684,14 @@ Below the replica tier, each recipient, a session screen or a federation observe
 members of its projection that changed, as a delta (`WorldDocumentBasis.Diff`, the document delta a
 basis uses) that `WorldProjectionHold` merges over the projection the recipient holds, and nothing when
 nothing changed. A delta of values alone (the timeline, the observations, the provenance) reaches the
-recipient as a state delivery rather than a new definition; on the federation wire it travels as a
-`ProjectionDelta` frame. Projections and deltas travel as compact canonical JSON
+recipient as a state delivery rather than a new definition, and a session's state mirror reads it at the
+tick it was stamped with, even when no body snapshot was sampled there; on the federation wire it travels
+as a `ProjectionDelta` frame. A delta that changes which rows are observed, their order, or their cells'
+keys installs a new definition instead, so bindings resolve their row ordinals again. Observations are
+refreshed at every authoritative tick, so an advancing or cycling bound row moves without a write. A
+peer's projection and deltas are read through `WorldJsonContext.Untrusted`, which refuses duplicate
+members and nulls the model does not admit, and a delta that does not hydrate leaves the held
+projection unchanged. Projections and deltas travel as compact canonical JSON
 (`WorldProjection.SerializeCompact`), as does a replica's whole definition
 (`WorldDefinitionSerialization.SerializeCompact`); the indented canonical forms are kept for what hashes, stores
 or displays a document.
@@ -708,7 +714,8 @@ cells it may read, whether or not the row declares a policy, and moves with the 
 clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from
 the phase the world loaded with, or zero clamped into the row's closed envelope. The last anchor per
 recipient per clock is a counted row under the `world.projection` work source, released when the
-recipient leaves or loses disclosure.
+recipient leaves or loses disclosure, when its projection stops carrying the clock, or when its stream
+detaches, without waiting for the socket to drain.
 
 A portal window renders its destination from its own disclosed mirror unless its session is delivered
 everything the destination holds: a live session admitted at `Replica`, holding `observe all`,

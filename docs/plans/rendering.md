@@ -5728,7 +5728,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      per-recipient deltas of the projection members that changed
      (`WorldDocumentBasis.Diff`, merged by `WorldProjectionHold` on the far
      side), and only when one changed; a delta of values alone reaches the
-     recipient as a state delivery. Every state clock a value keys on must
+     recipient as a state delivery. Observations refresh at every authoritative
+     tick, including ticks whose body snapshot is not sampled. A change to
+     observed row order or cell layout installs the definition so bindings
+     resolve their row ordinals again. A session's state mirror uses a delta's
+     stamped clock independently of the sampled body snapshots. Every state clock a value keys on must
      pass the disclosure boundary for its row's slot, and every bindable bound
      to a state cell for that cell (every cell of its row for a per-body
      read), or the composition refuses by name before any derived value is
@@ -5741,7 +5745,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      last anchor, so the two may differ while the clock reads none. The last
      anchor per recipient per clock is a counted row (`world.projection`
      anchor rows retained and released), released when the recipient leaves
-     or loses disclosure. `ProjectionAnchorLawTests` hold a mixed affine,
+     or loses disclosure, when a projection stops carrying the clock, or when
+     its stream detaches, without waiting for the socket to drain.
+     `ProjectionAnchorLawTests` hold a mixed affine,
      quantized, staircase, eased and seek trace to the host phase at every
      tick with no spurious anchor, a steady sky to zero bytes, a late join to
      the exact phase, a hidden clock to a refusal, the anchor rows to their

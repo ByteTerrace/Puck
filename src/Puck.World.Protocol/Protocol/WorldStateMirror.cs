@@ -510,13 +510,36 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
         : default
     );
     /// <inheritdoc/>
-    public bool TryClockValue(WorldClock clock, out double value) => TryValue(
-        slot: SlotOf(
+    public bool TryClockPhase(WorldClock clock, out double phase) {
+        var slot = SlotOf(
             binding: WorldPresentationManifest.ClockBinding(clock: clock),
             conversion: WorldStateConversion.Number
-        ),
-        value: out value
-    );
+        );
+
+        phase = 0d;
+
+        if ((slot < 0) || !m_slots[slot].HasNumber) {
+            return false;
+        }
+
+        ref readonly var entry = ref m_slots[slot];
+        var current = entry.Sample.Value;
+
+        phase = WorldClockAnchor.ToTurn(phase: WorldClockAnchor.PhaseOf(kind: current.Kind, raw: current.Raw));
+
+        if (!entry.Interpolates || (m_appliedFraction >= 1f)) {
+            return true;
+        }
+
+        var previous = entry.PreviousValue;
+        var start = WorldClockAnchor.ToTurn(phase: WorldClockAnchor.PhaseOf(kind: previous.Kind, raw: previous.Raw));
+        // Subtract in raw precision before converting: a large whole part must never erase fractional clock bits.
+        var distance = (((double)(((Int128)current.Raw) - previous.Raw)) / ((current.Kind == CellKind.Fixed) ? 65536d : 1d));
+
+        phase = WorldClocks.Phase(value: (start + (distance * m_appliedFraction)));
+
+        return true;
+    }
     /// <summary>Returns the clock a keyed value reads and its phase as the mirror presents it: a tick clock's at the
     /// presented tick, a state clock's from its row's presented value (<see cref="WorldKeyResolver.TryPhase"/>).</summary>
     /// <param name="name">The clock's name.</param>
@@ -1051,6 +1074,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
             ref var slot = ref m_slots[m_moving[index]];
 
             slot.Previous = slot.Current;
+            slot.PreviousValue = slot.Sample.Value;
             slot.Presented = slot.Current;
         }
 
@@ -1097,11 +1121,12 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
 
             if (
                 entry.Interpolates &&
-                (entry.Previous != entry.Current)
+                ((entry.Previous != entry.Current) || !entry.PreviousValue.Equals(other: entry.Sample.Value))
             ) {
                 m_moving[moving++] = slot;
             } else {
                 entry.Previous = entry.Current;
+                entry.PreviousValue = entry.Sample.Value;
                 entry.Presented = entry.Current;
             }
         }
@@ -1153,6 +1178,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
 
         m_reads.Increment();
         entry.Sample = sample;
+        entry.PreviousValue = (hadNumber ? previousValue : sample.Value);
         entry.HasNumber = TryConvertNumber(
             number: out var number,
             value: sample.Value
@@ -1276,6 +1302,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
         public int Ordinal;
         public double Presented;
         public double Previous;
+        public CellValue PreviousValue;
         public int ReadSerial;
         public int Registrations;
         public WorldStateSample Sample;

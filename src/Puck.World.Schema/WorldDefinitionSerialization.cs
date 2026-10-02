@@ -367,8 +367,10 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<BindingProfileDocument> BindingProfileDocument => Get<BindingProfileDocument>();
     /// <summary>Gets the type info for <see cref="BodyMotionProgram"/>.</summary>
     public JsonTypeInfo<BodyMotionProgram> BodyMotionProgram => Get<BodyMotionProgram>();
+
     /// <summary>Gets the one shared instance.</summary>
-    public static WorldJsonContext Default { get; } = new();
+    public static WorldJsonContext Default { get; } = new(untrusted: false);
+
     /// <summary>Gets the type info for <see cref="Draw"/>.</summary>
     public JsonTypeInfo<Draw> Draw => Get<Draw>();
     /// <summary>Gets the type info for <see cref="DynamicsRow"/>.</summary>
@@ -377,6 +379,12 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<LatticeTopology> LatticeTopology => Get<LatticeTopology>();
     /// <summary>Gets the read-only options carrying the extended resolver.</summary>
     public JsonSerializerOptions Options { get; }
+
+    /// <summary>Gets the instance a payload from an untrusted peer is read through: it refuses a duplicated member and
+    /// a null where the model declares a non-nullable reference, besides everything <see cref="Default"/> refuses.
+    /// Only reads go through it; the authority writes through <see cref="Default"/>.</summary>
+    public static WorldJsonContext Untrusted { get; } = new(untrusted: true);
+
     /// <summary>Gets the type info for <see cref="StateAdvance"/>.</summary>
     public JsonTypeInfo<StateAdvance> StateAdvance => Get<StateAdvance>();
     /// <summary>Gets the type info for <see cref="StateCycle"/>.</summary>
@@ -489,8 +497,10 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     /// <summary>Gets the type info for the <see cref="WorldViewDefaults.Post"/> list.</summary>
     public JsonTypeInfo<IReadOnlyList<WorldViewPostPass>> WorldViewPostPassList => Get<IReadOnlyList<WorldViewPostPass>>();
 
-    private WorldJsonContext() {
+    private WorldJsonContext(bool untrusted) {
         var options = new JsonSerializerOptions(options: WorldJsonSourceContext.Default.Options) {
+            AllowDuplicateProperties = !untrusted,
+            RespectNullableAnnotations = untrusted,
             TypeInfoResolver = WorldJsonSourceContext.Default
                 .WithAddedModifier(modifier: WorldJsonVocabulary.Extend)
                 .WithAddedModifier(modifier: StateSpace.ExtendJson),

@@ -28,6 +28,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     public const string BackpressureDetachReason = "world.observation.backpressure";
     /// <summary>The named reason for detaching a projection whose authority route is no longer current.</summary>
     public const string InvalidatedDetachReason = "world.observation.invalidated";
+    /// <summary>The named reason for detaching a projection whose dependencies are no longer disclosed.</summary>
+    public const string DisclosureDetachReason = "world.observation.disclosure";
 
     private readonly Channel<(WorldFederationResponse Kind, byte[] Body)> m_frames = Channel.CreateBounded<(WorldFederationResponse, byte[])>(options: new BoundedChannelOptions(capacity: PendingDeliveryLimit) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true });
     private readonly WorldProjectionSampler m_sampler = new(updateSeconds: disclosure().Policy.UpdateSeconds);
@@ -49,11 +51,15 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     private bool Current() {
         if (m_invalidated) { return false; }
         if (isCurrent?.Invoke() != false) { return true; }
-        DetachReason = InvalidatedDetachReason;
-        m_invalidated = true;
-        m_frames.Writer.TryComplete();
+        End(reason: InvalidatedDetachReason);
 
         return false;
+    }
+    private void End(string reason) {
+        DetachReason = reason;
+        m_invalidated = true;
+        Release();
+        m_frames.Writer.TryComplete();
     }
     private async Task PumpAsync(Stream output, CancellationToken ct) {
         await foreach (var item in m_frames.Reader.ReadAllAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)) {
@@ -108,11 +114,9 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         if (!m_frames.Writer.TryWrite(item: (kind, body))) {
             // The stream's primer, definition revisions, and authority route cannot be reconstructed from a lone
             // latest snapshot. Detach so the peer reopens with a fresh primer instead of accepting an ambiguous gap.
-            DetachReason = BackpressureDetachReason;
-            m_invalidated = true;
             // Completing the channel successfully keeps the queued records ahead of the terminal reason; the hub
             // detaches on the reason after this delivery, whether or not the wire consumer ever drains again.
-            m_frames.Writer.TryComplete();
+            End(reason: BackpressureDetachReason);
         }
     }
 
@@ -126,18 +130,22 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         if (m_feed is not null) {
             var time = server!.DeliveryTime;
 
-            Present(
-                delivery: m_feed.Compose(
-                    arena: server.Arena,
-                    authority: authority,
-                    definition: definition,
-                    revision: revision(),
-                    time: in time
-                ),
-                engineTick: time.EngineTick,
-                tick: time.Tick,
-                version: version
-            );
+            try {
+                Present(
+                    delivery: m_feed.Compose(
+                        arena: server.Arena,
+                        authority: authority,
+                        definition: definition,
+                        revision: revision(),
+                        time: in time
+                    ),
+                    engineTick: time.EngineTick,
+                    tick: time.Tick,
+                    version: version
+                );
+            } catch (InvalidOperationException) {
+                End(reason: DisclosureDetachReason);
+            }
 
             return;
         }
@@ -162,16 +170,25 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         }
         // Every authoritative tick checks the peer's anchors, sampled or not: a prediction that misses is owed now.
         if (m_feed is not null) {
-            Present(
-                delivery: m_feed.Step(
-                    definition: server!.Definition,
+            try {
+                Present(
+                    delivery: m_feed.Step(
+                        arena: server!.Arena,
+                        definition: server.Definition,
+                        engineTick: snapshot.EngineTick,
+                        tick: snapshot.Tick
+                    ),
                     engineTick: snapshot.EngineTick,
-                    tick: snapshot.Tick
-                ),
-                engineTick: snapshot.EngineTick,
-                tick: snapshot.Tick,
-                version: server.DocumentVersion
-            );
+                    tick: snapshot.Tick,
+                    version: server.DocumentVersion
+                );
+            } catch (InvalidOperationException) {
+                End(reason: DisclosureDetachReason);
+            }
+
+            if (m_invalidated) {
+                return;
+            }
         }
         var currentDisclosure = disclosure();
 

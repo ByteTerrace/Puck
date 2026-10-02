@@ -53,6 +53,7 @@ public sealed class WorldSessionMirror : IClientSink {
 
     private int m_pendingCount;
     private bool m_pendingEverything;
+    private ArenaTime? m_stateTime;
 
     private int[] m_followedRows = [];
 
@@ -334,6 +335,10 @@ public sealed class WorldSessionMirror : IClientSink {
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        lock (m_stampGate) {
+            m_stateTime = null;
+        }
+
         Volatile.Write(
             location: ref m_kitColliders,
             value: CompileColliders(definition: definition)
@@ -480,6 +485,10 @@ public sealed class WorldSessionMirror : IClientSink {
             _ = Interlocked.Increment(location: ref m_snapshotSequence);
         }
 
+        lock (m_stampGate) {
+            m_stateTime = ArenaTime.At(engineTick: snapshot.EngineTick, tick: snapshot.Tick);
+        }
+
         // A field's cells are state the snapshot carries beside the document. They are applied to the one view the state
         // mirror reads, and each field row they moved is noted as a state delivery's rows are, so the next follow
         // refreshes the slots bound to it: the path WorldClient.DeliverSnapshot takes for the local mirror.
@@ -506,25 +515,29 @@ public sealed class WorldSessionMirror : IClientSink {
 
         // A value-only mutation cannot have changed a kit's collider or body-contact mode: publish the fresh
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
-        // The definition publishes before its rows are noted, so a follower that takes a row reads a definition at
-        // least as new as the delivery that moved it.
-        Publish(
-            definition: definition,
-            version: version
-        );
-        DocumentDelivered?.Invoke(obj: Document);
+        // Publish the definition and its stamped clock together with respect to followers, including event readers.
+        lock (m_followGate) {
+            Publish(
+                definition: definition,
+                version: version
+            );
 
-        lock (m_stampGate) {
-            if (stamp.Everything) {
-                m_pendingEverything = true;
+            lock (m_stampGate) {
+                // Anchor and observation deltas arrive at unsampled ticks too. Their values stand at the delivery's
+                // clock, even while the latest body snapshot still names an older tick.
+                m_stateTime = ArenaTime.At(engineTick: stamp.EngineTick, tick: stamp.Tick);
 
-                return;
-            }
-
-            foreach (var ordinal in stamp.MovedRows.Span) {
-                NoteRow(ordinal: ordinal);
+                if (stamp.Everything) {
+                    m_pendingEverything = true;
+                } else {
+                    foreach (var ordinal in stamp.MovedRows.Span) {
+                        NoteRow(ordinal: ordinal);
+                    }
+                }
             }
         }
+
+        DocumentDelivered?.Invoke(obj: Document);
     }
 
     // Notes one moved row for the next FollowState to refresh, once however often it moves before then. Called under
@@ -566,6 +579,7 @@ public sealed class WorldSessionMirror : IClientSink {
             var state = (m_state ??= new WorldStateMirror(view: m_stateView));
             int count;
             bool everything;
+            ArenaTime? time;
 
             lock (m_stampGate) {
                 count = m_pendingCount;
@@ -585,13 +599,14 @@ public sealed class WorldSessionMirror : IClientSink {
                 }
 
                 everything = m_pendingEverything;
+                time = m_stateTime;
                 m_pendingCount = 0;
                 m_pendingEverything = false;
             }
 
             var revision = DefinitionRevision;
-            var tick = Tick;
-            var engineTick = EngineTick;
+            var tick = (time?.Tick ?? Tick);
+            var engineTick = (time?.EngineTick ?? EngineTick);
 
             if (revision != m_stateRevision) {
                 m_stateRevision = revision;

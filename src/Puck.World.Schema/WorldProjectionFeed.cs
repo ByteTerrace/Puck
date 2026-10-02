@@ -23,7 +23,7 @@ public enum WorldProjectionDeliveryKind : byte {
 /// <param name="Payload">The compact canonical bytes to send: the whole projection, or the delta; empty when nothing is
 /// owed.</param>
 /// <param name="ValuesOnly">Whether the delivery changes only values, never a recipient's shape: a delta of the
-/// timeline, the observations or the provenance alone.</param>
+/// timeline, observation values or provenance that preserves observed row order and cell layout.</param>
 /// <param name="TimelineOnly">Whether the delivery is a delta of the timeline alone: anchors, which a recipient takes
 /// into the definition it holds without hydrating anything else.</param>
 public readonly record struct WorldProjectionDelivery(WorldProjectionDeliveryKind Kind, WorldProjectionDocument? Projection, byte[] Payload, bool ValuesOnly, bool TimelineOnly = false) {
@@ -80,6 +80,8 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             tier: WorldDisclosureTier.Presentation,
             time: in time
         )!;
+
+        m_anchors.Retain(clocks: (projection.Timeline?.Clocks ?? []));
         var payload = WorldProjection.SerializeCompact(projection: projection);
         var tree = WorldProjectionDelta.Tree(utf8Json: payload);
 
@@ -104,6 +106,12 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             );
         }
 
+        var valuesOnly = WorldProjectionDelta.IsValuesOnly(
+            delta: delta,
+            previousObservations: m_tree["observations"],
+            nextObservations: tree["observations"]
+        );
+
         m_held = projection;
         m_tree = tree;
 
@@ -111,16 +119,29 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             ? WorldProjectionDelivery.Nothing
             : Partial(
                 delta: delta,
-                projection: projection
+                projection: projection,
+                valuesOnly: valuesOnly
             ));
     }
-    /// <summary>Steps the recipient's anchors at an authoritative tick: a timeline delta when a held prediction misses
-    /// the authority's phase, and nothing otherwise.</summary>
+    /// <summary>Refreshes observed values and steps anchors at an authoritative tick, sending only changed members.</summary>
     /// <param name="definition">The authority's installed document.</param>
+    /// <param name="arena">The authority's live store.</param>
     /// <param name="tick">The authoritative simulation tick.</param>
     /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
     /// <returns>The delivery owed.</returns>
-    public WorldProjectionDelivery Step(WorldDefinition definition, ulong tick, ulong engineTick) {
+    public WorldProjectionDelivery Step(WorldDefinition definition, StateArena arena, ulong tick, ulong engineTick) {
+        // Observations carry literals, so an advance or cycle has no executable trait on the receiver. Refresh them
+        // even when no stored value was written and even when this tick's body snapshot is not sampled.
+        if (m_held is { Observations.Count: > 0 } observed) {
+            return Compose(
+                arena: arena,
+                authority: observed.Provenance.Authority,
+                definition: definition,
+                revision: observed.Provenance.Revision,
+                time: ArenaTime.At(engineTick: engineTick, tick: tick)
+            );
+        }
+
         if (
             (m_held?.Timeline is not { Clocks: { } clocks } timeline) ||
             (m_tree is null) ||
@@ -164,7 +185,8 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             )
             : Partial(
                 delta: delta,
-                projection: m_held
+                projection: m_held,
+                valuesOnly: true
             ));
     }
     /// <summary>Releases everything held for the recipient, its anchor rows included: it left or lost disclosure, and
@@ -175,7 +197,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         m_tree = null;
     }
 
-    private WorldProjectionDelivery Partial(WorldProjectionDocument projection, JsonObject delta) {
+    private WorldProjectionDelivery Partial(WorldProjectionDocument projection, JsonObject delta, bool valuesOnly) {
         var payload = CanonicalJsonDocument.SerializeCompact(node: delta);
 
         WorldProjectionWork.Count(kind: WorldProjectionWork.Deltas);
@@ -189,7 +211,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             Payload: payload,
             Projection: projection,
             TimelineOnly: WorldProjectionDelta.IsTimelineOnly(delta: delta),
-            ValuesOnly: WorldProjectionDelta.IsValuesOnly(delta: delta)
+            ValuesOnly: valuesOnly
         );
     }
     private WorldProjectionDelivery Whole(WorldProjectionDocument projection, JsonObject tree, byte[] payload) {
@@ -272,7 +294,7 @@ public sealed class WorldProjectionHold {
         JsonObject delta;
 
         try {
-            delta = ((JsonNode.Parse(utf8Json: utf8Json) as JsonObject) ?? throw new JsonException(message: "a projection delta is a JSON object."));
+            delta = WorldProjectionDelta.Tree(utf8Json: utf8Json);
         } catch (JsonException exception) {
             reason = $"the projection delta is not JSON: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
@@ -288,14 +310,18 @@ public sealed class WorldProjectionHold {
             return false;
         }
 
-        valuesOnly = WorldProjectionDelta.IsValuesOnly(delta: delta);
+        valuesOnly = WorldProjectionDelta.IsValuesOnly(
+            delta: delta,
+            previousObservations: m_tree["observations"],
+            nextObservations: (merged.TryGetValue(key: "observations", value: out var observations) ? observations : m_tree["observations"])
+        );
         timelineOnly = WorldProjectionDelta.IsTimelineOnly(delta: delta);
 
         if (timelineOnly) {
             WorldTimelineSection? timeline;
 
             try {
-                timeline = merged[WorldProjectionDelta.Timeline]?.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldTimelineSection);
+                timeline = merged[WorldProjectionDelta.Timeline]?.Deserialize(jsonTypeInfo: WorldJsonContext.Untrusted.WorldTimelineSection);
             } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
                 reason = $"the projection delta's timeline is not a timeline: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
@@ -314,7 +340,11 @@ public sealed class WorldProjectionHold {
             var whole = ((JsonObject)m_tree.DeepClone());
 
             foreach (var (member, node) in merged) {
-                whole[member] = node?.DeepClone();
+                if (node is null) {
+                    _ = whole.Remove(propertyName: member);
+                } else {
+                    whole[member] = node.DeepClone();
+                }
             }
 
             if (!WorldProjection.TryDeserialize(
@@ -333,7 +363,11 @@ public sealed class WorldProjectionHold {
         }
 
         foreach (var (member, node) in merged) {
-            m_tree[member] = node?.DeepClone();
+            if (node is null) {
+                _ = m_tree.Remove(propertyName: member);
+            } else {
+                m_tree[member] = node.DeepClone();
+            }
         }
 
         Definition = definition;
@@ -355,7 +389,10 @@ public static class WorldProjectionDelta {
     /// <param name="utf8Json">The projection's bytes.</param>
     /// <returns>The tree.</returns>
     /// <exception cref="JsonException">The bytes are not a JSON object.</exception>
-    public static JsonObject Tree(ReadOnlySpan<byte> utf8Json) => ((JsonNode.Parse(utf8Json: utf8Json) as JsonObject) ?? throw new JsonException(message: "a projection is a JSON object."));
+    public static JsonObject Tree(ReadOnlySpan<byte> utf8Json) => ((JsonNode.Parse(
+        documentOptions: new JsonDocumentOptions { AllowDuplicateProperties = false },
+        utf8Json: utf8Json
+    ) as JsonObject) ?? throw new JsonException(message: "a projection is a JSON object."));
     /// <summary>Returns a timeline's canonical tree, as a projection carries it.</summary>
     /// <param name="timeline">The timeline.</param>
     /// <returns>The tree.</returns>
@@ -448,10 +485,12 @@ public static class WorldProjectionDelta {
 
         return ((delta.Count == 1) && delta.ContainsKey(propertyName: Timeline));
     }
-    /// <summary>Returns whether a delta changes only values: the timeline, the observations or the provenance.</summary>
+    /// <summary>Returns whether a delta changes only values, preserving the observed row ordinals and cell layout.</summary>
     /// <param name="delta">The delta.</param>
-    /// <returns><see langword="true"/> when every member the delta names is one of those.</returns>
-    public static bool IsValuesOnly(JsonObject delta) {
+    /// <param name="previousObservations">The observations held before the delta.</param>
+    /// <param name="nextObservations">The observations after merging the delta.</param>
+    /// <returns><see langword="true"/> when the recipient can refresh its existing bindings.</returns>
+    public static bool IsValuesOnly(JsonObject delta, JsonNode? previousObservations, JsonNode? nextObservations) {
         ArgumentNullException.ThrowIfNull(argument: delta);
 
         foreach (var (member, _) in delta) {
@@ -460,6 +499,45 @@ public static class WorldProjectionDelta {
             }
         }
 
-        return true;
+        return (!delta.ContainsKey(propertyName: "observations") || JsonNode.DeepEquals(
+            node1: ObservationShape(observations: previousObservations),
+            node2: ObservationShape(observations: nextObservations)
+        ));
+    }
+
+    private static JsonArray? ObservationShape(JsonNode? observations) {
+        if (observations is not JsonArray rows) {
+            return null;
+        }
+
+        var shape = new JsonArray();
+
+        foreach (var row in rows) {
+            if (row is not JsonObject observed) {
+                continue; // Hydration refuses malformed rows.
+            }
+
+            var keys = new JsonArray();
+
+            if (observed["cells"] is JsonArray cells) {
+                foreach (var cell in cells) {
+                    if (cell is JsonObject value) {
+                        keys.Add(item: new JsonObject {
+                            ["key"] = value["key"]?.DeepClone(),
+                            ["hidden"] = value["hidden"]?.DeepClone(),
+                        });
+                    }
+                }
+            }
+
+            shape.Add(item: new JsonObject {
+                ["name"] = observed["name"]?.DeepClone(),
+                ["kind"] = observed["kind"]?.DeepClone(),
+                ["space"] = observed["space"]?.DeepClone(),
+                ["cells"] = keys,
+            });
+        }
+
+        return shape;
     }
 }
