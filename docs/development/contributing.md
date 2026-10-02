@@ -369,8 +369,9 @@ dotnet test tests/Puck.Cli.Tests -c Release --filter "FullyQualifiedName~Officia
 ```
 
 CI's `artifacts` workflow always publishes the browser before any test project
-runs, so this is a local-run-only step; the fixture's own failure message
-names the command when the bundle is missing.
+runs, so this is a local-run-only step. Without the bundle the tree-building
+tests skip by name, and the skip reason names the publish command; they never
+fail for the missing prerequisite.
 
 ## Working with world documents
 
