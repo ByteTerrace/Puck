@@ -993,8 +993,27 @@ public sealed partial class WorldTransferEscrow {
                 (HomeIdentity(arrival: arrival, index: index, id: carried.Id) is not { } owned)) {
                 continue;
             }
-            if (!m_server.Profiles.TryAdopt(carried: carried, owned: owned, reason: out var reason) &&
-                m_server.Output.HasNarrationSink) {
+            // A re-drive of a recorded outcome saves nothing: it binds a detached copy of the owned identity, as a
+            // replay's pinned seats are detached, and reports where that copy differs from the taped projection.
+            var bound = owned;
+            bool adopted;
+            string reason;
+
+            if (m_relandOutcome is null) {
+                adopted = m_server.Profiles.TryAdopt(carried: carried, owned: owned, reason: out reason);
+            } else {
+                bound = WorldIdentity.FromProjection(
+                    defaults: m_server.Definition.PlayerDefaults,
+                    projection: owned.Project()
+                );
+                adopted = bound.TryAdopt(carried: carried, reason: out reason);
+                WorldReplaySnapshot.ReportAdoptionDrift(
+                    bound: bound,
+                    narrationHub: m_server.Profiles.NarrationHub,
+                    taped: carried
+                );
+            }
+            if (!adopted && m_server.Output.HasNarrationSink) {
                 m_server.Output.Narrate(
                     channel: "world.identity",
                     text: $"[world.identity: world:{owned.Id} came home and did not adopt everything it carried — {reason}]"
@@ -1002,7 +1021,7 @@ public sealed partial class WorldTransferEscrow {
             }
             var color = m_server.Population.BodyColor(index: slot);
 
-            m_server.Population.SetSeatProfile(profile: owned, slot: slot);
+            m_server.Population.SetSeatProfile(profile: bound, slot: slot);
             m_server.Population.SetBodyColor(color: color, slot: slot);
         }
     }

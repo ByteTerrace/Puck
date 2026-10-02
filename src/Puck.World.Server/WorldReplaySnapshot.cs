@@ -1162,19 +1162,76 @@ public sealed partial class WorldReplaySnapshot {
             name: pin.Name,
             field: "move-speed",
             pinned: pin.MoveSpeed,
-            live: live.FixedMoveSpeed
+            live: live.FixedMoveSpeed,
+            used: PinnedUsed
         );
         ReportRateDrift(
             narrationHub: profiles.NarrationHub,
             name: pin.Name,
             field: "turn-speed",
             pinned: pin.TurnSpeed,
-            live: live.FixedTurnSpeed
+            live: live.FixedTurnSpeed,
+            used: PinnedUsed
         );
     }
+
+    /// <summary>Reports, as a pinned seat's drift is reported, where the identity a re-driven home arrival bound differs
+    /// from the projection its tape carried: the name, either rate, and every fact the bound identity holds that the
+    /// projection did not. The bound identity is the owner's identity as it stands now with the carried facts and
+    /// records adopted, so an edit made to it after the recording reaches the re-drive, and this names it rather than
+    /// letting it surface as an unexplained divergence. Nothing here refuses.</summary>
+    /// <param name="narrationHub">The hub the report is narrated through, or <see langword="null"/> for none.</param>
+    /// <param name="taped">The identity rebuilt from the taped projection.</param>
+    /// <param name="bound">The identity the re-driven seat bound.</param>
+    internal static void ReportAdoptionDrift(WorldOutputHub? narrationHub, WorldIdentity taped, WorldIdentity bound) {
+        if (narrationHub is not { HasNarrationSink: true }) {
+            return;
+        }
+        if (!string.Equals(
+            a: taped.Name,
+            b: bound.Name,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            narrationHub.Narrate(
+                channel: "replay.profile",
+                text: $"[replay.profile: '{taped.Name}' name drifted since record-start — taped '{taped.Name}', live '{bound.Name}'; {LiveUsed}]"
+            );
+        }
+        ReportRateDrift(
+            narrationHub: narrationHub,
+            name: taped.Name,
+            field: "move-speed",
+            pinned: taped.FixedMoveSpeed,
+            live: bound.FixedMoveSpeed,
+            used: LiveUsed
+        );
+        ReportRateDrift(
+            narrationHub: narrationHub,
+            name: taped.Name,
+            field: "turn-speed",
+            pinned: taped.FixedTurnSpeed,
+            live: bound.FixedTurnSpeed,
+            used: LiveUsed
+        );
+
+        var carried = (taped.Facts?.Cells ?? []);
+
+        foreach (var cell in (bound.Facts?.Cells ?? [])) {
+            if (!carried.Any(predicate: candidate => (candidate.Key == cell.Key))) {
+                narrationHub.Narrate(
+                    channel: "replay.profile",
+                    text: $"[replay.profile: '{taped.Name}' fact '{cell.Key}' drifted since record-start — taped none, live {cell.Value.AsInt}; {LiveUsed}]"
+                );
+            }
+        }
+    }
+
+    private const string LiveUsed = "the home arrival bound the LIVE identity, so this verdict reflects the edit";
+    private const string PinnedUsed = "the replay used the PINNED value, so this verdict reports the recording, not the edit";
+
     // Compared on the RAW fixed lane, never on the rendered decimal: a drift too small to show in four places is still
     // a different trajectory, and a comparison that reads the display string would miss exactly those.
-    private static void ReportRateDrift(WorldOutputHub? narrationHub, string name, string field, FixedQ4816? pinned, FixedQ4816? live) {
+    private static void ReportRateDrift(WorldOutputHub? narrationHub, string name, string field, FixedQ4816? pinned, FixedQ4816? live, string used) {
         if (pinned?.Value == live?.Value) {
             return;
         }
@@ -1182,7 +1239,7 @@ public sealed partial class WorldReplaySnapshot {
         if (narrationHub is { HasNarrationSink: true }) {
             narrationHub?.Narrate(
                 channel: "replay.profile",
-                text: $"[replay.profile: '{name}' {field} drifted since record-start — pinned {Describe(rate: pinned)}, live {Describe(rate: live)}; the replay used the PINNED value, so this verdict reports the recording, not the edit]"
+                text: $"[replay.profile: '{name}' {field} drifted since record-start — pinned {Describe(rate: pinned)}, live {Describe(rate: live)}; {used}]"
             );
         }
     }

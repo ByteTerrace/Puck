@@ -654,15 +654,22 @@ or record write changes that copy, and the next crossing carries it on; a destin
 a visitor into its own owned-world catalog. A local seat coming home rebinds to the identity it left
 with: the arrival lands at the seat whose incarnation this authority minted, carrying the id of an
 identity this authority's catalog owns. That identity adopts the carried facts and records, and
-only those, and is saved after every landing succeeds and the arrival record is durable. A rollback
-leaves the owned identity and its saved document unchanged. An id match alone is not enough, since every catalog seeds identities
-from its template. Facts another world wrote are unsigned: provenance attestation for carried state
+only those, and is saved after every landing succeeds and the arrival record is durable. A rolled-back
+arrival leaves the owned identity and its saved document unchanged. An id match alone is not enough,
+since every catalog seeds identities from its template. Facts another world wrote are unsigned: provenance attestation for carried state
 does not exist yet, so an owner adopts whatever a visited world wrote onto its traveler.
 Remote round trips do not adopt: a remote incarnation claim is unauthenticated, and a federation
-reservation requesting local-seat admission is refused. Remote home adoption remains deferred.
-Checkpoint restore rebinds a local home seat to its restored owned identity; a visitor with a
-colliding id keeps its travelling projection. A source restart also retains that owned binding
-when an in-doubt crossing aborts and restores the source seat.
+reservation has no field that could ask for a local seat, so it is always a peer admission. Remote
+home adoption remains deferred. Checkpoint restore rebinds a local home seat to its restored owned
+identity; a visitor with a colliding id keeps its travelling projection. When a source restarts and
+an in-doubt crossing then aborts, the restored seat holds its owned identity, which adopts the
+facts and records of the departure's logged projection: they are the authority's own, and facts
+written between the checkpoint and the departure exist nowhere else.
+
+Replay verification saves no identity. A re-driven home arrival binds a detached copy of the
+owned identity as it stands now, with the carried facts and records adopted, and reports on
+`replay.profile` where that copy differs from the taped projection, as a pinned seat's drifted rate
+is reported. A live `replay.drive` refuses a tape that lands travelers.
 
 A world names a cross-owner neighbour without reaching its storage directly — worlds are users, so one
 owner's storage container is never reachable from another's. A cross-owner reference resolves through

@@ -110,18 +110,16 @@ public sealed partial class WorldIdentity {
     /// <summary>Adopts what this identity's own traveler carried home: every fact on the traveler's travelling row and
     /// every field of the record pools this identity owns. Nothing else of <paramref name="carried"/> is read, so this
     /// identity keeps its own name, color, rates, panel, bindings and seat look. Each value passes the write door a
-    /// local write passes, so a value this identity's own declarations refuse is skipped and named.</summary>
+    /// local write passes, so a value this identity's own declarations refuse is skipped and named. An identity with an
+    /// owned document adopts into it; one rebuilt from a projection (a replay's detached copy of an owned identity)
+    /// adopts into its travelling rows.</summary>
     /// <param name="carried">The identity the traveler arrived as, rebuilt from its projection.</param>
     /// <param name="reason">The first value refused, or empty when every value was adopted.</param>
     /// <returns><see langword="true"/> when every carried value was adopted.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="carried"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">This identity has no owned document, or <paramref name="carried"/>
-    /// names another identity.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="carried"/> names another identity.</exception>
     public bool TryAdopt(WorldIdentity carried, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: carried);
-        if (Document is null) {
-            throw new InvalidOperationException(message: $"identity '{Id}' has no owned document to adopt into");
-        }
         if (!string.Equals(a: carried.Id, b: Id, comparisonType: StringComparison.Ordinal)) {
             throw new InvalidOperationException(message: $"identity '{Id}' cannot adopt what '{carried.Id}' carried");
         }

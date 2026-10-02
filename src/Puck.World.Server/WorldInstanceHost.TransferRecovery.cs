@@ -62,6 +62,59 @@ public sealed partial class WorldInstanceHost {
         };
         return true;
     }
+    // A member restored after its source restarted holds the restored catalog's identity, which the checkpoint may have
+    // rewound past facts and records the seat wrote before it departed. The commit's projection is this authority's
+    // own departing state, so a rollback that reseats the member adopts it back.
+    private static bool RestoreDetachedMember(WorldInstance source, ulong transferId, LandedMember member, WorldTransferCommitMember commit) => source.Server.ExecuteAuthorityOperation(operation: () => {
+        if (!RestoreDetachedBody(commit: commit, member: member, source: source, transferId: transferId)) {
+            return false;
+        }
+        if (
+            member.AdoptsDeparture &&
+            (member.Profile is { } owned) &&
+            (commit.Profile is { } departing) &&
+            !source.Server.Profiles.TryAdopt(
+                carried: WorldIdentity.FromProjection(
+                    defaults: source.Server.Definition.PlayerDefaults,
+                    projection: in departing
+                ),
+                owned: owned,
+                reason: out var reason
+            ) &&
+            source.Server.Output.HasNarrationSink
+        ) {
+            source.Server.Output.Narrate(
+                channel: "world.identity",
+                text: $"[world.identity: world:{owned.Id} rolled back and did not adopt everything it departed with — {reason}]"
+            );
+        }
+        return true;
+    });
+    private static bool RestoreDetachedBody(WorldInstance source, ulong transferId, LandedMember member, WorldTransferCommitMember commit) => source.Server.RestoreDetachedForTransfer(
+        detached: new WorldDetachedBody(
+            AdmissionGrants: member.AdmissionGrants,
+            BodyColor: member.BodyColor,
+            Designations: member.Designations,
+            DynamicState: member.DynamicState,
+            Peer: member.Peer,
+            Position: member.Position,
+            Profile: member.Profile,
+            Slot: member.SourceSlot,
+            SourceGrants: member.SourceGrants,
+            Yaw: member.Yaw
+        ),
+        mobility: member.Mobility,
+        transferId: transferId,
+        // Inactive slots are absent from population checkpoints and can be reused while recovery waits, so the
+        // departure turn is recovered from the retained commit, undoing only this attempted arrival.
+        travelTurn: (commit.HasMappedArrival
+            ? WorldFrameIsometry.AccumulateTurn(
+                travelTurn: commit.TravelTurn,
+                departureYaw: commit.YawRadians,
+                arrivalYaw: member.Yaw
+            )
+            : commit.TravelTurn)
+    );
     // Complete this preflight before installing any host schedule or table. A malformed later row must not leave
     // the valid prefix installed, erase an existing recovery, or call a peer with a changed commit payload.
     private List<InDoubtTransfer> PrepareInDoubtTransfers(WorldInstance row, IReadOnlyList<WorldInDoubtTransferCheckpoint> records) {
@@ -146,17 +199,20 @@ public sealed partial class WorldInstanceHost {
                 }
                 // This handle is retained only for the source's own use: a rollback reseats it and a publication mirrors
                 // it. The commit still carries the projection; a seat of this authority's own rebinds to its restored
-                // catalog's identity, as it was before the restart.
-                var profile = ((pending.CommitMembers[ordinal].Profile is { } projection)
-                    ? (row.Server.HomeSeatIdentity(
+                // catalog's identity, as it was before the restart, and adopts the projection back if it rolls back.
+                var owned = ((pending.CommitMembers[ordinal].Profile is { } projection)
+                    ? row.Server.HomeSeatIdentity(
                         id: projection.Id,
                         mobility: member.Mobility,
                         slot: member.SourceSlot
-                    ) ?? WorldIdentity.FromProjection(
-                        defaults: row.Server.Definition.PlayerDefaults,
-                        projection: in projection
-                    ))
+                    )
                     : null);
+                var profile = (owned ?? ((pending.CommitMembers[ordinal].Profile is { } visitor)
+                    ? WorldIdentity.FromProjection(
+                        defaults: row.Server.Definition.PlayerDefaults,
+                        projection: in visitor
+                    )
+                    : null));
 
                 landed.Add(item: new(
                     AdmissionGrants: [.. member.AdmissionGrants],
@@ -167,6 +223,7 @@ public sealed partial class WorldInstanceHost {
                     Peer: member.Peer,
                     Position: member.Position,
                     Profile: profile,
+                    AdoptsDeparture: (owned is not null),
                     FollowedSeatMask: member.FollowedSeatMask,
                     SourceGrants: [.. member.SourceGrants],
                     SourcePrincipal: Principal.Console,

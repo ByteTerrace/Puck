@@ -46,6 +46,7 @@ public sealed class WorldOwnedWorlds {
         m_catalogFingerprint = source.m_catalogFingerprint;
         m_directory = source.m_directory;
         m_machineCatalog = source.m_machineCatalog;
+        m_narrationHub = source.m_narrationHub;
         m_template = source.m_template;
         m_identities = [];
         m_persist = false;
@@ -56,7 +57,7 @@ public sealed class WorldOwnedWorlds {
 
     /// <summary>Creates a detached catalog for offline replay. Identities are rebuilt through the checkpoint
     /// leaves, so replay writes cannot mutate the live objects, and saving an owned replay identity performs no
-    /// file I/O.</summary>
+    /// file I/O. The copy narrates through this catalog's hub, so what a replay reports reaches the live session.</summary>
     /// <returns>The replay's own catalog.</returns>
     public WorldOwnedWorlds CreateReplayCopy() => new(source: this);
 

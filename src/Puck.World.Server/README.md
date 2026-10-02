@@ -1618,12 +1618,15 @@ rebinds to its owned identity, which adopts the carried facts and records
 (`WorldOwnedWorlds.TryAdopt`) after every landing succeeds and the arrival is
 durable, and `WorldOwnedWorlds.TrySave` refuses by name an identity its catalog
 does not own. An empty facts row preserves the owner's authored capacity.
-Remote round trips do not adopt; federation reservations requesting local-seat
-admission refuse because a remote incarnation claim is unauthenticated.
-Offline replay uses a detached catalog (`WorldOwnedWorlds.CreateReplayCopy`),
-so re-driving a home arrival changes no live identity or saved document.
-Checkpoint restore and source rollback recovery rebind a home seat to its own
-restored catalog; a visitor with a colliding id stays detached. One predicate,
+Remote round trips do not adopt: the federation reservation leaf has no
+admission field, so a decoded reservation is always a peer admission, since a
+remote incarnation claim is unauthenticated. Offline replay uses a detached
+catalog (`WorldOwnedWorlds.CreateReplayCopy`), and a re-driven home arrival
+adopts into a detached copy of the owned identity and reports its drift from the
+taped projection (`WorldReplaySnapshot.ReportAdoptionDrift`), so replay changes
+no live identity or saved document. Checkpoint restore and source rollback
+recovery rebind a home seat to its own restored catalog, and that rollback adopts
+the departure's logged projection; a visitor with a colliding id stays detached. One predicate,
 `WorldServer.HomeSeatIdentity`, decides what a home seat is for all three: a
 local seat whose incarnation, if it has crossed, this authority minted at that
 seat, carrying the id of an identity its catalog owns.

@@ -1309,31 +1309,6 @@ public sealed partial class WorldInstanceHost {
         WorldSubmissionPayload.Query { Value: WorldQuery.Properties properties } when (properties.BodyIndex is not null) => new WorldSubmissionPayload.Query(Value: properties with { BodyIndex = bodyIndex }),
         _ => payload,
     };
-    private static bool RestoreDetachedMember(WorldInstance source, ulong transferId, LandedMember member, WorldTransferCommitMember commit) => source.Server.ExecuteAuthorityOperation(operation: () => source.Server.RestoreDetachedForTransfer(
-        detached: new WorldDetachedBody(
-            AdmissionGrants: member.AdmissionGrants,
-            BodyColor: member.BodyColor,
-            Designations: member.Designations,
-            DynamicState: member.DynamicState,
-            Peer: member.Peer,
-            Position: member.Position,
-            Profile: member.Profile,
-            Slot: member.SourceSlot,
-            SourceGrants: member.SourceGrants,
-            Yaw: member.Yaw
-        ),
-        mobility: member.Mobility,
-        transferId: transferId,
-        // Inactive slots are absent from population checkpoints and can be reused while recovery waits, so the
-        // departure turn is recovered from the retained commit, undoing only this attempted arrival.
-        travelTurn: (commit.HasMappedArrival
-            ? WorldFrameIsometry.AccumulateTurn(
-                travelTurn: commit.TravelTurn,
-                departureYaw: commit.YawRadians,
-                arrivalYaw: member.Yaw
-            )
-            : commit.TravelTurn)
-    ));
     // Remove successful restores from BOTH lists so checkpoint profile ordinals still match. Failed restores keep
     // their recovery record; no retry may overwrite an occupied source slot.
     private static bool RestoreDetachedMembers(WorldInstance source, ulong transferId, List<LandedMember> members, List<WorldTransferCommitMember> commits) {
@@ -1955,7 +1930,8 @@ public sealed partial class WorldInstanceHost {
         IReadOnlyList<WorldGrant> SourceGrants,
         Principal SourcePrincipal,
         WorldMobilityIdentity Mobility,
-        byte FollowedSeatMask = 0
+        byte FollowedSeatMask = 0,
+        bool AdoptsDeparture = false
     );
     private sealed record InDoubtTransfer(
         PendingTransfer Transfer,

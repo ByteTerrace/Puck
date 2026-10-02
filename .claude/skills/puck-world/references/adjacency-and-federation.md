@@ -59,10 +59,14 @@ seat whose `Mobility.Incarnation` this authority minted, carrying an id its
 catalog owns; an id alone is not enough, since catalogs seed identities from
 their templates) rebinds to its owned identity, which adopts the carried facts
 and records and nothing else (`WorldOwnedWorlds.TryAdopt`), after all landings succeed and the arrival
-record is durable. A rollback changes no owned identity. An empty projected facts row preserves the
-owner's authored name and capacity before its first write. Remote round trips do not adopt;
-the federation decoder refuses a request for local-seat admission, since a remote incarnation
-claim is unauthenticated. Foreign-written
+record is durable. A rolled-back arrival changes no owned identity. An empty projected facts row
+preserves the owner's authored name and capacity before its first write. Remote round trips do
+not adopt: a federation reservation has no admission field, so it is always a peer admission and
+can never claim a local seat, since a remote incarnation claim is unauthenticated. A crossing
+whose source restarts and then aborts reseats the restored owned identity, which adopts the
+departure's logged projection, so facts written between the checkpoint and the departure
+survive. A replay's re-driven home arrival binds a detached copy and saves nothing.
+Foreign-written
 facts are unsigned until provenance attestation for carried state exists. The
 [rulepush package](../../../../worlds/rulepush/README.md) relies on this: a level
 hears the visitor's presses, a win writes an identity fact onto the travelling

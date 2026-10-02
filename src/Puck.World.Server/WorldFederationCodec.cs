@@ -143,7 +143,7 @@ public static partial class WorldFederationCodec {
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames.</summary>
-    public const ulong WireKey = 0x364445464B435550UL; // "PUCKFED6", commits and routes carry the traveler's arrival turn, and every traveler identity crosses as its projection alone.
+    public const ulong WireKey = 0x364445464B435550UL; // "PUCKFED6", commits and routes carry the traveler's arrival turn, every traveler identity crosses as its projection alone, and a reservation carries no admission field.
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -607,7 +607,8 @@ public static partial class WorldFederationCodec {
         return writer.ToArray();
     }
     /// <summary>Encodes a reservation including each traveler's identity projection
-    /// (<see cref="WorldIdentityProjectionWire"/>), never the owned-world document behind it.</summary>
+    /// (<see cref="WorldIdentityProjectionWire"/>), never the owned-world document behind it. The leaf carries no
+    /// admission field, so <see cref="WorldTransferReservationRequest.PeerAdmission"/> never reaches the wire.</summary>
     /// <param name="request">The reservation request.</param>
     /// <returns>The encoded leaf.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
@@ -630,8 +631,6 @@ public static partial class WorldFederationCodec {
         }
 
         writer.WriteBoolean(value: request.PartyAllOrNothing);
-        // A wire reservation always requests entity-table peer admission.
-        writer.WriteBoolean(value: true);
         writer.WriteInt32(value: request.Members.Count);
 
         foreach (var member in request.Members) {
@@ -1152,7 +1151,9 @@ public static partial class WorldFederationCodec {
             reader: ref reader
         );
     }
-    /// <summary>Decodes an untrusted reservation, rebuilding identities through the canonical document codec.</summary>
+    /// <summary>Decodes an untrusted reservation, rebuilding identities through the canonical document codec. A
+    /// federated reservation is always a peer admission: the leaf has no field that could ask for a local seat, whose
+    /// incarnation claim a peer cannot prove.</summary>
     /// <param name="body">The leaf bytes.</param>
     /// <param name="request">The reservation on success.</param>
     /// <param name="failure">The named refusal on failure.</param>
@@ -1173,14 +1174,6 @@ public static partial class WorldFederationCodec {
             : null
         );
         var party = reader.ReadBoolean();
-        var remote = reader.ReadBoolean();
-
-        if (!reader.Failed && !remote) {
-            reader.Fail(
-                detail: "a federated reservation must request peer admission; a remote incarnation cannot claim a local seat",
-                refusal: WireRefusal.PayloadMalformed
-            );
-        }
         var count = reader.ReadCount(
             field: "reservation traveler count",
             maximum: WorldBodiesLimits.CapacityCeiling,
@@ -1213,7 +1206,7 @@ public static partial class WorldFederationCodec {
             DeadlineSourceTick: deadline,
             Members: members,
             PartyAllOrNothing: party,
-            PeerAdmission: remote,
+            PeerAdmission: true,
             SourceAuthority: sourceAuthority,
             SourceRateHz: sourceRate,
             SourceTick: sourceTick,

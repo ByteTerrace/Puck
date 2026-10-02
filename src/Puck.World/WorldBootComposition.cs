@@ -349,12 +349,13 @@ public static class WorldBootComposition {
                     derivedFaceScreens: definition.Authoring.DerivedFaceScreens
                 )];
 
-        // WorldMachineHost's own narration hub: it is a peer singleton to WorldServer (constructed before it, as its
-        // own constructor parameter — see the remarks below), so it cannot share WorldServer's hub without a
-        // circular dependency; this one is its own. Bound to stderr in the same factory that constructs it, before
-        // anything resolves it — WorldMachineHost narrates from inside its own constructor (a declared machine's
-        // boot fault), so attaching only after the container finishes building the host, the way
-        // WorldPostBuildWiring.Install attaches WorldInstanceHost's, would miss those lines.
+        // The narration hub of the peers constructed before WorldServer: WorldMachineHost (a constructor parameter of
+        // WorldServer — see the remarks below) and the owned-world catalog (its identity refusals and a replay's
+        // profile drift). Neither can share WorldServer's hub without a circular dependency, so this one is theirs.
+        // Bound to stderr in the same factory that constructs it, before anything resolves it — both narrate from
+        // inside their own constructors (a declared machine's boot fault, a refused owned world), so attaching only
+        // after the container finishes building them, the way WorldPostBuildWiring.Install attaches
+        // WorldInstanceHost's, would miss those lines.
         services.AddSingleton(implementationFactory: static sp => {
             var hub = new WorldOutputHub();
 

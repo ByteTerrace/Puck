@@ -2079,7 +2079,6 @@ public sealed partial class FederationTransferLawTests {
         writer.WriteString(value: "seam");
         writer.WriteBoolean(value: false);
         writer.WriteBoolean(value: true);
-        writer.WriteBoolean(value: true);
         writer.WriteInt32(value: 1);
         writer.WriteInt32(value: 0);
         writer.WriteString(value: "origin/world");
