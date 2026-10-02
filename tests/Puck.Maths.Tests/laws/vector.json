@@ -1628,5 +1628,65 @@
         "Absolute": ""
       }
     ]
+  },
+  {
+    "Id": "vector.is-within-matches-length",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "IsWithin"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.IsWithin(radius) over vectors drawn across the whole raw carrier (the edge battery reaches three MinValue lanes, where the sum of squares is 3\u00B72\u00B9\u00B2\u2076) at eleven radii per vector: three drawn freely, the reported length itself and its two raw neighbours, MaxValue and MaxValue \u2212 1, zero, \u22121 and MinValue",
+        "Against": "Oracles.NormRoot, the nearest integer root of the exact raw Q32 sum of squares by a bracketed search whose predicate is one exact squaring, saturated to MaxValue as Length reports it, compared with each radius in BigInteger. The subject never roots: it compares the sum of squares with R\u00B2 \u002B R. A different route, so a wrong bound (R\u00B2 instead of R\u00B2 \u002B R, a missed saturation edge, a negative radius admitted) fails the law at the length\u0027s own neighbours",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the same eleven radii per vector against the shipped compare it replaces",
+        "Against": "FixedVector3.Length \u003C= radius, the floor-then-repair nearest root behind Length, a second shipped implementation; the two must agree bit for bit, which is the property the call sites that moved onto IsWithin rely on",
+        "Shared": "",
+        "Citation": "Length\u0027s own envelope is pinned by vector.space-full-width-oracle-and-length-policy",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "vector.compare-length-matches-the-squares",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedVector3",
+        "Name": "CompareLengthTo"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedVector3.CompareLengthTo over pairs drawn across the whole raw carrier (the edge battery reaches three MinValue lanes, where the sum of squares is 3\u00B72\u00B9\u00B2\u2076): each first vector against the drawn second, against a permuted, sign-flipped copy of itself (the same sum by another route, so the answer is zero), and against itself nudged one raw in each lane in turn (sums 2|x| \u00B1 1 apart)",
+        "Against": "Oracles.SquaredNorm, the exact sum of squares in BigInteger, compared with BigInteger.CompareTo. The subject sums 128-bit squares instead; a sum narrowed, wrapped or rounded first fails at the one-raw neighbours or the MinValue edge, and a sign confusion fails antisymmetry",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "InTreeIndependent",
+        "Flavor": "None",
+        "Subject": "the same pairs against the shipped Length: the vector CompareLengthTo calls longer never reports the shorter Length",
+        "Against": "FixedVector3.Length, the rounded saturating root behind the call site that moved onto CompareLengthTo (a capsule\u0027s broadphase radius takes the longer endpoint\u0027s Length, where it took the larger of two Lengths); the property is what makes that choice bit-identical",
+        "Shared": "",
+        "Citation": "Length\u0027s own envelope is pinned by vector.space-full-width-oracle-and-length-policy",
+        "Absolute": ""
+      }
+    ]
   }
 ]

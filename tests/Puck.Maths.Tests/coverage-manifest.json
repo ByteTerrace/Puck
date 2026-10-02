@@ -7820,6 +7820,14 @@
     },
     {
       "CoveredBy": [
+        "scalar.smoothstep-correctly-rounded",
+        "scalar.smoothstep-edges"
+      ],
+      "Id": "Puck.Maths.FixedQ4816.Smoothstep(Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816,Puck.Maths.FixedQ4816)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "deep.fixed-transcendental-envelope",
         "scalar.sqrt-exact"
       ],
@@ -8155,6 +8163,7 @@
       "CoveredBy": [
         "quaternion.algebraic-sanity-and-fromto-poles",
         "quaternion.from-to-full-width-alignment",
+        "quaternion.from-to-near-antiparallel",
         "quaternion.from-to-shortest-arc"
       ],
       "Id": "Puck.Maths.FixedQuaternion.FromTo(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
@@ -8247,6 +8256,7 @@
     {
       "CoveredBy": [
         "quaternion.slerp-endpoints-and-arc",
+        "quaternion.slerp-follows-the-arc",
         "quaternion.slerp-ladder-transcription"
       ],
       "Id": "Puck.Maths.FixedQuaternion.Slerp(Puck.Maths.FixedQuaternion,Puck.Maths.FixedQuaternion,Puck.Maths.FixedQ4816)",
@@ -8492,6 +8502,7 @@
     {
       "CoveredBy": [
         "rigid.exp-log-seam",
+        "rigid.exp-matches-the-series",
         "rigid.round-trip-ladder-self-consistency",
         "rigid.sclerp-endpoints-and-screw"
       ],
@@ -8548,6 +8559,7 @@
     {
       "CoveredBy": [
         "rigid.exp-log-seam",
+        "rigid.log-matches-the-series",
         "rigid.round-trip-ladder-self-consistency",
         "rigid.sclerp-endpoints-and-screw"
       ],
@@ -9107,6 +9119,13 @@
     },
     {
       "CoveredBy": [
+        "vector.compare-length-matches-the-squares"
+      ],
+      "Id": "Puck.Maths.FixedVector3.CompareLengthTo(Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "deep.vector-cross-vs-oracle",
         "vector.construction-and-refusals",
         "vector.exact-algebra-on-the-sublattice",
@@ -9146,6 +9165,13 @@
         "vector.adoption-ladder"
       ],
       "Id": "Puck.Maths.FixedVector3.FromVector3(System.Numerics.Vector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.is-within-matches-length"
+      ],
+      "Id": "Puck.Maths.FixedVector3.IsWithin(Puck.Maths.FixedQ4816)",
       "State": "covered"
     },
     {

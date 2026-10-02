@@ -3242,8 +3242,8 @@ Regenerates every GENERATED Rust source registered in
 `Puck.Scripting.WasmStdlibSources.All`—the maintained set of generated sources
 that make up the WASM standard library, not a single one-off port. Today that
 registry holds three files under `wasm/puck-stdlib/src`. Two give the WASM addon
-guest a self-contained, bit-exact copy of `FixedQ4816`'s six algorithm-pinned
-transcendentals (`atan2`, `sin`/`cos`, `exp2`, `log2`, `pow`): `fixed_generated.rs`
+guest a self-contained, bit-exact copy of `FixedQ4816`'s seven algorithm-pinned
+functions (`atan2`, `sin`/`cos`, `exp2`, `log2`, `pow`, `smoothstep`): `fixed_generated.rs`
 (the ported functions plus their interval tables and polynomial coefficients)
 and `fixed_vectors.rs` (known-answer vectors, computed by calling the real
 `FixedQ4816` at generation time). The third, `abi_generated.rs`, mirrors the

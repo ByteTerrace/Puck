@@ -50,7 +50,7 @@ contract says once really does produce a different value at some operands, and
 the test suite has *laws*—named, registered statements that must hold across
 every input the suite throws at them—that say so.
 
-**Ties go to even, everywhere.** Most results do not land
+**True ties go to even.** Most results do not land
 exactly on a representable value, so they are rounded to the nearest one that
 is. Occasionally a result lands exactly halfway between two neighbours; that
 is a **tie**, and this folder breaks ties by taking the neighbour whose last
@@ -59,16 +59,18 @@ uses, and it keeps long runs of arithmetic from drifting the way "always round
 up" would. The multiply, the divide, `Round`, `FromDouble`, `Parse`, every
 fused narrowing, and every normalizer round to nearest with ties to even.
 
-The transcendental kernels narrow their wide intermediates the same way.
-`Exp2`, `Log2` and `Atan2` round their Q62 or Q61 results to Q16 with ties to
-even, which is why `Exp2(−17)`—exactly half a ULP, where *ULP* stands for *unit
-in the last place*, the gap between one representable value and the next, `2⁻¹⁶`
+The transcendental kernels approximate irrational values, and an irrational
+value is never a true tie: when a kernel's wide intermediate lands exactly
+halfway, that is an artifact of the approximation, and either neighbour is as
+near the truth. `Exp2`, `Log2` and `Atan2` therefore narrow their Q62 or Q61
+results to Q16 half up, the cheaper rule. The one place a true tie can reach
+them is a whole exponent of `Exp2`, which is answered exactly as `2^k`
+instead, so `Exp2(−17)`—exactly half a ULP, where *ULP* stands for *unit in
+the last place*, the gap between one representable value and the next, `2⁻¹⁶`
 for Q48.16—answers `Zero`, the same answer `Pow(2, −17)` gives. `SinCos`
 narrows Q60 → Q16 to nearest with ties to even on the magnitude and re-signs;
 magnitude-first turn reduction and quadrant reflection make sine exactly odd
-and cosine exactly even. A tie in a computed approximation of an irrational
-value is an artifact rather than a true tie, so the rule decides a result only
-where the true value is itself a tie, as at `Exp2(−17)`.
+and cosine exactly even.
 
 **Wrapping is the default; saturation and refusal are named where they
 happen.** Three things can happen when a result will not fit the type that has
@@ -131,7 +133,7 @@ give each type its full contract.
 | `UnitFraction32` | `readonly record struct` | UQ0.32—the same half-open contract at a resolution of `2⁻³²`, stored in a `uint`. This is the grid the samplers draw on. |
 | `UnitInterval32` | `readonly record struct` | The **closed** interval `[0, 1]`—one included this time—on that same `2⁻³²` grid, stored in a `ulong` under a single invariant: `Value ≤ 2³²`. The thirty-third bit buys a multiplicative identity, exact absorbing elements at both ends (an absorbing element swallows whatever it meets, the way zero times anything is zero), and closure of `Multiply`. There are no arithmetic operators at all; every combining operation is a named method. |
 | `FixedVector2` | `readonly record struct` | Two `FixedQ4816` components. `Dot` and `Wedge`—the signed area of the parallelogram the two vectors span, which is the winding test—accumulate wide and round once. |
-| `FixedVector3` | `readonly record struct` | Three components, with `Dot`, `Cross`, `Lerp`, a scale-free `Normalize`, and saturating `Length` / `LengthSquared` alongside `Try…` siblings. `TryIntersectPlane` meets a ray with a plane: the parameter is one ties-to-even rounding of the quotient of two `Dot`s, refused when the ray runs parallel, the plane lies behind it, or the parameter leaves the carrier. This is the world-space displacement type. |
+| `FixedVector3` | `readonly record struct` | Three components, with `Dot`, `Cross`, `Lerp`, a scale-free `Normalize`, and saturating `Length` / `LengthSquared` alongside `Try…` siblings. `IsWithin(radius)` answers exactly what `Length <= radius` answers, saturation included, by comparing the exact sum of squares with `R² + R`, so a distance check pays no square root. `CompareLengthTo(other)` orders two vectors by length on their exact sums of squares; the longer never reports the shorter `Length`, so the longer of two can be chosen first and rooted once. `TryIntersectPlane` meets a ray with a plane: the parameter is one ties-to-even rounding of the quotient of two `Dot`s, refused when the ray runs parallel, the plane lies behind it, or the parameter leaves the carrier. This is the world-space displacement type. |
 | `FixedComplex` | `readonly record struct` | The deterministic planar **rotation**, built on `i² = −1`. `FromAngle` is the 2D exponential map, `*` composes turns, `Rotate` applies one, and `Argument` is the logarithm. Division is full-range with exact rounding. |
 | `FixedDual` | `static` | The factory and derivative-lift surface for the dual construction: `Constant`, `Variable`, `Divide`, and the lifted `Log2`, `SinCos` and `Sqrt`. |
 | `FixedDual<TValue>` | `readonly record struct` | The dual construction `a + b·ε`, where `ε² = 0`, over any carrier that supplies six operator interfaces. Over `FixedQ4816` it is a *quantized*—that is, rounded onto the fixed-point grid—forward-mode sensitivity; over `FixedQuaternion` it is the dual quaternion beneath `FixedRigidTransform`. Both house carriers get a fused kernel selected by a type test the JIT folds to a constant. |
@@ -246,12 +248,13 @@ allocates only the returned string; `TryFormat` allocates nothing at all.
 | `Abs` / `Sign` / `CopySign` | The magnitude, `-1`/`0`/`1`, and the magnitude carrying another value's sign. |
 | `Min` / `Max` / `Clamp` | Ordinary order; `Clamp` refuses an inverted range. |
 | `Lerp(from, to, amount)` | `from + (to − from)·amount`—exactly `from` at zero and exactly `to` at one, extrapolating outside `[0, 1]`, and wrapping like the operators do. |
+| `Smoothstep(edge0, edge1, value)` | The Hermite curve `t²(3 − 2t)` for `t = (value − edge0)/(edge1 − edge0)` clamped to `[0, 1]`: exactly `Zero` and `One` at and beyond the edges, reversed when `edge1 < edge0`, and the step `value < edge0 ? 0 : 1` at equal edges. The two differences are taken at full width, so edges anywhere on the carrier cannot wrap it. The ratio is floored once to Q62 and its cubic formed exactly, then rounded once to Q16, so the result is within half a ULP plus `1.5·2⁻⁴⁶` of the true curve, true ties (ratios that are odd multiples of `1/64`) go to even, and the curve is monotone in `value` by construction. |
 | `MoveToward(current, target, maxDelta)` | `target` when within `maxDelta`, otherwise `current` stepped `maxDelta` toward it. `maxDelta` negative throws `ArgumentOutOfRangeException`. |
 | `AngularFrequency(frequencyHz)` | The exact `ω = 2π·frequencyHz` as an unscaled `Rational`, formed from `PiQ61`—the one derivation every `ω = 2πf` site in this folder and in `Puck.Physics` shares. |
 | `Sqrt` | The integer nearest `√(raw·2¹⁶)`—tie-free, since consecutive squares differ by `2r + 1`—so the result is correctly rounded; a non-positive input yields `Zero`. |
-| `Log2` | The integer part from the bit length, plus a 128-interval reciprocal table and a quartic (fourth-degree polynomial) residual, narrowed Q61 → Q16 to nearest with ties to even. The range is the closed `[−16, 47]` with both ends attained; a non-positive input yields `MinValue`. Maximum observed error 0.50 ULP. |
-| `Exp2` | A 128-entry mantissa table indexed by the exponent's top seven fraction bits, plus a quartic at Q62. Saturates to `MaxValue` at exponents of 47 and above; answers `Zero` at −17 and below—the true `2⁻¹⁷` is exactly half a ULP and ties to the even zero. The error is half a ULP from the closing ties-to-even narrowing plus the mantissa's own relative error, which stays under `2⁻⁴⁴`: 0.51 ULP observed below `2²⁰`, rising to 0.82 just under `2²⁷` as the relative term catches up, and relative from there on—under roughly `2⁻⁴³`. |
-| `Pow` | Whole exponents of zero and ±1 answer exactly: `One`, the base itself, and the single correctly-rounded inverse. Every other whole exponent within ±32 answers the **single correct rounding** of the true power, ties to even: the exact integer power of the base's raw is formed in one `UInt128` while it stays below `2¹²⁷`—every small power of a base near one—and in a stack limb buffer past that, with no allocation either way, then shifted (a positive exponent) or divided into a power of two (a negative one) once; that division is one 128-by-64 hardware divide of the divisor's top word, corrected on the exact remainder. Overflow and underflow are decided on that exact value, so a power saturates exactly when its correct rounding leaves the carrier and answers `Zero` exactly when it rounds there. Everything else—fractional exponents, and whole ones beyond ±32—goes through `Exp2(y·log₂\|x\|)` with a logarithm of **relative** accuracy near `2⁻⁵²` (a balanced reduction about one, the last interval read directly as `log₂(1 + r)`, and the Taylor residual through degree six) and the product carried to a Q56 exponent, so a large exponent does not magnify the logarithm's error and the exponential's own envelope decides the result: about half a ULP below `2²⁰`, and a relative error under `2⁻⁴⁴` above it. A log-derived shortcut answers `Zero` below an exponent product of −18. The sign is applied last, from the exponent's parity, so a **negative base is supported at every whole exponent**—`(−2)³` is `−8`—and an overflowing negative result saturates to `MinValue` rather than `MaxValue`. A negative base at a *non-whole* exponent answers `Zero`: the real power is not a real number and this carrier has no not-a-number to say so with. A zero base answers `One`, `Zero`, or `MaxValue` depending on the exponent's sign; every base answers `One` at exponent zero and itself at exponent one. `MinValue` never reaches either path—its magnitude 2⁴⁷ is one raw past the carrier—because every exponent of magnitude two or more saturates or underflows anyway. |
+| `Log2` | The integer part from the bit length, plus a 128-interval reciprocal table and a quartic (fourth-degree polynomial) residual, narrowed Q61 → Q16 to nearest, half up. The range is the closed `[−16, 47]` with both ends attained; a non-positive input yields `MinValue`. Maximum observed error 0.50 ULP. |
+| `Exp2` | A 128-entry mantissa table indexed by the exponent's top seven fraction bits, plus a quartic at Q62. Saturates to `MaxValue` at exponents of 47 and above; answers `Zero` at −17 and below—the true `2⁻¹⁷` is exactly half a ULP and ties to the even zero. A whole exponent is answered exactly; any other is narrowed half up, and the error is half a ULP from that narrowing plus the mantissa's own relative error, which stays under `2⁻⁴⁴`: 0.51 ULP observed below `2²⁰`, rising to 0.82 just under `2²⁷` as the relative term catches up, and relative from there on—under roughly `2⁻⁴³`. |
+| `Pow` | Whole exponents of zero and ±1 answer exactly: `One`, the base itself, and the single correctly-rounded inverse. Every other whole exponent within ±32 answers the **single correct rounding** of the true power, ties to even: the exact integer power of the base's raw is formed in one `UInt128` while it stays below `2¹²⁷`—every small power of a base near one—then shifted (a positive exponent) or divided into a power of two (a negative one) once. Past that width the exponential path below answers first whenever its error bound proves the rounding: it is good to a relative `2⁻⁴³·⁵`, and it is trusted only when its estimate sits more than a relative `2⁻⁴⁰` from a rounding midpoint, which every power does except the true ties and a vanishing few beside them. Those continue exactly in a stack limb buffer, with no allocation, and the limb division is one 128-by-64 hardware divide of the divisor's top word, corrected on the exact remainder. Overflow is decided on the exact value, and underflow on it or on that proven bound, so a power saturates exactly when its correct rounding leaves the carrier and answers `Zero` exactly when it rounds there. Everything else—fractional exponents, and whole ones beyond ±32—goes through `Exp2(y·log₂\|x\|)` with a logarithm of **relative** accuracy near `2⁻⁵²` (a balanced reduction about one, the last interval read directly as `log₂(1 + r)`, and the Taylor residual through degree six) and the product carried to a Q56 exponent, so a large exponent does not magnify the logarithm's error and the exponential's own envelope decides the result: about half a ULP below `2²⁰`, and a relative error under `2⁻⁴⁴` above it. A log-derived shortcut answers `Zero` below an exponent product of −18. The sign is applied last, from the exponent's parity, so a **negative base is supported at every whole exponent**—`(−2)³` is `−8`—and an overflowing negative result saturates to `MinValue` rather than `MaxValue`. A negative base at a *non-whole* exponent answers `Zero`: the real power is not a real number and this carrier has no not-a-number to say so with. A zero base answers `One`, `Zero`, or `MaxValue` depending on the exponent's sign; every base answers `One` at exponent zero and itself at exponent one. `MinValue` never reaches either path—its magnitude 2⁴⁷ is one raw past the carrier—because every exponent of magnitude two or more saturates or underflows anyway. |
 | `Atan2(y, x)` | An octant fold, one 128-by-64 ratio division, then a per-interval cubic at Q61. The range is `(−π, π]`; both arguments zero answers `Zero`. Maximum observed 0.51 ULP. |
 | `SinCos` / `Sin` / `Cos` / `SinCosTurns` | Q96 reciprocal reduction preserves full-range radian accuracy. A 65-entry Q60 quarter-wave table shares sine/cosine symmetry; degree-five/four residual corrections cover at most pi/256 radians. Final narrowing is ties-to-even, with a 0.50000001 raw Q16 ULP error envelope over the full carrier. This is not a correctly-rounded guarantee. Sine is exactly odd and cosine exactly even. Single-output calls reconstruct only their requested component; `SinCosTurns` accepts an exact binary fraction of one turn, avoiding radian quantization. |
 | `ToString` / `TryFormat` / `Parse` / `TryParse` | The exact decimal expansion, which always terminates within sixteen fraction digits; parsing quantizes the original digits, so `Parse(x.ToString()) == x` at every raw. The parameterless overloads are invariant. The `format`-taking ones accept only an empty format or `G`/`g` and throw `FormatException` on anything else—there is only one rendering, so offering a menu of numeric formats would be a lie—while still honouring an explicit provider's `NumberDecimalSeparator` **and** its `NegativeSign`, both spliced into the invariant expansion, each of which may be several characters wide. `TryFormat` sizes itself from those widths and is all-or-nothing: a short destination returns `false` and reports zero written. |
@@ -591,10 +594,14 @@ after long chains.
 - `FromTo(from, to)` is the geometric-product rotor `(f̂ × t̂, 1 + f̂·t̂)`
   normalized, and normalization is what halves the full-angle rotor into the
   half-angle quaternion. Its norm is `2·cos(θ/2)`, which vanishes at a half
-  turn, so within about 0.45° of antiparallel—a candidate norm below 512 raw
-—it falls back to π about a deterministic axis perpendicular to `from`,
-  chosen by whichever basis vector is least aligned with it. Either input zero
-  answers `Identity`.
+  turn, but the cross product is exact at full width and the scalar is off
+  only by the two floored norms, so the rotor stays within a quarter of a raw
+  of the true rotation until the directions are within about `2⁻²⁷` rad of
+  antiparallel. Inside that gap it answers the half turn about `f × t`
+  itself, which carries `from` to within the gap of `to`; exactly
+  antiparallel inputs, whose cross product vanishes, rotate π about a
+  deterministic axis perpendicular to `from`, chosen by whichever basis vector
+  is least aligned with it. Either input zero answers `Identity`.
 - `Slerp` walks the shortest arc, negating the far endpoint when the dot is
   negative, and falls back to a normalized linear blend above a cosine of
   65503 raw, where the sine ratio is unstable. One `SinCos` serves both
@@ -676,13 +683,20 @@ of 65534 raw, where `Log`'s screw division would amplify quantization by about
 
 **Precision.** For the representation and for composition, about `2⁻¹⁵`
 relative to translation magnitude, which is the Q16 unit-quaternion norm
-quantization, so sub-millimetre at ten world units. `ScLerp`'s screw path sits
-outside that envelope: the `1/sin` amplification of the delta's quantized
-operands reaches a measured ~2.7 mm per component at ten world units near the
-blend threshold, tightening as the relative rotation grows. That band belongs
-to the operands and to `Exp`—`Log`'s lanes each close in a single
-`DivideProductSum` rounding, and fusing them left the measured worst case
-unchanged.
+quantization, so sub-millimetre at ten world units. `ScLerp`'s screw path stays
+inside that envelope too: measured against a double-precision screw
+interpolation of the same inputs, its worst per-component translation error is
+about 0.45 mm at ten world units, flat across relative rotations from 0.001 to
+2.5 rad. That holds because both halves of the screw divide by the rotation's
+sine at more than Q16: `Exp` forms `sin θ/θ`, `cos θ − sin θ/θ` and the slide's
+`−(d/2)·sin θ` from the Q60 sine and cosine, and `Log` carries its sine and half
+angle at Q20 before its lanes close in a single `DivideProductSum` rounding.
+Rounding either of them to Q16 first put `2⁻¹⁷/sin` of relative error into
+every dual lane, about 3 mm at ten world units near a 0.08 rad relative
+rotation. `Log` still divides by the sine, so a rotation within a few raws of
+a full turn (`W` near −1, a vector part of a few raws) answers a screw whose
+lanes are as uncertain as that sine; `rigid.log-matches-the-series` states the
+bound.
 `Rotation` and `Translation` read the parts back out; `TransformPoint` rotates
 and then translates; `Inverse` conjugates both quaternion parts.
 
