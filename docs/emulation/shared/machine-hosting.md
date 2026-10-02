@@ -117,7 +117,8 @@ owns revision-specific startup behavior.
 
 ### Host-selected content admission
 
-`GamingBrickContentPolicies.Puck()` creates an immutable policy that admits
+`GamingBrickContentPolicies.Puck()`, in `Puck.GamingBricks.Forge` beside the
+cartridge document it names, creates an immutable policy that admits
 arbitrary user-authored cartridges with the verified `puck.cartridge.v1` source
 format. Authors do not need publisher approval for each cartridge. The generic
 `MachineContentAdmissionPolicy` also supports open admission, other explicitly

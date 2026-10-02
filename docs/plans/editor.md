@@ -140,8 +140,8 @@ Every law has a red leg: the same assertion run against the feature switched
 off, or against a planted defect, which must fail. A check that cannot fail
 proves nothing. A package adds a `puck canary` only where pixels are the honest
 evidence (a grid, a highlight or a debug view drawn on screen), and a new
-canary in the merge or automatic set raises
-`src/Puck.Cli/Canary/CanaryCeilings.cs` in the same change. A package that adds
+canary in the merge or automatic set records
+the rise in `CanaryCeilings.json` (`puck canary-ceilings`) in the same change. A package that adds
 a verb adds its read-back and its entry in the build-mode binding group in the
 same change.
 

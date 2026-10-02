@@ -10,10 +10,14 @@ namespace Puck.Abstractions.Gpu;
 /// content-hashed and cached by the shader loader; this validates the bytecode the create path is actually given.
 /// </summary>
 public static class ShaderBytecode {
-    private const uint DxbcContainerMagic = 0x43425844; // 'DXBC' — wraps DXBC (SM5) or DXIL (SM6) bytecode.
+    /// <summary>The leading little-endian word of a DXBC container (<c>DXBC</c>), which wraps DXBC (SM5) or DXIL (SM6)
+    /// bytecode.</summary>
+    public const uint DxbcContainerMagic = 0x43425844;
+    /// <summary>The leading little-endian word of a SPIR-V module.</summary>
+    public const uint SpirVMagic = 0x07230203;
+
     private const int DxbcHeaderByteLength = 32; // magic(4) + checksum(16) + version(4) + totalSize(4) + chunkCount(4).
     private const int MagicByteLength = 4;
-    private const uint SpirVMagic = 0x07230203;
     private const int SpirVMinimumByteLength = 20;
 
     private static void ValidateDxbc(ReadOnlySpan<byte> bytecode) {
@@ -132,6 +136,20 @@ public static class ShaderBytecode {
     public static string FileExtension(bool hostsOnDirectX) => (hostsOnDirectX
         ? ".dxil"
         : ".spv"
+    );
+    /// <summary>Indicates whether <paramref name="bytecode"/> begins with the DXBC container magic.</summary>
+    /// <param name="bytecode">The compiled shader bytecode.</param>
+    /// <returns><see langword="true"/> when its leading word is <see cref="DxbcContainerMagic"/>.</returns>
+    public static bool IsDxbcContainer(ReadOnlySpan<byte> bytecode) => (
+        (bytecode.Length >= MagicByteLength) &&
+        (BinaryPrimitives.ReadUInt32LittleEndian(source: bytecode) == DxbcContainerMagic)
+    );
+    /// <summary>Indicates whether <paramref name="bytecode"/> begins with the SPIR-V magic.</summary>
+    /// <param name="bytecode">The compiled shader bytecode.</param>
+    /// <returns><see langword="true"/> when its leading word is <see cref="SpirVMagic"/>.</returns>
+    public static bool IsSpirV(ReadOnlySpan<byte> bytecode) => (
+        (bytecode.Length >= MagicByteLength) &&
+        (BinaryPrimitives.ReadUInt32LittleEndian(source: bytecode) == SpirVMagic)
     );
     /// <summary>Validates that <paramref name="bytecode"/> is recognizable, well-formed SPIR-V or DXBC/DXIL bytecode.</summary>
     /// <param name="bytecode">The compiled shader bytecode.</param>

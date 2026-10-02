@@ -6,8 +6,15 @@ using System.Text.Json;
 
 namespace Puck.Hosting;
 
-/// <summary>Opt-in Windows/Linux x64 local control. A private capability file authenticates up to four loopback sessions.</summary>
-public sealed class LocalControlServer : IDisposable {
+/// <summary>Opt-in Windows/Linux x64 local control. A private capability file authenticates up to four loopback sessions.
+/// <para>
+/// The server owns one accept loop and one serving task per connection. <see cref="Dispose"/> only begins the stop:
+/// it closes the sockets and the capability file without waiting, so a caller on the host's pump never blocks on a
+/// connection that is itself waiting for the pump. <see cref="Completion"/> completes once the accept loop and every
+/// serving task, with the session each one created, have finished; <see cref="DisposeAsync"/> stops the server and
+/// awaits it.
+/// </para></summary>
+public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
     private readonly CancellationTokenSource m_stop = new();
     private readonly ConcurrentDictionary<TcpClient, byte> m_clients = new();
     private readonly TcpListener m_listener = new(
@@ -23,6 +30,10 @@ public sealed class LocalControlServer : IDisposable {
     private readonly Func<IControlSession> m_createSession;
     private readonly LocalEndpointCapability m_descriptor;
     private readonly FileStream m_descriptorFile;
+
+    private readonly ConcurrentDictionary<Task, byte> m_serving = new();
+
+    private readonly Task m_accept;
 
     private int m_disposed;
 
@@ -47,11 +58,16 @@ public sealed class LocalControlServer : IDisposable {
             m_descriptor = new(port: ((IPEndPoint)m_listener.LocalEndpoint).Port);
             m_descriptorFile = m_descriptor.WriteDescriptor(path: AttachmentPath);
         } catch { m_listener.Stop(); m_stop.Dispose(); throw; }
-        _ = AcceptAsync();
+        m_accept = AcceptAsync();
+        Completion = CompleteAsync();
     }
 
     /// <summary>The capability file path. Its contents must never be logged or put in process arguments.</summary>
     public string AttachmentPath { get; }
+    /// <summary>Gets a task that completes after the server has stopped and its accept loop and every connection's
+    /// serving task, including the session each created, have returned. It never faults, and it does not complete
+    /// while the server is running. Work a session handed to the host's pump is the host's and is not awaited.</summary>
+    public Task Completion { get; }
 
     private async Task AcceptAsync() {
         try {
@@ -64,11 +80,29 @@ public sealed class LocalControlServer : IDisposable {
                     key: client,
                     value: 0
                 );
-                _ = ServeAsync(client: client);
+                var serving = ServeAsync(client: client);
+
+                foreach (var finished in m_serving.Keys.Where(predicate: static task => task.IsCompleted)) {
+                    m_serving.TryRemove(
+                        key: finished,
+                        value: out _
+                    );
+                }
+
+                m_serving.TryAdd(
+                    key: serving,
+                    value: 0
+                );
             }
         } catch (Exception error) when ((error is OperationCanceledException or SocketException or ObjectDisposedException)) {
             // Stop closes the accept socket. A transport failure cannot stop the world.
         }
+    }
+    // Ends after the accept loop, which admits every serving task, and then every serving task, have returned.
+    private async Task CompleteAsync() {
+        await m_accept.ConfigureAwait(options: ConfigureAwaitOptions.SuppressThrowing);
+        await Task.WhenAll(tasks: m_serving.Keys).ConfigureAwait(options: ConfigureAwaitOptions.SuppressThrowing);
+        m_stop.Dispose();
     }
     private static async Task<ControlResponse> ExecuteSessionAsync(IControlSession session, ControlRequest request, CancellationToken token) {
         Task<ControlResponse>? work = null;
@@ -205,7 +239,8 @@ public sealed class LocalControlServer : IDisposable {
         }
     }
 
-    /// <summary>Closes listener and session sockets without stopping World or waiting on its pump.</summary>
+    /// <summary>Begins the stop: closes the listener, the session sockets and the capability file without stopping World
+    /// and without waiting on its pump or on the serving tasks. <see cref="Completion"/> reports when they have returned.</summary>
     public void Dispose() {
         if (Interlocked.Exchange(
             location1: ref m_disposed,
@@ -216,7 +251,12 @@ public sealed class LocalControlServer : IDisposable {
         foreach (var client in m_clients.Keys) { client.Dispose(); }
         m_descriptorFile.Dispose();
         try { File.Delete(path: AttachmentPath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        // The cancellation source remains alive until the accept and connection continuations observe it.
+    }
+    /// <summary>Stops the server as <see cref="Dispose"/> does and waits for <see cref="Completion"/>.</summary>
+    /// <returns>A task that completes when no worker of this server is running.</returns>
+    public async ValueTask DisposeAsync() {
+        Dispose();
+        await Completion.ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <summary>Validates the operation before it can reach an unbounded host queue.</summary>
     /// <param name="request">The request to validate.</param>

@@ -139,7 +139,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     [Fact]
     public void MixedLayoutsLatchViewIndicesAndRetireScenesWhenSeatsReturnHome() {
         using var state = new TemporaryDirectory(prefix: "puck-routed-layout-");
-        using var host = WorldBootHarness.Compose(
+        var host = state.Own(owner: WorldBootHarness.Compose(
             edit: definition => (definition with {
                 ViewsRaw = (definition.Views with {
                     Graphs = [new WorldViewGraph(Name: "pane", Package: "sdf.world")],
@@ -155,7 +155,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: "tests/Puck.Counters/counters.world.json"
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var routes = host.Services.GetRequiredService<WorldSeatAuthorityRouter>();

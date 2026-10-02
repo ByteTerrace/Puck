@@ -25,7 +25,7 @@ public sealed class WorldLayoutTransitionScaleLawTests : IDisposable {
     [InlineData(1f)]
     [Theory]
     public void ATransitionDipsTheGridInsideTheCeilingAndNeverTheCeiling(float ceiling) {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: World,
@@ -40,7 +40,7 @@ public sealed class WorldLayoutTransitionScaleLawTests : IDisposable {
                         ],
                     },
                 };
-            }).Build();
+            }).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var composition = host.Services.GetRequiredService<WorldCompositionState>();
 

@@ -17,7 +17,7 @@
       "reference": { "kind": "binding", "graph": "binding.graph.json", "world": "parity.world.json", "parameters": { "grain": { "seed": { "0": 0, "1210": 13 } } } }
     },
     "materials": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "1": 600 } },
-    "lattice": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "1": 100000 } },
+    "lattice": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "0": 33000, "1": 38000 } },
     "noise": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "0": 7000 } },
     "vocabulary": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "1": 375 } },
     "converge": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "1": 375 } }

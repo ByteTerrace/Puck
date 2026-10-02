@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using Puck.Assets;
 using Puck.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Addons;
@@ -23,10 +24,6 @@ public sealed record WasmInspectionResult(
 );
 /// <summary>Reads a WebAssembly binary's imports and exports without instantiating it.</summary>
 public static class WasmModuleInspector {
-    private const uint WasmVersion1 = 1;
-
-    private static readonly byte[] WasmMagic = [0x00, 0x61, 0x73, 0x6D]; // \0asm
-
     // Every read is checked against what remains, and a length is compared as the unsigned value it was encoded as
     // before it is narrowed: a module is bytes an author points at, so nothing in it is trusted to be in range.
     private ref struct Reader(ReadOnlySpan<byte> bytes) {
@@ -189,7 +186,7 @@ public static class WasmModuleInspector {
             );
         }
 
-        if (!wasmBytes[..4].SequenceEqual(other: WasmMagic)) {
+        if (!wasmBytes[..4].SequenceEqual(other: WasmBinaryFormat.Magic)) {
             return new WasmInspectionResult(
                 ContentHash: contentHash,
                 Exports: [],
@@ -203,7 +200,7 @@ public static class WasmModuleInspector {
             start: 4
         ));
 
-        if (version != WasmVersion1) {
+        if (version != WasmBinaryFormat.Version1) {
             return new WasmInspectionResult(
                 ContentHash: contentHash,
                 Exports: [],

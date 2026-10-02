@@ -4,7 +4,8 @@ namespace Puck.World.Client;
 
 // A row's bound parameters (WorldViewGraph.Parameters): each scalar config field a row binds takes its value from the
 // state mirror, the one presentation read of state, through the slot the presentation manifest registered for its token
-// at install. A literal is written once; a state binding is read every frame and written only when its value moved, and
+// at install. A literal is written once; a state binding or keys on a clock is read every frame and written only when
+// its value moved, and
 // a binding that does not resolve draws the field's source default, read back from the pass after the row's config is
 // bound. An array reads a whole row: the node binds every array to the row its token names before a graph installs
 // (ShaderPipelineRenderNode.BindRows), so arrays reading one row alike share one region, and the host writes the row by
@@ -177,9 +178,16 @@ public sealed partial class WorldViewGraphHost {
         public double Last;
         public bool Written;
 
-        // The binding's presented value through its registered slot, exact for an integer cell, or the source default
-        // while the binding does not resolve; a literal is itself.
+        // The binding's presented value through its registered slot, exact for an integer cell, keys at their clock's
+        // presented phase, or the source default while either does not resolve; a literal is itself.
         public double Read(WorldStateMirror mirror) {
+            if (Value.Keys is not null) {
+                return mirror.Scalar(
+                    fallback: ((float)Fallback),
+                    scalar: in Value
+                );
+            }
+
             if (Value.State is { } binding) {
                 return (mirror.TryValue(
                     slot: mirror.SlotOf(

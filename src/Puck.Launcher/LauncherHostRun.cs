@@ -76,7 +76,11 @@ public static class LauncherHostRun {
 
         if (!ran) {
             try {
-                host.Dispose();
+                if (host is IAsyncDisposable asynchronous) {
+                    await asynchronous.DisposeAsync();
+                } else {
+                    host.Dispose();
+                }
             } catch (Exception exception) {
                 WriteSecondary(
                     error: error,

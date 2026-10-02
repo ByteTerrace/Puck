@@ -164,26 +164,26 @@
     {
       "name": "canary-conditional-layers-discriminating",
       "source": "canary-conditional-layers-discriminating.music.json",
-      "hash": "2a166309b1855a961e56b93a8d2bf8da758e132ac186efed5711ce6edc904ebc"
+      "hash": "3f2d8bbd91423c8c16b69466f80b1ef7e2f1915340f003f1e5f0b0015b406dfd"
     }
   ],
   "tunes": [
     {
       "name": "ambient-tune",
       "source": "../../../src/Puck.World/Assets/worlds/tunes/ambient-tune.audio.json",
-      "hash": "6651c152c660a28610dd7d6d6b8e12994f227099b5bc88978ce85e7e19228d07"
+      "hash": "0f4fc8aaf33df089400ac1eadda59718e344a60ea8c83ba5337e69fcbd25ff7a"
     },
     {
       "name": "arrival-tune",
       "source": "../../../src/Puck.World/Assets/worlds/tunes/arrival-tune.audio.json",
-      "hash": "f14ead2f6b26fe55d520607f34c84de725b72d66ea969aeae39edd0c24681bb7"
+      "hash": "6874bf8a031b3acbef842375c05c16153b143b59f04a5067f23a42ac65094794"
     }
   ],
   "patches": [
     {
       "name": "stinger",
       "source": "../../../src/Puck.World/Assets/worlds/patches/stinger.synth.json",
-      "hash": "5126a83fc5816863b6ecf981ef238ef346653c028a589520d766ec4ab82260ca"
+      "hash": "5d8f53b2714ddc863bf96e4817055838e3b72d705cba99bb050ccd6a00c472b0"
     }
   ]
 }

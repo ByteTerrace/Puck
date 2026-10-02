@@ -30,7 +30,7 @@
             ]
           },
           "value": {
-            "$ref": "./common.schema.json#/$defs/ShapeNonNullable42"
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable50"
           },
           "cells": {
             "description": "The row\u0027s current cells (default empty). Refused past its effective capacity, and on a duplicate key, by name \u2014 unless Evicts is set, in which case a write that would grow past capacity evicts the oldest cell instead of refusing (see Evicts). A slot-shaped row (see IsSlot) holds exactly one cell keyed SlotKey; a keyed row may hold any author-chosen keys except SlotKey itself, which is reserved for the value sugar and refused as an authored cell key.",
@@ -42,7 +42,7 @@
                   "type": "string"
                 },
                 "value": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable42"
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable50"
                 },
                 "advance": {
                   "$ref": "./common.schema.json#/$defs/StateAdvance"
@@ -61,7 +61,7 @@
                   ]
                 },
                 "clock": {
-                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable43"
+                  "$ref": "./common.schema.json#/$defs/ShapeNonNullable51"
                 },
                 "visibility": {
                   "$ref": "./common.schema.json#/$defs/StateVisibility"
@@ -402,7 +402,7 @@
             "$ref": "./common.schema.json#/$defs/StateCycle"
           },
           "clock": {
-            "$ref": "./common.schema.json#/$defs/ShapeNonNullable43"
+            "$ref": "./common.schema.json#/$defs/ShapeNonNullable51"
           },
           "space": {
             "description": "The vector space this row belongs to; required for Vector, refused for every other kind.",

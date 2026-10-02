@@ -68,6 +68,8 @@ check form:
 |---|---|
 | `FileLengths.json` | `puck lengths --check` |
 | `CommentSmells.json` | `puck comment-smells --check` |
+| `FormatVersions.json` | `puck formats --check` |
+| `CanaryCeilings.json` | `puck canary-ceilings --check` |
 | Formatting of touched files | `puck format --check --file-list <scratchpad>/<lane>-files.json` |
 | The project-map layering block | `puck architecture --check` |
 | `docs/world-name-registry.md` | `puck registry --check` |
@@ -75,8 +77,9 @@ check form:
 | A committed test baseline | `puck baselines <artifact> --check` |
 
 Run the recording form only to apply a deliberate change: `puck lengths` after
-shrinking a recorded file, `puck format --file-list` over your own files, a
-baseline whose movement the change explains. Review the rewritten file's diff
+shrinking a recorded file, `puck format --file-list` over your own files,
+`puck formats` after bumping a format token, `puck canary-ceilings` after
+changing canary cost, a baseline whose movement the change explains. Review the rewritten file's diff
 and commit it in the same change. A ledger rewritten during verification hides
 the drift the check exists to report.
 
