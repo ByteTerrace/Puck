@@ -41,17 +41,22 @@ stale and is corrected in the same change.
 - For a code pass, restore and build that worktree first so `obj/` and `bin/`
   exist. The Codex sandbox has no network: fetch corpora and packages before
   the run. A documentation-only pass needs no build unless XML comments change.
-- Launch a Codex pass as the companion's `task --write` with `--cwd` set to the
-  review worktree, and a Claude pass as an agent working in that worktree, each
-  with the model and effort the lead names. A pass cannot read this
-  conversation, message a session or ask a question, so the brief carries
-  every string, decision and path it needs, and tells it to answer its own
-  questions from the code and the brief. A Codex pass that ends on a question
-  has done nothing: answer it in a prompt file and continue the same thread
-  with `task --resume-last`.
+- Launch a Codex pass as the companion's `task --write`. The subcommand takes
+  `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file`, `--background`
+  and `--resume-last` (with `--resume` and `--fresh`).
+  Set `--cwd` to the review worktree and use the model and effort the lead
+  names. Pass the brief with `--prompt-file <path>`, never as command-line
+  prompt text. `task` has no `--help`: `task --help` is sent to the model as a
+  prompt. Launch a Claude pass as an agent working in that worktree. A pass
+  cannot read this conversation, message a session or ask a question, so the
+  brief carries every string, decision and path it needs, and tells it to answer
+  its own questions from the code and the brief. A Codex pass that ends on a
+  question has done nothing: answer it in a prompt file and continue the same
+  thread with `task --resume-last`.
 - Write the brief to a lane-named file (`<scratchpad>/rb/<lane>.md`) so the
-  second review and the verifier can reuse it, and name a scratch directory
-  outside the worktree for the pass's CLI copies and logs.
+  second review and the verifier can reuse it.
+- Name a scratch directory outside the tree in the brief for any CLI copy or
+  temporary files; otherwise the pass can write them inside the worktree.
 
 ## The brief
 
@@ -178,10 +183,15 @@ no brief, so it raises compatibility findings and tries to run tests.
    pass, push the working branch, fast-forward only. Only the lead merges it
    into the integration branch the lead's brief names.
 
+A Codex companion job's app-server broker can outlive the job and hold its
+worktree open. Stop that job's broker process before removing the review
+worktree.
+
 ## Route adjacent work
 
 | Skill | Route there for |
 |---|---|
+| [`orchestration`](../orchestration/SKILL.md) | Selecting models and coordinating assignments, machines, integration merges and finding destinations. |
 | [`verification`](../verification/SKILL.md) | The gates, CLI copy, red-leg proofs, GPU legs and finished-lane list the verifier runs. |
 | [`rendering`](../rendering/SKILL.md) | The render-graph runtime contracts and recurring bug classes to put in a render lane's hunt list. |
 | [`maths-laws`](../maths-laws/SKILL.md) | A Maths lane's laws, legs and mutation probe. |

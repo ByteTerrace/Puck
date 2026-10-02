@@ -127,13 +127,24 @@ brief requires a manual proof, use these steps:
    build leaves the previous binaries, and a run against them tests the fix.
 3. Run the law. It must fail at the assertion it was written for, with the
    intended message. A failure anywhere else (a compile error, a setup throw, a
-   different assertion) is not a red leg, and neither is a skipped test or a
-   run that selected none: read the counts.
+   different assertion) is not a red leg. The outcome must be **Failed**; a
+   **Skipped** run, or one that selected no test, is not a red leg: read the
+   counts.
 4. Confirm the withheld tree differs from the fixed one exactly where you
    meant it to (diff it): a mutation tool can produce a different mutant, and
    a red leg against it proves nothing about the fix.
-5. Restore the fix, rebuild, and run the law again. It must pass.
+5. Restore the fix, then touch the restored files before rebuilding and running
+   the law again. It must pass. Restoring an older timestamp can let MSBuild
+   keep the mutated assembly, so a run without this rebuild can test the
+   mutation instead of the restored fix.
 6. Record in the commit message which laws were proved red and how.
+
+In xUnit v3, `Assert.Throws`, `Assert.ThrowsAny`, `Assert.ThrowsAsync`,
+`Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception
+(verified on xUnit 3.2.2). A law that wraps a call which can skip, such as a
+device or capability probe, can therefore report **Skipped** with its fix
+withheld and pin nothing. In such laws, catch the exception directly with a
+`try`/`catch` and assert on it.
 
 A canary's discriminating leg is its red leg and must fail for the reason its
 manifest names. For `tests/Puck.Maths.Tests`, the `maths-laws` mutation probe is
@@ -144,27 +155,49 @@ owed when your change relies on it.
 
 GPU work is `puck parity`, `puck counters`, any canary requiring `gpu`
 (including `--merge`), a windowed or offscreen `Puck.World` run, any verb that
-boots one in those modes (such as `puck docs citations` without
-`--enumeration`, which boots it headless and windowed), and any test that opens
-a device. A World run with effective `host.presentation: none` uses no GPU;
-the `puck-world` skill owns the presentation modes and deployment overrides.
+boots one in those modes, and any test that opens a device. This includes a
+full `Puck.World.Tests` run: its device-law classes open the GPU. `puck docs
+citations` without `--enumeration` builds `Puck.World` and boots it headless
+and windowed to read its help vocabulary, so it waits for the GPU like any
+other GPU leg. A World run with effective `host.presentation: none` uses no
+GPU; the `puck-world` skill owns the presentation modes and deployment
+overrides.
 
 - A GPU runs one GPU leg at a time. Legs compete for the device, the ports and
   the frame budget, and a contended leg times out.
+- While another GPU leg runs, filter World tests with
+  `--filter "FullyQualifiedName!~DeviceLaw"` and list the skipped device-law
+  classes as owed. Keep the CPU-heavy work restriction below.
 - In delegated work, run GPU legs only under a grant the lead issues in your
   brief. Without one, run none: list each leg you need (verb, canaries,
   backend) in your hand-back report.
 - With a grant, run the granted legs serially, nothing else GPU-bound beside
   them, and keep CPU-heavy work (solution builds, large suites) off the machine
   while they run.
-- Before a leg, check that no other GPU work is running, and exclude the check
-  itself: a process search by name or command line can match its own query and
-  reports work that is not there.
+- Qualify the merged head, never a batch on its own. Before a batch's GPU run,
+  merge the current integration head into it. A stale batch can fail or pass
+  because it lacks changes already on the integration branch.
+  [`orchestration`](../orchestration/SKILL.md#assemble-and-refresh-batches)
+  owns batch assembly and merge sequencing.
 - A per-change GPU check is one to four canaries on one backend: the backend
   the change touches, or Vulkan when it is backend-neutral. Parity runs when
   the change means to move pixels or simulation state, and otherwise once at
   the lane's end. The `rendering` skill owns which canaries a render change
   owes.
+
+### GPU process checks and script runs
+
+A detector that waits for the GPU to go idle by matching process command lines
+excludes the matching shell (`powershell`, `pwsh` or `bash`). The query's own
+command line contains the strings it searches for; without this exclusion it
+waits on itself forever. Run such a detector once by hand on an idle machine
+before trusting it.
+
+On Windows, stopping a background task can kill a wrapper shell and leave the
+script's own bash running. Before relaunching a GPU script, find every instance
+by command line, stop each by process id, and confirm none remain. Bash reads
+a script as it runs, so never edit its file while an instance is running. Copy
+the script under a new name per run.
 
 ### Flake or failure
 
@@ -207,6 +240,7 @@ command for the parts it covers.
 
 | Skill | Route there for |
 |---|---|
+| [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, integration batches, machines and GPU grants. |
 | [`review-passes`](../review-passes/SKILL.md) | Briefing a cross-family review-and-fix pass, and verifying and landing its fixes. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers, mutation probe and recorded registers. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The Humble and Advanced Post batteries. |
