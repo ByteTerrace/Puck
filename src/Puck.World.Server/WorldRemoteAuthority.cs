@@ -753,7 +753,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
                     ) {
                         return false;
                     }
-                    PublishObservedRoute(route: route);
+                    ObserveRoute(route: route);
                     break;
                 case WorldFederationResponse.Definition: {
                         if (
@@ -899,7 +899,12 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             );
         }
     }
-    private void PublishObservedRoute(WorldAuthorityRouteDescription route) {
+
+    /// <summary>Takes one observed route: the latest head of the traveler's route, which this authority's observation
+    /// delivers frame by frame. It becomes the route a later <see cref="PublishClaim"/> redelivers, and is reported to the
+    /// route's owner at once. Serialized with <see cref="PublishClaim"/> by the route gate.</summary>
+    /// <param name="route">The observed route.</param>
+    public void ObserveRoute(WorldAuthorityRouteDescription route) {
         lock (m_observedRouteGate) {
             var changed = ((m_observedRoute is not { } observed) || (observed.Entity != route.Entity));
 
@@ -923,12 +928,18 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             m_routeChanged?.Invoke(obj: route);
         }
     }
+    /// <summary>Publishes the claim that makes a seat follow this route, then delivers the latest observed route to
+    /// it, both under the route gate. Observation starts before the claim exists, so a route observed earlier reached an
+    /// owner with no seat to update; it is delivered here, once the claim stands. A route observed while the claim is
+    /// published waits on the gate and arrives after this delivery, so an older route can never overtake a newer one.
+    /// The ordering belongs to this one method, never to the threads that happen to call it.</summary>
+    /// <param name="publish">Publishes the seat claim.</param>
+    public void PublishClaim(Action publish) {
+        ArgumentNullException.ThrowIfNull(argument: publish);
 
-    /// <summary>Delivers the latest observed route after its owner publishes the seat claim. Observation starts before
-    /// that claim exists, so its first route notification may have had no seat to update. Delivery is serialized with
-    /// incoming route frames so an older turn cannot overtake a newer one.</summary>
-    public void RepublishObservedRoute() {
         lock (m_observedRouteGate) {
+            publish();
+
             if (m_observedRoute is { } route) {
                 m_routeChanged?.Invoke(obj: route);
             }

@@ -298,11 +298,20 @@ public sealed partial class WorldInstanceHost {
                     slot: followedSlot,
                     travelTurn: commits[landedOrdinal].TravelTurn
                 );
-                m_seats.PublishRoute(
+                void PublishSeatRoute() => m_seats.PublishRoute(
                     endpoint: endpoint,
                     entity: routedEntity,
                     slot: followedSlot
                 );
+
+                // A route this host just started observing publishes the claim under its own route gate, which then
+                // delivers any route observed before the claim stood; a delayed commit acknowledgement can outlive
+                // onward crossings.
+                if (routedAuthority is { } routed) {
+                    routed.PublishClaim(publish: PublishSeatRoute);
+                } else {
+                    PublishSeatRoute();
+                }
 
                 // A mapped arrival turned the body by the turn between the landed member's departure yaw and the
                 // commit member's arrival yaw, at the same ordinal. The seat's view turns with it, so it looks along
@@ -317,9 +326,6 @@ public sealed partial class WorldInstanceHost {
                         yawReference: (targetAuthority.Local?.Server.Definition ?? targetAuthority.Remote!.Definition).Views.SeatControl.YawReference
                     );
                 }
-                // A delayed commit acknowledgement can outlive onward crossings. Consume the latest route even if
-                // its one-time observation notification arrived before PublishRoute made this seat follow it.
-                routedAuthority?.RepublishObservedRoute();
             }
 
             // Scoped to the BOOT instance on each side independently, because that is the only instance a
