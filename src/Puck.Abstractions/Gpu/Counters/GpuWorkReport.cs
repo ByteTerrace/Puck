@@ -176,20 +176,20 @@ public static class GpuWorkReport {
         var labels = sample.PassLabels;
         var kinds = GpuWork.SubmissionKinds;
 
-        for (var pass = 0; (pass < sample.PassCount); pass++) {
+        for (var row = 0; row < sample.PassCount + sample.Details.Length; row++) {
+            var detail = row - sample.PassCount;
+            var pass = ((detail < 0) ? row : sample.Details[detail].Pass);
             var state = sample.GetPassState(pass: pass);
 
-            _ = builder.Append(value: "work ").Append(value: labels[pass]).Append(value: ' ').Append(value: EnumWireName<GpuPassState>.Of(value: state));
+            _ = builder.Append(value: "work ").Append(value: labels[pass]);
+            if (detail >= 0) { _ = builder.Append(value: " detail=").Append(value: sample.Details[detail].Detail); }
+            _ = builder.Append(value: ' ').Append(value: EnumWireName<GpuPassState>.Of(value: state));
 
             if (state == GpuPassState.Executed) {
                 _ = builder.Append(value: ':');
 
                 for (var column = 0; (column < kinds.Length); column++) {
-                    _ = sample.TryGetPassCount(
-                        column: column,
-                        pass: pass,
-                        value: out var value
-                    );
+                    _ = ReadRow(sample: sample, pass: pass, detail: detail, column: column, value: out var value);
                     AppendCount(
                         builder: builder,
                         kind: kinds[column],
@@ -231,7 +231,9 @@ public static class GpuWorkReport {
         );
         writer.WriteStartArray(propertyName: "passes");
 
-        for (var pass = 0; (pass < sample.PassCount); pass++) {
+        for (var row = 0; row < sample.PassCount + sample.Details.Length; row++) {
+            var detail = row - sample.PassCount;
+            var pass = ((detail < 0) ? row : sample.Details[detail].Pass);
             var state = sample.GetPassState(pass: pass);
 
             writer.WriteStartObject();
@@ -239,6 +241,7 @@ public static class GpuWorkReport {
                 propertyName: "label",
                 value: labels[pass]
             );
+            if (detail >= 0) { writer.WriteString(propertyName: "detail", value: sample.Details[detail].Detail); }
             writer.WriteString(
                 propertyName: "class",
                 value: EnumWireName<WorkClass>.Of(value: sample.GetPassClass(pass: pass))
@@ -252,11 +255,7 @@ public static class GpuWorkReport {
                 writer.WriteStartObject(propertyName: "counts");
 
                 for (var column = 0; (column < kinds.Length); column++) {
-                    _ = sample.TryGetPassCount(
-                        column: column,
-                        pass: pass,
-                        value: out var value
-                    );
+                    _ = ReadRow(sample: sample, pass: pass, detail: detail, column: column, value: out var value);
                     writer.WriteNumber(
                         propertyName: kinds[column].Name,
                         value: value
@@ -282,6 +281,10 @@ public static class GpuWorkReport {
         writer.WriteEndObject();
         writer.WriteEndObject();
     }
+    private static bool ReadRow(GpuWorkSample sample, int pass, int detail, int column, out long value) => ((detail < 0)
+        ? sample.TryGetPassCount(pass: pass, column: column, value: out value)
+        : sample.TryGetDetailCount(detail: detail, column: column, value: out value));
+
     // Appends " <name>=<value>", the name without a leading "gpu." segment, straight into the builder.
     private static void AppendCount(StringBuilder builder, WorkKind kind, long value) {
         var name = kind.Name.AsSpan();

@@ -7,6 +7,12 @@ process handling, branding asset synchronization, and MCP behavior. Individual f
 and service or process setup; the suite is not a replacement for running a
 hardware-dependent CLI operation in its intended environment.
 
+`SkyBaselineFixtureLawTests` checks that the four counted sky workloads isolate
+still, drift, twinkle and clock-key changes. It reads bindable fields through
+the shared value resolver and requires the cycle canary's render section to
+match the compiled courtyard exactly. Device canaries separately check the
+visible day, night and restored-day captures.
+
 `StartupBenchmarkTests` checks that incomplete or failed samples cannot produce
 a corpus average, pending or unrelated captures cannot prove rendered readiness,
 missing overlays fail rendered samples, and process output carries elapsed observation times.
@@ -93,6 +99,10 @@ Official package and bootstrap tests include unfilled boot draws and exact-byte
 retry checks. The hosted composition control moves a nested machine document to
 the common worlds directory and verifies its asset path still names the same
 asset without embedding the build directory.
+
+`CountersLawTests` also preserves optional layer/body detail identities through
+reading, comparison and ceilings. Required zeros and unavailable details stay
+separate from other rows in the same physical pass.
 
 ## Verification
 

@@ -26,7 +26,7 @@ public static partial class WorldConstructs {
 
     /// <summary>Gets the described constructs.</summary>
     public static WorldConstructTable Table { get; } = new(
-        constructs: [.. Composition(), .. Sections(), .. State(), .. Rules(), .. Tests()],
+        constructs: [.. Composition(), .. Sections(), .. State(), .. Rules(), .. Tests(), .. Values()],
         excluded: Excluded()
     );
 }

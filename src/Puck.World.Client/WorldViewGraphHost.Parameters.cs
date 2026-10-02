@@ -179,24 +179,6 @@ public sealed partial class WorldViewGraphHost {
 
         // The binding's presented value through its registered slot, exact for an integer cell, or the source default
         // while the binding does not resolve; a literal is itself.
-        public double Read(WorldStateMirror mirror) {
-            if (Value.State is { } binding) {
-                return (mirror.TryValue(
-                    slot: mirror.SlotOf(
-                        binding: in binding,
-                        conversion: WorldStateConversion.Number
-                    ),
-                    value: out var bound
-                )
-                    ? bound
-                    : Fallback
-                );
-            }
-
-            return (((Value.Literal is { } literal) && float.IsFinite(f: literal))
-                ? literal
-                : Fallback
-            );
-        }
+        public double Read(WorldStateMirror mirror) => mirror.Values.Scalar(fallback: Fallback, value: Value);
     }
 }

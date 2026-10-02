@@ -1,0 +1,65 @@
+// A small sky study: one authored clock drives a changing wind and star shimmer.
+schema: "puck.world.definition.v1"
+basis: "standard"
+documentId: "sky-clock-keys"
+
+timeline {
+  clock day {
+    periodSeconds: 80s
+    spanSeconds: 24h
+  }
+  clock gust {
+    phase: keys(clock: day) [
+      { at: 0h, value: 0, ease: smooth }
+      { at: 12h, value: 0.75, ease: smooth }
+    ]
+  }
+}
+
+render {
+  sky {
+    layers [
+      {
+        $type: gradient
+        name: air
+        stops [
+          { name: horizon, elevation: 0, color: #91B7D6 }
+          { name: zenith, elevation: 1, color: #182953 }
+        ]
+      }
+      {
+        $type: clouds
+        name: cirrus
+        coverage: 0.45
+        drift [
+          keys(clock: gust) [
+            { at: 0, value: 0.01, ease: smooth }
+            { at: 0.5, value: 0.04, ease: smooth }
+          ]
+          keys(clock: day) [
+            { at: 0h, value: -0.015 }
+            { at: 12h, value: 0.01 }
+          ]
+        ]
+        shear [0.003, -0.002]
+        spin: keys(clock: day) [
+          { at: 0h, value: -0.002, ease: smooth }
+          { at: 12h, value: 0.002, ease: smooth }
+        ]
+      }
+      {
+        $type: stars
+        name: stars
+        brightness: 0.8
+        twinkle {
+          share: 0.3
+          depth: 0.6
+          rate: keys(clock: gust) [
+            { at: 0, value: 0.7, ease: smooth }
+            { at: 0.5, value: 1.4, ease: smooth }
+          ]
+        }
+      }
+    ]
+  }
+}

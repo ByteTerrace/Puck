@@ -169,6 +169,14 @@
                 "value": {
                   "description": "The count; for an allocation reading, the fewest bytes a run of the window allocated.",
                   "type": "integer"
+                },
+                "detail": {
+                  "description": "The submitted layer or body name, or null for the ordinary pass row.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -220,6 +228,14 @@
                     "allocation-zero-nonzero"
                   ],
                   "title": "WorkClass"
+                },
+                "detail": {
+                  "description": "The submitted layer or body name, or null for the ordinary pass row.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [

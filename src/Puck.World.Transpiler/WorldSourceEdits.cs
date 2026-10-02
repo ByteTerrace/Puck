@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Decompiler;
 
 namespace Puck.World.Transpiler;
@@ -57,7 +58,7 @@ public static class WorldSourceEdits {
                     edits.Add(item: new Edit(Pointer: sectionPointer, Span: new SourceSpan(Offset: source.Length, Length: 0, Line: 0, Column: 0), Text: (("\n" + addition) + "\n")));
                     continue;
                 }
-                if (entries.TryGetValue(key: changed, value: out var removed) && !Exists(pointer: changed, root: target)) {
+                if (entries.TryGetValue(key: changed, value: out var removed) && removed.DefinesNode && !Exists(pointer: changed, root: target)) {
                     if (!TryEditable(original: original, pointer: changed, reason: out reason, sourcePath: sourcePath)) { return false; }
                     edits.Add(item: new Edit(Pointer: changed, Span: removed.Span, Text: string.Empty));
                     continue;
@@ -67,13 +68,20 @@ public static class WorldSourceEdits {
             }
 
             string replacement;
+            SourceOrigin origin;
 
-            while (!TryReplacement(pointer: pointer, reason: out reason, target: target, text: out replacement)) {
-                pointer = Parent(pointer: pointer);
-                while ((pointer.Length > 0) && !entries.ContainsKey(key: pointer)) { pointer = Parent(pointer: pointer); }
-                if (pointer.Length == 0) { return false; }
+            if ((entries[pointer].ValueSpan is { } valueSpan) && (At(pointer: pointer, root: target) is JsonValue leaf)) {
+                origin = entries[pointer] with { Span = SourceLexemes.ContentSpan(source: source, span: valueSpan) };
+                replacement = WorldDecompiler.DecompileValue(value: leaf, form: origin.ValueForm);
+            } else {
+                reason = string.Empty;
+                while (!entries[pointer].DefinesNode || !TryReplacement(pointer: pointer, reason: out reason, target: target, text: out replacement)) {
+                    pointer = Parent(pointer: pointer);
+                    while ((pointer.Length > 0) && !entries.ContainsKey(key: pointer)) { pointer = Parent(pointer: pointer); }
+                    if (pointer.Length == 0) { return false; }
+                }
+                origin = entries[pointer];
             }
-            var origin = entries[pointer];
 
             if (!TryEditable(original: original, pointer: pointer, reason: out reason, sourcePath: sourcePath)) { return false; }
             if ((origin.Span.Offset < 0) || (origin.Span.Length <= 0) || (origin.Span.Offset > (source.Length - origin.Span.Length))) {

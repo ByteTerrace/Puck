@@ -42,7 +42,14 @@ existing planner's last-access barriers. Recovery distinguishes unsubmitted
 initialization and staged copies from already submitted writes. Its checkpoint
 storage is counted; steady standing allocates no objects.
 `ShaderInterfaceLawTests` pin the pass interface's layout, document and
-generated include. `ShaderInterfaceSpikeTests` build the variant passes under
+generated include. `ShaderInterfaceStructureLawTests` derive record fields from
+native C# layouts, verify generated padding and two-element echo sentinels,
+reject a stale same-stride field reorder, and compile the record on both
+backends to check its reflected stride and identity.
+`SdfWorldPackageInitializationLawTests` first reads each public declaration in
+a separate assembly context, so test order cannot hide an incomplete native or
+temporal pass interface caused by static initialization.
+`ShaderInterfaceSpikeTests` build the variant passes under
 `Assets/Interfaces/` with DXC. They hold the SPIR-V and DXIL readers to the
 interface's layout and require byte-identical output from two builds.
 `-showLiveOutput` prints each build's content pins for comparison with another
@@ -69,6 +76,10 @@ outside includes, an image-only one-off shader, and malformed manifests, and a
 package that loads from its binaries with no compiler. A fake tool runner writes
 bytecode that hashes its input, wrapped as a SPIR-V module with no bindings, so
 equal bytecode means an equal compile input.
+
+`RenderGraphWorkDetailLawTests` exercises prepared counter detail names through
+the real node: waited-slot growth, peak-budget refusal, failed pair creation,
+immutable completed labels and allocation-free steady recording.
 
 ## Verification
 

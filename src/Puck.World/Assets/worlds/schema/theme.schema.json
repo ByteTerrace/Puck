@@ -9,20 +9,16 @@
       "type": "object",
       "properties": {
         "surfaceBase": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "surfacePanel": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "surfaceRaised": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "surfaceInset": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "scrimPanel": {
           "$ref": "./common.schema.json#/$defs/WorldThemeScrim"
@@ -34,80 +30,61 @@
           "$ref": "./common.schema.json#/$defs/WorldThemeScrim"
         },
         "lineHair": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "lineSoft": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "lineStrong": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "lineInset": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "textPrimary": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "textDim": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "textMute": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "accent": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "accentQuiet": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "accentLine": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "accentInk": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "positive": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "warning": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "danger": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "phosphor": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "phosphorDim": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "phosphorCyan": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "badgeDark": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "badgeLight": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         }
       },
       "required": [
@@ -342,35 +319,19 @@
           "type": "number"
         },
         "bloomHaloAlpha": {
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2"
         },
         "bloomRingWidth": {
           "type": "number"
         },
         "bloomRingAlpha": {
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2"
         },
         "bloomNeutralHaloAlpha": {
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2"
         },
         "bloomNeutralRingAlpha": {
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2"
         },
         "bloomHeldInsetBlur": {
           "type": "number"
@@ -379,11 +340,7 @@
           "type": "number"
         },
         "bloomHeldInsetAlpha": {
-          "title": "BindableScalar",
-          "type": [
-            "number",
-            "string"
-          ]
+          "$ref": "./common.schema.json#/$defs/BindableScalarNonNullable2"
         },
         "bloomAccent": {
           "$ref": "./common.schema.json#/$defs/WorldThemeBloomHue"
@@ -407,8 +364,7 @@
           "type": "number"
         },
         "pressHeldGlowColor": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "pressHeldShadowBlur": {
           "type": "number"
@@ -420,8 +376,7 @@
           "type": "number"
         },
         "pressHeldShadowColor": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "shadowSeatBlur": {
           "type": "number"
@@ -436,19 +391,16 @@
           "type": "number"
         },
         "shadowSeatColor": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "shadowSeatStripColor": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "catchlightOffsetY": {
           "type": "number"
         },
         "catchlightColor": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "chipRestOpacity": {
           "type": "number"
@@ -507,28 +459,22 @@
       "type": "object",
       "properties": {
         "plateTop": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "plateMid": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "plateBottom": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "plateStripeColor": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "embossFill": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "engraveFill": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "embossShadowDropAlpha": {
           "type": "number"
@@ -561,24 +507,19 @@
           "type": "number"
         },
         "screenWellOuter": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "screenWellInner": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "bezelOuter": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "bezelInner": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "bezelEdge": {
-          "title": "BindableColor",
-          "type": "string"
+          "$ref": "./common.schema.json#/$defs/BindableColorNonNullable"
         },
         "phosphorGlowBlur": {
           "type": "number"
@@ -744,6 +685,10 @@
       ],
       "additionalProperties": false,
       "title": "WorldThemeChrome"
+    },
+    "keys": {
+      "$ref": "./common.schema.json#/$defs/WorldSectionKeys",
+      "description": "Partial-record keys for the theme\u0027s bindable leaves."
     }
   },
   "required": [

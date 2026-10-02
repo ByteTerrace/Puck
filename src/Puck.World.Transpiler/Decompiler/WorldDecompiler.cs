@@ -13,6 +13,22 @@ namespace Puck.World.Transpiler.Decompiler;
 
 /// <summary>Decompiles canonical Puck JSON definitions back into declarative Puck authoring DSL (.puck).</summary>
 public static partial class WorldDecompiler {
+    /// <summary>Prints one document value through the same expression printer used by full document decompilation.</summary>
+    /// <param name="value">The replacement document value.</param>
+    /// <param name="form">The vocabulary's spelling of the authored position.</param>
+    /// <returns>The value's source expression.</returns>
+    public static string DecompileValue(JsonNode? value, DocumentValueForm form = DocumentValueForm.Unclassified) {
+        var text = FormatArgument(node: value, indentLevel: 0, form: form switch {
+            DocumentValueForm.Name => WorldArgumentForm.Name,
+            DocumentValueForm.Key => WorldArgumentForm.Key,
+            DocumentValueForm.Expression => WorldArgumentForm.Expression,
+            DocumentValueForm.Choice => WorldArgumentForm.Choice,
+            DocumentValueForm.Text => WorldArgumentForm.Text,
+            _ => WorldArgumentForm.Unclassified,
+        });
+
+        return PuckPrinter.PrintExpression(expression: PuckParser.ParseExpression(source: text, vocabulary: WorldDocumentVocabulary.Instance));
+    }
     /// <summary>Decompiles a JSON text string into formatted Puck source code.</summary>
     /// <param name="jsonText">The raw or canonical JSON text.</param>
     /// <param name="embeddings">Optional companion embedding lock file for resolving vector literals.</param>
@@ -992,7 +1008,7 @@ public static partial class WorldDecompiler {
     // `$type` discriminator prints as a call (`compare(left: …)`), which is leaf-shaped and keeps its colon.
     private static bool RendersAsContainer(JsonNode? value) => value switch {
         JsonArray => true,
-        JsonObject obj => ((obj["$type"] is not JsonValue typeVal) || !typeVal.TryGetValue<string>(value: out _)),
+        JsonObject obj => (!IsKeyedValue(value: obj) && ((obj["$type"] is not JsonValue typeVal) || !typeVal.TryGetValue<string>(value: out _))),
         _ => false,
     };
     // The separator a field writes before its value: none in front of a container, ": " in front of a leaf. The
@@ -1033,6 +1049,20 @@ public static partial class WorldDecompiler {
         var position = ((holder is null) ? null : WorldCallArguments.MemberType(member: key, owner: holder));
         var form = ((holder is null) ? WorldArgumentForm.Unclassified : WorldCallArguments.Classify(member: key, owner: holder));
         var text = PrintsAsText(form: form, node: value);
+
+        if ((holder == typeof(WorldTimelineSection)) && (key == "clocks") && (value is JsonArray clocks) &&
+            clocks.All(predicate: static clock => ((clock is JsonObject row) && (row["name"] is JsonValue name) && name.TryGetValue<string>(value: out _)))) {
+            foreach (var clock in clocks.Cast<JsonObject>()) {
+                DecompileNamedBlock(sb: sb, identifier: "clock", name: clock["name"]!.GetValue<string>(), blockObj: clock,
+                    indentLevel: indentLevel, excludedKeys: ["name"], holder: typeof(WorldClock));
+            }
+            return;
+        }
+
+        if ((key == "keys") && (value is JsonObject sectionKeys) && IsKeyedValue(value: sectionKeys)) {
+            sb.AppendLine(value: (indent + FormatKeys(context: holder, indentLevel: indentLevel, value: sectionKeys)));
+            return;
+        }
 
         if (
             !text &&
@@ -1231,6 +1261,9 @@ public static partial class WorldDecompiler {
         }
 
         if (node is JsonObject obj) {
+            if (IsKeyedValue(value: obj)) {
+                return FormatKeys(context: context, indentLevel: indentLevel, value: obj);
+            }
             if (obj.Count == 0) {
                 return "{}";
             }

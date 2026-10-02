@@ -27,7 +27,7 @@ public sealed class WorldFactsCompilerAdversarialLawTests {
     );
 
     [Fact]
-    public void BindableCameraScalars_ExportTheirNumberOrStringWireShape() {
+    public void BindableCameraScalars_ExportTheirNumberStringOrClockKeysWireShape() {
         var split = WorldSchema.Export(postProcessPackages: []);
         var definitions = Assert.IsType<JsonObject>(@object: split.Common["$defs"]);
         var orbit = Assert.IsType<JsonObject>(@object: definitions["WorldCameraProgramOpOrbit"]);
@@ -35,12 +35,28 @@ public sealed class WorldFactsCompilerAdversarialLawTests {
 
         foreach (var property in new[] { "yaw", "pitch" }) {
             var node = Assert.IsType<JsonObject>(@object: properties[property]);
-            var types = Assert.IsType<JsonArray>(@object: node["type"]);
+            var constraint = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: node["allOf"])));
+            var reference = constraint["$ref"]!.GetValue<string>();
+
+            Assert.Equal(actual: reference, expected: "#/$defs/BindableScalarNonNullable");
+            var scalar = Assert.IsType<JsonObject>(@object: definitions["BindableScalarNonNullable"]);
+            var alternatives = Assert.IsType<JsonArray>(@object: scalar["anyOf"]);
+
+            Assert.Equal(expected: 3, actual: alternatives.Count);
 
             Assert.Equal(
                 expected: ["number", "string"],
-                actual: types.Select(selector: static type => type!.GetValue<string>())
+                actual: alternatives.Take(count: 2).Select(selector: static arm => arm!["type"]!.GetValue<string>())
             );
+            Assert.Equal(expected: "#/$defs/WorldKeysBindableScalar", actual: alternatives[2]!["$ref"]!.GetValue<string>());
+            var keys = Assert.IsType<JsonObject>(@object: definitions["WorldKeysBindableScalar"]);
+
+            Assert.Equal(expected: "object", actual: keys["type"]!.GetValue<string>());
+            Assert.False(condition: keys["additionalProperties"]!.GetValue<bool>());
+            var keyProperties = Assert.IsType<JsonObject>(@object: keys["properties"]);
+
+            Assert.True(condition: keyProperties.ContainsKey(propertyName: "clock"));
+            Assert.True(condition: keyProperties.ContainsKey(propertyName: "keys"));
         }
     }
     [Fact]

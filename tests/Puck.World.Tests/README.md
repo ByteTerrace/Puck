@@ -45,6 +45,11 @@ per episode. `OverlayLeaseTableFitsBackstopsLawTests` holds the shared text back
 the power-of-two sum of all declared reservations. `OverlayPackageLawTests` counts its
 installed host/device regions and CPU scratch/shadow payloads.
 
+`SdfLightingInterfaceDeviceLawTests` compiles the existing generated echo for
+the five native lighting records and reads every field of two elements on
+Vulkan and Direct3D 12. Corrupting one field in each table changes exactly five
+verdict pixels, checking both field offsets and the native element stride.
+
 `WorldComposedPickMapLawTests` carries material names through the real SDF frame
 composition: two emitters, global SDF ordinals, rebased mesh draws, and a replaced
 identity map that cannot rename an earlier captured answer.
@@ -63,6 +68,12 @@ The cases include reduced quality, exact seeds, periodic wraps, small positive g
 gaps, zero work, extreme finite cloud radii and explicit zero-power boundaries. This
 isolated proof does not exercise the common stack's admission, masks, transforms,
 ordered blending or renderer registration.
+
+`WorldInspectorDomainLawTests` compares span and console diagnostics, checks
+steady formatting with active scalar, direction and coupled-tuple fields, removes a recovered field, and
+refuses an oversized record through the editor's existing reservation. Residency
+identity controls the readout across replacement and retirement; the routed
+composition law registers the actual scene's existing guard without a device. The real inspector command and Tick path preserve that ownership with no steady allocation.
 
 ## Keep the feedback loop short
 

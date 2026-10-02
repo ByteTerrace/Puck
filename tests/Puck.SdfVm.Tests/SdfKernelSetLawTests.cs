@@ -140,10 +140,12 @@ public sealed class SdfKernelSetLawTests {
             }
         }
     }
-    // Both interfaces the kernels read carry this host's instruction set in their pass blocks' variable names.
+    // Every kernel interface carries this host's instruction set in its pass block's variable name.
     [Fact]
     public void TheKernelInterfacesCarryTheHostsInstructionSetStamp() {
-        foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.BrickBakeLayout, SdfWorldInterfaces.ResolveParameters.Layout])) {
+        foreach (var kernel in SdfKernelSet.Kernels) {
+            var layout = SdfKernelSet.LayoutOf(kernel: kernel);
+
             Assert.Equal(expected: SdfIsaHlsl.Stamp, actual: layout.Interface.Stamp);
             Assert.Equal(
                 expected: ("passGroup" + SdfIsaHlsl.Stamp),

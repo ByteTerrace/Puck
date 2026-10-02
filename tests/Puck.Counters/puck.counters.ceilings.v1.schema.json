@@ -134,6 +134,14 @@
                 "ceiling": {
                   "description": "The most the count may read; zero requires it to read zero.",
                   "type": "integer"
+                },
+                "detail": {
+                  "description": "The layer or body whose count is constrained, or null for the ordinary pass row.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [

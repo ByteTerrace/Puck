@@ -20,7 +20,7 @@ namespace Puck.World;
 /// (<see cref="WorldRenderSettings.DrawsBakes"/>), is settled, so a capture or a <c>world.wait ready</c> never lands
 /// between a placement's field and its bake.
 /// </summary>
-internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
+internal sealed partial class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     private readonly Lock m_gate = new();
     private readonly List<WorkEntry> m_views = [];
     private readonly Dictionary<string, string> m_residencyNames = new(comparer: StringComparer.Ordinal);
@@ -34,6 +34,9 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
         kinds: SdfMovedTransforms.Kinds,
         name: SdfMovedTransforms.SourceName
     );
+    /// <summary>Actual timeline work across primary, routed and session frames. Retiring views carry their totals
+    /// forward through the same counter mechanism as dynamic transforms.</summary>
+    public ForwardingWorkCounterSource Timeline { get; } = new(WorldEnvironmentResolve.SourceName, WorldEnvironmentResolve.Kinds);
 
     /// <summary>The device the render nodes run on, or <see langword="null"/> until the render factory has run.</summary>
     public IGpuDeviceContext? Device { get; set; }
@@ -132,7 +135,8 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <param name="name">The view's registered name.</param>
     /// <param name="work">The view's completed-work source.</param>
     /// <param name="lifetime">The view's object-lifetime counters.</param>
-    public void RegisterView(string name, IGpuWorkSource work, IWorkCounterSource lifetime) {
+    /// <param name="environment">The same view owner's environment resolver, when it has one.</param>
+    public void RegisterView(string name, IGpuWorkSource work, IWorkCounterSource lifetime, WorldEnvironmentResolve? environment = null) {
         ArgumentNullException.ThrowIfNull(name);
         ArgumentNullException.ThrowIfNull(work);
         ArgumentNullException.ThrowIfNull(lifetime);
@@ -140,6 +144,7 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
         lock (m_gate) {
             RemoveView(name: name);
             m_views.Add(item: new WorkEntry(
+                Environment: environment,
                 Lifetime: lifetime,
                 Name: name,
                 Work: work
@@ -169,5 +174,5 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
             comparisonType: StringComparison.Ordinal
         ));
 
-    private readonly record struct WorkEntry(string Name, IGpuWorkSource Work, IWorkCounterSource Lifetime);
+    private readonly record struct WorkEntry(string Name, IGpuWorkSource Work, IWorkCounterSource Lifetime, WorldEnvironmentResolve? Environment);
 }

@@ -1,7 +1,6 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Presentation;
-using Puck.Assets.Documents;
 
 namespace Puck.World;
 
@@ -92,8 +91,6 @@ public readonly record struct WorldQualityPreset(
 /// <param name="Sky">The procedural sky — a gradient, sun disc, star field, and distance fog. Optional; an absent
 /// section renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section
 /// existed.</param>
-/// <param name="Cycle">Lighting and sky keyed over a state row's value (a day/night cycle when that row advances).
-/// Optional; absent leaves <paramref name="Lighting"/>/<paramref name="Sky"/> static.</param>
 /// <param name="Environment">The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe
 /// reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.</param>
 /// <param name="Tonemap">The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs
@@ -118,11 +115,14 @@ public sealed record WorldRenderDefaults(
     [property: JsonPropertyName("high"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? HighRaw = null,
     WorldRenderLighting? Lighting = null,
     WorldRenderSky? Sky = null,
-    WorldRenderCycle? Cycle = null,
     WorldRenderEnvironment? Environment = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTonemap? Tonemap = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null
 ) {
+    /// <summary>Named partial-record keys, compiled to ordinary typed values when the definition is prepared.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldSectionKeys? Keys { get; init; }
+
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units. The march advances a
     /// float depth against a 0.001-unit surface epsilon; 8192 is the largest power of two at which a float's spacing
     /// (2^13 · 2^-23 = 0.00098) still resolves that epsilon, so every sample along the whole ray can still land within
@@ -157,21 +157,24 @@ public sealed record WorldRenderDefaults(
 /// unauthored world always had; present, the list IS the lights — an authored list without a hemisphere has no
 /// ambient. Every field of every light is optional individually and resolves to the engine's pinned default for its
 /// kind.</summary>
-/// <param name="Lights">The lights, at most <c>SdfEnvironment.MaxLights</c>, in slot order (a <c>render.cycle</c> key
-/// moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit
+/// <param name="Lights">The lights, at most <c>SdfLighting.MaxLights</c>, in slot order. Section keys address
+/// an existing row by its authored name. At most one directional may shadow: the soft-shadow march runs once per lit
 /// pixel.</param>
 /// <param name="Curvature">The stylized curvature enrichment — cavity darkening, curvature rim light, and an ink
 /// outline. Optional; absent (and all-zero) shades exactly as a world that declares none.</param>
 public sealed record WorldRenderLighting(IReadOnlyList<WorldRenderLight>? Lights = null, WorldRenderCurvature? Curvature = null) {
+    /// <summary>Named partial-record keys for this lighting section.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldSectionKeys? Keys { get; init; }
     /// <summary>The topology an absent <c>render.lighting</c> resolves to — the pinned shadowing sun and the pinned
-    /// hemisphere — which a <c>render.cycle</c> key over unauthored lighting is validated against.</summary>
+    /// hemisphere. Keys addressing lights require explicitly authored named rows.</summary>
     public static WorldRenderLighting Pinned { get; } = new(Lights: [
         new WorldRenderLight.Directional(Shadows: true),
         new WorldRenderLight.Hemisphere(),
     ]);
 }
 /// <summary>One light. The <c>$type</c> string is the JSON discriminator; a new kind is a new derived record, its
-/// <see cref="JsonDerivedTypeAttribute"/> line, and its lane semantics in <c>SdfEnvironment</c>.</summary>
+/// <see cref="JsonDerivedTypeAttribute"/> line, and its resolved values in <c>SdfLighting</c>.</summary>
 [JsonDerivedType(typeof(WorldRenderLight.Directional), typeDiscriminator: "directional")]
 [JsonDerivedType(typeof(WorldRenderLight.Hemisphere), typeDiscriminator: "hemisphere")]
 [JsonDerivedType(typeof(WorldRenderLight.Rim), typeDiscriminator: "rim")]
@@ -179,6 +182,10 @@ public sealed record WorldRenderLighting(IReadOnlyList<WorldRenderLight>? Lights
 [JsonDerivedType(typeof(WorldRenderLight.Occluder), typeDiscriminator: "occluder")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldRenderLight {
+    /// <summary>The authored row identity used by section keys and source-preserving edits.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; init; }
+
     private WorldRenderLight() {
     }
 
@@ -193,10 +200,10 @@ public abstract record WorldRenderLight {
     /// <param name="Shadows">Whether this light drives the soft-shadow march (at most one light per world). Absent is
     /// <see langword="false"/>. An unshadowed directional is scaled by ambient occlusion instead.</param>
     public sealed record Directional(
-        DocumentVector3? Direction = null,
+        BindableDirection? Direction = null,
         BindableColor? Color = null,
-        float? Weight = null,
-        float? AngularRadius = null,
+        BindableScalar? Weight = null,
+        BindableAngle? AngularRadius = null,
         bool? Shadows = null
     ) : WorldRenderLight;
     /// <summary>A hemisphere ambient: a floor plus a gradient on the surface normal's Y (sky above, darker below),
@@ -206,8 +213,8 @@ public abstract record WorldRenderLight {
     /// <param name="Gradient">The hemisphere gradient. Absent is the pinned gradient.</param>
     public sealed record Hemisphere(
         BindableColor? Color = null,
-        float? Base = null,
-        float? Gradient = null
+        BindableScalar? Base = null,
+        BindableScalar? Gradient = null
     ) : WorldRenderLight;
     /// <summary>A view-dependent silhouette brighten: <c>weight · color · pow(1 − saturate(dot(normal,
     /// −rayDirection)), power)</c>, added after the material shade.</summary>
@@ -217,8 +224,8 @@ public abstract record WorldRenderLight {
     /// engine default.</param>
     public sealed record Rim(
         BindableColor? Color = null,
-        float? Weight = null,
-        float? Power = null
+        BindableScalar? Weight = null,
+        BindableScalar? Power = null
     ) : WorldRenderLight;
     /// <summary>A point light with inverse-square falloff and a soft core:
     /// <c>intensity = weight / (1 + (distance / radius)^2)</c>. No shadow march in v1 — a point light never occludes
@@ -230,15 +237,15 @@ public abstract record WorldRenderLight {
     /// <param name="Color">The light's linear colour.</param>
     /// <param name="Weight">The strength. Absent is the engine default.</param>
     public sealed record Point(
-        DocumentVector3? Position = null,
-        float? Radius = null,
+        BindableVector3? Position = null,
+        BindableScalar? Radius = null,
         WorldAnchor? Anchor = null,
         BindableColor? Color = null,
-        float? Weight = null
+        BindableScalar? Weight = null
     ) : WorldRenderLight;
     /// <summary>A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement
     /// frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.</summary>
-    public sealed record Occluder(DocumentVector3? Position = null, float? Radius = null, WorldAnchor? Anchor = null, float? Weight = null) : WorldRenderLight;
+    public sealed record Occluder(BindableVector3? Position = null, BindableScalar? Radius = null, WorldAnchor? Anchor = null, BindableScalar? Weight = null) : WorldRenderLight;
 }
 /// <summary>The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures
 /// at each hit. Every field is optional individually — absent resolves to the engine's pinned default. The three
@@ -253,15 +260,18 @@ public abstract record WorldRenderLight {
 /// the ridge and cavity terms saturate.</param>
 /// <param name="InkHigh">The curvature magnitude at which the outline saturates.</param>
 /// <param name="InkColor"><see cref="BindableColor"/>'s grammar: the outline colour.</param>
-public sealed record WorldRenderCurvature(float? Cavity = null, float? Rim = null, float? Ink = null, float? InkLow = null, float? InkHigh = null, BindableColor? InkColor = null);
+public sealed record WorldRenderCurvature(BindableScalar? Cavity = null, BindableScalar? Rim = null, BindableScalar? Ink = null, BindableScalar? InkLow = null, BindableScalar? InkHigh = null, BindableColor? InkColor = null);
 /// <summary>The procedural sky as an ordered stack of layers. Absent is a hard gate: the world renders the pinned
 /// two-stop gradient and fog density, as before this section existed. The layers composite in a fixed order —
 /// gradient, stars, sun disc, clouds — whatever order they are authored in; fog is read every frame on its own. A
 /// layer kind appears at most once.</summary>
 /// <param name="Layers">The layers.</param>
 public sealed record WorldRenderSky(IReadOnlyList<WorldRenderSkyLayer>? Layers = null) {
+    /// <summary>Named partial-record keys for this sky section.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldSectionKeys? Keys { get; init; }
     /// <summary>The topology an absent <c>render.sky</c> resolves to — the pinned two-stop gradient and the pinned
-    /// fog — which a <c>render.cycle</c> key over an unauthored sky is validated against.</summary>
+    /// fog. Keys addressing sky layers require explicitly authored named rows.</summary>
     public static WorldRenderSky Pinned { get; } = new(Layers: [
         new WorldRenderSkyLayer.Gradient(Stops: [
             new WorldRenderSkyStop(Elevation: -1f),
@@ -278,29 +288,33 @@ public sealed record WorldRenderSky(IReadOnlyList<WorldRenderSkyLayer>? Layers =
 [JsonDerivedType(typeof(WorldRenderSkyLayer.Clouds), typeDiscriminator: "clouds")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldRenderSkyLayer {
+    /// <summary>The authored row identity used by section keys and source-preserving edits.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; init; }
+
     private WorldRenderSkyLayer() {
     }
 
     /// <summary>The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.</summary>
-    /// <param name="Stops">Two to <c>SdfEnvironment.MaxSkyStops</c> stops, strictly ascending in elevation. A
-    /// <c>render.cycle</c> key moves a stop by its index and may not add or remove one.</param>
+    /// <param name="Stops">Two to <c>SdfLighting.MaxSkyStops</c> stops, strictly ascending in elevation. A
+    /// section key moves a stop by its authored name and may not add or remove one.</param>
     public sealed record Gradient(IReadOnlyList<WorldRenderSkyStop>? Stops = null) : WorldRenderSkyLayer;
     /// <summary>The exponential distance fog fading toward the sky gradient.</summary>
     /// <param name="Density">The density per world unit. Absent is the pinned density.</param>
-    public sealed record Fog(float? Density = null) : WorldRenderSkyLayer;
+    public sealed record Fog(BindableScalar? Density = null) : WorldRenderSkyLayer;
     /// <summary>The visible sun disc — an additive highlight about one directional light's direction.</summary>
     /// <param name="Light">The <see cref="WorldRenderLighting.Lights"/> slot of a directional light. Absent is the
     /// shadow light, or the first directional when none shadows.</param>
     /// <param name="Radius">The disc's angular half-radius in radians, in <c>(0, π/2]</c>. Absent is the engine
     /// default.</param>
     /// <param name="Intensity">The peak additive brightness. Absent is zero, which draws nothing.</param>
-    public sealed record SunDisc(int? Light = null, float? Radius = null, float? Intensity = null) : WorldRenderSkyLayer;
+    public sealed record SunDisc(int? Light = null, BindableAngle? Radius = null, BindableScalar? Intensity = null) : WorldRenderSkyLayer;
     /// <summary>The procedural star field: a deterministic per-cell hash over an octahedral sky projection.</summary>
     /// <param name="Density">The star grid's cell count per octahedral axis. Absent is the engine default.</param>
     /// <param name="Brightness">The peak per-star brightness. Absent is zero, which draws nothing.</param>
     /// <param name="Seed">The hash seed folded into every cell.</param>
     /// <param name="Twinkle">Scintillation for a share of the stars. Optional; absent twinkles none.</param>
-    public sealed record Stars(float? Density = null, float? Brightness = null, uint? Seed = null, WorldRenderSkyTwinkle? Twinkle = null) : WorldRenderSkyLayer;
+    public sealed record Stars(float? Density = null, BindableScalar? Brightness = null, uint? Seed = null, WorldRenderSkyTwinkle? Twinkle = null) : WorldRenderSkyLayer;
     /// <summary>The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera,
     /// thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.</summary>
     /// <param name="Coverage">The fraction of the sky the layer covers, in <c>[0, 1]</c>. Absent is zero.</param>
@@ -318,44 +332,32 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="Shear">The wind of the shaping field relative to the cloud field, in layer units per second.
     /// Absent holds the shapes.</param>
     public sealed record Clouds(
-        float? Coverage = null,
-        float? Softness = null,
-        float? Scale = null,
+        BindableScalar? Coverage = null,
+        BindableScalar? Softness = null,
+        BindableScalar? Scale = null,
         uint? Seed = null,
         BindableColor? Color = null,
-        DocumentVector2? Drift = null,
-        float? Spin = null,
-        float? Curl = null,
-        DocumentVector2? Shear = null
+        BindableVector2? Drift = null,
+        BindableScalar? Spin = null,
+        BindableAngle? Curl = null,
+        BindableVector2? Shear = null
     ) : WorldRenderSkyLayer;
 }
 /// <summary>One gradient stop.</summary>
 /// <param name="Elevation">The direction's Y component this stop sits at, in <c>[−1, 1]</c>.</param>
-/// <param name="Color"><see cref="BindableColor"/>'s grammar: the colour at this elevation. Absent (in a cycle key)
-/// keeps the previous key's colour.</param>
-public sealed record WorldRenderSkyStop(float? Elevation = null, BindableColor? Color = null);
+/// <param name="Color"><see cref="BindableColor"/>'s grammar: the colour at this elevation. A gradient's authored
+/// stops require a color; omitted partial-record key leaves carry through the wrap.</param>
+public sealed record WorldRenderSkyStop(BindableScalar? Elevation = null, BindableColor? Color = null) {
+    /// <summary>The authored stop identity used by section keys.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; init; }
+}
 /// <summary>Scintillation: a hash-chosen share of the stars dip and recover on the simulation clock, each at its own
 /// harmonic and phase of one authored rate, so no two twinkle in step. Presentation-only, keyed on the tick.</summary>
 /// <param name="Share">The fraction of stars that twinkle, in <c>[0, 1]</c>. Zero twinkles none.</param>
 /// <param name="Depth">How far a twinkling star dips below its steady brightness, in <c>[0, 1]</c>.</param>
 /// <param name="Rate">The fundamental scintillation rate in hertz.</param>
-public sealed record WorldRenderSkyTwinkle(float? Share = null, float? Depth = null, float? Rate = null);
-/// <summary>Lighting and sky as a function of a state row: presentation reads the row's live value each frame, takes
-/// its fractional part (an advancing clock wraps once per unit), and interpolates between the two keys that bracket
-/// it — every environment lane by its own kind: colours and scalars linearly, directions along the arc, counts, kinds,
-/// seeds and flags held from the earlier key. A key states only the fields it moves; every other field holds its
-/// value from the previous key (the first key starts from the static <see cref="WorldRenderDefaults.Lighting"/>/
-/// <see cref="WorldRenderDefaults.Sky"/>, and the last key wraps into the first). A key addresses a light by its
-/// slot and a stop by its index, with the same kind the statics author there, and may not add or remove either.
-/// Presentation-only: the row is simulation state, the interpolation is not.</summary>
-/// <param name="State">The state row read (its slot cell; <c>Fixed</c> or <c>Int</c>).</param>
-/// <param name="Keys">At least two keys, strictly ascending <see cref="WorldRenderCycleKey.At"/> in <c>[0, 1)</c>.</param>
-public sealed record WorldRenderCycle(string State, IReadOnlyList<WorldRenderCycleKey> Keys);
-/// <summary>One point on a <see cref="WorldRenderCycle"/>.</summary>
-/// <param name="At">The row-value fraction this key sits at, in <c>[0, 1)</c>.</param>
-/// <param name="Lighting">The lighting fields this key moves, or <see langword="null"/>.</param>
-/// <param name="Sky">The sky fields this key moves, or <see langword="null"/>.</param>
-public sealed record WorldRenderCycleKey(float At, WorldRenderLighting? Lighting = null, WorldRenderSky? Sky = null);
+public sealed record WorldRenderSkyTwinkle(BindableScalar? Share = null, BindableScalar? Depth = null, BindableScalar? Rate = null);
 /// <summary>The tonemap the root graph applies to the frame before the HUD — see
 /// <see cref="WorldRenderDefaults.Tonemap"/>.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldTonemap>))]
@@ -367,10 +369,14 @@ public enum WorldTonemap {
 }
 /// <summary>The analytic studio reflections a GGX specular lobe reflects — see
 /// <see cref="WorldRenderDefaults.Environment"/>.</summary>
-/// <param name="Softboxes">The reflection softboxes, at most <c>SdfEnvironment.MaxSoftboxes</c>. Absent or empty
+/// <param name="Softboxes">The reflection softboxes, at most <c>SdfLighting.MaxSoftboxes</c>. Absent or empty
 /// contributes nothing.</param>
 /// <param name="Horizon">The reflection horizon gradient. Absent is black — contributes nothing.</param>
-public sealed record WorldRenderEnvironment(IReadOnlyList<WorldRenderSoftbox>? Softboxes = null, WorldRenderHorizon? Horizon = null);
+public sealed record WorldRenderEnvironment(IReadOnlyList<WorldRenderSoftbox>? Softboxes = null, WorldRenderHorizon? Horizon = null) {
+    /// <summary>Named partial-record keys for this reflection environment.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldSectionKeys? Keys { get; init; }
+}
 /// <summary>One analytic studio-reflection softbox: a soft, angularly-extended highlight a GGX lobe catches in its
 /// mirror direction, widened by the surface's own roughness.</summary>
 /// <param name="Direction">From a reflecting surface toward the softbox, any nonzero length (normalized before
@@ -380,7 +386,11 @@ public sealed record WorldRenderEnvironment(IReadOnlyList<WorldRenderSoftbox>? S
 /// <param name="Weight">The strength. Absent is 1.</param>
 /// <param name="Blur">Additional falloff softening, in the same units as <paramref name="Size"/>. Absent is
 /// 0.</param>
-public sealed record WorldRenderSoftbox(DocumentVector3 Direction, DocumentVector2 Size, BindableColor? Color = null, float? Weight = null, float? Blur = null);
+public sealed record WorldRenderSoftbox(BindableDirection Direction, BindableVector2 Size, BindableColor? Color = null, BindableScalar? Weight = null, BindableScalar? Blur = null) {
+    /// <summary>The authored softbox identity used by section keys.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Name { get; init; }
+}
 /// <summary>The studio reflection's horizon gradient — the reflection direction's Y interpolates between
 /// <paramref name="Low"/> and <paramref name="High"/>.</summary>
 /// <param name="Low">The ground-ward (direction.y = −1) colour. Absent is black.</param>

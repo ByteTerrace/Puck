@@ -24,13 +24,14 @@ public sealed class SkyBaselineFixtureLawTests {
     [Theory]
     public void Counted_sky_fixtures_isolate_one_animated_value(string name) {
         var definition = Read(path: $"tests/Puck.Counters/sky-{name}.world.json");
+        var values = new WorldValueResolver(definition: definition, tick: default);
         var stars = Assert.Single(collection: definition.Render.Sky!.Layers!.OfType<WorldRenderSkyLayer.Stars>());
         var clouds = Assert.Single(collection: definition.Render.Sky.Layers!.OfType<WorldRenderSkyLayer.Clouds>());
 
-        Assert.True(condition: (stars.Brightness > 0f));
-        Assert.Equal(expected: (name == "twinkle"), actual: (stars.Twinkle!.Share > 0f));
-        Assert.Equal(expected: (name == "cycle"), actual: (definition.Render.Cycle is not null));
-        Assert.Equal(expected: 0f, actual: clouds.Spin);
+        Assert.True(condition: (values.Scalar((stars.Brightness ?? default), 0d) > 0d));
+        Assert.Equal(expected: (name == "twinkle"), actual: (values.Scalar((stars.Twinkle!.Share ?? default), 0d) > 0d));
+        Assert.Equal(expected: (name == "cycle"), actual: (definition.Render.Keys is not null));
+        Assert.Equal(expected: 0d, actual: values.Scalar((clouds.Spin ?? default), 0d));
 
         using var document = JsonDocument.Parse(json: File.ReadAllText(path: PathOf(path: $"tests/Puck.Counters/sky-{name}.world.json")));
         var layer = document.RootElement.GetProperty(propertyName: "render").GetProperty(propertyName: "sky").GetProperty(propertyName: "layers")[4];

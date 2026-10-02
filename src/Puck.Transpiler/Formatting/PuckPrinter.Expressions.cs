@@ -223,9 +223,11 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case CallExpressionNode call: {
+                        var body = call.Arguments.LastOrDefault(predicate: static argument => argument.TrailingBody);
+
                         m_builder.Append(value: call.Name).Append(value: '(');
                         Arguments(
-                            arguments: call.Arguments,
+                            arguments: ((body is null) ? call.Arguments : [.. call.Arguments.Where(predicate: static argument => !argument.TrailingBody)]),
                             level: level,
                             multiLine: call.Trivia.MultiLine
                         );
@@ -234,6 +236,17 @@ public static partial class PuckPrinter {
                             Indent(level: level);
                         }
                         m_builder.Append(value: ')');
+                        if (body is not null) {
+                            if (body.Trivia.Opening is { } opening) { m_builder.Append(value: ' ').Append(value: opening); }
+                            if (body.Trivia.OnNewLine || (body.Trivia.Leading.Count > 0)) {
+                                EndLine();
+                                Leading(level: level, trivia: body.Trivia);
+                                Indent(level: level);
+                            } else {
+                                m_builder.Append(value: ' ');
+                            }
+                            Expression(expression: body.Value, level: level);
+                        }
 
                         break;
                     }

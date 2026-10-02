@@ -109,6 +109,10 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
         if (renderProbe?.Residency is { } rendered) {
             render += $", volumes {rendered.LiveVolumes}/{Puck.SdfVm.SdfWorldTables.MaxVolumes}";
+            var lighting = rendered.LightingMemory;
+
+            render += string.Create(CultureInfo.InvariantCulture,
+                    $", lighting table subset: upload-slots={Puck.SdfVm.SdfWorldTables.FrameRingSize}, device-bytes={lighting.Gpu.DeviceLocal}, host-bytes={lighting.Gpu.HostVisible}, cpu-shadow-bytes={lighting.CpuShadowBytes}, cpu-scratch-bytes={lighting.CpuScratchBytes} (GPU bytes included in table totals)");
             var clamps = rendered.LiveProgramFieldScopeClamps;
 
             render += $", scoped clamps {clamps.Count} ({clamps.Count(predicate: static clamp => (clamp.ShapeCount > 1))} shared)";
@@ -124,7 +128,11 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var stampPoolWorstCase = (WorldPlacementPolicy.MaxStampRegistrations * WorldPlacementPolicy.MaxShapesPerStamp);
         var stampPool = $"stamp pool {WorldPlacementPolicy.MaxShapesPerStamp} shape(s)/stamp x {WorldPlacementPolicy.MaxStampRegistrations} registration(s) = {stampPoolWorstCase} worst-case instance(s) of {Puck.SignedDistance.SdfProgramBuilder.MaxInstances} ceiling ({(Puck.SignedDistance.SdfProgramBuilder.MaxInstances - stampPoolWorstCase)} headroom for statics/screens/avatars)";
         var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
-        var fogDensity = (server.Definition.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density ?? Puck.SignedDistance.SdfEnvironment.DefaultFogDensity);
+        var prepared = WorldPresentationValues.Of(definition: server.Definition).Definition;
+        var fog = prepared.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density;
+        var values = new WorldValueResolver(prepared, new Puck.Hosting.PresentedTick(server.CompletedEngineTicks, 0d));
+        var fogDensity = ((fog is { } density) ? (float)values.Scalar(fallback: Puck.SignedDistance.SdfLighting.DefaultFogDensity, value: density)
+            : Puck.SignedDistance.SdfLighting.DefaultFogDensity);
         var far = string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldTables.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"

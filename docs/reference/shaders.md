@@ -941,10 +941,33 @@ DXIL's structured stride for one is its 12 bytes, while SPIR-V's buffer layout
 may pad it to 16, so the two backends would disagree on where each element
 starts.
 
+An engine-owned record uses `ShaderInterfaceStructure.From<T>()` and the
+buffer member's `structure` argument. The unmanaged C# record's public fields
+define its names, types, offsets and stride. Fields are `float`, `int`, `uint`
+or floating-point vectors. Each field must meet the shared 4-, 8- or 16-byte
+alignment, and the record's size must include its trailing alignment. This
+allows a `Vector3` followed by a scalar in one 16-byte row. The generator emits
+the struct and any explicit gaps; it does not maintain a second field list.
+Nested records and arrays within records are not admitted.
+
+The reflected buffer name carries the record layout's content identity. A
+same-sized field reorder therefore refuses stale bytecode even though its
+stride has not changed. HLSL reads the buffer through its ordinary member name;
+the generated include supplies the alias.
+Record fields may not share a name with a generated resource or stamped-block
+alias; admission names the colliding field before the shader preprocessor can
+rename its access.
+
+The shared interface echo reads two consecutive native records, checking both
+field offsets and the element stride. `WriteRecordSentinels` prepares those
+records and zeroes padding. Its distinct normal-float sentinels support records
+up to 8192 bytes and bindings below 256; a larger echo refuses by resource name
+instead of reusing sentinel identities.
+
 Each buffer binding carries the element stride its bytecode reflects
 (`ShaderInterfaceBinding.ElementStride`; every other binding carries 0). A
 structured buffer's stride is its element's size on both backends: 4, 8 or 16
-bytes. A raw buffer's stride is what each backend reports for a byte-address
+bytes for a primitive, or the native record's declared size. A raw buffer's stride is what each backend reports for a byte-address
 buffer: SPIR-V declares one as a runtime array of `uint` whose `ArrayStride` is
 4 (`ShaderInterfaceLayout.SpirvRawBufferStride`), and DXIL's reflection reports
 a `NumSamples` of 0 (`ShaderInterfaceLayout.DxilRawBufferStride`), the zero
@@ -1628,7 +1651,8 @@ the work counters: every pass of `sdf.world`, `place`, `overlay`, the source
 conversions and every post-process package, which must) declares the work
 counters in its interface (`ShaderWorkCounters`), whose generated include
 carries the functions its shaders count through, and keeps a counter buffer and
-a readback buffer per frame slot, one row a pass (`GpuKernelCounters`). A
+a readback buffer per frame slot (`GpuKernelCounters`). Rows begin with the
+physical passes, followed by their named detail rows. A
 compute kernel counts through `puckCountWork`, one wave sum added by the wave's
 first active lane, and a fragment stage through `puckCountFragmentWork`, the
 same over the wave's lanes that are not helper lanes. Every generated include
@@ -1642,8 +1666,18 @@ ahead of the first pass and copies them to its readback behind the last, which
 counts one clear, one copy and three buffer barriers outside every pass: the
 clear before the compute and fragment stages that add, those stages before the
 copy, and the copy before the host's read. The ledger adds each row's
-`gpu.march.steps` and `gpu.texels.written` to its pass once the submission
-completes. What the
+`gpu.march.steps`, `gpu.texels.written`, `gpu.sky.evaluations`, `gpu.sky.hashes` and
+`gpu.sky.texture-loads` once the submission completes. Each row uses ten 32-bit
+words: five low/high pairs. `WorkDetails` supplies the prepared pass's layer or
+body names before counter clear. The ledger captures those names with the
+submission, so later membership changes cannot rename completed work. Physical
+pass indices stay unchanged; `WorkDetailRow` is the absolute first detail row.
+`puckCountDetailWork` adds steps, evaluations, hashes and texture loads to a
+detail; output texels belong to the ordinary pass or run. Its active lanes may
+address different details. A slot grows only after its prior fence and readback
+complete, within the existing replacement-peak budget. GPU storage and retained
+CPU arrays are included in inspection. JSON report and ceiling rows carry an
+optional `detail`, part of their comparison identity. What the
 node does between submissions to install or rebuild a graph, the sets it
 writes and the pass blocks it sends to every frame slot, counts in no
 submission, whether the install succeeds, fails partway or follows a device

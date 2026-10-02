@@ -73,7 +73,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 ? (preview.Width, preview.Height)
                 : null
             ),
-            rows: m_installedRows
+            rows: m_installedRows,
+            installed: true
         )
         : new ShaderPipelineMemoryAccount(
             BudgetBytes: BudgetBytes,
@@ -189,7 +190,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // What installing a graph planned at an extent, with its counted buffers resolved against counts at that extent, the
     // preview its selection needs and its arrays bound to rows, costs from what the node owns now. History the graph
     // carries from the installed one is moved, not allocated, so the peak holds its bytes once.
-    private ShaderPipelineMemoryAccount Account(ShaderPipelinePlan plan, ShaderPipelineStorageCounts counts, (uint Width, uint Height)? preview, RowBindings rows) {
+    private ShaderPipelineMemoryAccount Account(ShaderPipelinePlan plan, ShaderPipelineStorageCounts counts, (uint Width, uint Height)? preview, RowBindings rows, bool installed = false) {
         var extent = (counts.Width, counts.Height);
         var steady = checked((((GraphBytes(
             counts: counts,
@@ -203,6 +204,10 @@ public sealed partial class ShaderPipelineRenderNode {
             extent: preview,
             inFlight: m_inFlight
         )));
+        // The live graph can grow its waited counter slots without replacing its resource plan.
+        if (installed && m_passes.Length != 0 && m_passes[0].KernelCounters is { } counters) {
+            steady = checked(steady + counters.TotalBytes - KernelCounterBytes(plan: plan, inFlight: m_inFlight));
+        }
         var carried = 0UL;
 
         foreach (var index in CarriedHistoryOf(

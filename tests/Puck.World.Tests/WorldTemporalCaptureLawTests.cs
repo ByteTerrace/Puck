@@ -47,16 +47,13 @@ public sealed class WorldTemporalCaptureLawTests {
     }
 
     private static byte[] Block(SdfFrame frame) {
-        var environment = new float[Puck.SignedDistance.SdfEnvironment.LaneCount];
-
-        SdfFrameBlock.BakeEnvironment(frame: frame, rows: environment);
         var block = new byte[SdfFrameBlock.SizeBytes];
 
         SdfFrameBlock.Write(
             block: block,
-            tables: new SdfPassValues(ScreenCount: 0, InstanceMaskWordCount: 1, MeshDraws: ((uint)frame.MeshDraws.Count), DebugMode: 0, Environment: environment),
+            tables: new SdfPassValues(ScreenCount: 0, InstanceMaskWordCount: 1, MeshDraws: ((uint)frame.MeshDraws.Count), DebugMode: 0),
             frame: frame, view: 0, width: 64, height: 64
         );
-        return block;
+        return [.. block, .. LightingSnapshot.Bytes(lighting: frame.Environment)];
     }
 }

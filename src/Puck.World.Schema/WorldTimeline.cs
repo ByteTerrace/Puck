@@ -4,45 +4,47 @@ using Puck.Hosting;
 namespace Puck.World;
 
 /// <summary>The <c>timeline</c> section: the world's named presentation clocks, which every time-driven look can read,
-/// its sky, its lights and its theme among them. A clock is presentation: it reads the simulation tick or a state row
-/// and feeds nothing back into the simulation.</summary>
+/// its sky, its lights and its theme among them. A clock reads the simulation tick, a state row, or a phase curve on
+/// another clock, and feeds nothing back into the simulation.</summary>
 /// <param name="Clocks">The clocks, each named once.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldTimelineSection(IReadOnlyList<WorldClock>? Clocks = null) {
     /// <summary>Gets the section an unauthored world resolves to: no named clocks.</summary>
     public static WorldTimelineSection Absent { get; } = new();
 }
-/// <summary>One named presentation clock: a tick clock, whose phase advances with the simulation's engine tick through a
-/// period, or a state clock, whose phase is the fractional part of a state row's presented value (an advancing row
-/// wraps once per unit).</summary>
+/// <summary>One named presentation clock: a tick clock advances with the simulation's engine tick through a period;
+/// a state clock reads the fractional part of a presented state value; a phase clock reads keys on another clock.
+/// <see cref="WorldValueResolver"/> resolves all three sources for presentation consumers.</summary>
 /// <param name="Name">The clock's name, unique within the section.</param>
 /// <param name="PeriodSeconds">A tick clock's period, in seconds: a whole number of engine ticks
 /// (<c>1/50400</c> s). Refused beside <paramref name="State"/>.</param>
 /// <param name="SpanSeconds">What one period reads as, in the units a key's time is authored in: a day that passes in
 /// twenty minutes and reads as twenty-four hours has a span of <c>24h</c>. Absent reads as the period for a tick clock
-/// and as one for a state clock.</param>
+/// and as one for a state or phase clock.</param>
 /// <param name="StartSeconds">How far into its span a tick clock stands at engine tick zero, in
 /// <paramref name="SpanSeconds"/>' units, in <c>[0, span)</c>. Absent is zero. Refused on a state clock.</param>
 /// <param name="State">A state clock's Fixed or Int row. Refused beside <paramref name="PeriodSeconds"/>.</param>
+/// <param name="Phase">A phase curve keyed on another clock. Refused beside a period or state source.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldClock(
     string Name,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? PeriodSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? SpanSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? StartSeconds = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Phase = null
 ) {
     /// <summary>Gets whether the clock reads a state row rather than the tick.</summary>
     [JsonIgnore]
     public bool IsStateClock => (State is not null);
     /// <summary>Gets what one period reads as: <see cref="SpanSeconds"/>, or the period for a tick clock and one for a
-    /// state clock when it is absent.</summary>
+    /// state or phase clock when it is absent.</summary>
     [JsonIgnore]
     public double Span => (SpanSeconds ?? (PeriodSeconds ?? 1d));
 }
 /// <summary>The pure arithmetic of a <see cref="WorldClock"/>: its period and start in exact engine ticks, and its
-/// phase at a presented tick. The validator and every presentation that reads a clock share it, so a clock reads the
-/// same everywhere.</summary>
+/// phase at a presented tick. <see cref="WorldValueResolver"/> uses this arithmetic for tick clocks and normalized
+/// phases while also resolving state and nested phase sources.</summary>
 public static class WorldClocks {
     /// <summary>Returns the engine ticks nearest a duration and whether the duration is exactly that many: a clock's
     /// period must be a whole number of engine ticks.</summary>
@@ -67,7 +69,7 @@ public static class WorldClocks {
     /// <summary>Returns a tick clock's period in engine ticks.</summary>
     /// <param name="clock">The clock; a tick clock whose period the validator admitted.</param>
     /// <returns>The period, in engine ticks.</returns>
-    /// <exception cref="ArgumentException"><paramref name="clock"/> is a state clock or its period is not a whole
+    /// <exception cref="ArgumentException"><paramref name="clock"/> is a state or phase clock or its period is not a whole
     /// number of engine ticks.</exception>
     public static ulong PeriodTicks(WorldClock clock) {
         ArgumentNullException.ThrowIfNull(argument: clock);

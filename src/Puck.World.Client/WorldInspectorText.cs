@@ -8,7 +8,7 @@ using Puck.SignedDistance;
 namespace Puck.World.Client;
 
 /// <summary>The inspector's fixed reusable formatter. The panel and command read precisely this text.</summary>
-public sealed class WorldInspectorText {
+public sealed partial class WorldInspectorText {
     private readonly char[] m_chars = new char[(InspectorWriter.MaxLines * (InspectorWriter.MaxLineChars + 1))];
 
     private int m_length;

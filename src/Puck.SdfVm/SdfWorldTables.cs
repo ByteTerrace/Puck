@@ -9,7 +9,7 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The device-resident half of one SDF frame source (<see cref="SdfWorldResidency"/>): every table the
 /// <c>sdf.world</c> kernels read that the frame source writes — the program words, dynamic transforms, frame instance
-/// grid, screen surfaces, screen mappings, screen lights, bounded volumes, glyph decals and mesh draws, each a
+/// grid, screen surfaces, screen mappings, screen lights, bounded volumes, glyph decals, mesh draws and native lighting, each a
 /// <see cref="GpuRegion"/> — with the glyph atlas, the carve-bake brick pool, the samplers and the pipelines a view's
 /// passes record with. A view's scratch and output are its render-graph instance's (<see cref="SdfWorldPasses"/>); the
 /// tables are shared by every view of the frame source. Fully backend-neutral through its device's
@@ -350,6 +350,11 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             region: MeshRegionIndex
         ));
         m_meshRegionBytes = SdfMeshRegion.DrawBytes;
+        m_lightFrameRegion = scope.Own(created: CreateRegion(byteCount: m_lighting.LightFrameBytes.Length, region: LightFrameRegionIndex));
+        m_lightsRegion = scope.Own(created: CreateRegion(byteCount: m_lighting.LightBytes.Length, region: LightsRegionIndex));
+        m_skyFrameRegion = scope.Own(created: CreateRegion(byteCount: m_lighting.SkyFrameBytes.Length, region: SkyFrameRegionIndex));
+        m_skyStopsRegion = scope.Own(created: CreateRegion(byteCount: m_lighting.StopBytes.Length, region: SkyStopsRegionIndex));
+        m_skySoftboxesRegion = scope.Own(created: CreateRegion(byteCount: m_lighting.SoftboxBytes.Length, region: SkySoftboxesRegionIndex));
         m_previousDynamicTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)m_dynamicTransformRegion.ByteCount), usage: GpuBufferUsage.Storage));
         m_previousMeshTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
@@ -404,20 +409,15 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             release: m_bindings.DestroyPool
         );
 
-        var worldGroups = pipelines.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles;
+        // Reserve each distinct consumer's World group in every upload slot.
+        for (var group = 0; (group < WorldGroups.Layouts.Length); group++) {
+            var handles = pipelines.Pipeline(kernel: WorldGroups.Kernels[group]).GroupLayoutHandles;
 
-        // The World set per ring slot, which every view's compute passes bind, written the first time one is bound
-        // (WorldSet).
-        for (var slot = 0; (slot < FrameRingSize); slot++) {
-            m_worldSets[slot] = m_bindings.AllocateSet(
-                name: NameOf(
-                    detail: "world group",
-                    index: slot,
-                    part: "tables"
-                ),
-                descriptorSetLayoutHandle: worldGroups[((int)WorldGroup)],
-                poolHandle: m_pool
-            );
+            for (var slot = 0; (slot < FrameRingSize); slot++) {
+                m_worldSets[((group * FrameRingSize) + slot)] = m_bindings.AllocateSet(
+                    name: NameOf(detail: WorldGroups.Kernels[group].ToString(), index: slot, part: "tables"),
+                    descriptorSetLayoutHandle: handles[((int)WorldGroup)], poolHandle: m_pool);
+            }
         }
 
         // One sampler per filter; a screen samples its source through the one its row chooses and the glyph atlas through
@@ -530,7 +530,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,
             descriptorSetHandle: set,
-            elementStride: resource.Member.Type!.Value.SizeBytes(),
+            elementStride: (resource.Member.Structure?.SizeBytes ?? resource.Member.Type!.Value.SizeBytes()),
             kind: resource.Kind
         );
     }

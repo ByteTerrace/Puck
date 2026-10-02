@@ -33,7 +33,7 @@ namespace Puck.Abstractions.Gpu;
 /// have grown to the configured pass count.
 /// </para>
 /// </summary>
-public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
+public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     private const int Columns = GpuWork.SubmissionColumnCount;
 
     private readonly WorkCount[] m_lifetime = new WorkCount[GpuWork.LifetimeKindCount];
@@ -44,6 +44,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     private int m_currentPass = -1;
     private WorkClass[] m_classes = [];
     private string[] m_labels = [];
+    private GpuWorkDetail[] m_details = [];
 
     private long m_lastSealed;
     private Record? m_open;
@@ -130,6 +131,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             throw new InvalidOperationException(message: "The passes cannot change while the work being recorded has entered, skipped, or retained a pass.");
         }
 
+        m_details = [];
         m_labels = passLabels.ToArray();
         m_classes = (passClasses.IsEmpty
             ? new WorkClass[passLabels.Length]
@@ -139,6 +141,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         m_open?.Rebind(
             classes: m_classes,
             labels: m_labels,
+            details: m_details,
             revision: m_revision
         );
         Withdraw();
@@ -306,10 +309,10 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         if (submission > m_published) {
             completed.Readback?.AddTo(
                 counts: completed.Counts.AsSpan(
-                    length: ((completed.Labels.Length + 1) * Columns),
+                    length: ((completed.Labels.Length + completed.Details.Length + 1) * Columns),
                     start: 0
                 ),
-                passCount: completed.Labels.Length,
+                rowCount: (completed.Labels.Length + completed.Details.Length),
                 slot: completed.ReadbackSlot
             );
             Publish(record: completed);
@@ -373,6 +376,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         chosen!.Open(
             classes: m_classes,
             labels: m_labels,
+            details: m_details,
             revision: m_revision
         );
         m_open = chosen;
@@ -385,10 +389,11 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         m_snapshots[((int)((m_version + 1L) & 1L))].Load(
             classes: record.Classes,
             counts: record.Counts.AsSpan(
-                length: ((passCount + 1) * Columns),
+                length: ((passCount + record.Details.Length + 1) * Columns),
                 start: 0
             ),
             labels: record.Labels,
+            details: record.Details,
             revision: record.Revision,
             states: record.States.AsSpan(
                 length: passCount,
@@ -422,6 +427,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         public bool HasPassActivity;
 
         public string[] Labels = [];
+        public GpuWorkDetail[] Details = [];
 
         public IGpuWorkReadback? Readback;
         public int ReadbackSlot;
@@ -437,10 +443,11 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             Readback = null;
             State = RecordState.Free;
         }
-        public void Open(string[] labels, WorkClass[] classes, long revision) {
+        public void Open(string[] labels, WorkClass[] classes, GpuWorkDetail[] details, long revision) {
             Rebind(
                 classes: classes,
                 labels: labels,
+                details: details,
                 revision: revision
             );
             Counts.AsSpan(
@@ -454,9 +461,10 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             Submission = 0L;
         }
         // Keeps the outside row, which does not depend on the passes; clears every pass row and state.
-        public void Rebind(string[] labels, WorkClass[] classes, long revision) {
+        public void Rebind(string[] labels, WorkClass[] classes, GpuWorkDetail[] details, long revision) {
             Classes = classes;
-            var countLength = ((labels.Length + 1) * Columns);
+            Details = details;
+            var countLength = ((labels.Length + details.Length + 1) * Columns);
 
             if (Counts.Length < countLength) {
                 var grown = new long[countLength];

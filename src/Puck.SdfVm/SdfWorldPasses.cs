@@ -33,8 +33,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     private readonly Lock m_gate = new();
     // Every residency an entry resolves or a recorder holds, with its holds.
     private readonly Dictionary<SdfWorldResidency, int> m_residencies = new(comparer: ReferenceEqualityComparer.Instance);
-    // Each graph's viewport-row region, by the frame block its passes share: the sky part's, which every later part of the
-    // same graph binds.
     // The frame the package started last, which each residency's frame is started for once.
     private long m_frame = 1;
 

@@ -136,6 +136,8 @@ public sealed partial class ShaderPipelineRenderNode {
         // The counter buffers the graph's kernels count their own work into, on its first pass when a pass counts
         // (ShaderPipelinePlan.CountsKernelWork) and null on every other.
         public GpuKernelCounters? KernelCounters;
+        public IReadOnlyList<string> WorkDetails = [];
+        public uint WorkDetailRow;
 
         public bool Grouped => (PortBindings is not null);
 

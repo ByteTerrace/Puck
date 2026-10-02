@@ -36,6 +36,7 @@ groupshared uint sdfShadowGatherLitCount;
 groupshared float3 sdfAmbientGatherLow;
 groupshared float3 sdfAmbientGatherHigh;
 
+#ifdef SDF_SHADOW_PASS
 uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float reach, uint lane) {
     // Phase 0 — clear the group mask and publish this lane's hitPoint.
     for (uint word = lane; word < SDF_SHADOW_MASK_WORDS; word += SDF_GROUP_SHADOW_LANES) {
@@ -227,6 +228,7 @@ uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float rea
 
     return 2u;
 }
+#endif
 #endif
 #endif
 

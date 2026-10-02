@@ -103,25 +103,26 @@ internal static class CountersComparison {
     }
 
     private static void ComparePasses(List<string> differences, WorldCountersRun left, string leftName, WorldCountersRun right, string rightName, string prefix) {
-        var leftPasses = left.Passes.ToDictionary(keySelector: static pass => (pass.Node, pass.Label), elementSelector: static pass => pass.State);
-        var rightPasses = right.Passes.ToDictionary(keySelector: static pass => (pass.Node, pass.Label), elementSelector: static pass => pass.State);
+        var leftPasses = left.Passes.ToDictionary(keySelector: static pass => (pass.Node, pass.Label, pass.Detail), elementSelector: static pass => pass.State);
+        var rightPasses = right.Passes.ToDictionary(keySelector: static pass => (pass.Node, pass.Label, pass.Detail), elementSelector: static pass => pass.State);
 
-        foreach (var (node, label) in leftPasses.Keys.Union(second: rightPasses.Keys).OrderBy(keySelector: static pass => pass.Node, comparer: StringComparer.Ordinal).ThenBy(keySelector: static pass => pass.Label, comparer: StringComparer.Ordinal)) {
-            var leftState = (leftPasses.TryGetValue(key: (node, label), value: out var leftFound) ? EnumWireName<GpuPassState>.Of(value: leftFound) : Absent);
-            var rightState = (rightPasses.TryGetValue(key: (node, label), value: out var rightFound) ? EnumWireName<GpuPassState>.Of(value: rightFound) : Absent);
+        foreach (var (node, label, detail) in leftPasses.Keys.Union(second: rightPasses.Keys).OrderBy(keySelector: static pass => pass.Node, comparer: StringComparer.Ordinal).ThenBy(keySelector: static pass => pass.Label, comparer: StringComparer.Ordinal).ThenBy(keySelector: static pass => pass.Detail, comparer: StringComparer.Ordinal)) {
+            var leftState = (leftPasses.TryGetValue(key: (node, label, detail), value: out var leftFound) ? EnumWireName<GpuPassState>.Of(value: leftFound) : Absent);
+            var rightState = (rightPasses.TryGetValue(key: (node, label, detail), value: out var rightFound) ? EnumWireName<GpuPassState>.Of(value: rightFound) : Absent);
 
             if (!string.Equals(a: leftState, b: rightState, comparisonType: StringComparison.Ordinal)) {
-                differences.Add(item: $"{prefix}pass state node={node} pass={label} {leftName}={leftState} {rightName}={rightState}");
+                differences.Add(item: $"{prefix}pass state node={node} pass={label}{DetailText(detail)} {leftName}={leftState} {rightName}={rightState}");
             }
         }
     }
     private static string Describe(CountKey key, WorkClass workClass) =>
-        $"{EnumWireName<WorkClass>.Of(value: workClass)} kind={key.Kind} pass={(key.Pass ?? "-")} node={(key.Node ?? "-")} source={key.Source}";
+        $"{EnumWireName<WorkClass>.Of(value: workClass)} kind={key.Kind} pass={(key.Pass ?? "-")}{DetailText(key.Detail)} node={(key.Node ?? "-")} source={key.Source}";
     private static Dictionary<CountKey, WorldCount> Index(WorldCountersRun run) {
         var index = new Dictionary<CountKey, WorldCount>();
 
         foreach (var count in run.Counts) {
             index[new CountKey(
+                Detail: count.Detail,
                 Kind: count.Kind,
                 Node: count.Node,
                 Pass: count.Pass,
@@ -131,6 +132,7 @@ internal static class CountersComparison {
 
         return index;
     }
+    internal static string DetailText(string? detail) => ((detail is null) ? string.Empty : $" detail={detail}");
     private static string Value(WorldCount? count) =>
         ((count is null)
             ? Absent
@@ -138,13 +140,14 @@ internal static class CountersComparison {
         );
 
     // Where a count was read; the order a difference list is printed in.
-    private readonly record struct CountKey(string Source, string? Node, string? Pass, string Kind) : IComparable<CountKey> {
+    private readonly record struct CountKey(string Source, string? Node, string? Pass, string Kind, string? Detail) : IComparable<CountKey> {
         public int CompareTo(CountKey other) {
             var order = string.CompareOrdinal(strA: Source, strB: other.Source);
 
             order = ((order != 0) ? order : string.CompareOrdinal(strA: Node, strB: other.Node));
             order = ((order != 0) ? order : string.CompareOrdinal(strA: Pass, strB: other.Pass));
 
+            order = ((order != 0) ? order : string.CompareOrdinal(strA: Detail, strB: other.Detail));
             return ((order != 0) ? order : string.CompareOrdinal(strA: Kind, strB: other.Kind));
         }
     }

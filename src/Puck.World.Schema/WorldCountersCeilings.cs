@@ -45,4 +45,5 @@ public sealed record WorldCountersCeilingRun(
 /// <param name="Kind">The GPU submission kind's dotted name.</param>
 /// <param name="Class">What the count was recorded as: the kind's class, loosened to its pass's.</param>
 /// <param name="Ceiling">The most the count may read; zero requires it to read zero.</param>
-public sealed record WorldCountCeiling(string Node, string? Pass, string Kind, WorkClass Class, long Ceiling);
+/// <param name="Detail">The layer or body whose count is constrained, or null for the ordinary pass row.</param>
+public sealed record WorldCountCeiling(string Node, string? Pass, string Kind, WorkClass Class, long Ceiling, string? Detail = null);

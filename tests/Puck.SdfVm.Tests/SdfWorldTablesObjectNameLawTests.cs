@@ -18,7 +18,7 @@ public sealed class SdfWorldTablesObjectNameLawTests {
 
     // The regions construction creates, by the part their objects are named under: the host-written tables, then the
     // brick staging.
-    private static readonly string[] RegionParts = ["program", "dynamic-transforms", "instance-grid", "screen-surfaces", "screen-lights", "volumes", "decals", "screen-mappings", "mesh-region", "brick-staging"];
+    private static readonly string[] RegionParts = ["program", "dynamic-transforms", "instance-grid", "screen-surfaces", "screen-lights", "volumes", "decals", "screen-mappings", "mesh-region", "light-frame", "lights", "sky-frame", "sky-stops", "sky-softboxes", "brick-staging"];
 
     private static IReadOnlyList<string> NamesOfOneConstruction(bool naming) {
         var recording = new RecordingGpuObjectNaming(isEnabled: naming);
@@ -81,7 +81,11 @@ public sealed class SdfWorldTablesObjectNameLawTests {
         Assert.Contains(collection: names, expected: "Image sdf.world/sampled-filler");
         Assert.Contains(collection: names, expected: "Image sdf.world/storage-filler");
         Assert.Contains(collection: names, expected: "DescriptorPool sdf.world/descriptors");
-        Assert.Contains(collection: names, expected: "DescriptorSet sdf.world/tables/world group[0]");
+        foreach (var group in new[] { "Beam", "Sky", "Shadow", "Views" }) {
+            for (var slot = 0; (slot < SdfWorldTables.FrameRingSize); slot++) {
+                Assert.Contains(collection: names, expected: $"DescriptorSet sdf.world/tables/{group}[{slot}]");
+            }
+        }
         Assert.Contains(collection: names, expected: "CommandPool sdf.world/commands[1]");
         Assert.Contains(
             collection: names,

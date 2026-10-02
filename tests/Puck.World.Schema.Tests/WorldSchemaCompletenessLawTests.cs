@@ -116,6 +116,7 @@ public sealed class WorldSchemaCompletenessLawTests {
         node.ContainsKey(propertyName: "oneOf") ||
         node.ContainsKey(propertyName: "$comment") ||
         node.ContainsKey(propertyName: "$ref") ||
+        ((node["allOf"] is JsonArray clauses) && clauses.Any(predicate: static clause => ((clause is JsonObject constraint) && IsTyped(node: constraint)))) ||
         node.ContainsKey(propertyName: "properties"));
     private static JsonNode ParseFragment(string path) =>
         (JsonNode.Parse(utf8Json: ShippedWorldDocuments.Read(path: path)) ?? throw new InvalidDataException(message: $"{path} did not parse as JSON."));

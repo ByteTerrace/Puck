@@ -7,7 +7,7 @@ Every document field that carries a declared name, and the kind of name it carri
 element; `[name]` is a `$type` arm; `{tokens}` is an expression's postfix
 spelling; `{row}` is a reaction scalar's row form. A path ending in `…` re-enters a shape listed above it.
 An aliased import (`imports[].as`) qualifies every `Declares` site as `<alias>$<name>` and rewrites every
-other role's names of the same namespace to match; a placement and a prototype each have their own. Facet
+other role's names of the same namespace to match; placements, prototypes and clocks each have their own. Facet
 is the export list (`exports.reads`/`actions`/`bindings`) that admits a host
 reference through the field to an imported module's name; see `src/Puck.World.Schema/README.md`.
 
@@ -15,28 +15,344 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 
 | Path | Kind | Role | Facet | Member |
 |---|---|---|---|---|
+| `render.lighting.lights[][directional].direction` | State | Binding | Binding | `WorldRenderLight.Directional.Direction` |
+| `render.lighting.lights[][directional].direction.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][directional].direction.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][directional].direction.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][directional].direction.keys[].value[0]` | State | Binding | Binding | `BindableDirection.X` |
+| `render.lighting.lights[][directional].direction.keys[].value[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][directional].direction.keys[].value[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][directional].direction.keys[].value[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][directional].direction.keys[].value[1]` | State | Binding | Binding | `BindableDirection.Y` |
+| `render.lighting.lights[][directional].direction.keys[].value[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][directional].direction.keys[].value[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][directional].direction.keys[].value[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][directional].direction.keys[].value[2]` | State | Binding | Binding | `BindableDirection.Z` |
+| `render.lighting.lights[][directional].direction.keys[].value[2].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][directional].direction.keys[].value[2].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][directional].direction.keys[].value[2].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][directional].direction[0]` | State | Binding | Binding | `BindableDirection.X` |
+| `render.lighting.lights[][directional].direction[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][directional].direction[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][directional].direction[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][directional].direction[1]` | State | Binding | Binding | `BindableDirection.Y` |
+| `render.lighting.lights[][directional].direction[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][directional].direction[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][directional].direction[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][directional].direction[2]` | State | Binding | Binding | `BindableDirection.Z` |
+| `render.lighting.lights[][directional].direction[2].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][directional].direction[2].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][directional].direction[2].keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
+| `render.lighting.lights[][directional].color.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][directional].color.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][directional].color.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][directional].weight` | State | Binding | Binding | `WorldRenderLight.Directional.Weight` |
+| `render.lighting.lights[][directional].weight.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][directional].weight.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][directional].weight.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][directional].angularRadius` | State | Binding | Binding | `WorldRenderLight.Directional.AngularRadius` |
+| `render.lighting.lights[][directional].angularRadius.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][directional].angularRadius.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][directional].angularRadius.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.lighting.lights[][hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
+| `render.lighting.lights[][hemisphere].color.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][hemisphere].color.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][hemisphere].color.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][hemisphere].base` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Base` |
+| `render.lighting.lights[][hemisphere].base.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][hemisphere].base.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][hemisphere].base.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][hemisphere].gradient` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Gradient` |
+| `render.lighting.lights[][hemisphere].gradient.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][hemisphere].gradient.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][hemisphere].gradient.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.lighting.lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
+| `render.lighting.lights[][rim].color.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][rim].color.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][rim].color.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][rim].weight` | State | Binding | Binding | `WorldRenderLight.Rim.Weight` |
+| `render.lighting.lights[][rim].weight.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][rim].weight.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][rim].weight.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][rim].power` | State | Binding | Binding | `WorldRenderLight.Rim.Power` |
+| `render.lighting.lights[][rim].power.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][rim].power.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][rim].power.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][point].position` | State | Binding | Binding | `WorldRenderLight.Point.Position` |
+| `render.lighting.lights[][point].position.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][point].position.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][point].position.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][point].position.keys[].value[0]` | State | Binding | Binding | `BindableVector3.X` |
+| `render.lighting.lights[][point].position.keys[].value[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][point].position.keys[].value[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][point].position.keys[].value[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][point].position.keys[].value[1]` | State | Binding | Binding | `BindableVector3.Y` |
+| `render.lighting.lights[][point].position.keys[].value[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][point].position.keys[].value[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][point].position.keys[].value[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][point].position.keys[].value[2]` | State | Binding | Binding | `BindableVector3.Z` |
+| `render.lighting.lights[][point].position.keys[].value[2].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][point].position.keys[].value[2].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][point].position.keys[].value[2].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][point].position[0]` | State | Binding | Binding | `BindableVector3.X` |
+| `render.lighting.lights[][point].position[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][point].position[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][point].position[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][point].position[1]` | State | Binding | Binding | `BindableVector3.Y` |
+| `render.lighting.lights[][point].position[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][point].position[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][point].position[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][point].position[2]` | State | Binding | Binding | `BindableVector3.Z` |
+| `render.lighting.lights[][point].position[2].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][point].position[2].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][point].position[2].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][point].radius` | State | Binding | Binding | `WorldRenderLight.Point.Radius` |
+| `render.lighting.lights[][point].radius.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][point].radius.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][point].radius.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.lighting.lights[][point].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `render.lighting.lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
+| `render.lighting.lights[][point].color.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][point].color.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][point].color.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][point].weight` | State | Binding | Binding | `WorldRenderLight.Point.Weight` |
+| `render.lighting.lights[][point].weight.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][point].weight.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][point].weight.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][occluder].position` | State | Binding | Binding | `WorldRenderLight.Occluder.Position` |
+| `render.lighting.lights[][occluder].position.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][occluder].position.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][occluder].position.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][occluder].position.keys[].value[0]` | State | Binding | Binding | `BindableVector3.X` |
+| `render.lighting.lights[][occluder].position.keys[].value[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][occluder].position.keys[].value[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][occluder].position.keys[].value[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][occluder].position.keys[].value[1]` | State | Binding | Binding | `BindableVector3.Y` |
+| `render.lighting.lights[][occluder].position.keys[].value[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][occluder].position.keys[].value[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][occluder].position.keys[].value[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][occluder].position.keys[].value[2]` | State | Binding | Binding | `BindableVector3.Z` |
+| `render.lighting.lights[][occluder].position.keys[].value[2].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][occluder].position.keys[].value[2].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][occluder].position.keys[].value[2].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][occluder].position[0]` | State | Binding | Binding | `BindableVector3.X` |
+| `render.lighting.lights[][occluder].position[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][occluder].position[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][occluder].position[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][occluder].position[1]` | State | Binding | Binding | `BindableVector3.Y` |
+| `render.lighting.lights[][occluder].position[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][occluder].position[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][occluder].position[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][occluder].position[2]` | State | Binding | Binding | `BindableVector3.Z` |
+| `render.lighting.lights[][occluder].position[2].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][occluder].position[2].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][occluder].position[2].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.lights[][occluder].radius` | State | Binding | Binding | `WorldRenderLight.Occluder.Radius` |
+| `render.lighting.lights[][occluder].radius.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][occluder].radius.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][occluder].radius.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.lighting.lights[][occluder].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.lights[][occluder].weight` | State | Binding | Binding | `WorldRenderLight.Occluder.Weight` |
+| `render.lighting.lights[][occluder].weight.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.lights[][occluder].weight.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.lights[][occluder].weight.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.curvature.cavity` | State | Binding | Binding | `WorldRenderCurvature.Cavity` |
+| `render.lighting.curvature.cavity.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.curvature.cavity.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.curvature.cavity.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.curvature.rim` | State | Binding | Binding | `WorldRenderCurvature.Rim` |
+| `render.lighting.curvature.rim.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.curvature.rim.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.curvature.rim.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.curvature.ink` | State | Binding | Binding | `WorldRenderCurvature.Ink` |
+| `render.lighting.curvature.ink.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.curvature.ink.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.curvature.ink.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.curvature.inkLow` | State | Binding | Binding | `WorldRenderCurvature.InkLow` |
+| `render.lighting.curvature.inkLow.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.curvature.inkLow.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.curvature.inkLow.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.curvature.inkHigh` | State | Binding | Binding | `WorldRenderCurvature.InkHigh` |
+| `render.lighting.curvature.inkHigh.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.curvature.inkHigh.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.curvature.inkHigh.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.lighting.curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
+| `render.lighting.curvature.inkColor.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.lighting.curvature.inkColor.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.lighting.curvature.inkColor.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.lighting.keys.clock` | Clock | Names | Read | `WorldSectionKeys.Clock` |
+| `render.sky.layers[][gradient].stops[].elevation` | State | Binding | Binding | `WorldRenderSkyStop.Elevation` |
+| `render.sky.layers[][gradient].stops[].elevation.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][gradient].stops[].elevation.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][gradient].stops[].elevation.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
+| `render.sky.layers[][gradient].stops[].color.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][gradient].stops[].color.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][gradient].stops[].color.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][fog].density` | State | Binding | Binding | `WorldRenderSkyLayer.Fog.Density` |
+| `render.sky.layers[][fog].density.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][fog].density.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][fog].density.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][sunDisc].radius` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Radius` |
+| `render.sky.layers[][sunDisc].radius.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][sunDisc].radius.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][sunDisc].radius.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
+| `render.sky.layers[][sunDisc].intensity.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][sunDisc].intensity.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][sunDisc].intensity.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][stars].brightness` | State | Binding | Binding | `WorldRenderSkyLayer.Stars.Brightness` |
+| `render.sky.layers[][stars].brightness.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][stars].brightness.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][stars].brightness.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][stars].twinkle.share` | State | Binding | Binding | `WorldRenderSkyTwinkle.Share` |
+| `render.sky.layers[][stars].twinkle.share.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][stars].twinkle.share.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][stars].twinkle.share.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][stars].twinkle.depth` | State | Binding | Binding | `WorldRenderSkyTwinkle.Depth` |
+| `render.sky.layers[][stars].twinkle.depth.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][stars].twinkle.depth.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][stars].twinkle.depth.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][stars].twinkle.rate` | State | Binding | Binding | `WorldRenderSkyTwinkle.Rate` |
+| `render.sky.layers[][stars].twinkle.rate.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][stars].twinkle.rate.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][stars].twinkle.rate.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].coverage` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Coverage` |
+| `render.sky.layers[][clouds].coverage.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].coverage.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].coverage.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].softness` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Softness` |
+| `render.sky.layers[][clouds].softness.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].softness.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].softness.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].scale` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Scale` |
+| `render.sky.layers[][clouds].scale.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].scale.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].scale.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.sky.layers[][clouds].color` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Color` |
-| `render.cycle.state` | State | Names | Read | `WorldRenderCycle.State` |
-| `render.cycle.keys[].lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
-| `render.cycle.keys[].lighting.lights[][hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
-| `render.cycle.keys[].lighting.lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
-| `render.cycle.keys[].lighting.lights[][point].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
-| `render.cycle.keys[].lighting.lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
-| `render.cycle.keys[].lighting.lights[][occluder].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
-| `render.cycle.keys[].lighting.curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
-| `render.cycle.keys[].sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
-| `render.cycle.keys[].sky.layers[][clouds].color` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Color` |
+| `render.sky.layers[][clouds].color.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].color.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].color.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].drift` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Drift` |
+| `render.sky.layers[][clouds].drift.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].drift.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].drift.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].drift.keys[].value[0]` | State | Binding | Binding | `BindableVector2.X` |
+| `render.sky.layers[][clouds].drift.keys[].value[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].drift.keys[].value[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].drift.keys[].value[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].drift.keys[].value[1]` | State | Binding | Binding | `BindableVector2.Y` |
+| `render.sky.layers[][clouds].drift.keys[].value[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].drift.keys[].value[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].drift.keys[].value[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].drift[0]` | State | Binding | Binding | `BindableVector2.X` |
+| `render.sky.layers[][clouds].drift[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].drift[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].drift[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].drift[1]` | State | Binding | Binding | `BindableVector2.Y` |
+| `render.sky.layers[][clouds].drift[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].drift[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].drift[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].spin` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Spin` |
+| `render.sky.layers[][clouds].spin.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].spin.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].spin.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].curl` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Curl` |
+| `render.sky.layers[][clouds].curl.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].curl.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].curl.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].shear` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Shear` |
+| `render.sky.layers[][clouds].shear.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].shear.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].shear.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].shear.keys[].value[0]` | State | Binding | Binding | `BindableVector2.X` |
+| `render.sky.layers[][clouds].shear.keys[].value[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].shear.keys[].value[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].shear.keys[].value[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].shear.keys[].value[1]` | State | Binding | Binding | `BindableVector2.Y` |
+| `render.sky.layers[][clouds].shear.keys[].value[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].shear.keys[].value[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].shear.keys[].value[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].shear[0]` | State | Binding | Binding | `BindableVector2.X` |
+| `render.sky.layers[][clouds].shear[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].shear[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].shear[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.layers[][clouds].shear[1]` | State | Binding | Binding | `BindableVector2.Y` |
+| `render.sky.layers[][clouds].shear[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.sky.layers[][clouds].shear[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.sky.layers[][clouds].shear[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.sky.keys.clock` | Clock | Names | Read | `WorldSectionKeys.Clock` |
+| `render.environment.softboxes[].direction` | State | Binding | Binding | `WorldRenderSoftbox.Direction` |
+| `render.environment.softboxes[].direction.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].direction.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].direction.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].direction.keys[].value[0]` | State | Binding | Binding | `BindableDirection.X` |
+| `render.environment.softboxes[].direction.keys[].value[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].direction.keys[].value[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].direction.keys[].value[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].direction.keys[].value[1]` | State | Binding | Binding | `BindableDirection.Y` |
+| `render.environment.softboxes[].direction.keys[].value[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].direction.keys[].value[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].direction.keys[].value[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].direction.keys[].value[2]` | State | Binding | Binding | `BindableDirection.Z` |
+| `render.environment.softboxes[].direction.keys[].value[2].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].direction.keys[].value[2].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].direction.keys[].value[2].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].direction[0]` | State | Binding | Binding | `BindableDirection.X` |
+| `render.environment.softboxes[].direction[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].direction[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].direction[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].direction[1]` | State | Binding | Binding | `BindableDirection.Y` |
+| `render.environment.softboxes[].direction[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].direction[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].direction[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].direction[2]` | State | Binding | Binding | `BindableDirection.Z` |
+| `render.environment.softboxes[].direction[2].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].direction[2].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].direction[2].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].size` | State | Binding | Binding | `WorldRenderSoftbox.Size` |
+| `render.environment.softboxes[].size.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].size.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].size.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].size.keys[].value[0]` | State | Binding | Binding | `BindableVector2.X` |
+| `render.environment.softboxes[].size.keys[].value[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].size.keys[].value[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].size.keys[].value[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].size.keys[].value[1]` | State | Binding | Binding | `BindableVector2.Y` |
+| `render.environment.softboxes[].size.keys[].value[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].size.keys[].value[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].size.keys[].value[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].size[0]` | State | Binding | Binding | `BindableVector2.X` |
+| `render.environment.softboxes[].size[0].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].size[0].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].size[0].keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].size[1]` | State | Binding | Binding | `BindableVector2.Y` |
+| `render.environment.softboxes[].size[1].clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].size[1].keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].size[1].keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.environment.softboxes[].color` | State | Binding | Binding | `WorldRenderSoftbox.Color` |
+| `render.environment.softboxes[].color.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].color.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].color.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].weight` | State | Binding | Binding | `WorldRenderSoftbox.Weight` |
+| `render.environment.softboxes[].weight.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].weight.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].weight.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.softboxes[].blur` | State | Binding | Binding | `WorldRenderSoftbox.Blur` |
+| `render.environment.softboxes[].blur.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.softboxes[].blur.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.softboxes[].blur.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.environment.horizon.low` | State | Binding | Binding | `WorldRenderHorizon.Low` |
+| `render.environment.horizon.low.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.horizon.low.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.horizon.low.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `render.environment.horizon.high` | State | Binding | Binding | `WorldRenderHorizon.High` |
+| `render.environment.horizon.high.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `render.environment.horizon.high.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `render.environment.horizon.high.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `render.environment.keys.clock` | Clock | Names | Read | `WorldSectionKeys.Clock` |
+| `render.keys.clock` | Clock | Names | Read | `WorldSectionKeys.Clock` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].memory[].row` | State | Names | Read | `WorldScreenMemory.Row` |
@@ -44,12 +360,30 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].rig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
+| `cameras[].rig.operations[][orbit].yaw.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `cameras[].rig.operations[][orbit].yaw.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `cameras[].rig.operations[][orbit].yaw.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `cameras[].rig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
+| `cameras[].rig.operations[][orbit].pitch.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `cameras[].rig.operations[][orbit].pitch.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `cameras[].rig.operations[][orbit].pitch.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `cameras[].rig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
+| `cameras[].rig.operations[][path].fraction.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `cameras[].rig.operations[][path].fraction.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `cameras[].rig.operations[][path].fraction.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `cameras[].rig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
 | `cameras[].rig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
+| `cameras[].rig.operations[][fieldOfView].fieldOfViewRadians.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `cameras[].rig.operations[][fieldOfView].fieldOfViewRadians.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `cameras[].rig.operations[][fieldOfView].fieldOfViewRadians.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `cameras[].rig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
+| `cameras[].rig.operations[][blend].weight.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `cameras[].rig.operations[][blend].weight.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `cameras[].rig.operations[][blend].weight.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `cameras[].rig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `cameras[].rig.operations[][selectProgram].key.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `cameras[].rig.operations[][selectProgram].key.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `cameras[].rig.operations[][selectProgram].key.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `cameras[].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `cameras[].anchors[].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
 | `cameras[].anchors[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
@@ -1054,21 +1388,60 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.seatRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.seatRig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.seatRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
+| `views.seatRig.operations[][orbit].yaw.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.seatRig.operations[][orbit].yaw.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.seatRig.operations[][orbit].yaw.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.seatRig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
+| `views.seatRig.operations[][orbit].pitch.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.seatRig.operations[][orbit].pitch.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.seatRig.operations[][orbit].pitch.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.seatRig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
+| `views.seatRig.operations[][path].fraction.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.seatRig.operations[][path].fraction.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.seatRig.operations[][path].fraction.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.seatRig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
 | `views.seatRig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
+| `views.seatRig.operations[][fieldOfView].fieldOfViewRadians.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.seatRig.operations[][fieldOfView].fieldOfViewRadians.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.seatRig.operations[][fieldOfView].fieldOfViewRadians.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.seatRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
+| `views.seatRig.operations[][blend].weight.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.seatRig.operations[][blend].weight.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.seatRig.operations[][blend].weight.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.seatRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `views.seatRig.operations[][selectProgram].key.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.seatRig.operations[][selectProgram].key.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.seatRig.operations[][selectProgram].key.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.cameraRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.cameraRig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.cameraRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
+| `views.cameraRig.operations[][orbit].yaw.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.cameraRig.operations[][orbit].yaw.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.cameraRig.operations[][orbit].yaw.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.cameraRig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
+| `views.cameraRig.operations[][orbit].pitch.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.cameraRig.operations[][orbit].pitch.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.cameraRig.operations[][orbit].pitch.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.cameraRig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
+| `views.cameraRig.operations[][path].fraction.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.cameraRig.operations[][path].fraction.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.cameraRig.operations[][path].fraction.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.cameraRig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
 | `views.cameraRig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
+| `views.cameraRig.operations[][fieldOfView].fieldOfViewRadians.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.cameraRig.operations[][fieldOfView].fieldOfViewRadians.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.cameraRig.operations[][fieldOfView].fieldOfViewRadians.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.cameraRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
+| `views.cameraRig.operations[][blend].weight.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.cameraRig.operations[][blend].weight.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.cameraRig.operations[][blend].weight.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `views.cameraRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
+| `views.cameraRig.operations[][selectProgram].key.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.cameraRig.operations[][selectProgram].key.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.cameraRig.operations[][selectProgram].key.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `views.graphs[].parameters{*}{*}.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `views.graphs[].parameters{*}{*}.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `views.graphs[].parameters{*}{*}.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `looks.rows[].source[creation].prototypeId` | Prototype | Names | Read | `WorldLookSource.Creation.PrototypeId` |
 | `looks.rows[].motion.lanes` | State | Expression | Read | `WorldLookMotion.Lanes` |
 | `looks.rows[].motion.lanes[]{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
@@ -1168,68 +1541,258 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.pairPools[].leftPool` | Pool | Names | Read | `StatePairPool.LeftPool` |
 | `state.pairPools[].rightPool` | Pool | Names | Read | `StatePairPool.RightPool` |
 | `theme.color.surfaceBase` | State | Binding | Binding | `WorldThemeColor.SurfaceBase` |
+| `theme.color.surfaceBase.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.surfaceBase.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.surfaceBase.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.surfacePanel` | State | Binding | Binding | `WorldThemeColor.SurfacePanel` |
+| `theme.color.surfacePanel.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.surfacePanel.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.surfacePanel.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.surfaceRaised` | State | Binding | Binding | `WorldThemeColor.SurfaceRaised` |
+| `theme.color.surfaceRaised.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.surfaceRaised.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.surfaceRaised.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.surfaceInset` | State | Binding | Binding | `WorldThemeColor.SurfaceInset` |
+| `theme.color.surfaceInset.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.surfaceInset.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.surfaceInset.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.scrimPanel.color` | State | Binding | Binding | `WorldThemeScrim.Color` |
+| `theme.color.scrimPanel.color.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.scrimPanel.color.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.scrimPanel.color.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.scrimPanel.alpha` | State | Binding | Binding | `WorldThemeScrim.Alpha` |
+| `theme.color.scrimPanel.alpha.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.scrimPanel.alpha.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.scrimPanel.alpha.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.scrimStrip.color` | State | Binding | Binding | `WorldThemeScrim.Color` |
+| `theme.color.scrimStrip.color.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.scrimStrip.color.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.scrimStrip.color.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.scrimStrip.alpha` | State | Binding | Binding | `WorldThemeScrim.Alpha` |
+| `theme.color.scrimStrip.alpha.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.scrimStrip.alpha.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.scrimStrip.alpha.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.scrimChip.color` | State | Binding | Binding | `WorldThemeScrim.Color` |
+| `theme.color.scrimChip.color.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.scrimChip.color.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.scrimChip.color.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.scrimChip.alpha` | State | Binding | Binding | `WorldThemeScrim.Alpha` |
+| `theme.color.scrimChip.alpha.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.scrimChip.alpha.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.scrimChip.alpha.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.lineHair` | State | Binding | Binding | `WorldThemeColor.LineHair` |
+| `theme.color.lineHair.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.lineHair.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.lineHair.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.lineSoft` | State | Binding | Binding | `WorldThemeColor.LineSoft` |
+| `theme.color.lineSoft.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.lineSoft.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.lineSoft.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.lineStrong` | State | Binding | Binding | `WorldThemeColor.LineStrong` |
+| `theme.color.lineStrong.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.lineStrong.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.lineStrong.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.lineInset` | State | Binding | Binding | `WorldThemeColor.LineInset` |
+| `theme.color.lineInset.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.lineInset.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.lineInset.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.textPrimary` | State | Binding | Binding | `WorldThemeColor.TextPrimary` |
+| `theme.color.textPrimary.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.textPrimary.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.textPrimary.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.textDim` | State | Binding | Binding | `WorldThemeColor.TextDim` |
+| `theme.color.textDim.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.textDim.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.textDim.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.textMute` | State | Binding | Binding | `WorldThemeColor.TextMute` |
+| `theme.color.textMute.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.textMute.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.textMute.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.accent` | State | Binding | Binding | `WorldThemeColor.Accent` |
+| `theme.color.accent.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.accent.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.accent.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.accentQuiet` | State | Binding | Binding | `WorldThemeColor.AccentQuiet` |
+| `theme.color.accentQuiet.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.accentQuiet.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.accentQuiet.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.accentLine` | State | Binding | Binding | `WorldThemeColor.AccentLine` |
+| `theme.color.accentLine.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.accentLine.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.accentLine.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.accentInk` | State | Binding | Binding | `WorldThemeColor.AccentInk` |
+| `theme.color.accentInk.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.accentInk.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.accentInk.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.positive` | State | Binding | Binding | `WorldThemeColor.Positive` |
+| `theme.color.positive.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.positive.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.positive.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.warning` | State | Binding | Binding | `WorldThemeColor.Warning` |
+| `theme.color.warning.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.warning.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.warning.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.danger` | State | Binding | Binding | `WorldThemeColor.Danger` |
+| `theme.color.danger.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.danger.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.danger.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.phosphor` | State | Binding | Binding | `WorldThemeColor.Phosphor` |
+| `theme.color.phosphor.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.phosphor.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.phosphor.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.phosphorDim` | State | Binding | Binding | `WorldThemeColor.PhosphorDim` |
+| `theme.color.phosphorDim.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.phosphorDim.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.phosphorDim.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.phosphorCyan` | State | Binding | Binding | `WorldThemeColor.PhosphorCyan` |
+| `theme.color.phosphorCyan.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.phosphorCyan.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.phosphorCyan.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.badgeDark` | State | Binding | Binding | `WorldThemeColor.BadgeDark` |
+| `theme.color.badgeDark.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.badgeDark.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.badgeDark.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.color.badgeLight` | State | Binding | Binding | `WorldThemeColor.BadgeLight` |
+| `theme.color.badgeLight.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.color.badgeLight.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.color.badgeLight.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomHaloAlpha` | State | Binding | Binding | `WorldThemeElevation.BloomHaloAlpha` |
+| `theme.elevation.bloomHaloAlpha.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomHaloAlpha.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomHaloAlpha.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomRingAlpha` | State | Binding | Binding | `WorldThemeElevation.BloomRingAlpha` |
+| `theme.elevation.bloomRingAlpha.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomRingAlpha.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomRingAlpha.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomNeutralHaloAlpha` | State | Binding | Binding | `WorldThemeElevation.BloomNeutralHaloAlpha` |
+| `theme.elevation.bloomNeutralHaloAlpha.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomNeutralHaloAlpha.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomNeutralHaloAlpha.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomNeutralRingAlpha` | State | Binding | Binding | `WorldThemeElevation.BloomNeutralRingAlpha` |
+| `theme.elevation.bloomNeutralRingAlpha.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomNeutralRingAlpha.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomNeutralRingAlpha.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomHeldInsetAlpha` | State | Binding | Binding | `WorldThemeElevation.BloomHeldInsetAlpha` |
+| `theme.elevation.bloomHeldInsetAlpha.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomHeldInsetAlpha.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomHeldInsetAlpha.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomAccent.ring` | State | Binding | Binding | `WorldThemeBloomHue.Ring` |
+| `theme.elevation.bloomAccent.ring.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomAccent.ring.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomAccent.ring.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomAccent.halo` | State | Binding | Binding | `WorldThemeBloomHue.Halo` |
+| `theme.elevation.bloomAccent.halo.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomAccent.halo.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomAccent.halo.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomPositive.ring` | State | Binding | Binding | `WorldThemeBloomHue.Ring` |
+| `theme.elevation.bloomPositive.ring.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomPositive.ring.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomPositive.ring.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomPositive.halo` | State | Binding | Binding | `WorldThemeBloomHue.Halo` |
+| `theme.elevation.bloomPositive.halo.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomPositive.halo.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomPositive.halo.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomWarning.ring` | State | Binding | Binding | `WorldThemeBloomHue.Ring` |
+| `theme.elevation.bloomWarning.ring.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomWarning.ring.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomWarning.ring.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomWarning.halo` | State | Binding | Binding | `WorldThemeBloomHue.Halo` |
+| `theme.elevation.bloomWarning.halo.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomWarning.halo.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomWarning.halo.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomDanger.ring` | State | Binding | Binding | `WorldThemeBloomHue.Ring` |
+| `theme.elevation.bloomDanger.ring.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomDanger.ring.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomDanger.ring.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomDanger.halo` | State | Binding | Binding | `WorldThemeBloomHue.Halo` |
+| `theme.elevation.bloomDanger.halo.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomDanger.halo.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomDanger.halo.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomNeutral.ring` | State | Binding | Binding | `WorldThemeBloomHue.Ring` |
+| `theme.elevation.bloomNeutral.ring.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomNeutral.ring.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomNeutral.ring.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.bloomNeutral.halo` | State | Binding | Binding | `WorldThemeBloomHue.Halo` |
+| `theme.elevation.bloomNeutral.halo.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.bloomNeutral.halo.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.bloomNeutral.halo.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.pressHeldGlowColor` | State | Binding | Binding | `WorldThemeElevation.PressHeldGlowColor` |
+| `theme.elevation.pressHeldGlowColor.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.pressHeldGlowColor.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.pressHeldGlowColor.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.pressHeldShadowColor` | State | Binding | Binding | `WorldThemeElevation.PressHeldShadowColor` |
+| `theme.elevation.pressHeldShadowColor.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.pressHeldShadowColor.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.pressHeldShadowColor.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.shadowSeatColor` | State | Binding | Binding | `WorldThemeElevation.ShadowSeatColor` |
+| `theme.elevation.shadowSeatColor.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.shadowSeatColor.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.shadowSeatColor.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.shadowSeatStripColor` | State | Binding | Binding | `WorldThemeElevation.ShadowSeatStripColor` |
+| `theme.elevation.shadowSeatStripColor.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.shadowSeatStripColor.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.shadowSeatStripColor.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.elevation.catchlightColor` | State | Binding | Binding | `WorldThemeElevation.CatchlightColor` |
+| `theme.elevation.catchlightColor.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.elevation.catchlightColor.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.elevation.catchlightColor.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.plateTop` | State | Binding | Binding | `WorldThemeDiegetic.PlateTop` |
+| `theme.diegetic.plateTop.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.plateTop.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.plateTop.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.plateMid` | State | Binding | Binding | `WorldThemeDiegetic.PlateMid` |
+| `theme.diegetic.plateMid.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.plateMid.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.plateMid.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.plateBottom` | State | Binding | Binding | `WorldThemeDiegetic.PlateBottom` |
+| `theme.diegetic.plateBottom.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.plateBottom.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.plateBottom.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.plateStripeColor` | State | Binding | Binding | `WorldThemeDiegetic.PlateStripeColor` |
+| `theme.diegetic.plateStripeColor.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.plateStripeColor.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.plateStripeColor.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.embossFill` | State | Binding | Binding | `WorldThemeDiegetic.EmbossFill` |
+| `theme.diegetic.embossFill.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.embossFill.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.embossFill.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.engraveFill` | State | Binding | Binding | `WorldThemeDiegetic.EngraveFill` |
+| `theme.diegetic.engraveFill.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.engraveFill.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.engraveFill.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.screenWellOuter` | State | Binding | Binding | `WorldThemeDiegetic.ScreenWellOuter` |
+| `theme.diegetic.screenWellOuter.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.screenWellOuter.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.screenWellOuter.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.screenWellInner` | State | Binding | Binding | `WorldThemeDiegetic.ScreenWellInner` |
+| `theme.diegetic.screenWellInner.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.screenWellInner.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.screenWellInner.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.bezelOuter` | State | Binding | Binding | `WorldThemeDiegetic.BezelOuter` |
+| `theme.diegetic.bezelOuter.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.bezelOuter.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.bezelOuter.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.bezelInner` | State | Binding | Binding | `WorldThemeDiegetic.BezelInner` |
+| `theme.diegetic.bezelInner.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.bezelInner.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.bezelInner.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `theme.diegetic.bezelEdge` | State | Binding | Binding | `WorldThemeDiegetic.BezelEdge` |
+| `theme.diegetic.bezelEdge.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `theme.diegetic.bezelEdge.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `theme.diegetic.bezelEdge.keys[].value…` | | | | re-enters `WorldKeys`1` |
+| `theme.keys.clock` | Clock | Names | Read | `WorldSectionKeys.Clock` |
 | `markers[].style.chipAlpha` | State | Binding | Binding | `WorldMarkerStyle.ChipAlpha` |
+| `markers[].style.chipAlpha.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `markers[].style.chipAlpha.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `markers[].style.chipAlpha.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `markers[].style.ringColor` | State | Binding | Binding | `WorldMarkerStyle.RingColor` |
+| `markers[].style.ringColor.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `markers[].style.ringColor.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `markers[].style.ringColor.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `markers[].style.ringAlpha` | State | Binding | Binding | `WorldMarkerStyle.RingAlpha` |
+| `markers[].style.ringAlpha.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `markers[].style.ringAlpha.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `markers[].style.ringAlpha.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `markers[].ring.field` | Field | Names | Read | `WorldMarkerRing.Field` |
 | `rules[].name` | Rule | Declares |  | `Rule.Name` |
 | `rules[].effects[][setState].state` | State | Names | Action | `ActionEffect.SetState.State` |
@@ -2506,7 +3069,12 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `sets[].set[any].items[]…` | | | | re-enters `CellSetExpression` |
 | `sets[].set[both].items[]…` | | | | re-enters `CellSetExpression` |
 | `sets[].set[not].item…` | | | | re-enters `CellSetExpression` |
+| `timeline.clocks[].name` | Clock | Declares |  | `WorldClock.Name` |
 | `timeline.clocks[].state` | State | Names | Read | `WorldClock.State` |
+| `timeline.clocks[].phase` | State | Binding | Binding | `WorldClock.Phase` |
+| `timeline.clocks[].phase.clock` | Clock | Names | Read | `WorldKeys`1.Clock` |
+| `timeline.clocks[].phase.keys[].value` | State | Binding | Binding | `WorldKey`1.Value` |
+| `timeline.clocks[].phase.keys[].value…` | | | | re-enters `WorldKeys`1` |
 | `exports.reads` | Any | Names | Read | `WorldExports.Reads` |
 | `exports.actions` | Any | Names | Action | `WorldExports.Actions` |
 | `exports.bindings` | Any | Names | Binding | `WorldExports.Bindings` |
@@ -2516,6 +3084,20 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | Path | Member | Reason |
 |---|---|---|
 | `spawnPoints[].id` | `WorldSpawnPoint.Id` | a spawn point id |
+| `render.lighting.lights[].name` | `WorldRenderLight.Name` | a lighting-section row identity |
+| `render.lighting.lights[][directional].name` | `WorldRenderLight.Name` | a lighting-section row identity |
+| `render.lighting.lights[][hemisphere].name` | `WorldRenderLight.Name` | a lighting-section row identity |
+| `render.lighting.lights[][rim].name` | `WorldRenderLight.Name` | a lighting-section row identity |
+| `render.lighting.lights[][point].name` | `WorldRenderLight.Name` | a lighting-section row identity |
+| `render.lighting.lights[][occluder].name` | `WorldRenderLight.Name` | a lighting-section row identity |
+| `render.sky.layers[].name` | `WorldRenderSkyLayer.Name` | a sky-section row identity |
+| `render.sky.layers[][gradient].stops[].name` | `WorldRenderSkyStop.Name` | a gradient-local stop identity |
+| `render.sky.layers[][gradient].name` | `WorldRenderSkyLayer.Name` | a sky-section row identity |
+| `render.sky.layers[][fog].name` | `WorldRenderSkyLayer.Name` | a sky-section row identity |
+| `render.sky.layers[][sunDisc].name` | `WorldRenderSkyLayer.Name` | a sky-section row identity |
+| `render.sky.layers[][stars].name` | `WorldRenderSkyLayer.Name` | a sky-section row identity |
+| `render.sky.layers[][clouds].name` | `WorldRenderSkyLayer.Name` | a sky-section row identity |
+| `render.environment.softboxes[].name` | `WorldRenderSoftbox.Name` | an environment-section row identity |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
@@ -2925,4 +3507,3 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `machines[].cable.name` | `WorldMachineCable.Name` | a link-cable name |
 | `ruleGroups[].trigger[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
 | `sets[].set[family].name` | `CellSetExpression.Family.Name` | a family name is local to the document that declares the range |
-| `timeline.clocks[].name` | `WorldClock.Name` | a presentation clock name |

@@ -260,7 +260,7 @@ public sealed class ShaderInterfaceLayout {
         group.Resources.Any(predicate: resource => (
             (resource.Binding == binding.Binding) &&
             (resource.Kind is GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer) &&
-            (resource.Member.Type is null)
+            (resource.Member.Type is null) && (resource.Member.Structure is null)
         ));
     private static GpuBindingKind BindingKind(ShaderInterfaceMemberKind kind) =>
         kind switch {
@@ -352,12 +352,12 @@ public sealed class ShaderInterfaceLayout {
                 Binding: binding,
                 Count: member.DescriptorCount,
                 ElementStride: (kind switch {
-                    GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer => (member.Type?.SizeBytes() ?? SpirvRawBufferStride),
+                    GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer => (member.Structure?.SizeBytes ?? (member.Type?.SizeBytes() ?? SpirvRawBufferStride)),
                     _ => 0,
                 }),
                 Kind: kind,
                 Members: [],
-                Name: member.Name,
+                Name: member.ResourceName,
                 Set: set
             ));
         }

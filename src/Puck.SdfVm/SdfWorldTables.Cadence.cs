@@ -14,9 +14,10 @@ namespace Puck.SdfVm;
 //                          InstallReload.
 //   - the world values    : the bound screen count and the mesh draws' count.
 //   - the pass block      : the view's camera basis, fov/aspect, off-axis offset, far distance and debug view mode, every
-//                          lever and the environment (SdfFrameBlock) with its presented-tick bakes (the twinkle phase,
-//                          the cloud offsets), less the render extent, which the scheduler renders a view again for when
-//                          it moves.
+//                          traversal lever (SdfFrameBlock), less the render extent, which the scheduler renders a view
+//                          again for when it moves.
+//   - the lighting regions : native light, sky-frame, gradient-stop and softbox records, including the resolver's
+//                          presented-tick twinkle phase and cloud offsets.
 //   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
 //                          showing one renders again exactly when the presented tick moves it.
 //   - m_dynamicTransformRevision : bumped whenever a frame packs an owed dynamic-transform row, so the table is never
@@ -98,6 +99,11 @@ public sealed partial class SdfWorldTables {
         hash.Add(values: m_screenSurfaceRegion.Contents);
         hash.Add(values: m_screenMappingRegion.Contents);
         hash.Add(values: m_screenLightScratch);
+        hash.Add(values: m_lightFrameRegion.Contents);
+        hash.Add(values: m_lightsRegion.Contents);
+        hash.Add(values: m_skyFrameRegion.Contents);
+        hash.Add(values: m_skyStopsRegion.Contents);
+        hash.Add(values: m_skySoftboxesRegion.Contents);
         m_tablesSignature = hash.Value;
     }
 
