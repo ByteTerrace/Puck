@@ -63,7 +63,7 @@ whose command no longer breaks its rule, until the row is deleted.
 
 | Verb | What it is |
 |---|---|
-| [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs exactly those. |
+| [`puck affected`](#puck-affectedthe-checks-a-change-needs) | names the test suites, canaries and parity run a change needs, from the project graph and recorded canary coverage; `--run` runs the suites, worlds and catalog check, and `--run --gpu` the canaries and parity too. |
 | [`puck architecture`](../project-map.md) | the project-layering report: explains the build-time layering gate, `--map` prints the generated layering block of `docs/project-map.md`, and `--check` fails when the checked-in block drifts from the projects' declarations. |
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
@@ -72,6 +72,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
+| [`puck canary-ceilings`](#puck-canary-ceilingsrecorded-gate-costs) | records the World boots and summed leg budget of the two canary gate selections in `CanaryCeilings.json`, or checks it with `--check`; a recorded count must equal its plan. |
 | [`puck cartridge-cost`](#puck-cartridge-costcartridge-cost-measurement) | measures each cartridge primitive's sustained per-frame capacity on both real machines, the evidence the cartridge cost model's weights come from. |
 | [`puck comment-smells`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `CommentSmells.json`, the ratchet ledger the comment-smell build error (SMELL001–SMELL004) reads, or checks it with `--check`; a recorded count only falls. |
 | [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--bundle` inlines world imports, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`, with each world document's compiled world (`.puckb`) beside it; a `.world.json` path compiles to its compiled world alone. |
@@ -84,7 +85,10 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
+| [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format token, or checks it with `--check`. |
+| [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds the affected canaries and parity. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
+| [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in a worktree of its own, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
@@ -595,17 +599,33 @@ build's shaders and compares a Linux DXC build of the same commit against them
 ([CI tooling](../development/ci.md)), the binding contract's cross-host gate
 leg.
 
-`generate` writes the HLSL includes the C# model owns:
+`generate` writes the files the C# model owns (`ShaderDeclarations`):
 `src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-isa.hlsli`, the SDF instruction set's
-version, enums and packed-layout constants, generated from
-`Puck.SignedDistance` by `Puck.SdfVm.SdfIsaHlsl`; and every generated shader
-interface (`<name>.interface.hlsli`). An engine package that declares
-pass-group members, such as `overlay`, `place` and `sdf.film-grain`, owns the
-one include named by its interface, found by that file name. A checked-in
-interface include that no package owns, and a package whose include is missing
-or named twice, fail by name. `--check` writes nothing, regenerates each include in
-memory and exits 1 naming each file that differs from the model and its first
-differing line; CI runs it beside `puck schema --check`.
+enums and packed-layout constants, generated from `Puck.SignedDistance` by
+`Puck.SdfVm.SdfIsaHlsl`; the instruction set's fingerprint, recorded in
+`src/Puck.SdfVm/SdfIsaFingerprint.cs`; every generated shader interface
+(`<name>.interface.hlsli`); and the build's shader recipe,
+`build/ShaderRecipe.targets`. An engine package that declares pass-group members,
+such as `overlay`, `place` and `sdf.film-grain`, owns the one include named by
+its interface, found by that file name; the SDF kernels' interfaces sit at fixed
+paths. A checked-in interface include that no package owns, and a package whose
+include is missing or named twice, fail by name. `--check` writes nothing,
+regenerates each file in memory and exits 1 naming each file that differs from
+the model and its first differing line; CI runs it beside `puck schema --check`.
+
+The model is in `Puck.Shaders.Model` and `Puck.SdfVm.Model`, which compile no
+shader, so the kernel builds generate first: every project whose kernels
+include a generated declaration references `Puck.Shaders.Generator`, whose build
+writes each declaration the model has changed before those kernels compile. A
+change that adds a declaration and a kernel reading it builds with an ordinary
+`dotnet build`; the verb is needed to write the recipe and to check the tree,
+and never to seed a header by hand
+([generated declarations](shaders.md#generated-declarations)). Because a build
+writes every declaration the model changed, `--check` in a git work tree also
+fails on a file that matches the model only in the working tree while its
+staged copy differs or is missing: the index must carry each generated file.
+CI's artifacts and formatting jobs install their candidate CLI by building and
+packing the checkout, then run the check before the solution build.
 
 `interface` prints the [frame-block](shaders.md#frame-values-extent-and-ports) declarations
 each pass of a graph document or one-off shader reads, or, with
@@ -638,7 +658,11 @@ owns the source-language, resource and toolchain contracts.
 
 `puck affected` reads the working tree's changes against a base (`--since`,
 `HEAD` by default, so only uncommitted work) and names what those changes can
-break, and nothing wider:
+break, and nothing wider. `--merge-base <revision>` takes the base as the merge
+base of `HEAD` and that revision instead, so the commits a target branch gained
+after the branch left it are never read as the branch's change; diffing against
+the target's tip would count them. `--since` and `--merge-base` each name the
+base, so passing both is refused.
 
 - **Suites** follow the project graph. A changed project chooses its own suite
   and the suite of every project that references it, transitively, counting a
@@ -720,8 +744,15 @@ names the game's Release catalog, the compiled worlds the build writes, which
 holds no test worlds: `--run` checks it with the compile the line names.
 
 `--run` builds and runs the chosen suites, then `puck test` on the chosen
-worlds, then the catalog check, then the chosen canaries, then parity, and
-exits 1 when any of them fails.
+worlds, then the catalog check, and exits 1 when any of them fails. A suite
+prints one verdict line; a failed one follows it with its whole report, each
+failed test with its message and stack or the build errors that stopped it, so
+the log `puck gate` keeps names every failure. `--gpu`,
+which needs `--run`, then runs the chosen canaries and then parity, one after
+the other: they boot real Worlds and hold both GPU backends, so they run only
+when asked for, on a machine with no competing build or GPU work.
+[`puck gate`](#puck-gatethe-change-scoped-gate) runs this step on the
+candidate's own CLI.
 
 `--record` refreshes the coverage index. It builds a `Puck.World` that records
 every method the runtime compiles (`-p:PuckRecordMethods=true`; no other build
@@ -729,6 +760,114 @@ carries the recorder), runs the full canary set on it, and maps each leg's
 methods to their source files through the build's portable PDBs. It is a full
 run, so it happens when the owner asks for one; between recordings a new or
 moved source shows up as `unmapped`.
+
+## `puck gate`—the change-scoped gate
+
+`puck gate` verifies a branch's change before it merges. It reads the change
+against the merge base of `HEAD` and the branch it lands on, `--merge-base`
+(default `origin/features/gfx-pipeline`), and runs these steps in order:
+
+1. `dotnet build Puck.slnx -c Release`. A failed build prints its error lines
+   and stops the gate, so no later step runs against output an earlier build
+   left behind.
+2. Copy the CLI that build wrote into the run's own temporary directory. Every
+   later step runs that copy, so it runs the candidate's code, and no other
+   run's build or copy can replace it mid-gate.
+3. `puck affected --merge-base <merge base> --run`: the suites, `.puck` test
+   worlds and catalog check the change reaches. `--gpu` adds `--gpu`, which
+   runs the chosen canaries and then parity.
+4. The repository checks, each in its check form only: `puck format --check`
+   over the changed C# and `.puck` sources, `puck lengths --check`,
+   `puck comment-smells --check`, `puck docs links`, `puck schema --check`,
+   `puck architecture --check`, `puck registry --check`, `puck vocabulary --check`,
+   `puck shaders generate --check`, `puck branding --check`, `puck formats --check`
+   and `puck canary-ceilings --check`.
+   Nothing in the checkout is rewritten.
+
+A failed step fails the gate, and the later steps still run. Each step's full
+output goes to `gate.log` in the run's directory, which the summary names and
+the run keeps; the console carries one verdict line a step and the tail of a
+failed one. The CLI copy and the format file list are removed when the run
+ends.
+
+```text
+gate: 12 changed file(s) against <merge base>, the merge base of HEAD and origin/features/gfx-pipeline; full output in ../../Temp/puck-gate-x1y2/gate.log.
+gate: build passed
+gate: affected passed
+gate: format passed
+gate: lengths passed
+gate: comment-smells passed
+gate: docs links passed
+gate: schema passed
+gate: architecture passed
+gate: registry passed
+gate: vocabulary passed
+gate: shaders generate passed
+gate: branding passed
+gate: formats passed
+gate: canary-ceilings passed
+gate: passed; full output in ../../Temp/puck-gate-x1y2/gate.log
+```
+
+Run the gate from a CLI outside the checkout, such as a copy of
+`src/Puck.Cli/bin/Release/net10.0` in a directory of its own: the build
+rewrites that output, so a CLI running from it is refused. `--gpu` boots real
+Worlds on both GPU backends; run it with no competing build or GPU work on the
+machine.
+
+Exit codes: 0 every step passed, 1 the build or a step failed, 2 refused (no
+merge base, or a CLI running from the checkout it would rebuild).
+
+## `puck laws prove`—a law against its fix
+
+`puck laws prove <law>` shows that a law fails without its fix and passes
+with it, and prints the evidence for the commit that lands them. The law is a
+test name of dotted identifiers, `Class` or `Class.Method`, selected as
+`FullyQualifiedName~<law>`; its project is the test project whose sources
+declare that class, or `--project`.
+
+The fix is one of:
+
+- `--fix <revision>`: the commit's first-parent change, reversed three-way
+  over `HEAD` on every path it changes outside `tests/`, so a law the commit
+  adds stays in place. The commit must be in `HEAD`'s history. `--file-list`
+  narrows the reversal to the listed paths, which the commit must change.
+- `--file-list <json>` alone: the working tree's uncommitted change to the
+  listed paths, each put back to `HEAD` (a path `HEAD` lacks is removed).
+
+The proof never touches the working tree. It adds a detached git worktree of
+`HEAD` under a temporary directory and copies the working tree's uncommitted
+and untracked files into it. There it withholds the fix, builds the law's
+project in Release and runs the law, which must fail. It then restores the fix,
+builds and runs again, and the law must pass. Outcomes come from the test run's
+TRX report together with the process's completion verdict. A run that selects
+no test, skips a selected test, aborts or executes different tests between legs
+is refused. Both legs execute the same tests, and every selected test must
+finish with a passed or failed outcome. Caller Git hooks are disabled, and
+projects outside the proof tree and links in it are refused. Cancellation kills
+and waits for the active child process before cleanup. Cleanup removes the
+proof's worktree, its own registration and its temporary directory, and reports
+any removal failure; it never prunes another worktree's registration.
+
+```text
+Law: BackgroundBuildLawTests (tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj)
+Withheld: <commit> hosting: keep a canceled build's source alive until its callbacks finish
+  docs/reference/hosting.md
+  src/Puck.Hosting/BackgroundBuild.cs
+Without the fix: 1 of 3 failed
+  Puck.Hosting.Tests.BackgroundBuildLawTests.CancelKeepsACompletedBuildUntilItsCallbacksFinish: Assert.True() Failure
+With the fix: 3 of 3 passed
+```
+
+A law that passes with the fix withheld cannot fail and exits 1, as does one
+that fails with the fix in place. A build that fails in either phase is
+refused with its errors, never read as the law failing: when the law itself
+calls what the fix added, narrow the withheld paths with `--file-list` to the
+change the law judges.
+
+Exit codes: 0 proven, 1 cannot fail or fails with the fix, 2 refused (a build
+failed, the test run cannot be judged, or the fix cannot be withheld), 130
+cancelled after cleanup.
 
 ## `puck canary`—real-World behavioral proofs
 
@@ -928,10 +1067,11 @@ manifests, so the output is the same on every machine, and a GPU selection can
 be costed on a machine without a GPU. The two gate selections, the automatic
 set (`puck canary`, `--capability automatic`, and `puck landing`) and
 `--merge`, are each held to a ceiling of World boots and summed leg budget
-declared in `src/Puck.Cli/Canary/CanaryCeilings.cs`. A gate whose plan exceeds
-its ceiling is refused with exit 2 before anything builds, naming both numbers.
-A change that deliberately grows a gate raises the ceiling in the same change
-and states the new `--plan` counts.
+recorded in `CanaryCeilings.json` ([`puck canary-ceilings`](#puck-canary-ceilingsrecorded-gate-costs)).
+A gate whose plan exceeds its recorded ceiling is refused with exit 2 before
+anything builds, naming both numbers. A change that deliberately grows a gate
+records the rise with `puck canary-ceilings` in the same change and states the
+new `--plan` counts.
 
 A selection with an offscreen or windowed proof on a named backend warms the
 engine's pipeline cache before any leg starts. The runner boots the first
@@ -970,7 +1110,10 @@ exact-cardinality responses, ordered sequences of responses (`sequence`) and
 of lines (`lines`: each listed line matches, exactly or as contained text, past
 the previous one's match), named response field
 extraction (from the response's first line, or with `"line"` from the first
-indented line of its record that starts with that text), equality/inequality, strict ordering of two extracted numbers
+indented line of its record that starts with that text, past the first that
+starts with the text an `"after"` names; a `"line"` naming a whole
+counter kind reads that `<kind> <value>` line's value as the field the kind
+names), equality/inequality, strict ordering of two extracted numbers
 (`greater`: left above right), inclusive bounds, minimum margins,
 byte-level file equality/inequality (`filesDiffer`), per-channel bounds over a
 region of one capture (`imageRegion`), a capture's mean difference from a
@@ -2841,6 +2984,80 @@ one final line feed. `--check` reports a ledger whose bytes differ from that for
 holds, so a hand edit that reorders or respaces an entry fails the check rather than churning the next rewrite.
 Running the verb without `--check` rewrites the ledger in its canonical form.
 
+## `puck canary-ceilings`—recorded gate costs
+
+`CanaryCeilings.json` at the repository root records what the two gate selections of
+[`puck canary`](#puck-canaryreal-world-behavioral-proofs), the automatic set and `--merge`, cost: World boots and
+the summed per-leg timeouts, as `--plan` counts them over the checked-in manifests. The ledger is generated; nothing
+in the source declares a ceiling by hand.
+
+```text
+puck canary-ceilings            write CanaryCeilings.json from the manifests' plans
+puck canary-ceilings --check    write nothing; exit 1 when a recorded count differs from its plan in
+                                either direction, or the ledger's bytes differ from what the verb writes
+```
+
+A run or `--plan` of a gate selection is refused before anything builds when its plan *exceeds* the recorded count.
+`--check` is stricter, and requires equality, for two reasons. A rise is a deliberate change, so the lane that adds
+cost records it in the same change and states the new counts in its commit. A fall is recorded too: otherwise the
+headroom a lane freed would be spendable by any other lane without a reviewed change. Equality also settles
+concurrent changes. Two lanes that record different counts edit the same lines and conflict at merge; two lanes
+that record the same count merge cleanly to a ledger that no longer equals the combined plan, so `--check` fails
+until `puck canary-ceilings` records the merged manifests' real counts. The resolver reruns the verb and never
+recomputes a count by hand.
+
+The verb refuses (exit 2) when any manifest fails to load, since a plan over a partial set would record a falsely
+low cost. CI runs `puck canary-ceilings --check` in the `ledgers` job of `verify.yml`.
+
+## `puck formats`—strict format tokens
+
+`FormatVersions.json` at the repository root lists every strictly versioned wire, persisted, or cache format the
+tracked `src/` tree declares, each with its current token and declaring file. It is generated from the source, so
+the constants remain the one source of truth and the ledger is their checked-in mirror.
+
+```text
+puck formats            write FormatVersions.json from the source
+puck formats --check    write nothing; exit 1 for an unrecorded, stale, bumped, reshaped, or moved format,
+                        or a ledger whose bytes differ from what the verb writes
+```
+
+A declaration is a format when it is a `const`, a `static readonly` field, or a static or expression-bodied property
+whose initializer is one of two things:
+
+- a named document schema literal, a string of the form `puck.<name>.v<N>` such as `puck.world.definition.v1`;
+- a literal under one of the recognized token member names (`WireKey`, `WireProtocolKey`, `ProtocolKey`,
+  `Revision`, `ShapeToken`, `SupportedVersion`, `CurrentVersion`, `Format`, `FormatVersion`, `SupportedFormat`,
+  `Version`, `Magic`, `JournalMagic`, `JournalVersion`, `PackMagic`, `PackVersion`, `CompilerVersion`,
+  `AbiVersion`, `TokenAlgorithm`). A numeric
+  token whose bytes are a four- to eight-character printable code is spelled as that text, so the key
+  `0x354445464B435550` is recorded as `PUCKFED5`.
+
+Declarations under a `*.Post` project and generated files are outside the ledger. An entry that is none of these
+needs its member added to the recognized names in `FormatVersionsLedger`, which is a deliberate edit of the verb.
+
+An entry holds its id (`Type.Member`), the file declaring it, its token and a `shape` digest, each on a line of its
+own. The digest covers canonical syntax of the declaring file and its partial siblings (`Stem.cs` and
+`Stem.*.cs` beside it), source-declared field and property types, record constructor types and base types,
+including their data dependencies. Shared World wire leaves also feed the wire, replay, checkpoint, federation
+and journal digests; snapshot identities cover their machine project's source and the shared state reader,
+writer and image layout. A version-shaped string inside an object initializer is an identity, not a schema literal.
+The digest is what lets two lanes collide. Git merges two identical edits of one line without a conflict,
+and two lanes that bump a codec to the same next token write the same token line; they changed the codec
+differently, so their digest lines differ and conflict. A lane that edits a codec without bumping its token fails
+`--check` with a `reshaped` finding until the author reruns `puck formats`, which is the moment to decide whether
+the encoding changed and the token should too. This also covers document schemas: a field change under an
+unchanged schema token requires recording its new shape.
+
+The digest uses the existing formatter's syntactic and null-pattern normalizers before hashing syntax structure
+without trivia. Parentheses do not contribute an extra node, but operator grouping remains in the tree. Resolved
+call arguments are identified by parameter position, and only expressions the formatter considers safe to reorder
+are sorted. Local and parameter names are replaced by declaration identities; `nameof` retains its resulting text.
+Formatting, comments and local renames preserve the digest, while changed argument binding and evaluation order
+move it. Unresolved calls retain their written syntax. These are conservative source fingerprints: an implementation
+edit within the covered files can require recording even when its encoding stays the same.
+
+CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
+
 ## `puck baselines`—test baselines
 
 A committed test baseline is recorded by this verb and only compared by its test. Every run of an owning test
@@ -2904,8 +3121,8 @@ Regenerates every GENERATED Rust source registered in
 `Puck.Scripting.WasmStdlibSources.All`—the maintained set of generated sources
 that make up the WASM standard library, not a single one-off port. Today that
 registry holds three files under `wasm/puck-stdlib/src`. Two give the WASM addon
-guest a self-contained, bit-exact copy of `FixedQ4816`'s six algorithm-pinned
-transcendentals (`atan2`, `sin`/`cos`, `exp2`, `log2`, `pow`): `fixed_generated.rs`
+guest a self-contained, bit-exact copy of `FixedQ4816`'s seven algorithm-pinned
+functions (`atan2`, `sin`/`cos`, `exp2`, `log2`, `pow`, `smoothstep`): `fixed_generated.rs`
 (the ported functions plus their interval tables and polynomial coefficients)
 and `fixed_vectors.rs` (known-answer vectors, computed by calling the real
 `FixedQ4816` at generation time). The third, `abi_generated.rs`, mirrors the

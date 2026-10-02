@@ -46,7 +46,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 reads++;
             }
         };
-        gpu.WriteReadback = bytes => {
+        gpu.WriteReadback = (_, bytes) => {
             if (bytes.Length == (PickRecordBytes + BoxBytes)) {
                 BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[12..], value: (0x123456U << 8) | 173U);
                 WriteBox(box: WholeBox, bytes: bytes);
@@ -113,7 +113,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var copies = new List<ulong>();
 
         gpu.OnBufferCopy = (_, bytes) => { if (bytes is PickRecordBytes or SurfaceRecordBytes) { copies.Add(item: bytes); } };
-        gpu.WriteReadback = bytes => {
+        gpu.WriteReadback = (_, bytes) => {
             if (bytes.Length != (SurfaceRecordBytes + BoxBytes)) { return; }
             BinaryPrimitives.WriteSingleLittleEndian(destination: bytes, value: 4);
             BinaryPrimitives.WriteUInt32LittleEndian(destination: bytes[4..], value: SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Sdf, source: 1));
@@ -193,7 +193,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 copied.Add(item: (((uint)(pixel % Extent)), ((uint)(pixel / Extent))));
             }
         };
-        gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
+        gpu.WriteReadback = (_, bytes) => WriteBox(box: WholeBox, bytes: bytes);
         for (var idle = 0; (idle < 4); idle++) {
             _ = view.Produce(context: in context);
         }
@@ -247,7 +247,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
-        gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
+        gpu.WriteReadback = (_, bytes) => WriteBox(box: WholeBox, bytes: bytes);
         var node = view.Runtime.Node(instance: 0);
         var installed = node.Plan;
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
@@ -282,7 +282,7 @@ public sealed partial class SdfWorldPassesLawTests {
 
         TestLiveness.Until(step: () => view.Produce(context: in context),
             reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
-        gpu.WriteReadback = bytes => WriteBox(box: WholeBox, bytes: bytes);
+        gpu.WriteReadback = (_, bytes) => WriteBox(box: WholeBox, bytes: bytes);
         var picker = view.Passes.PickerOf(instance: SdfTestView.Instance);
         var first = picker.Request(x: 0.25f, y: 0.75f);
 

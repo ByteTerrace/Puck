@@ -31,6 +31,28 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
     private long m_nextHandle = 0x1000;
 
+    private long m_submitted;
+
+    private readonly Dictionary<nint, HashSet<nint>> m_commandReads = [];
+    private readonly Dictionary<nint, HashSet<nint>> m_setReads = [];
+    private readonly Dictionary<nint, long> m_lastRead = [];
+
+    /// <summary>Gets every recorded command that named an object the fake had already released (an image barrier, a
+    /// clear, a copy, a descriptor write of an image view, a readback or a framebuffer attachment), each as its use and
+    /// the object.</summary>
+    public List<string> UsesAfterRelease { get; } = [];
+    /// <summary>Gets or sets the last submission, in queue order, the fake queue has finished: every later one is pending
+    /// until a fence wait or a device drain finishes it, in order. The default finishes every submission as it is
+    /// made.</summary>
+    public long CompletedThrough { get; set; } = long.MaxValue;
+
+    /// <summary>Gets how many submissions the fake queue has numbered.</summary>
+    public long SubmissionsMade => m_submitted;
+    /// <summary>Gets or sets whether the fake tracks which images each submission reads (through its command buffers'
+    /// barriers, attachments, clears, copies and bound descriptor sets) and records in <see cref="UsesAfterRelease"/>
+    /// every image disposed while a submission that reads it is pending. Tracking allocates.</summary>
+    public bool TracksPendingReads { get; set; }
+
     /// <summary>Gets every object created so far, in creation order.</summary>
     public List<Created> CreatedObjects { get; } = [];
     /// <summary>Gets each direct dispatch's group counts, in recording order, while <see cref="Recording"/> is on.</summary>
@@ -89,6 +111,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public bool Recording { get; set; }
     /// <summary>Gets or sets whether the next fenced submission throws before any commands reach the queue.</summary>
     public bool RefuseNextSubmission { get; set; }
+    /// <summary>Gets or sets whether the next device drain reports a lost device.</summary>
+    public bool LoseNextIdleWait { get; set; }
     /// <summary>Gets or sets whether the queue holds every submission unfinished: while set, no fence reads as
     /// signaled, though a wait still returns at once.</summary>
     public bool QueueHeld { get; set; }
@@ -207,6 +231,95 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             GraphicsCommands.Add(item: (command, buffer, offsetBytes, sizeBytes, count));
         }
     }
+    private void RecordImageBarrier(nint commandBufferHandle, nint imageHandle, ShaderPipelineBarrier barrier) {
+        NoteUse(commandBuffer: commandBufferHandle, handle: imageHandle, use: "barrier");
+        RecordBarrier(barrier: barrier, handle: imageHandle);
+    }
+    // The object a handle names, an image's view naming its image, or null for a handle the fake did not create.
+    private Created? CreatedOf(nint handle) {
+        lock (m_gate) {
+            if (m_byHandle.TryGetValue(key: handle, value: out var created)) {
+                return created;
+            }
+
+            return ((m_byHandle.TryGetValue(key: (handle - 1), value: out var image) && image.Kind.EndsWith(comparisonType: StringComparison.Ordinal, value: " image"))
+                ? image
+                : null);
+        }
+    }
+    // Records a command that names an object the fake has already released, and, while pending reads are tracked, the
+    // image a command buffer or a descriptor set names.
+    private void NoteUse(nint handle, string use, nint commandBuffer = 0, nint set = 0) {
+        var created = CreatedOf(handle: handle);
+
+        if (created is { DisposeCount: > 0 } released) {
+            lock (m_gate) {
+                UsesAfterRelease.Add(item: $"{use} of {released}");
+            }
+        }
+        if (
+            !TracksPendingReads ||
+            (created is null)
+        ) {
+            return;
+        }
+
+        lock (m_gate) {
+            if (commandBuffer != 0) {
+                ReadsOf(key: commandBuffer, map: m_commandReads).Add(item: created.Handle);
+            }
+            if (set != 0) {
+                ReadsOf(key: set, map: m_setReads).Add(item: created.Handle);
+            }
+        }
+    }
+    private static HashSet<nint> ReadsOf(Dictionary<nint, HashSet<nint>> map, nint key) {
+        if (!map.TryGetValue(key: key, value: out var reads)) {
+            reads = [];
+            map.Add(key: key, value: reads);
+        }
+
+        return reads;
+    }
+    // Numbers a submission in queue order and, while pending reads are tracked, records it as the latest reader of every
+    // image its command buffers named.
+    private long Submitted(ReadOnlySpan<nint> commandBufferHandles) {
+        lock (m_gate) {
+            var number = ++m_submitted;
+
+            if (TracksPendingReads) {
+                foreach (var command in commandBufferHandles) {
+                    if (!m_commandReads.TryGetValue(key: command, value: out var reads)) {
+                        continue;
+                    }
+
+                    foreach (var image in reads) {
+                        m_lastRead[image] = number;
+                    }
+                }
+            }
+
+            return number;
+        }
+    }
+    // The queue finishes every submission through a number, in order.
+    private void Complete(long through) {
+        lock (m_gate) {
+            CompletedThrough = Math.Max(val1: CompletedThrough, val2: through);
+        }
+    }
+    // A pending submission that reads an image being disposed, or null.
+    private long? PendingReader(nint imageHandle) => (
+        (TracksPendingReads && m_lastRead.TryGetValue(key: imageHandle, value: out var number) && (QueueHeld || (number > CompletedThrough)))
+            ? number
+            : null);
+
+    /// <summary>Returns whether a handle, an image's or its view's, names an object the fake created and has released:
+    /// a surface handed to the display that names one is presented after release.</summary>
+    /// <param name="handle">The handle.</param>
+    /// <returns><see langword="true"/> when the object is released.</returns>
+    public bool IsReleased(nint handle) => (CreatedOf(handle: handle) is { DisposeCount: > 0 });
+
     private void RecordBarrier(ShaderPipelineBarrier barrier, nint handle) {
         if (Recording) {
             Barriers.Add(item: (barrier, handle));
@@ -222,6 +335,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) => ((nint)(SetHandleBase + Interlocked.Increment(location: ref m_sets)));
     public void BeginCommandBuffer(nint commandBufferHandle) {
         lock (m_gate) {
+            if (m_commandReads.TryGetValue(key: commandBufferHandle, value: out var reads)) {
+                reads.Clear();
+            }
+
             if (m_byHandle.TryGetValue(
                 key: commandBufferHandle,
                 value: out var pool
@@ -232,13 +349,26 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     }
     public void BeginDebugGroup(nint commandBufferHandle, string label) { }
     public void BeginRenderPass(nint commandBufferHandle, IGpuFramebuffer framebuffer, GpuPixelRect? area = null) {
-        if (Recording) {
-            var fake = ((FakeFramebuffer)framebuffer);
+        var fake = ((FakeFramebuffer)framebuffer);
 
+        foreach (var color in fake.Colors) {
+            NoteUse(commandBuffer: commandBufferHandle, handle: color, use: "color attachment");
+        }
+        if (fake.Depth != 0) {
+            NoteUse(commandBuffer: commandBufferHandle, handle: fake.Depth, use: "depth attachment");
+        }
+        if (Recording) {
             RenderPasses.Add(item: (fake.RenderPass.Description, fake.Colors, fake.Depth));
         }
     }
     public void BindDescriptorSet(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineLayoutHandle, uint group, nint descriptorSetHandle) {
+        if (TracksPendingReads) {
+            lock (m_gate) {
+                if (m_setReads.TryGetValue(key: descriptorSetHandle, value: out var reads)) {
+                    ReadsOf(key: commandBufferHandle, map: m_commandReads).UnionWith(other: reads);
+                }
+            }
+        }
         if (Recording) {
             BoundSets.Add(item: (group, descriptorSetHandle));
         }
@@ -251,8 +381,15 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             Record(text: $"clear buffer {bufferHandle}");
         }
     }
-    public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => ClearedImages.Add(item: imageHandle);
-    public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => CopiedImages.Add(item: (sourceImageHandle, destinationImageHandle));
+    public void ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) {
+        NoteUse(commandBuffer: commandBufferHandle, handle: imageHandle, use: "clear");
+        ClearedImages.Add(item: imageHandle);
+    }
+    public void CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) {
+        NoteUse(commandBuffer: commandBufferHandle, handle: sourceImageHandle, use: "copy from");
+        NoteUse(commandBuffer: commandBufferHandle, handle: destinationImageHandle, use: "copy to");
+        CopiedImages.Add(item: (sourceImageHandle, destinationImageHandle));
+    }
     public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0) {
         if (Recording) {
             Record(text: $"copy buffer {sourceBufferHandle} to {destinationBufferHandle}");
@@ -523,17 +660,34 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
     public void SetScissor(nint commandBufferHandle, GpuPixelRect rect) { }
-    public void Submit(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
+    public void Submit(ReadOnlySpan<nint> commandBufferHandles) {
+        Submissions++;
+        _ = Submitted(commandBufferHandles: commandBufferHandles);
+    }
     public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
         if (RefuseNextSubmission) { RefuseNextSubmission = false; throw new InvalidOperationException(message: "Injected pre-submit failure."); }
         Submissions++;
+
+        var number = Submitted(commandBufferHandles: commandBufferHandles);
+
+        if (fence is FakeFence fake) {
+            fake.Number = number;
+        }
     }
-    public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => Submissions++;
+    public void SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) {
+        Submissions++;
+        Complete(through: Submitted(commandBufferHandles: commandBufferHandles));
+    }
     public void TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Buffer, NewLayout: GpuImageLayout.Undefined, OldLayout: GpuImageLayout.Undefined, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: bufferHandle);
-    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordBarrier(barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask), handle: imageHandle);
+    public void TransitionImageLayout(nint commandBufferHandle, nint imageHandle, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => RecordImageBarrier(commandBufferHandle: commandBufferHandle, imageHandle: imageHandle, barrier: new ShaderPipelineBarrier(DestinationAccess: destinationAccessMask, DestinationStage: destinationStageMask, Kind: ShaderPipelineBarrierKind.Image, NewLayout: newLayout, OldLayout: oldLayout, SourceAccess: sourceAccessMask, SourceStage: sourceStageMask));
     public void WaitIdle() {
         WaitIdleCount++;
+        if (LoseNextIdleWait) {
+            LoseNextIdleWait = false;
+            throw new DeviceLostException(message: "Injected loss while draining.");
+        }
         Record(text: "device drain");
+        Complete(through: m_submitted);
     }
     public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
         lock (m_gate) {
@@ -584,12 +738,14 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
     public void WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        NoteUse(handle: imageViewHandle, set: descriptorSetHandle, use: "sampled descriptor");
         if (Recording) {
             DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));
         }
     }
     public void WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }
     public void WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) {
+        NoteUse(handle: imageViewHandle, set: descriptorSetHandle, use: "storage descriptor");
         if (Recording) {
             DescriptorWrites.Add(item: (descriptorSetHandle, binding, imageViewHandle));
         }
@@ -617,6 +773,10 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
                 if (DisposeCount == 1) {
                     gpu.LiveBytes -= Bytes;
+
+                    if (gpu.PendingReader(imageHandle: Handle) is { } pending) {
+                        gpu.UsesAfterRelease.Add(item: $"dispose of {this} while submission {pending} that reads it is pending");
+                    }
                 }
 
                 if (gpu.Recording) {
@@ -664,11 +824,17 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public void Dispose() => created.Dispose();
     }
     private sealed class FakeFence(FakePipelineGpu gpu, Created created) : IGpuSubmissionFence {
-        // The fake queue finishes every submission as it is made, unless the law holds it.
-        public bool IsSignaled => !gpu.QueueHeld;
+        // The submission the fence was last armed with, in queue order.
+        public long Number;
+
+        // The fake queue finishes every submission as it is made, unless the law holds it or stops it at a submission.
+        public bool IsSignaled => (!gpu.QueueHeld && (Number <= gpu.CompletedThrough));
 
         public void Dispose() => created.Dispose();
-        public void Wait() => created.Wait();
+        public void Wait() {
+            created.Wait();
+            gpu.Complete(through: Number);
+        }
     }
     private sealed class FakeImage(Created created, GpuPixelFormat format, uint width, uint height, GpuImageUsage usage) : IGpuImage {
         public GpuPixelFormat Format => format;
@@ -714,6 +880,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
             var bytes = ((((ulong)width) * height) * bytesPerPixel);
 
+            gpu.NoteUse(handle: sourceImageHandle, use: "readback");
             gpu.Readbacks.Add(item: (sourceImageHandle, sourceLayout));
 
             if (StagingBytes != bytes) {

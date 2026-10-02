@@ -40,7 +40,10 @@
         <Project Path="src/Puck.Recording/Puck.Recording.csproj" />
         <Project Path="src/Puck.Scripting/Puck.Scripting.csproj" />
         <Project Path="src/Puck.SdfVm/Puck.SdfVm.csproj" />
+        <Project Path="src/Puck.SdfVm.Model/Puck.SdfVm.Model.csproj" />
         <Project Path="src/Puck.Shaders/Puck.Shaders.csproj" />
+        <Project Path="src/Puck.Shaders.Generator/Puck.Shaders.Generator.csproj" />
+        <Project Path="src/Puck.Shaders.Model/Puck.Shaders.Model.csproj" />
         <Project Path="src/Puck.SignedDistance/Puck.SignedDistance.csproj" />
         <Project Path="src/Puck.State.Generators/Puck.State.Generators.csproj" />
         <Project Path="src/Puck.State.Rules/Puck.State.Rules.csproj" />

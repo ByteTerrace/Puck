@@ -156,7 +156,7 @@ public sealed class SdfResolveDeviceLawTests {
         var pool = services.Bindings.CreatePool(name: default, sizes: GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups));
 
         try {
-            uint Binding(string member) => SdfWorldInterfaces.BindingOf(layout: parameters.Layout, member: member);
+            uint Binding(string member) => SdfKernelInterfaces.BindingOf(layout: parameters.Layout, member: member);
             var named = new Dictionary<uint, nint> {
                 [Binding(member: SdfWorldPackage.CurrentColor)] = sourceView,
                 [Binding(member: SdfWorldPackage.Output)] = output.ImageViewHandle,

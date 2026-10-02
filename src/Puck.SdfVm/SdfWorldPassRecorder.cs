@@ -505,7 +505,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         for (var draw = 0u; (draw < count); draw++) {
             BinaryPrimitives.WriteUInt32LittleEndian(
                 destination: m_meshPushedIndex,
-                value: SdfWorldInterfaces.MeshPushedIndex(
+                value: SdfKernelInterfaces.MeshPushedIndex(
                     draw: draw,
                     view: 0u
                 )

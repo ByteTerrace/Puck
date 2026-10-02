@@ -89,6 +89,9 @@ docs/.obsidian
 *.dxil
 *.spv.hash
 *.dxil.hash
+*.spv.*.tmp
+*.dxil.*.tmp
+*.hash.*.tmp
 *.dxbc
 # Compiled worlds and bake packs are derived products; the build and the runtime write them.
 *.puckb

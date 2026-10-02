@@ -32,7 +32,7 @@ public static partial class PostReportFiles {
         public required int Skip { get; init; }
     }
     [JsonSerializable(typeof(SummaryDto))]
-    [JsonSourceGenerationOptions(WriteIndented = true)]
+    [JsonSourceGenerationOptions(NewLine = "\n", WriteIndented = true)]
     private sealed partial class SummaryJsonContext : JsonSerializerContext;
 
     /// <summary>Writes <c>summary.json</c>.</summary>

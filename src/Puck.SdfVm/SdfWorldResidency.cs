@@ -207,8 +207,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
         : ((m_frame is null)
             ? $"residency '{Name}' has captured no frame"
             : m_pipelines.Describe()));
-    /// <summary>Gets the GPU work the residency's uploads recorded (<see cref="SdfWorldTables.Work"/>); submission
-    /// identities keep increasing across a device-loss rebuild.</summary>
+    /// <summary>Gets the GPU work the residency's uploads recorded (<see cref="SdfWorldTables.Work"/>), published by the
+    /// first <see cref="Prepare"/> of a frame that finds the upload's fence signaled; submission identities keep
+    /// increasing across a device-loss rebuild.</summary>
     public IGpuWorkSource Work => m_work;
     /// <summary>Gets the GPU objects the residency's tables have created, over its whole life.</summary>
     public IWorkCounterSource WorkLifetime => m_work;
@@ -347,6 +348,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
 
         m_packed = true;
+        // The ledger publishes an upload once a frame finds its fence signaled, standing frames included, so the one
+        // upload a still view renders from is read back even though no later upload follows it.
+        m_work.Poll();
 
         if (
             (m_frame is not { } frame) ||

@@ -71,7 +71,9 @@ Several pieces exist with nothing using them:
 GPU work remains counted for correctness and quality decisions. The optional
 `world.gpu-timing` readout records named pass timestamp pairs through
 `IGpuTimestampFactory` on both backends, after submission fences. Timing is off
-by default and remains observational; it never changes a rendering decision.
+by default and never judges correctness. Its one rendering reader is dynamic
+resolution (rendering plan P15-6), off by default, which holds the views' GPU
+frame time to the display period and asks for the timestamps while it is on.
 
 The building blocks the packages reuse are in place. The overlay draws rects,
 rings, wedges, panels, icons and text (`OverlayFrameBuilder`), and has no line
@@ -129,8 +131,8 @@ Every law has a red leg: the same assertion run against the feature switched
 off, or against a planted defect, which must fail. A check that cannot fail
 proves nothing. A package adds a `puck canary` only where pixels are the honest
 evidence (a grid, a highlight or a debug view drawn on screen), and a new
-canary in the merge or automatic set raises
-`src/Puck.Cli/Canary/CanaryCeilings.cs` in the same change. A package that adds
+canary in the merge or automatic set records
+the rise in `CanaryCeilings.json` (`puck canary-ceilings`) in the same change. A package that adds
 a verb adds its read-back and its entry in the build-mode binding group in the
 same change.
 
@@ -438,6 +440,11 @@ only in the main view, and the slice cannot be moved.
    record's K row) and `ao` (the occlusion half of the S row). The mode names in
    `DebugViewModes` and the kernel's count and switch
    (`frame/sdf-levers.hlsli`, `debug/sdf-debug-views.hlsli`) move together.
+6. **A slice that shows a broken field.** The slice view marks a sample whose
+   distance is NaN or infinite, and a gradient-magnitude mode shows where the
+   field departs from a distance (its gradient's length away from one).
+7. **A slice of the selection.** Once E2 selects a placement, the slice can
+   show that placement's field alone.
 
 Debug views and shading levers are session levers: `world.save` never folds
 them into the document.
@@ -453,9 +460,12 @@ binder holds and one it creates later; red leg: the main residency alone, as
 today); presenter laws that the slice and the four levers reach the frame.
 Canary `debug-views`: a screen showing a camera view changes to the `normals`
 colors when the mode is on. This package supplies the missing checks for the
-rendering plan's debug-view and shading-lever capability rows.
+rendering plan's debug-view and shading-lever capability rows. The NaN marker
+and the gradient-magnitude mode join the mode-count sync law; a law over a
+program with a NaN-producing primitive holds the marker on that sample, and
+the selected-placement slice holds every other placement's field out.
 
-**Depends on:** nothing.
+**Depends on:** nothing; the selected-placement slice (7) follows E2.
 
 ### E5 — The inspector
 
@@ -671,8 +681,8 @@ readback waits for its submission fence, rejects a replaced graph or an earlier
 enable epoch, and averages at most 32 completed pairs. Disabling hides readings
 immediately and releases pools after their fences. Device loss releases all
 query/readback ownership. GPU timestamp readback and retained CPU sample payloads
-are reported separately. Times and FPS are observational and never become
-correctness assertions or quality inputs.
+are reported separately. Times and FPS never become correctness assertions;
+dynamic resolution is the one quality input that reads the timing.
 
 **Depends on:** nothing; E5 for the panel; the rendering plan's one-pixel
 readback for step 3.

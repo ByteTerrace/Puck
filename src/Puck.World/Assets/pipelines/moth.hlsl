@@ -51,6 +51,9 @@
 
 // The output image's size in pixels.
 static float2 resolution;
+// The width over height of the rect the image is placed in, which the paired camera projects at. A pane keeps its
+// allocation's extent while its rect eases, so the image's own aspect is not the one the display shows.
+static float aspect;
 
 static const float PI = 3.14159265;
 // Base material IDs. Hits add 20 times the rigid part index for local surface details.
@@ -1616,14 +1619,14 @@ float4 shade(float2 pixel) {
     float3 color=(float3)0;
     for(int y=0;y<AA;y++) for(int x=0;x<AA;x++) {
         float2 offset=(float2(float(x),float(y))+.5)/float(AA)-.5;
-        float2 uv=(pixel+offset-.5*resolution)/resolution.y;
+        float2 uv=((pixel+offset)/resolution-.5)*float2(aspect,1.);
         color+=render(uv,offset);
     }
     color/=float(AA*AA);
     // Tone mapping follows linear-light integration, including illustrated eye glints.
     color=(color*(2.51*color+.03))/(color*(2.43*color+.59)+.14);
     color=pow(max(color,0.),(float3)(1./2.2));
-    float2 uv=(pixel-.5*resolution)/resolution.y;
+    float2 uv=(pixel/resolution-.5)*float2(aspect,1.);
     color*=1.-.14*dot(uv,uv);
     color+=(hash31(float3(pixel,17.))-.5)/255.;
     return float4(color,1.);
@@ -1639,6 +1642,7 @@ void main(uint3 id : SV_DispatchThreadID) {
         return;
     }
     resolution = float2(width, height);
+    aspect = frameGroup.placedExtent.x / frameGroup.placedExtent.y;
     // Pixel centers with y growing up the image, as the shading functions above expect.
     output[id.xy] = shade(float2(id.x + 0.5, height - (id.y + 0.5)));
 }

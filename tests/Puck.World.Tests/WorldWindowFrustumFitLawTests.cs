@@ -450,14 +450,13 @@ public sealed partial class WorldWindowFrustumFitLawTests {
     [Fact]
     public void TheCanarysSeatViewRidesItsBody_SoAStepReframesTheWindow() {
         using var state = new TemporaryDirectory(
-            bestEffortDelete: true,
             prefix: "puck-portal-window-eye-"
         );
-        using var host = WorldBootHarness.Compose(
+        var host = state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: Local
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var viewports = host.Services.GetRequiredService<WorldSeatViewports>();
@@ -524,14 +523,13 @@ public sealed partial class WorldWindowFrustumFitLawTests {
     [Fact]
     public void ANoSeatWorldsWindowFitsFromTheSpectator_AndMovingItReframesTheWindow() {
         using var state = new TemporaryDirectory(
-            bestEffortDelete: true,
             prefix: "puck-portal-window-spectator-"
         );
-        using var host = WorldBootHarness.Compose(
+        var host = state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
             world: Local
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();
         var viewports = host.Services.GetRequiredService<WorldSeatViewports>();

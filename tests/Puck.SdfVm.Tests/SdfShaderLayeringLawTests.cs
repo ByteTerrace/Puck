@@ -19,7 +19,7 @@ public sealed partial class SdfShaderLayeringLawTests {
 
     [Fact]
     public void NoModuleDependsOnAHigherLayer() {
-        var root = RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory);
+        var root = RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
         var files = Directory.EnumerateFiles(path: root, searchOption: SearchOption.AllDirectories, searchPattern: "*.hlsl*")
             .Where(predicate: static path => (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli")))
             .ToDictionary(

@@ -1895,7 +1895,8 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.temporal`, `world.upscale-sharpness`, `world.target`, `world.shadow-mask`,
+`world.temporal`, `world.dynamic-resolution`, `world.upscale-sharpness`,
+`world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
@@ -1915,6 +1916,22 @@ resolves them over its history, and under `world.cadence on` stands once a still
 view has converged; `world.upscale-sharpness` then sharpens what it resolves.
 Camera and session views never reconstruct. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
+`world.dynamic-resolution on` moves the world's own views' render grid each
+frame between the floor (`render.dynamicResolutionFloor`, quarter by default)
+and the render-scale ceiling, inside the allocation, so no frame rebuilds or
+reallocates; a native tier is allocated at three-quarter while it is on. Its
+load is the views' GPU frame time against the display period (it turns on the
+pass timestamps `world.gpu-timing` reads), the present timing where the device
+times nothing, and, offscreen, the views' counted march steps against the
+budget the committed floor ceilings give per output pixel. A sample within 10%
+of its budget leaves the grid; outside it the grid moves by at most 1/16 of
+itself down or 1/32 up. `world.dynamic-resolution <tier|fraction>` forces a
+grid for sweeps, and the no-argument echo names the ceiling, the grid the
+views render, the lowest grid measured over the budget that it will not rise
+onto (`over=`), the floor, the budget and the signal. A sample counts only at
+the grid the views render now, and between two grids that bracket the budget
+the grid settles on the cheaper one. `render.dynamicResolution` sets it at boot,
+`world.save` folds it back, and every shipped preset leaves it off.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and

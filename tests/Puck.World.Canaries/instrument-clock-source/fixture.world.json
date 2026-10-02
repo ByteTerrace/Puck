@@ -209,7 +209,7 @@
     {
       "name": "instrument-clock-source-canary",
       "source": "canary-instrument-clock-source.music.json",
-      "hash": "ab2faa3ad4cec3f69d74fd6a384803e8304991c32cc392b6e76649f7e046f82c"
+      "hash": "642dfa199ba323bf4e503fcf972df3fa4b882bd4768d4572f2f61969be20ca2b"
     }
   ]
 }

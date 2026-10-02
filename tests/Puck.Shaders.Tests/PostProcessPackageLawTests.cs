@@ -105,8 +105,9 @@ public sealed class PostProcessPackageLawTests {
     // blocks each draw reads, in hex. The frame group block holds the frame counter, counting from one, and the tick rate;
     // the pass block holds the 64x64 extent, the default flicker rate of 24, then the bound config (intensity, seed, then
     // the package's remaining fields) and the pass's work counter row, zero.
+    // Each frame block ends with the placed extent, the node's own 64 by 64 (0x42800000) since nothing places it.
     private static Recorded Pinned(string configHex) => new(
-        Blocks: [.. Enumerable.Range(count: 4, start: 1).Select(selector: frame => $"{new string(c: '0', count: 48)}{frame:X2}000000E0C40000{new string(c: '0', count: 128)} 400000004000000018000000{configHex}00000000")],
+        Blocks: [.. Enumerable.Range(count: 4, start: 1).Select(selector: frame => $"{new string(c: '0', count: 48)}{frame:X2}000000E0C40000{new string(c: '0', count: 128)}0000804200008042{new string(c: '0', count: 16)} 400000004000000018000000{configHex}00000000")],
         Commands: [.. Enumerable.Repeat(count: 4, element: new[] { "vertices 24 8", "draw 0 3" }).SelectMany(selector: static pair => pair)],
         Pipeline: "sdf.film-grain  8 GpuVertexAttribute { Location = 0, Format = R32G32Float, OffsetBytes = 0 }",
         RenderPass: "GpuColorAttachment { Format = R8G8B8A8Unorm, Load = Clear, Store = Store, FinalLayout = RenderTarget } ",

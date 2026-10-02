@@ -903,7 +903,7 @@ internal static partial class Subjects {
     private static long Exp2ExponentRaw(long raw) =>
         (((long)(unchecked((ulong)raw) % (67UL << FixedQ4816.FractionBitCount))) - (20L << FixedQ4816.FractionBitCount));
     // Exp2's envelope, DERIVED from the kernel's own two error terms rather than declared as a step: half a raw ULP for
-    // the closing ties-to-even narrowing, plus the mantissa's own relative error carried up to the result's scale.
+    // the closing half-up narrowing, plus the mantissa's own relative error carried up to the result's scale.
     // That relative error is dominated by the quartic's truncation of the exponential series — the omitted tail
     // Σ_{n≥5} (ln2·r)ⁿ/n! is at most 3.85·10⁻¹⁴ at the largest residual r = 511/2¹⁶ < 2⁻⁷ — with the six Q62
     // truncations and the table's own rounding together under 10⁻¹⁸, so 2⁻⁴⁴ ≈ 5.68·10⁻¹⁴ covers the whole of it.
@@ -1052,7 +1052,7 @@ internal static partial class Subjects {
         if (FixedQ4816.Exp2(value: FixedQ4816.MaxValue) != FixedQ4816.MaxValue) { return "the exponential does not saturate at MaxValue"; }
         if (FixedQ4816.Exp2(value: Raw(value: ((47L << FixedQ4816.FractionBitCount) - 1L))) == FixedQ4816.MaxValue) { return "the exponential saturates one epsilon below forty-seven"; }
 
-        // The underflow gate: the true 2⁻¹⁷ is exactly half a ULP and the narrowing ties to even, so −17 answers Zero
+        // The underflow gate: the true 2⁻¹⁷ is exactly half a ULP and the whole-exponent answer ties to even, so −17 answers Zero
         // — the same answer the whole-exponent power gives for 2^−17 — while one raw above it is past the tie.
         if (FixedQ4816.Exp2(value: Raw(value: ((-17L << FixedQ4816.FractionBitCount) + 1L))) != FixedQ4816.Epsilon) { return "the exponential one raw above minus seventeen is not epsilon"; }
         if (FixedQ4816.Pow(
@@ -1388,11 +1388,12 @@ internal static partial class Subjects {
     /// <summary>Proves the power's WHOLE-exponent path is the single correct rounding of the true power at every
     /// exponent 2 ≤ |n| ≤ 32, both base signs, and both saturation and underflow verdicts — each base sampled over
     /// the full raw carrier, folded so the true magnitude lands between 2⁻²⁰ and 2⁵⁰, straddling both ends of the
-    /// carrier, and again at a base within 32 raws of the exponent's own saturation threshold, where the result sits
-    /// within a few raws of 2⁶³.</summary>
+    /// carrier, again at a base within 32 raws of the exponent's own saturation threshold, where the result sits
+    /// within a few raws of 2⁶³, and at one of the eight true ties, which the exponential estimate must leave to the
+    /// exact path.</summary>
     /// <param name="left">Its lane supplies the full-width base, then a folded base: the target magnitude from the top
     /// byte, the sign from the bit below it, the mantissa from the rest; its low bits pick the threshold base's
-    /// offset and sign.</param>
+    /// offset and sign, and the tie and its sign.</param>
     /// <param name="right">Its lane folds onto the exponent.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? FixedPowWholeCorrectlyRounded(long[] left, long[] right) {
@@ -1435,11 +1436,30 @@ internal static partial class Subjects {
             val2: (FixedPowBoundaryRoot(degree: power, radicand: threshold) + offset)
         );
 
-        return FixedPowWholeMatchesOracle(
+        if (FixedPowWholeMatchesOracle(
             baseRaw: (((baseBits & 1UL) != 0UL)
                 ? -thresholdBase
                 : thresholdBase),
             exponent: exponent
+        ) is { } thresholdDetail) {
+            return thresholdDetail;
+        }
+
+        // The true ties, which the exponential estimate can never prove and must leave to the exact path. A power
+        // X^n / 2^(16(n − 1)) sits on a midpoint only when X = 2¹⁵·o for an odd o at n = 17, and 2^(16(m + 1)) / X^m
+        // only when X = 2¹⁷ at m = 17; o ≤ 13 keeps the first family inside the carrier.
+        var tie = ((int)((baseBits >> 40) % 8UL));
+        var tieBase = ((tie < 7)
+            ? (((2L * tie) + 1L) << 15)
+            : (2L << 16));
+
+        return FixedPowWholeMatchesOracle(
+            baseRaw: (((baseBits & 2UL) != 0UL)
+                ? -tieBase
+                : tieBase),
+            exponent: ((tie < 7)
+                ? 17
+                : -17)
         );
     }
     /// <summary>Proves the power's EXPONENTIAL path — fractional exponents and whole ones beyond ±32 — lies inside the

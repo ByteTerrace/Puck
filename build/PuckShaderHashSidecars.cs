@@ -2,14 +2,23 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
 
 /// <summary>
-/// Writes a "&lt;bytecode-file&gt;.hash" sidecar beside each shader bytecode file compiled this pass, recording
+/// Publishes each shader bytecode file compiled this pass and writes a "&lt;bytecode-file&gt;.hash" sidecar beside it, recording
 /// a source-side hash (the source <c>.hlsl</c> concatenated with every <c>ShaderInclude</c> item, in item
 /// order — a real streamed byte concatenation) and a bytecode-side hash of the compiled file itself.
+/// <para>A bytecode file and its sidecar are published as one transaction, under the project's publication lock
+/// (<see cref="LockFile"/>, <see cref="PuckShaderHashing.Lock"/>), which every reader of a pair takes too: the old sidecar
+/// is removed, the bytecode DXC wrote under the run's <see cref="Token"/> is moved into place whole, and the new sidecar
+/// is moved in last. The sidecar is the pair's commit record: one exists only beside the bytecode it describes, so two
+/// builds of one checkout can never leave one generation's bytecode beside another's sidecar, and a publication cut
+/// short leaves no sidecar, which the next build's incremental gate recompiles. A file another process holds (a reader
+/// outside the build, an antivirus scan of a file just written) is retried (<see cref="PuckShaderHashing.Retry"/>).</para>
 /// </summary>
 /// <remarks>
 /// Runs once per build over the whole item list at once, in real C# compiled by <c>RoslynCodeTaskFactory</c>
@@ -23,18 +32,34 @@ public sealed class PuckWriteShaderHashSidecars : Task {
     public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
     /// <summary>The shared <c>ShaderInclude</c> items every source may depend on, in item order.</summary>
     public ITaskItem[] Includes { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>The token of this run's temporary bytecode names: DXC wrote each file as
+    /// "&lt;bytecode-file&gt;.&lt;token&gt;.tmp".</summary>
+    public string Token { get; set; } = "";
+    /// <summary>The project's shader publication lock, which every task that writes or reads a bytecode and sidecar pair
+    /// holds while it does.</summary>
+    [Required]
+    public string LockFile { get; set; } = "";
 
     public override bool Execute() {
+        using (PuckShaderHashing.Lock(lockFile: LockFile, log: Log)) {
+            return Publish();
+        }
+    }
+
+    private bool Publish() {
         foreach (var bytecode in BytecodeFiles) {
             var bytecodePath = bytecode.GetMetadata(metadataName: "FullPath");
             var sourcePath = bytecode.GetMetadata(metadataName: "SourcePath");
+            var compiledPath = (((bytecodePath + ".") + Token) + ".tmp");
 
-            if (!File.Exists(path: bytecodePath) || !File.Exists(path: sourcePath)) {
-                continue;
+            if (!File.Exists(path: compiledPath)) {
+                Log.LogError(message: $"Shader compilation produced no temporary bytecode '{compiledPath}'. The cached bytecode and sidecar are left unchanged.");
+
+                return false;
             }
 
             var sourceHash = PuckShaderHashing.HashConcatenated(firstPath: sourcePath, includes: Includes);
-            var bytecodeHash = PuckShaderHashing.HashFile(path: bytecodePath);
+            var bytecodeHash = PuckShaderHashing.HashFile(path: compiledPath);
 
             // Publish a complete file rather than truncating one a live asset reader may have memory-mapped.
             // Windows refuses truncation of mapped files; replacement also prevents readers seeing half a hash.
@@ -43,11 +68,17 @@ public sealed class PuckWriteShaderHashSidecars : Task {
 
             try {
                 File.WriteAllText(contents: $"source:{sourceHash}\nbytecode:{bytecodeHash}\n", path: temporaryPath);
-                if (File.Exists(path: sidecarPath)) {
-                    File.Replace(destinationBackupFileName: null, destinationFileName: sidecarPath, sourceFileName: temporaryPath);
-                } else {
-                    File.Move(destFileName: sidecarPath, sourceFileName: temporaryPath);
-                }
+                PuckShaderHashing.Retry(
+                    log: Log,
+                    operation: () => {
+                        File.Delete(path: sidecarPath);
+
+                        return true;
+                    },
+                    path: sidecarPath
+                );
+                PuckShaderHashing.Publish(destinationPath: bytecodePath, log: Log, temporaryPath: compiledPath);
+                PuckShaderHashing.Publish(destinationPath: sidecarPath, log: Log, temporaryPath: temporaryPath);
             } finally {
                 if (File.Exists(path: temporaryPath)) {
                     File.Delete(path: temporaryPath);
@@ -59,8 +90,9 @@ public sealed class PuckWriteShaderHashSidecars : Task {
     }
 }
 /// <summary>
-/// Independently recomputes both hashes <see cref="PuckWriteShaderHashSidecars"/> writes from whatever is on
-/// disk right now and compares them against each cached <c>.hash</c> sidecar — catching a cached
+/// Collects the project's shader bytecode and independently recomputes both hashes
+/// <see cref="PuckWriteShaderHashSidecars"/> writes, under the same publication lock as the collection and
+/// expected-output check, and compares them against each cached <c>.hash</c> sidecar — catching a cached
 /// bytecode file that is stale relative to its source (an edited <c>.hlsl</c>/<c>.hlsli</c> whose recompiled
 /// bytecode and sidecar were not refreshed) or relative to its own sidecar (bytecode bytes changed without a
 /// recompile). Deliberately independent of <see cref="PuckWriteShaderHashSidecars"/>'s own run this pass: on a
@@ -69,14 +101,50 @@ public sealed class PuckWriteShaderHashSidecars : Task {
 /// timestamp check saw no textual change), this task is what actually reads the cached sidecar.
 /// </summary>
 public sealed class PuckValidateShaderBytecodeFresh : Task {
-    /// <summary>Every cached bytecode file (.spv/.dxil); each item's <c>SourcePath</c> metadata names its
-    /// matching <c>.hlsl</c> (already confirmed to exist by <c>ValidateShaderBytecodeSources</c>).</summary>
-    public ITaskItem[] BytecodeFiles { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>The project whose Assets/Shaders directory holds the bytecode to collect.</summary>
+    [Required]
+    public string ProjectDirectory { get; set; } = "";
+    /// <summary>Every bytecode output the project's declared shader stages require.</summary>
+    public ITaskItem[] ExpectedBytecode { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>Every validated bytecode file (.spv/.dxil), relative to the project, for its content list.</summary>
+    [Output]
+    public ITaskItem[] BytecodeFiles { get; private set; } = Array.Empty<ITaskItem>();
     /// <summary>The shared <c>ShaderInclude</c> items every source may depend on, in item order.</summary>
     public ITaskItem[] Includes { get; set; } = Array.Empty<ITaskItem>();
+    /// <summary>The project's shader publication lock (<see cref="PuckWriteShaderHashSidecars.LockFile"/>), held while
+    /// the pairs are read, so no publication is seen half done.</summary>
+    [Required]
+    public string LockFile { get; set; } = "";
 
     public override bool Execute() {
-        foreach (var bytecode in BytecodeFiles) {
+        using (PuckShaderHashing.Lock(lockFile: LockFile, log: Log)) {
+            return Validate();
+        }
+    }
+
+    private bool Validate() {
+        foreach (var expected in ExpectedBytecode) {
+            if (!File.Exists(path: expected.GetMetadata(metadataName: "FullPath"))) {
+                Log.LogError(message: $"Shader bytecode '{expected.ItemSpec}' is missing. Build normally before packing or publishing with --no-build.");
+            }
+        }
+
+        var collected = new List<ITaskItem>();
+        var projectRoot = (Path.GetFullPath(path: ProjectDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar);
+        var directory = Path.Combine(path1: projectRoot, path2: "Assets/Shaders");
+
+        if (Directory.Exists(path: directory)) {
+            foreach (var extension in new[] { "*.spv", "*.dxil" }) {
+                foreach (var path in Directory.EnumerateFiles(path: directory, searchOption: SearchOption.AllDirectories, searchPattern: extension)) {
+                    var item = new TaskItem(itemSpec: path);
+
+                    item.SetMetadata(metadataName: "SourcePath", metadataValue: Path.ChangeExtension(extension: ".hlsl", path: path));
+                    collected.Add(item: item);
+                }
+            }
+        }
+
+        foreach (var bytecode in collected) {
             var bytecodePath = bytecode.GetMetadata(metadataName: "FullPath");
             var sourcePath = bytecode.GetMetadata(metadataName: "SourcePath");
 
@@ -112,7 +180,18 @@ public sealed class PuckValidateShaderBytecodeFresh : Task {
             }
         }
 
-        return !Log.HasLoggedErrors;
+        if (Log.HasLoggedErrors) {
+            return false;
+        }
+
+        foreach (var bytecode in collected) {
+            bytecode.ItemSpec = bytecode.ItemSpec.Substring(startIndex: projectRoot.Length).Replace(newChar: '/', oldChar: '\\');
+        }
+        collected.Sort(comparison: (left, right) => string.Compare(strA: left.ItemSpec, strB: right.ItemSpec, comparisonType: StringComparison.Ordinal));
+
+        BytecodeFiles = collected.ToArray();
+
+        return true;
     }
 }
 /// <summary>
@@ -133,8 +212,18 @@ public sealed class PuckRemoveOrphanedShaderBytecode : Task {
     /// <summary>The bytecode files this task removed, so the caller can drop them from its item list.</summary>
     [Output]
     public ITaskItem[] Removed { get; private set; } = Array.Empty<ITaskItem>();
+    /// <summary>The project's shader publication lock (<see cref="PuckWriteShaderHashSidecars.LockFile"/>), held while
+    /// pairs are read and removed.</summary>
+    [Required]
+    public string LockFile { get; set; } = "";
 
     public override bool Execute() {
+        using (PuckShaderHashing.Lock(lockFile: LockFile, log: Log)) {
+            return Sweep();
+        }
+    }
+
+    private bool Sweep() {
         var removed = new List<ITaskItem>();
 
         foreach (var bytecode in BytecodeFiles) {
@@ -194,6 +283,86 @@ public sealed class PuckRemoveOrphanedShaderBytecode : Task {
 
 /// <summary>Shared hashing helpers for the shader-hash-sidecar tasks above.</summary>
 internal static class PuckShaderHashing {
+    private const int Attempts = 20;
+
+    /// <summary>Takes a project's shader publication lock: the file opened with no sharing, which the operating system
+    /// releases with the handle however the holder ends, so a crashed build leaves no lock behind. Another holder is
+    /// waited for, up to five minutes.</summary>
+    public static IDisposable Lock(string lockFile, TaskLoggingHelper log) {
+        var directory = Path.GetDirectoryName(path: lockFile);
+
+        if (!string.IsNullOrEmpty(value: directory)) {
+            Directory.CreateDirectory(path: directory);
+        }
+
+        var deadline = (DateTime.UtcNow + TimeSpan.FromMinutes(value: 5));
+        var waited = false;
+
+        while (true) {
+            try {
+                return new FileStream(access: FileAccess.ReadWrite, mode: FileMode.OpenOrCreate, path: lockFile, share: FileShare.None);
+            } catch (IOException) when ((DateTime.UtcNow < deadline)) {
+                if (!waited) {
+                    log.LogMessage(importance: MessageImportance.Normal, message: $"Waiting for another build's shader publication to finish ('{lockFile}').");
+                    waited = true;
+                }
+                Thread.Sleep(millisecondsTimeout: 50);
+            }
+        }
+    }
+    /// <summary>Runs a file operation, retrying it while another process holds the file: a sharing violation or a refused
+    /// replace (<see cref="IOException"/>, <see cref="UnauthorizedAccessException"/>) waits a little longer each time, up
+    /// to about ten seconds in all, and is rethrown after the last attempt.</summary>
+    public static T Retry<T>(Func<T> operation, TaskLoggingHelper log, string path) {
+        for (var attempt = 1; ; attempt++) {
+            try {
+                return operation();
+            } catch (Exception error) when ((((error is IOException) || (error is UnauthorizedAccessException)) && (attempt < Attempts))) {
+                log?.LogMessage(importance: MessageImportance.Low, message: $"Retrying '{path}' (attempt {attempt}): {error.Message}");
+                Thread.Sleep(millisecondsTimeout: (50 * attempt));
+            }
+        }
+    }
+    /// <summary>Moves a complete temporary file over its destination, whole: a reader sees the old file or the new one,
+    /// never part of either. A destination another publisher created meanwhile is replaced on the next attempt.</summary>
+    public static void Publish(string temporaryPath, string destinationPath, TaskLoggingHelper log) {
+        Retry(
+            log: log,
+            operation: () => {
+                if (File.Exists(path: destinationPath)) {
+                    File.Replace(destinationBackupFileName: null, destinationFileName: destinationPath, sourceFileName: temporaryPath);
+                } else {
+                    File.Move(destFileName: destinationPath, sourceFileName: temporaryPath);
+                }
+
+                return true;
+            },
+            path: destinationPath
+        );
+    }
+    /// <summary>Reads a whole file while letting a publisher replace it, so a reader never refuses a concurrent build's
+    /// replace and never holds one up; an open refused mid-replace is retried.</summary>
+    public static byte[] ReadAllBytes(string path) =>
+        Retry(log: null, operation: () => ReadOnce(path: path), path: path);
+
+    private static byte[] ReadOnce(string path) {
+        using (var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.ReadWrite | FileShare.Delete)) {
+            var bytes = new byte[stream.Length];
+            var read = 0;
+
+            while (read < bytes.Length) {
+                var count = stream.Read(bytes, read, (bytes.Length - read));
+
+                if (count == 0) {
+                    throw new IOException(message: $"'{path}' ended early while it was read.");
+                }
+                read += count;
+            }
+
+            return bytes;
+        }
+    }
+
     /// <summary>Streams <paramref name="firstPath"/> followed by every item in <paramref name="includes"/>, in
     /// order, through one SHA-256 instance — a real byte concatenation, not a hash-of-hashes. Carriage returns are
     /// dropped before hashing so the hash is a function of the committed text, not of the checkout's line-ending
@@ -213,9 +382,7 @@ internal static class PuckShaderHashing {
     /// <summary>Hashes one file's raw bytes.</summary>
     public static string HashFile(string path) {
         using (var sha256 = SHA256.Create()) {
-            using (var stream = File.OpenRead(path: path)) {
-                return ToHex(bytes: sha256.ComputeHash(inputStream: stream));
-            }
+            return ToHex(bytes: sha256.ComputeHash(buffer: ReadAllBytes(path: path)));
         }
     }
     /// <summary>Reads a two-line "source:&lt;hex&gt;" / "bytecode:&lt;hex&gt;" sidecar.</summary>
@@ -223,7 +390,7 @@ internal static class PuckShaderHashing {
         var sourceHash = "";
         var bytecodeHash = "";
 
-        foreach (var line in File.ReadAllLines(path: path)) {
+        foreach (var line in Encoding.UTF8.GetString(bytes: ReadAllBytes(path: path)).Split('\n')) {
             if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "source:")) {
                 sourceHash = line.Substring(startIndex: "source:".Length).Trim();
             } else if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "bytecode:")) {
@@ -249,7 +416,7 @@ internal static class PuckShaderHashing {
     }
 
     private static void AppendFile(CryptoStream destination, string path) {
-        var bytes = File.ReadAllBytes(path: path);
+        var bytes = ReadAllBytes(path: path);
         var count = 0;
 
         for (var i = 0; (i < bytes.Length); i++) {

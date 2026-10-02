@@ -1161,7 +1161,7 @@ P13b-2 has landed: the simulation destination runs end to end. A seat folds the
 optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
 flag byte on every intent path, so an absent ray costs one byte; the tape's
 `ShapeToken`, the checkpoint's `SupportedVersion` and the handshake's
-`WorldProtocol.WireProtocolKey` `PUCKWRL4` and the federation's `WorldFederationCodec.WireKey` `PUCKFED5`, each strict. The server keeps each
+`WorldProtocol.WireProtocolKey` `PUCKWRL4` and the federation's `WorldFederationCodec.WireKey` `PUCKFED6`, each strict. The server keeps each
 body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
 the row's mapping against a one-by-one source, for the rule operand
 `$pointer:<seat>:<screenIndex>:x|y|on`; `body.channels` echoes the ray and its
@@ -2774,7 +2774,7 @@ Phase 3, the groups, follows phase 2:
     `SdfFrameBufferPlanLawTests` held too until P14-6 deleted that plan).
 20. Done: the SDF engine is on groups. Its kernels read
     `sdf-world.interface.hlsli` and `sdf-bricks.interface.hlsli`,
-    generated from `SdfWorldInterfaces` and owned by `puck shaders generate`,
+    generated from `SdfKernelInterfaces` and owned by `puck shaders generate`,
     and the pass-pipeline cache creates every pipeline from its interface's
     layout, which the kernels bind by member name. Every per-view dispatch bound
     the ring slot's frame set and its view's views set until P14-6 gave each
@@ -3819,7 +3819,7 @@ Each commit is marked with what it waits on.
    - The format moved with it, strictly and with no reader for the old shape:
      the tape's `ShapeToken`, the checkpoint's `SupportedVersion`,
      `WorldProtocol.WireProtocolKey` `PUCKWRL4`, and the federation's
-     `WorldFederationCodec.WireKey` `PUCKFED5`. No tape is checked in.
+     `WorldFederationCodec.WireKey` `PUCKFED6`. No tape is checked in.
    - `PlayerCommandModule` registers `source.pointer.origin` and
      `source.pointer.direction` as Axis3D seat verbs, the seat keeps them for
      the tick, and `SeatController.HeldIntent` folds them into the intent. A
@@ -4362,7 +4362,7 @@ item 2 landed.
     because the build refuses bytecode stale against its sources and every
     include, the generated `sdf-isa.hlsli` among them, and `puck shaders
     generate --check` refuses that file stale against the C# model. The
-    instruction set's fingerprint (`SdfIsaHlsl.Fingerprint`) hashes the include,
+    instruction set's fingerprint (`SdfIsaFingerprint.Value`) hashes the include,
     which generates every lane enum, header lane accessor and vector count the
     kernels read, and the model's described encoding (`SdfEncodingProbe`: where
     the builder and packer put every field, bitfield and table entry, found by
@@ -4390,6 +4390,48 @@ item 2 landed.
     stamp, on both backends. The parity world boots with soft shadows at
     `High` and ambient occlusion on, so every SDF station passes through the
     shadow and ambient stages under the cross-backend pixel gate.
+14. Per-tile segment pruning. A `tape` pass in `sdf.world`, between `beam`
+    and `primary`, proves which masked segments cannot decide any ray of a
+    tile and leaves them out of the march.
+    - Delivers: for each 16-pixel tile, the pass walks the tile's masked
+      segments over four to eight depth slabs, from the beam's entry to the far
+      bound. It evaluates each `ShapeBlend` once at the slab ball's centre,
+      bounded by the world-space ball's radius times a certified Lipschitz
+      bound for that candidate, including its transforms and domain warps.
+      The interpreter's `distanceScale` alone is not that bound: a scale also
+      changes the coordinates at which the shape is evaluated. A candidate
+      without a finite certified bound stays live. The bound and P15-7's ball
+      test share the same function. The pass tracks which side
+      each union, smooth union, intersection and subtraction chooses over the
+      ball. It writes a per-tile bitmask of live segments with summary words,
+      which `mapCore` and `mapGradCore` read through the existing
+      instance-mask walk. Every pass counts the shapes it evaluates, beside
+      `gpu.march.steps`. The pass is off for a program under about thirty
+      masked instructions per tile, where pruning saves under 10%.
+    - Evidence: a CPU study of interval pruning over the render programs, on
+      the counters camera at 1440x810 with 16-pixel tiles, against today's
+      mask with its sphere and rigid-leaf skips. Instructions pruned beyond
+      the instance mask: counters 5.9%, the parity world's vocabulary station
+      9.5%, the Nexus 84.1%, the courtyard 83.0%. Shape evaluations per march
+      sample fall 2.3%, 9.1%, 71.4% and 84.7%. Every pruned tape matched the
+      full walk bit for bit over 1.79 million march samples.
+    - Done when: on the Nexus and courtyard workloads at the floor tier,
+      primary's shape evaluations fall by at least 60% (the study predicts 71%
+      to 85%), the tape pass's own evaluations stay under 25% of those it
+      saves, `gpu.march.steps` is unchanged, and parity passes.
+    - Follows P15-5 and P15-7.
+15. Winner-only gradients. `mapGradCore` takes a hit's gradient from the
+    shape that decides its value, rather than walking every shape's gradient,
+    wherever one shape decides it: a hard blend, or a smooth blend outside its
+    radius. Inside a smooth blend's band it keeps every shape the blend weighs.
+    - Evidence: on the Nexus a hit's gradient walk costs 71.6 shape
+      evaluations, where the deciding shapes alone cost 6.0.
+    - Done when: on the same Nexus camera, extent and hit samples, the count
+      of analytic shape-gradient evaluations equals the count of shapes with
+      nonzero blend weight in a reference full walk. The shapes-evaluated
+      count (step 14), including work to find the winners, must also be lower
+      than with this optimization off. `SdfFieldDeviceLawTests` holds the
+      gradients, and parity passes.
 
 **Decisions.** P4's visibility record is the surface sample record staged
 shading reads. P7b moves the SDF push blocks and binding constants onto groups;
@@ -4413,6 +4455,17 @@ matrix row is green when host leases and instance reads serve it. With no
 composite, N split-screen seats render as N instances' passes rather than one
 dispatch whose Z dimension is N; counters on the RTX 2060 measure that cost, and
 layered views return only if the counts call for them.
+
+**Not adopted.** The interval-pruning study also weighed these, and none is
+planned:
+
+- An interval-culled octree in the baker: it saves 20.9% of a bake's sign
+  evaluations, 0.5% of the whole bake's.
+- A compiled or SIMD CPU evaluator: the CPU evaluator answers fixed-point
+  queries and bakes, a different domain from the GPU march the study prices.
+- An interpreter rebuilt on the studied design: step 14 takes its pruning as a
+  pass in front of the existing interpreter, whose instruction set, kernel
+  variants and device law already stand.
 
 **Depends on:** P2, P8, P11, P12, P4 for the visibility record, and P7b: at
 most four group layouts, separate sampler tables, the world group at a fixed
@@ -4626,16 +4679,24 @@ resolution, and stay there.
   only when its residency's levers turn reconstruction on; by default it does
   not, so it renders at its render extent with the spatial resolve and keeps no
   history storage. The world's own views follow `world.temporal`.
-- **Dynamic resolution follows present timing.** One controller consumes one
-  load signal and sets each view's per-frame render extent from it. The signal
-  is the presenter's confirmed-present timing (`IPresentTimingFeedback`) at
-  runtime: presentation-only, read by nothing in the simulation, and outside the
-  determinism contract. It reaches the controller through an injectable timing
-  source, so laws drive the controller with a fake. Where present timing is
-  unavailable (`PresentTimingSample.Unavailable`, an offscreen host, a
-  presenter without the capability), the same controller reads the previous
-  frame's counted `gpu.march.steps` against a per-tier step budget instead.
-  The counters workload and the parity world pin dynamic resolution off.
+- **Dynamic resolution follows the GPU's frame time.** One controller
+  (`WorldDynamicResolution`) consumes one load signal and sets each view's
+  per-frame render extent from it. Against a known display rate the signal is
+  the GPU's own time for the world's views' latest timed frame, the pass
+  timestamps `world.gpu-timing` reads (`ShaderPipelineRenderNode.Timing`), held
+  to the display period: a present-paced (FIFO) swapchain reports every kept
+  present as exactly its period, so present timing can lower the grid on a miss
+  but never shows the headroom to raise it again. Where the device times
+  nothing, the signal is the presenter's confirmed-present timing
+  (`IPresentTimingFeedback`) against the period; where neither is available
+  (an offscreen host has no display rate and presents nothing), the previous
+  frame's counted `gpu.march.steps` against the step budget. Every signal is
+  presentation-only, read by nothing in the simulation, and outside the
+  determinism contract. It reaches the controller through an injectable source
+  (`IWorldFrameLoadSource`), so laws drive the controller with a fake; the
+  World's source (`WorldFrameLoadSource`) asks `WorldGpuTiming` for timestamps
+  only while dynamic resolution is on against a known display rate. The
+  counters workload and the parity world pin dynamic resolution off.
 - **Dynamic-resolution policy.** A fresh load sample within 90–110% of its
   budget leaves the scale unchanged. Outside that band the scale falls by at
   most 1/16 or rises by at most 1/32 per fresh sample, clamped to the view's
@@ -4646,8 +4707,31 @@ resolution, and stay there.
   Counted fallback budgets derive from the committed RTX 2060 ceiling rows
   and scale by output pixel area, so recording new floor evidence also updates
   the controller's budgets. No copied numeric budget constants are maintained.
-  The timing trace and counted fallback hold the same exact response,
-  including both step bounds and floor/ceiling clamps. Extent changes allocate
+  The GPU time, the present timing and the counted fallback hold the same exact response,
+  including both step bounds and floor/ceiling clamps. A sample is taken only
+  at the quantized grid the views render now: each node records the grid of
+  every submission it renders, a reading names its renders' common grid, and a
+  reading from another grid, as one delayed past a grid move is, moves
+  nothing. A present names no frame, so a present interval is a sample only
+  while every view render completed from its start to its end was at the
+  current grid: each node keeps a summary of every render completed since it
+  was last read (`ShaderPipelineRenderNode.TakeCompletions`), not only the
+  newest, and the interval needs every view's summary to name the current
+  grid. A view that leaves the graph hands its completed renders to the
+  runtime by instance name (`RenderGraphRuntime.TakeRetiredCompletions`), but
+  only for the names its reader declares (`RenderGraphRuntime.AccountFor`: the
+  world load source declares its views while dynamic resolution is on and
+  none once it is off), so a pane or source keeps no entry: a
+  disposed node waits out its submissions first, and a node a kept consumer
+  still holds stays polled until it owes nothing or is released. So a removed
+  view's render still counts, across any number of reconfigurations between
+  reads, and each render is handed over once. When the budget falls between two adjacent grids the
+  controller settles on the cheaper one: an over-budget sample marks its grid,
+  and a rise stops below the mark until a sample, scaled by the two grids'
+  area ratio, predicts the marked grid within the budget itself, which clears
+  the mark. The grids are dyadic, so the prediction is compared exactly: the
+  load times the marked grid's area against the budget times the current
+  grid's, as exact products of the doubles given, inclusive at the budget. Extent changes allocate
   nothing inside the ceiling. Ordinary canaries and parity pin the lever off;
   P15-8 decides default enablement from its counted comparison.
 - **The counters are always on.** A pass counts its march steps and texels into
@@ -4891,8 +4975,25 @@ counted rows recorded in the same change.
    - Counted-cost gate: with reconstruction on, the resolve's dispatch, its
      texels, the history's barriers and its device-local bytes; a still view's
      rendered frames stop after one period (`world.cadence on`).
-6. **P15-6, dynamic resolution.** The render extent moves inside its ceiling
-   each frame.
+6. **P15-6, dynamic resolution.** Landed. The render extent moves inside its
+   ceiling each frame. `world.dynamic-resolution on|off|<tier>|<fraction>`
+   turns it on, or forces a grid for a sweep; `render.dynamicResolution` and
+   `render.dynamicResolutionFloor` set it at boot, and every shipped preset
+   leaves it off. A step moves the grid by a share of itself, so "1/16" and
+   "1/32" below are relative bounds (`WorldDynamicResolution.MaximumFall`,
+   `MaximumRise`). The step budget is the floor run's `world` node march-step
+   ceilings over its output pixels, read from the committed ceilings file,
+   which the World compiles in; it is one budget for every tier, scaled by the
+   output's pixels. A native tier's ceiling while the lever is on is
+   three-quarter (`WorldRenderSettings.RenderCeiling`). A reading is the
+   frame's cost across views: the sum over each view's newest timed or
+   completed render not read before. A standing view's latest reading is
+   stale, a render an earlier reading already counted, so it adds no load, does
+   not make the reading fresh and does not name its grid; a reading is fresh
+   whenever any view rendered anew. The controller settles on the cheaper of
+   two adjacent quantized grids that bracket the budget instead of
+   oscillating between them, and `world.dynamic-resolution` echoes the grid
+   it holds above as `over=`.
    - Delivers: one controller that sets each view's per-frame render extent
      between a floor and the tier's ceiling, never reallocating, and resets no
      history (the resolve reads the extent each frame). It writes
@@ -4901,18 +5002,23 @@ counted rows recorded in the same change.
      A view at a native ceiling reconstructs nothing and ignores that grid, so
      dynamic resolution on a native tier gives its views a ceiling below
      native for as long as it is on (one rebuild when the lever moves), never a
-     per-frame choice of fragment; its one load signal,
-     present timing through an injectable timing source with the counted
-     march-step budget where present timing is unavailable; the lever with its
-     presets.
+     per-frame choice of fragment; its one load signal through an injectable
+     source, the GPU's frame time first, present timing where the device times
+     nothing, and the counted march-step budget where neither is available; the
+     lever with its presets.
    - Touches: `WorldFramePresenter`, `WorldRenderSettings`, `SdfFrameBlock`, the
      controller in `src/Puck.World.Client`, `WorldSessionLevers`,
      `quality.puck`.
    - Done when: a law drives the controller through a fake timing source over a
      scripted signal and holds its extents, and a second law makes the fake
-     unavailable and holds the controller to the step budget; a `dynamic-resolution` canary forces a sweep of extents through the
+     unavailable and holds the controller to the step budget; a law raises the
+     grid again under a present-paced display when the GPU's time drops, and
+     one holds the fallback order; a `dynamic-resolution` canary forces a sweep of extents through the
      lever and reads no `gpu.created.*` rise and no rebuild across it, each
-     forced extent's capture within tolerance of its reference.
+     forced extent's capture within tolerance of its reference. Held by
+     `WorldDynamicResolutionLawTests`, `WorldFrameLoadAggregateLawTests` and the
+     `dynamic-resolution` canary, whose
+     grid captures equal their tiers' captures exactly on both backends.
    - Counted-cost gate: zero created objects across the sweep; per-frame counts
      scale with the render extent the frame chose.
 7. **P15-7, march seeding.** The previous frame's depth starts the march where
@@ -5121,6 +5227,15 @@ Bakes are presentation only: contact and queries keep reading the SDF field.
 The parity world ships its bakes, so captures never depend on a local bake.
 Which representation a placement uses follows P6's rule that representations
 are chosen by measured cost.
+
+**Open experiment.** A CPU experiment compares manifold dual contouring with
+`SdfDualContouring`'s one vertex per cell. One vertex per cell leaves 19 of 93
+baked prototypes with non-manifold edges, every mesh still closed (the Nexus
+kart ramp 33, the kart bank wall 30, the granary anchor 27, the hex tiles 8
+each), and pinches a plate about one cell thick (84 non-manifold edges at one
+cell, none at 0.4, 0.7, or 1.3 to 3 cells). The experiment is done when it
+reports each extractor's non-manifold edges, silhouette error and cost over the
+same prototypes, so the mesh choice above rests on the counts.
 
 **Check:** baking one prototype twice produces the same key and, on one
 device, the same bytes; editing one prototype rebakes only that prototype; a
@@ -5687,7 +5802,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `sky-cycle` (the courtyard's toggle between two keys). The `sky-clock`
      canary, which holds the view equal one period apart, landed with P18-2.
    - Touches: `tests/Puck.Parity`, `tests/Puck.Counters`,
-     `tests/Puck.World.Canaries`, `src/Puck.Cli/Canary/CanaryCeilings.cs`.
+     `tests/Puck.World.Canaries`, `CanaryCeilings.json`.
    - Done when: the station holds on both backends; each canary is shown failing
      once on a broken leg (the stars' brightness zeroed); the sky leg's rows are recorded on the RTX 2060 at the floor
      tier, and show today's costs: every pass re-rendering on a drift frame.
@@ -6334,11 +6449,12 @@ block (P14-7), and P14-8's kernels as pass-pipeline cache entries, one command
 list per instance per frame slot, the conditional mesh pass, and the world tables
 bound through the group-1 set P17's texture draw added for the bake atlases, one
 per upload ring slot, the float working targets (P14-10), staged shading (P14-11)
-and the final sweep (P14-13): every P14 step has landed, and its counted-cost
-ceilings land as P15-1. P15 and P16 both follow P14: P15 also needs P4, and
-P16's display output landed with P14-10's float working targets and its HDR
-desktop capture after it; only the HDR-display checks remain, deferred to the
-end.
+and the final sweep (P14-13): steps 1 to 13 have landed, and the counted-cost
+ceilings land as P15-1. Per-tile segment pruning (P14-14) follows P15-5 and
+P15-7; winner-only gradients (P14-15) follow P14-14's shapes-evaluated count.
+P15 and P16 both follow P14: P15 also needs P4, and P16's display output landed
+with P14-10's float working targets and its HDR desktop capture after it; only
+the HDR-display checks remain, deferred to the end.
 P17's CPU half, the bakes and their texture codecs, has landed, and so have
 their block-compressed upload and sampling check on both backends and the one
 pixel-format vocabulary, `GpuPixelFormat`. A ready bake's mesh draws in place
@@ -6355,9 +6471,9 @@ and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
-landed, and so has every other P14 step, so the longest remaining chain is
-P15's, P15-1 to P15-8. A bake's textures (P17) come before P6's choice between
-a bake and the field.
+landed, and so have P14's other first thirteen steps, so the longest remaining
+chain is P15's, P15-1 to P15-8, with P14-14's pruning after P15-5 and P15-7. A
+bake's textures (P17) come before P6's choice between a bake and the field.
 
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to

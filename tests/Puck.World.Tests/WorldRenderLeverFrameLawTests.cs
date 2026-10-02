@@ -30,11 +30,11 @@ public sealed class WorldRenderLeverFrameLawTests : IDisposable {
     public void Dispose() => m_stateDirectory.Dispose();
     [Fact]
     public void EveryLiveLeverSettingReachesTheDressedFrame() {
-        using var host = WorldBootHarness.Compose(
+        var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
             world: World
-        ).Build();
+        ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var settings = host.Services.GetRequiredService<WorldRenderSettings>();
 

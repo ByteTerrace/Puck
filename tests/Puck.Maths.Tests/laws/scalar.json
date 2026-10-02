@@ -1373,7 +1373,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Log2 \u2014 the bit-length integer part plus Log2FractionQ61\u0027s 128-entry reciprocal table and quartic residual, narrowed Q61 \u2192 Q16 to nearest with ties to even",
+        "Subject": "FixedQ4816.Log2 \u2014 the bit-length integer part plus Log2FractionQ61\u0027s 128-entry reciprocal table and quartic residual, narrowed Q61 \u2192 Q16 to nearest, half up \u2014 the logarithm of a raw that is not a power of two is irrational, so a tie there is an artifact of the approximation and either neighbour is as near",
         "Against": "Oracles.EncloseLog2, which produces the fraction by REPEATED SQUARING of the exact mantissa with directed truncation \u2014 no table, no polynomial, no fixed-width intermediate. The statement is that the subject lies inside the enclosure widened by 0.75 raw ULP, the committed empirical envelope for log2; the doc\u0027s own claim (0.50 ULP max observed) is strictly tighter. ENVELOPE: Subjects.PositiveRaw clears the sign bit of every sampled raw, so the negative half of the space reaches this leg only as its mirror image, and the refusal there is stated structurally below",
         "Shared": "",
         "Citation": "",
@@ -1430,8 +1430,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Exp2 \u2014 a 128-entry mantissa table indexed by the exponent\u0027s top seven fraction bits, a quartic in the residual at Q62, and a ties-to-even right shift by 46 \u2212 \u230Aexponent\u230B",
-        "Against": "Oracles.EncloseExp2, which forms 2^u as the product of the ladder factors 2^(2\u207B\u2071) over the fraction\u0027s set bits, the ladder built by REPEATED INTEGER SQUARE ROOTS of two with directed rounding \u2014 no table, no polynomial. The envelope is DERIVED from the kernel\u0027s own two error terms rather than declared as a step: half a raw ULP for the closing ties-to-even narrowing, plus the mantissa\u0027s relative error carried up to the result\u0027s scale, bounded by 2\u207B\u2074\u2074. That second bound is the quartic\u0027s truncation of the exponential series \u2014 the omitted tail \u03A3_{n\u22655} (ln2\u00B7r)\u207F/n! is at most 3.85\u00B710\u207B\u00B9\u2074 at the largest residual r = 511/2\u00B9\u2076, and the six Q62 truncations with the table\u0027s own rounding add under 10\u207B\u00B9\u2078 to it. The absolute arm is ATTAINED, not slack: the \u221217 tie sits exactly half a ULP from its true value, on the even Zero. ENVELOPE: Subjects.Exp2ExponentRaw folds every sampled raw onto [\u221220, 47), the whole NON-saturating interior \u2014 above 47 the kernel deliberately answers MaxValue, which no envelope around the true value could contain, so that half-open tail is stated by the gate leg instead. RULED, and the correction is the point: this leg used to state a two-regime STEP \u2014 0.75 raw ULP absolute below a true result of 2\u00B2\u2077, 2\u207B\u2074\u2070 relative above it \u2014 which is discontinuous by a factor of ten at the switch and which the kernel breaches over the octave below it, where its own shape crosses three quarters of a ULP at about 2\u00B2\u2076\u00B7\u2078. The kernel is not defective there (0.816 raw ULP observed at the worst operand, a relative 9\u00B710\u207B\u00B9\u2074); the envelope was mis-stated, and the derived form above is strictly tighter than the step it replaces everywhere below 2\u00B2\u2076 and sixteen times tighter above 2\u00B2\u2077",
+        "Subject": "FixedQ4816.Exp2 \u2014 a 128-entry mantissa table indexed by the exponent\u0027s top seven fraction bits, a quartic in the residual at Q62, and a half-up right shift by 46 \u2212 \u230Aexponent\u230B; a whole exponent k is answered exactly as 2^k, the one place a true tie can occur",
+        "Against": "Oracles.EncloseExp2, which forms 2^u as the product of the ladder factors 2^(2\u207B\u2071) over the fraction\u0027s set bits, the ladder built by REPEATED INTEGER SQUARE ROOTS of two with directed rounding \u2014 no table, no polynomial. The envelope is DERIVED from the kernel\u0027s own two error terms rather than declared as a step: half a raw ULP for the closing half-up narrowing, plus the mantissa\u0027s relative error carried up to the result\u0027s scale, bounded by 2\u207B\u2074\u2074. That second bound is the quartic\u0027s truncation of the exponential series \u2014 the omitted tail \u03A3_{n\u22655} (ln2\u00B7r)\u207F/n! is at most 3.85\u00B710\u207B\u00B9\u2074 at the largest residual r = 511/2\u00B9\u2076, and the six Q62 truncations with the table\u0027s own rounding add under 10\u207B\u00B9\u2078 to it. The absolute arm is ATTAINED, not slack: the \u221217 tie sits exactly half a ULP from its true value, on the even Zero. ENVELOPE: Subjects.Exp2ExponentRaw folds every sampled raw onto [\u221220, 47), the whole NON-saturating interior \u2014 above 47 the kernel deliberately answers MaxValue, which no envelope around the true value could contain, so that half-open tail is stated by the gate leg instead. RULED, and the correction is the point: this leg used to state a two-regime STEP \u2014 0.75 raw ULP absolute below a true result of 2\u00B2\u2077, 2\u207B\u2074\u2070 relative above it \u2014 which is discontinuous by a factor of ten at the switch and which the kernel breaches over the octave below it, where its own shape crosses three quarters of a ULP at about 2\u00B2\u2076\u00B7\u2078. The kernel is not defective there (0.816 raw ULP observed at the worst operand, a relative 9\u00B710\u207B\u00B9\u2074); the envelope was mis-stated, and the derived form above is strictly tighter than the step it replaces everywhere below 2\u00B2\u2076 and sixteen times tighter above 2\u00B2\u2077",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -1457,7 +1457,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the documented underflow gate is at \u221217: Exp2(\u221217\u00B7One) is Zero \u2014 the true 2\u207B\u00B9\u2077 is exactly half a ULP and the narrowing ties to even, like the multiply, the divide, Round, FromDouble, Parse and the whole-exponent Pow, so Exp2(\u221217) and Pow(2, \u221217) agree \u2014 while one raw above \u221217 is past the tie and answers Epsilon, and every exponent below, including \u221217 minus one epsilon, \u221218, \u221219, \u22122\u00B3\u00B9 and MinValue, returns Zero. RULED, and the correction is the point: this kernel used to round its final tie half UP, the one half-up tie in the family, so Exp2(\u221217) answered Epsilon while Pow(2, \u221217) answered Zero for the same value",
+        "Subject": "the documented underflow gate is at \u221217: Exp2(\u221217\u00B7One) is Zero \u2014 the true 2\u207B\u00B9\u2077 is exactly half a ULP and the whole-exponent answer ties it to even, like the multiply, the divide, Round, FromDouble, Parse and the whole-exponent Pow, so Exp2(\u221217) and Pow(2, \u221217) agree \u2014 while one raw above \u221217 is past the tie and answers Epsilon, and every exponent below, including \u221217 minus one epsilon, \u221218, \u221219, \u22122\u00B3\u00B9 and MinValue, returns Zero. RULED: a whole exponent is the only Exp2 input whose true value can be a tie, so the exact whole-exponent answer carries the family\u0027s ties-to-even rule there and Exp2(\u221217) and Pow(2, \u221217) give the same Zero; every other 2^x is irrational, and the narrowing that serves it rounds half up because a tie there is only an artifact",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -1720,7 +1720,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedQ4816.Pow at every whole exponent 2 \u2264 |n| \u2264 32 and both base signs, each base sampled over the full raw carrier and again folded so the true magnitude lands between 2\u207B\u00B2\u2070 and 2\u2075\u2070 \u2014 straddling both the underflow to Zero and the saturation at the top of the carrier; and, for every draw, again at a base within 32 raws of that exponent\u0027s own saturation threshold \u2014 the integer n-th root of 2^(63 \u002B 16(n \u2212 1)), or of 2^(16(m \u002B 1) \u2212 63) for a negative exponent \u2212m \u2014 where the result sits within a few raws of 2\u2076\u00B3, the only band where the negative path\u0027s one-shot quotient estimate can overshoot and its exact correction is what decides the answer",
+        "Subject": "FixedQ4816.Pow at every whole exponent 2 \u2264 |n| \u2264 32 and both base signs, each base sampled over the full raw carrier and again folded so the true magnitude lands between 2\u207B\u00B2\u2070 and 2\u2075\u2070 \u2014 straddling both the underflow to Zero and the saturation at the top of the carrier; and, for every draw, again at a base within 32 raws of that exponent\u0027s own saturation threshold \u2014 the integer n-th root of 2^(63 \u002B 16(n \u2212 1)), or of 2^(16(m \u002B 1) \u2212 63) for a negative exponent \u2212m \u2014 where the result sits within a few raws of 2\u2076\u00B3, the only band where the negative path\u0027s one-shot quotient estimate can overshoot and its exact correction is what decides the answer; and, for every draw, at one of the eight true ties, 2\u00B9\u2075\u00B7o for odd o \u2264 13 at n = 17 and 2\u00B9\u2077 at n = \u221217 \u2014 the only bases whose exact power sits on a rounding midpoint, so the exponential estimate that answers first can never prove them and the exact path must",
         "Against": "the exact power in BigInteger \u2014 BigInteger.Pow of the raw, shifted by 16\u00B7(n \u2212 1) or divided into 2^(16\u00B7(1 \u2212 n)) \u2014 rounded once to nearest with ties to even by Oracles.RoundRationalTiesToEven and saturated with the parity\u0027s sign where it leaves the carrier. BIT-EXACT on both sides: the documented contract is the correct rounding, not an envelope",
         "Shared": "",
         "Citation": "",
@@ -1896,6 +1896,57 @@
         "Flavor": "None",
         "Subject": "RealQuadratic.ToString renders identically under a host culture whose negative sign is U+2212 as it does invariantly, checked by switching CurrentCulture around the call and restoring it. Formatting BigInteger components with the ambient provider let a host culture inject U+200E, U+061C or U+2212 into text that reaches logs, snapshots and golden files, against this library's stated contract that nothing in it reads the current culture. The probe proves its own teeth in the same breath, by requiring that ambient formatting of the SAME component really does differ -- otherwise a host that changed nothing would green it vacuously. ENVELOPE: the member cannot be named in Members because the coverage surface excludes ToString, so this law gates it without crediting it",
         "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.smoothstep-correctly-rounded",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Smoothstep"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Smoothstep at edges drawn over the whole raw carrier in both orientations \u2014 including pairs at the two extremes, whose difference needs 65 signed bits \u2014 at a value drawn over the whole carrier (so the clamps are reached) and again at a value placed inside the edges at a drawn fraction, so the interior is swept whatever the edges\u0027 distance apart; and, per draw, at a true tie, t = o/64 for an odd o, in both orientations",
+        "Against": "Oracles.Smoothstep: the exact rational N\u00B2(3D \u2212 2N)/D\u00B3 for N = value \u2212 edge0 and D = edge1 \u2212 edge0, in BigInteger, scaled by 2\u00B9\u2076 and rounded ONCE, ties to even, by Oracles.RoundRationalTiesToEven. A different route from the subject, which floors the ratio to Q62 before an exact cubic: the oracle never quantizes the ratio. BIT-EXACT outside a band of 2\u207B\u2074\u2074 ULP about each rounding midpoint, inside which either neighbour is accepted; the subject\u0027s documented bound beyond the half ULP is 1.5\u00B72\u207B\u2074\u2076 ULP, below that band. True ties are exact on both sides, so the tie leg is bit-exact and pins the ties-to-even rule",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "the curve is monotone in the value: at the interior value and its two raw neighbours the results never reverse the edges\u0027 direction (non-decreasing for edge0 \u003C edge1, non-increasing for edge0 \u003E edge1, the step at equal edges included). ENVELOPE: neighbouring raws only; the oracle agreement leg carries order over wider gaps, since two correctly rounded values of a monotone curve are themselves ordered",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.smoothstep-edges",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Smoothstep"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedQ4816.Smoothstep at six edge pairs in both orientations, the carrier extremes MinValue/MaxValue among them, and at five equal-edge steps",
+        "Against": "exact hand-derived expectations from the definition: Zero at edge0 and one raw beyond it, One at edge1 and one raw beyond it, exactly One/2 at the midpoint of an even span (t = 1/2 gives t\u00B2(3 \u2212 2t) = 1/2), and at equal edges the step value \u003C edge0 ? Zero : One",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

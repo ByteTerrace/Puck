@@ -5,7 +5,7 @@ using Puck.Hosting;
 namespace Puck.Shaders;
 
 /// <summary>
-/// The display encode (<c>Assets/Runtime/display-encode.frag.hlsl</c>), the one shader that turns a working image into
+/// The display encode (<c>Assets/Shaders/Runtime/display-encode.frag.hlsl</c>), the one shader that turns a working image into
 /// the pixels a display or a capture holds: every swapchain compositor draws it into its back buffer in the output's
 /// color space, and a render node's preview draws it in SDR. An instance encodes a working image in SDR into an
 /// RGBA8 image of its own and reads that back, which is how a capture of a float output, and a presenter's readback of
@@ -99,16 +99,17 @@ public sealed class SurfaceEncoder : IDisposable {
     /// <exception cref="IOException">The bytecode is missing or cannot be read.</exception>
     /// <exception cref="InvalidDataException">The file is not bytecode of the backend's format.</exception>
     public static byte[] Bytecode(bool directX, bool fragment) {
-        var path = Path.Combine(
-            path1: AppContext.BaseDirectory,
-            path2: "Assets",
-            path3: "Runtime",
-            path4: ((fragment
+        var path = Path.Combine(paths: [
+            AppContext.BaseDirectory,
+            "Assets",
+            "Shaders",
+            "Runtime",
+            ((fragment
                 ? FragmentStem
                 : VertexStem) + (directX
                 ? ".dxil"
-                : ".spv"))
-        );
+                : ".spv")),
+        ]);
         var bytecode = File.ReadAllBytes(path: path);
 
         ShaderBytecode.ValidateFormat(bytecode: bytecode);

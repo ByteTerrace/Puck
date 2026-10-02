@@ -15,7 +15,7 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfKernelHeaderReadLawTests {
     [Fact]
     public void EveryKernelReadsTheHeadersThroughTheGeneratedAccessors() {
-        var root = RepositoryPaths.Resolve(relativePath: SdfWorldInterfaces.KernelDirectory);
+        var root = RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
         var files = Directory.EnumerateFiles(path: root, searchOption: SearchOption.AllDirectories, searchPattern: "*.hlsl*")
             .Where(predicate: path => !Path.GetRelativePath(path: path, relativeTo: root).StartsWith(comparisonType: StringComparison.Ordinal, value: "isa"))
             .ToDictionary(

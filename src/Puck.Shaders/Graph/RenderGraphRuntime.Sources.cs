@@ -136,6 +136,7 @@ public sealed partial class RenderGraphRuntime {
             node: CreateNode(
                 deviceContext: m_device,
                 hostsOnDirectX: m_hostsOnDirectX,
+                images: m_images,
                 inFlightFrames: m_inFlightFrames,
                 name: name,
                 packages: m_packages,
@@ -147,7 +148,7 @@ public sealed partial class RenderGraphRuntime {
     // Opens an uploaded source instance's upload and makes its graph and its node, which renders nothing when the upload
     // refused or no conversion reads what it declares. The node takes the graph once every graph of the set binds
     // (Install).
-    private static (SourceGraph Source, ShaderPipelineRenderNode Node) CreateSource(RenderGraphInstance instance, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames) {
+    private static (SourceGraph Source, ShaderPipelineRenderNode Node) CreateSource(RenderGraphInstance instance, RenderGraphPackageRecorders packages, GpuPassPipelineCache pipelines, IGpuDeviceContext deviceContext, bool hostsOnDirectX, uint inFlightFrames, GpuImageLeases images) {
         var upload = packages.CreateSource(context: new RenderGraphExternalProducerContext(
             Device: deviceContext,
             HostsOnDirectX: hostsOnDirectX,
@@ -171,6 +172,7 @@ public sealed partial class RenderGraphRuntime {
             node = CreateNode(
                 deviceContext: deviceContext,
                 hostsOnDirectX: hostsOnDirectX,
+                images: images,
                 inFlightFrames: inFlightFrames,
                 name: instance.Name,
                 packages: packages,
@@ -221,6 +223,8 @@ public sealed partial class RenderGraphRuntime {
         var submitted = node.FrameCounter;
         var surface = node.ProduceFrame(context: in context);
 
+        NoteOwedReadbacks(index: index);
+
         if (node.FrameCounter == submitted) {
             return;
         }
@@ -231,6 +235,8 @@ public sealed partial class RenderGraphRuntime {
             Frame: frame,
             Image: surface,
             Layout: node.PublishedLayout,
+            StateTick: node.PublishedStateTick,
+            StandsFor: Standing.Own,
             Tainted: false
         );
     }

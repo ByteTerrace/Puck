@@ -168,6 +168,11 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
 
         throw new ArgumentOutOfRangeException(paramName: nameof(ordinal));
     }
+    // Whether the live program names any field's brick (Emit names a field only once its first upload is ready), so
+    // that a reset of the brick state, which forgets every ready field, changes the program. A reset before any field is
+    // ready leaves the program as it was, and moving its revision then would rebuild an unchanged program and render
+    // every standing view again.
+    private bool AnyReady() => (Array.IndexOf(array: m_ready, value: true) >= 0);
     private static int HeightFieldCount(WorldFieldsSection document) {
         var count = 0;
 
@@ -194,6 +199,8 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             objA: bakes,
             objB: m_uploadService
         )) {
+            var dropsReadyField = AnyReady();
+
             m_uploadService = bakes;
             m_uploadedLattice = null;
             m_uploadedFieldCount = 0;
@@ -201,7 +208,10 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             m_uploadedChanged = [];
             m_uploadedHeightScales = [];
             m_pendingField = -1;
-            m_programRevision++;
+
+            if (dropsReadyField) {
+                m_programRevision++;
+            }
         }
 
         if (
@@ -218,6 +228,8 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             (lattice != m_uploadedLattice) ||
             (fieldCount != m_uploadedFieldCount)
         ) {
+            var dropsReadyField = AnyReady();
+
             m_uploadedLattice = lattice;
             m_uploadedFieldCount = fieldCount;
             m_uploadedChanged = new int[fieldCount];
@@ -229,7 +241,10 @@ public sealed class WorldFieldEmitter : ISdfSceneEmitter {
             m_ready = new bool[fieldCount];
             m_pendingField = -1;
             m_cursor = 0;
-            m_programRevision++;
+
+            if (dropsReadyField) {
+                m_programRevision++;
+            }
         }
 
         if (m_pendingField >= 0) {

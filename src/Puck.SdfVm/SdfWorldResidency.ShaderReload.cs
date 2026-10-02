@@ -113,7 +113,7 @@ public sealed partial class SdfWorldResidency {
             device: m_deviceContext!,
             directory: request.Directory!,
             // Use the format already loaded into this residency, never an OS guess or a mutable host preference.
-            extension: (m_kernels[SdfKernel.Beam].Span.StartsWith(value: "DXBC"u8)
+            extension: (ShaderBytecode.IsDxbcContainer(bytecode: m_kernels[SdfKernel.Beam].Span)
                 ? ".dxil"
                 : ".spv"
             ),
