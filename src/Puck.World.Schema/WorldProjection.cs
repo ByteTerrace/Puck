@@ -99,13 +99,15 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Adjacencies">The reciprocal boundary rows.</param>
 /// <param name="Metadata">The title/description half of <c>metadata</c>, when the world authors one — see the type
 /// remarks.</param>
-/// <param name="Observations">Explicitly disclosed literal state observations, without executable or draw bookkeeping traits.</param>
+/// <param name="Observations">Explicitly disclosed state observations, without draw bookkeeping: each cell as stored,
+/// with the value-over-time trait that governs it.</param>
 /// <param name="Spaces">The vector spaces the disclosed vector rows among <paramref name="Observations"/> name, and no
 /// other: a space declares only a model, a revision, and a dimension count, and a vector row loads only against its
 /// own.</param>
-/// <param name="Timeline">The world's tick clocks, which a recipient evaluates from the tick it presents, and no state
-/// clock: a state clock reads a state row, and a projection sends no anchor of its phase, so a projection whose values
-/// key on one does not hydrate (<see cref="WorldProjection.TryToDefinition"/>).</param>
+/// <param name="Timeline">The world's clocks as a recipient evaluates them from the tick it presents: each tick clock as
+/// authored, and each state clock a carried value keys on as an anchored clock holding the anchor of its phase the
+/// recipient was last sent (<see cref="WorldClockAnchorLedger"/>), never the row it reads. A state clock no carried
+/// value keys on does not cross.</param>
 public sealed record WorldProjectionDocument(
     WorldProjectionProvenance Provenance,
     WorldMotionDefaults Motion,
@@ -170,8 +172,10 @@ public sealed record WorldProjectionDocument(
 /// value from the composing authority's own state and sends the literal, because the projection discloses no state
 /// section for a receiver to answer one against.</para>
 /// <para>At <see cref="WorldDisclosureTier.Replica"/> <see cref="Compose"/> answers <see langword="null"/> and the
-/// caller serializes the definition verbatim. For a flat document that download is hash-identical to the authored
-/// file; for a document loaded from a <c>basis</c> delta it is the flattened composition — self-contained by
+/// caller sends the definition whole, in the compact form every definition travels in
+/// (<see cref="WorldDefinitionSerialization.SerializeCompact"/>). For a flat document that download re-serializes to
+/// the authored file's canonical bytes; for a document loaded from a <c>basis</c> delta it is the flattened
+/// composition — self-contained by
 /// construction, since a live document never carries a basis (see <see cref="WorldDefinition.Basis"/>), and a
 /// receiver has no directory to resolve one against.</para>
 /// </remarks>
@@ -229,11 +233,41 @@ public static class WorldProjection {
     /// <param name="unrestricted">Whether to compose as a reader every restriction admits — the most any recipient could
     /// be handed, which a measurement sizing for every possible recipient reads — instead of as
     /// <paramref name="recipient"/>.</param>
-    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false) {
+    /// <param name="anchors">The anchors the recipient holds, which the composed timeline carries while their
+    /// predictions hold and replaces where they miss, or <see langword="null"/> for a one-off composition that no
+    /// recipient keeps anchors from, which carries each state clock's anchor at <paramref name="time"/>.</param>
+    /// <exception cref="WorldDisclosureException">A carried value keys on a state clock whose row the recipient may not
+    /// read, or binds a state cell it may not read: the composition refuses by name before any derived value is
+    /// emitted.</exception>
+    /// <exception cref="InvalidOperationException">The composed projection does not round-trip or flatten: a fault, not
+    /// a refusal.</exception>
+    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false, WorldClockAnchorLedger? anchors = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (tier != WorldDisclosureTier.Presentation) {
             return null;
+        }
+
+        WorldProjectionWork.Count(kind: WorldProjectionWork.Compositions);
+
+        // Every state clock a carried value keys on is a dependency of a derived value: it must pass the disclosure
+        // boundary before anything is composed, or nothing is.
+        var keyed = KeyedClocks(definition: definition);
+        var bound = WorldKeyedValues.BoundOf(definition: definition);
+
+        if (!unrestricted) {
+            RefuseHiddenClocks(
+                arena: arena,
+                definition: definition,
+                keyed: keyed,
+                recipient: recipient
+            );
+            RefuseHiddenBindings(
+                arena: arena,
+                bound: bound,
+                definition: definition,
+                recipient: recipient
+            );
         }
 
         // Placements cross as the recipient's disclosure deals them: a dealt placement reads the cells it was dealt
@@ -300,7 +334,12 @@ public static class WorldProjection {
                     Description: metadata.Description
                 )
             : null),
-            Timeline: TickClocksOf(timeline: definition.Timeline)
+            Timeline: CarriedClocks(
+                anchors: anchors,
+                definition: definition,
+                keyed: keyed,
+                time: in time
+            )
         );
 
         WorldStateDisclosure.ValidateBindings(
@@ -313,8 +352,11 @@ public static class WorldProjection {
         var observations = WorldStateDisclosure.Compose(
             arena: arena,
             definition: definition,
+            presented: PresentedRows(
+                bound: bound,
+                definition: definition
+            ),
             recipient: recipient,
-            time: in time,
             unrestricted: unrestricted
         );
 
@@ -331,41 +373,202 @@ public static class WorldProjection {
         );
     }
 
-    // The timeline a projection carries: its tick clocks, which are functions of the tick alone; null when it declares
-    // none.
-    private static WorldTimelineSection? TickClocksOf(WorldTimelineSection timeline) {
-        var clocks = (timeline.Clocks ?? [])
-            .Where(predicate: static clock => ((clock is not null) && !clock.IsStateClock))
-            .ToArray();
-
-        return ((clocks.Length == 0)
-            ? null
-            : new WorldTimelineSection(Clocks: clocks));
-    }
-    // A value keyed on a clock the hydrated timeline does not declare would resolve to its fallback, so the projection
-    // refuses to hydrate instead; the clock it names is a state clock, the one kind a projection does not carry.
-    private static string? UncarriedClock(WorldDefinition definition) {
-        static bool Carries(WorldDefinition definition, string clock) => WorldKeyResolver.TryClock(
-            clock: out _,
-            name: clock,
-            timeline: definition.Timeline
-        );
+    // Every clock a value of the document keys on, by the path that first names it: a keyed section's own clock and
+    // each keyed value's.
+    private static Dictionary<string, string> KeyedClocks(WorldDefinition definition) {
+        var keyed = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
         foreach (var (path, clock) in new[] { ("render.lighting", definition.Render.Lighting?.Clock), ("render.sky", definition.Render.Sky?.Clock) }) {
-            if ((clock is not null) && !Carries(clock: clock, definition: definition)) {
-                return UncarriedClockRefusal(clock: clock, path: path);
+            if (clock is not null) {
+                _ = keyed.TryAdd(key: clock, value: path);
             }
         }
 
-        foreach (var keyed in WorldKeyedValues.Of(definition: definition)) {
-            if (!Carries(clock: keyed.Track.Clock, definition: definition)) {
-                return UncarriedClockRefusal(clock: keyed.Track.Clock, path: keyed.Path);
+        foreach (var value in WorldKeyedValues.Of(definition: definition)) {
+            _ = keyed.TryAdd(key: value.Track.Clock, value: value.Path);
+        }
+
+        return keyed;
+    }
+    // A state clock reads its row's slot, so a keyed value on it is a reading of that cell: a recipient that may not
+    // read the cell is sent no value derived from it.
+    private static void RefuseHiddenClocks(WorldDefinition definition, StateArena arena, Dictionary<string, string> keyed, Principal? recipient) {
+        foreach (var clock in (definition.Timeline.Clocks ?? [])) {
+            if (
+                (clock?.State is not { } rowName) ||
+                !keyed.TryGetValue(key: clock.Name, value: out var path) ||
+                (definition.State.FirstOrDefault(predicate: row => string.Equals(
+                    a: row.Name.Value,
+                    b: rowName,
+                    comparisonType: StringComparison.Ordinal
+                )) is not { } row)
+            ) {
+                continue;
+            }
+
+            if (!WorldStateDisclosure.CanRead(
+                arena: arena,
+                definition: definition,
+                key: WorldStateRow.SlotKey,
+                recipient: recipient,
+                row: row
+            )) {
+                throw new WorldDisclosureException(message: $"{path} keys on clock '{clock.Name}', which reads state row '{rowName}' this recipient may not read; a hidden source sends no derived value.");
+            }
+        }
+    }
+    // A bindable bound to a state cell is a reading of that cell, under the rule a state clock's keys are: a recipient
+    // that may not read the cell, or, for a value read per body, every cell of its row, is sent no value derived from
+    // it.
+    private static void RefuseHiddenBindings(WorldDefinition definition, StateArena arena, IReadOnlyList<WorldBoundValue> bound, Principal? recipient) {
+        foreach (var (path, binding) in bound) {
+            if (definition.State.FirstOrDefault(predicate: row => string.Equals(
+                a: row.Name.Value,
+                b: binding.Row,
+                comparisonType: StringComparison.Ordinal
+            )) is not { } row) {
+                continue;
+            }
+
+            bool Reads(CellName key) => WorldStateDisclosure.CanRead(
+                arena: arena,
+                definition: definition,
+                key: key,
+                recipient: recipient,
+                row: row
+            );
+            var perBody = string.Equals(
+                a: binding.Key,
+                b: StateBinding.BodyKey,
+                comparisonType: StringComparison.Ordinal
+            );
+
+            // A key no cell name spells reads nothing, which the validator refuses; a per-body read reads every cell.
+            var reads = (perBody
+                ? (Reads(key: WorldStateRow.SlotKey) && (row.Cells ?? []).All(predicate: held => Reads(key: held.Key)))
+                : (!CellName.TryParse(
+                    candidate: (binding.Key ?? WorldStateRow.SlotKey.Value),
+                    name: out var cell,
+                    reason: out _
+                ) || Reads(key: cell)));
+
+            if (reads) {
+                continue;
+            }
+
+            throw new WorldDisclosureException(message: $"{path} binds state row '{binding.Row}' this recipient may not read; a hidden source sends no derived value.");
+        }
+    }
+    // The rows a presented bindable reads, which cross as observations so the recipient reads the value the authority
+    // presents rather than its fallback; a field row crosses as the field it is, never also as an observation.
+    private static HashSet<string>? PresentedRows(WorldDefinition definition, IReadOnlyList<WorldBoundValue> bound) {
+        if (bound.Count == 0) {
+            return null;
+        }
+
+        var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var (_, binding) in bound) {
+            if (definition.State.FirstOrDefault(predicate: row => string.Equals(
+                a: row.Name.Value,
+                b: binding.Row,
+                comparisonType: StringComparison.Ordinal
+            )) is { Field: null }) {
+                _ = rows.Add(item: binding.Row);
+            }
+        }
+
+        return rows;
+    }
+    // The timeline a projection carries: each tick clock as authored, each state clock a value keys on as the anchored
+    // clock the recipient's ledger carries for it, or, for a one-off composition no recipient holds anchors from, the
+    // anchor of its phase now; and nothing else; null when that is no clock.
+    private static WorldTimelineSection? CarriedClocks(WorldDefinition definition, Dictionary<string, string> keyed, WorldClockAnchorLedger? anchors, in ArenaTime time) {
+        var clocks = new List<WorldClock>();
+
+        foreach (var clock in (definition.Timeline.Clocks ?? [])) {
+            if (clock is null) {
+                continue;
+            }
+
+            if (clock.IsTickClock) {
+                clocks.Add(item: clock);
+            } else if (clock.IsStateClock && keyed.ContainsKey(key: clock.Name)) {
+                clocks.Add(item: ((anchors is not null)
+                    ? anchors.Carry(
+                        clock: clock,
+                        definition: definition,
+                        engineTick: time.EngineTick,
+                        tick: time.Tick
+                    )
+                    : new WorldClock(
+                        Anchor: WorldClockAnchors.Read(
+                            clock: clock,
+                            definition: definition,
+                            engineTick: time.EngineTick,
+                            tick: time.Tick
+                        ),
+                        Name: clock.Name,
+                        SpanSeconds: clock.SpanSeconds
+                    )));
+            }
+        }
+
+        return ((clocks.Count == 0)
+            ? null
+            : new WorldTimelineSection(Clocks: clocks));
+    }
+
+    /// <summary>Returns why a hydrated definition's clocks do not stand, or <see langword="null"/> when they do: a value
+    /// keyed on a clock the timeline does not declare would resolve to its fallback, a state clock would read a row no
+    /// projection carries, and an anchor that names a rate without the ticks it is per predicts nothing.</summary>
+    /// <param name="definition">The hydrated definition.</param>
+    /// <returns>The named refusal, or <see langword="null"/>.</returns>
+    public static string? Uncarried(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var clock in (definition.Timeline.Clocks ?? [])) {
+            if ((clock is null) || string.IsNullOrWhiteSpace(value: clock.Name) || !names.Add(item: clock.Name)) {
+                return "projection clocks must be non-null and named uniquely.";
+            }
+
+            if (!double.IsFinite(d: clock.Span) || (clock.Span <= 0d)) {
+                return $"projection clock '{clock.Name}' must have a finite positive span.";
+            }
+
+            if (clock.IsTickClock) {
+                if ((clock.Anchor is not null) || !WorldClocks.TryWholeTicks(seconds: clock.PeriodSeconds!.Value, ticks: out _) ||
+                    ((clock.StartSeconds is { } start) && (!double.IsFinite(d: start) || (start < 0d) || (start >= clock.Span)))) {
+                    return $"projection tick clock '{clock.Name}' must have a whole-tick period, a start inside its span, and no anchor.";
+                }
+            } else if (clock.StartSeconds is not null) {
+                return $"projection anchored clock '{clock.Name}' cannot carry a tick clock's start.";
+            }
+
+            if (clock.IsStateClock) {
+                return $"projection carries clock '{clock.Name}' over state row '{clock.State}'; a projection carries a state clock as an anchor of its phase, never its row.";
+            }
+
+            if (clock.Anchor is { IsWellFormed: false }) {
+                return $"projection anchors clock '{clock.Name}' with rate {clock.Anchor.Rate} over {clock.Anchor.Step} engine ticks; a rate names the ticks it is per, and only a rate does.";
+            }
+        }
+
+        foreach (var (clock, path) in KeyedClocks(definition: definition)) {
+            if (!WorldKeyResolver.TryClock(
+                clock: out _,
+                name: clock,
+                timeline: definition.Timeline
+            )) {
+                return $"projection keys {path} on clock '{clock}', which it does not carry.";
             }
         }
 
         return null;
     }
-    private static string UncarriedClockRefusal(string path, string clock) => $"projection keys {path} on clock '{clock}', which it does not carry: a state clock does not cross to a presentation-tier recipient, which receives no anchor of its phase.";
+
     // The declared spaces a disclosed vector row names, in declaration order; null when no vector row was disclosed.
     private static StateSpace[]? SpacesOf(IReadOnlyList<WorldObservedRow>? observations, IReadOnlyList<StateSpace>? spaces) {
         if (
@@ -388,6 +591,19 @@ public static class WorldProjection {
             : [.. spaces.Where(predicate: space => named.Contains(item: space.Name.Value))]);
     }
 
+    /// <summary>Serializes a projection to its compact canonical UTF-8 bytes, the form it travels to a recipient in:
+    /// <see cref="Serialize"/>'s members and order with no whitespace.</summary>
+    /// <param name="projection">The projection.</param>
+    /// <returns>The compact canonical UTF-8 byte form.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="projection"/> is <see langword="null"/>.</exception>
+    public static byte[] SerializeCompact(WorldProjectionDocument projection) {
+        ArgumentNullException.ThrowIfNull(argument: projection);
+
+        return CanonicalJsonDocument.SerializeCompact(
+            jsonTypeInfo: WorldJsonContext.Default.WorldProjectionDocument,
+            value: projection
+        );
+    }
     /// <summary>Serializes a projection to its canonical UTF-8 bytes.</summary>
     /// <param name="projection">The projection.</param>
     /// <returns>The canonical UTF-8 byte form.</returns>
@@ -412,7 +628,7 @@ public static class WorldProjection {
         try {
             projection = JsonSerializer.Deserialize(
                 utf8Json: utf8Json,
-                jsonTypeInfo: WorldJsonContext.Default.WorldProjectionDocument
+                jsonTypeInfo: WorldJsonContext.Untrusted.WorldProjectionDocument
             );
         } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
             reason = $"the projection is not a valid {WorldProjectionDocument.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
@@ -473,10 +689,18 @@ public static class WorldProjection {
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when the projection hydrated and every document value resolved.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="projection"/> is <see langword="null"/>.</exception>
-    public static bool TryToDefinition(WorldProjectionDocument projection, out WorldDefinition? definition, out string reason) {
+    public static bool TryToDefinition(WorldProjectionDocument projection, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: projection);
 
         definition = null;
+
+        // Nullable annotations do not constrain collection elements on the JSON boundary.
+        if ((projection.Kits is null) || projection.Kits.Any(predicate: static kit => (kit is null)) ||
+            (projection.Observations?.Any(predicate: static row => ((row is null) || (row.Cells is null) || row.Cells.Any(predicate: static cell => (cell is null)))) == true)) {
+            reason = "projection kits, observations and observed cells must be non-null rows.";
+
+            return false;
+        }
 
         var state = WorldFieldsSection.ToStateSection(composite: projection.Fields);
 
@@ -576,7 +800,7 @@ public static class WorldProjection {
             DocumentId = projection.Provenance.DocumentId,
         };
 
-        if (UncarriedClock(definition: hydrated) is { } uncarried) {
+        if (Uncarried(definition: hydrated) is { } uncarried) {
             reason = uncarried;
 
             return false;
@@ -594,8 +818,10 @@ public static class WorldProjection {
         return true;
     }
 
-    // An observed row crosses as a plain state row of the literals the recipient was disclosed: no trait, no
-    // visibility, and no placeholder cell, since a placeholder names no key and a withheld cell is simply absent.
+    // An observed row crosses as a state row of the cells the recipient was disclosed, each with the value-over-time
+    // trait that governs it, so the recipient evaluates it as the authority does: no visibility, and no placeholder
+    // cell, since a placeholder names no key and a withheld cell is simply absent. A slot's trait is its row's, since a
+    // slot cell carries no trait of its own.
     private static bool TryObservedRow(WorldObservedRow observed, out WorldStateRow row, out string reason) {
         row = null!;
 
@@ -615,11 +841,38 @@ public static class WorldProjection {
             return false;
         }
 
+        if ((observed.Min is { } min) && (observed.Max is { } max) && (min > max)) {
+            reason = $"projection observation row '{observed.Name}' carries an envelope whose min {min} exceeds its max {max}";
+
+            return false;
+        }
+
         var cells = new List<StateCell>(capacity: observed.Cells.Count);
+        WorldObservedCell? slotTrait = null;
 
         foreach (var cell in observed.Cells) {
             if (cell.Hidden) {
                 continue;
+            }
+
+            var traits = ((((cell.Advance is null) ? 0 : 1) + ((cell.Cycle is null) ? 0 : 1)) + ((cell.Dynamics is null) ? 0 : 1));
+
+            if (traits > 1) {
+                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' carries {traits} value-over-time traits; a cell is governed by one";
+
+                return false;
+            }
+
+            if ((traits == 1) && (observed.Kind is not (CellKind.Fixed or CellKind.Int))) {
+                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' carries a value-over-time trait, which only a Fixed or Int row does";
+
+                return false;
+            }
+
+            if ((cell.Clock is not null) && (traits == 0)) {
+                reason = $"projection observation row '{observed.Name}' cell '{cell.Key}' carries a clock without the trait that reads it";
+
+                return false;
             }
 
             if (!CellName.TryParse(
@@ -641,7 +894,23 @@ public static class WorldProjection {
                 return false;
             }
 
+            var slot = (key == WorldStateRow.SlotKey);
+
+            if (slot && (traits == 1)) {
+                slotTrait = cell;
+            }
+
             cells.Add(item: new StateCell(
+                Advance: (slot
+                    ? null
+                    : cell.Advance),
+                Clock: cell.Clock,
+                Cycle: (slot
+                    ? null
+                    : cell.Cycle),
+                Dynamics: (slot
+                    ? null
+                    : cell.Dynamics),
                 Key: key,
                 Observation: cell.Observation,
                 Value: (observed.Kind switch {
@@ -655,9 +924,23 @@ public static class WorldProjection {
             ));
         }
 
+        // A slot's trait is the row's default, which every other cell that carries none opts out of.
+        if (slotTrait is not null) {
+            for (var index = 0; (index < cells.Count); index++) {
+                if ((cells[index].Key != WorldStateRow.SlotKey) && (cells[index] is { Advance: null, Cycle: null, Dynamics: null })) {
+                    cells[index] = (cells[index] with { Behavior = StateCellBehavior.None });
+                }
+            }
+        }
+
         row = new WorldStateRow(
+            Advance: slotTrait?.Advance,
             Cells: cells,
+            Cycle: slotTrait?.Cycle,
+            Dynamics: slotTrait?.Dynamics,
             Kind: observed.Kind,
+            Max: observed.Max,
+            Min: observed.Min,
             Name: name,
             Space: observed.Space
         );

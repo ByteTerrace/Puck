@@ -577,19 +577,11 @@ internal static class Fixtures {
         section: definition.StateRaw,
         time: ArenaTime.Origin
     );
-    public static IReadOnlyList<WorldObservedRow>? Disclose(WorldDefinition definition, Principal? recipient) {
-        var time = ArenaTime.At(
-            engineTick: 0UL,
-            tick: 0UL
-        );
-
-        return WorldStateDisclosure.Compose(
-            arena: Store(definition: definition),
-            definition: definition,
-            recipient: recipient,
-            time: in time
-        );
-    }
+    public static IReadOnlyList<WorldObservedRow>? Disclose(WorldDefinition definition, Principal? recipient) => WorldStateDisclosure.Compose(
+        arena: Store(definition: definition),
+        definition: definition,
+        recipient: recipient
+    );
     public static WorldProjectionDocument? Project(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, Principal? recipient = null) {
         var time = ArenaTime.At(
             engineTick: 0UL,

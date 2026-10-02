@@ -828,6 +828,10 @@ public sealed partial class WorldPersistence {
             throw new InvalidOperationException(message: $"the checkpoint's search progress does not restore: {searchReason}");
         }
         BoardEnforcement.Restore(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
+        // A restore completes outside the tick, so it delivers the restored definition itself: every attached sink
+        // replaces the observations and trait clocks it held, which no per-tick anchor step would resend.
+        Host.Document.MarkDefinitionDeliveryPending();
+        Host.Document.DeliverPending();
     }
 
     /// <summary>Re-applies one mutation from a hosted row's persisted journal tail — the mutations recorded after

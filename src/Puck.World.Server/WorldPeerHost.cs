@@ -269,7 +269,7 @@ public sealed class WorldPeerHost : IDisposable {
             ) {
                 await WorldPeerWireFormat.WriteRefusalAsync(
                     stream: connection.Stream,
-                    reason: "world.mutation.actor_mismatch: mutation actor does not match authenticated connection",
+                    reason: "world.mutation.actor-mismatch: mutation actor does not match authenticated connection",
                     ct: ct
                 ).ConfigureAwait(continueOnCapturedContext: false);
                 continue;
@@ -1040,7 +1040,8 @@ public sealed class WorldPeerHost : IDisposable {
                 reply: reply,
                 tier: tier,
                 authority: m_server.AuthorityIdentity,
-                revision: m_server.Population.Revision
+                revision: m_server.Population.Revision,
+                time: m_server.DeliveryTime
             ),
             ct: ct
         ).ConfigureAwait(continueOnCapturedContext: false);
@@ -1145,7 +1146,8 @@ public sealed class WorldPeerHost : IDisposable {
                 route: in route,
                 tier: tier,
                 authority: m_server.AuthorityIdentity,
-                revision: m_server.Population.Revision
+                revision: m_server.Population.Revision,
+                time: m_server.DeliveryTime
             ),
             ct: ct
         ).ConfigureAwait(continueOnCapturedContext: false);
@@ -1222,7 +1224,7 @@ public sealed class WorldPeerHost : IDisposable {
         ) {
             await WriteFederationRefusal(
                 ct: ct,
-                detail: "world.mutation.actor_mismatch: mutation actor does not match authenticated credential",
+                detail: "world.mutation.actor-mismatch: mutation actor does not match authenticated credential",
                 refusal: WorldFederationRefusal.SubmissionRefused,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
@@ -1558,9 +1560,10 @@ public sealed class WorldPeerHost : IDisposable {
     // observer. A seat reads its own disclosure through ObserveTraveler, whose credential resolves to its principal.
     private async Task StreamProjectionAsync(Stream stream, WorldDisclosureTier tier, CancellationToken ct) {
         var sink = new WorldFederationProjectionSink(
-            tier: tier,
             authority: m_server.AuthorityIdentity,
             revision: () => m_server.Population.Revision,
+            server: m_server,
+            tier: tier,
             disclosure: () => new WorldSinkDisclosure(
                 Policy: m_server.Definition.Population.ObserverDisclosure,
                 ObserverBodyIndex: -1
@@ -1582,6 +1585,7 @@ public sealed class WorldPeerHost : IDisposable {
             // gate the attach did — otherwise this dispose races a tick publishing through that list.
             m_server.ExecuteAuthorityOperation(operation: () => {
                 lease.Dispose();
+                sink.Release();
 
                 return true;
             });

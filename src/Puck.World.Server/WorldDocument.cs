@@ -69,11 +69,6 @@ public sealed partial class WorldDocument {
         get => m_lastMutationFailureDetail;
         set => m_lastMutationFailureDetail = value;
     }
-    /// <summary>Gets or sets whether a definition delivery is pending for the next step.</summary>
-    internal bool PendingDefinitionDelivery {
-        get => m_pendingDefinitionDelivery;
-        set => m_pendingDefinitionDelivery = value;
-    }
     /// <summary>Gets the buffered live-edit ops, drained FIFO at the step boundary before intents.</summary>
     internal Queue<WorldPendingOp> Pending => m_pending;
 

@@ -21,6 +21,7 @@ public sealed class DocumentVersionWireLawTests {
         definition: Fixtures.BuildDocument(),
         revision: 0,
         tier: WorldDisclosureTier.Replica,
+        time: ArenaTime.At(engineTick: 0UL, tick: 0UL),
         version: version
     );
     private static bool Decodes(byte[] leaf, out WorldDocumentVersion version) => WorldFederationCodec.TryDecodeDocument(
@@ -49,7 +50,8 @@ public sealed class DocumentVersionWireLawTests {
             authority: "world/corner-sw",
             revision: 0,
             route: Route(version: version),
-            tier: WorldDisclosureTier.Replica
+            tier: WorldDisclosureTier.Replica,
+            time: ArenaTime.At(engineTick: 0UL, tick: 0UL)
         ),
         failure: out _,
         route: out _

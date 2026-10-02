@@ -1513,7 +1513,9 @@ since a slot's one cell has no separate default of its own to override.
 Timing state — the epoch, a dynamics follower's sampled position/velocity, a
 cycle's carried substep remainder — lives on the CELL, in `clock`
 (`StateCellClock`, `{epochTick?, epochEngineTick?, y0?, v0?, substepTicks?}`,
-every field optional), never on the trait: a key a write mints later starts
+every field optional, a zero field left out, and the same form wherever a
+clock travels: a row's cell, a pool value, a disclosed observation), never on
+the trait: a key a write mints later starts
 its own clock from the tick (and engine tick) it was created, and a slot
 row's timing state is authored as a `clock` object beside its bare `value`
 sugar. The two epochs are independent: `epochTick` is a simulation tick, read
@@ -3071,7 +3073,13 @@ carries the projection's `observations` into the hydrated document as plain
 rows as state. A disclosed vector row names its space, and the projection's
 `spaces` carries the declaration of every space a disclosed vector row names (a
 model, a revision, and a dimension count) and no other, so the row hydrates as a
-vector row of that space.
+vector row of that space. The projection's `timeline` carries the tick clocks and,
+for each state clock a carried value keys on, an anchored clock holding a
+`WorldClockAnchor` in place of the row; `WorldClockAnchorLedger` and
+`WorldProjectionFeed` keep one recipient's anchors and deltas, and
+`WorldProjectionHold` is the receiving half. The
+[worlds manual](../../docs/architecture/worlds.md#observation-and-display) states
+the anchor rule.
 
 `WorldCounterpartAttestation` is a neighbour's statement of its seam edges plus
 the five `WorldOverlapTerms` the overlap derivation reads from its side.

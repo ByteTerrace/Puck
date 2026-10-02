@@ -53,7 +53,7 @@ public interface IServerLink {
     long SubmitEnvelope(WorldSubmissionPayload payload, Principal principal, Guid operationId, Action<WorldSubmissionResult>? completion) {
         if (payload is WorldSubmissionPayload.Mutation) {
             completion?.Invoke(new WorldSubmissionResult.Refusal(
-                Code: "world.transport.operation_metadata_unsupported",
+                Code: "world.transport.operation-metadata-unsupported",
                 Detail: "the server link does not implement caller-preserved mutation operation IDs"
             ));
             return 0L;

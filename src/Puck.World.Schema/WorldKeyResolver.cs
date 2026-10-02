@@ -11,11 +11,11 @@ public interface IWorldClockSource {
     /// <summary>Gets the engine tick the source presents at.</summary>
     PresentedTick Presented { get; }
 
-    /// <summary>Reads a state clock's row as the source presents it.</summary>
+    /// <summary>Reads a state clock's phase, reducing the raw value before conversion to presentation precision.</summary>
     /// <param name="clock">The state clock.</param>
-    /// <param name="value">The row's presented value, or zero when it reads none.</param>
+    /// <param name="phase">The presented phase, or zero when it reads none.</param>
     /// <returns><see langword="true"/> when the row reads a number.</returns>
-    bool TryClockValue(WorldClock clock, out double value);
+    bool TryClockPhase(WorldClock clock, out double phase);
 }
 /// <summary>The segment of a keyed value a phase falls in: the key it leaves, the key it reaches, and how far along
 /// it the phase stands. Every length is in phase, a share of the clock's span.</summary>
@@ -67,7 +67,8 @@ public static class WorldKeyResolver {
         return false;
     }
     /// <summary>Returns a clock's phase as a source presents it: a tick clock's at the source's tick, a state clock's
-    /// the fractional part of its row's presented value.</summary>
+    /// the fractional part of its row's presented value, and an anchored clock's predicted from its anchor at the
+    /// source's tick (<see cref="WorldClockAnchor.PhaseAt"/>).</summary>
     /// <param name="clock">The clock.</param>
     /// <param name="source">The source, or <see langword="null"/> for none, which reads no phase.</param>
     /// <param name="phase">The phase, in <c>[0, 1)</c>, or zero when it reads none.</param>
@@ -82,14 +83,18 @@ public static class WorldKeyResolver {
         }
 
         if (clock.IsStateClock) {
-            if (!source.TryClockValue(
+            return source.TryClockPhase(
                 clock: clock,
-                value: out var value
-            )) {
+                phase: out phase
+            );
+        }
+
+        if (clock.IsAnchored) {
+            if (clock.Anchor is not { IsWellFormed: true } anchor) {
                 return false;
             }
 
-            phase = WorldClocks.Phase(value: value);
+            phase = anchor.PhaseAt(tick: source.Presented);
 
             return true;
         }
@@ -422,7 +427,7 @@ public static class WorldKeyResolver {
     /// <param name="tick">The presented tick.</param>
     /// <param name="modulus">The period the result is reduced by, in the rate's units; positive.</param>
     /// <returns>The reduced integral.</returns>
-    /// <exception cref="ArgumentException"><paramref name="clock"/> is a state clock, or <paramref name="track"/>
+    /// <exception cref="ArgumentException"><paramref name="clock"/> is no tick clock, or <paramref name="track"/>
     /// carries no keys.</exception>
     public static double Integrate(WorldKeyTrack<float> track, WorldClock clock, PresentedTick tick, double modulus) => Integrate(
         clock: clock,
@@ -441,7 +446,7 @@ public static class WorldKeyResolver {
     /// <param name="tick">The presented tick.</param>
     /// <param name="modulus">The period the result is reduced by, in the rate's units; positive.</param>
     /// <returns>The reduced integral.</returns>
-    /// <exception cref="ArgumentException"><paramref name="clock"/> is a state clock, or <paramref name="track"/>
+    /// <exception cref="ArgumentException"><paramref name="clock"/> is no tick clock, or <paramref name="track"/>
     /// carries no keys.</exception>
     public static double Integrate<T>(WorldKeyTrack<T> track, Func<T, double> value, WorldClock clock, PresentedTick tick, double modulus) {
         ArgumentNullException.ThrowIfNull(argument: value);
@@ -449,9 +454,9 @@ public static class WorldKeyResolver {
         ArgumentNullException.ThrowIfNull(argument: clock);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: modulus);
 
-        if (clock.IsStateClock) {
+        if (!clock.IsTickClock) {
             throw new ArgumentException(
-                message: $"Clock '{clock.Name}' reads a state row, whose integral would depend on its history; a rate keys only on a tick clock.",
+                message: $"Clock '{clock.Name}' is no tick clock: a state row's or an anchor's integral would depend on its history; a rate keys only on a tick clock.",
                 paramName: nameof(clock)
             );
         }

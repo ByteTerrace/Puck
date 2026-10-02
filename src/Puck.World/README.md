@@ -556,7 +556,7 @@ pending, from any submitter, with `world.authority.stopped`, so an edit in
 flight there rolls back by name. The queue keeps nothing once its last endpoint
 is gone. Every edit carries the activation of the world whose document its base
 came from, and a world refuses one composed on another's
-(`world.mutation.activation_mismatch`), so an edit sent while a traveler's link
+(`world.mutation.activation-mismatch`), so an edit sent while a traveler's link
 has already moved on to the next world rolls back instead of landing there. The
 row doors that read a row before writing it (`world.row.add`, `.remove`, the
 literal `.set`, `.step`) and `creation.sculpt` carry it too.
@@ -2066,8 +2066,9 @@ rates the tick integrates in closed form, so a key changing one never jumps
 the layer; a rate keys only on a tick clock and binds no state row. Keys are
 presentation: a clock reads the tick or a state row and nothing keyed feeds
 the simulation. A presentation-tier projection carries the tick clocks, which
-the recipient evaluates at the tick it presents, and no state clock, so a
-projection whose values key on a state clock refuses to hydrate by name. `world.timeline` echoes each clock's source, its period and
+the recipient evaluates at the tick it presents, and each state clock a value
+keys on as an anchor of its phase, re-sent only at the ticks the recipient's
+prediction misses the authority's phase. `world.timeline` echoes each clock's source, its period and
 start in engine ticks, its phase and reading at the authority's tick, and how
 many keyed values the presentation has resolved, which rises only while a
 clock a key reads moves.

@@ -89,7 +89,7 @@ boot that finds no compiled world derives everything and runs the same world.
 
 **The file.** A compiled world is a [chunk container](../reference/assets.md#chunk-containers)
 with the magic `PWLD` and format version 1, named `<name>.puckb` after its
-document (`moth.puck` and `moth.world.json` both map to `moth.puckb`). Its header
+document (`moth.puck` maps to `moth.puckb`, and `puck.world.json` to `puck.puckb`). Its header
 holds, in order, four keys, and a boot whose own four keys differ ignores the
 whole file:
 
@@ -655,6 +655,24 @@ An observation feed provides:
 - redaction and fidelity enforcement at every projection/read door, including queries;
 - the destination presentation clock and step width.
 
+The in-process output hub delivers synchronously on the tick thread. Its snapshots borrow reused storage,
+so each sink consumes or copies them before returning. The federation projection sink copies encoded records
+into a per-subscription queue of at most eight pending deliveries (`WorldFederationProjectionSink.PendingDeliveryLimit`).
+When that queue fills, it detaches with `world.observation.backpressure` and ends the stream with a projection
+invalidation. The hub detaches it immediately; draining the retained records does not keep the subscription alive.
+A peer reopens for a fresh primer: a snapshot alone cannot repair a missed definition revision
+or authority route. The queued records retain their original order and authority/session epochs until that
+invalidation; no later record enters a detached queue. A retired authority route detaches with
+`world.observation.invalidated`, and a composition its recipient's disclosure refuses
+(`WorldDisclosureException`) with `world.observation.disclosure`. Any other failure to compose is a
+fault, and faulting sinks still detach independently.
+
+Session queries cross the same disclosure decision as delivery. A `Frames` session reads no query result;
+`Presentation` sessions can query only recipient-filtered state observations, whose projection is also used
+for delivery. Authoritative readbacks require a `Replica` admission and disclose-all observer policy. A
+session whose observation has ended has no query read door. Session state read views use the delivered tier's
+definition projection; Frames and ended sessions are refused there too.
+
 A session screen observes its destination as a session. When the screen binds,
 `WorldServer.TryObserveAsSession` admits one against the destination's own `admission` rows for
 the viewer's authority, and releasing the screen ends it. The screen's mirror starts knowing nothing
@@ -665,6 +683,61 @@ stops the mirror, and granting it again catches the mirror up with the current d
 first. A destination that admits no viewer binds the screen dark and says why, and a destination
 that ends the session, as a rebuild does, is asked to admit the screen again. A destination a
 session screen shows therefore authors an admission row that grants `observe all` with a budget.
+
+Below the replica tier, each recipient, a session screen or a federation observer, is fed by its own
+`WorldProjectionFeed`. Its first delivery is the whole projection; after that it is sent only the
+members of its projection that changed, as a delta (`WorldDocumentBasis.Diff`, the document delta a
+basis uses) that `WorldProjectionHold` merges over the projection the recipient holds, and nothing when
+nothing changed. A delta of values alone (the timeline, the observations, the provenance) reaches the
+recipient as a state delivery rather than a new definition, and a session's state mirror reads it at the
+tick it was stamped with, even when no body snapshot was sampled there; on the federation wire it travels
+as a `ProjectionDelta` frame. A delta that changes which rows are observed, their order, or their cells'
+keys installs a new definition instead, so bindings resolve their row ordinals again. A
+peer's projection and deltas are read through `WorldJsonContext.Untrusted`, which refuses duplicate
+members and nulls the model does not admit, and a delta that does not hydrate leaves the held
+projection unchanged. Projections and deltas travel as compact canonical JSON
+(`WorldProjection.SerializeCompact`), as does a replica's whole definition
+(`WorldDefinitionSerialization.SerializeCompact`); the indented canonical forms are kept for what hashes, stores
+or displays a document.
+
+A projection carries a timeline's tick clocks as authored, and each state clock a carried value keys on
+as an anchored clock: an anchor of its phase (`WorldClockAnchor`: the engine tick, the phase as a `u64`
+share of a turn, which for a Fixed row is its fractional bits exactly, and the phase one authoritative
+tick adds), never the row it reads. The recipient predicts the phase from the anchor at the tick it
+presents, through the same `WorldClockAnchor.Predict` the authority uses, and `WorldClockAnchorLedger`
+sends a new anchor at exactly the authoritative ticks that prediction misses the authority's own phase.
+An anchor carries a rate only over a span the authority proves affine: a Fixed slot whose one trait is
+an advance adding whole raw units every tick, which the next tick confirms. Every other movement, a rate
+change, a quantized advance, a cycle's staircase, an eased row or a seek, carries rate zero and
+re-anchors wherever the phase moves, so a sky held still or moving along a proved span sends nothing.
+A state clock is a reading of its row's slot, and a bindable bound to a state cell a reading of that
+cell (of every cell of its row when it reads per body), so a recipient that may not read one refuses the
+composition by name before any derived value is emitted, rather than presenting the value at its
+fallback. A row a presented bindable binds that the recipient may read crosses as an observation of the
+cells it may read, whether or not the row declares a policy, and moves with the row's deltas. An
+observed row carries its declared envelope, and an observed cell holds its stored value beside the one
+value-over-time trait that governs it and the clock that trait reads: an advance's base and epoch engine
+tick, a cycle's phase, epoch tick and substep remainder, or an eased cell's target with the dynamics row
+it eases by and its follower's epoch tick, position and velocity. A `.$target` read answers the stored
+target. The recipient evaluates the trait with the engine's own fixed-point computation, over the
+dynamics rows its projection carries, so a bound read presents what the authority presents at every
+tick. Only a write or a jump of the authoritative state changes an observation, and each composes the
+projection: every jump (a whole-document rebuild by `world.reset`, `world.load` or `world.reload`, an
+undo, a replay drive, and a checkpoint restore) marks the definition for
+the one delivery door (`WorldDocument.MarkDefinitionDeliveryPending`), and a restore, which completes
+outside the tick, delivers at once. So the per-tick step sends anchors alone and nothing while a value
+only moves as its trait says; the `world.projection` work
+source counts every composition. A late view hydrates the exact current phase; while a
+clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from
+the phase the world loaded with, or zero clamped into the row's closed envelope. The last anchor per
+recipient per clock is a counted row under the `world.projection` work source. It is the only anchor
+kept: one replaced before a delivery reached the recipient is gone. A recipient therefore presents the
+latest authoritative tick it was told about and predicts only forward from the anchor it holds. A frame
+that interpolates toward the delivery that brought an anchor presents the anchor's own phase, and
+`WorldClockAnchor.Predict` refuses a tick before its anchor by name. An authority restored to a tick
+before the anchor it sent re-anchors. The anchor row is released when the
+recipient leaves or loses disclosure, when its projection stops carrying the clock, or when its stream
+detaches, without waiting for the socket to drain.
 
 A portal window renders its destination from its own disclosed mirror unless its session is delivered
 everything the destination holds: a live session admitted at `Replica`, holding `observe all`,

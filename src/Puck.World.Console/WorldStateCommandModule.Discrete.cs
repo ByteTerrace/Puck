@@ -206,12 +206,10 @@ public sealed partial class WorldStateCommandModule {
                 ) {
                     return CommandResult.Error(output: $"[world.observe: refused — {acting.Describe()} may observe only itself, not {principal.Describe()}]");
                 }
-                var time = server.Time;
                 var rows = (WorldStateDisclosure.Compose(
                     arena: server.Arena,
                     definition: server.Definition,
-                    recipient: principal,
-                    time: in time
+                    recipient: principal
                 ) ?? []).ToArray();
 
                 return new CommandResult(Output: System.Text.Json.JsonSerializer.Serialize(

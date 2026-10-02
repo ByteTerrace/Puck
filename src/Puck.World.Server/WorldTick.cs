@@ -144,6 +144,7 @@ public sealed partial class WorldTick {
     // point on the tick thread) can stamp itself with the server's actual current tick/step width rather than the
     // literal 0/0 that is only honest before the first Step has ever run — see BuildPrimerSnapshot.
     private ulong m_lastStepTicks;
+    private ulong m_deliveryTick;
     private int m_tickWrittenCount;
 
     private readonly WorldServer m_host;
@@ -152,6 +153,10 @@ public sealed partial class WorldTick {
     internal ulong CompletedEngineTicks => m_lastCompletedEngineTicks;
     /// <summary>Gets the tick the latest authoritative step completed, or zero before the first step.</summary>
     internal ulong CompletedTick => m_lastCompletedTick;
+    /// <summary>Gets the authoritative tick whose engine tick <see cref="CompletedEngineTicks"/> is: the tick the step
+    /// in progress produces while one runs, since a step settles its engine tick before it drains or delivers
+    /// anything, and the completed tick between steps.</summary>
+    internal ulong DeliveryTick => m_deliveryTick;
 
     /// <summary>Gets the server whose document, arena, entity table, grants and narration this tick advances.</summary>
     private WorldServer Host => m_host;
@@ -243,6 +248,7 @@ public sealed partial class WorldTick {
     internal void RestoreClock(ulong completedEngineTicks, ulong completedTick, ulong lastStepTicks) {
         m_lastCompletedEngineTicks = completedEngineTicks;
         m_lastCompletedTick = completedTick;
+        m_deliveryTick = completedTick;
         m_lastStepTicks = lastStepTicks;
     }
     /// <summary>Drops every placement-deal memo and the definition the sweep last ran over, so the next sweep

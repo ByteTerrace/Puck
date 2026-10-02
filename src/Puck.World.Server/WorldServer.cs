@@ -237,8 +237,19 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// name, in the same family as the boot-allocated population capacity, rather than seating faces at indices no
     /// renderer holds.</summary>
     public int BootDerivedFaceScreens { get; }
+    /// <summary>Gets the phases this world's state clocks read as it was admitted at boot
+    /// (<see cref="WorldClockAnchors.Seeds"/>): what a presentation-tier recipient that joins while a clock's row holds
+    /// no number seeds the clock from.</summary>
+    public IReadOnlyDictionary<string, ulong> ClockSeeds { get; }
     /// <summary>Gets the exact engine-time boundary completed by the latest authoritative step.</summary>
     public ulong CompletedEngineTicks => m_tick.CompletedEngineTicks;
+    /// <summary>Gets the authoritative tick a delivery stands at: the tick and engine tick the step in progress
+    /// produces, which its snapshot will carry, while one runs, and the completed ones between steps. A delivery
+    /// composed mid-step (a drained mutation's, a rule's) reads values as of it, never as of the tick before.</summary>
+    public ArenaTime DeliveryTime => (Time with {
+        EngineTick = m_tick.CompletedEngineTicks,
+        Tick = m_tick.DeliveryTick,
+    });
     /// <summary>Gets the live world definition this server runs — swapped in place as buffered edits apply.</summary>
     public WorldDefinition Definition => m_document.Definition;
     /// <summary>Gets the version of <see cref="Definition"/>: this server's activation, minted once at construction,
@@ -516,6 +527,7 @@ public sealed partial class WorldServer : IWorldServerHost {
             : instanceIdentity
         );
         BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
+        ClockSeeds = WorldClockAnchors.Seeds(definition: definition);
         m_machines = machines;
         if (!machines.TryPrepare(
             admission: admission,

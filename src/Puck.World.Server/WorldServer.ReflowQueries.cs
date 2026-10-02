@@ -22,7 +22,7 @@ public sealed partial class WorldServer {
         }
     }
 
-    public QueryAnswer AnswerReflowQuery(WorldQuery query, Principal principal) {
+    internal QueryAnswer AnswerReflowQuery(WorldQuery query, Principal principal) {
         lock (m_reflowReviewGate) {
             ExpireReflowReviews();
             if (query is WorldQuery.ReflowCancel) {
@@ -101,12 +101,21 @@ public sealed partial class WorldServer {
             );
         }
     }
+
     /// <summary>Returns the task of the actor's preview worker started by <see cref="WorldQuery.ReflowPreview"/>, so a
     /// caller can await the proposal instead of polling <see cref="WorldQuery.ReflowStatus"/>, which remains the only
     /// reader of its result. A faulted worker faults this task too.</summary>
     /// <param name="principal">The actor whose preview to await.</param>
     /// <returns>The pending worker, or a completed task when the actor has no preview.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="principal"/> is a session whose disclosure does not
+    /// carry reflow review, or whose observation has ended.</exception>
     public Task ReflowPreviewCompletion(Principal principal) {
+        if (
+            (principal.Kind == PrincipalKind.Session) &&
+            !ExecuteAuthorityOperation(operation: () => AllowsSessionQuery(session: principal, query: new WorldQuery.ReflowStatus()))
+        ) {
+            throw new InvalidOperationException(message: WorldSessionObservation.QueryRefusal);
+        }
         lock (m_reflowReviewGate) {
             return (m_reflowReviews.TryGetValue(
                 key: principal,
@@ -120,6 +129,15 @@ public sealed partial class WorldServer {
     /// <summary>Consumes the actor's reviewed authoring plan. The caller must submit its batch through the
     /// simulation mutation door; this method itself changes no world state.</summary>
     public bool TryTakeReviewedReflow(Principal principal, out WorldPlacementProposal? proposal, out string reason) {
+        if (
+            (principal.Kind == PrincipalKind.Session) &&
+            !ExecuteAuthorityOperation(operation: () => AllowsSessionQuery(session: principal, query: new WorldQuery.ReflowStatus()))
+        ) {
+            proposal = null;
+            reason = WorldSessionObservation.QueryRefusal;
+
+            return false;
+        }
         lock (m_reflowReviewGate) {
             ExpireReflowReviews();
             proposal = null;

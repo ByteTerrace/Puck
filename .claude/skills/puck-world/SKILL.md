@@ -219,9 +219,15 @@ placement is a reading of the cells it was dealt from, and a responsive (`respon
 placement a reading of the cells its conditions read, so the view (and the wire
 projection, through the same `WorldStateDisclosure.Disclose`) re-deals or re-reads
 it from the reader's own rows. Every federation egress that knows its traveler
-composes for it; the seatless `Observe` lane composes for the public observer. The
-local HUD and view bindings stay unfiltered: they draw the one shared screen the author
-chose. Details and the laws: [references/console.md](references/console.md).
+composes for it; the seatless `Observe` lane composes for the public observer. A
+state clock a projected value keys on is a reading of its row's slot: it crosses as
+an anchor of its phase (`WorldClockAnchor`, re-sent by the recipient's
+`WorldProjectionFeed` only where the shared `Predict` misses), never as the row; a
+bindable bound to state is a reading of its cell; a recipient that may not read either
+refuses the composition by name. Laws:
+`ProjectionAnchorLawTests`. The local HUD and view bindings stay unfiltered: they draw
+the one shared screen the author chose. Details and the laws:
+[references/console.md](references/console.md).
 
 **Rule writes land on the arena; the document installs once per tick.** During
 `EvaluateWorldRules` every state effect writes the host's `StateArena`

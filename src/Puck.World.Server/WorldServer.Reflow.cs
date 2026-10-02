@@ -106,6 +106,12 @@ public sealed partial class WorldServer {
         ) != 0) { return false; }
         try {
             var captured = ExecuteAuthorityOperation(operation: () => {
+                if (
+                    (principal.Kind == PrincipalKind.Session) &&
+                    !AllowsSessionQuery(session: principal, query: new WorldQuery.ReflowPreview(Request: request))
+                ) {
+                    return (Definition: ((WorldDefinition?)null), Tick: 0UL, Reason: WorldSessionObservation.QueryRefusal);
+                }
                 var template = ReflowTemplate(
                     definition: m_document.Definition,
                     request: request

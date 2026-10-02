@@ -270,11 +270,12 @@ public sealed partial class WorldTick {
         // rebase an Advance epoch, or reads one, against the SAME value. Reassigned identically at the step's own
         // end (m_lastCompletedEngineTicks = context.ElapsedTicks); setting it again there is a no-op.
         m_lastCompletedEngineTicks = context.ElapsedTicks;
+        m_deliveryTick = (context.Tick + 1UL);
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
         Host.MutationBudget.BeginTick();
-        Host.EndFaultedSessions();
+        Host.EndObserverEndedSessions();
         Host.Extensions.Drain();
         Host.Addons?.TickAddons(tick: (context.Tick + 1UL));
         _ = DrainPendingOps(tick: context.Tick);
@@ -804,8 +805,8 @@ public sealed partial class WorldTick {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring) { return false; }
             Host.MutationBudget.BeginTick();
-            // A paused or stopped world still ends a session whose observer faulted.
-            Host.EndFaultedSessions();
+            // A paused or stopped world still ends a session whose observer faulted or detached itself.
+            Host.EndObserverEndedSessions();
             Host.Extensions.Drain();
             return DrainPendingOps(tick: m_lastCompletedTick);
         }

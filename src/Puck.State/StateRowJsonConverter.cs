@@ -93,72 +93,6 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
         _ => throw new JsonException(message: $"{context} must be a boolean."),
     };
 
-    // A clock's y0/v0 ride the same per-kind spelling as an ordinary cell value (a decimal string via FixedQ4816 for
-    // a fixed row, a plain JSON number for int) — never raw bits, matching StateCell.Value's own wire convention.
-    private static StateCellClock ReadClock(JsonElement element, string context) {
-        if (element.ValueKind != JsonValueKind.Object) {
-            throw new JsonException(message: $"{context} must be an object.");
-        }
-
-        var epochTick = 0L;
-        var epochEngineTick = 0L;
-        JsonElement? y0 = null;
-        JsonElement? v0 = null;
-        var substepTicks = 0L;
-
-        foreach (var member in element.EnumerateObject()) {
-            switch (member.Name) {
-                case "epochTick":
-                    epochTick = RequireInt64(
-                        context: $"{context}.epochTick",
-                        element: member.Value
-                    );
-                    break;
-                case "epochEngineTick":
-                    epochEngineTick = RequireInt64(
-                        context: $"{context}.epochEngineTick",
-                        element: member.Value
-                    );
-                    break;
-                case "y0":
-                    y0 = member.Value;
-                    break;
-                case "v0":
-                    v0 = member.Value;
-                    break;
-                case "substepTicks":
-                    substepTicks = RequireInt64(
-                        context: $"{context}.substepTicks",
-                        element: member.Value
-                    );
-                    break;
-                default:
-                    throw new JsonException(message: $"{context} contains unmapped member '{member.Name}'.");
-            }
-        }
-
-        // y0/v0 are the follower's continuous state and ride raw FixedQ4816 bits whatever the carrying row's kind
-        // (see StateDynamics), so they are authored in the fixed spelling — a decimal string — regardless of row kind.
-        return new StateCellClock(
-            EpochTick: epochTick,
-            EpochEngineTick: epochEngineTick,
-            Y0: ((y0 is { } y0Element)
-            ? RequireNumeric(
-                    context: $"{context}.y0",
-                    element: y0Element,
-                    kind: CellKind.Fixed
-                )
-            : 0L),
-            V0: ((v0 is { } v0Element)
-            ? RequireNumeric(
-                    context: $"{context}.v0",
-                    element: v0Element,
-                    kind: CellKind.Fixed
-                )
-            : 0L),
-            SubstepTicks: substepTicks
-        );
-    }
     private static StateVector ReadVector(JsonElement element, string context) {
         if (element.ValueKind != JsonValueKind.String) {
             throw new JsonException(message: $"{context} must be an unpadded base64url vector string.");
@@ -309,7 +243,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 : StateCellBehavior.Inherit
             );
             var clock = ((cellClock is { } cellClockElement)
-                ? ReadClock(
+                ? StateCellClockJsonConverter.Read(
                     context: $"state row '{name}'.cells[{index}].clock",
                     element: cellClockElement
                 )
@@ -379,9 +313,10 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 
         return masks;
     }
+
     // Fixed-kind values are human-authored decimal text, never the raw Q48.16 bit pattern: the document, the console
     // verb JSON, and every echo agree on one spelling.
-    private static long RequireFixed(JsonElement element, string context) {
+    internal static long RequireFixed(JsonElement element, string context) {
         if (
             (element.ValueKind != JsonValueKind.String) ||
             !FixedQ4816.TryParse(
@@ -395,6 +330,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 
         return parsed.Value;
     }
+
     private static int RequireInt32(JsonElement element, string context) {
         if (
             (element.ValueKind != JsonValueKind.Number) ||
@@ -405,7 +341,8 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 
         return parsed;
     }
-    private static long RequireInt64(JsonElement element, string context) {
+
+    internal static long RequireInt64(JsonElement element, string context) {
         if (
             (element.ValueKind != JsonValueKind.Number) ||
             !element.TryGetInt64(value: out var parsed)
@@ -415,6 +352,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
 
         return parsed;
     }
+
     private static long RequireNumeric(CellKind kind, JsonElement element, string context) => kind switch {
         CellKind.Fixed => RequireFixed(
         context: context,
@@ -511,47 +449,6 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
     // Written only when non-default (a fresh cell, or one settled back to epoch zero, carries no "clock" member at
     // all) — the follower's continuous state is fixed-native on every row kind, so y0/v0 are written in the fixed
     // spelling.
-    private static void WriteClock(Utf8JsonWriter writer, string propertyName, StateCellClock clock) {
-        writer.WritePropertyName(propertyName: propertyName);
-        writer.WriteStartObject();
-
-        if (clock.EpochTick != 0L) {
-            writer.WriteNumber(
-                propertyName: "epochTick",
-                value: clock.EpochTick
-            );
-        }
-        if (clock.EpochEngineTick != 0L) {
-            writer.WriteNumber(
-                propertyName: "epochEngineTick",
-                value: clock.EpochEngineTick
-            );
-        }
-        if (clock.Y0 != 0L) {
-            WriteOptionalNumeric(
-                writer: writer,
-                propertyName: "y0",
-                kind: CellKind.Fixed,
-                raw: clock.Y0
-            );
-        }
-        if (clock.V0 != 0L) {
-            WriteOptionalNumeric(
-                writer: writer,
-                propertyName: "v0",
-                kind: CellKind.Fixed,
-                raw: clock.V0
-            );
-        }
-        if (clock.SubstepTicks != 0L) {
-            writer.WriteNumber(
-                propertyName: "substepTicks",
-                value: clock.SubstepTicks
-            );
-        }
-
-        writer.WriteEndObject();
-    }
     private static void WriteOptionalNumeric(Utf8JsonWriter writer, string propertyName, CellKind kind, long? raw) {
         if (raw is not { } rawValue) {
             return;
@@ -851,7 +748,7 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             ? [ReadCell(
                         cellKind: cellKind,
                         clock: ((clock is { } clockElement)
-                            ? ReadClock(
+                            ? StateCellClockJsonConverter.Read(
                                 context: $"state row '{name}'.clock",
                                 element: clockElement
                             )
@@ -1048,9 +945,9 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
             );
 
             if (value.Cells[0].Clock is { } slotClock) {
-                WriteClock(
+                writer.WritePropertyName(propertyName: "clock");
+                StateCellClockJsonConverter.Write(
                     clock: slotClock,
-                    propertyName: "clock",
                     writer: writer
                 );
             }
@@ -1096,9 +993,9 @@ public abstract partial class StateRowJsonConverter<TRow> : JsonConverter<TRow>,
                 }
 
                 if (cell.Clock is { } cellClock) {
-                    WriteClock(
+                    writer.WritePropertyName(propertyName: "clock");
+                    StateCellClockJsonConverter.Write(
                         clock: cellClock,
-                        propertyName: "clock",
                         writer: writer
                     );
                 }

@@ -10,9 +10,10 @@ public sealed partial class WorldServer {
 
     // Each live session's observation: its hub lease and the handle its observer holds.
     private readonly Dictionary<Principal, (IDisposable Lease, WorldSessionObservation Observation)> m_sessionSinks = new();
-    // Sessions whose observer faulted during a delivery, ended at the start of the next step: ending one inside the
-    // hub's fan-out would tape its end after the tick's own entries rather than where a replay applies it.
-    private readonly List<Principal> m_faultedSessions = [];
+    // Sessions whose observer faulted or detached itself during a delivery, ended at the start of the next step: ending
+    // one inside the hub's fan-out would tape its end after the tick's own entries rather than where a replay applies
+    // it.
+    private readonly List<Principal> m_observerEndedSessions = [];
 
     /// <inheritdoc cref="WorldGrants.EndSession"/>
     public bool EndSession(Principal session, out string refusal) => m_grants.EndSession(
@@ -23,6 +24,15 @@ public sealed partial class WorldServer {
     public bool IsLiveSession(Principal principal) => m_grants.IsLiveSession(principal: principal);
     /// <inheritdoc cref="WorldGrants.ObservesAsSession"/>
     public bool ObservesAsSession(Principal session) => m_grants.ObservesAsSession(session: session);
+
+    internal bool AllowsSessionQuery(Principal session, WorldQuery query) => (
+        m_sessionSinks.TryGetValue(key: session, value: out var attached) &&
+        attached.Observation.AllowsQuery(query: query)
+    );
+    internal WorldDefinition? ReadSessionDefinition(Principal session) => (m_sessionSinks.TryGetValue(key: session, value: out var attached)
+        ? attached.Observation.ReadDefinition()
+        : null);
+
     /// <inheritdoc cref="WorldGrants.TryAdmitSession"/>
     public bool TryAdmitSession(string sourceAuthority, out Principal session, out WorldDisclosureTier tier, out string refusal) => m_grants.TryAdmitSession(
         refusal: out refusal,
@@ -89,16 +99,21 @@ public sealed partial class WorldServer {
 
             m_sessionSinks[session] = (lease, admitted);
 
-            // A primer the observer faulted on detached it before it was ever delivered a tick: the session ends
-            // rather than standing admitted with nothing observing through it.
-            if (observed.Fault is { } fault) {
+            // A primer the observer faulted or detached on ended it before it was ever delivered a tick: the session
+            // ends rather than standing admitted with nothing observing through it.
+            if (
+                (observed.Fault is not null) ||
+                (observed.DetachReason is not null)
+            ) {
                 _ = m_grants.EndSession(
                     refusal: out _,
                     session: session
                 );
                 DetachSessionSink(session: session);
 
-                return (Observation: ((WorldSessionObservation?)null), Reason: $"the observer faulted on its first delivery: {fault.Message}");
+                return (Observation: ((WorldSessionObservation?)null), Reason: ((observed.Fault is { } fault)
+                    ? $"the observer faulted on its first delivery: {fault.Message}"
+                    : $"the observer detached on its first delivery: {observed.DetachReason}"));
             }
 
             return (Observation: admitted, Reason: string.Empty);
@@ -120,17 +135,19 @@ public sealed partial class WorldServer {
             attached.Observation.MarkEnded();
         }
     }
-    /// <summary>Notes a session whose observer faulted during a delivery; the next step ends it.</summary>
+    /// <summary>Notes a session whose observer faulted or detached itself during a delivery; the next step ends
+    /// it.</summary>
     /// <param name="session">The session principal.</param>
-    internal void NoteFaultedSession(Principal session) => m_faultedSessions.Add(item: session);
-    /// <summary>Ends every session whose observer faulted since the last step, through the one end door: its rows are
-    /// revoked and its observation detached, as if its observer had released it. Called at the start of a step.</summary>
-    internal void EndFaultedSessions() {
-        if (m_faultedSessions.Count == 0) {
+    internal void NoteObserverEnded(Principal session) => m_observerEndedSessions.Add(item: session);
+    /// <summary>Ends every session whose observer faulted or detached itself since the last step, through the one end
+    /// door: its rows are revoked and its observation detached, as if its observer had released it. Called at the start
+    /// of a step.</summary>
+    internal void EndObserverEndedSessions() {
+        if (m_observerEndedSessions.Count == 0) {
             return;
         }
 
-        foreach (var session in m_faultedSessions) {
+        foreach (var session in m_observerEndedSessions) {
             _ = m_grants.EndSession(
                 refusal: out _,
                 session: session
@@ -138,7 +155,7 @@ public sealed partial class WorldServer {
             DetachSessionSink(session: session);
         }
 
-        m_faultedSessions.Clear();
+        m_observerEndedSessions.Clear();
     }
     /// <summary>Ends every live session no observer holds, through the one end door: a session a replay drive restored
     /// from its tape, whose recorded viewer is not watching this world, so nothing it last pressed or pointed at stays

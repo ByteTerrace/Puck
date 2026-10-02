@@ -68,7 +68,7 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["inverse"] = exportType(typeof(StateInverse)),
             ["dynamics"] = exportType(typeof(StateDynamics)),
             ["cycle"] = exportType(typeof(StateCycle)),
-            ["clock"] = ClockSchema(),
+            ["clock"] = StateCellClockJsonConverter.Schema(),
             ["space"] = new JsonObject { ["type"] = "string" },
             ["enum"] = new JsonObject { ["type"] = "string" },
         };
@@ -209,23 +209,8 @@ public abstract partial class StateRowJsonConverter<TRow> {
         new JsonObject { ["type"] = "string" }
     ),
     };
-    // ReadClock's own shape: every member optional (a fresh cell has no "clock" at all), the fixed-native "y0"/"v0"
-    // (the decimal FixedQ4816 spelling regardless of the carrying row's own kind) among them. Never delegated to a
-    // nested type's own converter — StateCellClock carries no JSON contract of its own, only this converter's
-    // hand-rolled Read/Write.
-    private static JsonObject ClockSchema() => new() {
-        ["type"] = "object",
-        ["properties"] = new JsonObject {
-            ["epochTick"] = new JsonObject { ["type"] = "integer" },
-            ["epochEngineTick"] = new JsonObject { ["type"] = "integer" },
-            ["y0"] = new JsonObject { ["type"] = "string" },
-            ["v0"] = new JsonObject { ["type"] = "string" },
-            ["substepTicks"] = new JsonObject { ["type"] = "integer" },
-        },
-        ["additionalProperties"] = false,
-    };
     // ReadCells' own per-entry shape: "key"/"value" required, every other member optional and read through the
-    // options' resolver (advance/dynamics/cycle/visibility/observation) or hand-rolled (clock — see ClockSchema).
+    // options' resolver (advance/dynamics/cycle/visibility/observation) or the clock's own converter (StateCellClockJsonConverter).
     private static JsonObject CellSchema(Func<Type, JsonNode> exportType) => new() {
         ["type"] = "object",
         ["properties"] = new JsonObject {
@@ -235,7 +220,7 @@ public abstract partial class StateRowJsonConverter<TRow> {
             ["dynamics"] = exportType(typeof(StateDynamics)),
             ["cycle"] = exportType(typeof(StateCycle)),
             ["behavior"] = exportType(typeof(StateCellBehavior)),
-            ["clock"] = ClockSchema(),
+            ["clock"] = StateCellClockJsonConverter.Schema(),
             ["visibility"] = exportType(typeof(StateVisibility)),
             ["observation"] = exportType(typeof(StateObservation)),
             ["provenance"] = new JsonObject { ["type"] = "string" },

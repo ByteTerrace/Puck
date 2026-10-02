@@ -711,6 +711,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
 
+        // The projection this session holds: a presentation-tier delta merges over it, and a new session starts from a
+        // whole projection again.
+        var hold = new WorldProjectionHold();
+
         while (!ct.IsCancellationRequested) {
             var frame = await WorldFederationCodec.ReadResponseAsync(
                 ct: ct,
@@ -757,6 +761,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
                             !WorldFederationCodec.TryDecodeDocument(
                             body: frame.Body.Span,
                             definition: out var definition,
+                            hold: hold,
                             tier: out var definitionTier,
                             failure: out var definitionFailure,
                             version: out var definitionVersion
@@ -792,6 +797,46 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
                             definition: definition,
                             version: definitionVersion
                         );
+                        break;
+                    }
+                case WorldFederationResponse.ProjectionDelta: {
+                        if (!WorldFederationCodec.TryDecodeProjectionDelta(
+                            body: frame.Body.Span,
+                            definition: out var merged,
+                            failure: out var deltaFailure,
+                            hold: hold,
+                            stamp: out var deltaStamp,
+                            valuesOnly: out var valuesOnly,
+                            version: out var deltaVersion
+                        )) {
+                            if (m_narrationHub is { HasNarrationSink: true }) {
+                                m_narrationHub?.Narrate(
+                                    channel: "world.projection",
+                                    text: $"[world.projection: remote observer '{Endpoint}' refused a projection delta ({deltaFailure})]"
+                                );
+                            }
+
+                            return false;
+                        }
+
+                        Volatile.Write(
+                            location: ref m_definition,
+                            value: merged
+                        );
+
+                        if (valuesOnly) {
+                            sink.DeliverState(
+                                definition: merged,
+                                stamp: in deltaStamp,
+                                version: deltaVersion
+                            );
+                        } else {
+                            sink.DeliverDefinition(
+                                definition: merged,
+                                version: deltaVersion
+                            );
+                        }
+
                         break;
                     }
                 case WorldFederationResponse.Snapshot: {
