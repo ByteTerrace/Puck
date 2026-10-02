@@ -283,7 +283,7 @@
           ],
           "properties": {
             "lights": {
-              "description": "The lights, at most SdfEnvironment.MaxLights, in slot order (a render.cycle key moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
+              "description": "The lights, at most SdfEnvironment.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
               "type": [
                 "array",
                 "null"
@@ -307,7 +307,7 @@
                       "direction": {
                         "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.",
                         "default": null,
-                        "title": "DocumentVector3",
+                        "title": "BindableDirection",
                         "anyOf": [
                           {
                             "type": "array",
@@ -318,36 +318,207 @@
                             "maxItems": 3
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
                       "color": {
-                        "description": "The light\u0027s linear colour.",
+                        "description": "The light\u0027s colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
                         ]
                       },
                       "weight": {
                         "description": "The diffuse weight. Absent is the pinned sun weight.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "angularRadius": {
-                        "description": "The light\u0027s angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "description": "The light\u0027s angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
+                        "default": null,
+                        "title": "BindableAngle",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "shadows": {
                         "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
@@ -356,6 +527,20 @@
                           "null"
                         ],
                         "default": null
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the light by, unique among the lights.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "lightName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -368,29 +553,174 @@
                         "const": "hemisphere"
                       },
                       "color": {
-                        "description": "The ambient\u0027s linear colour.",
+                        "description": "The ambient\u0027s colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
                         ]
                       },
                       "base": {
                         "description": "The floor. Absent is the pinned ambient floor.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "gradient": {
+                        "description": "The hemisphere gradient. Absent is the pinned gradient.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the light by, unique among the lights.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
                         ],
                         "default": null
                       },
-                      "gradient": {
-                        "description": "The hemisphere gradient. Absent is the pinned gradient.",
+                      "lightName": {
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -403,29 +733,174 @@
                         "const": "rim"
                       },
                       "color": {
-                        "description": "The rim\u0027s linear colour.",
+                        "description": "The rim\u0027s colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
                         ]
                       },
                       "weight": {
                         "description": "The strength. Absent is zero, which adds nothing.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "power": {
+                        "description": "The falloff exponent \u2014 larger confines the highlight nearer the silhouette. Absent is the engine default.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the light by, unique among the lights.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
                         ],
                         "default": null
                       },
-                      "power": {
-                        "description": "The falloff exponent \u2014 larger confines the highlight nearer the silhouette. Absent is the engine default.",
+                      "lightName": {
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -440,7 +915,7 @@
                       "position": {
                         "description": "The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.",
                         "default": null,
-                        "title": "DocumentVector3",
+                        "title": "BindableVector3",
                         "anyOf": [
                           {
                             "type": "array",
@@ -451,19 +926,104 @@
                             "maxItems": 3
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
                       "radius": {
                         "description": "The falloff radius. Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "anchor": {
                         "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
@@ -613,21 +1173,121 @@
                         "title": "WorldAnchor"
                       },
                       "color": {
-                        "description": "The light\u0027s linear colour.",
+                        "description": "The light\u0027s colour.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
                         ]
                       },
                       "weight": {
                         "description": "The strength. Absent is the engine default.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the light by, unique among the lights.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
                         ],
                         "default": null
+                      },
+                      "lightName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -640,8 +1300,9 @@
                         "const": "occluder"
                       },
                       "position": {
+                        "description": "The world-space position, or the offset in the anchor\u0027s frame.",
                         "default": null,
-                        "title": "DocumentVector3",
+                        "title": "BindableVector3",
                         "anyOf": [
                           {
                             "type": "array",
@@ -652,20 +1313,107 @@
                             "maxItems": 3
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
                       "radius": {
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "description": "The field\u0027s radius, positive.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "anchor": {
+                        "description": "An entity, entity part, or placement frame.",
                         "type": [
                           "object",
                           "null"
@@ -805,11 +1553,71 @@
                         "title": "WorldAnchor"
                       },
                       "weight": {
+                        "description": "The attenuation, in [0, 1].",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the light by, unique among the lights.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
                         ],
                         "default": null
+                      },
+                      "lightName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -829,57 +1637,706 @@
               "properties": {
                 "cavity": {
                   "description": "How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
                 },
                 "rim": {
                   "description": "How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
                 },
                 "ink": {
                   "description": "The ink outline\u0027s strength where the curvature magnitude spikes. Zero draws none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
                 },
                 "inkLow": {
                   "description": "The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
                 },
                 "inkHigh": {
                   "description": "The curvature magnitude at which the outline saturates.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
                 },
                 "inkColor": {
                   "description": "BindableColor\u0027s grammar: the outline colour.",
                   "default": null,
                   "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "string"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
                   ]
                 }
               },
               "additionalProperties": false,
               "default": null,
               "title": "WorldRenderCurvature"
+            },
+            "clock": {
+              "description": "The clock the section\u0027s keys read, by name in the timeline section. Required with Keys and refused without them.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "keys": {
+              "description": "The section\u0027s keys, ascending in time. A field a key states is keyed on Clock through the keys that state it, blended by the field\u0027s type and eased by each key\u0027s ease; a field no key states keeps its authored value.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "description": "One key of Keys: a partial record of the section at one time.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "at": {
+                    "description": "Where on the section\u0027s clock the key sits, in the clock\u0027s span units, in [0, span).",
+                    "type": "number"
+                  },
+                  "ease": {
+                    "description": "How time eases from this key to the next key that states each field. Absent is Linear.",
+                    "enum": [
+                      "Linear",
+                      "Smooth",
+                      "Step",
+                      null
+                    ],
+                    "default": null,
+                    "title": "WorldEase"
+                  },
+                  "lights": {
+                    "description": "The lights this key moves, by name: each the same kind as the light of that name, stating only the fields it moves. A light\u0027s name and shadowing are structure, which a key never states.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": {
+                      "$ref": "#/properties/render/properties/lighting/properties/lights/items"
+                    },
+                    "default": null
+                  },
+                  "curvature": {
+                    "description": "The curvature fields this key moves.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "cavity": {
+                        "description": "How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "rim": {
+                        "description": "How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "ink": {
+                        "description": "The ink outline\u0027s strength where the curvature magnitude spikes. Zero draws none.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "inkLow": {
+                        "description": "The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "inkHigh": {
+                        "description": "The curvature magnitude at which the outline saturates.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "inkColor": {
+                        "description": "BindableColor\u0027s grammar: the outline colour.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "default": null,
+                    "title": "WorldRenderCurvature"
+                  }
+                },
+                "required": [
+                  "at"
+                ],
+                "additionalProperties": false,
+                "title": "WorldRenderLightingKey"
+              },
+              "default": null
             }
           },
           "additionalProperties": false,
@@ -916,7 +2373,7 @@
                         "const": "gradient"
                       },
                       "stops": {
-                        "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation. A render.cycle key moves a stop by its index and may not add or remove one.",
+                        "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation.",
                         "type": [
                           "array",
                           "null"
@@ -930,19 +2387,105 @@
                           "properties": {
                             "elevation": {
                               "description": "The direction\u0027s Y component this stop sits at, in [\u22121, 1].",
-                              "type": [
-                                "number",
-                                "null"
-                              ],
-                              "default": null
+                              "default": null,
+                              "title": "BindableScalar",
+                              "anyOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "clock": {
+                                      "type": "string"
+                                    },
+                                    "keys": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "at": {
+                                            "type": "number"
+                                          },
+                                          "value": {
+                                            "type": "number"
+                                          },
+                                          "ease": {
+                                            "type": "string",
+                                            "enum": [
+                                              "Linear",
+                                              "Smooth",
+                                              "Step"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "at",
+                                          "value"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "clock",
+                                    "keys"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
                             },
                             "color": {
-                              "description": "BindableColor\u0027s grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key\u0027s colour.",
+                              "description": "BindableColor\u0027s grammar: the colour at this elevation. Absent is white.",
                               "default": null,
                               "title": "BindableColor",
-                              "type": [
-                                "string",
-                                "null"
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "clock": {
+                                      "type": "string"
+                                    },
+                                    "keys": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "at": {
+                                            "type": "number"
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          },
+                                          "ease": {
+                                            "type": "string",
+                                            "enum": [
+                                              "Linear",
+                                              "Smooth",
+                                              "Step"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "at",
+                                          "value"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "clock",
+                                    "keys"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               ]
                             }
                           },
@@ -950,6 +2493,20 @@
                           "title": "WorldRenderSkyStop"
                         },
                         "default": null
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the layer by, unique among the layers.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "layerName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -963,11 +2520,70 @@
                       },
                       "density": {
                         "description": "The density per world unit. Absent is the pinned density.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the layer by, unique among the layers.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
                         ],
                         "default": null
+                      },
+                      "layerName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -988,20 +2604,124 @@
                         "default": null
                       },
                       "radius": {
-                        "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Absent is the engine default.",
+                        "description": "The disc\u0027s angular half-radius, in (0, \u03C0/2] radians. Absent is the engine default.",
+                        "default": null,
+                        "title": "BindableAngle",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "intensity": {
+                        "description": "The peak additive brightness. Absent is zero, which draws nothing.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the layer by, unique among the layers.",
                         "type": [
-                          "number",
+                          "string",
                           "null"
                         ],
                         "default": null
                       },
-                      "intensity": {
-                        "description": "The peak additive brightness. Absent is zero, which draws nothing.",
+                      "layerName": {
                         "type": [
-                          "number",
+                          "string",
                           "null"
-                        ],
-                        "default": null
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1023,11 +2743,56 @@
                       },
                       "brightness": {
                         "description": "The peak per-star brightness. Absent is zero, which draws nothing.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "seed": {
                         "description": "The hash seed folded into every cell.",
@@ -1046,32 +2811,181 @@
                         "properties": {
                           "share": {
                             "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "default": null
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
                           },
                           "depth": {
                             "description": "How far a twinkling star dips below its steady brightness, in [0, 1].",
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "default": null
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
                           },
                           "rate": {
-                            "description": "The fundamental scintillation rate in hertz.",
-                            "type": [
-                              "number",
-                              "null"
-                            ],
-                            "default": null
+                            "description": "The fundamental scintillation rate in hertz. A rate: it keys only on a tick clock, and binds no state row.",
+                            "default": null,
+                            "title": "BindableScalar",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
                           }
                         },
                         "additionalProperties": false,
                         "default": null,
                         "title": "WorldRenderSkyTwinkle"
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the layer by, unique among the layers.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "layerName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       }
                     },
                     "additionalProperties": false,
@@ -1085,27 +2999,162 @@
                       },
                       "coverage": {
                         "description": "The fraction of the sky the layer covers, in [0, 1]. Absent is zero.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "softness": {
                         "description": "The width of a cloud\u0027s edge, in (0, 1]. Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "scale": {
                         "description": "The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "seed": {
                         "description": "The hash seed folded into the lattice.",
@@ -1119,15 +3168,56 @@
                         "description": "BindableColor\u0027s grammar: the cloud colour. Absent is white.",
                         "default": null,
                         "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
                         ]
                       },
                       "drift": {
-                        "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.",
+                        "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. A rate: it keys only on a tick clock, and binds no state row. Absent holds still.",
                         "default": null,
-                        "title": "DocumentVector2",
+                        "title": "BindableVector2",
                         "anyOf": [
                           {
                             "type": "array",
@@ -1138,32 +3228,162 @@
                             "maxItems": 2
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 2,
+                                      "maxItems": 2
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
                           }
                         ]
                       },
                       "spin": {
-                        "description": "The layer\u0027s rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "description": "The layer\u0027s rotation about the zenith in radians per second; positive is counter-clockwise seen from below. A rate, as Drift is. Absent is none.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "curl": {
-                        "description": "The Coriolis twist in radians at 45\u00B0 elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
+                        "description": "The Coriolis twist at 45\u00B0 elevation, in radians, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.",
+                        "default": null,
+                        "title": "BindableAngle",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       },
                       "shear": {
-                        "description": "The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.",
+                        "description": "The wind of the shaping field relative to the cloud field, in layer units per second. A rate, as Drift is. Absent holds the shapes.",
                         "default": null,
-                        "title": "DocumentVector2",
+                        "title": "BindableVector2",
                         "anyOf": [
                           {
                             "type": "array",
@@ -1174,10 +3394,64 @@
                             "maxItems": 2
                           },
                           {
-                            "type": "string",
-                            "minLength": 1,
-                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "number"
+                                      },
+                                      "minItems": 2,
+                                      "maxItems": 2
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
                           }
+                        ]
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the layer by, unique among the layers.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "layerName": {
+                        "type": [
+                          "string",
+                          "null"
                         ]
                       }
                     },
@@ -1188,89 +3462,67 @@
                 "title": "WorldRenderSkyLayer"
               },
               "default": null
-            }
-          },
-          "additionalProperties": false,
-          "default": null,
-          "title": "WorldRenderSky"
-        },
-        "cycle": {
-          "description": "Lighting and sky keyed over a state row\u0027s value (a day/night cycle when that row advances). Optional; absent leaves Lighting/Sky static.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "properties": {
-            "state": {
-              "description": "The state row read (its slot cell; Fixed or Int).",
-              "type": "string"
+            },
+            "clock": {
+              "description": "The clock the section\u0027s keys read, by name in the timeline section. Required with Keys and refused without them.",
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
             },
             "keys": {
-              "description": "At least two keys, strictly ascending At in [0, 1).",
-              "type": "array",
+              "description": "The section\u0027s keys, ascending in time. A field a key states is keyed on Clock through the keys that state it; a field no key states keeps its authored value.",
+              "type": [
+                "array",
+                "null"
+              ],
               "items": {
-                "description": "One point on a WorldRenderCycle.",
+                "description": "One key of Keys: a partial record of the sky at one time.",
                 "type": [
                   "object",
                   "null"
                 ],
                 "properties": {
                   "at": {
-                    "description": "The row-value fraction this key sits at, in [0, 1).",
+                    "description": "Where on the section\u0027s clock the key sits, in the clock\u0027s span units, in [0, span).",
                     "type": "number"
                   },
-                  "lighting": {
-                    "description": "The lighting fields this key moves, or null.",
-                    "type": [
-                      "object",
-                      "null"
+                  "ease": {
+                    "description": "How time eases from this key to the next key that states each field. Absent is Linear.",
+                    "enum": [
+                      "Linear",
+                      "Smooth",
+                      "Step",
+                      null
                     ],
-                    "properties": {
-                      "lights": {
-                        "$ref": "#/properties/render/properties/lighting/properties/lights",
-                        "default": null
-                      },
-                      "curvature": {
-                        "$ref": "#/properties/render/properties/lighting/properties/curvature",
-                        "default": null
-                      }
-                    },
-                    "additionalProperties": false,
                     "default": null,
-                    "title": "WorldRenderLighting"
+                    "title": "WorldEase"
                   },
-                  "sky": {
-                    "description": "The sky fields this key moves, or null.",
+                  "layers": {
+                    "description": "The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, a layer\u0027s name and the sun disc\u0027s light are structure, which a key never states.",
                     "type": [
                       "object",
                       "null"
                     ],
-                    "properties": {
-                      "layers": {
-                        "$ref": "#/properties/render/properties/sky/properties/layers",
-                        "default": null
-                      }
+                    "additionalProperties": {
+                      "$ref": "#/properties/render/properties/sky/properties/layers/items"
                     },
-                    "additionalProperties": false,
-                    "default": null,
-                    "title": "WorldRenderSky"
+                    "default": null
                   }
                 },
                 "required": [
                   "at"
                 ],
                 "additionalProperties": false,
-                "title": "WorldRenderCycleKey"
-              }
+                "title": "WorldRenderSkyKey"
+              },
+              "default": null
             }
           },
-          "required": [
-            "state",
-            "keys"
-          ],
           "additionalProperties": false,
           "default": null,
-          "title": "WorldRenderCycle"
+          "title": "WorldRenderSky"
         },
         "environment": {
           "description": "The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.",
@@ -1334,9 +3586,50 @@
                     "description": "BindableColor\u0027s grammar: the softbox\u0027s linear colour. Absent is white.",
                     "default": null,
                     "title": "BindableColor",
-                    "type": [
-                      "string",
-                      "null"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "string"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
                     ]
                   },
                   "weight": {
@@ -1376,18 +3669,100 @@
                   "description": "The ground-ward (direction.y = \u22121) colour. Absent is black.",
                   "default": null,
                   "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "string"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
                   ]
                 },
                 "high": {
                   "description": "The sky-ward (direction.y = 1) colour. Absent is black.",
                   "default": null,
                   "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "string"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
                   ]
                 }
               },
@@ -2443,19 +4818,107 @@
                           "type": "number"
                         },
                         "yaw": {
-                          "description": "The orbit heading in radians, as a literal or numeric state binding.",
-                          "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "description": "The orbit heading in radians, as a literal, a numeric state binding, or keys on a clock that turn along the shorter arc.",
+                          "title": "BindableAngle",
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "clock": {
+                                  "type": "string"
+                                },
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "type": "number"
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "ease": {
+                                        "type": "string",
+                                        "enum": [
+                                          "Linear",
+                                          "Smooth",
+                                          "Step"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "at",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "clock",
+                                "keys"
+                              ],
+                              "additionalProperties": false
+                            }
                           ]
                         },
                         "pitch": {
-                          "description": "The orbit tilt in radians, as a literal or numeric state binding.",
-                          "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "description": "The orbit tilt in radians, as a literal, a numeric state binding, or keys on a clock.",
+                          "title": "BindableAngle",
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "clock": {
+                                  "type": "string"
+                                },
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "type": "number"
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "ease": {
+                                        "type": "string",
+                                        "enum": [
+                                          "Linear",
+                                          "Smooth",
+                                          "Step"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "at",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "clock",
+                                "keys"
+                              ],
+                              "additionalProperties": false
+                            }
                           ]
                         },
                         "pivotOffset": {
@@ -2507,9 +4970,53 @@
                         "fraction": {
                           "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
                           "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "clock": {
+                                  "type": "string"
+                                },
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "type": "number"
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "ease": {
+                                        "type": "string",
+                                        "enum": [
+                                          "Linear",
+                                          "Smooth",
+                                          "Step"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "at",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "clock",
+                                "keys"
+                              ],
+                              "additionalProperties": false
+                            }
                           ]
                         },
                         "opcode": {
@@ -2589,9 +5096,53 @@
                         "fieldOfViewRadians": {
                           "description": "The field of view.",
                           "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "clock": {
+                                  "type": "string"
+                                },
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "type": "number"
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "ease": {
+                                        "type": "string",
+                                        "enum": [
+                                          "Linear",
+                                          "Smooth",
+                                          "Step"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "at",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "clock",
+                                "keys"
+                              ],
+                              "additionalProperties": false
+                            }
                           ]
                         },
                         "opcode": {
@@ -2625,9 +5176,53 @@
                         "weight": {
                           "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
                           "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "clock": {
+                                  "type": "string"
+                                },
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "type": "number"
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "ease": {
+                                        "type": "string",
+                                        "enum": [
+                                          "Linear",
+                                          "Smooth",
+                                          "Step"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "at",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "clock",
+                                "keys"
+                              ],
+                              "additionalProperties": false
+                            }
                           ]
                         },
                         "opcode": {
@@ -2655,9 +5250,53 @@
                         "key": {
                           "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
                           "title": "BindableScalar",
-                          "type": [
-                            "number",
-                            "string"
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "clock": {
+                                  "type": "string"
+                                },
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "type": "number"
+                                      },
+                                      "value": {
+                                        "type": "number"
+                                      },
+                                      "ease": {
+                                        "type": "string",
+                                        "enum": [
+                                          "Linear",
+                                          "Smooth",
+                                          "Step"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "at",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "clock",
+                                "keys"
+                              ],
+                              "additionalProperties": false
+                            }
                           ]
                         },
                         "cases": {
@@ -2753,9 +5392,53 @@
                   "weight": {
                     "description": "The blend weight in [0, 1] \u2014 a literal, or a state binding.",
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
                     ]
                   },
                   "opcode": {
@@ -2839,9 +5522,53 @@
                   "fieldOfViewRadians": {
                     "description": "The field of view.",
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
                     ]
                   },
                   "opcode": {
@@ -2974,19 +5701,107 @@
                     "type": "number"
                   },
                   "yaw": {
-                    "description": "The orbit heading in radians, as a literal or numeric state binding.",
-                    "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "description": "The orbit heading in radians, as a literal, a numeric state binding, or keys on a clock that turn along the shorter arc.",
+                    "title": "BindableAngle",
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
                     ]
                   },
                   "pitch": {
-                    "description": "The orbit tilt in radians, as a literal or numeric state binding.",
-                    "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "description": "The orbit tilt in radians, as a literal, a numeric state binding, or keys on a clock.",
+                    "title": "BindableAngle",
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
                     ]
                   },
                   "pivotOffset": {
@@ -3039,9 +5854,53 @@
                   "fraction": {
                     "description": "The curve\u0027s arc-length fraction to sample, in [0, 1] for an open row (values outside clamp) or unrestricted for a closed row (values wrap) \u2014 a literal, or a state binding.",
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
                     ]
                   },
                   "opcode": {
@@ -3069,9 +5928,53 @@
                   "key": {
                     "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
                     ]
                   },
                   "cases": {
@@ -19726,9 +22629,53 @@
                   ],
                   "additionalProperties": {
                     "title": "BindableScalar",
-                    "type": [
-                      "number",
-                      "string"
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "clock": {
+                            "type": "string"
+                          },
+                          "keys": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "at": {
+                                  "type": "number"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "ease": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Linear",
+                                    "Smooth",
+                                    "Step"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "at",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "clock",
+                          "keys"
+                        ],
+                        "additionalProperties": false
+                      }
                     ]
                   }
                 },
@@ -37488,6 +40435,76 @@
         "title": "StateSpace"
       },
       "default": null
+    },
+    "timeline": {
+      "description": "The world\u0027s tick clocks, which a recipient evaluates from the tick it presents, and no state clock: a state clock reads a state row, and a projection sends no anchor of its phase, so a projection whose values key on one does not hydrate (TryToDefinition).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "clocks": {
+          "description": "The clocks, each named once.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One named presentation clock: a tick clock, whose phase advances with the simulation\u0027s engine tick through a period, or a state clock, whose phase is the fractional part of a state row\u0027s presented value (an advancing row wraps once per unit).",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "The clock\u0027s name, unique within the section.",
+                "type": "string"
+              },
+              "periodSeconds": {
+                "description": "A tick clock\u0027s period, in seconds: a whole number of engine ticks (1/50400 s). Refused beside State.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "spanSeconds": {
+                "description": "What one period reads as, in the units a key\u0027s time is authored in: a day that passes in twenty minutes and reads as twenty-four hours has a span of 24h. Absent reads as the period for a tick clock and as one for a state clock.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "startSeconds": {
+                "description": "How far into its span a tick clock stands at engine tick zero, in SpanSeconds\u0027 units, in [0, span). Absent is zero. Refused on a state clock.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "state": {
+                "description": "A state clock\u0027s Fixed or Int row. Refused beside PeriodSeconds.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false,
+            "title": "WorldClock"
+          },
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldTimelineSection"
     },
     "schema": {
       "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed projection.",

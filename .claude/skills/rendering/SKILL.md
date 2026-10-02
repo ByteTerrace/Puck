@@ -1136,7 +1136,10 @@ explanation is [Qualifying a package](../../../docs/development/qualification.md
 
 ## World render data
 
-`WorldFramePresenter` re-reads `render.lighting`, `render.sky`, `render.cycle`,
+`WorldFramePresenter` re-reads `render.lighting`, `render.sky` (their keyed values
+resolved through the state mirror by `WorldEnvironmentResolve`, which also
+integrates every cloud and twinkle rate to the presented tick, so the
+environment rows carry offsets and a phase, never a rate),
 `render.environment`, `render.tonemap`, and `render.farDistance` from the live
 definition every frame, so a `world.row.set render …` lands on the next frame
 without a program rebuild; `render.tonemap` reaches the root graph

@@ -231,11 +231,7 @@
                 "null"
               ],
               "additionalProperties": {
-                "title": "BindableScalar",
-                "type": [
-                  "number",
-                  "string"
-                ]
+                "$ref": "./common.schema.json#/$defs/BindableScalar"
               }
             },
             "default": null

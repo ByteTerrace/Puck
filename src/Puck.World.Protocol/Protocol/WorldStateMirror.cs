@@ -43,10 +43,11 @@ public enum WorldStateConversion : byte {
 /// </para>
 /// <para>
 /// Refresh and apply both run on the thread that pumps the simulation and presents frames, so the mirror takes no
-/// lock. Reads are counted as <c>presentation.mirror.reads</c>.
+/// lock. Reads are counted as <c>presentation.mirror.reads</c>, and keyed values resolved as
+/// <c>presentation.mirror.keyed</c>.
 /// </para>
 /// </summary>
-public sealed class WorldStateMirror : IWorkCounterSource {
+public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
     /// <summary>The stable counter-source name.</summary>
     public const string SourceName = "presentation.mirror";
 
@@ -56,8 +57,16 @@ public sealed class WorldStateMirror : IWorkCounterSource {
         unit: "reads",
         workClass: WorkClass.Deterministic
     );
+    /// <summary>Counts every keyed value the mirror resolved: one per read of a value keyed on a clock. A consumer
+    /// that caches what it resolved (the environment, the theme) reads its keys again only when a clock they read moves,
+    /// so the count rises with the presentation's frames only while a keyed value moves.</summary>
+    public static readonly WorkKind KeyedResolutions = new(
+        name: "presentation.mirror.keyed",
+        unit: "resolutions",
+        workClass: WorkClass.Pacing
+    );
 
-    private static readonly WorkKind[] Kinds = [Reads];
+    private static readonly WorkKind[] Kinds = [Reads, KeyedResolutions];
     private readonly Dictionary<string, (bool Parsed, StateBinding Binding)> m_bindingByToken = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<object, WorldPresentationBinding[]> m_registrations = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly Dictionary<(StateBinding Binding, WorldStateConversion Conversion), int> m_slotByBinding = [];
@@ -78,6 +87,7 @@ public sealed class WorldStateMirror : IWorkCounterSource {
 
     private int[] m_nextSlotOfOrdinal = [];
 
+    private WorkCount m_keyed;
     private WorkCount m_reads;
     private int m_refreshSerial;
 
@@ -499,12 +509,73 @@ public sealed class WorldStateMirror : IWorkCounterSource {
         ? m_slots[slot].Sample
         : default
     );
-    /// <summary>Resolves a bindable scalar: its literal, or its registered binding's presented number.</summary>
+    /// <inheritdoc/>
+    public bool TryClockValue(WorldClock clock, out double value) => TryValue(
+        slot: SlotOf(
+            binding: WorldPresentationManifest.ClockBinding(clock: clock),
+            conversion: WorldStateConversion.Number
+        ),
+        value: out value
+    );
+    /// <summary>Returns the clock a keyed value reads and its phase as the mirror presents it: a tick clock's at the
+    /// presented tick, a state clock's from its row's presented value (<see cref="WorldKeyResolver.TryPhase"/>).</summary>
+    /// <param name="name">The clock's name.</param>
+    /// <param name="clock">The clock, or <see langword="null"/> when the installed document names none.</param>
+    /// <param name="phase">The phase, in <c>[0, 1)</c>, or zero when it reads none.</param>
+    /// <returns><see langword="true"/> when the clock is named and its phase reads.</returns>
+    public bool TryPhase(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldClock? clock, out double phase) {
+        phase = 0d;
+        m_keyed.Increment();
+
+        return (
+            m_view.Manifest.TryClock(
+            clock: out clock,
+            name: name
+        ) &&
+            WorldKeyResolver.TryPhase(
+            clock: clock,
+            phase: out phase,
+            source: this
+        )
+        );
+    }
+    /// <summary>Returns the state slot a state clock reads through, or -1 for a tick clock or a clock the installed
+    /// document does not name: what a consumer that caches a keyed value notes, beside the presented tick a tick clock
+    /// moves with.</summary>
+    /// <param name="name">The clock's name.</param>
+    /// <returns>The slot, or -1.</returns>
+    public int ClockSlotOf(string name) => ((m_view.Manifest.TryClock(
+        clock: out var clock,
+        name: name
+    ) && clock.IsStateClock)
+        ? SlotOf(
+            binding: WorldPresentationManifest.ClockBinding(clock: clock),
+            conversion: WorldStateConversion.Number
+        )
+        : -1
+    );
+    /// <summary>Resolves a bindable scalar: its literal, its registered binding's presented number, or its keys at
+    /// their clock's presented phase.</summary>
     /// <param name="scalar">The authored scalar.</param>
-    /// <param name="fallback">The value when the literal is not finite, no registration records the binding, or it
-    /// reads no number.</param>
+    /// <param name="fallback">The value when the literal is not finite, no registration records the binding, it reads
+    /// no number, or the keys' clock reads no phase.</param>
     /// <returns>The scalar's presented value.</returns>
     public float Scalar(in BindableScalar scalar, float fallback) {
+        if (scalar.Keys is { } keys) {
+            return (TryPhase(
+                clock: out var clock,
+                name: keys.Clock,
+                phase: out var phase
+            )
+                ? WorldKeyResolver.Scalar(
+                    phase: phase,
+                    span: clock.Span,
+                    track: keys
+                )
+                : fallback
+            );
+        }
+
         if (scalar.State is { } binding) {
             return (TryNumber(
                 slot: SlotOf(
@@ -523,12 +594,57 @@ public sealed class WorldStateMirror : IWorkCounterSource {
             : fallback
         );
     }
-    /// <summary>Resolves a bindable color: its literal, or its registered binding's current color.</summary>
+    /// <summary>Resolves a bindable angle, in radians, as <see cref="Scalar"/> resolves its scalar form, its keys
+    /// along the shorter arc.</summary>
+    /// <param name="angle">The authored angle.</param>
+    /// <param name="fallback">The angle, in radians, when its form reads none.</param>
+    /// <returns>The angle's presented value, in radians.</returns>
+    public float Angle(in BindableAngle angle, float fallback) {
+        var value = angle.Value;
+
+        if (value.Keys is { } keys) {
+            return (TryPhase(
+                clock: out var clock,
+                name: keys.Clock,
+                phase: out var phase
+            )
+                ? WorldKeyResolver.Angle(
+                    phase: phase,
+                    span: clock.Span,
+                    track: keys
+                )
+                : fallback
+            );
+        }
+
+        return Scalar(
+            fallback: fallback,
+            scalar: in value
+        );
+    }
+    /// <summary>Resolves a bindable color: its literal, its registered binding's current color, or its keys at their
+    /// clock's presented phase, blended in linear light.</summary>
     /// <param name="color">The authored color.</param>
-    /// <param name="fallback">The color when the token is malformed, no registration records the binding, or it holds
-    /// no color.</param>
+    /// <param name="fallback">The color when the token is malformed, no registration records the binding, it holds
+    /// no color, or the keys' clock reads no phase.</param>
     /// <returns>The color.</returns>
     public Vector4 Color(in BindableColor color, Vector4 fallback) {
+        if (color.Keys is { } keys) {
+            return (TryPhase(
+                clock: out var clock,
+                name: keys.Clock,
+                phase: out var phase
+            )
+                ? WorldKeyResolver.Color(
+                    fallback: fallback,
+                    phase: phase,
+                    span: clock.Span,
+                    track: keys
+                )
+                : fallback
+            );
+        }
+
         if (color.State is { } binding) {
             return (TryColor(
                 slot: SlotOf(
@@ -544,13 +660,178 @@ public sealed class WorldStateMirror : IWorkCounterSource {
 
         return (color.Literal ?? fallback);
     }
+    /// <summary>Resolves a bindable direction: its literal, or its keys at their clock's presented phase, along the
+    /// great circle.</summary>
+    /// <param name="direction">The authored direction.</param>
+    /// <param name="fallback">The direction when the keys' clock reads no phase.</param>
+    /// <returns>The direction; a literal at its authored length, a keyed one of unit length.</returns>
+    public Vector3 Direction(in BindableDirection direction, Vector3 fallback) {
+        if (direction.Keys is { } keys) {
+            return (TryPhase(
+                clock: out var clock,
+                name: keys.Clock,
+                phase: out var phase
+            )
+                ? WorldKeyResolver.Direction(
+                    phase: phase,
+                    span: clock.Span,
+                    track: keys
+                )
+                : fallback
+            );
+        }
+
+        return (direction.Literal ?? fallback);
+    }
+    /// <summary>Resolves a bindable two-component vector: its literal, or its keys at their clock's presented
+    /// phase.</summary>
+    /// <param name="vector">The authored vector.</param>
+    /// <param name="fallback">The vector when the keys' clock reads no phase.</param>
+    /// <returns>The vector.</returns>
+    public Vector2 Vector(in BindableVector2 vector, Vector2 fallback) {
+        if (vector.Keys is { } keys) {
+            return (TryPhase(
+                clock: out var clock,
+                name: keys.Clock,
+                phase: out var phase
+            )
+                ? WorldKeyResolver.Vector(
+                    phase: phase,
+                    span: clock.Span,
+                    track: keys
+                )
+                : fallback
+            );
+        }
+
+        return (vector.Literal ?? fallback);
+    }
+    /// <summary>Resolves a bindable three-component vector: its literal, or its keys at their clock's presented phase,
+    /// blended linearly.</summary>
+    /// <param name="vector">The authored vector.</param>
+    /// <param name="fallback">The vector when the keys' clock reads no phase.</param>
+    /// <returns>The vector.</returns>
+    public Vector3 Vector(in BindableVector3 vector, Vector3 fallback) {
+        if (vector.Keys is { } keys) {
+            return (TryPhase(
+                clock: out var clock,
+                name: keys.Clock,
+                phase: out var phase
+            )
+                ? WorldKeyResolver.Vector(
+                    phase: phase,
+                    span: clock.Span,
+                    track: keys
+                )
+                : fallback
+            );
+        }
+
+        return (vector.Literal ?? fallback);
+    }
+    /// <summary>Returns a rate integrated from engine tick zero to the presented tick, reduced by a modulus: a literal
+    /// rate as <see cref="PresentedTick.Integrate"/> integrates it, a rate keyed on a tick clock through each key
+    /// segment's closed form (<see cref="WorldKeyResolver.Integrate"/>), so a drifting layer never jumps where a key
+    /// changes its rate.</summary>
+    /// <param name="rate">The rate, in units per second; a rate binds no state row and keys only on a tick clock,
+    /// which the validator holds, and a form that breaks either integrates to zero.</param>
+    /// <param name="modulus">The period the result is reduced by, in the rate's units; positive.</param>
+    /// <returns>The reduced integral.</returns>
+    public double Integrate(in BindableScalar rate, double modulus) {
+        if (rate.Keys is { } keys) {
+            m_keyed.Increment();
+
+            return ((m_view.Manifest.TryClock(
+                clock: out var clock,
+                name: keys.Clock
+            ) && !clock.IsStateClock)
+                ? WorldKeyResolver.Integrate(
+                    clock: clock,
+                    modulus: modulus,
+                    tick: Presented,
+                    track: keys
+                )
+                : 0d
+            );
+        }
+
+        return (((rate.Literal is { } literal) && float.IsFinite(f: literal))
+            ? Presented.Integrate(
+                modulus: modulus,
+                ratePerSecond: literal
+            )
+            : 0d
+        );
+    }
+    /// <summary>Returns a two-component rate integrated from engine tick zero to the presented tick, each component
+    /// reduced by a modulus, as <see cref="Integrate(in BindableScalar, double)"/> integrates a scalar rate.</summary>
+    /// <param name="rate">The rate, in units per second.</param>
+    /// <param name="modulus">The period each component is reduced by, in the rate's units; positive.</param>
+    /// <returns>The reduced integral.</returns>
+    public Vector2 Integrate(in BindableVector2 rate, double modulus) {
+        if (rate.Keys is { } keys) {
+            m_keyed.Increment();
+
+            if (!m_view.Manifest.TryClock(
+                clock: out var clock,
+                name: keys.Clock
+            ) || clock.IsStateClock) {
+                return Vector2.Zero;
+            }
+
+            var tick = Presented;
+
+            return new Vector2(
+                x: ((float)WorldKeyResolver.Integrate(
+                    clock: clock,
+                    modulus: modulus,
+                    tick: tick,
+                    track: keys,
+                    value: static value => value.X
+                )),
+                y: ((float)WorldKeyResolver.Integrate(
+                    clock: clock,
+                    modulus: modulus,
+                    tick: tick,
+                    track: keys,
+                    value: static value => value.Y
+                ))
+            );
+        }
+
+        if (rate.Literal is not { } literal) {
+            return Vector2.Zero;
+        }
+
+        var presented = Presented;
+
+        return new Vector2(
+            x: ((float)presented.Integrate(
+                modulus: modulus,
+                ratePerSecond: literal.X
+            )),
+            y: ((float)presented.Integrate(
+                modulus: modulus,
+                ratePerSecond: literal.Y
+            ))
+        );
+    }
+
+    /// <summary>Gets how many keyed values the mirror has resolved (<see cref="KeyedResolutions"/>).</summary>
+    public long KeyedResolutionCount => m_keyed.Value;
+
     /// <inheritdoc/>
-    public bool TryRead(WorkKind kind, out long value) => WorkCounterSources.TryReadSingle(
+    public bool TryRead(WorkKind kind, out long value) => (WorkCounterSources.TryReadSingle(
         count: in m_reads,
         declared: Reads,
         kind: kind,
         value: out value
-    );
+    ) || WorkCounterSources.TryReadSingle(
+        count: in m_keyed,
+        declared: KeyedResolutions,
+        kind: kind,
+        value: out value
+    ));
 
     // Moves the delivered engine tick forward, keeping the one it replaces as the tick a moving slot's previous sample
     // holds. An engine tick behind the latest one (a restored checkpoint) starts again from itself.

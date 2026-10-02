@@ -63,7 +63,8 @@ the allocator assigns them in reverse. `poseChannels` connects station columns
 to the inherited drivers, and `limbPoses` holds the existing shape ids, pivots
 and swing parameters. `inspectionViews` supplies both the layouts and their
 number-key bindings; `courtyardCameras` supplies the additional cameras.
-Shared sky stops keep the default lighting and the blue-sky cycle key aligned.
+Shared sky stops keep the default sky and its blue day key aligned; the sky keys on the `skyMode` clock, whose
+row a seat toggles between the night key and the day key.
 The `floor`, `courtyard-tree`, `courtyard-rock` and `courtyard-grass` prototypes
 define the landscape; their placement loops control the grove and grass clusters.
 

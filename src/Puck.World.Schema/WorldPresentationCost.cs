@@ -104,6 +104,19 @@ public sealed record WorldBindingCost(string Pipeline, string Pass, string Membe
     }
 
     private static WorldBindingCost Price(WorldDefinition definition, string pipeline, string pass, string member, BindableScalar value) {
+        // Keys on a clock can move the field on any frame, as an interpolating binding does.
+        if (value.Keys is { } keys) {
+            return new WorldBindingCost(
+                BytesPerFrame: ScalarBytes,
+                BytesPerTick: 0,
+                Elements: 1,
+                Member: member,
+                Pass: pass,
+                Pipeline: pipeline,
+                Token: keys.ToString()
+            );
+        }
+
         if (value.State is not { } binding) {
             return new WorldBindingCost(
                 BytesPerFrame: 0,
