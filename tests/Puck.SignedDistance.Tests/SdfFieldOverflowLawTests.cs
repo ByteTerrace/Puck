@@ -51,6 +51,23 @@ public sealed class SdfFieldOverflowLawTests {
         Assert.False(condition: evaluator.TryDistanceBounds(distance: out _, lower: position, upper: position));
     }
     [Fact]
+    public void ARotationCannotHideAWrappedFusedStage() {
+        var evaluator = Program(emit: QuarterTurnPast2To45);
+        // At (2^46, 2^46, 0) the translated point is 1.5·2^46 on both axes, and the quarter turn's first fused stage
+        // t.X = √½·(x + y) reaches 1.06·2^63 raws and wraps, so the point evaluator once answered FarDistance there. The
+        // rotated point itself stays inside the carrier, so the linear enclosure, which assumes no stage wraps, bounded
+        // the plane wholly below zero. The step-by-step enclosure sees the wrap; the frame stops short of it.
+        var outside = FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromInteger(value: (1L << 46)), Y: FixedQ4816.FromInteger(value: (1L << 46)), Z: FixedQ4816.Zero));
+        var inside = FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromInteger(value: 3L), Y: FixedQ4816.One, Z: FixedQ4816.Zero));
+
+        Assert.True(condition: (evaluator.Frame < FixedQ4816.FromInteger(value: (1L << 46))), userMessage: $"the frame {evaluator.Frame} holds a wrapping rotation stage");
+        Assert.False(condition: evaluator.TryDistance(distance: out var wrapped, material: out _, position: outside), userMessage: $"the point evaluator answered {wrapped.Value} raws");
+        Assert.False(condition: evaluator.TryDistanceBounds(distance: out var hidden, lower: outside, upper: outside), userMessage: $"the bounds answered {hidden}");
+        Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: inside));
+        Assert.True(condition: evaluator.TryDistanceBounds(distance: out var bounds, lower: inside, upper: inside));
+        Assert.True(condition: bounds.Contains(value: distance), userMessage: $"the point answer {distance} lies outside {bounds}");
+    }
+    [Fact]
     public void AFieldThatOverflowsEverywhereIsRefusedByBothInterpreters() {
         // The review's case: a dilation by the carrier's whole negative range pushes every distance past its top, where
         // the point evaluator once wrapped to a large negative distance and the bounds read the saturated top as finite.
@@ -75,7 +92,7 @@ public sealed class SdfFieldOverflowLawTests {
             sweep: out var sweep
         ));
         Assert.Equal(expected: CertifiedSweepOutcome.Exhausted, actual: sweep.Outcome);
-        Assert.Equal(expected: FixedQ4816.Zero, actual: sweep.Fraction);
+        Assert.Equal(expected: UnitInterval32.Zero, actual: sweep.Fraction);
     }
     [Fact]
     public void AQuarticSuperellipsoidCannotHideAnOverflowedRatio() {
@@ -112,7 +129,7 @@ public sealed class SdfFieldOverflowLawTests {
             sweep: out var sweep
         ));
         Assert.Equal(expected: CertifiedSweepOutcome.Exhausted, actual: sweep.Outcome);
-        Assert.Equal(expected: FixedQ4816.Zero, actual: sweep.Fraction);
+        Assert.Equal(expected: UnitInterval32.Zero, actual: sweep.Fraction);
     }
     public static TheoryData<string> ShrinkCases() {
         var data = new TheoryData<string>();
@@ -232,6 +249,13 @@ public sealed class SdfFieldOverflowLawTests {
         Assert.True(condition: evaluator.TryDistance(distance: out _, material: out _, position: sweep.Reached), userMessage: "the sweep reached a centre the point evaluator refuses");
     }
 
+    // The review's rotation: a quarter turn about z of a plane translated 2^45 back on x and y, whose first fused stage
+    // wraps short of the carrier's end while the rotated point does not.
+    // Declared before the emitters that read it: static fields initialize in textual order.
+    private static readonly Func<SdfProgramBuilder, int, SdfProgramBuilder> QuarterTurnPast2To45 = (b, m) => b
+        .Translate(offset: new Vector3(x: -35184372088832f, y: -35184372088832f, z: 0f))
+        .Rotate(rotation: new Quaternion(x: 0f, y: 0f, z: MathF.Sqrt(x: 0.5f), w: MathF.Sqrt(x: 0.5f)))
+        .Plane(material: m, normal: Vector3.UnitY, offset: 0f);
     // Programs whose constants or reach approach the carrier's ends, so their frames sit at every scale.
     private static readonly IReadOnlyDictionary<string, Func<SdfProgramBuilder, int, SdfProgramBuilder>> ExtremeEmitters = new Dictionary<string, Func<SdfProgramBuilder, int, SdfProgramBuilder>> {
         ["dilate by 2^40"] = (b, m) => b.Sphere(material: m, radius: 1f).Dilate(radius: -1099511627776f),
@@ -239,6 +263,7 @@ public sealed class SdfFieldOverflowLawTests {
         ["onion of 2^45"] = (b, m) => b.Box(halfExtents: Vector3.One, material: m, round: 0f).Onion(thickness: 35184372088832f),
         ["plane offset 2^46"] = (b, m) => b.Plane(material: m, normal: Vector3.Normalize(value: new Vector3(x: 1f, y: 1f, z: 0f)), offset: 70368744177664f),
         ["translate 2^45"] = (b, m) => b.Translate(offset: new Vector3(x: 35184372088832f, y: -35184372088832f, z: 0f)).Sphere(material: m, radius: 2f),
+        ["rotate a quarter turn past 2^45"] = QuarterTurnPast2To45,
         ["scale 2^-14"] = (b, m) => b.Scale(scale: new Vector3(x: 0.00006103515625f, y: 0.00006103515625f, z: 0.00006103515625f)).Sphere(material: m, radius: 1f),
         ["scale 2^20"] = (b, m) => b.Scale(scale: new Vector3(x: 1048576f, y: 1048576f, z: 1048576f)).Box(halfExtents: Vector3.One, material: m, round: 0.1f),
         ["trapezoid"] = (b, m) => b.Trapezoid(bottomHalfWidth: 0.9f, halfHeight: 0.6f, lift: SdfLift.Revolve, liftAmount: 0.3f, material: m, topHalfWidth: 0.4f),

@@ -13,16 +13,18 @@ public enum CertifiedSweepOutcome {
 }
 /// <summary>A certified sweep's answer: how far along the displacement the sphere is proved clear, and why it
 /// stopped.</summary>
-/// <param name="Fraction">The fraction of the displacement, in <c>[0, 1]</c> and floored to the Q16 grid, along which
-/// every point of the moving sphere is proved to keep the field above zero. A zero fraction can also mean the initial
-/// sphere cannot be proved clear.</param>
-/// <param name="Reached">A representable centre at the end of the certified travel, itself proved clear after a
-/// positive advance; at zero travel it is the unmodified origin. The sweep carries its fraction at 2⁻³² of the
-/// displacement, finer than <paramref name="Fraction"/>, so this is where a fast body may be placed.</param>
+/// <param name="Fraction">The fraction of the displacement, in <c>[0, 1]</c> on the <c>2⁻³²</c> grid the sweep advances
+/// on, along which every point of the moving sphere is proved to keep the field above zero. It is the sweep's own
+/// fraction, never a coarser rounding of it, so two sweeps of one displacement compare by how far each proved: a long
+/// step's fractions can differ only below <c>2⁻¹⁶</c>. A zero fraction can also mean the initial sphere cannot be
+/// proved clear.</param>
+/// <param name="Reached">A representable centre at the end of the certified travel, the point the displacement reaches
+/// at <paramref name="Fraction"/>, itself proved clear after a positive advance; at zero travel it is the unmodified
+/// origin.</param>
 /// <param name="Outcome">Why the sweep stopped.</param>
 /// <param name="BoundsQueries">The bounds queries the sweep spent, each one walk of the field over one box: never
 /// more than the caller's budget.</param>
-public readonly record struct CertifiedSweep(FixedQ4816 Fraction, FixedPosition Reached, CertifiedSweepOutcome Outcome, int BoundsQueries);
+public readonly record struct CertifiedSweep(UnitInterval32 Fraction, FixedPosition Reached, CertifiedSweepOutcome Outcome, int BoundsQueries);
 /// <summary>
 /// Certified bounds on a scalar field over a box of points — the region reading of an <see cref="IFieldEvaluator"/>.
 /// </summary>

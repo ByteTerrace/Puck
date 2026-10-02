@@ -388,8 +388,10 @@ public sealed partial class SdfFieldEvaluator {
         // triples a box's width. The exact expression is linear in p, p + 2u×(u×p + w·p) = M·p with
         // M = (1 − 2|u|²)·I + 2·u·uᵀ + 2w·[u]×, so its enclosure as M·p reads each coordinate once per axis. The point
         // code rounds each of t and d to the nearest raw, so its answer lies within 0.5 + 2·0.5 raws of the exact d and
-        // twice that of the exact result for |u| ≤ 1: three raws, widened to four. Both enclosures hold the point
-        // answer, so their intersection does, and it is never looser than the step-by-step one.
+        // twice that of the exact result for |u| ≤ 1: three raws, widened to four. That error budget holds only while
+        // no fused stage wraps, and the linear form never sees the stages: a stage can leave the carrier while M·p,
+        // a rotated point, stays inside it. The step-by-step enclosure does see them, a bounded one proving every
+        // stage of t and d representable, so the two meet only then (see Intersect).
         var two = Point(value: Two);
         var usq = (((ux * ux) + (uy * uy)) + (uz * uz));
         var diagonal = (Point(value: FixedQ4816.One) - (two * usq));
@@ -410,10 +412,12 @@ public sealed partial class SdfFieldEvaluator {
             Z: Intersect(first: stepwise.Z, second: ((((m20 * p.X) + (m21 * p.Y)) + (m22 * p.Z)) + slack))
         );
     }
-    // Two enclosures of one value meet; an unbounded one, or an empty meet no point answer could produce, defers to the
-    // other.
+    // A faithful enclosure meets a tighter one that holds the point answer only where no point step wrapped. An unbounded
+    // first stays unbounded: it is the proof that a point step may have wrapped, and the second, which assumes none did,
+    // cannot bound what a wrap produced. An unbounded second, or an empty meet no point answer could produce, defers to
+    // the first.
     private static FixedInterval Intersect(FixedInterval first, FixedInterval second) {
-        if (second.IsUnbounded) {
+        if (first.IsUnbounded || second.IsUnbounded) {
             return first;
         }
 

@@ -16,8 +16,9 @@ namespace Puck.SignedDistance.Queries;
 public sealed class CertifiedFieldSweep(IFieldBounds field) : ICertifiedSweepQuery {
     private readonly IFieldBounds m_field = (field ?? throw new ArgumentNullException(paramName: nameof(field)));
 
-    // The fraction runs at Q32 of the displacement, so a step of one unit of it moves a long sweep a sliver.
-    private const int FractionBits = 32;
+    // The fraction runs on UnitInterval32's 2⁻³² grid of the displacement, so a step of one unit of it moves a long
+    // sweep a sliver, and the answer hands it back on that grid unrounded.
+    private const int FractionBits = UnitInterval32.FractionBitCount;
     private const long Whole = (1L << FractionBits);
 
     /// <inheritdoc/>
@@ -106,11 +107,13 @@ public sealed class CertifiedFieldSweep(IFieldBounds field) : ICertifiedSweepQue
                 break;
             }
 
-            // The Lipschitz ball's radius, floored, as a fraction of the displacement's length rounded up.
+            // The Lipschitz ball's radius, floored, as a fraction of the displacement's length rounded up. A reach at
+            // or past the length proposes the whole step before the shift, so the shifted reach stays below 2⁹⁵ and a
+            // large clearance or step scale never carries it past Int128 into a wrapped proposal.
             var reach = ((((Int128)clearance.Value) * stepScale.Value) >> FixedQ4816.FractionBitCount);
-            var proposed = ((lengthRaw == 0L)
+            var proposed = (((lengthRaw == 0L) || (reach >= lengthRaw))
                 ? Whole
-                : (long)Int128.Min(x: Whole, y: ((reach << FractionBits) / lengthRaw)));
+                : ((long)((reach << FractionBits) / lengthRaw)));
             var next = Math.Min(val1: Whole, val2: (fraction + Math.Max(val1: proposed, val2: 1L)));
             var proved = false;
 
@@ -152,7 +155,7 @@ public sealed class CertifiedFieldSweep(IFieldBounds field) : ICertifiedSweepQue
         var reached = SweepBox(displacement: displacement, from: fraction, start: start, to: fraction);
 
         sweep = new(
-            Fraction: FixedQ4816.FromRawBits(value: (fraction >> (FractionBits - FixedQ4816.FractionBitCount))),
+            Fraction: UnitInterval32.Create(value: ((ulong)fraction)),
             Reached: FixedPosition.FromLocal(local: new FixedVector3(X: reached.X.Lower, Y: reached.Y.Lower, Z: reached.Z.Lower)),
             Outcome: outcome,
             BoundsQueries: queries

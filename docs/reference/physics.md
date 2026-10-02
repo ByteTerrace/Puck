@@ -192,7 +192,9 @@ step starts. It sweeps every core sphere of every collider volume through
 - a sphere or box sweeps its centre at half its least radius;
 - a capsule sweeps one core sphere per piece of its segment, one more piece
   than the segment's length in radii, so the pieces cover the whole core;
-- the least fraction any core proves is the body's, and the body moves that far;
+- the least fraction any core proves is the body's, and the body moves that far.
+  The fractions compare on the sweep's own 2⁻³² grid (`UnitInterval32`), since
+  a long step's cores can differ by less than 2⁻¹⁶ of it;
 - the endpoint solve then runs unchanged, so a body that would have crossed a
   face stops on it and resolves against the face it reached.
 
@@ -214,7 +216,8 @@ moves less than its radius is only resolved at its endpoint, already past the
 wall. A step long enough that its fraction rounds to the Q16 grid also jumps a
 thin wall between samples. `CertifiedContactSweepLawTests` holds each with a
 radius stepper as its red leg, along with the budget's prefix property, the
-frame, the capsule core, and the lattice's bounds; the `thin-wall-sweep` canary
+frame, the capsule core, a compound body whose cores' fractions agree on the
+Q16 grid, and the lattice's bounds out to the carrier's ends; the `thin-wall-sweep` canary
 holds it in the running World.
 
 `FixedSurfaceQuery` is the nearest-surface-point primitive over the same
@@ -461,7 +464,10 @@ proven over a swept clearance box rather than sample points alone.
 lattice's height columns into a contact field—exact within two cells of a
 column, a conservative lower bound beyond—and encloses its answers over a box
 by the nearest column within reach, so a certified sweep proves a body clear of
-it. `UnionField` composes it with another field
+it. Its column indices and box gaps are taken in a wide type and clamped before
+they narrow to the lattice's own index, so a coordinate anywhere in the carrier,
+its ends included, reads the columns it lies near and never a wrapped one.
+`UnionField` composes it with another field
 (a world's authored solids) by nearest distance, so a glacier or a filled pond
 is real geometry a body's contact resolve reaches through the ordinary field
 seam. `Checkpoint`/`Capture`/`Restore`/`AppendStateHash` and the delta stream

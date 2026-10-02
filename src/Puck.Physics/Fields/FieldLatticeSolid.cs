@@ -6,6 +6,8 @@ namespace Puck.Physics.Fields;
 /// of column boxes, exact within two cells of a column and a conservative lower bound beyond.</summary>
 public sealed class FieldLatticeSolid : IFieldEvaluator, IFieldBounds {
     private const int Reach = 2;
+    // The widest column index an unwrapped Q48.16 quotient reaches, far past every column a lattice's int index holds.
+    private const long FarColumn = (1L << 47);
 
     private readonly FieldLattice m_lattice;
 
@@ -18,6 +20,20 @@ public sealed class FieldLatticeSolid : IFieldEvaluator, IFieldBounds {
     /// <inheritdoc/>
     public FieldEvaluatorCapabilities Capabilities => new(WarpFree: true);
 
+    // The gap between a box and a column on one axis, exact in a wide type, which two coordinates near the carrier's
+    // ends leave, and clamped to the reach: a gap at the reach puts the column at or past the reach, where no point
+    // answer falls below, so the clamp never lowers the bound past a point answer, and the narrowed gap never wraps.
+    private static FixedQ4816 Gap(FixedQ4816 low, FixedQ4816 high, FixedQ4816 columnMinimum, FixedQ4816 columnMaximum, FixedQ4816 reach) {
+        var gap = Int128.Max(
+            x: Int128.Max(
+                x: (((Int128)columnMinimum.Value) - high.Value),
+                y: (((Int128)low.Value) - columnMaximum.Value)
+            ),
+            y: Int128.Zero
+        );
+
+        return FixedQ4816.FromRawBits(value: ((long)Int128.Min(x: gap, y: reach.Value)));
+    }
     private static FixedQ4816 BoxDistance(in FixedVector3 point, in FixedVector3 min, in FixedVector3 max) {
         var d = FixedVector3.Max(
             left: (min - point),
@@ -34,34 +50,49 @@ public sealed class FieldLatticeSolid : IFieldEvaluator, IFieldBounds {
 
         return (outside.Length + inside);
     }
-    // The column index a coordinate falls in, the point query's own formula: monotone in the coordinate, so a box's
-    // points fall in the columns between its corners'.
-    private static int ColumnOf(FixedQ4816 coordinate, FixedQ4816 origin, FixedQ4816 cell) =>
-        ((int)(FixedQ4816.Floor(value: ((coordinate - origin) / cell)).Value >> 16));
+    // The column index a coordinate falls in, by the point query's own formula: floor((coordinate − origin) / cell),
+    // the quotient rounded once to the Q16 grid, to nearest with ties to even, as FixedQ4816's division rounds it. It is
+    // taken in Int128, where neither the offset nor the quotient can wrap (|offset| < 2⁶⁴ raws, so the scaled quotient
+    // is under 2⁸⁰ for a cell of at least one raw), so it equals that division wherever the division does not wrap and
+    // stays monotone in the coordinate where it would: a box's points fall in the columns between its corners'. The
+    // cell is positive (the topology validates it), so its raw is the divisor's magnitude. The answer is clamped to
+    // ±2⁴⁷, which every unwrapped column already lies within, before it leaves the wide type.
+    private static long ColumnOf(FixedQ4816 coordinate, FixedQ4816 origin, FixedQ4816 cell) {
+        var offset = (((Int128)coordinate.Value) - origin.Value);
+
+        var (truncated, remainder) = Int128.DivRem(left: (Int128.Abs(value: offset) << FixedQ4816.FractionBitCount), right: cell.Value);
+        var magnitude = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (cell.Value - remainder),
+            distanceToTruncated: remainder,
+            truncated: truncated
+        );
+        var quotient = ((offset < Int128.Zero) ? -magnitude : magnitude);
+
+        return ((long)Int128.Clamp(max: FarColumn, min: -FarColumn, value: (quotient >> FixedQ4816.FractionBitCount)));
+    }
+    // The columns within the reach of [first, last] that the lattice holds, clamped in the wide type before narrowing
+    // to the lattice's own int index: an empty range (Start past End) when none is. A clamped column sits far enough
+    // past the lattice that the reach never brings it back into it.
+    private static (int Start, int End) ColumnRange(long first, long last, int count) => (
+        ((int)Math.Clamp(max: count, min: 0L, value: (first - Reach))),
+        ((int)Math.Clamp(max: (count - 1L), min: -1L, value: (last + Reach)))
+    );
     private FixedQ4816 Distance(in FixedVector3 point) {
         var cell = m_lattice.CellSize;
         var origin = m_lattice.Origin;
         var fx = ColumnOf(cell: cell, coordinate: point.X, origin: origin.X);
         var fz = ColumnOf(cell: cell, coordinate: point.Z, origin: origin.Z);
+
+        var (firstX, lastX) = ColumnRange(count: m_lattice.Width, first: fx, last: fx);
+        var (firstZ, lastZ) = ColumnRange(count: m_lattice.Depth, first: fz, last: fz);
         var best = (cell * FixedQ4816.FromInteger(value: Reach));
 
-        for (var z = (fz - Reach); (z <= (fz + Reach)); z++) {
-            if (
-                (z < 0) ||
-                (z >= m_lattice.Depth)
-            ) {
-                continue;
-            }
-
-            for (var x = (fx - Reach); (x <= (fx + Reach)); x++) {
-                if (
-                    (x < 0) ||
-                    (x >= m_lattice.Width) ||
-                    (m_lattice.ColumnHeight(
+        for (var z = firstZ; (z <= lastZ); z++) {
+            for (var x = firstX; (x <= lastX); x++) {
+                if (m_lattice.ColumnHeight(
                     x: x,
                     z: z
-                ) is not { } top)
-                ) {
+                ) is not { } top) {
                     continue;
                 }
 
@@ -132,10 +163,9 @@ public sealed class FieldLatticeSolid : IFieldEvaluator, IFieldBounds {
         var origin = m_lattice.Origin;
         var reach = (cell * FixedQ4816.FromInteger(value: Reach));
         var least = reach;
-        var firstX = Math.Max(val1: 0, val2: (ColumnOf(cell: cell, coordinate: low.X, origin: origin.X) - Reach));
-        var lastX = Math.Min(val1: (m_lattice.Width - 1), val2: (ColumnOf(cell: cell, coordinate: high.X, origin: origin.X) + Reach));
-        var firstZ = Math.Max(val1: 0, val2: (ColumnOf(cell: cell, coordinate: low.Z, origin: origin.Z) - Reach));
-        var lastZ = Math.Min(val1: (m_lattice.Depth - 1), val2: (ColumnOf(cell: cell, coordinate: high.Z, origin: origin.Z) + Reach));
+
+        var (firstX, lastX) = ColumnRange(count: m_lattice.Width, first: ColumnOf(cell: cell, coordinate: low.X, origin: origin.X), last: ColumnOf(cell: cell, coordinate: high.X, origin: origin.X));
+        var (firstZ, lastZ) = ColumnRange(count: m_lattice.Depth, first: ColumnOf(cell: cell, coordinate: low.Z, origin: origin.Z), last: ColumnOf(cell: cell, coordinate: high.Z, origin: origin.Z));
 
         for (var z = firstZ; (z <= lastZ); z++) {
             for (var x = firstX; (x <= lastX); x++) {
@@ -156,12 +186,10 @@ public sealed class FieldLatticeSolid : IFieldEvaluator, IFieldBounds {
                     Y: top,
                     Z: (min.Z + cell)
                 );
-                var gap = FixedVector3.Max(
-                    left: FixedVector3.Max(
-                        left: (min - high),
-                        right: (low - max)
-                    ),
-                    right: FixedVector3.Zero
+                var gap = new FixedVector3(
+                    X: Gap(columnMaximum: max.X, columnMinimum: min.X, high: high.X, low: low.X, reach: reach),
+                    Y: Gap(columnMaximum: max.Y, columnMinimum: min.Y, high: high.Y, low: low.Y, reach: reach),
+                    Z: Gap(columnMaximum: max.Z, columnMinimum: min.Z, high: high.Z, low: low.Z, reach: reach)
                 );
                 var column = ((gap == FixedVector3.Zero)
                     ? -FixedVector3.MaxComponent(value: (max - min))

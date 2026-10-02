@@ -73,7 +73,7 @@ public sealed class SdfCertifiedQueryLawTests {
             sweep: out var sweep
         ));
         Assert.NotEqual(expected: CertifiedSweepOutcome.Clear, actual: sweep.Outcome);
-        Assert.True(condition: (sweep.Fraction < FixedQ4816.One));
+        Assert.True(condition: (sweep.Fraction < UnitInterval32.One));
         Assert.True(condition: sweep.Reached.TryDelta(delta: out var reached, origin: FixedPosition.Zero));
         Assert.InRange(actual: reached.X.Value, low: start.X.Value, high: (long.MaxValue - 1L));
     }
@@ -149,12 +149,13 @@ public sealed class SdfCertifiedQueryLawTests {
 
             Assert.True(condition: evaluator.TryCertifiedSweep(boundsQueryBudget: SweepBudget, displacement: displacement, origin: FixedPosition.FromLocal(local: start), radius: radius, sweep: out var sweep));
             if ((sweep.Outcome == CertifiedSweepOutcome.Contact) && (sweep.Reached == FixedPosition.FromLocal(local: start))) {
-                Assert.Equal(expected: FixedQ4816.Zero, actual: sweep.Fraction);
+                Assert.Equal(expected: UnitInterval32.Zero, actual: sweep.Fraction);
                 continue;
             }
 
             for (var sample = 0; (sample <= 64); sample++) {
-                var t = FixedQ4816.FromRawBits(value: ((sweep.Fraction.Value * sample) / 64L));
+                // Each sample's parameter is floored from the sweep's 2⁻³² fraction to the Q16 grid, so it never passes it.
+                var t = FixedQ4816.FromRawBits(value: ((long)(((sweep.Fraction.Value * ((ulong)sample)) / 64UL) >> (UnitInterval32.FractionBitCount - FixedQ4816.FractionBitCount))));
                 var point = (start + (displacement * t));
 
                 foreach (var offset in offsets) {
@@ -280,7 +281,7 @@ public sealed class SdfCertifiedQueryLawTests {
         Assert.True(condition: evaluator.TryCertifiedSweep(boundsQueryBudget: int.MaxValue, displacement: displacement, origin: origin, radius: radius, sweep: out var full));
         Assert.Equal(expected: CertifiedSweepOutcome.Contact, actual: full.Outcome);
 
-        var previous = FixedQ4816.Zero;
+        var previous = UnitInterval32.Zero;
 
         for (var budget = 1; (budget <= (full.BoundsQueries + 2)); budget++) {
             Assert.True(condition: evaluator.TryCertifiedSweep(boundsQueryBudget: budget, displacement: displacement, origin: origin, radius: radius, sweep: out var limited));
@@ -321,6 +322,27 @@ public sealed class SdfCertifiedQueryLawTests {
 
         Assert.True(condition: ((clearance > FixedQ4816.Zero) && (clearance <= (tolerance + FixedQ4816.FromDouble(value: 0.001)))), userMessage: $"the sweep stopped {clearance} clear of the face");
     }
+    [Fact]
+    public void ALargeClearanceTimesALargeStepScaleProposesTheWholeStep() {
+        // A field 2⁴⁰ units from everything with a step scale of 2⁴⁰ (a Lipschitz bound of 2⁻⁴⁰) proves a one-unit step
+        // in one stride. Their product, the reach, is 2⁹⁶ raws; shifted onto the 2⁻³² fraction grid it passed Int128,
+        // wrapped to a proposal of nothing, and the sweep crept one 2⁻³² step a query until its budget ran out.
+        var far = FixedQ4816.FromInteger(value: (1L << 40));
+        var field = new ConstantBounds(Distance: far, StepScale: far);
+
+        Assert.True(condition: CertifiedFieldSweep.TrySweep(
+            boundsQueryBudget: 64,
+            contactTolerance: FixedQ4816.Zero,
+            displacement: new FixedVector3(X: FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero),
+            field: field,
+            origin: FixedPosition.Zero,
+            radius: FixedQ4816.One,
+            sweep: out var sweep
+        ));
+        Assert.Equal(expected: CertifiedSweepOutcome.Clear, actual: sweep.Outcome);
+        Assert.Equal(expected: UnitInterval32.One, actual: sweep.Fraction);
+        Assert.Equal(expected: 2, actual: sweep.BoundsQueries);
+    }
 
     private static SdfFieldEvaluator ThinWall() {
         var builder = new SdfProgramBuilder();
@@ -348,6 +370,16 @@ public sealed class SdfCertifiedQueryLawTests {
             Y: FixedQ4816.FromDouble(value: value.Y),
             Z: FixedQ4816.FromDouble(value: value.Z)
         );
+
+    // A field at one distance everywhere, with whatever step scale the law names.
+    private sealed record ConstantBounds(FixedQ4816 Distance, FixedQ4816 StepScale) : IFieldBounds {
+        public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance) {
+            distance = FixedInterval.FromPoint(value: Distance);
+
+            return true;
+        }
+    }
+
     private static float Next(Random random, float scale) =>
         (((((float)random.NextDouble()) * 2f) - 1f) * scale);
 }

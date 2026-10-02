@@ -39,6 +39,19 @@ public sealed class CertifiedContactSweepLawTests {
 
         return new SdfFieldEvaluator(program: builder.Build());
     }
+    // One cell at the origin, one unit on a side, its column one unit high: a box from y = -1 to y = 1.
+    private static FieldLattice OneCellLattice() {
+        var lattice = new FieldLattice(input: new FieldLatticeInput(
+            Lattice: new FieldLatticeTopology(Origin: FixedVector3.Zero, CellSize: FixedQ4816.One, Width: 1, Depth: 1, Layers: 1, StepEveryTicks: 1),
+            Fields: [new FieldDescriptorInput(Name: "ground", Initial: FixedQ4816.Zero, Minimum: FixedQ4816.Zero, Maximum: FixedQ4816.FromInteger(value: 100), HeightScale: FixedQ4816.One, IsMedium: false, Color: "#808080")],
+            Reactions: [],
+            Paint: []
+        ));
+
+        lattice.Restore(checkpoint: new FieldLattice.Checkpoint(Raw: [[FixedQ4816.One.Value]]));
+
+        return lattice;
+    }
     private static FixedFieldContactSolver Solver(SdfFieldEvaluator evaluator, FixedContactSweepWork work, int budget = FixedFieldContactSolver.DefaultSweepBoundsQueryBudget, ICertifiedSweepQuery? sweep = null, bool noSweep = false) => new(
         contactSkin: Skin,
         field: evaluator,
@@ -176,6 +189,32 @@ public sealed class CertifiedContactSweepLawTests {
         Assert.Equal(actual: stepperCrossings, expected: cases);
     }
     [Fact]
+    public void ACompoundBodyMovesItsShortestSweepEvenWhenEveryFractionRoundsAlikeOnTheQ16Grid() {
+        // Two spheres nine units apart along a million-unit step toward the wall. The trailing core proves about 9.74
+        // units and the leading core about 0.74, each under 2⁻¹⁶ of the step, so on the Q16 grid both fractions read
+        // zero; the body must still move only the leading core's travel, or the leading sphere is carried through.
+        var evaluator = Wall();
+        var work = new FixedContactSweepWork();
+        var body = new FixedBodyColliderVolume[] {
+            new(Kind: FixedBodyColliderKind.Sphere, Center: FixedVector3.Zero, Endpoint: default, HalfExtents: default, Rotation: FixedQuaternion.Identity, Radius: Radius),
+            new(Kind: FixedBodyColliderKind.Sphere, Center: Z(z: -9.0), Endpoint: default, HalfExtents: default, Rotation: FixedQuaternion.Identity, Radius: Radius),
+        };
+        var previous = Z(z: -90.0);
+        var reached = Sweep(previous: previous, solver: Solver(evaluator: evaluator, work: work), target: (previous + Z(z: -1_000_000.0)), volumes: body);
+        var face = (WallZ + WallHalfThickness);
+
+        Assert.Equal(expected: 2L, actual: work.Read(kind: FixedContactSweepWork.Contacts));
+
+        foreach (var volume in body) {
+            var centre = Read(value: (reached.Z + volume.Center.Z));
+
+            Assert.True(condition: (centre > face), userMessage: $"the sphere at body offset {Read(value: volume.Center.Z)} passed the face to {centre}; the body reached {Read(value: reached.Z)}");
+        }
+
+        // The leading sphere stops within its radius and the skin of the face, so the body moved the least proved travel.
+        Assert.InRange(actual: Read(value: (reached.Z + body[1].Center.Z)), high: (face + 1.0), low: face);
+    }
+    [Fact]
     public void ACapsuleSweepsItsWholeCoreNotOnlyItsEnds() {
         // A thin bar at waist height, between the capsule's two sphere centres, crossed edge-on: neither end comes near it.
         var evaluator = Wall(halfExtents: new Vector3(x: 8f, y: 0.005f, z: WallHalfThickness), y: 0.85f);
@@ -279,6 +318,58 @@ public sealed class CertifiedContactSweepLawTests {
         // The contact tolerance ends the approach at the skin instead of creeping on: well under the 64 budget a tick.
         Assert.InRange(actual: ((work.Read(kind: FixedContactSweepWork.BoundsQueries) - before) / 10), high: 16L, low: 1L);
         Assert.Equal(expected: 0L, actual: work.Read(kind: FixedContactSweepWork.Exhausted));
+    }
+    [Fact]
+    public void TheLatticeBoundsEncloseThePointAnswerForBoxesReachingTheCarriersEnds() {
+        var solid = new FieldLatticeSolid(lattice: OneCellLattice());
+        var half = FixedQ4816.FromDouble(value: 0.5);
+        var inside = new FixedVector3(X: half, Y: half, Z: half);
+        var least = FixedQ4816.MinValue;
+        var most = FixedQ4816.MaxValue;
+        // Each box holds the one column's centre, where the point query answers -0.5. The review's box starts at
+        // x = -2³¹, whose column index less the reach wrapped an int to 2³¹ - 2, so the walk visited no column; the
+        // carrier's ends also wrapped the gap between box and column, reading a column inside the box as far away.
+        (FixedVector3 Lower, FixedVector3 Upper)[] boxes = [
+            (new(X: FixedQ4816.FromInteger(value: int.MinValue), Y: half, Z: half), inside),
+            (new(X: least, Y: half, Z: half), inside),
+            (inside, new(X: most, Y: half, Z: half)),
+            (new(X: half, Y: half, Z: least), new(X: half, Y: half, Z: most)),
+            (new(X: half, Y: least, Z: half), new(X: half, Y: most, Z: half)),
+            (new(X: least, Y: least, Z: least), new(X: most, Y: most, Z: most)),
+        ];
+
+        Assert.True(condition: solid.TryDistance(distance: out var centre, material: out _, position: FixedPosition.FromLocal(local: inside)));
+        Assert.Equal(actual: centre, expected: -half);
+
+        foreach (var (lower, upper) in boxes) {
+            Assert.True(condition: solid.TryDistanceBounds(distance: out var bounds, lower: FixedPosition.FromLocal(local: lower), upper: FixedPosition.FromLocal(local: upper)), userMessage: $"[{lower}, {upper}] was refused");
+            Assert.True(condition: bounds.Contains(value: centre), userMessage: $"[{lower}, {upper}]: the centre's answer {Read(value: centre)} lies outside {bounds}");
+
+            // Every corner is a point of the box too, and the point query answers there.
+            foreach (var corner in ((FixedVector3[])[lower, upper])) {
+                Assert.True(condition: solid.TryDistance(distance: out var atCorner, material: out _, position: FixedPosition.FromLocal(local: corner)));
+                Assert.True(condition: bounds.Contains(value: atCorner), userMessage: $"[{lower}, {upper}]: the corner {corner} answers {Read(value: atCorner)} outside {bounds}");
+            }
+        }
+    }
+    [Fact]
+    public async Task TheLatticePointQueryAnswersAtTheLastColumnsAnIntIndexHolds() {
+        var solid = new FieldLatticeSolid(lattice: OneCellLattice());
+        // The point's column is 2³¹ - 3. Its neighbour limit, the column plus the reach, is int.MaxValue, so an int loop
+        // over the neighbours never ended: every column index is at most int.MaxValue. No column lies within its reach,
+        // so it answers the reach, two cells.
+        var far = FixedPosition.FromLocal(local: new FixedVector3(X: FixedQ4816.FromDouble(value: 2147483645.5), Y: FixedQ4816.FromDouble(value: 0.5), Z: FixedQ4816.FromDouble(value: 0.5)));
+        var query = Task.Run(function: () => (solid.TryDistance(distance: out var distance, material: out _, position: far), distance), cancellationToken: TestContext.Current.CancellationToken);
+        var finished = await Task.WhenAny(task1: query, task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TimeSpan.FromSeconds(value: 30)));
+
+        Assert.True(condition: ReferenceEquals(objA: finished, objB: query), userMessage: "the point query near int.MaxValue's column never finished");
+
+        var (answered, answer) = await query;
+
+        Assert.True(condition: answered);
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 2), actual: answer);
+        Assert.True(condition: solid.TryDistanceBounds(distance: out var bounds, lower: far, upper: far));
+        Assert.True(condition: bounds.Contains(value: answer), userMessage: $"the answer {Read(value: answer)} lies outside {bounds}");
     }
     [Fact]
     public void TheLatticeBoundsEncloseEveryPointAnswerAndTheUnionRefusesWithAnyPart() {

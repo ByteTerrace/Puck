@@ -1412,7 +1412,7 @@
       "State": "covered"
     },
     {
-      "Id": "Puck.Maths.CertifiedSweep..ctor(Puck.Maths.FixedQ4816,Puck.Maths.FixedPosition,Puck.Maths.CertifiedSweepOutcome,System.Int32)",
+      "Id": "Puck.Maths.CertifiedSweep..ctor(Puck.Maths.UnitInterval32,Puck.Maths.FixedPosition,Puck.Maths.CertifiedSweepOutcome,System.Int32)",
       "Reason": "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.",
       "State": "waived"
     },

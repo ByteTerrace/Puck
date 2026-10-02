@@ -233,7 +233,11 @@ fraction of the program, and the overload taking `instructionsWalked` reports
 the instructions it visited. A rotation reads each coordinate once per axis:
 the exact rotation is linear in the point, so its enclosure is that matrix over
 the box, widened by the four raws the point code's two rounded stages can miss
-it by, and met with the step-by-step enclosure. A half turn, which the creation
+it by, and met with the step-by-step enclosure. The matrix assumes neither
+stage wraps, and a stage can leave the carrier while the rotated point stays
+inside it, so the two meet only where the step-by-step enclosure is bounded,
+which proves both stages representable; where it is not, the rotation is
+unbounded and the frame stops short of it. A half turn, which the creation
 emitter writes, then bounds a box as tightly as the unrotated program bounds the
 box's image, where the step-by-step enclosure alone triples its width.
 
@@ -247,6 +251,9 @@ Two certified queries are built on it:
   this way never passes through a surface, however thin the surface or however
   long the step. A step that only
   samples the field at its ends tunnels through such a surface.
+  The fraction it returns is a `UnitInterval32` on the 2⁻³² grid it advances
+  on, never rounded coarser, so two sweeps of one displacement compare by how
+  far each proved.
   If the initial sphere cannot be proved clear, the result is `Contact` at zero
   travel with the original centre. A box whose bounds are unbounded (it reaches
   past the frame) proves nothing, so the sweep stops `Exhausted` there, never
@@ -282,7 +289,8 @@ through boxes against the bounds, and holds the bounds interpreter's rule sets
 to the point interpreter's. `SdfCertifiedQueryLawTests` holds the sweep to a
 thin wall at speeds up to 100,000 units a step, with the fixed-step stepper as
 the red leg, and holds a contact tolerance to ending the approach in a few
-queries just off the face. `SdfBoundsTightnessLawTests` holds a half turn's
+queries just off the face, and a large clearance times a large step scale to
+proposing the whole step. `SdfBoundsTightnessLawTests` holds a half turn's
 bounds to the unrotated program's over the box's image, and the box cull to
 walking under half of a twelve-object row while still enclosing every point
 answer. `SdfFieldOverflowLawTests` sweeps programs whose constants and

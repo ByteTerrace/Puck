@@ -672,9 +672,11 @@ public sealed class FixedFieldContactSolver(
         return true;
     }
     // Sweeps one core sphere — its centre the body-local offset from the body's foot point — along the step, and
-    // lowers the least proved displacement when it proves less of the step than every core before it. A sweep the field
-    // refuses (its origin outside the field's frame) proves nothing, so the body keeps its start, the only ground proved.
-    private void SweepCore(ICertifiedSweepQuery certified, in FixedVector3 previousPosition, in FixedVector3 delta, FixedVector3 offset, FixedQ4816 radius, ref FixedQ4816 least, ref FixedVector3 reached) {
+    // lowers the least proved displacement when it proves less of the step than every core before it. The fractions
+    // compare on the sweep's own 2⁻³² grid: a long step's cores can differ by less than 2⁻¹⁶ of it, and the lesser one
+    // must win. A sweep the field refuses (its origin outside the field's frame) proves nothing, so the body keeps its
+    // start, the only ground proved.
+    private void SweepCore(ICertifiedSweepQuery certified, in FixedVector3 previousPosition, in FixedVector3 delta, FixedVector3 offset, FixedQ4816 radius, ref UnitInterval32 least, ref FixedVector3 reached) {
         var start = (previousPosition + offset);
 
         // The contact skin is the tolerance: within it the endpoint solve already holds a body off the surface, so a
@@ -688,7 +690,7 @@ public sealed class FixedFieldContactSolver(
             sweep: out var sweep
         )) {
             m_sweepWork.Count(boundsQueries: 0, contact: false, exhausted: true);
-            least = FixedQ4816.Zero;
+            least = UnitInterval32.Zero;
             reached = FixedVector3.Zero;
 
             return;
@@ -721,7 +723,7 @@ public sealed class FixedFieldContactSolver(
     // one. Every core moves by the same displacement and the sweeps form each step's box the same way from a point
     // start, so the least one's reached displacement lies inside every other core's proved boxes.
     private bool TrySweepCores(ICertifiedSweepQuery certified, in FixedVector3 previousPosition, in FixedVector3 delta, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, out FixedVector3 reached) {
-        var least = FixedQ4816.One;
+        var least = UnitInterval32.One;
 
         reached = delta;
 
@@ -773,7 +775,7 @@ public sealed class FixedFieldContactSolver(
             }
         }
 
-        return (least < FixedQ4816.One);
+        return (least < UnitInterval32.One);
     }
     // Computes the would-be ordinary push for a sphere center already confirmed not embedded (distance >= 0, sampled
     // by the caller) without applying it to position/velocity/grounded: the caller samples the other center at the
