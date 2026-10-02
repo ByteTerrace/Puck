@@ -33,8 +33,15 @@ public sealed partial class FederationTransferLawTests {
         var applied = new List<FixedQ4816>();
 
         view.RecenterLook(targetYaw: 0.3f, views: route.Definition.Views);
+        // Outbound-closed: the law drives the observed route by hand, so no lane dials.
+        using var network = new WorldPeerNetwork(
+            allowOutbound: false,
+            timeProvider: TimeProvider.System,
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
+        );
         using var authority = new WorldRemoteAuthority(
             endpoint: "127.0.0.1:42001",
+            network: network,
             placeholder: route.Definition,
             security: new InertAuthenticator(),
             observerAuthority: "machine-a/boot",
