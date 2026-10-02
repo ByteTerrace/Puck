@@ -1,6 +1,6 @@
 ---
 name: review-passes
-description: Briefs, runs and closes a cross-family review-and-fix pass over a lane's commits, where Codex reviews Claude-written code and a Claude agent reviews Codex-written code, in at most two rounds. Covers who reviews and when the loop ends, the self-contained brief (scope by commit range with every message read, the contract summary, a hunt list per area, the repository rules block, fixes that carry a law failing without them, compiling what the pass changed, reporting laws that cannot fail, the end-list format) and the after-review protocol (commit the unbuilt pass as a local WIP, verify each fix and red leg, replace the WIP, the second round over the fix diff alone, the lead's ruling on what round 2 still raises). Use when writing a review brief, launching a review pass, receiving its result, or verifying and landing a reviewer's fixes. verification owns gates, red-leg proofs and GPU legs; the subsystem skill that owns the changed area supplies the contract and hunt classes (rendering's runtime-contracts reference for the render graph); documentation owns doc-only reviews.
+description: Briefs, runs and closes cross-family review-and-fix passes in at most two rounds. Codex reviews Claude-written work; a Claude agent reviews Codex-written work, including Codex review fixes. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verification and red legs, fast-forward landing on the author's branch, round 2 over round 1's fix diff alone, and the lead's ruling on remaining findings. Use when briefing or launching a pass, receiving its result, or verifying and landing its fixes. Does not choose models, effort or concurrency. verification owns gates, red-leg proofs and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
 ---
 
 # Review passes
@@ -24,7 +24,9 @@ stale and is corrected in the same change.
 - The loop ends when a pass reports no blockers, and after round 2 at the
   latest. The lead rules on what round 2 still raises: a scoped fix, an open
   item, or a dismissal with its reason. There is never a third round.
-- A non-blocking finding never extends the loop; report it.
+- Round 2 runs only when round 1 makes blocker fixes, documentation fixes
+  included. A non-blocking finding never extends the loop: report it, and
+  verify a non-blocking fix without another round.
 
 ## Before launching
 
@@ -33,8 +35,12 @@ stale and is corrected in the same change.
   since git checks a branch out in one worktree only. Create and push no branch
   for the pass; its fixes land on the author's branch as commits. Never point
   it at another lane's checkout, and never run two passes in one worktree.
-- Restore and build that worktree first so `obj/` and `bin/` exist. The Codex
-  sandbox has no network: fetch corpora and packages before the run.
+  Keep a detached worktree under the checkout's `.claude/worktrees/<name>`.
+  Pause other edits and commits on the author's branch until the pass lands;
+  preserve any existing dirty work and clear it before the fast-forward.
+- For a code pass, restore and build that worktree first so `obj/` and `bin/`
+  exist. The Codex sandbox has no network: fetch corpora and packages before
+  the run. A documentation-only pass needs no build unless XML comments change.
 - Launch a Codex pass as the companion's `task --write` with `--cwd` set to the
   review worktree, and a Claude pass as an agent working in that worktree, each
   with the model and effort the lead names. A pass cannot read this
@@ -52,7 +58,8 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    simulation; a render-graph runtime over Vulkan and Direct3D 12; federation
    authority and recipients). Add "thorough" for a large or risky lane.
 2. **Tree.** The worktree's absolute path and branch, and "Edit only in this
-   tree; don't commit."
+   tree; don't commit." For a detached tree, name its head and the author's
+   working branch that will receive its commits.
 3. **Scope.** An exact range, `git diff <base> <head>`, with the base as a
    commit when the integration branch may move. List each lane commit by
    commit and subject and say "read each message". Name exclusions exactly: a
@@ -101,6 +108,11 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    Hunt only for problems that would block the merge. For each give file:line, why it's wrong, and a concrete failing scenario. Fix it in the tree when the fix is local and clear, adding a law (test) that fails without the fix; otherwise describe it. Compile every project you changed (dotnet build <project> -c Release) and leave nothing that fails to compile. Don't run tests unless a finding can't be settled any other way, one heavy command at a time. Never run GPU work (no puck canary, puck parity, or Puck.World runs). Report every existing law you find that cannot fail. Don't commit. End with a list, one line per finding: <id> file:line - fixed (files; law) | open (why) | not a blocker (why). If nothing blocks, say so plainly.
    ```
 
+   For a documentation-only pass, append: "Edit only Markdown, evals JSON,
+   and XML comments. A documentation fix needs no law; do not add tests.
+   Check changed Markdown links and anchors. Build only when XML comments
+   change."
+
 Do not hand the pass a `puck affected` list, do not tell it to use the Codex
 CLI, and do not use the companion's `review` subcommand for a lane: it takes
 no brief, so it raises compatibility findings and tries to run tests.
@@ -110,34 +122,50 @@ no brief, so it raises compatibility findings and tries to run tests.
 1. **Read the result.** Check every finding against the current files. A
    finding is evidence, not a verdict. Dismiss a compatibility finding under
    `AGENTS.md` rule 5 once nothing checked in uses the old shape.
+   Record the round and fix range before continuing. If the pass changes
+   nothing, skip steps 2 to 5; report remaining blockers to the lead in step 6,
+   or go to step 7 when it reports none. Never create an empty WIP.
 2. **Commit the pass as a WIP.** Stage the review worktree's changes
    explicitly and commit them unbuilt in that worktree
    (`review: <lane> pass, unverified`), so the output is never lost and its
-   diff is one unit. The WIP stays local; never push it.
+   diff is one unit. Keep every commit that may be rewritten local, including
+   verification repairs; never push them before step 7.
 3. **Verify the fixes.** Brief one agent, in the review worktree, to: build
    each touched project, then the solution; prove every new or changed law red
    with its fix withheld and green with it applied (`verification` § Prove
    each law's red leg); run the suites the fixes reach; run the check forms on
    touched files; repair what does not compile; and resolve or report each
    open finding. The agent reports each finding as verified, repaired, or
-   rejected with the reason. When Codex wrote the fixes, this agent is a Claude
-   agent, and its pass is round 2: it also reviews the fix diff for blockers.
+   rejected with the reason. For documentation-only fixes, use `documentation`
+   checks; add no law and build only for changed XML comments.
+   After a Codex round 1 with blocker fixes, the agent is a Claude agent with
+   fixes enabled that also reviews round 1's fix diff alone: this is round 2.
+   After a Claude round 1, the agent is a Claude agent, so its repairs stay
+   Claude-written for the Codex round 2 in step 5. On round 2's output, the
+   lead rules on remaining blockers before any further repair; verifying round
+   2's fixes, or a scoped fix the lead directs, is never a third round.
 4. **Replace the WIP.** Rewrite the local WIP into commits with
    `area: sentence` subjects, and land them on the author's working branch (a
-   fast-forward when the pass ran detached at its head). Each message names the
-   findings fixed, the law that pins each, and how its red leg was proved. No
-   `Co-Authored-By` trailer.
-5. **Run round 2 when it is owed.** When a Claude agent's round 1 changed code,
-   brief a Codex pass over the fix diff alone (`git diff <wip parent>
-   <replaced head>`), with the same rules and instructions blocks. Its hunt is
-   regressions the fixes introduced and laws that cannot fail. Its output goes
-   through steps 1 to 4; step 3 verifies its fixes without opening a third
-   round.
+   fast-forward when the pass ran detached at its head). From the clean
+   author's worktree, use `git merge --ff-only <verified review head>`; if
+   the branch has diverged, stop and report it, never reset or rebase it.
+   Rewrite only the pass's unpublished commits, preserving earlier branch
+   history. Each message names the findings fixed, the law that pins each,
+   and how its red leg was proved, or the documentation checks for doc-only
+   fixes. No `Co-Authored-By` trailer.
+5. **Run round 2 when it is owed.** When a Claude agent's round 1 makes blocker
+   fixes, documentation fixes included, brief a Codex pass over the fix diff
+   alone (`git diff <wip parent> <replaced head>`), with the same rules and
+   instructions blocks. Its hunt is regressions the fixes introduced and laws
+   that cannot fail. Its output goes through steps 1 to 4; step 3 verifies its
+   fixes without opening a third round.
 6. **Close the loop.** Report what round 2 still raises to the lead, who rules
    on each item (Who reviews, and when it ends).
-7. **Hand over.** Push the working branch, fast-forward only. The lane then
-   takes its GPU legs under the lead's grant, and the lead merges it into the
-   integration branch.
+7. **Hand over.** Merge the integration branch's current tip into the working
+   branch and run the final checks `verification` requires. Take any GPU legs
+   under the lead's grant or report them as owed. Once the required gates
+   pass, push the working branch, fast-forward only. Only the lead merges it
+   into the integration branch the lead's brief names.
 
 ## Route adjacent work
 
