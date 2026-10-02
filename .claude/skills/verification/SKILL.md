@@ -164,9 +164,9 @@ command for the parts it covers.
    `puck docs links` passes on every changed document (`puck docs citations`
    when a document or XML comment cites a verb or document field).
 5. Persisted replays, baselines and ceilings a deliberate correction moved are
-   re-recorded in the same change, with the reason in the commit (`CLAUDE.md`
+   re-recorded in the same change, with the reason in the commit (`AGENTS.md`
    rule 4).
-6. The commits follow `CLAUDE.md`: explicit staging, `area: sentence` subjects,
+6. The commits follow `AGENTS.md`: explicit staging, `area: sentence` subjects,
    the evidence in the message.
 7. The hand-back report names, under Needs you, Changed and Found: the CLI
    that produced each result, GPU legs still owed, each flake with its message,

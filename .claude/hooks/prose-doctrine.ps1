@@ -146,7 +146,7 @@ function Get-Surface {
         return $null
     }
 
-    if (($RelativePath -match '^\.claude/') -or ($RelativePath -in @('CLAUDE.md', 'AGENTS.md'))) {
+    if (($RelativePath -match '^\.claude/') -or ($RelativePath -eq 'AGENTS.md')) {
         return 'agent'
     }
 

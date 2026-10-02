@@ -286,7 +286,7 @@ all if a different consumer read it differently.
   —the `SdfFieldEvaluator` sync-pair entry (excluded-ops reconciliation,
   measured tolerances) and the "Composition, anchors, views, and queries"
   section's query provider summary.
-- [CLAUDE.md](../../../../CLAUDE.md)—the determinism contract (core rule 4). No
+- [AGENTS.md](../../../../AGENTS.md)—the determinism contract (core rule 4). No
   automated gate covers this query contract; `puck parity` checks only the
   state hashes and pixels of its authored parity world.
 - Source: `src/Puck.Maths/FixedPoint/IWorldQuery.cs`,

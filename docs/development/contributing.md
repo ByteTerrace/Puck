@@ -299,14 +299,15 @@ dotnet publish src/Puck.World.Browser -c Release
 `tests/Puck.World.Browser.Tests` links `Engine/*.cs` as source and runs under
 the ordinary net10.0 test host—no wasm runtime needed to exercise the pure
 core. The wasm-specific proof is the Node harness, which needs the AppBundle
-the `dotnet publish` line above produces and Node reached through fnm, since
-Node is not on `PATH` on the reference system
-(`FNM_DIR="$APPDATA/fnm" fnm exec --using=26.5.1 -- node ...`):
+the `dotnet publish` line above produces and the system Node on `PATH`. Its
+package declares no `engines` requirement, and CI runs it on Node 24.20.0
+(the `browser` job in `.github/workflows/verify.yml`). Use the system install,
+not a version manager:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
 cd src/Puck.Dashboard/src/portal
-$env:FNM_DIR = "$env:APPDATA/fnm"; fnm exec --using=26.5.1 -- node --test tests/engine-wasm.test.cjs
+node --test tests/engine-wasm.test.cjs
 ```
 
 The `.puck` authoring surface (a mounted workspace, `CompileSource`,
@@ -591,3 +592,9 @@ superseded plans. When moving or retiring a document, move every live contract,
 limitation, and procedure to its canonical home before removing the old copy.
 The root [README](../../README.md) routes to the document set; update its
 routing whenever the set changes.
+
+The rules for coding agents live in one file, the root
+[`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code 2.1.277
+or newer, which reads `AGENTS.md` natively only when no Claude Code memory
+file (a CLAUDE.md, a CLAUDE.local.md, or one under `.claude/`) exists in the
+directory or above it. The repository therefore commits none, at any level.

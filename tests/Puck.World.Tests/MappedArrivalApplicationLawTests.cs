@@ -18,7 +18,7 @@ namespace Puck.World.Tests;
 /// destination's own spawn point), and that it never touches state a mapped arrival deliberately leaves alone
 /// (kit/appearance/action-track). <c>Puck.World.WorldInstanceHost</c> (the composition root, home of the scan/
 /// coalesce/transfer orchestration that calls this) is out of reach for this project — verified by RUNNING
-/// <c>Puck.World</c> instead (CLAUDE.md rule 3).
+/// <c>Puck.World</c> instead (AGENTS.md rule 3).
 /// </summary>
 public sealed class MappedArrivalApplicationLawTests {
     [Fact]

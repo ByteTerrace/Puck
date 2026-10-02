@@ -71,10 +71,12 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    found in the same area.
 6. **Evidence gathered.** The suites, counts, gates and mutation proofs the
    lane already ran, so the pass reads instead of re-running them.
-7. **Rules block,** verbatim:
+7. **Rules block,** verbatim. Codex reads `AGENTS.md` from the worktree root
+   on its own; the block names it and restates the rules a review pass most
+   often needs in front of it:
 
    ```text
-   Repo rules: no backwards compatibility, ever (never preserve old wrong behaviour; no compat aliases, shims or read-side tolerance for old shapes). No InternalsVisibleTo (make a member public instead). No environment variables. One spelling per thing. LF everywhere; never raise newline issues. Docs state current behaviour in present tense with no dates or SHAs. Determinism: no wall clock, RNG or float in simulation state. A [VerifiedCode] member that changes is re-verified, never unbranded to pass the build.
+   Repo rules: AGENTS.md at the worktree root holds the repository's rules; follow it. In particular: no backwards compatibility, ever (never preserve old wrong behaviour; no compat aliases, shims or read-side tolerance for old shapes). No InternalsVisibleTo (make a member public instead). No environment variables. One spelling per thing. LF everywhere; never raise newline issues. Docs state current behaviour in present tense with no dates or SHAs. Determinism: no wall clock, RNG or float in simulation state. A [VerifiedCode] member that changes is re-verified, never unbranded to pass the build.
    ```
 
 8. **Instructions block,** verbatim:
@@ -91,7 +93,7 @@ no brief, so it raises compatibility findings and tries to run tests.
 
 1. **Read the result.** Check every finding against the current files. A
    finding is evidence, not a verdict. Dismiss a compatibility finding under
-   `CLAUDE.md` rule 5 once nothing checked in uses the old shape.
+   `AGENTS.md` rule 5 once nothing checked in uses the old shape.
 2. **Commit the pass as a WIP.** Stage the review worktree's changes
    explicitly and commit them unbuilt on the review branch
    (`review: <lane> pass, unverified`), so the output is never lost and its
