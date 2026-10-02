@@ -5,7 +5,7 @@
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
-        <ProjectReference Include="..\Puck.Embeddings\Puck.Embeddings.csproj" />
+        <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />
+        <ProjectReference Include="../Puck.Embeddings/Puck.Embeddings.csproj" />
     </ItemGroup>
 </Project>

@@ -351,8 +351,13 @@ placement shows another instance's output, the walk casts a new ray through the
 producer's camera from the hit's point on the image, and repeats in the
 producer's world. `WalkDisplay` starts from the topmost pane under a display
 point, or, where no pane holds it, from the view the display itself shows when
-that view is no pane (a lone view covering the whole display). A walk continues at most the limit it is given, which is normally
-`RenderGraphInstanceSet.NestingDepth`, the longest chain of same-frame reads.
+that view is no pane (a lone view covering the whole display). A walk continues through at most the limit of
+screens it is given, which is normally `RenderGraphInstanceSet.NestingDepth`; entering a pane's instance from the
+display passes through no screen and counts nothing. A set's nesting depth is declared by whoever composes it (a World
+from its boot document's `views.nestingDepth`), 3 when it declares none, from 0 through
+`RenderGraphInstanceSet.MaxNestingDepth`, 8; a set declaring another depth is refused as `NestingDepthInvalid`. It is
+never read off the reads, so two views reading each other's previous frames, or two portals facing each other, end at
+it.
 It ends on a producer's pixels, on an instance's world, off a source, at the
 limit, on an image the showing instance does not read, or at an instance with
 no camera. Every step maps in fixed point, so the same inputs walk the same

@@ -1,0 +1,13 @@
+# The same walk on the same document with reconstruction off, as it boots: the seat's view renders the spatial path.
+world.cadence off
+world.wait ready 600
+world.wait 20
+body.where
+world.screenshot {run}/before-spatial.png
+world.wait captures 30
+world.screenshot {run}/arrival-spatial.png crossing
+body.fly 1 0 0 0 0 0 1.5
+world.wait 100
+body.where
+world.screenshot {run}/after-spatial.png
+world.wait captures 30

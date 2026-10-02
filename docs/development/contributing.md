@@ -42,7 +42,12 @@ Prefer the cheapest correct tool:
 ## File paths
 
 Use `/` in authored paths, configuration, stored path identities, and path output,
-including on Windows. Prefer current `System.IO` APIs that accept these paths
+including on Windows. That includes every MSBuild project, props, and targets
+file: imports, item includes and excludes, links, package paths, and path
+properties all spell `/`. Puck's own MSBuild readers still read `\` as a
+separator the way MSBuild does, so the spelling is held by a `Puck.Cli.Tests`
+law that refuses a backslash anywhere in a tracked MSBuild file outside
+`experimental/`. Prefer current `System.IO` APIs that accept these paths
 directly; do not convert `/` to the platform separator before file access.
 Normalize platform-produced paths to `/` at Puck's output and storage boundaries
 with `Puck.Abstractions.PuckPaths.Normalize`, which resolves a path to its full
@@ -85,11 +90,17 @@ refresh are `puck` verbs, not scripts and not file apps.
 `src/Puck.Azure.Resources/bootstrap.cs` is the repository's one C# file app, an
 identity-team operation run outside CI. It uses the same `.editorconfig`,
 compiler warnings, and Puck formatting conventions as the project-based code;
-its file directives declare its dependencies, so keep package versions pinned.
-`Directory.Build.props` links `build/RepositoryPaths.cs` into it so it can locate
-checkout data at runtime without building Puck CLI. Invoke it from within the
-checkout. Compiler source paths can be remapped by CI and are not runtime file
-locations.
+its file directives declare its dependencies, so keep its SDK, package and
+project directives intact and its package versions pinned. The formatter's
+conventions apply as they do to project code: named arguments where compiler
+resolution and evaluation order permit, declaration spacing, explicit braces,
+PascalCase constants, and an `Async` suffix on task-returning helpers. It starts
+child processes through `ProcessStartInfo.ArgumentList` and checks each child's
+exit code. `Directory.Build.props` links `build/RepositoryPaths.cs` into it so it
+can locate checkout data at runtime without building Puck CLI; use that helper
+rather than a second repository walker. Invoke it from within the checkout.
+Compiler source paths can be remapped by CI and are not runtime file locations,
+so never derive a runtime path from one.
 
 Compile it without executing its operational code:
 
@@ -127,10 +138,11 @@ additional checks with distinct scopes.
 
 `puck parity` boots the [authored parity world](../../tests/Puck.Parity/README.md)
 offscreen once on Vulkan and once on Direct3D 12. Tick-scheduled captures receive
-three verdicts: valid content, exact simulation-state hash agreement, and pixel
+four verdicts: valid content, exact simulation-state hash agreement, the tick
+each frame refreshed its bound regions at matching the capture's tick, and pixel
 agreement under per-tile thresholds. Missing content or a camera inside geometry
-fails before comparison; state and pixel checks are evaluated separately after
-the content check passes. A failure records frames, a delta heatmap, and verdicts.
+fails before comparison; the state, tick and pixel checks are evaluated
+separately after the content check passes. A failure records frames, a delta heatmap, and verdicts.
 
 This comparison uses the contract beside the parity world, not a stored image
 baseline. It requires both GPU backends but does not take over a display. Use it
@@ -148,8 +160,9 @@ and nothing wider. The full sets run only when the owner asks for them.
 a merge needs: the automatic set (headless, no environmental requirements) and
 every canary requiring `gpu`, which includes the offscreen proofs on both
 backends. A bare `puck canary` runs only the automatic set, so it never runs a
-GPU proof. Run the merge gate with no competing build or GPU work on the
-machine, from a copy of the candidate's own CLI. `puck canary --merge --plan`
+GPU proof. A GPU runs one canary or parity run at a time, since runs compete
+for the device and for ports, and heavy CPU work beside one can push a leg past
+its time bounds. Run the merge gate from a copy of the candidate's own CLI. `puck canary --merge --plan`
 prints what the gate would run without a GPU, and a gate that outgrows its
 declared ceiling is refused before it builds. For a per-change GPU check on one
 backend, `puck canary --capability gpu --backend vulkan` (or `directx`) runs
@@ -231,8 +244,9 @@ The Humble battery's reference corpora are declared in its `corpora.json`
 once and the stages resolve it without configuration. `--lane gate` measures
 every row recorded as passing and must stay green; `--lane frontier` measures
 the recorded fails and inconclusives; a plain run measures both. The recipe above
-matches CI's `artifacts/hgb-post` directory for `summary.json`, `results.junit.xml`,
-and the candidate ledger; `--accept` promotes the candidate under the refusal rules
+writes to CI's `artifacts/hgb-post` directory, where a run leaves its report table,
+its JSON summary and its JUnit results (all three written by `PostReport` in
+`src/Puck.Machines.Post`) and the candidate ledger; `--accept` promotes the candidate under the refusal rules
 in the project README. Iterate with `--filter`; never chain runs to record.
 The Advanced battery works the same way: its corpora are pinned in its own
 `corpora.json`, the BIOS and commercial cartridges are command-line flags, and
@@ -290,14 +304,15 @@ dotnet publish src/Puck.World.Browser -c Release
 `tests/Puck.World.Browser.Tests` links `Engine/*.cs` as source and runs under
 the ordinary net10.0 test host—no wasm runtime needed to exercise the pure
 core. The wasm-specific proof is the Node harness, which needs the AppBundle
-the `dotnet publish` line above produces and Node reached through fnm, since
-Node is not on `PATH` on the reference system
-(`FNM_DIR="$APPDATA/fnm" fnm exec --using=26.5.1 -- node ...`):
+the `dotnet publish` line above produces and the system Node on `PATH`. Its
+package declares no `engines` requirement, and CI runs it on Node 24.20.0
+(the `browser` job in `.github/workflows/verify.yml`). Use the system install,
+not a version manager:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
 cd src/Puck.Dashboard/src/portal
-$env:FNM_DIR = "$env:APPDATA/fnm"; fnm exec --using=26.5.1 -- node --test tests/engine-wasm.test.cjs
+node --test tests/engine-wasm.test.cjs
 ```
 
 The `.puck` authoring surface (a mounted workspace, `CompileSource`,
@@ -472,6 +487,14 @@ meant to establish.
 - Read the refusal or failure reason. A control must fail at the intended check,
   with the intended message and error signal, rather than merely returning a
   failure.
+- Prove a new law or canary by withholding the fix it pins: with the fix
+  reverted and the law kept, the law must fail at its intended assertion, and
+  with the fix restored it must pass. A law that passes with the fix withheld
+  pins nothing.
+- Re-run a failure seen under load once, alone, before believing it. A timeout
+  or a wait for a port, listener or readiness that passes alone is a flake to
+  report with its message; a wrong pixel, hash, count, refusal or asserted value
+  is a failure whatever the load.
 - When converting a prose rule into an automated check, ensure the derived rule
   rejects every prohibited case. Prefer a strict, observable check when the
   intended scope is uncertain; an overly broad check can pass without testing
@@ -574,3 +597,9 @@ superseded plans. When moving or retiring a document, move every live contract,
 limitation, and procedure to its canonical home before removing the old copy.
 The root [README](../../README.md) routes to the document set; update its
 routing whenever the set changes.
+
+The rules for coding agents live in one file, the root
+[`AGENTS.md`](../../AGENTS.md). Codex reads it, and so does Claude Code 2.1.277
+or newer, which reads `AGENTS.md` natively only when no Claude Code memory
+file (a CLAUDE.md, a CLAUDE.local.md, or one under `.claude/`) exists in the
+directory or above it. The repository therefore commits none, at any level.

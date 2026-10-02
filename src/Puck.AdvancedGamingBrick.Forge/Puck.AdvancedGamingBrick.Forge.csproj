@@ -12,7 +12,7 @@
         <RootNamespace>Puck.AdvancedGamingBrick.Forge</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.GamingBricks.Forge\Puck.GamingBricks.Forge.csproj" />
-        <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
+        <ProjectReference Include="../Puck.GamingBricks.Forge/Puck.GamingBricks.Forge.csproj" />
+        <ProjectReference Include="../Puck.AdvancedGamingBrick/Puck.AdvancedGamingBrick.csproj" />
     </ItemGroup>
 </Project>

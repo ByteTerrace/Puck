@@ -59,7 +59,7 @@ affected project file before changing code.
 
 ## Determinism outranks throughput
 
-`CLAUDE.md` rule 4 binds every value a simulation advances, compares, hashes,
+`AGENTS.md` rule 4 binds every value a simulation advances, compares, hashes,
 snapshots, or replays: the same document and input produce bit-identical state
 on every run, machine, and backend. Some of the references' strongest
 recommendations are unsafe on that path, and the references do not say so

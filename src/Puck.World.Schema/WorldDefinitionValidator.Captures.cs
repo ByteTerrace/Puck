@@ -57,7 +57,8 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.station {stationReason}.");
             }
 
-            // A capture names the root by omitting the name, a views.graphs row by its name, and, in the render graph
+            // A capture names the root by omitting the name, a views.graphs row by its name, a world camera's view by
+            // the camera's name (an instance of its own while something shows it), and, in the render graph
             // composition synthesizes, the SDF world beneath whatever is drawn over it.
             if (
                 (row.Instance is { } instance) &&
@@ -66,13 +67,22 @@ public static partial class WorldDefinitionValidator {
                     b: instance,
                     comparisonType: StringComparison.Ordinal
                 )) &&
+                !definition.Cameras.Any(predicate: camera => (
+                    (camera is not null) &&
+                    !camera.IsSeatRelative &&
+                    string.Equals(
+                        a: camera.Name,
+                        b: instance,
+                        comparisonType: StringComparison.Ordinal
+                    )
+                )) &&
                 ((definition.Views.Root is not null) || !string.Equals(
                     a: instance,
                     b: WorldViewGraphs.WorldInstance,
                     comparisonType: StringComparison.Ordinal
                 ))
             ) {
-                errors.Add(item: $"{path}.instance '{instance}' names no render-graph instance a capture can read: name a views.graphs row, '{WorldViewGraphs.WorldInstance}' for the SDF world before its post passes and overlay in a world that names no root, or omit it for the root.");
+                errors.Add(item: $"{path}.instance '{instance}' names no render-graph instance a capture can read: name a views.graphs row, a world camera whose view a screen, a HUD frame or a probe export shows, '{WorldViewGraphs.WorldInstance}' for the SDF world before its post passes and overlay in a world that names no root, or omit it for the root.");
             }
 
             // A screen's capture reads the source instance its row's source is, which only a machine, producer or probe

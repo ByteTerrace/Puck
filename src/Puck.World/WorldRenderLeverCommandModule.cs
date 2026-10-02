@@ -11,7 +11,7 @@ namespace Puck.World;
 /// <summary>
 /// The render levers: engine-wide render options any presentation shape honors — shadows and their crowd radius,
 /// ambient occlusion and its quality, the far field, the unchanged-frame cadence gate, the shadow mask and march, render
-/// scale, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
+/// scale, temporal reconstruction, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
 /// called with no argument. Every write is a session lever submitted through the server's grant check and lands in
 /// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view,
 /// which sets the render node's mode through <see cref="WorldRenderProbe"/>. Nothing here needs a window or a
@@ -42,6 +42,8 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
     private string DescribeQuality() {
         return $"[world.quality: shadows={ShadowTiers.Name(reach: settings.ShadowReach)} ao={(settings.AmbientOcclusion
             ? "on"
+            : "off")} temporal={(settings.Temporal
+            ? "on"
             : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]";
     }
     private string DescribeShadowMarch() =>
@@ -61,13 +63,17 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             ? "on"
             : "off")}]";
     }
-    // The world.far-field echo.
+    // The world.temporal echo.
+    private static string TemporalEcho(WorldRenderSettings settings) =>
+        $"[world.temporal: {(settings.Temporal ? "on" : "off")}]";
+    // The world.bakes echo.
     private static string BakesEcho(WorldRenderSettings settings) =>
         $"[world.bakes: {settings.Bakes switch {
             true => "on",
             false => "off",
             null => "default: a world's bakes draw when it ships them",
         }}]";
+    // The world.far-field echo.
     private static string FarFieldEcho(WorldRenderSettings settings) {
         return $"[world.far-field: bound {(settings.FarBound
             ? "on"
@@ -680,7 +686,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.upscale-sharpness",
-            description: "Sets reduced-resolution reconstruction continuously, live: world.upscale-sharpness [bilinear|balanced|sharp|0..1|0%..100%]. Names alias 0/50/100%. Zero is the four-tap bilinear fast path; any positive value enables clamped Catmull-Rom and blends toward it; native render scale ignores this setting.",
+            description: "Sets reconstruction sharpness continuously, live: world.upscale-sharpness [bilinear|balanced|sharp|0..1|0%..100%]. Names alias 0/50/100%. A reduced view's spatial resolve is the four-tap bilinear fast path at zero, and any positive value blends toward clamped Catmull-Rom; a temporally resolved view (world.temporal) gets a contrast-adaptive sharpen of that strength where place shows it at its own extent. A native view that does not reconstruct ignores this setting.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.upscale-sharpness: {UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]");
@@ -704,15 +710,37 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.temporal",
+            description: "Turns temporal reconstruction of the world's own views on or off, live: world.temporal [on|off] — no argument echoes the current state. On, each view jitters its samples over an eight-sample sequence and resolves them over its history into its output, at native or reduced render scale, and a still view stands once it has converged; off, a reduced view resolves spatially and a native view writes its output directly. A change rebuilds each view's graph beside the installed one. Camera and session views never reconstruct.",
+            handler: (context, args) => {
+                if (args.Count == 0) {
+                    return new CommandResult(Output: TemporalEcho(settings: settings));
+                }
+
+                if (ParseOnOff(token: args[0]) is not { } on) {
+                    return CommandResult.Error(output: $"[world.temporal: unknown state '{args[0]}' — on|off]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Temporal,
+                    a: (on ? 1.0 : 0.0),
+                    formatEcho: () => new CommandResult(Output: TemporalEcho(settings: settings))
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
                 }
 
                 // The preset table is world data (WorldDefinition.Render), read off the LIVE definition so a mutated
-                // preset table applies immediately: look the named tier up and write its three levers into the live
+                // preset table applies immediately: look the named tier up and write its four levers into the live
                 // settings.
                 if (QualityTiers.Parse(name: args[0].ToString()) is not { } tier) {
                     return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — {string.Join(separator: "|", values: QualityTiers.Names)}]");
@@ -737,8 +765,16 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     ? 1.0
                     : 0.0)
                 );
+                SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.Temporal,
+                    a: (preset.Temporal
+                    ? 1.0
+                    : 0.0)
+                );
 
-                // The echo formats INSIDE the LAST lever's completion — all three have applied (or the last was
+                // The echo formats INSIDE the LAST lever's completion — all four have applied (or the last was
                 // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
                 return SubmitLever(
                     link: link,

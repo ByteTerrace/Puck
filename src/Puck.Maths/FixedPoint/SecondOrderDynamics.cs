@@ -22,8 +22,6 @@ public enum SecondOrderDynamicsBranch : byte {
 /// authoring/compile time, never on a per-tick or per-frame path).
 /// </summary>
 public readonly record struct SecondOrderDynamics {
-    private const long Log2EQ16Raw = 94548L; // round(log2(e) · 2^16)
-
     /// <summary>The fraction bit count every derived raw on this type is carried at (<c>32</c> — sixteen guard bits
     /// past <see cref="FixedQ4816"/>'s own Q16, so a follower's rest state is exact rather than dithering at the last
     /// Q16 bit).</summary>
@@ -56,7 +54,7 @@ public readonly record struct SecondOrderDynamics {
 
     // Q32 → Q16 to nearest, ties to even — the same narrowing SecondOrderState's accessors use, never a truncating
     // shift, whose downward bias reaches a whole Q16 unit on a rate that then serves as a divisor.
-    private static FixedQ4816 NarrowQ32(long raw) =>
+    private static FixedQ4816 NarrowQ32(Int128 raw) =>
         FixedQ4816.FromRawBits(value: FixedQ4816.RoundProduct(
             fractionBitCount: FixedQ4816.FractionBitCount,
             product: raw
@@ -69,10 +67,31 @@ public readonly record struct SecondOrderDynamics {
             throw new InvalidOperationException(message: "The dynamics are default-initialized; construct them with Create before evaluating them.");
         }
     }
+    // Forms exp(−rate·t) for a Q32 decay rate and a Q16 duration. The base-2 exponent rate·t·log₂e is formed exactly —
+    // the Q48 product times FixedQ4816.Log2EQ62 — and rounded once to the Q56 exponent FixedQ4816.Exp2Q56 consumes,
+    // so neither the rate·t product nor log₂e is quantized to Q16 first. A natural exponent of 2⁶ or more is far past
+    // the kernel's 2⁻¹⁷ underflow floor and answers Zero before the widening, which keeps the product inside Int128.
+    private static FixedQ4816 DecayFactor(Int128 rateRaw, FixedQ4816 t) {
+        const int NaturalFractionBitCount = (CoefficientFractionBitCount + FixedQ4816.FractionBitCount);
+        const int ExponentFractionBitCount = 56;
+        var limit = (Int128.One << (NaturalFractionBitCount + 6));
+        var naturalExponent = (rateRaw * t.Value);
+
+        if (naturalExponent >= limit) {
+            return FixedQ4816.Zero;
+        }
+
+        var exponentQ56 = FixedQ4816.RoundProduct(
+            fractionBitCount: ((NaturalFractionBitCount + 62) - ExponentFractionBitCount),
+            product: (Int128.Max(x: naturalExponent, y: -limit) * FixedQ4816.Log2EQ62)
+        );
+
+        return FixedQ4816.Exp2Q56(exponentQ56: -exponentQ56);
+    }
     // Forms e = exp(-decayNumeratorRaw/2^32 · t) and reports the raw ζω·t product alongside it; false when the
     // exponent's own decay factor has already rounded to zero (the caller reports the settled state) or the
     // intermediate product overflowed.
-    private static bool TryDecayFactor(long decayNumeratorRaw, FixedQ4816 t, FixedQ4816 log2e, out FixedQ4816 factor, out FixedQ4816 timeProduct) {
+    private static bool TryDecayFactor(long decayNumeratorRaw, FixedQ4816 t, out FixedQ4816 factor, out FixedQ4816 timeProduct) {
         if (!FusedArithmetic.TryMixedScaleProduct(
             a: decayNumeratorRaw,
             b: t.Value,
@@ -87,7 +106,10 @@ public readonly record struct SecondOrderDynamics {
         }
 
         timeProduct = FixedQ4816.FromRawBits(value: timeProductRaw);
-        factor = FixedQ4816.Exp2(value: -(timeProduct * log2e));
+        factor = DecayFactor(
+            rateRaw: decayNumeratorRaw,
+            t: t
+        );
 
         return (factor != FixedQ4816.Zero);
     }
@@ -294,10 +316,12 @@ public readonly record struct SecondOrderDynamics {
     /// strictly positive.</param>
     /// <returns>The value and velocity at the elapsed duration.</returns>
     /// <exception cref="InvalidOperationException">This instance is default-initialized (unbound).</exception>
-    /// <remarks>An approximation, not the exact propagator <see cref="Compile"/> derives: built from the public
-    /// <see cref="FixedQ4816.Exp2"/>/<see cref="FixedQ4816.SinCos"/> kernels at their own documented error, so the
-    /// result agrees with a stepped <see cref="SecondOrderStep"/> walk within a few raw Q16 units, not to the bit.
-    /// Settles to exactly <c>(target, Zero)</c> once the decay exponent clears the kernels' own underflow floor.</remarks>
+    /// <remarks>An approximation, not the exact propagator <see cref="Compile"/> derives: built from
+    /// <see cref="FixedQ4816"/>'s exponential and <see cref="FixedQ4816.SinCos"/> kernels at their own documented
+    /// error — each decay factor's exponent <c>rate·t·log₂e</c> formed exactly and rounded once to Q32 before the
+    /// exponential — so the result agrees with a stepped <see cref="SecondOrderStep"/> walk within a few raw Q16
+    /// units, not to the bit. Settles to exactly <c>(target, Zero)</c> once the decay exponent clears the kernels' own
+    /// underflow floor.</remarks>
     public SecondOrderSample Evaluate(FixedQ4816 initialValue, FixedQ4816 initialVelocity, FixedQ4816 target, ulong elapsedTicks, ulong ticksPerSecond) {
         ThrowIfUnbound();
 
@@ -334,7 +358,6 @@ public readonly record struct SecondOrderDynamics {
         var t = FixedQ4816.FromRawBits(value: unchecked((long)tMagnitude));
         var e0 = (initialValue - target);
         var v0 = initialVelocity;
-        var log2e = FixedQ4816.FromRawBits(value: Log2EQ16Raw);
 
         FixedQ4816 valueOffset;
         FixedQ4816 velocity;
@@ -344,7 +367,6 @@ public readonly record struct SecondOrderDynamics {
                     if (!TryDecayFactor(
                         decayNumeratorRaw: DecayRateRaw,
                         t: t,
-                        log2e: log2e,
                         factor: out var e,
                         timeProduct: out var decayTime
                     )) {
@@ -365,7 +387,6 @@ public readonly record struct SecondOrderDynamics {
                     if (!TryDecayFactor(
                         decayNumeratorRaw: DecayRateRaw,
                         t: t,
-                        log2e: log2e,
                         factor: out var e,
                         timeProduct: out _
                     )) {
@@ -420,7 +441,6 @@ public readonly record struct SecondOrderDynamics {
                     if (!TryDecayFactor(
                         decayNumeratorRaw: (DecayRateRaw - OscillationRateRaw),
                         t: t,
-                        log2e: log2e,
                         factor: out var lambda1,
                         timeProduct: out _
                     )) {
@@ -429,26 +449,19 @@ public readonly record struct SecondOrderDynamics {
                             Velocity: FixedQ4816.Zero
                         );
                     }
-                    if (!FusedArithmetic.TryMixedScaleProduct(
-                        a: (DecayRateRaw + OscillationRateRaw),
-                        b: t.Value,
-                        fractionBitsA: CoefficientFractionBitCount,
-                        fractionBitsB: FixedQ4816.FractionBitCount,
-                        fractionBitsOut: FixedQ4816.FractionBitCount,
-                        result: out var p2TimeRaw
-                    )) {
-                        return new(
-                            Value: target,
-                            Velocity: FixedQ4816.Zero
-                        );
-                    }
-
-                    // lambda1/lambda2 decay at the positive rates p1 = ζω−σ, p2 = ζω+σ (the poles are −p1, −p2); p1·p2 =
-                    // ω² exactly, which is how the velocity term below reaches ω² without a separate stiffness read.
-                    var lambda2 = FixedQ4816.Exp2(value: -(FixedQ4816.FromRawBits(value: p2TimeRaw) * log2e));
+                    // lambda1/lambda2 decay at the positive rates p1 = ζω−σ, p2 = ζω+σ (the poles are −p1, −p2). Before
+                    // coefficient quantization p1·p2 = ω², the identity the velocity term uses without a stiffness read. The
+                    // faster pole's factor may underflow to Zero while the slower one still carries the response. Its
+                    // Q32 rate can exceed long.MaxValue even though both constituents fit; widen before adding. The
+                    // sum is below 2^64, so its product with the non-negative Q16 duration stays below 2^127.
+                    var fastRateRaw = (((Int128)DecayRateRaw) + OscillationRateRaw);
+                    var lambda2 = DecayFactor(
+                        rateRaw: fastRateRaw,
+                        t: t
+                    );
                     // The poles are narrowed from their exact Q32 difference and sum, not as differences of two narrowings.
                     var p1 = NarrowQ32(raw: (DecayRateRaw - OscillationRateRaw));
-                    var p2 = NarrowQ32(raw: (DecayRateRaw + OscillationRateRaw));
+                    var p2 = NarrowQ32(raw: fastRateRaw);
                     // The closing divisions by 2σ take the Q32 rate directly, each one rounding.
                     var twoSigmaQ32 = (((UInt128)((ulong)OscillationRateRaw)) << 1);
 

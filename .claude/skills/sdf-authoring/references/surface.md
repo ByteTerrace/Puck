@@ -226,6 +226,7 @@ motion terms.
 | `shadowCrowdRadius` | 0..100 | 0 | `world.shadows` |
 | `ambientOcclusion` | bool | false | `world.ao` |
 | `renderScale` | `Native`..`Eighth` | `Native` | `world.render-scale` |
+| `temporal` | bool | false | `world.temporal` |
 | `upscaleSharpness` | [0, 1] | 0 | `world.upscale-sharpness` |
 | `farDistance` | [1, 8192] | 40 | `world.budget` |
 | `tonemap` | `None`/`Filmic` | `None` | `world.lighting` |

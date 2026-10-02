@@ -456,7 +456,7 @@ public sealed partial class SdfMeshCanaryOracleLawTests {
             viewportWidth: width
         );
     }
-    // The normalized ray through a pixel's center, as march/sdf-cone.hlsli's cameraRayDirection casts it.
+    // The normalized ray through a pixel's center, as frame/sdf-viewport.hlsli's cameraRayDirection casts it.
     private static Vector3 Direction(CameraSnapshot camera, int width, int height, int x, int y) {
         var ndcX = ((((x + 0.5) / width) * 2.0) - 1.0);
         var ndcY = -((((y + 0.5) / height) * 2.0) - 1.0);

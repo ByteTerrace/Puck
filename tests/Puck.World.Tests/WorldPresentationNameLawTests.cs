@@ -126,6 +126,26 @@ public sealed class WorldPresentationNameLawTests {
             );
         }
     }
+    // A row names a world camera's view by the camera's name; a camera relative to a seat renders one view per seat, so
+    // its name names no one view and is refused like any other name.
+    [Fact]
+    public void ACaptureRowNamesAWorldCamerasViewByTheCamerasName() {
+        var definition = WithCaptureStation(station: "lattice");
+
+        string RefusalOf(WorldAnchor? anchor) => Refusal(definition: definition with {
+            CamerasRaw = [Camera(anchor: anchor, name: "reference")],
+            Captures = definition.Captures! with {
+                Rows = [definition.Captures.Rows[0] with { Instance = "reference" }],
+            },
+        });
+
+        Assert.Equal(actual: RefusalOf(anchor: null), expected: string.Empty);
+        Assert.Contains(
+            actualString: RefusalOf(anchor: new WorldAnchor.Seat()),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "captures.rows[0].instance 'reference' names no render-graph instance a capture can read"
+        );
+    }
     // A row names a screen whose source is a source instance (a machine output, a producer, a probe); a screen showing
     // anything else, an undeclared screen, and a row naming both a screen and an instance are refused naming the row.
     [Fact]

@@ -15,7 +15,7 @@
              project README for why), and the lattice topology PenrosePatch's seeded selection walks; Puck.Maths carries
              the PCG streams and alias-table sampling every source family draws through. Nothing else, and nothing
              points back. -->
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.State/Puck.State.csproj" />
     </ItemGroup>
 </Project>

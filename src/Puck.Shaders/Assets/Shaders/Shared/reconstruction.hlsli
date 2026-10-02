@@ -19,12 +19,9 @@ float4 puckReconstructionTap(Texture2D<float4> image, int2 pixel, uint2 sourceDi
 
     return image.Load(int3((p + sourceOrigin), 0));
 }
-float4 puckReconstructRegion(Texture2D<float4> image, uint2 pixel, uint2 rectDims, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
-    if (all(sourceDims == rectDims)) {
-        return image.Load(int3((pixel + sourceOrigin), 0));
-    }
-
-    float2 sourcePos = ((((float2(pixel) + 0.5) * float2(sourceDims)) / float2(rectDims)) - 0.5);
+// Reconstructs at a continuous source position in texel units, the first texel's center at zero: bilinear over the four
+// nearest texels at sharpness 0, blending to clamped Catmull-Rom over the sixteen nearest at sharpness 1.
+float4 puckReconstructAt(Texture2D<float4> image, float2 sourcePos, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
     float2 clamped = clamp(sourcePos, float2(0.0, 0.0), (float2(sourceDims) - 1.0));
     int2 origin = int2(clamped);
     float2 f = (clamped - float2(origin));
@@ -68,6 +65,17 @@ float4 puckReconstructRegion(Texture2D<float4> image, uint2 pixel, uint2 rectDim
     float4 neighborhoodMax = max(max(c00, c10), max(c01, c11));
 
     return lerp(bilinear, clamp(cubic, neighborhoodMin, neighborhoodMax), sharpness);
+}
+// Reconstructs a rect's pixel from its source: an exact copy where the rect has the source's extent, otherwise the
+// source resampled at the pixel's center (puckReconstructAt).
+float4 puckReconstructRegion(Texture2D<float4> image, uint2 pixel, uint2 rectDims, uint2 sourceDims, uint2 sourceOrigin, float sharpness) {
+    if (all(sourceDims == rectDims)) {
+        return image.Load(int3((pixel + sourceOrigin), 0));
+    }
+
+    float2 sourcePos = ((((float2(pixel) + 0.5) * float2(sourceDims)) / float2(rectDims)) - 0.5);
+
+    return puckReconstructAt(image, sourcePos, sourceDims, sourceOrigin, sharpness);
 }
 
 float4 puckReconstruct(Texture2D<float4> image, uint2 pixel, uint2 rectDims, uint2 sourceDims, float sharpness) {

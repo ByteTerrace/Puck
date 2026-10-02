@@ -10,6 +10,6 @@
         <RootNamespace>Puck.Audio</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
     </ItemGroup>
 </Project>

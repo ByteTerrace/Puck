@@ -14,11 +14,11 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\..\src\Puck.Transpiler\Puck.Transpiler.csproj" />
-        <ProjectReference Include="..\..\src\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
+        <ProjectReference Include="../../src/Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../../src/Puck.Transpiler/Puck.Transpiler.csproj" />
+        <ProjectReference Include="../../src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="..\Shared\TestRecords.cs" Link="TestRecords.cs" />
+        <Compile Include="../Shared/TestRecords.cs" Link="TestRecords.cs" />
     </ItemGroup>
 </Project>

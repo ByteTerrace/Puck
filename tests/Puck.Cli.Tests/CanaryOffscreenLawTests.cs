@@ -8,7 +8,8 @@ namespace Puck.Cli.Tests;
 /// <summary>
 /// Proves the offscreen canary shape without a GPU: the shipped pipeline manifests load and expand to one proof per
 /// backend, the loader refuses an offscreen manifest that could skip a backend, <c>imageRegion</c> decides pixels
-/// against author-derived bounds in both directions, and the runner classifies unsupported environments and
+/// against author-derived bounds in both directions, <c>imageDifference</c> holds a capture to a box-filtered
+/// reference in both directions, and the runner classifies unsupported environments and
 /// unresolved pipeline waits from a transcript.
 /// </summary>
 public sealed class CanaryOffscreenLawTests : IDisposable {
@@ -433,6 +434,65 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
                 collection: results,
                 action: static result => Assert.False(condition: result.Passed)
             );
+        }
+    }
+    // A reference twice the capture's extent whose 2x2 blocks average the capture's code differs by nothing; a capture
+    // two codes off differs by a mean of two, inside a bound of two and outside one under it. A missing reference and a
+    // reference that is no whole multiple of the capture fail in either direction.
+    [Fact]
+    public void AnImageDifferenceBoxFiltersItsReferenceAndDecidesInBothDirections() {
+        const int Size = 16;
+        var reference = new byte[(((2 * Size) * (2 * Size)) * 4)];
+
+        for (var index = 0; (index < reference.Length); index += 4) {
+            var pixel = (index / 4);
+            var code = ((byte)(((((pixel % (2 * Size)) + (pixel / (2 * Size))) % 2) == 0) ? 10 : 30));
+
+            reference[index] = code;
+            reference[(index + 1)] = code;
+            reference[(index + 2)] = code;
+            reference[(index + 3)] = 255;
+        }
+        PngEncoder.Write(height: (2 * Size), path: Path.Combine(path1: m_root, path2: "reference.png"), rgba: reference, width: (2 * Size));
+        Gray(code: 20, fileName: "exact.png", height: Size, width: Size);
+        Gray(code: 22, fileName: "off.png", height: Size, width: Size);
+        Gray(code: 20, fileName: "odd.png", height: 24, width: 24);
+
+        CanaryImageDifferenceAssertion Difference(string capture, double maximum, bool holds, string referenceName = "reference.png", int size = Size) => new(
+            Bottom: 1,
+            Capture: capture,
+            Height: size,
+            Holds: holds,
+            Left: 0,
+            MaximumMeanCodes: maximum,
+            Name: $"{capture}-{maximum}-{holds}",
+            Reference: referenceName,
+            Right: 1,
+            Top: 0,
+            Width: size
+        );
+
+        var transcript = Transcript(runDirectory: m_root);
+        var results = CanaryAssertions.Evaluate(
+            leg: Leg(
+                Difference(capture: "exact.png", holds: true, maximum: 0),
+                Difference(capture: "off.png", holds: true, maximum: 2),
+                Difference(capture: "off.png", holds: false, maximum: 1.9)
+            ),
+            primaryTranscript: transcript
+        ).Results;
+
+        Assert.All(collection: results, action: static result => Assert.True(condition: result.Passed, userMessage: result.Detail));
+        foreach (var holds in ((bool[])[true, false])) {
+            var refused = CanaryAssertions.Evaluate(
+                leg: Leg(
+                    Difference(capture: "exact.png", holds: holds, maximum: 255, referenceName: "absent.png"),
+                    Difference(capture: "odd.png", holds: holds, maximum: 255, size: 24)
+                ),
+                primaryTranscript: transcript
+            ).Results;
+
+            Assert.All(collection: refused, action: static result => Assert.False(condition: result.Passed, userMessage: result.Detail));
         }
     }
     [Fact]

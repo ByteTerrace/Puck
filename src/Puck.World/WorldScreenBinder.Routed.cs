@@ -144,6 +144,10 @@ internal sealed partial class WorldScreenBinder {
                 val1: source.WorstCaseProgramWordCapacity,
                 val2: m_viewProgramWordCapacity
             ),
+            screenSources: new RoutedScreenSources(
+                binder: this,
+                scene: scene
+            ),
             width: ((uint)m_viewDisplayWidth)
         );
 

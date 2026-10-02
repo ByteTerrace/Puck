@@ -11,7 +11,7 @@ namespace Puck.World;
 /// <param name="binder">The screen binder, which names the source instance each screen reads.</param>
 internal sealed class WorldCaptureSources(WorldRenderProbe probe, WorldScreenBinder binder) : IWorldCaptureSources {
     /// <inheritdoc/>
-    public string? InstanceOf(int screen) => binder.ReadOf(screen: screen);
+    public string? InstanceOf(int screen) => binder.InstanceOf(screen: screen);
     /// <inheritdoc/>
     public IImageSourceReference? ReferenceOf(string instance) {
         if (probe.Root?.Runtime is not { } runtime) {

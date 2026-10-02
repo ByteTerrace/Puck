@@ -361,6 +361,25 @@
           1195,
           1215
         ]
+      },
+      {
+        "converge": 8,
+        "instance": "world",
+        "palette": [
+          {
+            "color": "#20242C",
+            "material": 0
+          },
+          {
+            "color": "#8C7A5D",
+            "material": 1
+          }
+        ],
+        "station": "converge",
+        "ticks": [
+          1300,
+          1330
+        ]
       }
     ]
   },
@@ -932,6 +951,7 @@
   ],
   "render": {
     "ambientOcclusion": true,
+    "temporal": false,
     "lighting": {
       "lights": [
         {

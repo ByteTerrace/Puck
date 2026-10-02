@@ -1139,8 +1139,9 @@ validator refuses `Passthrough` by name. `SourceFocus` in `Puck.Input` routes
 keys and text to a focused passthrough source, sends each release where its
 press went, and returns focus to the game on Control, Alt and Escape.
 `RenderGraphHitWalk` in `src/Puck.Hosting/Graph` continues a hit on a rendered
-source through the producer's camera up to a depth limit, normally
-`RenderGraphInstanceSet.NestingDepth`, entering at the topmost pane under a
+source through the producer's camera through at most a depth limit of screens,
+normally the set's declared `RenderGraphInstanceSet.NestingDepth` (the boot
+world's `views.nestingDepth`), entering at the topmost pane under a
 display point by the one rule `SourcePanes.Topmost` states: the last pane in
 drawing order whose face holds the point, a letterbox bar or bezel covering what
 is beneath. `SourcePanePicker` is the CPU `ISourcePicker` over that rule: it picks
@@ -1312,10 +1313,11 @@ instances the scheduler renders by demand at their footprint's extent and the
 `world.view-refresh` divisor. A view that would see itself reads its own
 previous frame, and a chain of different views lags one frame per hop.
 
-`Surface` distinguishes CPU pixels, a shared handle, and a same-device image; CPU
-pixels and a shared handle carry the two 8-bit RGBA formats, and a same-device
-image also the float working format every SDF view and the root graph render
-into (`R16G16B16A16Float`). Both swapchains choose a display output through
+`Surface` distinguishes CPU pixels, a shared handle, and a same-device image; a
+shared handle carries the two 8-bit RGBA formats, and CPU pixels and a
+same-device image also the float formats: the working format every SDF view and
+the root graph render into (`R16G16B16A16Float`), which a capture of an HDR
+display hands its CPU pixels over in. Both swapchains choose a display output through
 `DisplayOutput.TrySelect` and take an HDR one only when the host section's
 `colorSpace` requests it and the display reports it, and both write the root's
 frame through the display encode in the output they took. The tonemap is each
@@ -1355,10 +1357,11 @@ described by `ImageSourceDescriptor` (`Puck.Abstractions.Sources`): producer,
 transport, extent, pixel format (including palette-indexed and NV12), color
 encoding, cadence, presentation stamp, content class and capture fill. A world
 document names a producer by id, as a `producer` source with a settings object,
-so the four shipped producers (`testPattern`, `qr`, `camera`, `capture`) and any
-a host adds register a shape in `WorldImageProducerVocabulary` and a runtime in
-`WorldImageProducers` with no schema change. `testPattern`, `qr`, `camera` and
-`capture` are producer ids rather than source kinds, and no `console` source
+so the five shipped producers (`testPattern`, `qr`, `color`, `camera`,
+`capture`) and any a host adds register a shape in
+`WorldImageProducerVocabulary` and a runtime in `WorldImageProducers` with no
+schema change. `testPattern`, `qr`, `color`, `camera` and `capture` are producer
+ids rather than source kinds, and no `console` source
 exists. The machine, view, probe and
 session arms stay typed because each names a document row; an emulator joins as
 a machine engine. External content resolves through `WorldCaptureGate`, so a
@@ -1374,8 +1377,9 @@ An uploaded source's pixels travel as one region, `ImageSourceUploadLayout`'s
 header and planes. The shipped kernels in `src/Puck.Shaders/Assets/Shaders/Sources`
 convert a region into the image a consumer samples. `source-palette` and
 `source-nv12` use a stated matrix and range with co-sited chroma. `source-rgba`
-carries a BGRA swizzle, and `source-transfer` decodes sRGB, linear or PQ into
-linear light. `ImageSourceConversion` is their CPU reference, and the
+carries a BGRA swizzle, and `source-transfer` decodes sRGB, scRGB's linear
+scale or PQ, in BT.709 or BT.2020, into working values relative to the paper
+white. `ImageSourceConversion` is their CPU reference, and the
 `source-conversion` canary holds all four kernels to it on both backends. The
 test pattern and the QR code convert through graph regions: each writes a
 region that an uploaded source instance's one-pass graph converts in the
@@ -3933,17 +3937,23 @@ Each commit is marked with what it waits on.
    runs `RenderGraphHitWalk` over the runtime's instance set from the published
    panes, with each view's seat camera and each pane's paired camera, and the pane
    pointer maps through its instance's published mapping. Each view's world
-   producer reports the published screens as the surface placements inside its
-   world, so a walk continues from a view through a screen into its source (step
-   1's screen half). A portal's window is a session view: a walk through its
-   glass continues through the camera the window last rendered from
-   (`WorldSessionSceneEmitter.TryCamera`, a window's fitted camera with its
-   shear) into the destination, which reports no placements under the depth-one
-   policy, and ends on the surface its ray meets among the destination's static
-   placements (`RenderGraphHitPath.Surface`). The portal check's laws are
-   `WorldViewPaneMappingLawTests.APickThroughAPortalReachesTheDestinationsSurfaceThroughTheCameraItsWindowRendered`
-   and `WorldWindowFrustumFitLawTests`, and the `portal-window` canary picks the
-   destination's marker through a live window on both backends.
+   producer reports the screens of the world it renders as the surface
+   placements inside that world, so a walk continues from a view through a
+   screen into its source (step 1's screen half); a seat presented in another
+   world reports that world's screens. A portal's window is a session view: a
+   walk through its glass continues through the camera the window last rendered
+   from (`WorldSessionSceneEmitter.TryCamera`, a window's fitted camera with its
+   shear) into the destination, which reports its own screens, so the walk
+   continues through a portal inside it, each world tested against its own
+   screens, through at most the set's nesting depth of screens, and ends on the
+   surface its ray meets among the last world's static placements
+   (`RenderGraphHitPath.Surface`). The portal check's laws are
+   `WorldViewPaneMappingLawTests.APickThroughAPortalReachesTheDestinationsSurfaceThroughTheCameraItsWindowRendered`,
+   `WorldViewPaneMappingLawTests.ASeatPresentedElsewhereIsHitTestedAgainstThatWorldsScreens`,
+   `RenderGraphHitWalkLawTests.AHitWalksThroughTwoNestedLevelsEachWorldAgainstItsOwnScreens`
+   and `WorldWindowFrustumFitLawTests`; the `portal-window` canary picks the
+   destination's marker through a live window, and the `portal-nested` canary
+   picks a third world's wall two levels deep, on both backends.
 
 ### P14 — The SDF engine as a pass package
 
@@ -4211,10 +4221,12 @@ item 2 landed.
    at its own quality, and the binder resolves a window into the scene's one
    residency (`WorldScreenBinder.TryResolveWindowView`;
    `WorldRoutedPresentationLawTests.AWindowIsAViewOfTheSceneItsWorldsSeatsRenderAtItsOwnQuality`).
-   Open work: session screens attach through that door. Each reads its
-   own observation of the destination and renders its own residency, so a
-   portal window and a traveller's routed view of one destination keep two
-   residencies until the window reads the endpoint's mirror.
+   A portal window attaches through that door at every depth while its
+   session discloses everything (`WorldSessionWindowRoute`), so a traveller's
+   routed view and every fully disclosed window onto one destination, at any
+   level of nesting, render from the endpoint's one residency; a window disclosed
+   less renders its own. Each view of that residency binds the screens of the
+   level it renders (`ISdfScreenSources.ReadOf` takes the view).
    A camera view renders a view of the world's own residency at its own
    quality. A diegetic screen showing a live camera (a race billboard)
    costs its instance's passes, output and scratch while sharing the world's
@@ -4541,10 +4553,12 @@ resolution, and stay there.
   a seat's portal crossing keeps the instance's passes, scratch and history
   storage and shows the destination in the crossing frame. Otherwise its passes
   rebuild. The reset makes the first destination frame a spatial resolve, with
-  no trace of the departed world. A session
-  view's history is its own and resets on the same rules; a routed seat view and
-  a portal window's session view of the same destination keep separate
-  histories whether they share an endpoint residency or use separate residencies.
+  no trace of the departed world. A session view's history is its own and
+  resets on the same rules, at every level of nesting: each level is an instance
+  of its own, so a routed seat view, a portal window's view and a deeper level's
+  view of the same destination keep separate histories whether they share an
+  endpoint residency or use separate residencies, and no level reprojects
+  another's frames.
 - **Reprojection is validated by identity and depth.** History keeps, beside
   the color, each output pixel's ray parameter and identity (a history surface).
   A history sample whose identity differs from the current pixel's, or whose
@@ -4816,7 +4830,41 @@ counted rows recorded in the same change.
      keeps that output size through reader scale, split layouts and display
      resizing. Its camera uses the authored aspect on its first capture.
      Unspecified extents keep the scheduler's quantization and hysteresis.
-5. **P15-5, the temporal resolve.** Reconstruction on.
+5. **P15-5, the temporal resolve.** Landed. Reconstruction on.
+   - Landed: a temporal view runs the temporal fragment, whose resolve reads
+     the history color and surface the previous frame wrote at the output
+     extent and writes this frame's. It weights the 3x3 render samples around
+     each output pixel, reprojects history through `sdfReprojection`, rejects it
+     where the identity differs or the ray distance differs by more than 5%,
+     clips it to the neighbourhood's YCoCg box and caps its weight at eight
+     samples; `reactivity`, written by `sky` and `views` (a screen is fully
+     reactive, an emissive surface by its emissive share), lowers that weight.
+     An epoch's first frame, and any pixel whose history is rejected, is the
+     spatial resolve exactly. `IsUnchanged` holds a temporal view unchanged only
+     one period after its last change. `place` sharpens a source at its rect's
+     extent by `world.upscale-sharpness` when the view reconstructs.
+     `world.temporal` and the render section's `temporal` member turn it on for
+     the world's own views; `quality.puck` turns it off at `low` and on at
+     `medium` and `high`; camera and session views never ask for it. A view
+     following a crossing into another residency requests that residency's
+     resolve pipeline, so `portal-walk` crosses with reconstruction on. The
+     canaries hold `temporal-convergence` within 1.5 codes of the supersampled
+     reference over its subject, `temporal-ghosting` within 2 codes of the
+     still frame over the vacated strip, `temporal-disocclusion` within 4 codes
+     of the spatial path over the revealed pixels, and `temporal-reset`'s first
+     frame after a cut to the spatial path exactly; the parity world's
+     `converge` station holds on both backends under its vocabulary contract.
+     The resolve binds the World set as well as the frame and pass sets, one
+     more descriptor-set bind a resolve dispatch, and writes its pass set once a
+     frame slot. `portal-walk` crosses with reconstruction on and holds its
+     crossing frame to a relaunch's spatial crossing frame exactly, while a
+     frame with gathered history differs from the spatial one; no world can
+     author a crossing that keeps history, so the epoch reset on a crossing is
+     held by law (P15-2). The runtime counts the frames each instance's
+     schedule leaves it unread and absent from displayed outputs, including
+     held consumer outputs, and hands the count to the package's cadence
+     question and recordings, and the count is part of the epoch, so a parked
+     view shown again resets while a spatial view's still output stands.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected
      by identity and depth; neighbourhood rectification; the `reactivity` image
@@ -4988,8 +5036,40 @@ setting, named once, requests HDR10 or scRGB, which the selection above takes
 when the display reports it. The HUD and overlays show at the paper-white
 level through the encode's `DisplayOutput.WhiteScale`, and one HDR source,
 desktop capture on an HDR display, converts through P12. SDR stays the default
-and the fallback. Everything but the HDR source landed with P14-10; the HDR
-desktop capture remains.
+and the fallback. Everything but the HDR source landed with P14-10, and the HDR
+source has landed too:
+
+- A desktop capture selects its format and encoding at open: the output
+  driving its monitor reports HDR10 (`IDXGIOutput6::GetDesc1`) or not, and
+  `Win32GraphicsCaptureFeed.CaptureOutputOf` turns that into the frames'
+  `DisplayOutput`, B8G8R8A8 sRGB for an SDR display and half-float scRGB for an
+  HDR one in either color space (`INativeImageCaptureFeed.Output`). An SDR
+  capture is unchanged: its frames, its Direct3D 12 GPU route and its
+  `source-rgba` copy are what they were.
+  Frame callbacks and background checks queued by consumer liveness polls check
+  the display at a bounded cadence, off the render thread, including when no
+  frames arrive. The feed holds one DXGI factory and the output it found, re-reading
+  that output's description while the factory is current; a stale factory, which
+  is how DXGI reports a display change, is replaced and the output found again.
+  An HDR toggle, a move to a display that differs in it, or failed discovery ends
+  the feed when a check detects the change; the consumer reopens it with fresh
+  metadata. Unknown display discovery refuses an open instead of guessing SDR.
+- An HDR capture hands its CPU frames over as `R16G16B16A16Float` CPU pixels,
+  downscaled in linear light, and converts on its CPU tier, never the GPU
+  route, whose shared targets are B8G8R8A8. The binder names the encoding
+  `ImageColorEncoding.Of` gives its color space, so the one-pass graph runs
+  `source-transfer`, which writes working values relative to the host's paper
+  white: a sample of N cd/m² shows at N cd/m² on an HDR output, nothing above
+  SDR white is clipped before the display encode, and nothing is encoded twice.
+  The room glow averages the same frames in linear light.
+- The laws are `ImageSourceWorkingSpaceLawTests` (HDR10 and scRGB samples at 80,
+  203, 1000 and 10,000 cd/m², at two paper whites, through the display
+  encode's own decode, with clipped, linear, doubly encoded and fixed-white red
+  legs, and an SDR capture bit for bit), `Win32GraphicsCaptureOutputTests` (the
+  capture's format and color space) and
+  `RenderGraphRuntimeLawTests.ASourcesConversionReadsTheHostsPaperWhiteFromItsPassBlock`;
+  the `source-conversion` canary converts a half-float scRGB region at two
+  paper whites on both backends.
 Calibration UI, per-display metadata, and HDR on the Steam Deck OLED under
 Linux are later work and stay listed in open items until scheduled.
 **Check:** on an SDR display the same graph produces the previous image within
@@ -6203,8 +6283,9 @@ bound through the group-1 set P17's texture draw added for the bake atlases, one
 per upload ring slot, the float working targets (P14-10), staged shading (P14-11)
 and the final sweep (P14-13): every P14 step has landed, and its counted-cost
 ceilings land as P15-1. P15 and P16 both follow P14: P15 also needs P4, and
-P16's display output landed with P14-10's float working targets; only its HDR
-desktop capture and the HDR-display checks remain.
+P16's display output landed with P14-10's float working targets and its HDR
+desktop capture after it; only the HDR-display checks remain, deferred to the
+end.
 P17's CPU half, the bakes and their texture codecs, has landed, and so have
 their block-compressed upload and sampling check on both backends and the one
 pixel-format vocabulary, `GpuPixelFormat`. A ready bake's mesh draws in place
@@ -6222,9 +6303,8 @@ and a bound member and an overridden member compose by the rule
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
 landed, and so has every other P14 step, so the longest remaining chain is
-P15's, P15-1 to P15-8.
-P16's HDR desktop capture follows P14-10, and a
-bake's textures (P17) come before P6's choice between a bake and the field.
+P15's, P15-1 to P15-8. A bake's textures (P17) come before P6's choice between
+a bake and the field.
 
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to
@@ -6265,7 +6345,9 @@ blockers. Each is still required before the programme is done.
   upscaling and dynamic resolution on, render scale responding to its signal.
 - **Hardware: P16's HDR-display checks.** On an HDR display the swapchain
   reports an HDR color space, a test ramp exceeds SDR white, an HDR desktop
-  capture displays without clipping, and the HUD renders at paper white.
+  capture displays without clipping, toggling HDR during a desktop capture ends
+  and reopens the feed in the new encoding, on a still desktop as well as a
+  changing one, and the HUD renders at paper white.
 - **Review: cross-backend agreement.** A change's own GPU checks run on the
   backends at hand as it lands; whether Vulkan and Direct3D 12 agree across
   those checks is judged in one final review pass.

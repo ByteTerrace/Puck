@@ -21,6 +21,10 @@ public sealed partial class ShaderPipelineRenderNode {
     /// projection was composed for. Either way a capture reads only an image rendered at the extent requested of the node
     /// when it rendered, so a capture armed during a resize waits for the new extent.</summary>
     public bool ShownAtItsExtent { get; set; }
+    /// <summary>Gets or sets the frames its render graph's schedules have left the node's instance unread, with no displayed
+    /// output showing or reading it, including through held consumer outputs, which every package recording carries
+    /// (<see cref="RenderGraphPackageRecording.UnreadFrames"/>). It moves only while the instance is parked.</summary>
+    public long UnreadFrames { get; set; }
 
     // Whether the installed graph renders at an extent other than the one last requested: a resize is building, or its
     // candidate was refused.

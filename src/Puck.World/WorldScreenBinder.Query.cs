@@ -51,7 +51,7 @@ internal sealed partial class WorldScreenBinder {
     /// <param name="index">The engine screen-surface index.</param>
     /// <returns>The order, or <see langword="null"/> when the screen's source crosses no devices.</returns>
     public SharedFenceOrder? FenceOrderAt(int index) {
-        var feed = ((ReadOf(screen: index) is { } instance)
+        var feed = ((InstanceOf(screen: index) is { } instance)
             ? FeedOf(instance: instance)
             : null);
 
@@ -60,7 +60,7 @@ internal sealed partial class WorldScreenBinder {
                 seat: camera.Seat,
                 sensor: camera.Sensor
             ),
-            CaptureSlotFeed { Feed: { GpuRoute: true, Source: { } source } } => source.GpuFenceOrder,
+            CaptureSlotFeed { Feed: { RidesGpu: true, Source: { } source } } => source.GpuFenceOrder,
             ProbeSourceFeed probe => probe.Feed.Order,
             _ => null,
         });
@@ -115,7 +115,7 @@ internal sealed partial class WorldScreenBinder {
             PendingSteps: 0,
             MaximumPendingSteps: 0,
             BackpressureEvents: 0,
-            Fault: ((ReadOf(screen: index) is { } instance)
+            Fault: ((InstanceOf(screen: index) is { } instance)
                 ? SourceFault(instance: instance)
                 : slot.DeclaredFault)
         );

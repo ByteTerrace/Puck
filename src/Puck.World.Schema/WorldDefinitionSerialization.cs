@@ -195,6 +195,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldCameraSettings))]
 [JsonSerializable(typeof(WorldCaptureSettings))]
 [JsonSerializable(typeof(WorldQrSettings))]
+[JsonSerializable(typeof(WorldColorSettings))]
 [JsonSerializable(typeof(WorldTestPatternSettings))]
 // The host-section defaults row (the world.row.set host payload shape + the document `host` section). WorldBackendPreference
 // and the surface format ride explicit name-map converters (below) rather than the camelCase enum policy, which would emit

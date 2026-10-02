@@ -24,41 +24,41 @@
         <PackageReference Include="System.CommandLine" Version="[2.*, )" />
     </ItemGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
-        <ProjectReference Include="..\Puck.AdvancedGamingBrick.Forge\Puck.AdvancedGamingBrick.Forge.csproj" />
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
-        <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
-        <ProjectReference Include="..\Puck.DirectX\Puck.DirectX.csproj" />
-        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
-        <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
-        <ProjectReference Include="..\Puck.Input\Puck.Input.csproj" />
-        <ProjectReference Include="..\Puck.Launcher.Linux\Puck.Launcher.Linux.csproj" />
-        <ProjectReference Include="..\Puck.Launcher.Windows\Puck.Launcher.Windows.csproj" />
-        <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
-        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
-        <ProjectReference Include="..\Puck.Networking\Puck.Networking.csproj" />
-        <ProjectReference Include="..\Puck.Overlays\Puck.Overlays.csproj" />
-        <ProjectReference Include="..\Puck.Platform.Linux\Puck.Platform.Linux.csproj" />
-        <ProjectReference Include="..\Puck.Platform.Windows\Puck.Platform.Windows.csproj" />
-        <ProjectReference Include="..\Puck.Platform\Puck.Platform.csproj" />
-        <ProjectReference Include="..\Puck.Recording\Puck.Recording.csproj" />
-        <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
-        <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
-        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
-        <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
-        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
-        <ProjectReference Include="..\Puck.World.Addons\Puck.World.Addons.csproj" />
-        <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
-        <ProjectReference Include="..\Puck.World.Console\Puck.World.Console.csproj" />
-        <ProjectReference Include="..\Puck.HumbleGamingBrick.Forge\Puck.HumbleGamingBrick.Forge.csproj" />
-        <ProjectReference Include="..\Puck.World.Authoring\Puck.World.Authoring.csproj" />
-        <ProjectReference Include="..\Puck.World.Machines\Puck.World.Machines.csproj" />
-        <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
-        <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
-        <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
-        <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
-        <ProjectReference Include="..\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
+        <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
+        <ProjectReference Include="../Puck.AdvancedGamingBrick/Puck.AdvancedGamingBrick.csproj" />
+        <ProjectReference Include="../Puck.AdvancedGamingBrick.Forge/Puck.AdvancedGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />
+        <ProjectReference Include="../Puck.Commands/Puck.Commands.csproj" />
+        <ProjectReference Include="../Puck.DirectX/Puck.DirectX.csproj" />
+        <ProjectReference Include="../Puck.Hosting/Puck.Hosting.csproj" />
+        <ProjectReference Include="../Puck.HumbleGamingBrick/Puck.HumbleGamingBrick.csproj" />
+        <ProjectReference Include="../Puck.Input/Puck.Input.csproj" />
+        <ProjectReference Include="../Puck.Launcher.Linux/Puck.Launcher.Linux.csproj" />
+        <ProjectReference Include="../Puck.Launcher.Windows/Puck.Launcher.Windows.csproj" />
+        <ProjectReference Include="../Puck.Launcher/Puck.Launcher.csproj" />
+        <ProjectReference Include="../Puck.Maths/Puck.Maths.csproj" />
+        <ProjectReference Include="../Puck.Networking/Puck.Networking.csproj" />
+        <ProjectReference Include="../Puck.Overlays/Puck.Overlays.csproj" />
+        <ProjectReference Include="../Puck.Platform.Linux/Puck.Platform.Linux.csproj" />
+        <ProjectReference Include="../Puck.Platform.Windows/Puck.Platform.Windows.csproj" />
+        <ProjectReference Include="../Puck.Platform/Puck.Platform.csproj" />
+        <ProjectReference Include="../Puck.Recording/Puck.Recording.csproj" />
+        <ProjectReference Include="../Puck.Scripting/Puck.Scripting.csproj" />
+        <ProjectReference Include="../Puck.SdfVm/Puck.SdfVm.csproj" />
+        <ProjectReference Include="../Puck.Shaders/Puck.Shaders.csproj" />
+        <ProjectReference Include="../Puck.Storage/Puck.Storage.csproj" />
+        <ProjectReference Include="../Puck.Text/Puck.Text.csproj" />
+        <ProjectReference Include="../Puck.World.Addons/Puck.World.Addons.csproj" />
+        <ProjectReference Include="../Puck.World.Client/Puck.World.Client.csproj" />
+        <ProjectReference Include="../Puck.World.Console/Puck.World.Console.csproj" />
+        <ProjectReference Include="../Puck.HumbleGamingBrick.Forge/Puck.HumbleGamingBrick.Forge.csproj" />
+        <ProjectReference Include="../Puck.World.Authoring/Puck.World.Authoring.csproj" />
+        <ProjectReference Include="../Puck.World.Machines/Puck.World.Machines.csproj" />
+        <ProjectReference Include="../Puck.World.Protocol/Puck.World.Protocol.csproj" />
+        <ProjectReference Include="../Puck.World.Schema/Puck.World.Schema.csproj" />
+        <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />
+        <ProjectReference Include="../Puck.Transpiler/Puck.Transpiler.csproj" />
+        <ProjectReference Include="../Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
     </ItemGroup>
     <!-- The pinned SDK normally reuses build deps during publish. CI reuses portable IL for a RID-specific
          publish, so that manifest names the wrong runtime asset paths. Regenerate only publish metadata,
@@ -74,5 +74,5 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
-    <Import Project="..\..\build\WorldAssets.targets" />
+    <Import Project="../../build/WorldAssets.targets" />
 </Project>

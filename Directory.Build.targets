@@ -3,7 +3,7 @@
         <!-- Repository-only executables resolve live files from their checkout,
              independently of deterministic compiler source-path mapping. Puck.Cli.Tests reads the CLI's
              own copy, which its subject's internals already expose; a second copy there is a type conflict. -->
-        <Compile Include="$(MSBuildThisFileDirectory)build\RepositoryPaths.cs" Link="Properties\RepositoryPaths.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/RepositoryPaths.cs" Link="Properties/RepositoryPaths.cs" />
     </ItemGroup>
     <!-- Allocation laws and the emulator batteries' allocation stages read GC.GetAllocatedBytesForCurrentThread. A
          background collection retires every thread's allocation context without subtracting the unused remainder
@@ -17,7 +17,7 @@
         <!-- Derived here rather than in Directory.Build.props: $(NuGetPackageRoot) is set by NuGet's
              generated props, which import after Directory.Build.props but before this file. Properties
              evaluate before items, so csproj-body HintPaths resolve this correctly. -->
-        <WindowsSdkNetRefRoot>$(NuGetPackageRoot)\microsoft.windows.sdk.net.ref\$(WindowsSdkNetRefVersion)\lib\net8.0</WindowsSdkNetRefRoot>
+        <WindowsSdkNetRefRoot>$(NuGetPackageRoot)/microsoft.windows.sdk.net.ref/$(WindowsSdkNetRefVersion)/lib/net8.0</WindowsSdkNetRefRoot>
     </PropertyGroup>
 
     <!-- Flow the Windows Graphics Capture projection references to every project automatically. The imported
@@ -25,19 +25,19 @@
          executable that references Puck.Platform.Windows records Microsoft.Windows.SDK.NET.dll + WinRT.Runtime.dll
          in its .deps.json with no per-consumer csproj edit. This import lands after each project's body, so
          @(ProjectReference) is already populated when the ItemGroup condition is evaluated. -->
-    <Import Project="$(MSBuildThisFileDirectory)src\Puck.Platform.Windows\WindowsCaptureProjection.targets" />
+    <Import Project="$(MSBuildThisFileDirectory)src/Puck.Platform.Windows/WindowsCaptureProjection.targets" />
 
     <!-- The architecture gate. Reads the RESOLVED reference set rather than @(ProjectReference), so a
          transitively-arriving edge is checked the same as a declared one. -->
-    <Import Project="$(MSBuildThisFileDirectory)build\Puck.Architecture.targets" />
+    <Import Project="$(MSBuildThisFileDirectory)build/Puck.Architecture.targets" />
 
     <!-- The shared shader-compile recipe (DXC to SPIR-V + DXIL, item-driven, opt-out DXIL). Imported once for
          every project; a project declaring no shader items never triggers a single Exec. -->
-    <Import Project="$(MSBuildThisFileDirectory)build\Shaders.targets" />
+    <Import Project="$(MSBuildThisFileDirectory)build/Shaders.targets" />
 
     <!-- NuGet packaging policy for blessed projects. Imported here (after each project's body) so a
          csproj's own <IsPackable>true</IsPackable> is visible to the flag-guarded groups inside. -->
-    <Import Project="$(MSBuildThisFileDirectory)build\Packaging.targets" />
+    <Import Project="$(MSBuildThisFileDirectory)build/Packaging.targets" />
 
     <!-- The artifact producer records evaluated test outputs, including any future test projects or TFMs.
          Consumers run these assemblies directly and do not need to evaluate the solution or install workloads. -->

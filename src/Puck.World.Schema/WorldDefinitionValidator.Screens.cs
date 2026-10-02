@@ -951,6 +951,13 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        if (
+            (session.Fallback is { } fallback) &&
+            !IsHexColor(value: fallback)
+        ) {
+            errors.Add(item: $"{path}.session.fallback '{fallback}' must be #RRGGBB.");
+        }
+
         if (session.Resolution is { } resolution) {
             if (
                 (resolution.Width <= 0) ||

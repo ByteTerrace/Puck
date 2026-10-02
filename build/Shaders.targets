@@ -13,11 +13,11 @@
 
         This is the SAME physical file two ways: an in-repo project imports it transitively through
         Directory.Build.targets, and an external ByteTerrace.Puck.Shaders package consumer imports the identical file
-        via buildTransitive\ByteTerrace.Puck.Shaders.targets (src/Puck.Shaders/Puck.Shaders.csproj packs it there).
+        via buildTransitive/ByteTerrace.Puck.Shaders.targets (src/Puck.Shaders/Puck.Shaders.csproj packs it there).
         Never fork the two paths — a change here reaches both consumers identically.
     -->
     <UsingTask
-        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
         TaskFactory="RoslynCodeTaskFactory"
         TaskName="PuckWriteShaderHashSidecars"
     >
@@ -30,7 +30,7 @@
         </Task>
     </UsingTask>
     <UsingTask
-        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
         TaskFactory="RoslynCodeTaskFactory"
         TaskName="PuckValidateShaderBytecodeFresh"
     >
@@ -44,7 +44,7 @@
     </UsingTask>
 
     <UsingTask
-        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
         TaskFactory="RoslynCodeTaskFactory"
         TaskName="PuckRemoveOrphanedShaderBytecode"
     >
@@ -59,7 +59,7 @@
     </UsingTask>
 
     <UsingTask
-        AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
+        AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll"
         TaskFactory="RoslynCodeTaskFactory"
         TaskName="PuckCompileDirect3D11Kernels"
     >
@@ -85,10 +85,10 @@
 
     <!-- Bytecode with no same-stem .hlsl: the build removes what it wrote (its sidecar records the file's bytes),
          naming each removal on one line, and refuses anything else, which it leaves in place. Sidecars are found by
-         the Assets\Shaders convention CollectShaderBytecode ships from. -->
+         the Assets/Shaders convention CollectShaderBytecode ships from. -->
     <Target Name="ValidateShaderBytecodeSources" BeforeTargets="PrepareForBuild">
         <ItemGroup>
-            <_PuckShaderSidecar Include="Assets\Shaders\**\*.spv.hash;Assets\Shaders\**\*.dxil.hash" />
+            <_PuckShaderSidecar Include="Assets/Shaders/**/*.spv.hash;Assets/Shaders/**/*.dxil.hash" />
         </ItemGroup>
         <PuckRemoveOrphanedShaderBytecode Condition="'@(ShaderBytecode)' != '' or '@(_PuckShaderSidecar)' != ''" BytecodeFiles="@(ShaderBytecode)" Sidecars="@(_PuckShaderSidecar)">
             <Output ItemName="_PuckRemovedShaderBytecode" TaskParameter="Removed" />
@@ -133,7 +133,7 @@
         <Exec Condition="'$(_PuckHasShaderItems)' == 'true'" Command="&quot;$(DxcCommand)&quot; --version" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardErrorImportance="High" StandardOutputImportance="Low">
             <Output PropertyName="DxcProbeExitCode" TaskParameter="ExitCode" />
         </Exec>
-        <Error Condition="'$(_PuckHasShaderItems)' == 'true' and '$(DxcProbeExitCode)' != '0'" Text="$(MSBuildProjectName) shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path\to\dxc&quot;." />
+        <Error Condition="'$(_PuckHasShaderItems)' == 'true' and '$(DxcProbeExitCode)' != '0'" Text="$(MSBuildProjectName) shader compilation requires '$(DxcCommand)' (the DirectX Shader Compiler) to run. Install the Vulkan SDK or Windows SDK, or pass /p:DxcCommand=&quot;path/to/dxc&quot;." />
 
         <!-- Vertex. -->
         <Exec Condition="'$(PuckShaderSpirvEnabled)' == 'true' and '$(DxcProbeExitCode)' == '0' and '%(VertexShaderSource.FullPath)' != ''" Command="&quot;$(DxcCommand)&quot; $(PuckDxcVertexSpirv) -Fo &quot;%(VertexShaderSource.RootDir)%(VertexShaderSource.Directory)%(VertexShaderSource.Filename).spv&quot; &quot;%(VertexShaderSource.FullPath)&quot;" />
@@ -187,8 +187,8 @@
     <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths">
         <ItemGroup>
             <ShaderBytecode Remove="@(ShaderBytecode)" />
-            <ShaderBytecode Include="Assets\Shaders\**\*.spv" />
-            <ShaderBytecode Include="Assets\Shaders\**\*.dxil" />
+            <ShaderBytecode Include="Assets/Shaders/**/*.spv" />
+            <ShaderBytecode Include="Assets/Shaders/**/*.dxil" />
             <Content Include="@(ShaderBytecode)" CopyToOutputDirectory="PreserveNewest" />
         </ItemGroup>
     </Target>

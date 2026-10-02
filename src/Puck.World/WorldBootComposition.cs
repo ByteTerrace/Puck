@@ -325,7 +325,7 @@ public static class WorldBootComposition {
         // on Windows, the CPU tier) and compositor-owned desktop-window capture. Registered here (not presentation)
         // because WorldScreenBinder's constructor needs them regardless of boot shape — see below. Puck.World
         // references both Puck.Platform.Windows and Puck.Platform.Linux directly (it stays one universal build, per
-        // CLAUDE.md rule 3), so this OperatingSystem.IsWindows() branch is the one composition-time choice between
+        // AGENTS.md rule 3), so this OperatingSystem.IsWindows() branch is the one composition-time choice between
         // them; it is not a falsifier target itself — that property belongs to Puck.Launcher.Linux/.Headless, which
         // touch neither package.
         if (OperatingSystem.IsWindows()) {
@@ -422,6 +422,7 @@ public static class WorldBootComposition {
                 // camera rides its GPU tier on both hosts (see WorldScreenBinder.TryProvisionSharedRing). Headless
                 // never resolves either backend, so this bool only matters once presentation composes.
                 hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX,
+                paperWhiteNits: sp.GetRequiredService<WorldHostSettings>().PaperWhiteNits,
                 // A session-sourced face's destination/reference lookup and resolver-owned instance — CORE, not
                 // presentation-only, so an observation lease attaches (and a destination instance starts) in every
                 // boot shape, exactly like WorldMachineHost's own boot-time machine start.

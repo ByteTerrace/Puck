@@ -7,14 +7,17 @@ using Puck.Shaders;
 namespace Puck.World;
 
 internal sealed partial class WorldScreenBinder {
-    // The image source format of CPU pixels a capture or camera tier hands over, or null for one no conversion reads.
+    // The image source format of CPU pixels a capture or camera tier hands over, or null for one no conversion reads: an
+    // 8-bit order, or the half floats a capture of an HDR display hands over.
     private static ImagePixelFormat? PixelFormatOf(GpuPixelFormat format) => format switch {
         GpuPixelFormat.B8G8R8A8Unorm => ImagePixelFormat.B8G8R8A8Unorm,
         GpuPixelFormat.R8G8B8A8Unorm => ImagePixelFormat.R8G8B8A8Unorm,
+        GpuPixelFormat.R16G16B16A16Float => ImagePixelFormat.R16G16B16A16Float,
         _ => null,
     };
-    // Converts one CPU surface through a tier's conversion, when the runtime runs and a conversion reads its pixels.
-    private bool TryConvert(ConvertedPixels pixels, in FrameContext context, in Surface surface) {
+    // Converts one CPU surface, its pixels encoded as the color says, through a tier's conversion, when the runtime runs
+    // and a conversion reads its pixels.
+    private bool TryConvert(ConvertedPixels pixels, in FrameContext context, in Surface surface, ImageColorEncoding color) {
         if (
             (Runtime is not { } runtime) ||
             !surface.IsCpuPixels ||
@@ -25,9 +28,14 @@ internal sealed partial class WorldScreenBinder {
             return false;
         }
 
-        var byteCount = checked((int)((surface.Width * surface.Height) * 4U));
+        var byteCount = Surface.RequiredByteLength(
+            format: surface.Format,
+            height: surface.Height,
+            width: surface.Width
+        );
 
         return ((surface.Pixels.Length >= byteCount) && pixels.TryConvert(
+            color: color,
             context: in context,
             format: format,
             height: surface.Height,
@@ -160,8 +168,9 @@ internal sealed partial class WorldScreenBinder {
             m_current = null;
             m_shown = null;
         }
-        // Converts one image of the given format and extent, making a converter for it when the pixels change shape.
-        public bool TryConvert(RenderGraphRuntime runtime, in FrameContext context, ImagePixelFormat format, uint width, uint height, ReadOnlySpan<byte> planes) {
+        // Converts one image of the given format, color encoding and extent, making a converter for it when the pixels
+        // change shape.
+        public bool TryConvert(RenderGraphRuntime runtime, in FrameContext context, ImagePixelFormat format, ImageColorEncoding color, uint width, uint height, ReadOnlySpan<byte> planes) {
             if (m_retired) {
                 return false;
             }
@@ -169,6 +178,7 @@ internal sealed partial class WorldScreenBinder {
             if (
                 (m_current is not { } current) ||
                 (current.Format != format) ||
+                (current.Color != color) ||
                 (current.Width != width) ||
                 (current.Height != height)
             ) {
@@ -187,7 +197,7 @@ internal sealed partial class WorldScreenBinder {
                     converter: runtime.CreateConverter(
                         descriptor: new ImageSourceDescriptor(
                             Cadence: ImageSourceCadence.Tick,
-                            Color: ImageColorEncoding.Srgb,
+                            Color: color,
                             Content: m_content,
                             Format: format,
                             Height: height,
@@ -197,6 +207,7 @@ internal sealed partial class WorldScreenBinder {
                         ),
                         name: m_name
                     ),
+                    color: color,
                     format: format,
                     height: height,
                     token: m_nextToken++,
@@ -229,7 +240,8 @@ internal sealed partial class WorldScreenBinder {
         }
 
         // One converter and the frames still holding its image.
-        private sealed class Entry(RenderGraphSourceConverter converter, ImagePixelFormat format, uint width, uint height, int token) {
+        private sealed class Entry(RenderGraphSourceConverter converter, ImagePixelFormat format, ImageColorEncoding color, uint width, uint height, int token) {
+            public ImageColorEncoding Color { get; } = color;
             public RenderGraphSourceConverter Converter { get; } = converter;
             public ImagePixelFormat Format { get; } = format;
             public uint Height { get; } = height;
