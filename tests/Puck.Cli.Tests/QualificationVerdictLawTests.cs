@@ -70,6 +70,7 @@ public sealed class QualificationVerdictLawTests {
         MemoryProfile: "memory: unified.coherent=no device-local=8589934592",
         Releases: 1,
         SubmissionRefusals: [],
+        ValidationLive: true,
         ValidationMessages: [],
         Waits: [new QualificationWait(Outcome: "reached", Phase: "installed"), new QualificationWait(Outcome: "reached", Phase: "counted 4")],
         WorldReloads: 2
@@ -177,6 +178,13 @@ public sealed class QualificationVerdictLawTests {
         Assert.Equal(actual: Judge(debugLayers: false, readings: readings).Outcome, expected: QualificationOutcome.Pass);
     }
     [Fact]
+    public void ALayerThatNeverSaidItWasLiveFailsOnlyWithTheLayerOn() {
+        var readings = (Good() with { ValidationLive = false });
+
+        Fails(finding: "the vulkan validation layer never said it was live", readings: readings);
+        Assert.Equal(actual: Judge(debugLayers: false, readings: readings).Outcome, expected: QualificationOutcome.Pass);
+    }
+    [Fact]
     public void ALegThatCouldNotRunHereIsBlockedAndOneThatMisbehavedFails() {
         Assert.Equal(actual: Judge(leg: WorldOffscreenLegStatus.Unsupported, readings: Good()).Outcome, expected: QualificationOutcome.Blocked);
         Assert.Equal(actual: Judge(leg: WorldOffscreenLegStatus.NotRun, readings: null).Outcome, expected: QualificationOutcome.Blocked);
@@ -225,6 +233,7 @@ public sealed class QualificationVerdictLawTests {
                 Out(line: "[vulkan-debug] validation error: an object was not destroyed", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[vulkan-debug] general: loader notice", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[d3d12] debug layer live: the device reports through its info queue", stream: CliProcessOutputStream.Stderr),
+                Out(line: "[vulkan] validation layer live: the instance reports through its debug messenger", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[pipeline: ink GPU candidate refused: SHADERPIPE_BUDGET", stream: CliProcessOutputStream.Stderr),
                 Out(line: "[pipeline: ink unsupported: the dxc shader tool is absent", stream: CliProcessOutputStream.Stderr),
@@ -247,6 +256,7 @@ public sealed class QualificationVerdictLawTests {
         Assert.Equal(actual: readings.Waits, expected: [new QualificationWait(Outcome: "reached", Phase: "counted 4")]);
         Assert.Equal(actual: readings.Releases, expected: 1);
         Assert.Equal(actual: readings.ValidationMessages, expected: ["[vulkan-debug] validation error: an object was not destroyed", "[d3d12] debug layer requested but not loaded: the device has no info queue, so nothing is validated"]);
+        Assert.True(condition: readings.ValidationLive);
         Assert.Single(collection: readings.CandidateRefusals);
         Assert.Equal(actual: readings.CompilerAbsent, expected: "[pipeline: ink unsupported: the dxc shader tool is absent");
         Assert.Equal(actual: readings.WorldReloads, expected: 1);
