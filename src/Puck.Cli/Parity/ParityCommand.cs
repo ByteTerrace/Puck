@@ -373,10 +373,19 @@ internal static class ParityCommand {
             world: shippedWorld
         );
 
-        if (leg != CliExit.Success) {
-            return leg;
-        }
+        return EvaluateBackend(
+            backend: backend,
+            bakes: bakes,
+            captureDirectory: captureDirectory,
+            debugLayers: debugLayers,
+            leg: leg,
+            process: process,
+            validation: out validation
+        );
+    }
 
+    // Judge stderr even when the process failed, before any refusal leaves the leg.
+    internal static int EvaluateBackend(string backend, bool bakes, string captureDirectory, bool debugLayers, int leg, CliProcessResult? process, out DebugLayerVerdict? validation) {
         validation = DebugLayerOutput.Verdict(
             backend: backend,
             debugLayers: debugLayers,
@@ -384,6 +393,10 @@ internal static class ParityCommand {
                 .Where(predicate: static line => (line.Stream == CliProcessOutputStream.Stderr))
                 .Select(selector: static line => line.Line)
         );
+
+        if (leg != CliExit.Success) {
+            return leg;
+        }
 
         if (BakeRefusal(bakes: bakes, stdout: (process?.Stdout ?? string.Empty)) is { } refusal) {
             Console.Error.WriteLine(value: $"ERROR: the {backend} leg: {refusal}.");

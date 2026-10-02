@@ -117,6 +117,47 @@ public sealed class DebugLayerOutputLawTests {
         Assert.Equal(actual: ParityCommand.Fold(compared: CliExit.Refused, validated: failed.Passed), expected: CliExit.Refused);
         Assert.Equal(actual: ParityCommand.Fold(compared: CliExit.Failed, validated: clean.Passed), expected: CliExit.Failed);
     }
+    [InlineData(true)]
+    [InlineData(false)]
+    [Theory]
+    public void ARefusedParityLegStillReportsItsValidationVerdict(bool ran) {
+        var process = (ran ? new CliProcessResult(
+            ExitCode: 1,
+            OutputLines: [new CliProcessOutputLine(ElapsedMilliseconds: 0, Line: VulkanValidation, Sequence: 0, Stream: CliProcessOutputStream.Stderr)],
+            Stderr: VulkanValidation,
+            Stdout: string.Empty,
+            TimedOut: false
+        ) : null);
+        var exit = ParityCommand.EvaluateBackend(
+            backend: "vulkan", bakes: true, captureDirectory: string.Empty, debugLayers: true,
+            leg: CliExit.Refused, process: process, validation: out var validation
+        );
+
+        Assert.Equal(actual: exit, expected: CliExit.Refused);
+        Assert.NotNull(@object: validation);
+        Assert.False(condition: validation.Value.Passed);
+        Assert.Contains(expectedSubstring: (ran ? VulkanValidation : "never said it was live"), actualString: validation.Value.Detail);
+        Assert.StartsWith(expectedStartString: "parity: vulkan VALIDATION-FAIL ", actualString: ParityCommand.ValidationLine(backend: "vulkan", verdict: validation.Value));
+    }
+    [Fact]
+    public void AParityLegCannotClaimLivenessFromStdout() {
+        var process = new CliProcessResult(
+            ExitCode: 1,
+            OutputLines: [new CliProcessOutputLine(ElapsedMilliseconds: 0, Line: VulkanLive, Sequence: 0, Stream: CliProcessOutputStream.Stdout)],
+            Stderr: string.Empty,
+            Stdout: VulkanLive,
+            TimedOut: false
+        );
+
+        _ = ParityCommand.EvaluateBackend(
+            backend: "vulkan", bakes: true, captureDirectory: string.Empty, debugLayers: true,
+            leg: CliExit.Refused, process: process, validation: out var validation
+        );
+
+        Assert.NotNull(@object: validation);
+        Assert.False(condition: validation.Value.Passed);
+        Assert.Contains(expectedSubstring: "never said it was live", actualString: validation.Value.Detail);
+    }
     /// <summary>The pipeline-library miss is the one message the layer raises by design. The Direct3D 12 drain leaves
     /// it out where it reads the info queue, the only place the repository names it, so it never reaches stderr, and
     /// the runner's rule fails every <c>[d3d12-debug]</c> line it does see, whatever the line says.</summary>

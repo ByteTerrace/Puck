@@ -1497,7 +1497,8 @@ layer, with the same arguments and the same rule as `puck canary
 the statement that the layer is not live, or no live line for its backend fails
 the leg. Each
 leg prints one line, `parity: <backend> VALIDATION-OK` or `VALIDATION-FAIL`
-naming the first such line. A leg's messages cannot be attributed to one
+naming the first such line, including when its World process fails or cannot start.
+A refused leg keeps its refusal exit code. A leg's messages cannot be attributed to one
 capture, so a `VALIDATION-FAIL` fails the run (exit 1) after every capture's
 verdicts are printed.
 
