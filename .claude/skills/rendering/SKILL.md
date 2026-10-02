@@ -1950,7 +1950,11 @@ nothing and never decides freshness. Present association reads each node's
 `TakeCompletions`, the summary of every render completed since its last read,
 never the newest submission alone. The runtime polls a standing node's
 readbacks only while it `OwesReadbacks` (`RenderGraphRuntime.ReadbackPolls`
-counts the polls). Pending render completion fences survive an install's
+counts the polls). A node leaving the graph hands its completions to
+`RenderGraphRuntime.TakeRetiredCompletions` in `Retire` (disposed: after its
+fences are waited; held: polled through `m_retiredOwing` until it owes nothing
+or its hold releases), and `WorldFrameLoadSource.TakeCompletions` folds the
+retired views' in. Pending render completion fences survive an install's
 counter invalidation; device loss drops renders whose completion is unobserved.
 Timing runs under `WorldGpuTiming.Require`
 (the operator's `world.gpu-timing` demand and the controller's are one

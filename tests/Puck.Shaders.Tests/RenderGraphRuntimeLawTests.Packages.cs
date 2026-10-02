@@ -322,10 +322,27 @@ public sealed partial class RenderGraphRuntimeLawTests {
             owner: this,
             part: context.Part!
         );
+
+        // Each named instance's render grid; an instance not named renders its output's grid.
+        public Dictionary<string, double> Grids { get; } = [];
+
         public bool IsUnchanged(string instance, in FrameContext context) => Unchanged;
+        public IShaderPipelineRenderExtent? RenderExtentOf(string instance) => (Grids.TryGetValue(key: instance, value: out var grid)
+            ? new GridExtent(grid: grid)
+            : null);
         public void OnDeviceLost() => Lost++;
         public void BeginConvergence(string instance, RenderGraphConvergence convergence) => Convergence.Add(item: convergence);
 
+        private sealed class GridExtent(double grid) : IShaderPipelineRenderExtent {
+            public double Grid => grid;
+            public long Revision => 0L;
+
+            public (uint Width, uint Height) CeilingAt(uint width, uint height) => (width, height);
+            public (uint Width, uint Height) FrameAt(uint width, uint height) => (
+                ((uint)RenderGraphExtent.Pixels(display: ((int)width), fraction: grid)),
+                ((uint)RenderGraphExtent.Pixels(display: ((int)height), fraction: grid))
+            );
+        }
         private sealed class Recorder(ViewPackage owner, string part) : IRenderGraphPackageRecorder {
             public void Dispose() { }
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {

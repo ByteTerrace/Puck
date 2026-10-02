@@ -147,6 +147,8 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         return counted;
     }
     /// <inheritdoc/>
+    /// <remarks>The views that left the graph since the previous read hand their completed renders over through the
+    /// runtime (<see cref="RenderGraphRuntime.TakeRetiredCompletions"/>), so a removed view's render still counts.</remarks>
     public ShaderPipelineCompletions TakeCompletions() {
         var completions = default(ShaderPipelineCompletions);
 
@@ -155,6 +157,7 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         }
 
         FindViews(runtime: runtime);
+        completions = runtime.TakeRetiredCompletions(instance: IsView);
 
         foreach (var node in m_nodes) {
             if (node is not null) {
@@ -181,9 +184,8 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
 
         for (var index = 0; (index < instances.Count); index++) {
             var name = instances[index].Name;
-            var view = (string.Equals(a: name, b: WorldViewGraphs.WorldInstance, comparisonType: StringComparison.Ordinal) || (WorldViewNames.ViewOf(instance: name) is not null));
 
-            nodes[index] = ((view && (runtime.Producer(instance: index) is null)) ? runtime.Node(instance: index) : null);
+            nodes[index] = ((IsView(instance: name) && (runtime.Producer(instance: index) is null)) ? runtime.Node(instance: index) : null);
             survivors[index] = ((nodes[index] is { } node) ? Array.FindIndex(array: m_nodes, match: previous => ReferenceEquals(objA: previous, objB: node)) : -1);
         }
 
@@ -192,6 +194,9 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         m_gpu.Reset(survivors: survivors);
         m_steps.Reset(survivors: survivors);
     }
+    // Whether an instance is one of the world's own views: world, or world$2 on.
+    private static bool IsView(string instance) =>
+        (string.Equals(a: instance, b: WorldViewGraphs.WorldInstance, comparisonType: StringComparison.Ordinal) || (WorldViewNames.ViewOf(instance: instance) is not null));
     private bool NodesHold(RenderGraphRuntime runtime) {
         for (var index = 0; (index < m_nodes.Length); index++) {
             if ((m_nodes[index] is { } node) && !ReferenceEquals(objA: node, objB: runtime.Node(instance: index))) {

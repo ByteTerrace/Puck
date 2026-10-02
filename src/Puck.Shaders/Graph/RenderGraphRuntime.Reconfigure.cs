@@ -285,6 +285,7 @@ public sealed partial class RenderGraphRuntime {
 
         var oldNodes = m_nodes;
         var oldProducers = m_producers;
+        var oldSet = m_set;
         var oldSources = m_sources;
         var captured = m_set.Instances[m_captureInstance].Name;
         var captureStillArmed = (m_capture.PendingPath is not null);
@@ -335,7 +336,8 @@ public sealed partial class RenderGraphRuntime {
             nodes: oldNodes,
             producers: oldProducers,
             retired: retired,
-            retiring: retiring
+            retiring: retiring,
+            set: oldSet
         );
 
         // An upload holds no device object; its region is its node's, which the retirement above holds.
@@ -543,8 +545,9 @@ public sealed partial class RenderGraphRuntime {
                         producer: hold
                     ));
                 } else if (m_nodes[binding.Producer] is { } producer) {
+                    var instance = m_set.Instances[binding.Producer].Name;
                     var hold = (retiring[binding.Producer] ??= new RetiredProducer(
-                        dispose: producer.DisposeRetired,
+                        dispose: () => DisposeHeld(instance: instance, node: producer),
                         lost: null,
                         release: m_retiredProducers
                     ));
@@ -565,7 +568,7 @@ public sealed partial class RenderGraphRuntime {
     // hold, and the rest are disposed after the device has finished every submission that may sample their outputs,
     // since a kept consumer's frame in flight may still read them. Every disposal is attempted, and the failures are
     // thrown together after the last.
-    private void Retire(ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, bool[] retired, RetiredProducer?[] retiring) {
+    private void Retire(ShaderPipelineRenderNode?[] nodes, IRenderGraphExternalProducer?[] producers, bool[] retired, RetiredProducer?[] retiring, RenderGraphInstanceSet set) {
         if (!retired.Contains(value: true)) {
             return;
         }
@@ -581,11 +584,18 @@ public sealed partial class RenderGraphRuntime {
             if (retiring[old] is { Holds: > 0 } hold) {
                 m_retiredProducers.Add(item: hold);
 
+                if (nodes[old] is { } held) {
+                    RetireNode(held: true, instance: set.Instances[old].Name, node: held);
+                }
+
                 continue;
             }
 
             try {
-                nodes[old]?.Dispose();
+                if (nodes[old] is { } node) {
+                    RetireNode(held: false, instance: set.Instances[old].Name, node: node);
+                }
+
                 producers[old]?.Dispose();
             } catch (Exception error) {
                 (failures ??= []).Add(item: error);

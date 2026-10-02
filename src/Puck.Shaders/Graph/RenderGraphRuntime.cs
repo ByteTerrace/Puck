@@ -1037,25 +1037,32 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     /// (<see cref="CaptureRequestSlot.RefuseForDeviceLoss"/>), as the root's node refuses one forwarded to it.</summary>
     public void OnDeviceLost() {
         m_capture.RefuseForDeviceLoss();
+        // Renders in flight on the lost device never complete, so a retired node owes nothing more.
+        m_retiredOwing.Clear();
+        m_releasingLostDevice = true;
 
-        // A retired producer a node still holds hears of the loss when that node's loss releases it.
-        foreach (var retired in m_retiredProducers) {
-            retired.OnDeviceLost();
-        }
-        // The nodes first, retiring every lease their lost submissions held, then the producers.
-        foreach (var node in m_nodes) {
-            node?.OnDeviceLost();
-        }
-        foreach (var producer in m_producers) {
-            producer?.OnDeviceLost();
-        }
-        foreach (var source in m_sources) {
-            source?.OnDeviceLost();
-        }
+        try {
+            // A retired producer a node still holds hears of the loss when that node's loss releases it.
+            foreach (var retired in m_retiredProducers) {
+                retired.OnDeviceLost();
+            }
+            // The nodes first, retiring every lease their lost submissions held, then the producers.
+            foreach (var node in m_nodes) {
+                node?.OnDeviceLost();
+            }
+            foreach (var producer in m_producers) {
+                producer?.OnDeviceLost();
+            }
+            foreach (var source in m_sources) {
+                source?.OnDeviceLost();
+            }
 
-        PackagesLostDevice();
-        ReleaseStandIns(wait: false);
-        Release();
+            PackagesLostDevice();
+            ReleaseStandIns(wait: false);
+            Release();
+        } finally {
+            m_releasingLostDevice = false;
+        }
     }
     /// <summary>Schedules and renders one frame.</summary>
     /// <param name="frame">What the frame shows; its roots must include the root instance for it to render.</param>

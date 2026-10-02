@@ -4648,7 +4648,12 @@ resolution, and stay there.
   current grid: each node keeps a summary of every render completed since it
   was last read (`ShaderPipelineRenderNode.TakeCompletions`), not only the
   newest, and the interval needs every view's summary to name the current
-  grid. When the budget falls between two adjacent grids the
+  grid. A view that leaves the graph hands its completed renders to the
+  runtime by instance name (`RenderGraphRuntime.TakeRetiredCompletions`): a
+  disposed node waits out its submissions first, and a node a kept consumer
+  still holds stays polled until it owes nothing or is released. So a removed
+  view's render still counts, across any number of reconfigurations between
+  reads, and each render is handed over once. When the budget falls between two adjacent grids the
   controller settles on the cheaper one: an over-budget sample marks its grid,
   and a rise stops below the mark until a sample, scaled by the two grids'
   area ratio, predicts the marked grid within the budget itself, which clears
