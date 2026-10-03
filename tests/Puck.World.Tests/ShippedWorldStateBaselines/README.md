@@ -121,7 +121,7 @@ with — optionally adding rows a sibling district would have supplied
 | solitaire | `games/solitaire.puck` | spliced | 600 | no |
 | spider | `games/spider.puck` | spliced | 810 | yes |
 | tetromino | `games/tetromino.puck` | document | 130 | yes |
-| tictactoe | `games/tictactoe.puck` | fixture `twin-tictactoe-host.world.json` | 600 | yes |
+| tictactoe | `games/tictactoe.puck` | fixture `twin-tictactoe-host.puck` | 600 | yes |
 | wordspy | `games/wordspy.puck` | fixture `minimal-wordspy-host.puck` | 162 | yes |
 
 "Moves state" is asserted both ways: a sequence declared to move the world-scope

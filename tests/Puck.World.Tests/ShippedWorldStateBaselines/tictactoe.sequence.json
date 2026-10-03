@@ -3,7 +3,7 @@
   "world": "games/tictactoe.puck",
   "host": {
     "kind": "fixture",
-    "path": "tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json"
+    "path": "tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.puck"
   },
   "expectsStateChange": true,
   "steps": [

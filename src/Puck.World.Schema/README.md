@@ -818,7 +818,7 @@ Every reserved channel is a row of the rewrite's channel table, which carries
 its grammar; `WorldModuleNamespace.DescribesChannel` names them, and a spelling
 the table does not hold is left as written. An alias is a bare identifier (letter or underscore, then letters, digits, and
 underscores), refused by name otherwise. The same fragment composes twice under
-two aliases (`tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.world.json`),
+two aliases (`tests/Puck.World.Tests/Fixtures/twin-tictactoe-host.puck`),
 and an entry with no `as` composes its names unchanged.
 
 **Exports: a module's names are private by default.** A module document may
