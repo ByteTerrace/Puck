@@ -1866,30 +1866,28 @@ jumbotron view) that are not this type's concern. See
 `Puck.World.Addons/README.md` for the concrete host's own shipped-engine
 list and boot/link mechanics.
 
-### Machine memory bindings (`WorldServer.MachineMemory.cs`)
+### Machine memory bindings (`WorldServer.NamedMachineMemory.cs`)
 
-A screen row's `memory` array (`WorldScreenMemory`) is a standing mirror
-between one address on the machine's bus and one kind=Int `state.world` cell
-—distinct from an addon row's own `WorldAddonMemoryWatch` (an edge-triggered
-event feed for a mounted guest, unfolded). `SyncMachineMemory` runs once per
-tick, right before `IWorldMachineHost.Advance` steps every booted machine: a
-`Write` binding reads the cell (`WorldStateReader.TryRead`) and, when its
-value differs from the last value this binding successfully poked,
-`IWorldMachineHost.TryPokeMessage`s it in (little-endian, low byte at the
-declared address) so it lands before this tick's step—the memo updates
-only on a successful poke, so an as-yet-unbooted machine is retried every
-tick rather than silently latching a value it never delivered. A `Read`
-binding peeks the machine (`TryPeekMessage`) and, when the value differs from
-the last value it mirrored, applies one `WorldMutation.UpsertStateCell`
-(`Principal.World`) through the ordinary door, without this seam reaching
-into the arena the tick's own rules write, and delivers through `WorldDocument.DeliverPending`, matching every other engine-driven
-per-tick cell write in this project (`WorldTick.Fields.cs`). Both memos are
-keyed by (engine screen index, bus address), so an unmoved value costs one
-dictionary lookup and nothing past it: the peek/poke round trip through
-`Puck.Machines.QueuedMachineWorker`'s marshaled worker thread is a real,
-pre-existing cost every memory read/write pays regardless of caller (shared
-by `screen.peek` and an addon's own memory watch)—what a quiet binding
-elides is the mutation/install cost on top of it, not that shared floor.
+`machines[].memory` (`WorldMachineMemory`) is the one binding surface between
+a named machine's hardware and an Int `state.world` cell. Each binding names
+its provider address space, a raw address or exported symbol, and a scalar
+format. `WorldMachineHost.Bindings.cs` resolves the address and checks the
+provider's supported range, widths and access modes when preparing the machine.
+
+`SyncNamedMachineMemory` visits the bindings in document order once per tick,
+after rules and before `IWorldMachineHost.Advance`. A `Write` binding reads
+the cell through `WorldStateReader.TryRead`, encodes it under the declared
+conversion policy, and sends it through `IWorldMachineHost.WriteHardware`.
+A `Read` binding uses `Inspect` and mirrors the decoded value through
+`WorldMutation.UpsertStateCell` as `Principal.World`, delivering accepted
+changes through `WorldDocument.DeliverPending`.
+
+Observations belong to the machine name, binding name and instance generation.
+`MachineBindingState` exposes availability, the last accepted value and the
+provider or conversion refusal. Unavailable observations retain their last
+accepted value. The default `onChange` policy skips an unchanged read's cell
+mutation and an unchanged, successfully delivered write's hardware access;
+`everyTick` explicitly requests repeated transfers.
 
 ## The addon host seam (`IWorldAddonHost.cs`, `WorldAddonReceipt.cs`)
 

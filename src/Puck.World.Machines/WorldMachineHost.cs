@@ -1307,32 +1307,6 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
         return (Ok: true, Message: "");
     }
     /// <inheritdoc/>
-    public (bool Ok, string Message) TryPokeMessage(int index, int address, byte value) {
-        if (m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) is false) {
-            return (Ok: false, Message: $"no screen {index} declared");
-        }
-
-        var machine = ResolveMachine(screenIndex: index).Runtime;
-
-        if (machine is null) {
-            return (Ok: false, Message: $"screen {index} has no machine to write");
-        }
-
-        if (machine is not IMachineMemoryPeek peek) {
-            return (Ok: false, Message: $"screen {index}'s machine does not support memory poke");
-        }
-
-        peek.PokeByte(
-            address: address,
-            value: value
-        );
-
-        return (Ok: true, Message: "");
-    }
-    /// <inheritdoc/>
     public bool TryReadLinkMembers(string name, out IReadOnlyList<int> members) {
         if (m_links.TryGetValue(
             key: name,
