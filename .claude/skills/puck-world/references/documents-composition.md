@@ -285,8 +285,7 @@ ladder (0.5/1/2 m cubes) ahead-left, the slope fan (30/45/55/65/75°, bracketing
 the wall with a 1.5 m-clearance and a 0.5 m-clearance overhang at the right edge (a 1 m column,
 `pillarUnderhang`, joins the floor to the low overhang's underside so a whole-sphere pull can crawl
 floor → column → ceiling without leaving contact), the pit (a `Subtraction` carve) behind, and 1 m compass posts on the platform's axis midpoints — `axisX` red,
-`axisZ` blue, a post at the ENGINE-positive end and a flat disc at the negative — with `farPillar`
-120 m ahead on the net as the fog/far-distance landmark. What it measures (`body.fly` from each
+`axisZ` blue, a post at the ENGINE-positive end and a flat disc at the negative — What it measures (`body.fly` from each
 spawn, `body.where` samples): the 30/45/55° ramps climb at walking speed, the 65/75° faces stop the
 body at their foot (`FixedContactPushMath` treats a non-walkable, non-ceiling normal as a WALL —
 penetration resolved across `up`, the approach clamp horizontal only — pinned by
@@ -300,7 +299,7 @@ contact solver grounds on, a phantom lip ~radius wide at the rim) — the carve 
 net to above head height for exactly that reason, and a void that must be exact is built from union
 geometry instead. The chase rig's orbit yaw is `state.look.behind`, world-referenced, so a spawn's
 `yawDegrees` turns the body, never the camera. Three population creatures live on the platform as
-`inhabit` rows with `wander` producers (`spiderDen`, `dragonflyPerch`, `houndRun`), each a different
+`inhabit` rows with `wander` producers (`spiderDen`, `dragonflyPerch`, `houndPack`), each a different
 hold list over the same primitives (see [documents-motion.md](documents-motion.md)): the spider (`spiderKit`) pulls any face in a `[0, 180]` cone,
 the dragonfly (`dragonflyKit`, the same `walk` program every kit here shares) holds the air on full
 lift with its own row's `thrust` climbing, and keeps its altitude
@@ -328,11 +327,8 @@ volumes, move speed/turn rate, hold probes/standoff/reach, a hold's own gravity 
 vertical-channel envelope (including a medium's idle/settle target), a wall hold's travel speed, and a pull's own rate; the client multiplies the same live cell into the
 rendered rig AND the seat chase camera's orbit distance and look-at height
 (`Client.WorldFramePresenter.ResolveCamera`), so a shrunk body stays framed instead of shrinking to a
-speck on screen. A `tabletop` placement (a solid pedestal table, 1.2 m clearance under its top) carries
-the chess board (below); `drinkMe` sits north of it, its region kept clear of the tabletop's own
-footprint and of every resting piece's contact radius, so shrinking never jostles the board. `eatMe`
-and the `table` spawn point sit south of the tabletop, inside the `eatMe` region already, so an
-unshrunk arrival reads `scale=1` from the first tick. `body.where`'s `scale=` echo is the read-back.
+speck on screen. The `table` spawn point sits inside the `eatMe` region already, so an
+unshrunk arrival reads `scale=1` from the first tick; `drinkMe` sits north of it. `body.where`'s `scale=` echo is the read-back.
 Body-vs-body contact, overlap events, the cross-boundary continuum trajectory, the adjacency sweep's
 LOCAL side, and the self-collision sweep all read each body's live-scaled collider volumes; a rigid
 body's mass, inertia, bounding radius, centre of mass (`com=` on `body.where`), and linear rest
@@ -340,7 +336,8 @@ threshold scale with it too (`WorldBody.ScaleRigid`). Only the adjacency sweep's
 neighbour authority's own entities) still reads an unscaled collider, since no delivered snapshot yet
 carries a remote entity's live Scale.
 
-The tabletop's `chessBoard` Grid topology (8x8, 0.2 m cells) carries 32 `piece`-kit rigid bodies.
+Physical chess is not part of the shipped island: it is the Parlor package's
+`worlds/parlor/chess.puck`, whose tabletop's `chessBoard` Grid topology (8x8, 0.2 m cells) carries 32 `piece`-kit rigid bodies.
 Its candidate matcher unions four lossless bit-plane differences, rejects changes outside the move
 footprint, and directly compares the at most four affected cells. Every pre-move read uses `lastLegal`, never a refused observation.
 Local bindings hold attack and geometry intermediates. A legal move commits turn, board, four
@@ -352,9 +349,8 @@ piece count minus occupied squares. A `:between:0:63` count reduction over
 64 minus the empty-square mask's population. The [state reduction contract](../../../../docs/reference/state/expressions.md#reductions)
 owns range bounds, `:where:` composition, live reads, and pricing.
 Board-history fingerprints remain diagnostic, not repetition adjudication.
-The [chess authoring notes](../../../../src/Puck.World/README.md#the-world-as-data) own these contracts.
-They also own the closed -6..7 encoding, the topology shifts, and the bit-extract/deposit
-projection of home-piece losses into castling rights. The existing two-rule settle counter
+The `chess.puck` source owns these contracts, including the closed -6..7 encoding, the
+topology shifts, and the bit-extract/deposit projection of home-piece losses into castling rights. The existing two-rule settle counter
 avoids per-moving-tick epoch writes; `$physics:quiescent` is bool-kind, so an integer
 conditional expression cannot combine its gates.
 Periodic expression masks use `replicationMask(width)` and `repeatBits(pattern, width)`;
@@ -371,8 +367,8 @@ rendered as 64 `boardSquareLight`/`boardSquareDark` placements, one per cell, co
 capsule (radius 0.35, live-scaled by `Scale` like every other collider — `scale=1` near the table, so
 its full radius applies there) still reaches roughly 0.4 m from its own center, well past a single
 0.2 m cell — so a body cannot stand ANYWHERE on the board's own 1.6 m footprint (let alone tread among
-the pieces) without risking contact; the garden's own proof keeps Wren at a safe standoff beside the
-table and moves pieces by console verb (`body.impulse`/`body.pose`), never by having her body touch
+the pieces) without risking contact; a proof keeps the body at a safe standoff beside the
+table and moves pieces by console verb (`body.impulse`/`body.pose`), never by having the body touch
 one. The `plan` row is a rendered-nothing seam: an addon may write candidate cell keys into it and
 `world.tabletop` echoes them back, but no client code paints a highlight from it — chess set style and
 board rendering are this lane's; painting `plan` is deliberately left to a future addon.

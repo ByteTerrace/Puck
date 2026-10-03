@@ -211,9 +211,9 @@ stable, and never add a path that reproduces old-wrong behaviour.
   are enumerated at
   [load-bearing invariants](../../../../src/Puck.Maths/FixedPoint/README.md#load-bearing-invariants).
 - **Ties go to even, and there are exactly three exceptions** — `Exp2`,
-  `Log2`/`Atan2`, and `SinCos`. Each says so at the member and the wing argues
-  why. Assume ties-to-even everywhere else; do not invent a fourth exception,
-  and do not "correct" one of the three.
+  `Log2` and `Atan2`, which narrow half up. Each says so at the member and the
+  wing argues why (`SinCos` is ties-to-even). Assume ties-to-even everywhere
+  else; do not invent a fourth exception, and do not "correct" one of the three.
 - **Do not reassociate a rounded product.** `INumber<T>` grants capabilities,
   not a proof that multiplication is associative: `(a·b)·c ≠ a·(b·c)` at some
   operands over `FixedQ4816`. The fused kernels exist so a whole expression
@@ -280,7 +280,7 @@ wing it touched, and in the ordinary case owes nothing else:
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
 ```
 
-That is the Default tier — Smoke + Default, **about thirteen seconds**. It is
+That is the Default tier — Smoke + Default, **under thirty seconds**. It is
 cheap on purpose and it is where the *structural* gates live: the coverage
 ratchet and both leg gates carry the `Default` trait, so this run is the only
 one that checks a new public member is classified, that legs are declared and
@@ -297,12 +297,12 @@ in a change loop.
 | Tier | Command | Budget | When |
 |---|---|---|---|
 | Smoke | `--settings tests/Puck.Maths.Tests/smoke.runsettings` | < 2 s | tight inner loop while iterating one kernel; carries **no new evidence** — every row is a declared mirror |
-| **Default** | *(bound by default — no `--settings`)* | ~13 s | **every change**, unconditionally |
+| **Default** | *(bound by default — no `--settings`)* | < 30 s | **every change**, unconditionally |
 | Deep | `--settings tests/Puck.Maths.Tests/deep.runsettings` | minutes | **before you commit**, and before any rounding change lands |
 | Exhaustive | `--settings tests/Puck.Maths.Tests/exhaustive.runsettings` | long | on demand or nightly; full-width sweeps over an entire carrier |
 
-**Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes
-and does not support running a subset. Run it only
+**Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes;
+narrow it with a `--filter` on the law id when one law is the question. Run it only
 when the member you touched names it as its gate of record, which
 `coverage-manifest.json` and `Coverage.cs`'s waiver reasons will tell you by
 name. When in doubt, check the waiver rather than running the tier.

@@ -27,7 +27,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | Program model and ISA | `src/Puck.SignedDistance` (`SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfDomainOp`, `SdfProgram*.cs`, `SdfProgramBuilder*.cs`) | [program model](../../../docs/rendering/sdf/handbook/program-model.md), [materials and primitives](../../../docs/rendering/sdf/reference/materials-and-primitives.md), [Lipschitz](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md) |
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, `SdfBandedFieldEvaluator`, `BakedWorldQuery`); seams `IWorldQuery`/`IFieldEvaluator` in `src/Puck.Maths/FixedPoint` | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
 | Prototype bakes (mesh, textures, impostor) | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakeTier`, `SdfBakedTexture`); `src/Puck.Assets/Textures` (BC4/BC5/BC6H/BC7 codecs, `TextureMipChain`, `OctahedralNormal`); `CreationBaker`, `CreationBakeKey`, `CreationBakeCodec` in `src/Puck.World.Authoring/Authoring`; `WorldBakeStore`, `WorldBakeChunk` in `src/Puck.World.Schema`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes), [creation bakes](../../../docs/architecture/worlds.md#creation-bakes) |
-| GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`); the `sdf.world` fragment `SdfWorldPackage` in `src/Puck.Shaders/Graph` | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
+| GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`); the `sdf.world` fragment `SdfWorldPackage` in `src/Puck.Shaders.Model/Graph` | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `isa/sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), the `field/` modules the interpreter (`mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`), the `frame/` modules the frame's data (the screen tables, the key light, the levers), the `march/`/`surface/`/`shade/`/`debug/` modules the view logic, `field/sdf-vm.hlsli` and `passes/sdf-world.hlsli` the two aggregators, one `*.comp.hlsl` wrapper per dispatch under `passes/` | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
 | Cameras and views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewTransition`); `WorldViewInstances` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.CameraViews.cs`/`.Session.cs`/`.Views.cs` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldViewGraphHost`, `WorldRootGraph`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
@@ -1059,9 +1059,10 @@ These are one-line cautions; the owning pages hold the derivations.
   counting functions in its generated include: `puckCountWork` (a wave sum
   added by the first active lane) for a compute kernel and
   `puckCountFragmentWork` (the same over the lanes that are not helper lanes)
-  for a fragment stage, laid out from `GpuKernelCounters`' constants. Every
-  other generated include, a document pass's among them, declares the same two
-  functions empty, so a kernel counts unguarded and a package's kernel compiles
+  for a fragment stage, and `puckCountSky` (a wave sum of the sky evaluations,
+  which the sky, composite and sky-environment kernels call), laid out from
+  `GpuKernelCounters`' constants. Every other generated include, a document
+  pass's among them, declares the same three functions empty, so a kernel counts unguarded and a package's kernel compiles
   as a document pass naming its source; never guard a count with a macro.
   `DocumentPassPackageKernelLawTests` compiles every package kernel that way.
   Its node keeps
@@ -1072,8 +1073,8 @@ These are one-line cautions; the owning pages hold the derivations.
   the copy (`IGpuRecorder.CopyBuffer`) and the barrier to the host
   (`GpuStage.Host`, `GpuAccess.HostRead`), outside every pass, and names the
   slot to its ledger (`GpuWorkLedger.ReadOnCompletion`), which adds each row to
-  its pass as `gpu.march.steps` and `gpu.texels.written` once the submission
-  completes. A package pass that skips the frame is counted skipped
+  its pass as `gpu.march.steps`, `gpu.texels.written` and `gpu.sky.evaluations` once
+  the submission completes. A package pass that skips the frame is counted skipped
   (`GpuWorkLedger.SkipPass`), never executed with zeros. A
   recording gets its row in `RenderGraphPackageRecording.WorkCounters`; a
   package recorder writes it through `RenderGraphPackageWorkCounters`, which
@@ -1164,8 +1165,8 @@ These are one-line cautions; the owning pages hold the derivations.
   so names appear only when something is reported.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
-  backends) except the kernel kinds (`GpuWork.KernelKinds`: march steps and
-  texels written), which are `PerBackendDeterministic` like created-object
+  backends) except the kernel kinds (`GpuWork.KernelKinds`: march steps, texels written
+  and sky evaluations), which are `PerBackendDeterministic` like created-object
   kinds, and anything
   paced by the clock or a cross-process cache `Pacing`.
   `world.counters --json` publishes the classes in its `kinds` legend, and
@@ -1364,7 +1365,7 @@ The engine's kernels are one table, `SdfKernel`: each kernel's stem
 (`SdfKernelSet.StemOf`), pipeline (`SdfWorldTables.PipelineLayouts.Specs`),
 build order and loaded bytecode (`SdfKernelSet`) derive from it, so a new
 kernel is one enum member, one stem and its `.comp.hlsl`.
-The grouped binding contract is the pass interface in `src/Puck.Shaders/Interface`
+The grouped binding contract is the pass interface in `src/Puck.Shaders.Model/Interface`
 ([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)). Every
 shipped pass binds its groups as sets: each pipeline pass and package pass
 (post-process, `place`, `overlay`, the source conversions) through its

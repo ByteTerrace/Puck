@@ -150,17 +150,18 @@ state row's own name and in the lane expression.
 
 ## Volumes
 
-`volumes` is up to 8 emissive flow media per creation, presentation only — no
-field, no collider.
+`volumes` is up to 64 bounded media per creation (`SdfProgramBuilder.MaxVolumes`):
+emissive `flow` media and `cloud` density volumes. Presentation only — no field,
+no collider.
 
 | Field | Range | Default |
 |---|---|---|
-| `kind` | `"flow"` only | required |
+| `kind` | `"flow"` or `"cloud"` | required |
 | `position`, `rotation`, `halfExtent` | finite; half-extent positive on every axis | required |
 | `ramp` | 1 to 4 `{ density, color }` stops, density strictly increasing in [0, 1], color `#RRGGBB` only | required |
 | `parent` | the `name` of a shape in the same creation | null, the creation root |
-| `axis` | > 0 | 2 × halfExtent.Y |
-| `width` | > 0 | halfExtent.X |
+| `axis` | > 0; flow only | 2 × halfExtent.Y |
+| `width` | > 0; a cloud's noise-cell size | halfExtent.X |
 | `speed` | finite | 1 |
 | `seed` | uint | 0 |
 | `steps` | [8, 64] | 32 |
@@ -169,6 +170,9 @@ field, no collider.
 | `pulseAmplitude` | [0, 1] | 0 |
 | `pulseFrequency` | ≥ 0 | 0 |
 | `intensityLane` | [0, 3] | null |
+| `enabled` | bool; a disabled volume is omitted from emission | true |
+| `coverage` | [0, 1]; cloud only | 0.55 |
+| `softness` | (0, 1]; cloud only | 0.18 |
 
 A volume attaches to a **shape by name**, and inherits that shape's live frame.
 
@@ -212,8 +216,8 @@ its footprint is isotropic. Unequal size axes do not produce a strip highlight.
 
 ### Sky
 
-`render.sky` layers, each kind at most once, composited gradient, stars, sun
-disc, then clouds. A `gradient` needs 2 to 4 stops with `elevation` in [-1, 1]
+`render.sky` layers, each kind at most once, composited gradient, then
+sun disc and stars, then clouds, with fog read on its own. A `gradient` needs 2 to 4 stops with `elevation` in [-1, 1]
 strictly ascending. `fog` carries `density` per world unit. `sunDisc` indexes a
 directional light slot. `stars` and `clouds` carry their own density, seed, and
 motion terms.
@@ -225,13 +229,14 @@ motion terms.
 | `shadows` | `Off`/`Low`/`Medium`/`High` | `Off` | `world.shadows` |
 | `shadowCrowdRadius` | 0..100 | 0 | `world.shadows` |
 | `ambientOcclusion` | bool | false | `world.ao` |
-| `renderScale` | `Native`..`Eighth` | `Native` | `world.render-scale` |
+| `renderScale` | scalar ceiling in [0.125, 1] | 1 | `world.render-scale` |
 | `temporal` | bool | false | `world.temporal` |
+| `dynamicResolution` | bool | false | `world.render-scale auto` |
 | `upscaleSharpness` | [0, 1] | 0 | `world.upscale-sharpness` |
 | `farDistance` | [1, 8192] | 40 | `world.budget` |
 | `tonemap` | `None`/`Filmic` | `None` | `world.lighting` |
-| `cycle` | a state row plus ≥ 2 keys at ascending `at` in [0, 1) | absent | `world.lighting` |
+| `lighting.clock` + `lighting.keys`, `sky.clock` + `sky.keys` | a `timeline` clock name plus keys at ascending `at` in [0, span); a key states only the fields it moves | absent | `world.lighting` |
 
 `world.lighting` echoes the whole lighting, curvature, sky, environment, tonemap,
-and cycle state in one line each. An unauthored field reads `default`, meaning
+and the lighting and sky keys in one line each. An unauthored field reads `default`, meaning
 the engine's pinned value for that kind — not zero.

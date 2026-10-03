@@ -8,11 +8,13 @@ file is the decision/derivation prose the schema cannot state.
 
 `WorldRenderDefaults` (`WorldRenderDefaults.cs`), optional; `Absent` is the
 inert section. The boot levers (`shadows`, `shadowCrowdRadius`,
-`ambientOcclusion`, `renderScale`, `upscaleSharpness`, the `low`/`medium`/
-`high` presets) seed `WorldRenderSettings` once at boot and move only through
-their verbs afterwards; `world.save` folds a moved lever back into the section
-when the world authors one (`WorldSessionLevers.Fold`), and never writes a
-`render` section the world omits. Three members are read off the LIVE definition every frame instead,
+`ambientOcclusion`, `renderScale`, `upscaleSharpness`, `temporal`,
+`dynamicResolution`, the `low`/`medium`/`high` presets, each also carrying a
+`renderScaleFloor` tier) seed `WorldRenderSettings` once at boot and move only
+through their verbs afterwards; `world.save` folds a moved lever back into the
+section when the world authors one (`WorldSessionLevers.Fold`), creates the
+section when the world omits it and the render-scale ceiling moved, and
+otherwise leaves an absent `render` section absent. Three members are read off the LIVE definition every frame instead,
 so `world.row.set render {…}` lands on the next frame with no rebuild:
 `lighting`/`sky` (`WorldEnvironmentResolve`, every keyed value at its clock's presented phase) and `farDistance`
 (`WorldRenderFarDistance.Resolve`). `farDistance` is the depth every camera
@@ -421,7 +423,7 @@ is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
 for the authored `collision.bodyContacts` rigid fields, and the
 [server](../../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
 references for the mechanics. The shipped garden's `billiardsTray`/
-`bowlingLane`/`dominoes` placements are the worked example.
+`bowlingLane`/`dominoRun` placements are the worked example.
 
 ### `carry` and `tether` facets
 

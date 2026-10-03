@@ -42,9 +42,8 @@ while the console addresses another instance (`WorldConsoleAddressLawTests`).
 The `Puck.World`-resident desktop modules still take the boot link, which is
 safe only because the desktop's authority always resolves boot.
 
-Two definition factories, plus two `Puck.World` wrappers over them. A sweep that
-stops at the two factories MISSES most registration sites — the wrappers carry
-~69 of them.
+Two definition factories, plus one `Puck.World` wrapper over them. A sweep that
+stops at the two factories MISSES the wrapper's registration sites.
 
 - `CommandDefinition.Verb(...)` — bare no-arg verb (the bound-input shape).
   Takes `valueKind`, so a bound row may carry a constant (F1..F4 hand
@@ -58,10 +57,9 @@ stops at the two factories MISSES most registration sites — the wrappers carry
   (`Axis1D`), or `BindingVocabularyCheck` sees a mismatch — see the
   recompose trap below.
 - `WorldCommandDefinition.Simulation(name, description, handler)` — an
-  unbindable Simulation-routed wire verb.
-- `WorldCommandDefinition.Row<T>(name, description, info, toMutation, link)` —
-  a whole-row document upsert: inline-JSON parse plus submission. The general
-  `world.row.set`/`world.row.remove` door generalizes exactly this shape.
+  unbindable Simulation-routed wire verb. The whole-row document upsert the
+  general `world.row.set`/`world.row.remove` door generalizes has no factory of
+  its own.
 
 `Bindability` is required (`Unspecified` throws at construction). The
 description IS the help text — `help` prints `name - description` for every
@@ -355,7 +353,10 @@ refuses it, and a `world.wait <ticks>` after it has the capture behind it.
 
 Arming a second capture while one is still pending is REFUSED by name
 (`RenderGraphRuntimeNode.PendingCapturePath`) and counts in `wire.errors`:
-the render graph admits one pending request at a time. A mutation barrier orders command
+the render graph admits one pending request at a time.
+`world.screenshot <path.png> crossing [player]` instead waits for the first frame
+that seat presents after its route moves, kept apart from an ordinary capture so
+another may be armed and land meanwhile. A mutation barrier orders command
 application, but does not itself prove the capture has completed; use the
 capture outcome before reusing a path or claiming its bytes exist.
 

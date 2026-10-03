@@ -26,7 +26,8 @@ Primary code:
 - `Puck.World.Client/WorldFramePresenter.cs`, `WorldAdjacencySceneEmitter.cs`, and
   `WorldContinuum.cs` — local and neighbouring-authority render callers of the
   same seat state and generation-addressed continuum.
-- `Puck.World/WorldViewCommandModule.cs` — read-back and composition verbs.
+- `Puck.World/WorldViewCommandModule.cs` — read-back and composition verbs
+  (`world.view.camera` itself lives in `WorldSeatCameraCommandModule.cs`).
 
 ## Document shape
 
@@ -258,7 +259,11 @@ state. `views.layouts` maps normalized slots to joined seats, named cameras,
 or `views.graphs` instances (`instance`; a slot names at most one of `camera`
 and `instance`).
 An empty list uses the built-in one-to-four-seat ladder. Layout transition
-duration and render scale remain authored on each layout. A layout whose
+duration and the mid-transition render-scale dip (`transitionRenderScale`)
+remain authored on each layout; a view's durable render quality is the
+`views.quality` rows (`WorldViewQuality`: a render view's `name`, or `*` for the
+player-view defaults, with `renderScale`, `renderScaleFloor` and `tier`; session
+pins have no document member). A layout whose
 `seatCount` no joined-seat count can reach (5+) is selectable only through
 `view.override layout <name>` — the authoring shape for an override-only view.
 Under a camera-only layout, a joined seat the layout binds no seat slot to

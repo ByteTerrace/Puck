@@ -86,7 +86,7 @@ Output is records and nothing else — no counts, no banner:
 
 ```
 src/Puck.Abstractions/Memory/AllocatorExtensions.cs:14:24 decl Method Puck.Abstractions.Memory.AllocatorExtensions.Alloc(Puck.Abstractions.Memory.IAllocator, nint)
-src/Puck.Vulkan/Apis/VulkanNativeCommandBufferRecordingApi.cs:347:35 ref Method Puck.Abstractions.Memory.AllocatorExtensions.Alloc(Puck.Abstractions.Memory.IAllocator, nint)
+src/Puck.Vulkan/Apis/VulkanNativeCommandBufferRecordingApi.cs:352:35 ref Method Puck.Abstractions.Memory.AllocatorExtensions.Alloc(Puck.Abstractions.Memory.IAllocator, nint)
 ```
 
 `path:line:col` leads, so a line parses like a `search` hit and pastes into an
