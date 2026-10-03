@@ -297,13 +297,23 @@ public sealed class WorldAuthorityCheckpointLawTests {
             WorldAuthorityCheckpointCodec.SupportedVersion,
             System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(source: bytes.AsSpan(start: 4))
         );
+        // The law never pins a token's literal: whatever the current key is, the Hello door accepts it and refuses any
+        // other, and the federation key stays a distinct identity.
+        Assert.True(condition: WorldHelloDoor.TryAccept(
+            offeredKey: WorldProtocol.WireProtocolKey,
+            refusal: out _
+        ));
+        Assert.False(condition: WorldHelloDoor.TryAccept(
+            offeredKey: (WorldProtocol.WireProtocolKey ^ 1UL),
+            refusal: out var helloRefusal
+        ));
         Assert.Equal(
-            actual: WorldProtocol.WireProtocolKey,
-            expected: 0x354C52574B435550UL
+            actual: helloRefusal,
+            expected: WorldHelloRefusal.WireProtocolKeyMismatch
         );
-        Assert.Equal(
+        Assert.NotEqual(
             actual: WorldFederationCodec.WireKey,
-            expected: 0x364445464B435550UL
+            expected: WorldProtocol.WireProtocolKey
         );
         Assert.True(
             condition: WorldAuthorityCheckpointCodec.TryDecode(
