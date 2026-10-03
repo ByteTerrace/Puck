@@ -13,6 +13,7 @@ namespace Puck.World.Server;
 /// address can ever hold — deliberately stricter than the checkpoint codec's own leaf used to be, since a checkpoint
 /// is trusted local state while a federation peer's bytes are not: the one shared reader applies the untrusted-input
 /// discipline everywhere.</summary>
+[FormatLeaf]
 internal static class WorldWireLeaves {
     /// <summary>Reads a <see cref="WorldEntityAddress"/>, refusing a blank authority.</summary>
     public static WorldEntityAddress ReadEntityAddress(ref WireReader reader) => new(

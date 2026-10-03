@@ -15,13 +15,25 @@ internal static class FormatShapesFiles {
     /// <summary>The class each file declares.</summary>
     public const string ClassName = "FormatShapes";
 
-    /// <summary>The constant a format's fingerprint is read from.</summary>
-    /// <param name="id">The format's ledger id, <c>Type.Member</c>.</param>
+    /// <summary>The constant a format's fingerprint is read from, named by the declaring symbol alone: a ledger id that
+    /// two files share carries the path after an <c>@</c> to tell its entries apart, which is the ledger's own business and
+    /// never a C# identifier.</summary>
+    /// <param name="id">The format's ledger id, <c>Type.Member</c> with or without the ledger's <c>@path</c>.</param>
     /// <returns>The member name on <see cref="ClassName"/>.</returns>
-    public static string ConstantOf(string id) => id.Replace(
+    public static string ConstantOf(string id) => SymbolOf(id: id).Replace(
         newValue: string.Empty,
         oldValue: "."
     );
+    /// <summary>The declaring type and member of a ledger id: the id without its <c>@path</c> suffix.</summary>
+    /// <param name="id">The ledger id.</param>
+    /// <returns><c>Type.Member</c>.</returns>
+    public static string SymbolOf(string id) {
+        var at = id.IndexOf(value: '@');
+
+        return ((at < 0)
+            ? id
+            : id[..at]);
+    }
     /// <summary>Plans every generated file: each project's constants for the formats its source files declare, each in
     /// the namespace of the file that declares it, so the codec reads <c>FormatShapes.X</c> unqualified and no namespace
     /// exists that the source did not already have.</summary>
@@ -56,7 +68,7 @@ internal static class FormatShapesFiles {
                         throw new InvalidOperationException(message: $"'{entry.Id}' spells the constant {constant}, which another format of namespace {group.Key} already does.");
                     }
 
-                    builder.Append(value: $"        /// <summary>The shape fingerprint of <c>{entry.Id}</c>, declared in <c>{entry.Source}</c>.</summary>\n");
+                    builder.Append(value: $"        /// <summary>The shape fingerprint of <c>{SymbolOf(id: entry.Id)}</c>, declared in <c>{entry.Source}</c>.</summary>\n");
                     builder.Append(value: $"        public const string {constant} = \"{entry.Shape}\";\n");
                 }
 

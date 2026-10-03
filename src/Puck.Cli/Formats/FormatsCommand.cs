@@ -129,13 +129,55 @@ internal static class FormatsCommand {
 
         return existing;
     }
+    private static int Explain(string id) {
+        if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
+            return CliExit.Refused;
+        }
+
+        try {
+            if (FormatVersionsLedger.Explain(
+                files: ReadSources(repositoryRoot: repositoryRoot),
+                id: id
+            ) is not var (entry, closure)) {
+                return CliExit.Refuse(
+                    verb: Verb,
+                    what: id,
+                    why: "no format has this id; see FormatVersions.json."
+                );
+            }
+
+            Console.WriteLine(value: $"{entry.Id} ({entry.Source}) token {entry.Token} shape {entry.Shape}: {closure.Units.Count} unit(s) in {closure.Units.Select(selector: static unit => unit.Path).Distinct(comparer: StringComparer.Ordinal).Count()} file(s), {closure.Open.Count} open call(s).");
+
+            foreach (var group in closure.Units.GroupBy(keySelector: static unit => unit.Path, comparer: StringComparer.Ordinal).OrderBy(keySelector: static group => group.Key, comparer: StringComparer.Ordinal)) {
+                Console.WriteLine(value: $"  {group.Key}");
+
+                foreach (var unit in group.OrderBy(keySelector: static unit => unit.Key, comparer: StringComparer.Ordinal)) { Console.WriteLine(value: $"    {unit.Kind.ToString().ToLowerInvariant()} {unit.Key}"); }
+            }
+            foreach (var call in closure.Open) { Console.WriteLine(value: $"  open {call}"); }
+
+            return CliExit.Success;
+        } catch (FormatBoundaryException exception) {
+            foreach (var problem in exception.Problems) { Console.Error.WriteLine(value: $"{Verb}: {problem}"); }
+
+            return CliExit.Failed;
+        }
+    }
     private static int Run(bool check) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
 
         var sources = ReadSources(repositoryRoot: repositoryRoot);
-        var current = FormatVersionsLedger.Discover(files: sources);
+        IReadOnlyList<FormatEntry> current;
+
+        try {
+            current = FormatVersionsLedger.Discover(files: sources);
+        } catch (FormatBoundaryException exception) {
+            foreach (var problem in exception.Problems) { Console.Error.WriteLine(value: $"{Verb}: {problem}"); }
+
+            return CliExit.Failed;
+        }
+
         var path = Path.Combine(
             path1: repositoryRoot,
             path2: FormatVersionsLedger.FileName
@@ -151,6 +193,21 @@ internal static class FormatsCommand {
         );
 
         if (!check) {
+            var before = ((File.Exists(path: path) && FormatVersionsLedger.TryParse(
+                entries: out var earlier,
+                error: out _,
+                json: File.ReadAllText(path: path)
+            ))
+                ? earlier
+                : []);
+            var refusals = FormatVersionsLedger.Refusals(current: current, recorded: before);
+
+            if (refusals.Count != 0) {
+                foreach (var refusal in refusals) { Console.Error.WriteLine(value: $"{Verb}: {refusal}"); }
+
+                return CliExit.Failed;
+            }
+
             var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
             File.WriteAllText(
@@ -236,6 +293,12 @@ internal static class FormatsCommand {
             run: Run
         );
 
+        var explain = new Option<string?>(name: "--explain") { Description = "Write nothing; print what one format's shape covers (units by file) and the calls it leaves open." };
+
+        command.Add(option: explain);
+        command.SetAction(action: parseResult => ((parseResult.GetValue(option: explain) is { } id)
+            ? Explain(id: id)
+            : Run(check: parseResult.GetValue(option: ((Option<bool>)command.Options.First(predicate: static option => (option.Name == "--check")))))));
         command.Detail(detail: """
             Records every strictly versioned wire, persisted, or cache format in the tracked
             source under src/: a static constant or read-only field whose initializer is a
@@ -245,13 +308,16 @@ internal static class FormatsCommand {
             token that is a four- to eight-character code is spelled as text (the key
             0x354445464B435550 is PUCKFED5).
 
-            Each entry carries its token, the file declaring it and a digest of canonical
-            syntax of that file, its partial siblings and its data and codec dependencies, so
-            two branches that bump one format to the same new token still conflict on the
-            digest line, and a codec edited without a bump fails the check until its author
-            records the new digest and decides whether the token should move.
-            Formatting, comments and local renames preserve the digest. Operator grouping,
-            argument binding, evaluation order and serialized member names remain significant.
+            Each entry carries its token, the file declaring it and a digest of the canonical
+            syntax of its closure: every unit of the declaring file, its partial siblings and each
+            unit naming the token, the enums and constants they read, the types they name one
+            level deep, and the members they call that are marked [FormatLeaf]. A call into any
+            other repository member is open: it is recorded in the entry, a new one is refused,
+            and [FormatSeam("its behaviour sets no byte because ...")] declares one outside the
+            wire. Two branches that bump one format to the same new token still conflict on the
+            digest line. Formatting, comments and local renames preserve the digest. Operator
+            grouping, argument binding, evaluation order and serialized member names remain
+            significant.
 
             Each project that declares a format also gets a generated FormatShapes.g.cs holding
             one constant per entry, that entry's shape digest, so the codec that owns the format

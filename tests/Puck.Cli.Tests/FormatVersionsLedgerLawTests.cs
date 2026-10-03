@@ -35,6 +35,16 @@ public sealed class FormatVersionsLedgerLawTests {
             public static class Stage { private const uint Magic = 0x68736D53; }
             """,
     };
+
+    // The shipped source is read and closed once for every law that judges it; closing it is the slow step.
+    private static readonly Lazy<(string Root, Dictionary<string, string> Sources, IReadOnlyList<FormatEntry> Entries)> Shipped = new(valueFactory: static () => {
+        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
+
+        var sources = FormatsCommand.ReadSources(repositoryRoot: repositoryRoot);
+
+        return (repositoryRoot, sources, FormatVersionsLedger.Discover(files: sources));
+    });
+
     private static FormatEntry Entry(IReadOnlyList<FormatEntry> entries, string id) => entries.Single(predicate: entry => (entry.Id == id));
     private static string Records(Dictionary<string, string> sources) => FormatVersionsLedger.Render(entries: FormatVersionsLedger.Discover(files: sources));
     private static IReadOnlyList<string> Check(Dictionary<string, string> recordedFrom, Dictionary<string, string> current) {
@@ -264,9 +274,7 @@ public sealed class FormatVersionsLedgerLawTests {
     }
     [Fact]
     public void TheShippedLedgerIsExactlyWhatTheShippedSourceDeclares() {
-        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
-
-        var current = FormatVersionsLedger.Discover(files: FormatsCommand.ReadSources(repositoryRoot: repositoryRoot));
+        var (repositoryRoot, _, current) = Shipped.Value;
         var text = File.ReadAllText(path: Path.Combine(
             path1: repositoryRoot,
             path2: FormatVersionsLedger.FileName
@@ -335,12 +343,12 @@ public sealed class FormatVersionsLedgerLawTests {
     [Theory]
     public void ASnapshotLayoutChangeMovesItsIdentityDigest(string project, string file, string identity) {
         var sources = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
-            [$"src/{project}/{file}.cs"] = $"public static class {identity} {{ public const int CurrentVersion = 1; }}",
-            [$"src/{project}/Device.cs"] = "public static class Device { public static int SaveState() => 1; }",
+            [$"src/{project}/{file}.cs"] = $"public static class {identity} {{ public const int CurrentVersion = 1; public static int Save() => Device.SaveState(); }}",
+            [$"src/{project}/Device.cs"] = "[FormatLeaf] public static class Device { public static int SaveState() => 1; }",
         };
         var changed = new Dictionary<string, string>(sources, StringComparer.Ordinal);
 
-        changed[$"src/{project}/Device.cs"] = "public static class Device { public static int SaveState() => 2; }";
+        changed[$"src/{project}/Device.cs"] = changed[$"src/{project}/Device.cs"].Replace(newValue: "=> 2", oldValue: "=> 1");
         Assert.Contains(collection: Check(current: changed, recordedFrom: sources), filter: problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: $"reshaped: the shape of '{identity}.CurrentVersion'"));
     }
     [Fact]
@@ -379,9 +387,9 @@ public sealed class FormatVersionsLedgerLawTests {
     [Fact]
     public void AWorldPayloadChangeMovesTheWireContractAndReplayDigests() {
         var sources = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
-            ["src/Puck.World.Protocol/Protocol/WorldProtocol.cs"] = "public static class WorldProtocol { public const ulong WireProtocolKey = 1234; }",
-            ["src/Puck.World.Protocol/Protocol/WorldWireCodec.cs"] = "public static class WorldWireCodec { public static int Encode() => 1; }",
-            ["src/Puck.World.Server/WorldReplaySnapshot.cs"] = "public static class WorldReplaySnapshot { public const uint ShapeToken = 4; }",
+            ["src/Puck.World.Protocol/Protocol/WorldProtocol.cs"] = "public static class WorldProtocol { public const ulong WireProtocolKey = 1234; public static int Encode() => WorldWireCodec.Encode(); }",
+            ["src/Puck.World.Protocol/Protocol/WorldWireCodec.cs"] = "[FormatLeaf] public static class WorldWireCodec { public static int Encode() => 1; }",
+            ["src/Puck.World.Server/WorldReplaySnapshot.cs"] = "public static class WorldReplaySnapshot { public const uint ShapeToken = 4; public static int Encode() => WorldWireCodec.Encode(); }",
         };
         var changed = new Dictionary<string, string>(sources, StringComparer.Ordinal);
 
@@ -393,8 +401,7 @@ public sealed class FormatVersionsLedgerLawTests {
     }
     [Fact]
     public void TheStrictExtensionConfigurationTokenIsDiscovered() {
-        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
-        Assert.Contains(collection: FormatVersionsLedger.Discover(files: FormatsCommand.ReadSources(repositoryRoot: repositoryRoot)),
+        Assert.Contains(collection: Shipped.Value.Entries,
             filter: entry => ((entry.Id == "WorldExtensionConfiguration.CurrentSchema") && (entry.Token == "puck.world.extensions.v1")));
     }
     [Fact]
@@ -460,8 +467,8 @@ public sealed class FormatVersionsLedgerLawTests {
     [Fact]
     public void TwoFormatsOfOneNamespaceThatSpellOneConstantAreRefused() {
         var entries = new[] {
-            new FormatEntry(Id: "A.BC", Shape: "0000000000000001", Source: "src/Puck.Demo/A.cs", Token: "1"),
-            new FormatEntry(Id: "AB.C", Shape: "0000000000000002", Source: "src/Puck.Demo/B.cs", Token: "1"),
+            new FormatEntry(Id: "A.BC", Open: [], Shape: "0000000000000001", Source: "src/Puck.Demo/A.cs", Token: "1"),
+            new FormatEntry(Id: "AB.C", Open: [], Shape: "0000000000000002", Source: "src/Puck.Demo/B.cs", Token: "1"),
         };
 
         var refusal = Assert.Throws<InvalidOperationException>(testCode: () => FormatShapesFiles.Plan(
@@ -491,11 +498,9 @@ public sealed class FormatVersionsLedgerLawTests {
     }
     [Fact]
     public void TheShippedShapeFilesAreExactlyWhatTheShippedLedgerPlans() {
-        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
-
-        var sources = FormatsCommand.ReadSources(repositoryRoot: repositoryRoot);
+        var (repositoryRoot, sources, entries) = Shipped.Value;
         var plan = FormatsCommand.ShapeFiles(
-            entries: FormatVersionsLedger.Discover(files: sources),
+            entries: entries,
             repositoryRoot: repositoryRoot,
             sources: sources
         );
@@ -508,5 +513,159 @@ public sealed class FormatVersionsLedgerLawTests {
                 expected: text
             );
         }
+    }
+
+    // The boundary: what a codec's shape covers beyond its own files.
+    private static Dictionary<string, string> Boundary(string leaf = "var a = reader.ReadString(); var b = reader.ReadString(); return a + b;", string order = "A, B", string unmarked = "return 1;", string seam = "[FormatSeam(\"its behaviour sets no byte because it only counts\")]") => new(comparer: StringComparer.Ordinal) {
+        ["src/Puck.Demo/Wire.cs"] = $$"""
+            namespace Puck.Demo;
+            public static class Wire {
+                public const int FormatVersion = 3;
+                public static string Read(Reader reader) => Leaves.ReadPair(reader) + (Family)reader.ReadByte() + Helper.Normalize() + Counter.Count();
+                public static byte Write(Family family) => (byte)family;
+            }
+            """,
+        ["src/Puck.Demo/Leaves.cs"] = $$"""
+            namespace Puck.Demo;
+            [FormatLeaf]
+            public static class Leaves {
+                public static string ReadPair(Reader reader) { {{leaf}} }
+                public static string Unrelated() => "x";
+            }
+            """,
+        ["src/Puck.Demo/Family.cs"] = $$"""
+            namespace Puck.Demo;
+            public enum Family : byte { {{order}} }
+            """,
+        ["src/Puck.Demo/Helper.cs"] = $$"""
+            namespace Puck.Demo;
+            public static class Helper { public static int Normalize() { {{unmarked}} } }
+            public static class Uncalled { public static int Elsewhere() => 7; }
+            {{seam}}
+            public static class Counter { public static int Count() => 1; }
+            """,
+        ["src/Puck.Demo/Reader.cs"] = "namespace Puck.Demo; [FormatLeaf] public sealed class Reader { public string ReadString() => \"\"; public byte ReadByte() => 0; }",
+    };
+    private static string ShapeOf(Dictionary<string, string> sources) => Entry(entries: FormatVersionsLedger.Discover(files: sources), id: "Wire.FormatVersion").Shape;
+
+    [Fact]
+    public void AMarkedHelperTheCodecCallsMovesTheShapeWhenItsReadOrderChanges() {
+        var swapped = Boundary(leaf: "var b = reader.ReadString(); var a = reader.ReadString(); return a + b;");
+
+        Assert.NotEqual(expected: ShapeOf(sources: Boundary()), actual: ShapeOf(sources: swapped));
+    }
+    [Fact]
+    public void AnEnumTheCodecCastsMovesTheShapeWhenItsMembersReorder() {
+        Assert.NotEqual(expected: ShapeOf(sources: Boundary()), actual: ShapeOf(sources: Boundary(order: "B, A")));
+    }
+    [Fact]
+    public void AMemberNothingReachableCallsNeverMovesTheShape() {
+        var sources = Boundary();
+        var edited = Boundary();
+
+        edited["src/Puck.Demo/Helper.cs"] = edited["src/Puck.Demo/Helper.cs"].Replace(newValue: "=> 8", oldValue: "=> 7");
+        edited["src/Puck.Demo/Leaves.cs"] = edited["src/Puck.Demo/Leaves.cs"].Replace(newValue: "=> \"y\"", oldValue: "=> \"x\"");
+        Assert.Equal(expected: ShapeOf(sources: sources), actual: ShapeOf(sources: edited));
+    }
+    [Fact]
+    public void AnUnmarkedCallIsOpenNotCoveredAndRefusedUntilRecorded() {
+        var sources = Boundary();
+        var entry = Entry(entries: FormatVersionsLedger.Discover(files: sources), id: "Wire.FormatVersion");
+
+        Assert.Equal(expected: ["M:Puck.Demo.Helper.Normalize"], actual: entry.Open);
+        Assert.Equal(expected: entry.Shape, actual: ShapeOf(sources: Boundary(unmarked: "return 2;")));
+
+        var refusals = FormatVersionsLedger.Refusals(current: [entry], recorded: []);
+
+        Assert.Single(collection: refusals);
+        Assert.Contains(actualString: refusals[0], expectedSubstring: "M:Puck.Demo.Helper.Normalize");
+        Assert.Contains(actualString: refusals[0], expectedSubstring: "[FormatLeaf]");
+        Assert.Empty(collection: FormatVersionsLedger.Refusals(current: [entry], recorded: [entry]));
+
+        var tighter = entry with { Open = [] };
+        var problems = FormatVersionsLedger.Check(current: [tighter], recorded: [entry], recordedText: FormatVersionsLedger.Render(entries: [entry]));
+
+        Assert.Contains(collection: problems, filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "stale: 'Wire.FormatVersion' no longer calls M:Puck.Demo.Helper.Normalize"));
+    }
+    [Fact]
+    public void AMarkedCalleeIsCoveredNotOpenAndASeamIsNeitherAndNeedsAReason() {
+        var marked = Boundary(unmarked: "return Leaves.Unrelated().Length;");
+        var entry = Entry(entries: FormatVersionsLedger.Discover(files: marked), id: "Wire.FormatVersion");
+
+        Assert.Equal(expected: ["M:Puck.Demo.Helper.Normalize"], actual: entry.Open);
+        Assert.DoesNotContain(collection: entry.Open, filter: static call => call.Contains(comparisonType: StringComparison.Ordinal, value: "Counter"));
+
+        var edited = Boundary();
+
+        edited["src/Puck.Demo/Helper.cs"] = edited["src/Puck.Demo/Helper.cs"].Replace(newValue: "Count() => 2", oldValue: "Count() => 1");
+        Assert.Equal(expected: ShapeOf(sources: Boundary()), actual: ShapeOf(sources: edited));
+
+        var refusal = Assert.Throws<FormatBoundaryException>(testCode: () => FormatVersionsLedger.Discover(files: Boundary(seam: "[FormatSeam(\"\")]")));
+
+        Assert.Contains(actualString: refusal.Message, expectedSubstring: "seam without a reason");
+        Assert.Throws<FormatBoundaryException>(testCode: () => FormatVersionsLedger.Discover(files: Boundary(seam: "[FormatSeam]")));
+    }
+    [Fact]
+    public void TheLedgerRecordsOpenCallsInOneSpellingAndRoundTripsThem() {
+        var entries = FormatVersionsLedger.Discover(files: Boundary());
+        var text = FormatVersionsLedger.Render(entries: entries);
+
+        Assert.Contains(actualString: text, expectedSubstring: "\"open\": [\n                \"M:Puck.Demo.Helper.Normalize\"\n            ],");
+        Assert.True(condition: FormatVersionsLedger.TryParse(entries: out var parsed, error: out var error, json: text), userMessage: error);
+        Assert.Equal(expected: text, actual: FormatVersionsLedger.Render(entries: parsed));
+    }
+    [Fact]
+    public void TwoFormatsSharingATypeAndMemberGenerateConstantsThatCompile() {
+        var sources = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+            ["src/Puck.Demo/A.cs"] = "namespace Puck.Demo.A;\npublic static class Codec { public const int FormatVersion = 1; }",
+            ["src/Puck.Demo/B.cs"] = "namespace Puck.Demo.B;\npublic static class Codec { public const int FormatVersion = 2; }",
+        };
+        var entries = FormatVersionsLedger.Discover(files: sources);
+
+        Assert.Equal(expected: ["Codec.FormatVersion@src/Puck.Demo/A.cs", "Codec.FormatVersion@src/Puck.Demo/B.cs"], actual: entries.Select(selector: static entry => entry.Id));
+
+        var plan = FormatShapesFiles.Plan(
+            entries: entries,
+            projectOf: source => ("src/Puck.Demo/", System.Text.RegularExpressions.Regex.Match(input: sources[source], pattern: @"^namespace\s+([A-Za-z0-9_.]+)\s*;", options: System.Text.RegularExpressions.RegexOptions.Multiline).Groups[1].Value)
+        );
+        var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
+            assemblyName: "ShapesCompile",
+            options: new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(outputKind: Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary),
+            references: [Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path: typeof(object).Assembly.Location)],
+            syntaxTrees: [.. plan.Values.Select(selector: static text => Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(text: text))]
+        );
+
+        Assert.Empty(collection: compilation.GetDiagnostics(cancellationToken: TestContext.Current.CancellationToken).Where(predicate: static diagnostic => (diagnostic.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)));
+        Assert.DoesNotContain(actualString: string.Concat(values: plan.Values), expectedSubstring: "@");
+        Assert.Contains(actualString: plan["src/Puck.Demo/FormatShapes.g.cs"], expectedSubstring: "namespace Puck.Demo.A {");
+        Assert.Contains(actualString: plan["src/Puck.Demo/FormatShapes.g.cs"], expectedSubstring: "namespace Puck.Demo.B {");
+    }
+    // The shipped codecs: the shape of each pilot moves with the leaves its read and write paths call and the enums they cast.
+    [Fact]
+    public void TheShippedPilotsMoveWhenAWireLeafSwapsItsReadsOrACastEnumReorders() {
+        var (_, sources, _) = Shipped.Value;
+        var swapped = new Dictionary<string, string>(sources, StringComparer.Ordinal);
+        var reordered = new Dictionary<string, string>(sources, StringComparer.Ordinal);
+        const string Leaves = "src/Puck.World.Server/WorldWireLeaves.cs";
+        const string Feed = "src/Puck.World.Server/WorldEventFeed.cs";
+        const string Domain = "        var identityDomain = reader.ReadString(field: \"peer identity domain\");\n";
+        const string Subject = "        var identitySubject = reader.ReadString(field: \"peer identity subject\");\n";
+
+        Assert.Contains(actualString: sources[Leaves], expectedSubstring: (Domain + Subject));
+        Assert.Contains(actualString: sources[Feed], expectedSubstring: "RegionEnter,\n    /// <summary>A body left a named region.</summary>\n    RegionExit,");
+
+        swapped[Leaves] = sources[Leaves].Replace(newValue: (Subject + Domain), oldValue: (Domain + Subject));
+        reordered[Feed] = sources[Feed].Replace(newValue: "RegionExit,\n    /// <summary>A body left a named region.</summary>\n    RegionEnter,", oldValue: "RegionEnter,\n    /// <summary>A body left a named region.</summary>\n    RegionExit,");
+
+        foreach (var id in new[] { "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldReplaySnapshot.ShapeToken" }) {
+            var shape = Shipped.Value.Entries.Single(predicate: entry => (entry.Id == id)).Shape;
+
+            Assert.NotEqual(expected: shape, actual: FormatVersionsLedger.Explain(files: swapped, id: id)!.Value.Entry.Shape);
+        }
+
+        Assert.NotEqual(
+            expected: Shipped.Value.Entries.Single(predicate: static entry => (entry.Id == "WorldAuthorityCheckpointCodec.SupportedVersion")).Shape,
+            actual: FormatVersionsLedger.Explain(files: reordered, id: "WorldAuthorityCheckpointCodec.SupportedVersion")!.Value.Entry.Shape
+        );
     }
 }

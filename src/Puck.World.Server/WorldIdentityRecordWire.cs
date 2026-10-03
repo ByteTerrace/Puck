@@ -4,6 +4,7 @@ using Puck.Networking;
 namespace Puck.World.Server;
 
 // Checkpoints and reservation projections carry exactly the same typed, bounded identity-record payload.
+[FormatLeaf]
 internal static class WorldIdentityRecordWire {
     public static void Write(WireWriter writer, WorldStateSection? records) {
         WorldIdentityRecords.Validate(section: records);

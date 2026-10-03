@@ -16,6 +16,7 @@ namespace Puck.World.Protocol;
 /// cannot represent its value writes nothing and returns <see langword="false"/>, so each codec raises its own
 /// host-bug exception (a <c>WorldCodecRefusal</c> leaf failure, a tape codec exception, an invalid-operation throw)
 /// in its own wording.</remarks>
+[FormatLeaf]
 public static class WorldWireCodec {
     private static void Undeclared(ref WireReader reader, string type, byte wire) => reader.Fail(
         detail: $"{type} wire value {wire} is not declared",

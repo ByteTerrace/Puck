@@ -3045,8 +3045,9 @@ content and needs no header.
 ```text
 puck formats            write FormatVersions.json and every FormatShapes.g.cs from the source
 puck formats --check    write nothing; exit 1 for an unrecorded, stale, retokened, reshaped, or moved format,
-                        a ledger whose bytes differ from what the verb writes, or a FormatShapes.g.cs that
-                        disagrees with it
+                        an open call the ledger does not record, a ledger whose bytes differ from what the verb
+                        writes, or a FormatShapes.g.cs that disagrees with it
+puck formats --explain ID   print what one format's shape covers, by file, and the calls it leaves open
 ```
 
 The check records shape and never demands a token bump: a format whose source changed is `reshaped` until
@@ -3067,17 +3068,38 @@ whose initializer is one of two things:
 Declarations under a `*.Post` project and generated files are outside the ledger. An entry that is none of these
 needs its member added to the recognized names in `FormatVersionsLedger`, which is a deliberate edit of the verb.
 
-An entry holds its id (`Type.Member`), the file declaring it, its token and a `shape` digest, each on a line of its
-own. The digest covers canonical syntax of the declaring file and its partial siblings (`Stem.cs` and
-`Stem.*.cs` beside it), source-declared field and property types, record constructor types and base types,
-including their data dependencies. Shared World wire leaves also feed the wire, replay, checkpoint, federation
-and journal digests; snapshot identities cover their machine project's source and the shared state reader,
-writer and image layout. A version-shaped string inside an object initializer is an identity, not a schema literal.
-The generated files are `.g.cs`, which the digest never reads, so a fingerprint never depends on the file that holds it.
-Each is the nearest project's `FormatShapes.g.cs`, with one `internal static class FormatShapes` per namespace its
-declaring files use, holding a constant per entry spelled `Type.Member` as `TypeMember`; a codec reads it
-unqualified from its own namespace. Two lanes that edit one codec differently write different digest lines, which
-conflict in the ledger, and git merges two identical edits without a conflict.
+An entry holds its id (`Type.Member`), the file declaring it, its token, a `shape` digest and, when the format's boundary
+has open calls, an `open` list, each on a line of its own. The digest covers canonical syntax of the format's *closure*,
+computed with the Roslyn semantic model over units: a type's layout (header and data members: fields, constants, enum
+members, auto-properties, static constructors) and each code member on its own. The roots are every unit of the
+declaring file and its partial siblings (`Stem.cs` and `Stem.*.cs` beside it) and each unit anywhere that names the
+token. A unit covers:
+
+- every enum it names, whole, and every constant it reads, so a reordered or renumbered enum a codec casts moves the
+  digest;
+- any other repository type it names, one level deep: the type's header and data members, never the types those members
+  name in turn;
+- a repository member it calls that is marked `[FormatLeaf]`, on the member or on a type that holds it, with that
+  member's own units in turn, and every override or implementation of a covered virtual or interface member; and a
+  property whose body calls nothing in the repository.
+
+A closure over every call reaches the whole engine (a world codec's would hold ten thousand units), so the boundary is
+explicit. A call into any other repository member is *open*: the shape cannot see what it does. A member that is not part
+of any wire is marked `[FormatSeam("its behaviour sets no byte because …")]`, which is not followed and not open, and
+`puck formats` refuses a seam with an empty reason. Prefer moving the call out of the codec (decode to data, apply
+outside) to marking it. `puck formats` records each format's open calls in the ledger and refuses a call that is not
+already recorded, so the boundary only tightens: a call never joins the list without a reviewer seeing the ledger edit,
+and `--check` reports one that has left it as `stale` until the ledger is re-recorded. `puck formats --explain <id>`
+prints the units a format covers, by file, and the calls it leaves open. Platform and package members are outside the
+repository and outside the digest.
+
+A version-shaped string inside an object initializer is an identity, not a schema literal. The generated files are
+`.g.cs`, which the digest never reads, so a fingerprint never depends on the file that holds it. Each is the nearest
+project's `FormatShapes.g.cs`, with one `internal static class FormatShapes` per namespace its declaring files use,
+holding a constant per entry named by the declaring symbol alone (`Type.Member` as `TypeMember`, whatever `@path` the
+ledger adds to tell two files' identical ids apart); a codec reads it unqualified from its own namespace. Two lanes that
+edit one codec differently write different digest lines, which conflict in the ledger, and git merges two identical edits
+without a conflict.
 
 The digest uses the existing formatter's syntactic and null-pattern normalizers before hashing syntax structure
 without trivia. Parentheses do not contribute an extra node, but operator grouping remains in the tree. Resolved
@@ -3085,8 +3107,11 @@ call arguments are identified by parameter position, and only expressions the fo
 are sorted. Local and parameter names are replaced by declaration identities; `nameof` retains its resulting text.
 Formatting, comments and local renames preserve the digest, while changed argument binding and evaluation order
 move it. Unresolved calls retain their written syntax. These are conservative source fingerprints: an implementation
-edit within the covered files moves the fingerprint even when its encoding stays the same, and data written before it
+edit within the covered units moves the fingerprint even when its encoding stays the same, and data written before it
 is refused.
+
+An authored document carries no shape field: its schema token and the JSON-schema refusal of an unknown or missing
+member are its shape check, so a document format records a shape in the ledger and nothing writes it into the text.
 
 CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
 

@@ -611,7 +611,13 @@ meant to establish.
   fingerprint. `puck formats --check` fails on any disagreement but never asks
   for a token bump: the codec writes its fingerprint in its header or handshake
   and refuses data of any other shape by name before any state changes, so a
-  token cannot say what the fingerprint does not. Two lanes that edit one codec
+  token cannot say what the fingerprint does not. The fingerprint covers the
+  codec's own files, the enums it casts and the members it calls that carry
+  `[FormatLeaf]`; a call into any other repository member is recorded as open
+  and a new one is refused, so a helper that decides a byte is marked
+  `[FormatLeaf]`, one that decides none is marked
+  `[FormatSeam("its behaviour sets no byte because …")]`, and a codec that
+  drives the engine moves that work out. Two lanes that edit one codec
   differently conflict on its shape line in the ledger instead of colliding at
   run time.
   [`puck formats`](../reference/cli.md#puck-formatsstrict-format-tokens).
