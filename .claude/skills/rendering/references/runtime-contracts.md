@@ -167,33 +167,49 @@ retries a frame.
 
 **Rule.** Temporal history (accumulated samples, reprojected frames) resets when
 its previous samples are wrong for this view: a cut, a binding change, an
-extent or render-scale change, an enable or debug toggle, a pose the view did
+output extent or reconstruction ceiling change, an enable or debug toggle, a pose the view did
 not render, or a view shown again after it went unseen. A gap the view's
 cadence scheduled (a refresh divisor, a standing consumer, a budget skip) is
 continuity and never resets history.
 
+Every render-graph history resource follows one successful-write rule. A
+previous-frame read creates no writer demand, including a P11 self-reference.
+A slot advances only when its writer records and submits successfully; a
+failed or skipped write leaves the preceding history intact. Device loss
+discards the ring and starts with no history. Publication and export remain
+allowed, and a failure in an export handoff after submission keeps the
+committed write. No consumer uses a private advancement mode.
+
 **How the code holds it.** `SdfTemporalHistory` (`src/Puck.SdfVm`) continues
 history while `Continues(epoch, previousPoses)` holds: the frame's
 `SdfTemporalEpoch` (`Binding`, `Cut`, `Width`, `Height`, `Ceiling`, `Enabled`,
-`Debug`) equals the last one, and the previous poses are the ones the instance
+`Debug`, `Temporal`, `Unread`) equals the last one, and the previous poses are the ones the instance
 last rendered. Any difference resets the epoch. A frame gap with an unchanged
 epoch and unchanged poses continues it. `SdfWorldPasses.EpochOf` sets `Enabled`
-only while a capture converges, so ordinary rendering accumulates nothing.
+while the view resolves temporally or a capture converges. The runtime counts
+only frames outside displayed outputs, including held consumer outputs, in
+`Unread`. A dynamic render-grid change restarts settling without discarding
+the history ring. `ShaderPipelineRenderNode` reserves a ring instance for a
+recording writer and commits its cursor at submission; its recovery restores
+the existing access tracker on failure. `IRenderGraphPackageRecorder.Submitted`
+commits the temporal sample metadata, and `SdfResolveRecorder` caches history
+descriptors by their bound handles as well as their slot and tables.
 
 **Laws.** `SdfTemporalHistoryLawTests`
 (`EveryEpochInputAndAPoseGapResetAtThePixelCenter`,
 `ACountedSourceDrivesTheIndexAndUncountedRendersRepeatTheirSample`,
 `AJitteredRenderDoesNotStandOnceSamplingEnds`),
-`SdfWorldPassesLawTests.Temporal`, and the runtime's convergence laws.
+`SdfWorldPassesLawTests.Temporal`, the runtime's convergence laws,
+`RenderGraphHistoryLawTests`, and `RenderGraphSchedulerLawTests.History`.
 
-**Where the code is weaker.** The epoch has no "went unseen" input:
-`IRenderGraphPackageFactory.IsUnchanged(instance, context)` receives no count
-of frames the instance went unread, and `RenderGraphInstanceStatus.Unread` is
-not counted. A view hidden and shown again with unchanged poses continues its
-history. A change that adds that input counts only frames an instance spent
-outside the frame's visible closure, so a cadence gap never reads as unseen.
+**Verification boundary.** CPU laws hold scheduling, cursor recovery and
+submission callbacks on a fake device. Temporal and device-loss canaries and
+parity hold the backend recordings and pixels on Vulkan and Direct3D 12.
 
 **Violations to hunt.** History reset every refresh period by a divisor (the
 view never converges); history kept across a cut, a crossing into another
 residency, a resize, or a return to view; a counter that overflows or never
 resets; a reconfiguration that loses or keeps the count wrongly.
+Also hunt a history read that demands its writer, a cursor moved by a skipped
+or refused submission, temporal metadata committed during recording, and a
+cached descriptor that still names a submission slot's former history.

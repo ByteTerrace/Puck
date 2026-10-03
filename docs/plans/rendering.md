@@ -5990,6 +5990,28 @@ counted rows recorded in the same change.
      held consumer outputs, and hands the count to the package's cadence
      question and recordings, and the count is part of the epoch, so a parked
      view shown again resets while a spatial view's still output stands.
+   - History follows one rule across the render graph: a slot advances only
+     when its writer pass records and submits successfully. A history read
+     creates no demand for its writer, including P11 self-references and
+     previous-frame reads between instances. A failed or skipped write keeps
+     the last successful history; recording and submission failures roll back
+     the pending cursor and access state, and device loss discards history so
+     the replacement device starts with no history. Temporal resolve uses the
+     same rule as every other previous-frame resource, with no private mode.
+     History remains eligible for publication and export. A successful
+     submission commits before an export handoff, so a later handoff failure
+     keeps the submitted history and consumes its submission slot. Demand a
+     consumer needs is stated where it is shown, never implied by a history
+     read: a camera the display shows directly (a HUD frame or a probe export)
+     that films the world reads the views the world's screens show at their
+     previous frame, so `WorldViewGraphHost` roots those views while the camera
+     is a root, at the camera's fraction times each view's declared extent and
+     at the camera's refresh (`RenderGraphRoot.Refresh`, which the scheduler
+     honours like an instance's own: an instance only roots show renders no
+     more often than its most frequent root asks), so a filmed view renders no
+     more often than the camera consumes it; the rooting ends with the camera's. A paused node presents its last image
+     on purpose: its scheduled frame is spent, so its refresh and the demand it
+     passes to its producers keep their cadence, though it writes no history.
    - Delivers: the history color and history surface as the fragment's history
      versions at output extent; reprojection through `sdfReprojection`, rejected
      by identity and depth; neighbourhood rectification; the `reactivity` image

@@ -1114,6 +1114,8 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             }
 
             throw;
+        } finally {
+            FinishHistory();
         }
     }
 
@@ -1144,6 +1146,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         );
         m_turn ^= 1;
         m_history = schedule.Next;
+        m_historyPrior = prior;
+        m_historySchedule = schedule;
+        Array.Clear(array: m_historySucceeded);
         m_latest = schedule;
         m_readFrame = frame.Index;
         m_unproduced = 0;
@@ -1239,6 +1244,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                         previous: prior
                     );
                 } else {
+                    m_historySucceeded[index] = true;
                     MarkRendered(index: index, schedule: schedule);
                 }
 
@@ -1343,6 +1349,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             try {
                 surface = node.ProduceFrame(context: in context);
             } finally {
+                if (node.FrameCounter != rendered) {
+                    m_historySucceeded[index] = true;
+                    RememberOutput(index: index, node: node, schedule: schedule, surface: node.PublishedSurface);
+                }
                 node.Reads?.RetireUntaken();
                 node.Reads = null;
                 NoteOwedReadbacks(index: index);
@@ -1354,6 +1364,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     index: index,
                     node: node
                 );
+                // A paused node presents its last image as this frame's output on purpose, writing nothing: the frame it
+                // was scheduled for is spent, so its refresh, and the demand it passes to its producers, keep their cadence.
+                if (Stands(index: index)) {
+                    m_historySucceeded[index] = true;
+                }
 
                 // A source whose conversion has not built yet is asked again, since its cadence may never ask twice.
                 if (source is not null) {
@@ -1379,24 +1394,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 schedule: schedule
             );
 
-            var standsFor = StandingOf(
-                index: index,
-                node: node,
-                schedule: schedule,
-                surface: in surface
-            );
-
             submitter = node;
-            m_previous[index] = m_current[index];
-            m_current[index] = new Output(
-                Buffer: node.LatestOutputBuffer(),
-                Frame: frame.Index,
-                Image: surface,
-                Layout: node.PublishedLayout,
-                StateTick: node.PublishedStateTick,
-                StandsFor: standsFor,
-                Tainted: (m_taintedReads[index] is not null)
-            );
+            if (node.FrameCounter == rendered) {
+                RememberOutput(index: index, node: node, schedule: schedule, surface: in surface);
+            }
         }
 
         ConvertForCapture(

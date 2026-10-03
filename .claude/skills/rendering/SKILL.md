@@ -1455,8 +1455,16 @@ previous history. It fills a caller-owned `RenderGraphSchedule`, whose `Next`
 it rewrites, so the next frame goes into another schedule; a refused frame
 leaves the schedule unchanged, and a host alternating two schedules allocates
 nothing in a steady frame. `RenderGraphSchedulerLawTests` pins demand, extent,
+history reads creating no producer demand, and withdrawal of unsuccessful
+writes. History remains reachable for lifetime and binding. Local history
+uses a per-storage successful-write cursor (`ShaderPipelineRenderNode.History.cs`),
+committed at submission and rolled back with access state on failure; device
+loss starts with no history. Package signatures decide whether another sample
+is owed, and publication and export remain allowed. `RenderGraphHistoryLawTests`
+holds this rule for images, buffers, reloads, graphics attachments and recovery.
+`RenderGraphSchedulerLawTests` also pins
 refresh, self-reads, cycles, the pass-pixel budget, buffer reads (demanded by
-every rendering reader, no extent, no pass-pixels), kind mismatches and that
+every same-frame rendering reader, no extent, no pass-pixels), kind mismatches and that
 zero-allocation steady frame with a buffer edge in it. A source instance
 (`RenderGraphInstance.IsSource`, package `source.<producer id>`) is scheduled
 by demand at most once a frame, but at the cadence and negotiated extent its
@@ -1790,7 +1798,12 @@ with the views shown, never with the square of every view. `WorldViewGraphHost.T
 after the sources. A view's demand (`WorldViewDemand`, flags) is every way
 something shows it: a screen, through a footprint of its declared extent over the
 display, and a HUD frame or a probe export, as a root beside the runtime's
-(`WorldViewGraphHost.Roots`); a parked one is demanded not at all. A declared
+(`WorldViewGraphHost.Roots`); a parked one is demanded not at all. A camera
+reads the views it films at their previous frame, which demands nothing, so while
+a root camera films the world the host roots every view the world's screens show,
+at the camera's fraction times the view's extent and at the camera's refresh
+(`AddFilmedRoots`, `RenderGraphRoot.Refresh`: an instance only roots show renders
+no more often than its most frequent root asks). A declared
 extent past the display is scaled by one factor on both axes
 (`WorldViewInstances.Fit`), so a view never renders stretched. Every view
 refreshes at `world.view-refresh`'s divisor except a window session (every

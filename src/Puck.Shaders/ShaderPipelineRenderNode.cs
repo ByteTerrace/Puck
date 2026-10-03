@@ -199,6 +199,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// an external input's own layout while a package pass that drew nothing
     /// (<see cref="RenderGraphPackageOutcome.DrewNothing"/>) publishes that input in its output's place.</summary>
     public GpuImageLayout PublishedLayout => m_publishedLayout;
+    /// <summary>Gets the latest successfully submitted surface, including when a later export handoff fails.</summary>
+    public Surface PublishedSurface => m_lastSurface;
     /// <summary>Gets the name of the external image the latest presentation published in its output's place, because a
     /// package pass that drew nothing (<see cref="RenderGraphPackageOutcome.DrewNothing"/>) stands for it, or
     /// <see langword="null"/> when the node published an image of its own. The published image is then whatever the host
@@ -298,26 +300,25 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
 
             // A framebuffer owns no image, so one over history the install carries binds the replaced graph's instances,
             // which move into this graph only once nothing else can fail.
-            IGpuImage[] ImagesOf(ShaderPipelineAttachment attachment) {
+            IGpuImage ImageOf(ShaderPipelineAttachment attachment, int slot) {
                 var resource = map[attachment.Version];
+                var previous = (carried.TryGetValue(key: resource.Storage.Index, value: out var carry) ? carry.Old : resource);
+                // Shader graphics writes every submission. Offset its prebuilt framebuffer ring to the carried
+                // history cursor; ordinary attachments, including depth, keep their submission slot.
+                var instance = (resource.History
+                    ? (((((previous.HistoryLatest + 1) + slot) + resource.Count) - ((int)(m_frame % ((ulong)resource.Count)))) % resource.Count)
+                    : slot);
 
-                return (carried.TryGetValue(
-                    key: resource.Storage.Index,
-                    value: out var carry
-                )
-                    ? carry.Old.Images
-                    : resource.Images)!;
+                return previous.Images![instance];
             }
-            var colors = planned.Attachments.Where(predicate: static attachment => !attachment.Depth).Select(selector: ImagesOf).ToArray();
-            var depth = ((planned.Attachments.FirstOrDefault(predicate: static attachment => attachment.Depth) is { } depthAttachment)
-                ? ImagesOf(attachment: depthAttachment)
-                : null);
+            var colors = planned.Attachments.Where(predicate: static attachment => !attachment.Depth).ToArray();
+            var depth = planned.Attachments.FirstOrDefault(predicate: static attachment => attachment.Depth);
 
             for (var slot = 0; (slot < m_inFlight); slot++) {
                 runtime.Framebuffers[slot] = m_gpu.RenderPassFactory.CreateFramebuffer(
                     runtime.RenderPass!,
-                    [.. colors.Select(selector: images => images[slot])],
-                    depth?[slot]
+                    [.. colors.Select(selector: attachment => ImageOf(attachment: attachment, slot: slot))],
+                    ((depth is null) ? null : ImageOf(attachment: depth, slot: slot))
                 );
             }
         }
@@ -783,7 +784,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     imageViewHandle: ResolveImage(
                         resource,
                         output.Name,
-                        slot
+                        HistoryIndex(previous: false, resource: resource, slot: slot)
                     ).ImageViewHandle
                 );
             } else {
@@ -792,7 +793,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     bufferHandle: ResolveBuffer(
                         resource,
                         output.Name,
-                        slot
+                        HistoryIndex(previous: false, resource: resource, slot: slot)
                     ).BufferHandle,
                     bufferSize: (resource.Spec.SizeBytes ?? 0),
                     descriptorSetHandle: set,
@@ -803,16 +804,13 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
     }
     private static int HistoryIndex(RuntimeResource resource, int slot, bool previous) {
-        if (!previous) {
-            return InstanceAt(
-                index: slot,
-                resource: resource
-            );
+        if (resource.History) {
+            return ((!previous && resource.HistoryWriting)
+                ? ((resource.HistoryLatest + 1) % resource.Count)
+                : resource.HistoryLatest);
         }
-        if (!resource.History) {
-            throw new InvalidDataException(message: $"Resource '{resource.Spec.Name}' is not declared as history.");
-        }
-        return (((slot + resource.Count) - 1) % resource.Count);
+        if (previous) { throw new InvalidDataException(message: $"Resource '{resource.Spec.Name}' is not declared as history."); }
+        return InstanceAt(index: slot, resource: resource);
     }
     // Installs a finished build beside the installed graph: allocates its resources, carries compatible history and live
     // parameters over, and retires the replaced graph once its readers' submissions complete. An allocation
@@ -1065,6 +1063,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         foreach (var (index, carry) in carried) {
             var current = m_resources[index];
             var old = carry.Old;
+
+            current.HistoryLatest = old.HistoryLatest;
 
             Array.Copy(
                 destinationArray: current.Initialized,
@@ -1689,7 +1689,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 ResolveImage(
                     selectedResource,
                     selectedResource.Spec.Name,
-                    slotIndex
+                    HistoryIndex(previous: false, resource: selectedResource, slot: slotIndex)
                 ),
                 slotIndex,
                 command
@@ -1707,23 +1707,28 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             commands: commands,
             fence: slot.Fence!
         );
+        // From here the queue owns the write. A later export or readback failure must not reuse this submission slot
+        // or roll the committed history back.
+        CommitCadenceFrame();
+        m_frame++;
+        m_frameLeases.MoveTo(destination: slot.Leases);
         NoteRenderGrid();
         NoteRenderCompletion(fence: slot.Fence!, slot: slotIndex);
-        CommitCadenceFrame();
+        Publish(surface: Output(slot: slotIndex));
+        m_publishedStateTick = Frame.StateTick;
+        m_publishedAtRequestedExtent = !RendersAnotherExtent;
+        m_outputRefreshRequested = false;
+        m_installedUnrendered = false;
+        m_publishedFrame = m_frame;
+        foreach (var pass in m_passes) {
+            if (pass.Recorded) { pass.Package?.Submitted(); }
+        }
         SubmitPackageReadbacks(fence: slot.Fence!, slot: slotIndex);
         SubmitTiming(fence: slot.Fence!, slot: slotIndex);
         if (exported is not null) {
             exportValue = exported.CompleteWrite();
             exportWritten = true;
         }
-        m_frameLeases.MoveTo(destination: slot.Leases);
-        Publish(surface: Output(slot: slotIndex));
-        m_publishedStateTick = Frame.StateTick;
-        m_publishedAtRequestedExtent = !RendersAnotherExtent;
-        m_outputRefreshRequested = false;
-        m_installedUnrendered = false;
-        m_frame++;
-        m_publishedFrame = m_frame;
         CaptureIfPending();
         return m_lastSurface;
     }

@@ -521,7 +521,7 @@ public sealed partial class RenderGraphSchedulerLawTests {
         }
     }
     [Fact]
-    public void ABufferNoRenderingViewReadsIsNotRenderedAndAPreviousFrameReadTakesItsLastOutput() {
+    public void ABufferNoRenderingViewReadsIsNotRenderedAndAPreviousFrameReadDemandsNothing() {
         var set = Set(
             Instance(name: "main"),
             Instance(
@@ -558,11 +558,11 @@ public sealed partial class RenderGraphSchedulerLawTests {
         );
 
         Assert.Equal(
-            expected: new RenderGraphReadSchedule(Consumer: "mirror", Frame: 1, Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: true, Producer: "bricks"),
+            expected: new RenderGraphReadSchedule(Consumer: "mirror", Frame: -1, Kind: ShaderPipelineResourceKind.Buffer, PreviousFrame: true, Producer: "bricks"),
             actual: Assert.Single(collection: mirrored[^1].Reads)
         );
         Assert.Equal(
-            expected: 3,
+            expected: 0,
             actual: RenderCount(
                 name: "bricks",
                 schedules: mirrored,
