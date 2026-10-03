@@ -49,6 +49,10 @@ stale and is corrected in the same change.
   prompt. Launch a Claude pass as an agent working in that worktree. A pass
   cannot read this conversation, message a session or ask a question, so the
   brief carries every string, decision and path it needs.
+- The companion keys a job's state by the exact spelling of its working
+  directory. Launch, status and result use the identical `--cwd` spelling (case,
+  separators, a trailing slash, a link). A job reported missing is probably
+  running under another spelling: look under the original, and never relaunch.
 - Write the brief to a lane-named file (`<scratchpad>/rb/<lane>.md`) so the
   second review and the verifier can reuse it.
 - Name a scratch directory outside the tree in the brief for any CLI copy or
