@@ -1045,7 +1045,7 @@ These are one-line cautions; the owning pages hold the derivations.
   of its own. A counting set is never a device's own
   `IGpuDeviceContext.Services`, and wrapping a counting member again is refused.
   A new pass needs its `EnterPass`/`LeavePass` where it submits; the SDF upload
-  counts its `fillers`, `bricks` and `upload` passes, skipping one it has no work
+  counts its `fillers`, `bricks`, `upload` and `environment` passes, skipping one it has no work
   for. `SdfWorldTablesWorkLawTests` and `SdfWorldResidencyWorkLawTests` pin the
   upload's exact counts over `tests/Shared/FakeGpuDevice.cs`, so a
   recording change re-records those constants in the same change.
@@ -1081,7 +1081,11 @@ These are one-line cautions; the owning pages hold the derivations.
   every lane that did work. A new march, query or volume sample adds to
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
   counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
-  and `SdfWorkCountingLawTests` hold both. Vulkan devices are created with
+  and `SdfWorkCountingLawTests` hold both. The residency's upload counts its
+  `environment` pass (the sky's environment map and its reduction,
+  `SdfWorldTables.SkyEnvironment.cs`) the same way: the tables keep a
+  `GpuKernelCounters` of a row per upload pass over their ring slots and name the
+  slot to their ledger on an upload that renders the map. Vulkan devices are created with
   `fragmentStoresAndAtomics` for the fragment stages' counts and
   `shaderDemoteToHelperInvocation` for a fragment `discard`, and every shader
   module's SPIR-V capabilities are checked against
