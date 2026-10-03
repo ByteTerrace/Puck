@@ -238,9 +238,9 @@ public sealed class AddonGuestLawTests {
         };
 
         info.ArgumentList.Add(item: typeof(AddonGuestLawTests).Assembly.Location);
-        info.ArgumentList.Add(item: "-method");
+        info.ArgumentList.Add(item: "--filter-method");
         info.ArgumentList.Add(item: $"{typeof(AddonGuestLawTests).FullName}.{nameof(HostFaultChildAsync)}");
-        info.ArgumentList.Add(item: "-explicit");
+        info.ArgumentList.Add(item: "--explicit");
         info.ArgumentList.Add(item: "only");
 
         using var child = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: "The child test host did not start."));
@@ -255,7 +255,8 @@ public sealed class AddonGuestLawTests {
             condition: (child.ExitCode == 0),
             userMessage: $"the child test host exited {child.ExitCode}:{Environment.NewLine}{printed[Math.Max(val1: 0, val2: (printed.Length - 2000))..]}"
         );
-        Assert.Contains(expectedSubstring: "Total: 1, Errors: 0, Failed: 0", actualString: printed);
+        Assert.Contains(expectedSubstring: "total: 1", actualString: printed);
+        Assert.Contains(expectedSubstring: "succeeded: 1", actualString: printed);
     }
     // Runs only as the child of AHostHardwareFaultAfterAGuestRanIsAManagedException, which selects it explicitly. A guest
     // runs on this thread, then the processor raises an integer division fault in managed code on a thread that never
