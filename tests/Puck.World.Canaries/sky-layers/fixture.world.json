@@ -206,7 +206,11 @@
       "round": 0,
       "source": {
         "$type": "producer",
-        "id": "testPattern"
+        "id": "testPattern",
+        "settings": {
+          "height": 32,
+          "width": 64
+        }
       },
       "route": {
         "engageable": false,

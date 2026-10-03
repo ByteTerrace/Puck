@@ -55,6 +55,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // Per frame slot: the tables the pass set's ports and dummies were written for, and each screen element's last written
     // view.
     private readonly SdfWorldTables?[] m_portTables;
+    // Per frame slot, the counter buffer the slot's pass set binds: the node replaces a slot's buffer when its detail rows
+    // grow, so the binding follows the buffer the recording names rather than the one the ports were first written with.
+    private readonly IGpuBuffer?[] m_boundCounters;
     private readonly nint[][] m_screens;
     // The mesh part's pool, its set per frame slot, and a framebuffer over each instance of its target and depth.
     private readonly nint m_meshPool;
@@ -105,6 +108,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var tables = (view.Residency.Tables ?? throw new InvalidOperationException(message: $"Residency '{view.Residency.Name}' has no tables for pass '{context.Pass}'."));
 
         m_portTables = new SdfWorldTables?[slots];
+        m_boundCounters = new IGpuBuffer?[slots];
         m_screens = new nint[slots][];
 
         for (var slot = 0; (slot < slots); slot++) {
@@ -403,6 +407,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             set: set,
             tables: tables
         );
+        BindCounters(
+            recording: in recording,
+            set: set,
+            tables: tables
+        );
         BindScreens(
             recording: in recording,
             set: set,
@@ -609,6 +618,18 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             );
         }
     }
+    // Writes the slot's counter buffer into its pass set when it is not the one the set binds, compared by the buffer
+    // object, since a handle value may name a new object once the old one is released.
+    private void BindCounters(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
+        var counters = WorkCountersOf(recording: in recording).Buffer;
+
+        if (ReferenceEquals(objA: m_boundCounters[recording.Slot], objB: counters)) {
+            return;
+        }
+
+        tables.WriteWorldBuffer(buffer: counters, member: ShaderWorkCounters.Buffer, set: set);
+        m_boundCounters[recording.Slot] = counters;
+    }
     // Writes, once per slot, every storage the pass's ports bind at the member its access reads or writes it through, and
     // the tables' dummy and fillers at every member no port binds. The storages a slot resolves stay
     // the instance's for the recorder's life.
@@ -666,7 +687,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             }
         }
 
-        tables.WriteWorldBuffer(buffer: WorkCountersOf(recording: in recording).Buffer, member: ShaderWorkCounters.Buffer, set: set);
+        m_boundCounters[slot] = null;
         bindings.WriteStorageImage(
             arrayElement: 0,
             binding: OutputBinding,
