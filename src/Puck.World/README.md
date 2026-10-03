@@ -987,7 +987,7 @@ Facts a script needs:
 - `WorldRecordingCommandModule.cs`—the recording-session command surface;
   generic frame capture lives in Hosting and is driven by Launcher.
 - `Assets/`—the one shipped world, `worlds/puck.world.json` (the island; the
-  boot default), a delta over `worlds/standard.world.json` (the standards as
+  boot default), a delta over `worlds/standard.puck` (the standards as
   state, the safety net under everything at y = -64, and its debug texture);
   its districts under `worlds/modules/` (`modules/README.md`) and the tabletop
   games under `worlds/games/`, each an imported fragment; the corner shards

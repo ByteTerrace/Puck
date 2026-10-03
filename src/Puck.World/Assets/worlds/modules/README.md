@@ -346,7 +346,7 @@ qualified row (`jump$reached`/`jump$falls`).
 
 ## Verifying headless
 
-`tests/Puck.World.Canaries/jump-trophy/host.world.json` is a minimal `standard.world.json`-based world that
+`tests/Puck.World.Canaries/jump-trophy/host.world.json` is a minimal `standard.puck`-based world that
 imports `modules/jump.puck` under alias `jump` and spawns its one local seat on `jump-arrival` with
 the `vaulter` kit—the same shape a future island import uses. Drive it directly:
 

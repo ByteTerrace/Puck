@@ -59,7 +59,7 @@ A chord row's, context row's, and wheel row's `group` may be a literal or a
 `state.<row>[.<key>]` reference to a Text cell. All references to one cell
 resolve together before the profile is composed, so changing that single cell
 renames the relationship consistently instead of requiring a document-wide
-search/replace. `standard.world.json` is the worked example — its
+search/replace. `standard.puck` is the worked example — its
 `state.world.bindingGroups` row holds `defaultActionGroup`, and every chord and
 wheel row names it through the reference.
 

@@ -582,7 +582,7 @@ groups, properties, interactions, player defaults, probes,
 dynamics, curves, tables). Worlds live as data
 under `../Puck.World/Assets/worlds/`. There is one shipped world,
 `puck.world.json` (the island, the boot default), a `basis` delta over
-`standard.world.json`. Its districts—`dive`, `kart`, `jump`, `studio`,
+`standard.puck`. Its districts—`dive`, `kart`, `jump`, `studio`,
 `arena`, `arcade`, `granaries`—are imported `puck.world.definition.v1` module
 fragments under `worlds/modules/` (see `modules/README.md`); tabletop games
 live as imported fragments under `worlds/games/`. The corner shards
@@ -958,7 +958,7 @@ from the console.
 
 **Bindings compose in layers.** A seat's effective binding document is the
 world's `bindingOverlays` rows in order (a `basis` chain supplies earlier rows
-—the shipped `Assets/worlds/standard.world.json` template carries the standard
+—the shipped `Assets/worlds/standard.puck` template carries the standard
 movement and action-wheel document; the engine itself ships none,
 and a world authoring none binds nothing), then the seat's owned identity
 world's `bindingOverlays`, then live session rebinds—merged by

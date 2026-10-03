@@ -6,7 +6,7 @@ using Xunit;
 namespace Puck.World.Browser.Tests;
 
 /// <summary>Exercises the pure <c>Engine/</c> core directly (linked as source — see the project's own remarks on why
-/// a browser-wasm exe cannot be referenced), over real shipped documents: <c>standard.world.json</c> composed with
+/// a browser-wasm exe cannot be referenced), over real shipped documents: <c>standard.puck</c> composed with
 /// <c>games/tictactoe.world.json</c> as the primary "does the whole pipeline run" fixture, and the flagship
 /// <c>puck.world.json</c> to pin the one verified, honest scope boundary this engine has today (a
 /// <c>screens[].source.machine</c> engine key never resolves to a real catalog, so its registration is DEFERRED
@@ -27,10 +27,10 @@ public sealed class BrowserEngineTests {
 
         return Encoding.UTF8.GetBytes(s: tree!.ToJsonString());
     }
-    // standard.world.json composed with the tictactoe fragment — a real shipped document pair with no
+    // standard.puck composed with the tictactoe fragment — a real shipped document pair with no
     // screens[].source.machine engine to trip the extension-vocabulary boundary ComposedPuckWorldBytes hits.
     private static byte[] ComposedTicTacToeBytes() {
-        var basisBytes = ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json"));
+        var basisBytes = ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.puck"));
         var fragmentBytes = ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck"));
 
         Assert.True(
@@ -143,7 +143,7 @@ public sealed class BrowserEngineTests {
     }
     [Fact]
     public void ParseFragment_composes_a_game_module_under_the_standard_basis() {
-        var basisPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json");
+        var basisPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.puck");
         var fragmentPath = RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck");
         var hostBytes = ShippedWorldDocuments.Composed(path: basisPath);
         var fragmentBytes = ShippedWorldDocuments.Read(path: fragmentPath);

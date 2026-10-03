@@ -50,7 +50,7 @@ public sealed class AffectedBaselineLawTests {
         Assert.Equal(expected: all, actual: Select(path: "build/changed.props").Baselines.Select(selector: static artifact => artifact.Name));
         Assert.Equal(expected: ["corpus-inventory"], actual: Select(path: "fixtures/data.json", consumer: true).Baselines.Select(selector: static artifact => artifact.Name));
     }
-    [InlineData("src/Puck.World/Assets/worlds/standard.world.json", "browser-parity")]
+    [InlineData("src/Puck.World/Assets/worlds/standard.puck", "browser-parity")]
     [InlineData("src/Puck.World/Assets/worlds/quality.puck", "browser-parity")]
     [InlineData("src/Puck.World/Assets/worlds/games/tictactoe.puck", "browser-parity")]
     [InlineData("VerifiedCode.json", "maths-ledger")]
