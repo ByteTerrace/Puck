@@ -8,7 +8,7 @@ namespace Puck.Cli.Gate;
 internal static class GateCommand {
     private const string Verb = "gate";
 
-    private static int Run(string target, bool gpu, bool record, TimeProvider clock, CancellationToken cancellationToken) {
+    private static int Run(string target, bool gpu, bool record, int suiteJobs, int gpuJobs, TimeProvider clock, CancellationToken cancellationToken) {
         if (record && !gpu) {
             return CliExit.Refuse(verb: Verb, what: "--record", why: "requires --gpu and an all-green qualification.");
         }
@@ -28,8 +28,10 @@ internal static class GateCommand {
         return GateRun.Run(
             directory: directory,
             gpu: gpu,
+            gpuJobs: gpuJobs,
             repositoryRoot: repositoryRoot,
             record: record,
+            suiteJobs: suiteJobs,
             clock: clock,
             runner: new ProcessGateRunner(cancellationToken: cancellationToken, clock: clock),
             target: target
@@ -40,18 +42,22 @@ internal static class GateCommand {
         var mergeBaseOption = AffectedCommand.MergeBase(description: "The branch the change lands on; the change is read against its merge base with HEAD.");
         var gpuOption = AffectedCommand.Gpu();
 
-        gpuOption.Description = "Add affected canaries and parity, device suites, every recorded counters workload and docs citations, serially.";
+        gpuOption.Description = "Add affected canaries (side by side, up to --gpu-jobs legs on the GPU) and parity, then device suites, every recorded counters workload and docs citations, one step after another.";
         var recordOption = new Option<bool>("--record") { Description = "Requires --gpu; refresh canary coverage only after every qualification step passes." };
+        var gpuJobsOption = Canary.CanaryCommand.GpuJobs();
+        var suiteJobsOption = AffectedSuites.Jobs();
         var command = new Command(
             description: "Build the solution and run the checks a branch's change needs, against its merge base.",
             name: Verb
-        ) { mergeBaseOption, gpuOption, recordOption };
+        ) { mergeBaseOption, gpuOption, gpuJobsOption, recordOption, suiteJobsOption };
 
         mergeBaseOption.DefaultValueFactory = static _ => GateRun.DefaultTarget;
         command.Detail(detail: (GatePlan.Detail() + $"""
 
             Baseline steps run only when affected reaches their owning project or declared data inputs.
-            The chosen canaries and parity follow the baseline checks, only with --gpu. Counters expands every
+            The affected step runs its suites side by side up to --suite-jobs. The chosen canaries, side by
+            side up to --gpu-jobs legs on the GPU, and parity follow the baseline checks, only with --gpu.
+            Counters expands every
             tests/Puck.Counters/*.world.json with matching ceilings, using its sibling script when
             present or the script recorded in its ceilings. Checks write nothing; --record writes coverage.
             Before each heavy step, admission waits for memory and disk headroom by host load's default thresholds.
@@ -69,6 +75,8 @@ internal static class GateCommand {
             """));
         command.SetAction(action: (parseResult, cancellationToken) => Task.FromResult(result: Run(
             gpu: parseResult.GetValue(option: gpuOption),
+            gpuJobs: parseResult.GetValue(option: gpuJobsOption),
+            suiteJobs: parseResult.GetValue(option: suiteJobsOption),
             record: parseResult.GetValue(option: recordOption),
             clock: clock,
             cancellationToken: cancellationToken,

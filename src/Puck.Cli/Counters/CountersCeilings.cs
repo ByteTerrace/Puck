@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Documents;
@@ -14,10 +15,11 @@ namespace Puck.Cli.Counters;
 /// count of a render node, in a pass or outside every pass, that is deterministic or per-backend-deterministic is held
 /// under a ceiling: <see cref="Record"/> takes each count's reading as its ceiling, so a count that read zero is a required
 /// zero, and <see cref="Check"/> fails a count over its ceiling, a required zero broken and a count no ceiling was recorded
-/// for, naming its backend, kind, pass and node. A per-backend-deterministic count is judged only on the device its
-/// backend's ceilings were recorded on, and reported as not judged elsewhere, except a required zero
-/// (<see cref="WorldCountCeiling.RequiredZero"/>): a per-backend-deterministic kind (the kernel kinds, whose magnitudes
-/// follow the device) that a pass never counts is a structural contract, so it is judged on every device.
+/// for, naming its backend, kind, pass and node. A backend's deterministic ceilings and its required zeros
+/// (<see cref="WorldCountCeiling.RequiredZero"/>: a zero of a kind whose magnitude follows the device, in a pass that never
+/// does that work, so a structural contract) are shared by every device; its other per-backend-deterministic ceilings are
+/// one record per device (<see cref="IsSameDevice"/>), and a run is judged against its own device's record. A run on a
+/// device with no record fails by name.
 /// </summary>
 internal static class CountersCeilings {
     /// <summary>The ceilings the workload is held to, repository-relative.</summary>
@@ -27,9 +29,10 @@ internal static class CountersCeilings {
 
     private static readonly Dictionary<string, WorkKind> SubmissionKindsByName = GpuWork.SubmissionKinds.ToArray().ToDictionary(keySelector: static kind => kind.Name);
 
-    /// <summary>What a check found: the counts that failed their ceilings, and the notes about counts it did not judge.</summary>
-    /// <param name="Failures">One line per failure, naming the backend, class, kind, pass and node.</param>
-    /// <param name="Notes">One line per backend some of whose counts were not judged, and why.</param>
+    /// <summary>What a check found: the counts that failed their ceilings, and the notes about how they were judged.</summary>
+    /// <param name="Failures">One line per failure, naming the backend, class, kind, pass and node, or the device no
+    /// ceilings were recorded for.</param>
+    /// <param name="Notes">One line per backend whose device record was recorded under another driver version.</param>
     public sealed record Verdict(IReadOnlyList<string> Failures, IReadOnlyList<string> Notes);
 
     /// <summary>Indicates whether a count is held under a ceiling: a GPU submission kind of a render node, in a pass or
@@ -54,53 +57,120 @@ internal static class CountersCeilings {
         (recorded == WorkClass.PerBackendDeterministic) &&
         (kind.Class == WorkClass.PerBackendDeterministic)
     );
-    /// <summary>Records a report's counts as ceilings: each backend's run on its device, every ceiled count's reading its
-    /// ceiling, and for every pass that did not execute a zero for each submission kind, which the pass reads once it does.
-    /// A zero of a per-backend-deterministic kind is recorded as a required zero, judged on every device.</summary>
+    /// <summary>Indicates whether a ceiling is shared by every device of its backend: a deterministic count's, or a
+    /// required zero. Every other ceiling is one device's reading.</summary>
+    /// <param name="recorded">The class the count is recorded as.</param>
+    /// <param name="requiredZero">Whether the ceiling is a required zero.</param>
+    /// <returns><see langword="true"/> when the ceiling belongs among the backend's shared ceilings.</returns>
+    public static bool IsShared(WorkClass recorded, bool requiredZero) =>
+        ((recorded == WorkClass.Deterministic) || requiredZero);
+    /// <summary>Indicates whether two devices share one ceilings record: the same backend, the same adapter (its PCI vendor
+    /// and device identifiers) and the same driver implementation (<see cref="GpuDeviceIdentity.DriverId"/>). The driver
+    /// version is recorded evidence, not part of the key: a driver update keeps the device's record, and a count the update
+    /// moves is judged against it.</summary>
+    /// <param name="left">The first device.</param>
+    /// <param name="right">The second device.</param>
+    /// <returns><see langword="true"/> when one record holds both.</returns>
+    public static bool IsSameDevice(GpuDeviceIdentity left, GpuDeviceIdentity right) => (
+        string.Equals(a: left.Backend, b: right.Backend, comparisonType: StringComparison.Ordinal) &&
+        (left.VendorId == right.VendorId) &&
+        (left.DeviceId == right.DeviceId) &&
+        (left.DriverId == right.DriverId)
+    );
+    /// <summary>Records a report's counts as ceilings: every ceiled count's reading its ceiling, and for every pass that did
+    /// not execute a zero for each submission kind, which the pass reads once it does. Each backend's deterministic
+    /// ceilings and required zeros are its shared ceilings, and the rest are the record of the device its run ran on.</summary>
     /// <param name="report">The report.</param>
-    /// <returns>The ceilings.</returns>
+    /// <returns>The ceilings, holding one device per backend.</returns>
     public static WorldCountersCeilings Record(WorldCountersReport report) => new(
-        Runs: [.. report.Runs.Select(selector: static run => new WorldCountersCeilingRun(
-            Backend: run.Backend,
-            Ceilings: [
-                .. run.Counts.Where(predicate: IsCeiled).Select(selector: static count => new WorldCountCeiling(
-                    Ceiling: count.Value,
-                    Detail: count.Detail,
-                    Class: count.Class,
-                    Kind: count.Kind,
-                    Node: count.Node!,
-                    Pass: count.Pass,
-                    RequiredZero: IsRequiredZero(ceiling: count.Value, kind: SubmissionKindsByName[count.Kind], recorded: count.Class)
-                )),
-                .. run.Passes.Where(predicate: static pass => (pass.State != GpuPassState.Executed)).SelectMany(selector: static pass => new string?[] { null }.Concat(second: pass.Details).SelectMany(selector: detail => GpuWork.SubmissionKinds.ToArray().Select(selector: kind => {
-                    var recorded = CountersReading.ClassIn(kind: kind.Class, pass: pass.Class);
+        Backends: [.. report.Runs.Select(selector: static run => {
+            var ceilings = CeilingsOf(run: run);
 
-                    return new WorldCountCeiling(
-                        Ceiling: 0L,
-                        Detail: detail,
-                        Class: recorded,
-                        Kind: kind.Name,
-                        Node: pass.Node,
-                        Pass: pass.Label,
-                        RequiredZero: IsRequiredZero(ceiling: 0L, kind: kind, recorded: recorded)
-                    );
-                }))),
-            ],
-            Device: run.Device,
-            Height: run.Height,
-            Width: run.Width
-        ))],
+            return new WorldCountersBackendCeilings(
+                Backend: run.Backend,
+                Ceilings: [.. ceilings.Where(predicate: static ceiling => IsShared(recorded: ceiling.Class, requiredZero: ceiling.RequiredZero))],
+                Devices: [new WorldCountersDeviceCeilings(
+                    Ceilings: [.. ceilings.Where(predicate: static ceiling => !IsShared(recorded: ceiling.Class, requiredZero: ceiling.RequiredZero))],
+                    Device: run.Device
+                )]
+            );
+        })],
+        Height: ((report.Runs.Count > 0) ? report.Runs[0].Height : 0),
         Script: report.Script,
+        Width: ((report.Runs.Count > 0) ? report.Runs[0].Width : 0),
         Workload: report.Workload
     );
-    /// <summary>Holds a report to ceilings, backend by backend. Every recorded ceiling must have been measured: its count
-    /// read, of the class it was recorded as, or its pass present and not executed, which reads zero; and every ceiled
-    /// count read must have a ceiling. Only then is each value compared, a per-backend-deterministic one only on the device
-    /// the backend's ceilings were recorded on, except a required zero, which is compared on every device.</summary>
+    /// <summary>Merges a fresh record into the ceilings already recorded: each backend's shared ceilings and the resolution
+    /// become the record's, the record's device replaces that device's record in place or joins after the others, and
+    /// every other device's record is kept as it was.</summary>
+    /// <param name="recorded">The fresh record (<see cref="Record"/>).</param>
+    /// <param name="existing">The ceilings already recorded.</param>
+    /// <param name="merged">The merged ceilings, or <see langword="null"/> when the method returns
+    /// <see langword="false"/>.</param>
+    /// <param name="reason">Why the two cannot be merged, or empty.</param>
+    /// <returns><see langword="true"/> when the record merges: the same workload and script, and no ceiling the record
+    /// shares across devices that another device's record holds as its own reading.</returns>
+    public static bool TryMerge(WorldCountersCeilings recorded, WorldCountersCeilings existing, [NotNullWhen(returnValue: true)] out WorldCountersCeilings? merged, out string reason) {
+        merged = null;
+
+        if (
+            !string.Equals(a: recorded.Workload, b: existing.Workload, comparisonType: StringComparison.Ordinal) ||
+            !string.Equals(a: recorded.Script, b: existing.Script, comparisonType: StringComparison.Ordinal)
+        ) {
+            reason = $"the ceilings hold {existing.Workload} run by {existing.Script}, not {recorded.Workload} run by {recorded.Script}; record another workload into a ceilings file of its own";
+
+            return false;
+        }
+
+        var backends = new List<WorldCountersBackendCeilings>(collection: existing.Backends);
+
+        foreach (var backend in recorded.Backends) {
+            var index = backends.FindIndex(match: candidate => string.Equals(a: candidate.Backend, b: backend.Backend, comparisonType: StringComparison.Ordinal));
+
+            if (index < 0) {
+                backends.Add(item: backend);
+
+                continue;
+            }
+
+            var devices = new List<WorldCountersDeviceCeilings>(collection: backends[index].Devices);
+
+            foreach (var device in backend.Devices) {
+                var at = devices.FindIndex(match: candidate => IsSameDevice(left: candidate.Device, right: device.Device));
+
+                if (at < 0) {
+                    devices.Add(item: device);
+                } else {
+                    devices[at] = device;
+                }
+            }
+
+            var shared = backend.Ceilings.Select(selector: static ceiling => KeyOf(ceiling: ceiling)).ToHashSet();
+
+            foreach (var other in devices.Where(predicate: other => !backend.Devices.Any(predicate: device => IsSameDevice(left: device.Device, right: other.Device)))) {
+                if (other.Ceilings.FirstOrDefault(predicate: ceiling => shared.Contains(item: KeyOf(ceiling: ceiling))) is { } held) {
+                    reason = $"{backend.Backend}: {Where(ceiling: held)} is a ceiling every device shares in this record and {Describe(device: other.Device)}'s own reading in the ledger; record that device again on it";
+
+                    return false;
+                }
+            }
+
+            backends[index] = backend with { Devices = devices };
+        }
+
+        merged = recorded with { Backends = backends };
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Holds a report to ceilings, backend by backend, each run against its backend's shared ceilings and its own
+    /// device's record. Every recorded ceiling must have been measured: its count read, of the class it was recorded as, or
+    /// its pass present and not executed, which reads zero; and every ceiled count read must have a ceiling. A run on a
+    /// device with no record fails by name, and is still held to the shared ceilings.</summary>
     /// <param name="report">The report.</param>
     /// <param name="ceilings">The ceilings.</param>
-    /// <returns>The failures and the notes; no failure when every expectation was measured and every judged count is
-    /// within its ceiling.</returns>
+    /// <returns>The failures and the notes; no failure when every expectation was measured and every count is within its
+    /// ceiling.</returns>
     public static Verdict Check(WorldCountersReport report, WorldCountersCeilings ceilings) {
         var failures = new List<string>();
         var notes = new List<string>();
@@ -117,34 +187,43 @@ internal static class CountersCeilings {
             );
         }
 
-        foreach (var recorded in ceilings.Runs) {
+        foreach (var recorded in ceilings.Backends) {
             if (!report.Runs.Any(predicate: run => string.Equals(a: run.Backend, b: recorded.Backend, comparisonType: StringComparison.Ordinal))) {
                 failures.Add(item: $"{recorded.Backend}: the ceilings were recorded for the backend, which the run did not measure");
             }
         }
 
         foreach (var run in report.Runs) {
-            var recorded = ceilings.Runs.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Backend, b: run.Backend, comparisonType: StringComparison.Ordinal));
+            var recorded = ceilings.Backends.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Backend, b: run.Backend, comparisonType: StringComparison.Ordinal));
 
             if (recorded is null) {
                 failures.Add(item: $"{run.Backend}: no ceilings were recorded for the backend");
 
                 continue;
             }
-            if ((recorded.Width, recorded.Height) != (run.Width, run.Height)) {
-                failures.Add(item: $"{run.Backend}: the ceilings were recorded at {recorded.Width}x{recorded.Height}, the run is {run.Width}x{run.Height}");
+            if ((ceilings.Width, ceilings.Height) != (run.Width, run.Height)) {
+                failures.Add(item: $"{run.Backend}: the ceilings were recorded at {ceilings.Width}x{ceilings.Height}, the run is {run.Width}x{run.Height}");
 
                 continue;
             }
 
-            var judged = (recorded.Device == run.Device);
+            var device = recorded.Devices.FirstOrDefault(predicate: candidate => IsSameDevice(left: candidate.Device, right: run.Device));
+
+            if (device is null) {
+                failures.Add(item: $"{run.Backend}: no ceilings recorded for {Describe(device: run.Device)}; run puck counters --record on it");
+            } else if (device.Device.DriverVersionRaw != run.Device.DriverVersionRaw) {
+                notes.Add(item: $"{run.Backend}: the ceilings for {Describe(device: run.Device)} were recorded under driver {DriverOf(device: device.Device)}, this run's driver is {DriverOf(device: run.Device)}");
+            }
+
+            var held = ((device is null)
+                ? recorded.Ceilings
+                : recorded.Ceilings.Concat(second: device.Ceilings).ToArray()
+            );
             var measured = new Dictionary<(string Node, string? Pass, string? Detail, string Kind), WorldCount>();
             var passes = run.Passes.ToDictionary(
                 elementSelector: static pass => pass.State,
                 keySelector: static pass => (pass.Node, pass.Label)
             );
-            var unjudged = 0;
-            var zerosJudged = 0;
 
             foreach (var count in run.Counts.Where(predicate: static count => (
                 string.Equals(a: count.Source, b: GpuWorkReport.Section, comparisonType: StringComparison.Ordinal) &&
@@ -154,11 +233,11 @@ internal static class CountersCeilings {
                 measured[(count.Node!, count.Pass, count.Detail, count.Kind)] = count;
             }
 
-            foreach (var ceiling in recorded.Ceilings) {
-                var where = $"{run.Backend}: {EnumWireName<WorkClass>.Of(value: ceiling.Class)} kind={ceiling.Kind} pass={(ceiling.Pass ?? Outside)} detail={(ceiling.Detail ?? "-")} node={ceiling.Node}";
+            foreach (var ceiling in held) {
+                var where = $"{run.Backend}: {Where(ceiling: ceiling)}";
 
                 if (!measured.Remove(
-                    key: (ceiling.Node, ceiling.Pass, ceiling.Detail, ceiling.Kind),
+                    key: KeyOf(ceiling: ceiling),
                     value: out var count
                 )) {
                     // A pass that did not execute reads zero, which any ceiling holds.
@@ -169,8 +248,6 @@ internal static class CountersCeilings {
                         ((ceiling.Detail is not null) && !run.Passes.Single(predicate: pass => ((pass.Node == ceiling.Node) && (pass.Label == ceiling.Pass))).Details.Contains(value: ceiling.Detail))
                     ) {
                         failures.Add(item: $"{where} was recorded but not measured");
-                    } else if (ceiling.RequiredZero && !judged) {
-                        zerosJudged++;
                     }
 
                     continue;
@@ -180,16 +257,6 @@ internal static class CountersCeilings {
 
                     continue;
                 }
-                if ((ceiling.Class == WorkClass.PerBackendDeterministic) && !judged) {
-                    // A required zero is a structural contract, so it holds on a foreign device too.
-                    if (!ceiling.RequiredZero) {
-                        unjudged++;
-
-                        continue;
-                    }
-
-                    zerosJudged++;
-                }
                 if ((ceiling.Ceiling == 0L) && (count.Value != 0L)) {
                     failures.Add(item: $"{where} breaks its required zero: reads {Spell(value: count.Value)}");
                 } else if (count.Value > ceiling.Ceiling) {
@@ -197,19 +264,19 @@ internal static class CountersCeilings {
                 }
             }
 
-            foreach (var count in measured.Values.Where(predicate: IsCeiled)) {
+            // On a device with no record, its own readings are covered by the one line naming the device.
+            foreach (var count in measured.Values.Where(predicate: count => (IsCeiled(count: count) && ((device is not null) || IsShared(
+                recorded: count.Class,
+                requiredZero: IsRequiredZero(ceiling: count.Value, kind: SubmissionKindsByName[count.Kind], recorded: count.Class)
+            ))))) {
                 failures.Add(item: $"{run.Backend}: {EnumWireName<WorkClass>.Of(value: count.Class)} kind={count.Kind} pass={(count.Pass ?? Outside)} detail={(count.Detail ?? "-")} node={count.Node} reads {Spell(value: count.Value)} with no ceiling recorded");
             }
             foreach (var pass in run.Passes.Where(predicate: static pass => (pass.State != GpuPassState.Executed))) {
                 foreach (var detail in pass.Details) {
-                    if (!recorded.Ceilings.Any(predicate: ceiling => ((ceiling.Node == pass.Node) && (ceiling.Pass == pass.Label) && (ceiling.Detail == detail)))) {
+                    if (!held.Any(predicate: ceiling => ((ceiling.Node == pass.Node) && (ceiling.Pass == pass.Label) && (ceiling.Detail == detail)))) {
                         failures.Add(item: $"{run.Backend}: pass={pass.Label} detail={detail} node={pass.Node} has no ceiling recorded");
                     }
                 }
-            }
-
-            if (!judged && ((unjudged > 0) || (zerosJudged > 0))) {
-                notes.Add(item: $"{run.Backend}: {unjudged} per-backend-deterministic count(s) not judged, {zerosJudged} required zero(s) still judged: the ceilings were recorded on {Describe(device: recorded.Device)}, this run's device is {Describe(device: run.Device)}");
             }
         }
 
@@ -219,7 +286,9 @@ internal static class CountersCeilings {
         );
     }
     /// <summary>Reads a ceilings document, refusing one that is not a well-formed <c>puck.counters.ceilings.v1</c>
-    /// document.</summary>
+    /// document: every ceiling of a GPU submission kind, marked a required zero exactly when it is one, each shared ceiling
+    /// a deterministic count's or a required zero and each device's ceiling neither, each device of its backend and recorded
+    /// once, and no ceiling both shared and a device's own.</summary>
     /// <param name="path">The document's path.</param>
     /// <param name="ceilings">The ceilings, or <see langword="null"/> when the method returns <see langword="false"/>.</param>
     /// <param name="reason">Why the file is not a ceilings document, or empty.</param>
@@ -258,24 +327,13 @@ internal static class CountersCeilings {
             return false;
         }
 
-        foreach (var run in ceilings.Runs) {
-            foreach (var ceiling in run.Ceilings) {
-                if (!SubmissionKindsByName.TryGetValue(key: ceiling.Kind, value: out var kind)) {
-                    reason = $"a malformed ceiling: {run.Backend} kind={ceiling.Kind} is not a GPU submission kind";
-                    ceilings = null;
+        reason = Malformation(ceilings: ceilings);
 
-                    return false;
-                }
-                if (ceiling.RequiredZero != IsRequiredZero(ceiling: ceiling.Ceiling, kind: kind, recorded: ceiling.Class)) {
-                    reason = $"a malformed ceiling: {run.Backend} kind={ceiling.Kind} pass={(ceiling.Pass ?? Outside)} node={ceiling.Node} requiredZero does not match its kind, class and ceiling";
-                    ceilings = null;
+        if (reason.Length > 0) {
+            ceilings = null;
 
-                    return false;
-                }
-            }
+            return false;
         }
-
-        reason = string.Empty;
 
         return true;
     }
@@ -289,8 +347,103 @@ internal static class CountersCeilings {
         );
     }
 
-    private static string Describe(GpuDeviceIdentity device) =>
-        $"{device.AdapterName} (driver {device.DriverVersion})";
+    // Every ceiled count's reading, then a zero for each submission kind of every pass that did not execute, in report order.
+    private static WorldCountCeiling[] CeilingsOf(WorldCountersRun run) => [
+        .. run.Counts.Where(predicate: IsCeiled).Select(selector: static count => new WorldCountCeiling(
+            Ceiling: count.Value,
+            Detail: count.Detail,
+            Class: count.Class,
+            Kind: count.Kind,
+            Node: count.Node!,
+            Pass: count.Pass,
+            RequiredZero: IsRequiredZero(ceiling: count.Value, kind: SubmissionKindsByName[count.Kind], recorded: count.Class)
+        )),
+        .. run.Passes.Where(predicate: static pass => (pass.State != GpuPassState.Executed)).SelectMany(selector: static pass => new string?[] { null }.Concat(second: pass.Details).SelectMany(selector: detail => GpuWork.SubmissionKinds.ToArray().Select(selector: kind => {
+            var recorded = CountersReading.ClassIn(kind: kind.Class, pass: pass.Class);
+
+            return new WorldCountCeiling(
+                Ceiling: 0L,
+                Detail: detail,
+                Class: recorded,
+                Kind: kind.Name,
+                Node: pass.Node,
+                Pass: pass.Label,
+                RequiredZero: IsRequiredZero(ceiling: 0L, kind: kind, recorded: recorded)
+            );
+        }))),
+    ];
+    private static string Describe(GpuDeviceIdentity device) {
+        var builder = new StringBuilder().Append(value: device.AdapterName).Append(
+            provider: CultureInfo.InvariantCulture,
+            handler: $" (vendor=0x{device.VendorId:x4} device=0x{device.DeviceId:x4}"
+        );
+
+        if (device.DriverId != 0U) {
+            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $" driver.id={device.DriverId}");
+        }
+
+        return builder.Append(value: ')').ToString();
+    }
+    private static string DriverOf(GpuDeviceIdentity device) => ((device.DriverVersion.Length > 0)
+        ? device.DriverVersion
+        : string.Create(provider: CultureInfo.InvariantCulture, handler: $"0x{device.DriverVersionRaw:x}")
+    );
+    private static (string Node, string? Pass, string? Detail, string Kind) KeyOf(WorldCountCeiling ceiling) =>
+        (ceiling.Node, ceiling.Pass, ceiling.Detail, ceiling.Kind);
+    // Why a read document is not a well-formed ledger, or empty.
+    private static string Malformation(WorldCountersCeilings ceilings) {
+        foreach (var backend in ceilings.Backends) {
+            var shared = new HashSet<(string Node, string? Pass, string? Detail, string Kind)>();
+
+            foreach (var ceiling in backend.Ceilings) {
+                if (Malformed(backend: backend.Backend, ceiling: ceiling) is { Length: > 0 } malformed) {
+                    return malformed;
+                }
+                if (!IsShared(recorded: ceiling.Class, requiredZero: ceiling.RequiredZero)) {
+                    return $"a malformed ceiling: {backend.Backend} {Where(ceiling: ceiling)} is one device's reading among the ceilings every device shares";
+                }
+
+                _ = shared.Add(item: KeyOf(ceiling: ceiling));
+            }
+
+            for (var index = 0; (index < backend.Devices.Count); index++) {
+                var device = backend.Devices[index];
+
+                if (!string.Equals(a: device.Device.Backend, b: backend.Backend, comparisonType: StringComparison.Ordinal)) {
+                    return $"a malformed device record: {Describe(device: device.Device)} ran on {device.Device.Backend}, recorded under {backend.Backend}";
+                }
+                if (backend.Devices.Take(count: index).Any(predicate: earlier => IsSameDevice(left: earlier.Device, right: device.Device))) {
+                    return $"a malformed device record: {backend.Backend} records {Describe(device: device.Device)} twice";
+                }
+
+                foreach (var ceiling in device.Ceilings) {
+                    if (Malformed(backend: backend.Backend, ceiling: ceiling) is { Length: > 0 } malformed) {
+                        return malformed;
+                    }
+                    if (IsShared(recorded: ceiling.Class, requiredZero: ceiling.RequiredZero)) {
+                        return $"a malformed ceiling: {backend.Backend} {Where(ceiling: ceiling)} is a ceiling every device shares, recorded as {Describe(device: device.Device)}'s own";
+                    }
+                    if (shared.Contains(item: KeyOf(ceiling: ceiling))) {
+                        return $"a malformed ceiling: {backend.Backend} {Where(ceiling: ceiling)} is both a shared ceiling and {Describe(device: device.Device)}'s own";
+                    }
+                }
+            }
+        }
+
+        return string.Empty;
+    }
+    private static string Malformed(string backend, WorldCountCeiling ceiling) {
+        if (!SubmissionKindsByName.TryGetValue(key: ceiling.Kind, value: out var kind)) {
+            return $"a malformed ceiling: {backend} kind={ceiling.Kind} is not a GPU submission kind";
+        }
+        if (ceiling.RequiredZero != IsRequiredZero(ceiling: ceiling.Ceiling, kind: kind, recorded: ceiling.Class)) {
+            return $"a malformed ceiling: {backend} kind={ceiling.Kind} pass={(ceiling.Pass ?? Outside)} node={ceiling.Node} requiredZero does not match its kind, class and ceiling";
+        }
+
+        return string.Empty;
+    }
     private static string Spell(long value) =>
         value.ToString(provider: CultureInfo.InvariantCulture);
+    private static string Where(WorldCountCeiling ceiling) =>
+        $"{EnumWireName<WorkClass>.Of(value: ceiling.Class)} kind={ceiling.Kind} pass={(ceiling.Pass ?? Outside)} detail={(ceiling.Detail ?? "-")} node={ceiling.Node}";
 }

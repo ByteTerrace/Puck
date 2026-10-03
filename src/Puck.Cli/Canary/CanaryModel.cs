@@ -53,9 +53,19 @@ internal sealed record CanaryManifest(
     // The wall-clock ceiling one boot of a leg may take before the runner kills it. Not the leg's length: every leg
     // ends when its script ends, because the runner closes the script with wire.errors and quit.
     int TimeoutSeconds,
-    string Title
+    string Title,
+    // Whether every leg runs alone on the machine, with no other leg beside it: the manifest's own declaration that
+    // its observation depends on how busy the machine is (for instance several processes whose independent wall
+    // clocks must line up), never a property derived from its boot shape or requirements.
+    bool Exclusive = false
 ) {
     public bool IsAutomatic => ((BootShape == CanaryBootShape.Headless) && (Requirements.Count == 0));
+    /// <summary>Whether every leg holds one of the run's GPU slots: it boots a real graphics device, windowed or
+    /// offscreen, or declares the <c>gpu</c> requirement.</summary>
+    public bool UsesGpu => ((BootShape is CanaryBootShape.Windowed or CanaryBootShape.Offscreen) || Requirements.Contains(
+        comparer: StringComparer.Ordinal,
+        value: "gpu"
+    ));
 }
 internal sealed record CanaryLeg(
     IReadOnlyList<CanaryAssertion> Assertions,

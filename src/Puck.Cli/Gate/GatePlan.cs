@@ -22,7 +22,7 @@ internal static class GatePlan {
     public static readonly IReadOnlyList<GateStep> Steps = [
         new("build", GateStepKind.Build, ["build", "Puck.slnx", "-c", CliOptions.DefaultConfiguration, CliOptions.NoNodeReuse, "-v", "q", "-nologo"], Heavy: true),
         new("copy CLI", GateStepKind.CopyCli, []),
-        new("affected", GateStepKind.Puck, ["affected", "--merge-base", "<merge base>", "--run"], Heavy: true),
+        new("affected", GateStepKind.Puck, ["affected", "--merge-base", "<merge base>", "--run", "--suite-jobs", "<suite-jobs>"], Heavy: true),
         new("format", GateStepKind.Puck, ["format", "--check", "--file-list", "<file list>"], Sources: true),
         new("lengths", GateStepKind.Puck, ["lengths", "--check"]),
         new("comment-smells", GateStepKind.Puck, ["comment-smells", "--check"]),
@@ -38,7 +38,7 @@ internal static class GatePlan {
         new("derivations", GateStepKind.Puck, ["derivations", "--check"]),
         .. BaselinesCommand.Artifacts.OrderBy(keySelector: static artifact => artifact.Name, comparer: StringComparer.Ordinal)
             .Select(selector: static artifact => new GateStep(("baselines " + artifact.Name), GateStepKind.Baseline, artifact.CheckArguments(), Heavy: true)),
-        new("affected canaries", GateStepKind.Canaries, ["canary", "<canaries>"], Heavy: true, Gpu: true),
+        new("affected canaries", GateStepKind.Canaries, ["canary", "--gpu-jobs", "<gpu-jobs>", "<canaries>"], Heavy: true, Gpu: true),
         new("parity", GateStepKind.Parity, ["parity"], Heavy: true, Gpu: true),
         .. DeviceSuites.Select(selector: static device => DeviceSuite(selection: device.Selection, suite: device.Suite)),
         new("counters", GateStepKind.Counters, ["counters", "--check", "--world", "<world>", "--ceilings", "<ceilings>"], Heavy: true, Gpu: true),
@@ -93,13 +93,25 @@ internal static class GatePlan {
             };
         }
     }
-    public static IEnumerable<GateStep> Expand(string repositoryRoot, string mergeBase, string fileList, bool sources, bool gpu, bool record, AffectedPlan affected) {
+    /// <summary>Expands the plan into the steps one run takes, in order.</summary>
+    /// <param name="repositoryRoot">The checkout the run gates.</param>
+    /// <param name="mergeBase">The resolved merge base the affected step reads the change against.</param>
+    /// <param name="fileList">The JSON list of changed sources the format step checks.</param>
+    /// <param name="sources">Whether any C# or <c>.puck</c> source changed.</param>
+    /// <param name="gpu">Whether the run takes the GPU steps.</param>
+    /// <param name="record">Whether the run ends by recording canary coverage.</param>
+    /// <param name="affected">The affected plan, which chooses the baseline, canary and parity steps.</param>
+    /// <param name="suiteJobs">The most suites the affected step runs at once.</param>
+    /// <param name="gpuJobs">The most canary legs the affected step keeps on the GPU at once, with
+    /// <paramref name="gpu"/>.</param>
+    /// <returns>The steps.</returns>
+    public static IEnumerable<GateStep> Expand(string repositoryRoot, string mergeBase, string fileList, bool sources, bool gpu, bool record, AffectedPlan affected, int suiteJobs, int gpuJobs) {
         foreach (var step in Steps) {
             if ((step.Gpu && !gpu) || (step.Record && !record) || (step.Sources && !sources)) { continue; }
             if ((step.Kind == GateStepKind.Baseline) && !affected.Baselines.Any(predicate: artifact => (artifact.Name == step.Arguments[1]))) { continue; }
             if ((step.Kind == GateStepKind.Parity) && !affected.Parity) { continue; }
             if (step.Kind == GateStepKind.Canaries) {
-                if (affected.Canaries.Count > 0) { yield return step with { Arguments = ["canary", .. affected.Canaries] }; }
+                if (affected.Canaries.Count > 0) { yield return step with { Arguments = ["canary", "--gpu-jobs", gpuJobs.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), .. affected.Canaries] }; }
                 continue;
             }
             if (step.Kind == GateStepKind.Counters) {
@@ -110,6 +122,7 @@ internal static class GatePlan {
                 Arguments = [.. step.Arguments.Select(selector: argument => argument switch {
                 "<merge base>" => mergeBase,
                 "<file list>" => fileList,
+                "<suite-jobs>" => suiteJobs.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
                 _ => argument,
             })],
             };
