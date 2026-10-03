@@ -10,12 +10,10 @@ namespace Puck.World;
 /// seat slot) stay bare <see cref="InvalidDataException"/>s outside this catalog — see
 /// <see cref="ReplayRefusalExtensions"/>'s remarks for why this door's v1 scope stops here.</summary>
 internal enum ReplayRefusal {
-    /// <summary>A recording was armed after the world stepped, so it would start from a checkpoint of the live state,
-    /// and that state is one no authority checkpoint captures: a mounted or pumped addon guest, a screen operation, a
-    /// stepped machine without checkpoint support, a coupled link or rewind history, a live session, an engagement in
-    /// flight, or an edit not yet applied. Arming refuses rather than produce a tape that cannot re-drive.</summary>
-    [Refusal(door: "replay.record", condition: "the world has stepped and its live state is one no authority checkpoint captures", kind: RefusalKind.Verdict, Unsupported = true)]
-    StartNotCheckpointable,
+    /// <summary>A recording was armed after the world's first step. A tape re-establishes the definition and the seats,
+    /// never the state a step reached, so its re-drive could not start where the recording did.</summary>
+    [Refusal(door: "replay.record", condition: "the world has already stepped when a recording is armed", kind: RefusalKind.Verdict, Unsupported = true)]
+    ArmedAfterFirstStep,
 
     /// <summary>The leading magic or shape token does not match this build's pinned <c>.puckreplay</c> shape.</summary>
     [Refusal(door: "replay.tape", condition: "the leading magic or shape token does not match this build's pinned .puckreplay shape", kind: RefusalKind.ProtocolFault)]
