@@ -1025,7 +1025,13 @@ public sealed class CrossingIdentityPrivacyLawTests {
     // The red legs: a binding taped before the later adoption gives seat 0 score 1 on the re-drive, and two detached
     // identities leave seat 1 without the write.
     [Fact]
-    public void TwoTravelersHomeUnderOneIdentityReplayTheirSharedBinding() {
+    public void TwoTravelersHomeUnderOneIdentityReplayTheirSharedBinding() => ProveSharedHomeBinding(separateArrivals: false);
+    // The non-atomic party path lands one arrival per traveler. With an arrival-local detached map, the second
+    // arrival leaves replay seat 0 at score 1 while live seat 0 reads 2, failing Primary.Match at that tick.
+    [Fact]
+    public void SeparateHomeArrivalsUnderOneIdentityReplayTheirSharedBinding() => ProveSharedHomeBinding(separateArrivals: true);
+
+    private static void ProveSharedHomeBinding(bool separateArrivals) {
         const int LaneCapacity = 16;
         using var directory = new TemporaryDirectory(prefix: "puck-privacy-shared-");
         var definition = Fixtures.BuildDocument() with {
@@ -1080,11 +1086,28 @@ public sealed class CrossingIdentityPrivacyLawTests {
             })]
         );
 
-        Assert.True(condition: server.ReserveTransfer(request: request).Accepted);
-        Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: request.SourceAuthority,
-            transferId: request.TransferId, reason: out _, members: [.. carried.Select(selector: static projection => new WorldTransferCommitMember(
-                Profile: projection, HasMappedArrival: false, BodyMotionProgramName: "", Position: default, YawRadians: default,
-                PlanarVelocity: default, VerticalVelocity: default))]));
+        var arrivals = (separateArrivals
+            ? request.Members.Select(selector: (member, index) => request with {
+                TransferId = ((ulong)(index + 1)),
+                PartyAllOrNothing = false,
+                Members = [member],
+            }).ToArray()
+            : [request]);
+
+        foreach (var arrival in arrivals) {
+            Assert.True(condition: server.ReserveTransfer(request: arrival).Accepted);
+            Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: arrival.SourceAuthority,
+                transferId: arrival.TransferId, reason: out _, members: [.. arrival.Members.Select(selector: static member => new WorldTransferCommitMember(
+                    Profile: member.Identity, HasMappedArrival: false, BodyMotionProgramName: "", Position: default, YawRadians: default,
+                    PlanarVelocity: default, VerticalVelocity: default))]));
+            if (separateArrivals) {
+                fixture.Step();
+                tape.NoteTick();
+            }
+        }
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 1)!.Profile);
+        Assert.Equal(expected: 2L, actual: Fact(identity: owned, key: "score"));
         for (var tick = 0; (tick < 5); tick++) {
             fixture.Step();
             tape.NoteTick();
@@ -1100,7 +1123,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
 
         Assert.True(condition: verdict.Primary.Match, userMessage: verdict.Primary.Describe());
         Assert.Equal(expected: -1, actual: verdict.Primary.DivergedAt);
-        Assert.Equal(expected: 6, actual: verdict.Primary.Ticks);
+        Assert.Equal(expected: (separateArrivals ? 8 : 6), actual: verdict.Primary.Ticks);
     }
 
     // Records one tick on a fresh server whose catalog owns the boot profile, seat 0 joined as that identity.

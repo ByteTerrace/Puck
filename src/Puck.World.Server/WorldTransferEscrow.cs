@@ -187,6 +187,8 @@ public sealed partial class WorldTransferEscrow {
     private WorldArrivalOutcome? m_relandOutcome;
     private bool m_relandRolledBack;
 
+    private readonly Dictionary<string, WorldIdentity> m_detachedHomeProfiles = new(comparer: StringComparer.Ordinal);
+
     /// <summary>Initializes a new instance of the <see cref="WorldTransferEscrow"/> class for one authority.</summary>
     /// <param name="server">The authority the escrow lands travelers in.</param>
     /// <param name="landingRefusal">An admission policy evaluated at each commit member's ordinal, returning a refusal
@@ -273,6 +275,7 @@ public sealed partial class WorldTransferEscrow {
         m_mobilityLeases.Clear();
         m_mobilityAdmissions.Clear();
         m_borderAdmissions.Clear();
+        m_detachedHomeProfiles.Clear();
         m_crossingSequence = checkpoint.CrossingSequence;
 
         // Commit's own "definition moved after reservation" guard is a REFERENCE check against the live
@@ -990,14 +993,13 @@ public sealed partial class WorldTransferEscrow {
     // a taped rollback never reaches this point. Returns, in member order, the projection each traveler that came home
     // is bound to (what its owned identity holds once the adoption stands, a partial one included) and null for a
     // traveler that did not; the tape records it as part of the arrival's outcome.
-    // Several travelers of one arrival may come home under one owned identity: live, they bind the one object, so each
+    // Several travelers across arrivals may come home under one owned identity: live, they bind the one object, so each
     // adoption writes into what the others hold, and the tape records every binding once every adoption has run. A
     // re-drive binds travelers whose taped projections name one identity to one shared detached identity, so they
     // alias exactly as they did live.
     private WorldIdentityProjection?[] AdoptHomeProfiles(WorldCrossingArrival arrival) {
         var adopted = new WorldIdentityProjection?[arrival.Slots.Count];
         var bound = new WorldIdentity?[arrival.Slots.Count];
-        Dictionary<string, WorldIdentity>? detachedById = null;
 
         for (var index = 0; (index < arrival.Slots.Count); index++) {
             var slot = arrival.Slots[index];
@@ -1015,29 +1017,30 @@ public sealed partial class WorldTransferEscrow {
                     continue;
                 }
 
-                detachedById ??= new Dictionary<string, WorldIdentity>(comparer: StringComparer.Ordinal);
+                var adoptedProfile = WorldIdentity.FromProjection(
+                    defaults: m_server.Definition.PlayerDefaults,
+                    projection: in taped
+                );
 
-                if (!detachedById.TryGetValue(
+                if (!m_detachedHomeProfiles.TryGetValue(
                     key: taped.Id,
                     value: out var detached
                 )) {
-                    detached = WorldIdentity.FromProjection(
-                        defaults: m_server.Definition.PlayerDefaults,
-                        projection: in taped
-                    );
-                    detachedById.Add(
+                    detached = adoptedProfile;
+                    m_detachedHomeProfiles.Add(
                         key: taped.Id,
                         value: detached
                     );
-
-                    if (owned is not null) {
-                        WorldReplaySnapshot.ReportAdoptionDrift(
-                            current: owned,
-                            narrationHub: m_server.Profiles.NarrationHub,
-                            taped: detached,
-                            used: WorldReplaySnapshot.HomeArrivalTapedUsed
-                        );
-                    }
+                } else if (!detached.TryAdopt(carried: adoptedProfile, reason: out var adoptionReason)) {
+                    throw ReplayRefusal.ArrivalRefused.Raise(message: $"home identity '{taped.Id}' could not reproduce its recorded adoption — {adoptionReason}");
+                }
+                if (owned is not null) {
+                    WorldReplaySnapshot.ReportAdoptionDrift(
+                        current: owned,
+                        narrationHub: m_server.Profiles.NarrationHub,
+                        taped: adoptedProfile,
+                        used: WorldReplaySnapshot.HomeArrivalTapedUsed
+                    );
                 }
                 BindHomeProfile(profile: detached, slot: slot);
                 adopted[index] = taped;
