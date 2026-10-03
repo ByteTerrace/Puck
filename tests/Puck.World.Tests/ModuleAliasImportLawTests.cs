@@ -248,6 +248,7 @@ public sealed class ModuleAliasImportLawTests {
     public void CompositionReadBackNamesEachAlias() {
         Assert.True(
             condition: WorldDefinitionFileSource.TryDescribeComposition(
+                content: Puck.Testing.ShippedWorldDocuments.Read(path: FixturePath()),
                 path: FixturePath(),
                 layers: out var layers,
                 reason: out var reason
