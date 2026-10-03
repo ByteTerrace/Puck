@@ -121,6 +121,36 @@ public sealed partial class WorldRoutedPresentationLawTests {
         Assert.Equal(actual: reopened.Index, expected: 0);
         Assert.Single(collection: Capture(source: reopened.Scene.FrameSource).Views);
     }
+    // A window whose camera fit is unavailable renders the world's default projection, which takes the same resolution
+    // policy as a fitted camera: the ceiling and the grid a pin holds.
+    [Fact]
+    public void AWindowsDefaultProjectionFallbackIsDressedByItsResolutionPolicy() {
+        using var state = new TemporaryDirectory(prefix: "puck-routed-window-fallback-");
+        var host = state.Own(owner: WorldBootHarness.Compose(
+            edit: definition => (definition with {
+                ViewsRaw = (definition.Views with {
+                    Layouts = [new WorldViewLayout(Name: "seat", Slots: [new WorldViewSlot(Height: 1f, Width: 1f, X: 0f, Y: 0f)])],
+                }),
+            }),
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: state,
+            world: "tests/Puck.Counters/counters.world.json"
+        ).Build());
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
+        using var window = presenter.AttachWindow(endpoint: north);
+
+        _ = Capture(source: presenter);
+        Assert.Null(value: window.View);
+        Assert.Equal(actual: Assert.Single(collection: Capture(source: window.Scene.FrameSource).Views).RenderScale, expected: 1f);
+
+        window.FallbackResolution = static view => (view with { RenderScale = 0.75f, ResolvedRenderScale = 0.625f });
+
+        var dressed = Assert.Single(collection: Capture(source: window.Scene.FrameSource).Views);
+
+        Assert.Equal(actual: dressed.RenderScale, expected: 0.75f);
+        Assert.Equal(actual: dressed.ResolvedRenderScale, expected: 0.625f);
+    }
     // A window shows its destination under the destination's own sky, as the destination's authority renders it, never
     // the pinned default sky.
     [Fact]

@@ -108,7 +108,7 @@ public sealed partial class WorldRenderSettings {
     /// <summary>The saved quality or tier floor, bounded by the view's ceiling.</summary>
     public float Floor(string view) {
         var quality = Quality(view: view);
-        var defaults = Quality(view: "*");
+        var defaults = (Governed(view: view) ? Quality(view: "*") : null);
         var selectedTier = (quality?.Tier ?? GraphTier(view: view));
         var tier = (quality?.RenderScaleFloor ??
             (((selectedTier is { } selected) ? m_resolutionDefinition?.Render.Preset(tier: selected)?.RenderScaleFloor : null) ??

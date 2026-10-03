@@ -124,6 +124,15 @@ public sealed class WorldRenderScaleGrammarLawTests : IDisposable {
         Assert.Equal(0.5f, presenter.DressResolution(new SdfViewSnapshot(), "session$0", 256, 144).RenderScale);
     }
     [Fact]
+    public void ThePlayerDefaultFloorDoesNotBoundACameraView() {
+        var (commands, settings, _) = Compose();
+        Assert.False(condition: commands.Submit(line: "world.render-scale floor native").IsError);
+        Assert.Equal(1f, settings.Floor(view: "world"));
+        Assert.Equal(WorldRenderScaleTiers.Scale(tier: WorldRenderScaleTier.Quarter), settings.Floor(view: "counters-cam"));
+        Assert.False(condition: commands.Submit(line: "world.render-scale counters-cam pin half").IsError);
+        Assert.Equal(WorldRenderScaleTiers.Scale(tier: WorldRenderScaleTier.Half), settings.Resolution(view: "counters-cam").Pin);
+    }
+    [Fact]
     public void SessionQualitySurvivesAnotherReaderOfTheSameDocumentQuality() {
         var rows = new[] { new WorldViewQuality(Name: "world", RenderScale: 0.5f) };
         var first = (Fixtures.BuildDocument() with { ViewsRaw = new WorldViewDefaults(Quality: rows) });

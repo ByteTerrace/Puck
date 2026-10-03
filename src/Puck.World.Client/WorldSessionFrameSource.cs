@@ -59,7 +59,9 @@ public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Act
         }
         m_views.Clear();
         for (var index = 0; (index < frame.Views.Count); index++) {
-            m_views.Add(item: resolveResolution(frame.Views[index], ((uint)(resolution?.Width ?? ((int)width))), ((uint)(resolution?.Height ?? ((int)height)))));
+            // Only the session's own snapshot is dressed here: the views after it are cameras the binder filmed, each
+            // already dressed under its own name.
+            m_views.Add(item: ((index == 0) ? resolveResolution(frame.Views[index], ((uint)(resolution?.Width ?? ((int)width))), ((uint)(resolution?.Height ?? ((int)height)))) : frame.Views[index]));
         }
         return frame with { Views = m_views };
     }
