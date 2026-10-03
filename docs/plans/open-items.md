@@ -43,7 +43,16 @@ These items belong to no single programme.
 
   `FederationOnwardRouteLawTests` drives the host's own claim publication across the onward hop, with the onward route observed before, during and after the claim. The portal follow-up work (presented-world probe hosts, remote destinations' screens, silo failover) reuses the same harness.
 
-- [ ] Write the six composed [Milestone 1 acceptance laws](acceptance-laws.md) on the integration head, each proved red by withholding the behavior it guards. The projection, time-travel and portal-unification lanes have landed and gaps G1 to G5 are fixed in code with their own laws; G6 (no refusal classification) and a narrowed G7 remain open.
+- [ ] Write the six composed [Milestone 1 acceptance laws](acceptance-laws.md) on the integration head, each proved red by withholding the behavior it guards. Gaps G1 to G7 are fixed in code with laws of their own, G6 as `RefusalAttribute.Unsupported`, and all six laws are written. These parts remain:
+  - [ ] Law 6: arrange `HudRefusal.SeatPanelReplaceRefused`, which refuses only through `identity.hud`, so the twins must join a seat's roster profile.
+  - [ ] Law 6: arrange `AddonMutateRefusal.NotRequested`, which needs a guest addon whose manifest never requested `Mutate`.
+  - [ ] Law 6: give codes and arrangements to the checkpoint refusals (addons, screen operations, coupled links, rewind history).
+  - [ ] Law 6: give codes and arrangements to the closed rewind group's external transfer, the undeclared producer's, the rigid body's and the carrying traveller's transfers.
+  - [ ] Law 6: give codes and arrangements to a history seek while a session is live, and to the op-id-preserving mutation on a basic link.
+  - [ ] Law 6: arrange `WorldRuleEffectRefusal.IdentityUnbound`, which refuses inside a rule firing whose scope rewinds it, so it needs a gate the twins can hold apart.
+  - [ ] Law 2: the federated, rollback and shared-identity variants of the crossing replay.
+  - [ ] Law 3: the load-door and `replay.drive` doors.
+  - [ ] Law 4 and law 5: the GPU canary `displayed-source-render-root` and law 5's federated leg, owed on a GPU host with QUIC.
 
 ## [State and language](state-and-language.md)
 
@@ -237,3 +246,4 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] E12 the shape gallery as a world, retiring `Puck.SdfVm.Debug` once the gallery reaches parity with it.
 - [ ] E13 carving and the brick bake: a carve brush whose dabs are document rows.
 - [ ] E14 scrub the recorded past: `world.history` seek, branch, diff and replay-edit have landed as console verbs; the scrubber row, bindable stepping, and re-entering and saving a branch remain.
+  - [ ] E14's lane (the scrubber row, bindable stepping, a tape that starts from a checkpoint) is committed on a local subagent branch in fleet/cloud-a's session and is not yet merged: HistoryScrubLawTests and five arming and privacy laws still owe their `puck laws prove` red legs, and the branch owes a merge of fleet/cloud-a and its checks.
