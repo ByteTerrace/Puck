@@ -1,0 +1,309 @@
+schema: "puck.world.definition.v1"
+
+captures {
+  rows [
+    {
+      instance: "pattern"
+      palette [
+        {
+          color: "#FFFFFF"
+          material: 0
+        }
+      ]
+      station: pattern
+      ticks [448]
+    }
+    {
+      palette [
+        {
+          color: "#FFFFFF"
+          material: 0
+        }
+      ]
+      screen: 0
+      station: machine
+      ticks [90]
+    }
+    {
+      palette [
+        {
+          color: "#FFFFFF"
+          material: 0
+        }
+      ]
+      station: edge
+      ticks [96]
+    }
+  ]
+}
+
+cameras [
+  {
+    anchor: null
+    name: "edge"
+    renderHeight: 64
+    renderWidth: 64
+    rig {
+      name: "edge"
+      operations [
+        anchor(subject: worldPoint(point: [10.1342857, 1.47, 1]))
+        lookAt(subject: worldPoint(point: [10.1342857, 1.47, 0]))
+        fieldOfView(fieldOfViewRadians: 0.2669743)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+  {
+    anchor: null
+    name: "arms"
+    renderHeight: 128
+    renderWidth: 64
+    rig {
+      name: "arms"
+      operations [
+        anchor(subject: worldPoint(point: [20, 2, 4]))
+        lookAt(subject: worldPoint(point: [20, 2, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9272952)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 256
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 64
+}
+
+views {
+  layout "sources" {
+    seatCount: 0
+    slots [
+      {
+        camera: null
+        height: 0.25
+        instance: "pattern"
+        width: 0.5
+        x: 0
+        y: 0
+      }
+      {
+        camera: null
+        height: 0.25
+        instance: "code"
+        width: 0.5
+        x: 0.5
+        y: 0
+      }
+      {
+        camera: "edge"
+        height: 0.25
+        width: 1
+        x: 0
+        y: 0.25
+      }
+      {
+        camera: "arms"
+        height: 0.5
+        width: 1
+        x: 0
+        y: 0.5
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 0.01
+    minPitch: -0.01
+    yawReference: World
+  }
+
+  seatRig "sources" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 0.01, pitch: 0, yaw: 0)
+      fieldOfView(fieldOfViewRadians: 0.001)
+    ]
+  }
+
+  graph "pattern" {
+    package: "source.testPattern"
+    settings {
+      height: 64
+      width: 32
+    }
+  }
+
+  graph "code" {
+    package: "source.qr"
+    settings {
+      payload: "puck"
+      quietZoneModules: 0
+    }
+  }
+}
+
+machines [
+  {
+    name: "instrument"
+    engine: "tune-instrument"
+    configuration {
+      schema: "puck.tune-instrument.configuration.v1"
+      content {
+        path: "instrument.audio.json"
+      }
+    }
+  }
+]
+
+screens [
+  {
+    index: 0
+    origin [0, 1, 2]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 1
+    halfHeight: 1
+    halfDepth: 0.1
+    round: 0
+    source: machine(instance: instrument, output: "video")
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+  {
+    index: 1
+    origin [10, 1, 0]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 1
+    halfHeight: 1
+    halfDepth: 0.1
+    round: 0
+    source: producer(id: "testPattern", settings: {
+      height: 3
+      width: 7
+    }
+    )
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+  {
+    index: 2
+    origin [20, 3.5, 0]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.9
+    halfHeight: 0.45
+    halfDepth: 0.05
+    round: 0
+    source: producer(id: "testPattern", settings: {
+      height: 3
+      width: 7
+    }
+    )
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+  {
+    index: 3
+    origin [20, 2.5, 0]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.9
+    halfHeight: 0.45
+    halfDepth: 0.05
+    round: 0
+    source: none()
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+  {
+    index: 4
+    origin [20, 1.5, 0]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.9
+    halfHeight: 0.45
+    halfDepth: 0.05
+    round: 0
+    source: producer(id: "testPattern", settings: {
+      height: 3
+      width: 7
+    }
+    )
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+  {
+    index: 5
+    origin [20, 0.5, 0]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.9
+    halfHeight: 0.45
+    halfDepth: 0.05
+    round: 0
+    source: text(lines: [
+      "  "
+      "  "
+    ], foreground: "#FFFFFF", background: "#000000"
+    )
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+]
+
+destinations [
+  {
+    durability: persisted
+    name: "session"
+    reference: "session"
+    scope: global
+  }
+]
+
+references [
+  {
+    document: "session"
+    name: "session"
+  }
+]
+
+text {
+  defaultFont: "inter"
+  fonts [
+    {
+      name: "inter"
+      source: "../../../src/Puck.World/Assets/worlds/fonts/inter-regular.ttf"
+      hash: "sha256-64/47e488e1fc92d640"
+      codePointRanges [
+        "U+0020-U+007E"
+      ]
+    }
+  ]
+}

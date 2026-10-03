@@ -248,7 +248,7 @@ public sealed partial class WorldWindowFrustumFitLawTests {
 
         Assert.False(condition: WorldWindowFrustumFit.TryResolveApertures(
             counterpart: out _,
-            destination: AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Canaries/uploaded-sources/session.world.json"),
+            destination: AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Canaries/uploaded-sources/session.puck"),
             local: local,
             screenIndex: DoorScreen(local: local),
             source: out _

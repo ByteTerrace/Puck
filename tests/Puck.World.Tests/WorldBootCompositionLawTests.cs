@@ -23,7 +23,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
     private const string WorkloadScript = "tests/Puck.Counters/counters.script.txt";
     private const string WorkloadWorld = "tests/Puck.Counters/counters.puck";
     // An offscreen world declaring one screen, a machine's video output, with no view screen.
-    private const string ScreensWorld = "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json";
+    private const string ScreensWorld = "tests/Puck.World.Canaries/uploaded-sources/fixture.puck";
 
     // The collector closes the workload's script with these two lines (WorldOffscreenLeg.Launch in Puck.Cli), so the
     // offscreen World receives them as well.

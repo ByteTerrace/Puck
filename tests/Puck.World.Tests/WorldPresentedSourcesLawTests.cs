@@ -11,7 +11,7 @@ namespace Puck.World.Tests;
 /// screens compose.</summary>
 public sealed class WorldPresentedSourcesLawTests {
     // A destination whose screen 5 shows two lines of text through its own font catalog, beside its own document.
-    private const string Destination = "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json";
+    private const string Destination = "tests/Puck.World.Canaries/uploaded-sources/fixture.puck";
 
     // The frame source a session view of a destination renders through, composed as WorldScreenBinder.RegisterSessionView
     // composes it, after one captured frame.
