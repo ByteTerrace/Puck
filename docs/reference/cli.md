@@ -3488,10 +3488,10 @@ The check records shape and never demands a token bump: a format whose source ch
 `puck formats` records the new fingerprint, and the generated constant moves with it, so the codec that reads it
 refuses what was written under the old one.
 
-Both forms refuse with exit 2 before discovery if non-ignored, untracked C# sources exist under `src/`, excluding
-`*.g.cs` files. The refusal writes nothing and lists every such file in sorted, repository-relative paths with forward
-slashes. Run `git add` on those files or remove them first: the ledger is computed from tracked sources only and
-cannot describe what will be committed while those sources are omitted.
+Both forms read tracked and non-ignored new C# sources under `src/`, excluding
+`*.g.cs` files. Staging a source does not change its recorded shape. A new codec
+participates in discovery before it is staged, and `--check` reports its missing
+entry without writing the ledger.
 
 A declaration is a format when it is a `const`, a `static readonly` field, or a static or expression-bodied property
 whose initializer is one of two things:

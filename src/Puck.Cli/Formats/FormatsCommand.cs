@@ -51,7 +51,7 @@ public static class FormatsCommand {
     /// <summary>Plans every generated <c>FormatShapes.g.cs</c> for a checkout.</summary>
     /// <param name="entries">The ledger's entries.</param>
     /// <param name="repositoryRoot">The repository root, whose project files place each constants file.</param>
-    /// <param name="sources">Every tracked source file's text, by repository-relative path.</param>
+    /// <param name="sources">Every tracked or unignored new source file's text, by repository-relative path.</param>
     /// <returns>Each file's repository-relative path and its text.</returns>
     internal static IReadOnlyDictionary<string, string> ShapeFiles(IReadOnlyList<FormatEntry> entries, string repositoryRoot, IReadOnlyDictionary<string, string> sources) => FormatShapesFiles.Plan(
         entries: entries,
@@ -171,26 +171,11 @@ public static class FormatsCommand {
         return Execute(check: check, repositoryRoot: repositoryRoot);
     }
 
-    /// <summary>Records or checks the tracked-source ledger, refusing before discovery when untracked sources
-    /// would be omitted.</summary>
+    /// <summary>Records or checks the ledger over tracked and unignored new sources.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
     /// <param name="check">Whether to check the ledger without writing it.</param>
-    /// <returns>Zero on success, one for ledger drift, or two for untracked sources or an unusable ledger.</returns>
+    /// <returns>Zero on success, one for ledger drift, or two for an unusable ledger.</returns>
     public static int Execute(string repositoryRoot, bool check) {
-        var untracked = ListSources(repositoryRoot, "--others", "--exclude-standard");
-
-        if (untracked.Length != 0) {
-            foreach (var relative in untracked) {
-                Console.Error.WriteLine(value: $"{Verb}: untracked source: {relative}");
-            }
-
-            return CliExit.Refuse(
-                verb: Verb,
-                what: FormatVersionsLedger.FileName,
-                why: "git add or remove the untracked sources listed above; the ledger is computed from tracked sources only and cannot describe what will be committed."
-            );
-        }
-
         var sources = ReadSources(repositoryRoot: repositoryRoot);
         IReadOnlyList<FormatEntry> current;
 
@@ -327,10 +312,9 @@ public static class FormatsCommand {
             grouping, argument binding, evaluation order and serialized member names remain
             significant.
 
-            Both recording and --check refuse before discovery if non-ignored, untracked C#
-            sources exist under src/, excluding .g.cs files. The refusal names every file;
-            git add or remove them first. The ledger is computed from tracked sources only
-            and cannot describe what will be committed while those sources are omitted.
+            Both recording and --check read tracked and non-ignored new C# sources under
+            src/, excluding .g.cs files. Staging a source does not change its shape. A new
+            codec participates before staging; --check reports its missing entry.
 
             Each project that declares a format also gets a generated FormatShapes.g.cs holding
             one constant per entry, that entry's shape digest, so the codec that owns the format
@@ -343,7 +327,7 @@ public static class FormatsCommand {
             bump: edit the source, then run `puck formats`.
 
             Exit codes: 0 written, or the ledger holds; 1 drift under --check; 2 an unusable
-            or missing ledger, or untracked sources.
+            or missing ledger.
             """);
 
         return command;
