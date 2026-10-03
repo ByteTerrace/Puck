@@ -470,18 +470,30 @@ public sealed class WorldDynamicResolutionLawTests {
         var path = Path.Combine(path1: RepositoryRoot(), path2: "tests/Puck.Counters/counters.ceilings.json");
         var ceilings = JsonSerializer.Deserialize(jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings, utf8Json: File.OpenRead(path: path))!;
 
-        foreach (var run in ceilings.Runs) {
-            var steps = run.Ceilings
+        foreach (var backend in ceilings.Backends) {
+            // The floor device's record is the backend's first; a record of another device after it moves nothing.
+            var steps = backend.Ceilings.Concat(second: backend.Devices[0].Ceilings)
                 .Where(predicate: static ceiling => ((ceiling.Node == WorldDynamicResolution.BudgetNode) && (ceiling.Kind == "gpu.march.steps")))
                 .Sum(selector: static ceiling => ceiling.Ceiling);
 
-            Assert.True(condition: (steps > 0L), userMessage: $"the {run.Backend} run records no march steps for the world node");
-            Assert.Equal(expected: (((double)steps) / (((long)run.Width) * run.Height)), actual: WorldDynamicResolution.StepBudgetPerPixel(backend: run.Backend, ceilings: ceilings));
+            Assert.True(condition: (steps > 0L), userMessage: $"the {backend.Backend} floor record holds no march steps for the world node");
+            Assert.Equal(expected: (((double)steps) / (((long)ceilings.Width) * ceilings.Height)), actual: WorldDynamicResolution.StepBudgetPerPixel(backend: backend.Backend, ceilings: ceilings));
+
+            var other = new WorldCountersDeviceCeilings(
+                Ceilings: [.. backend.Devices[0].Ceilings.Select(selector: static ceiling => (ceiling with { Ceiling = (ceiling.Ceiling * 2L) }))],
+                Device: (backend.Devices[0].Device with { DeviceId = (backend.Devices[0].Device.DeviceId + 1U) })
+            );
+            var withOther = ceilings with {
+                Backends = [.. ceilings.Backends.Select(selector: candidate => (ReferenceEquals(objA: candidate, objB: backend) ? (candidate with { Devices = [.. candidate.Devices, other] }) : candidate))],
+            };
+
+            Assert.Equal(expected: WorldDynamicResolution.StepBudgetPerPixel(backend: backend.Backend, ceilings: ceilings), actual: WorldDynamicResolution.StepBudgetPerPixel(backend: backend.Backend, ceilings: withOther));
         }
 
-        // A backend no run was recorded on reads the first run; a document with no run gives no budget.
-        Assert.Equal(expected: WorldDynamicResolution.StepBudgetPerPixel(backend: ceilings.Runs[0].Backend, ceilings: ceilings), actual: WorldDynamicResolution.StepBudgetPerPixel(backend: "metal", ceilings: ceilings));
-        Assert.Equal(expected: 0d, actual: WorldDynamicResolution.StepBudgetPerPixel(backend: "vulkan", ceilings: (ceilings with { Runs = [] })));
+        // A backend nothing was recorded on reads the first backend; a document with no backend or no device gives no budget.
+        Assert.Equal(expected: WorldDynamicResolution.StepBudgetPerPixel(backend: ceilings.Backends[0].Backend, ceilings: ceilings), actual: WorldDynamicResolution.StepBudgetPerPixel(backend: "metal", ceilings: ceilings));
+        Assert.Equal(expected: 0d, actual: WorldDynamicResolution.StepBudgetPerPixel(backend: "vulkan", ceilings: (ceilings with { Backends = [] })));
+        Assert.Equal(expected: 0d, actual: WorldDynamicResolution.StepBudgetPerPixel(backend: "vulkan", ceilings: (ceilings with { Backends = [.. ceilings.Backends.Select(selector: static backend => (backend with { Devices = [] }))] })));
     }
     [Fact]
     public void APinOverridesTheLoadAndBothBoundsHoldIt() {

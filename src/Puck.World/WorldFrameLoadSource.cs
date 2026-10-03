@@ -12,9 +12,9 @@ namespace Puck.World;
 /// (<paramref name="view"/>, the world's own by default) GPU frame time, from the pass timestamps <see cref="WorldGpuTiming"/> records while
 /// the controller asks; the presenter's present timing, when the host's presenter reports it (a windowed World's
 /// swapchain; an offscreen World presents nothing, so it reports none); the counted march steps of the views' completed
-/// submissions; and their budget per output pixel from the counters ceilings the floor tier committed
+/// submissions; and their budget per output pixel from the counters ceilings the floor device committed
 /// (<c>tests/Puck.Counters/counters.ceilings.json</c>, compiled in as <see cref="CeilingsResource"/>) for the device's
-/// backend. A timed or counted reading sums the view's newest submissions not read before, through a
+/// backend (<see cref="WorldDynamicResolution.StepBudgetPerPixel"/>). A timed or counted reading sums the view's newest submissions not read before, through a
 /// <see cref="WorldFrameLoadAggregate"/> per signal, and names the grid each submission's node recorded it at
 /// (<see cref="ShaderPipelineRenderNode.TryGetRenderGrid"/>). Reading allocates nothing.</summary>
 /// <param name="presentTiming">Resolves the presenter's present timing, on the first read, or <see langword="null"/> for a

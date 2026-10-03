@@ -39,20 +39,28 @@ public sealed class CountersDetailLawTests {
         Assert.Contains(collection: differences, filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=stars"));
         Assert.Contains(collection: differences, filter: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=clouds"));
     }
+    // A detail's required zero is shared by every device: on a device with no record it is still judged, beside the line
+    // naming the device, while that device's own magnitudes wait for its record. On the recording device every detail is
+    // judged, and an unknown one fails.
     [Fact]
     public void ADetailRequiredZeroHoldsOnAForeignDeviceAndUnknownDetailsFail() {
         var original = Report(run: Run(counts: [Count(detail: null, value: 100), Count(detail: "stars", value: 0)]));
         var ceilings = CountersCeilings.Record(report: original);
 
-        Assert.True(condition: ceilings.Runs[0].Ceilings[1].RequiredZero);
-        var foreign = Run(counts: [Count(detail: null, value: 101), Count(detail: "stars", value: 1), Count(detail: "clouds", value: 3)])
-            with { Device = Device with { DeviceId = 3 } };
-        var verdict = CountersCeilings.Check(report: Report(run: foreign), ceilings: ceilings);
+        Assert.True(condition: Assert.Single(collection: ceilings.Backends[0].Ceilings).RequiredZero);
+        var counts = new[] { Count(detail: null, value: 101), Count(detail: "stars", value: 1), Count(detail: "clouds", value: 3) };
+        var foreign = CountersCeilings.Check(report: Report(run: Run(counts: counts) with { Device = Device with { DeviceId = 3 } }), ceilings: ceilings);
 
-        Assert.Equal(expected: 2, actual: verdict.Failures.Count);
-        Assert.Contains(collection: verdict.Failures, filter: static line => (line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=stars") && line.Contains(comparisonType: StringComparison.Ordinal, value: "required zero")));
-        Assert.Contains(collection: verdict.Failures, filter: static line => (line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=clouds") && line.Contains(comparisonType: StringComparison.Ordinal, value: "no ceiling")));
-        Assert.Contains(expectedSubstring: "1 per-backend-deterministic count(s) not judged, 1 required zero(s) still judged", actualString: Assert.Single(collection: verdict.Notes));
+        Assert.Equal(expected: 2, actual: foreign.Failures.Count);
+        Assert.Equal(expected: "vulkan: no ceilings recorded for GPU (vendor=0x0001 device=0x0003); run puck counters --record on it", actual: foreign.Failures[0]);
+        Assert.Contains(collection: foreign.Failures, filter: static line => (line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=stars") && line.Contains(comparisonType: StringComparison.Ordinal, value: "required zero")));
+        Assert.Empty(collection: foreign.Notes);
+
+        var recording = CountersCeilings.Check(report: Report(run: Run(counts: counts)), ceilings: ceilings);
+
+        Assert.Equal(expected: 3, actual: recording.Failures.Count);
+        Assert.Contains(collection: recording.Failures, filter: static line => (line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=-") && line.Contains(comparisonType: StringComparison.Ordinal, value: "over its ceiling")));
+        Assert.Contains(collection: recording.Failures, filter: static line => (line.Contains(comparisonType: StringComparison.Ordinal, value: "detail=clouds") && line.Contains(comparisonType: StringComparison.Ordinal, value: "no ceiling")));
     }
     [Fact]
     public void SkippedDetailsRecordZerosAndCannotDisappearFromAMeasurement() {
@@ -62,7 +70,8 @@ public sealed class CountersDetailLawTests {
         var report = Report(run: run);
         var ceilings = CountersCeilings.Record(report: report);
 
-        Assert.Equal(expected: (GpuWork.SubmissionKinds.Length * 3), actual: ceilings.Runs[0].Ceilings.Count);
+        Assert.Equal(expected: (GpuWork.SubmissionKinds.Length * 3), actual: ceilings.Backends[0].Ceilings.Count);
+        Assert.Empty(collection: ceilings.Backends[0].Devices[0].Ceilings);
         Assert.Empty(collection: CountersCeilings.Check(ceilings: ceilings, report: report).Failures);
         var missing = run with { Passes = [run.Passes[0] with { Details = ["plain"] }] };
 
@@ -86,7 +95,7 @@ public sealed class CountersDetailLawTests {
         var ceilings = CountersCeilings.Record(report: report);
 
         json = JsonNode.Parse(json: JsonSerializer.Serialize(value: ceilings, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings))!;
-        json["runs"]![0]!["ceilings"]![0]!.AsObject().Remove(propertyName: "detail");
+        json["backends"]![0]!["devices"]![0]!["ceilings"]![0]!.AsObject().Remove(propertyName: "detail");
         Assert.Throws<JsonException>(testCode: () => JsonSerializer.Deserialize(json: json.ToJsonString(), jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings));
     }
 
