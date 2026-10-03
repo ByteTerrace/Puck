@@ -630,9 +630,6 @@ retain all 256 bits.
 The artifact producer runs this check after its Release build, before packaging,
 using the built candidate CLI and the restored source graph.
 
-The next slices cover other compiled-world chunk versions, shader packages,
-`GpuPipelineCacheStore` content keys and kernel sets.
-
 ## `puck shaders`—shader compilation
 
 ```sh

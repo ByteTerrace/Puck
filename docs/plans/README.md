@@ -37,8 +37,12 @@ The current world architecture is owned by [Worlds and federation](../architectu
 
 S7's engine and language substrate is present, including generation-aware
 single and pair pools, snapshots, lexical claim/release/iteration, and authored
-round trips. It remains an open package until mutable body attachments,
-identity-owned transfer, pair interactions through the real World host, record
-field traits, and the promised Paddleball/Arena migrations and executable evidence
-land. The detailed evidence list stays in the
+round trips. Its World integration is present too: logical enum carriers on
+bodies, pair interactions through the World host, identity-owned record transfer,
+and the Paddleball and Arena migrations. It remains an open package until
+remote home adoption of identity records closes
+([records and pools](records-and-pools.md#remote-home-adoption)) and records
+carry the timed row traits they lack today, which
+[S7](state-and-language.md#s7--records-and-pools) names as the condition for
+converting rows that use them. The evidence list stays in the
 [records and pools contract](records-and-pools.md).
