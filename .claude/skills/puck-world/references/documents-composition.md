@@ -17,8 +17,8 @@ subject names them:
   authored, never both, never neither. `NeighbourKey` (computed, never
   serialized) folds whichever arm was authored into the one opaque string
   every `IWorldNeighbourResolver` call site resolves against. This is what a
-  portal facet's `destination` resolves against: the nexus's own `references`
-  section names the three dungeons by document path.
+  portal facet's `destination` resolves against: the island's own `references`
+  section names its four quilt shards (`shards/quilt-*`) by document path.
 - **`Gravity`** (`WorldGravity.cs`) — an acceleration field, deliberately not
   geometry. `uniform` is an authored acceleration vector. `attractors` names a
   placement plus explicit mass; optional `points` instead names a placement,
@@ -95,7 +95,7 @@ subject names them:
 ## Worlds have no in-code definition — the shipped `puck.world.json` walkthrough
 
 A boot with no `--world` override loads
-`src/Puck.World/Assets/worlds/puck.world.json` — the bare walker world, a delta over
+`src/Puck.World/Assets/worlds/puck.world.json` — the island, a delta over
 `standard.world.json`. The basis carries the standards, defined AS STATE — a `transforms` text row
 (`identity`/`origin`/`unit`) and a `colors` text row that document values reference by
 `state.<row>.<key>` instead of restating literals — the standard `theme` section (an ABSENT theme
@@ -111,7 +111,7 @@ at parse naming the missing member). Unauthored it derives
 (`WorldPlacementPolicyDefaults.DeriveFrom`): zero placement and screen headroom, no derived
 faces, no candidate ring, no preview deadline, and a scale envelope spanning exactly the rows' authored scales, so the basis's static
 rows need no policy at all. Console placement mutations can grow the renderer beyond its initial reserve without
-an authored policy. The pip prototype's shape rotations are
+an authored policy. The `debugRoom` prototype's unrotated shapes use
 `state.transforms.identity`, its palette is `state.colors.*`, the seat rig's pivot is
 `state.transforms.origin` (the `IDocumentSpatialValue` machinery: `DocumentVector2`/`DocumentVector3`/
 `DocumentQuaternion` fields accept a literal array OR a text-cell reference, resolved at the
@@ -270,15 +270,16 @@ conservative margin is numerically calibrated against. `strands` above 1 is
 render-only, refused for deterministic field contact by name. `body.rig [body]` is the read-back (Immediate, client-local — the values live only on the stamp pool): per driver its phase and eased weight, per effector its weight, whether its latch is holding, and the WORLD point its tip is being asked for (`target=(x, y, z)` or `none`), so a piped run fences twice and asserts a planted foot's target is unchanged while `body.where` moved. A body-rooted part anchor (`WorldStampPool.TryBodyPartAuthoredPose`) reports the COMPOSED pose — drivers, parent chain, effector — so an anchor consumer and the rendered geometry never disagree. Everything else — the
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
 QUIC), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
-(`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the pip look, and grants — is the
+(`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the `wren` look, and grants — is the
 world document's own. A field trait's `color` speaks the same grammar (resolved live at
 emit — a state cell write recolors a height field on the next frame, no re-bake, bricks hold only
 distances; `world.fields` echoes the authored token).
-The world's one placement is the `debugRoom` prototype at origin: a 48 m platform (top at y = −0.5)
+The `provingCourt` placement carries the `debugRoom` placement (one of the island's districts,
+beside the garden and market courts): a 48 m platform (top at y = −0.5)
 carrying one fixture per contact contract, each with a `spawnPoints` row (engine frame) that stands
-the body in front of it — `origin`, `ramps`, `stairs`, `wall`, `pit`, `ladder`, `edge` —
+the body in front of it — `proving-arrival`, `ramps`, `stairs`, `wall`, `pit`, `ladder`, `edge` —
 reachable by `body.pose spawn:<id> [body]` (the console mirror of a rule's `pose` effect naming a
-spawn point; seats still spawn at `origin` by the absent-`seatSpawns` derivation). Author-frame
+spawn point; the island's seats spawn where its authored `bodies.seatSpawns` say). Author-frame
 layout, +Z ahead of the origin spawn and +X the player's LEFT (the half-turn flips X): the scale
 ladder (0.5/1/2 m cubes) ahead-left, the slope fan (30/45/55/65/75°, bracketing
 `collision.maxSlopeDegrees` 60) ahead-right, the step stairs (rises 0.1/0.25/0.5/1 m) to the left,
