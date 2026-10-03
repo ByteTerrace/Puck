@@ -17,7 +17,7 @@ namespace Puck.World;
 /// <summary>
 /// The post-build wiring step every boot shape runs: the affordance vocabulary install, the boot document's genuine
 /// binding-vocabulary re-validation (see the remarks on <see cref="Install"/>), the accepted-session-lever
-/// attachment, the outstanding-capture drain (see the end of <see cref="Install"/>), and the server's
+/// attachment, the schedule drain, and the server's
 /// <see cref="WorldServer.EchoTap"/>/<see cref="WorldServer.SaveEffectTap"/>/<see cref="WorldServer.MusicTransitionTap"/>/
 /// <see cref="WorldServer.MusicLayerTap"/>/<see cref="WorldServer.MusicEmbellishmentTap"/>/
 /// <see cref="WorldMachineHost.MachineLifecycleTap"/> closures — moved out of the old presentation-only render-root
@@ -30,7 +30,7 @@ namespace Puck.World;
 public static class WorldPostBuildWiring {
     /// <summary>Installs the affordance vocabulary, re-validates the boot document's binding vocabulary now that the
     /// vocabulary is real (see the remarks below), attaches the session-lever sink, wires the server's echo/cue taps,
-    /// and registers the shutdown drain that reports an armed capture no frame ever served. Safe to call exactly
+    /// and registers the schedule's shutdown drain. Safe to call exactly
     /// once, after the container has built but before the host starts.</summary>
     /// <remarks>
     /// The loader validates before the DI container exists. At that point the command half of
@@ -479,26 +479,12 @@ public static class WorldPostBuildWiring {
             audioDirector.SubmitEmbellishment(patchId: patchId);
         };
 
-        // THE CAPTURE-REQUEST DRAIN: world.screenshot arms a readback of the NEXT composed frame, so a run that ends
-        // before that frame writes nothing at all. Left alone, the caller's only evidence is the arming echo, which
-        // is indistinguishable from a capture that succeeded — the silent-success shape this repository has already
-        // been bitten by. Say it out loud instead, at ApplicationStopped (every hosted service has stopped, so the
-        // render loop is provably finished and an outstanding request provably never will be served). The scheduled
-        // `captures` rows are not drained here: the host loop settles them (IFixedStepSimulation.SettleOwedFrames,
-        // WorldCaptureScheduler.Drain) before it disposes the render root, while the chain that would have served
-        // them is still alive. Presentation-only: a headless boot has no render probe and world.screenshot refuses
-        // there anyway.
+        // A capture still owed a frame as the run ends, a scheduled row's or a world.screenshot's, is refused by name by
+        // the host loop (IFixedStepSimulation.SettleOwedFrames, WorldCaptureScheduler.Drain) before it disposes the
+        // render root, while the chain that would have served it is still alive.
         // THE SCHEDULE DRAIN, every boot shape: a run that ended before its export tick must leave a manifest
         // saying where it got to rather than an empty directory a reader cannot tell from a crash.
         services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: scheduleRunner.Drain);
-
-        if (services.GetService<WorldRenderProbe>() is { } renderProbe) {
-            services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: () => {
-                if (renderProbe.Root?.PendingCapturePath is { } pending) {
-                    Console.Error.WriteLine(value: $"[world.screenshot] WARNING: a capture of {pending} was still pending when the run ended — no frame composed after it was armed, so NO FILE WAS WRITTEN.");
-                }
-            });
-        }
 
         // THE RENDER-CAPACITY PRE-FLIGHT. The composed scene's construction-time probe is the first and only point
         // where the WHOLE worst case exists — the boot document's own rows, the avatar catalog, and one reservation

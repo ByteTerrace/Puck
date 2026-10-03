@@ -531,11 +531,13 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Captures.** Create the `FrameCaptureRequest`, arm it with
   `ICaptureRequestTarget.RequestCapture`, and await its `Completion`. Never
   block the host pump on it. Let a readback `DeviceLostException` propagate
-  after completing the request. A scheduled capture raises
+  after completing the request. A scheduled capture, and a `world.screenshot`
+  armed through `WorldCaptureScheduler.ArmUnscheduled`, raises
   `IFixedStepSimulation.AwaitsFrame` until a frame serves it, so the pump
-  composes that tick's frame before stepping on. Offscreen the pump also holds
-  its clock (`IFixedStepSimulation.HoldsClock`): no tick past the armed one
-  runs until the capture is served or refused. The hold counts from
+  composes that tick's frame before stepping on. Both rendered hosts' pumps also
+  hold their clock (`IFixedStepSimulation.HoldsClock`): no tick past the armed
+  one runs until the capture is served or refused, and the offscreen host's
+  hold on an unrendered frame (`FixedStepPump.Hold`) charges the same budgets. The hold counts from
   readiness (`IWorldEngineReadiness`, `WorldRenderProbe` over the world's
   `SdfWorldResidency.IsReady` and the root served): time held while the world
   is not ready is spent
