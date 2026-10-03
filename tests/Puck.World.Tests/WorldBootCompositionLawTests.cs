@@ -156,6 +156,37 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
             expected: CommandAudience.Operator
         );
     }
+    // A counter readout reads the counts the composition owns; resolving the command registry and answering
+    // world.counters must not create the backend's renderer, whose device a composition law never has.
+    [Fact]
+    public void TheCounterReadoutDoesNotCreateTheRenderer() {
+        var host = m_stateDirectory.Own(owner: ComposeBoot(presentation: WorldHostPresentation.Offscreen).Build());
+        var result = host.Services.GetRequiredService<CommandRegistry>().Submit(line: "world.counters");
+
+        Assert.False(
+            condition: result.IsError,
+            userMessage: result.Output
+        );
+    }
+    // The seal itself: a service that brings up a device throws by name when a law resolves it, so the law above and
+    // every composition law fail loudly rather than creating one.
+    [Fact]
+    public void TheDeviceSealRefusesAResolvedRenderRoot() {
+        var builder = ComposeBoot(presentation: WorldHostPresentation.Offscreen);
+
+        Assert.Contains(
+            collection: builder.Services,
+            filter: static descriptor => (descriptor.ServiceType == typeof(Puck.Hosting.IRenderRoot))
+        );
+
+        var host = m_stateDirectory.Own(owner: builder.Build());
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => host.Services.GetRequiredService<Puck.Hosting.IRenderRoot>());
+
+        Assert.Contains(
+            expectedSubstring: "brings up a GPU device",
+            actualString: refusal.Message
+        );
+    }
     // The headless shape's operator verbs are the evaluation diagnostics, which ScheduledStepVocabularyLawTests pins
     // against the live executable. A GPU shape answers the operator with exactly those and the verb that arms its
     // device's creation faults, and nothing else. The windowed shape's registry is not resolvable without a device; it

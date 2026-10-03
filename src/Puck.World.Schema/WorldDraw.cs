@@ -35,21 +35,6 @@ public static class WorldDrawSites {
     /// <summary>The descriptor <c>bodies.capacityRow</c> boot read narrates under.</summary>
     public const string PopulationCapacity = "bodies.capacity";
 
-    /// <summary>Determines whether <paramref name="site"/> is a BOOT-ONLY document field — drawn once at composition, settled
-    /// into an ordinary literal (see this type's remarks for which sites then clear their row name).</summary>
-    /// <param name="site">The site descriptor.</param>
-    /// <returns><see langword="true"/> for a boot-only field site.</returns>
-    public static bool IsBootOnly(string site) =>
-        (string.Equals(
-            a: site,
-            b: PopulationCapacity,
-            comparisonType: StringComparison.Ordinal
-        ) ||
-        string.Equals(
-            a: site,
-            b: HostBackend,
-            comparisonType: StringComparison.Ordinal
-        ));
     /// <summary>Returns the descriptor a <see cref="WorldStateRow"/>'s own <see cref="StateRow.Draw"/> resolves
     /// under.</summary>
     /// <param name="rowName">The site row's name.</param>
