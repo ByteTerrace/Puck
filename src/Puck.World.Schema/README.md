@@ -580,9 +580,10 @@ bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, grants, hud, state, input hold, rules,
 groups, properties, interactions, player defaults, probes,
 dynamics, curves, tables). Worlds live as data
-under `../Puck.World/Assets/worlds/`. There is one shipped world,
-`puck.world.json` (the island, the boot default), a `basis` delta over
-`standard.world.json`. Its districts—`dive`, `kart`, `jump`, `studio`,
+under `../Puck.World/Assets/worlds/`. The boot default is
+`puck.world.json` (the island), a `basis` delta over `standard.world.json`;
+`pipeline.world.json` and `moth-courtyard.puck` are diagnostic scenes a
+`--world` argument names. Its districts—`dive`, `kart`, `jump`, `studio`,
 `arena`, `arcade`, `granaries`—are imported `puck.world.definition.v1` module
 fragments under `worlds/modules/` (see `modules/README.md`); tabletop games
 live as imported fragments under `worlds/games/`. The corner shards
@@ -895,8 +896,10 @@ speaker radius the validator refuses in an authored section) never reaches the
 file. A top-level member the document does not author is left out rather than
 written as `null`. The session state a save folds in (`WorldSessionCapture`
 for what the server owns, `WorldSessionLevers.Fold` for the presentation
-levers) lands only in sections the document authors, and a section the session
-left alone is written as authored. `WorldSaveAuthoredDocumentLawTests` saves
+levers) lands in a section the document authors, and a section the session
+left alone is written as authored. Moved render ceilings, per-view quality
+(`views.quality`) and editor values create their valid section when the document
+omits it; session pins never fold. `WorldSaveAuthoredDocumentLawTests` saves
 every shipped world, every world document under `tests/Puck.World.Tests/Fixtures`,
 and every canary world that way and proves each one boots
 again to the definition it was loaded as. One value moves on an otherwise
@@ -1328,8 +1331,10 @@ renderer shows as a CPU-baked distance brick, coloured by `color`. Capacity
 eight-row primer fits the federation wire's 32 MiB frame), `MaxFields` 8,
 `MaxExtent` 1024 per axis, `MaxLayers` 128, `MaxSurfaceCells` 126 (a
 height-bearing row's XZ footprint, and the cross-layer sum where several
-layers raise), `MaxReactions` 64, `MaxTransformTerms` 64, `MaxPaint` 256. Read
-back with `world.fields`; the exact structural cost (cell count × compiled
+layers raise), `MaxReactions` 64, `MaxTransformTerms` 64, `MaxPaint` 256. The lattice's
+`cellSize` must quantize to a positive Q48.16 value that keeps the lattice solid's
+contact reach (`FieldLatticeSolid.ReachCells`, 2 cells) inside Q48.16, or the
+document is refused. Read back with `world.fields`; the exact structural cost (cell count × compiled
 full-cell passes, plus body capacity × body passes, at the authored cadence)
 folds into `world.budget`.
 
