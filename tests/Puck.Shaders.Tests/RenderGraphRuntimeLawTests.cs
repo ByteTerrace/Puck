@@ -306,11 +306,17 @@ public sealed partial class RenderGraphRuntimeLawTests : IDisposable {
         public readonly Dictionary<string, (nint Input, nint Output, bool MayStandIn)> PassRecords = new(comparer: StringComparer.Ordinal);
 
         public long Records;
+        public ulong? CadenceSignature;
+
+        public readonly Dictionary<nint, long> ImageWrites = [];
+        public readonly Dictionary<string, long> SampledWrites = new(comparer: StringComparer.Ordinal);
+
         public bool RefuseRecording;
         public uint Width;
     }
     private sealed class FakeRecorder(Counter counter, string pass) : IRenderGraphPackageRecorder {
         public void Dispose() => counter.Disposed++;
+        public ulong? Signature(in FrameContext context) => counter.CadenceSignature;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             if (counter.RefuseRecording) { throw new InvalidOperationException(message: "Injected history writer recording refusal."); }
             counter.Records++;
@@ -328,6 +334,9 @@ public sealed partial class RenderGraphRuntimeLawTests : IDisposable {
                 : recording.Inputs[0].Image.Layout);
             counter.OutputImage = recording.Outputs[0].Image.ImageHandle;
             counter.PassRecords[pass] = (counter.InputImage, counter.OutputImage, recording.MayStandIn);
+            if (counter.CadenceSignature.HasValue) {
+                if (recording.Inputs.Length == 0) { counter.ImageWrites[counter.OutputImage] = counter.Records; } else { counter.SampledWrites[pass] = (counter.ImageWrites.TryGetValue(key: counter.InputImage, value: out var written) ? written : -1); }
+            }
 
             var outcome = (counter.PassOutcomes.TryGetValue(
                 key: pass,

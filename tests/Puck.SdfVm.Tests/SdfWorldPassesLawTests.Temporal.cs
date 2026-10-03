@@ -378,6 +378,8 @@ public sealed partial class SdfWorldPassesLawTests {
     // One sdf.world instance, "world", over a frame on the upload model, optionally reading a feed that hands out a
     // tainted image until it fills. Construction produces until the view has rendered its installed graph.
     private sealed class TemporalRig : IDisposable {
+        private static readonly string[] Names = ["world"];
+        private static readonly RenderGraphRoot[] Roots = [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)];
         private readonly UploadModelGpu m_gpu = new();
 
         private readonly FrameContext m_context;
@@ -432,6 +434,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 height: Extent, kernels: SdfTestPipelines.Kernels(), name: name, pipelines: pipelines, width: Extent);
         }
 
+        public IReadOnlyList<UploadModelBufferBarrier> BufferBarriers => m_gpu.BufferBarriers;
         public bool Filling {
             set => m_feed!.Filling = value;
         }
@@ -442,6 +445,8 @@ public sealed partial class SdfWorldPassesLawTests {
         public RenderGraphRuntime Runtime { get; }
         public SdfWorldResidency? Second { get; }
         public SdfWorldResidency Selected { get; set; }
+        public SdfFrame SourceFrame { get => m_sourceFrame; set => m_sourceFrame = value; }
+        public IReadOnlyList<string> StateConflicts => m_gpu.StateConflicts;
         public int ViewIndex { get; set; }
 
         public uint OutputExtent { get; set; } = Extent;
@@ -457,7 +462,7 @@ public sealed partial class SdfWorldPassesLawTests {
             m_rendered = World.FrameCounter;
             var scheduled = new RenderGraphFrame(DisplayHeight: ((int)OutputExtent), DisplayHertz: 60, DisplayWidth: ((int)OutputExtent),
                 Footprints: ((m_feed is null) ? [] : [new RenderGraphFootprint(Consumer: "world", Height: 1.0, Producer: "feed", Width: 1.0)]),
-                Index: m_index, Named: (named ? ["world"] : []), Roots: ((named && !Parked) ? [new RenderGraphRoot(Height: 1, Instance: "world", Width: 1)] : []), Tick: m_index++);
+                Index: m_index, Named: (named ? Names : []), Roots: ((named && !Parked) ? Roots : []), Tick: m_index++);
 
             var context = m_context with { TargetHeight = OutputExtent, TargetWidth = OutputExtent };
 

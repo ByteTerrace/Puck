@@ -40,7 +40,7 @@ public static partial class SdfWorldPackage {
     // floats, one allocation every frame slot shares, since the composite reads them in the frame the sky writes them.
     // Each texel's base alpha says whether the sky evaluated it.
     private static ShaderPipelineResource[] SkyResources => [
-        .. SkyRuns.Select(selector: static run => Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: run, transient: true)),
+        .. SkyRuns.Select(selector: static run => Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: run, retained: true)),
     ];
 
     private static class SkyDeclaration {

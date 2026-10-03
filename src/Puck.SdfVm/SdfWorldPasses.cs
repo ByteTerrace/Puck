@@ -167,6 +167,11 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
         var entry = Refresh(instance: instance);
 
+        entry.UnreadFrames = unreadFrames;
+        if ((entry.View is { } current) && (current.Residency.Tables is { } packed)) {
+            UpdateSurfaceInputs(entry: entry, tables: packed, view: current);
+        }
+
         if (
             (entry.View is not { } view) ||
             !view.Residency.IsUnchanged(
@@ -175,8 +180,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             ) ||
             (entry.RenderedScale != entry.CurrentScale)
         ) {
-            entry.Temporal.Changed();
-
             return false;
         }
 
@@ -288,7 +291,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.RenderedScale = entry.CurrentScale;
             entry.RenderedSharpness = entry.CurrentSharpness;
             entry.RenderedShadowFadeCapacity = entry.CurrentShadowFadeCapacity;
-            entry.Temporal.Rendered();
+            if (entry.SampleRenderedFrame == m_frame) { entry.Temporal.Rendered(); }
         }
     }
 

@@ -21,7 +21,7 @@ public static partial class SdfWorldPackage {
     /// <param name="reconstructs">Whether the view reconstructs its render grid.</param>
     /// <param name="temporal">Whether the view reconstructs over time.</param>
     /// <param name="fadeCapacity">The configured number of concurrent fades, from zero to two.</param>
-    /// <returns>The fragment. Its incoming image is transient and enters graph memory accounting.</returns>
+    /// <returns>The fragment. Its incoming image is retained and enters graph memory accounting.</returns>
     public static RenderGraphPackageFragment FragmentFor(bool reconstructs, bool temporal, int fadeCapacity) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: fadeCapacity);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: fadeCapacity, other: 2);
@@ -44,7 +44,7 @@ public static partial class SdfWorldPackage {
         ];
         private static GpuPixelFormat Format(int capacity) => ((capacity == 1) ? GpuPixelFormat.R8Unorm : GpuPixelFormat.R8G8Unorm);
         private static RenderGraphPackageFragment CreateFragment(RenderGraphPackageFragment source, int capacity, bool renderExtent) => source with {
-            Resources = [.. source.Resources, Image(format: Format(capacity: capacity), from: null, name: IncomingVisibility, transient: true) with {
+            Resources = [.. source.Resources, Image(format: Format(capacity: capacity), from: null, name: IncomingVisibility, retained: true) with {
                 Dimensions = (renderExtent ? ShaderPipelineDimensions.Render() : ShaderPipelineDimensions.Relative()),
             }],
             Passes = [.. source.Passes.Select(selector: pass => pass.Name switch {
