@@ -26,7 +26,7 @@ namespace Puck.World;
 /// cannot is a caller being lied to.
 /// <para>Registered in every boot shape so the command vocabulary stays stable; its presentation dependencies are
 /// optional and handlers refuse by name when unavailable.</para></remarks>
-internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? renderProbe = null, WorldBindingBarControl? bindingBarControl = null, WorldCrossingCapture? crossingCapture = null) : ICommandModule {
+internal sealed class WorldUiCommandModule(IServerLink link, WorldCaptureScheduler captureScheduler, WorldRenderProbe? renderProbe = null, WorldBindingBarControl? bindingBarControl = null, WorldCrossingCapture? crossingCapture = null) : ICommandModule {
     /// <summary>The binding-bar visibility and read-back verb.</summary>
     public const string BindingBarCommand = "world.binding-bar";
 
@@ -225,7 +225,10 @@ internal sealed class WorldUiCommandModule(IServerLink link, WorldRenderProbe? r
                     return new CommandResult(Output: $"[world.screenshot: pending {path} — lands on the first frame player {player} presents after crossing]");
                 }
 
-                render.RequestCapture(request: request);
+                captureScheduler.ArmUnscheduled(
+                    request: request,
+                    target: render
+                );
 
                 // "pending", not the bare path: the words are true at the instant they are printed. The capture line
                 // on stderr is what says the file exists.

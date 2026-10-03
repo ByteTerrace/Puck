@@ -213,6 +213,21 @@ public sealed class WorldCaptureScheduler {
     /// <summary>Gets every capture outcome recorded so far, in the order each was decided.</summary>
     public IReadOnlyList<WorldCaptureManifestEntry> Entries => m_landed;
 
+    /// <summary>Arms a capture requested outside the schedule (<c>world.screenshot</c>) on the render chain's target. It
+    /// writes no manifest entry: its outcome is its request's own.</summary>
+    /// <param name="request">The unserved request.</param>
+    /// <param name="target">The render chain's capture target.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> or <paramref name="target"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The target already holds a capture, or the request is
+    /// terminal.</exception>
+    public void ArmUnscheduled(FrameCaptureRequest request, ICaptureRequestTarget target) {
+        ArgumentNullException.ThrowIfNull(argument: request);
+        ArgumentNullException.ThrowIfNull(argument: target);
+
+        target.RequestCapture(request: request);
+    }
+
     /// <summary>Gets the kind counting the host time a holding host withheld steps for while a capture was owed, in
     /// engine ticks: <c>world.captures.held</c>. Paced by the wall clock, so two runs may differ.</summary>
     public static WorkKind HeldTicks { get; } = new(name: "world.captures.held", unit: "engine-ticks", workClass: WorkClass.Pacing);
