@@ -22,7 +22,7 @@ void CSMain(uint3 id : SV_GroupThreadID) {
     [loop] for (uint column = 0u; column < (uint)SdfSkyEnvironmentSize; column++) {
         float3 direction = sdfSkyEnvironmentDirection(uint2(column, row));
         float weight = sdfSkyEnvironmentSolidAngle(direction);
-        float3 color = sdfSkyEnvironmentUnpack(sdfSkyEnvironmentRW[((row * (uint)SdfSkyEnvironmentSize) + column)]);
+        float3 color = sdfSkyEnvironmentUnpack(sdfSkyEnvironmentRW[((row * (uint)SdfSkyEnvironmentSize) + column)]) - sdfSkyEnvironmentUnpack(sdfSkyEnvironmentRW[0]);
         float basis[9];
 
         sdfSkyEnvironmentBasis(direction, basis);
@@ -51,6 +51,9 @@ void CSMain(uint3 id : SV_GroupThreadID) {
         float normalization = (12.566370614359172 / sdfSkyReduce[(SDF_SKY_REDUCE_SUMS - 1)][0]);
 
         sdfSkyCoefficientsRW[row] = float4((sdfSkyReduce[(row * 3u)][0] * normalization), (sdfSkyReduce[((row * 3u) + 1u)][0] * normalization), (sdfSkyReduce[((row * 3u) + 2u)][0] * normalization), 0.0);
+        if (row == 0u) {
+            sdfSkyCoefficientsRW[0] += float4(sdfSkyEnvironmentUnpack(sdfSkyEnvironmentRW[0]) * 3.544907701811032, 0.0);
+        }
         sdfWorkTexels = 1u;
     }
 

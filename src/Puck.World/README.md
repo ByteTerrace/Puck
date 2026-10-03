@@ -2060,22 +2060,26 @@ unauthored; 1..8192), re-read on every definition revision like the lighting
 below—geometry beyond it is never marched, so an infinite ground plane shows
 a horizon curve there unless the `render.sky` fog layer absorbs it first.
 
-Two document sections author the scene's lighting instead of a verb, re-read
-on every definition revision (a live edit lands on the next frame).
-`render.lighting.lights[]` is a typed list, at most eight, each `$type`
-`directional` (`direction`, `color`, `weight`, `angularRadius`, `shadow`), `hemisphere`
-(`color`, `base`, `gradient`) or `rim` (`color`, `weight`, `power`, added after
-the material shade); absent, the pinned sun and hemisphere render.
-`render.lighting.curvature` adds cavity darkening, ridge light and an ink outline
-read through the `inkLow`/`inkHigh` curvature band (1 / fillet radius).
-`render.sky.layers[]` is a stack of `$type` `gradient` (two to four `stops` of
-`elevation`/`color`), `fog`, `sunDisc` (bound to a light slot), `stars` (each
-star hash-dealt its own blackbody colour and apparent luminosity;
-`twinkle { share, depth, rate }` scintillates a share of them on the tick clock)
-and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
-—a hashed, warped noise layer over everything above it, all on the tick clock),
-composited in that order whatever order they are authored in. Every field is
-optional individually, and a layer may carry a `name`. A directional's
+The lighting, sky and environment sections are re-read on every definition
+revision. `render.lighting.lights[]` holds at most eight typed lights:
+`directional`, `point`, `occluder` and `rim`. An absent list supplies the
+pinned sun. `render.lighting.curvature` adds cavity darkening, ridge light and
+an ink outline through the `inkLow`/`inkHigh` curvature band.
+
+`render.sky.layers[]` is the authored-order stack of repeatable `gradient`,
+`sunDisc`, `stars`, `clouds`, `aurora`, `noise`, `pattern`, `panorama`
+and `panel` layers, with opacity, blend, visibility, masks, transforms and
+quality tiers. The `fog` record controls distance fog outside that stack.
+Lighting-visible layers supply the shared environment map and second-order
+spherical harmonics. `render.environment.ambient` scales the sky irradiance
+through AO; `reflection` scales map reflections with analytic rectangular
+panels. Both gains default to one and skip their shading work at zero.
+A `panel` defaults to lighting-only visibility and additive blending; its
+colour, intensity and blur use the same bindings and key clocks as the sky.
+The [frame rendering guide](../../docs/rendering/sdf/handbook/frame-rendering.md)
+describes the environment's refresh threshold and counted work.
+
+A directional's
 `shadow` is `always`, `auto` or `never` (the default). `always` and `auto`
 require a unique light `name`; `never` consumes no shadow slot. Each delivered
 tick selects `always` lights first, then `auto` lights by their tick-state color

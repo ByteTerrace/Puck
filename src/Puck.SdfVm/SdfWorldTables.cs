@@ -358,7 +358,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
         m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
         m_skyLayerRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyLayerRecords), region: SkyLayerRegionIndex));
-        m_softboxRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_softboxRecords), region: SoftboxRegionIndex));
         m_shadowHandoffBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: RegionName(region: ShadowHandoffRegionIndex), sizeBytes: ((ulong)RecordBytes(records: m_shadowHandoffs)), usage: GpuBufferUsage.Storage));
         m_shadowHandoffRegion = scope.Own(created: new GpuRegion(

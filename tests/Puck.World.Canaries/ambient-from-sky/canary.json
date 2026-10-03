@@ -1,0 +1,169 @@
+{
+  "id": "ambient-from-sky",
+  "title": "A surface receives ambient from the keyed lighting sky",
+  "binding": "The white rough sphere has no direct lights, reflections or fog. Its camera-only sky stays black while its lighting-only sky changes colour and returns to the starting key. The surface must change and restore. The discriminating leg holds the same key so the surface does not change.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/ambient-from-sky/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.cell.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.cell.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "ambient-follows-the-sky",
+        "before": "day.png",
+        "after": "night.png",
+        "agree": false
+      },
+      {
+        "type": "framesAgree",
+        "name": "ambient-restores",
+        "before": "day.png",
+        "after": "day-again.png",
+        "agree": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/ambient-from-sky/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.cell.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.state.cell.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 6,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "framesAgree",
+        "name": "ambient-follows-the-sky",
+        "before": "day.png",
+        "after": "night.png",
+        "agree": true
+      },
+      {
+        "type": "framesAgree",
+        "name": "ambient-restores",
+        "before": "day.png",
+        "after": "day-again.png",
+        "agree": true
+      }
+    ]
+  }
+}

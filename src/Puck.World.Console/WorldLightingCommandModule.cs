@@ -7,7 +7,7 @@ namespace Puck.World;
 /// <summary>
 /// The <c>render.lighting</c>/<c>render.sky</c>/<c>render.environment</c>/<c>render.grounding</c>/
 /// <c>render.tonemap</c> read-back: <c>world.lighting</c> reports every authored light by slot, the curvature
-/// enrichment, every sky layer, the studio-reflection softbox count and horizon colors, the grounding
+/// enrichment, every sky layer, the environment ambient and reflection gains, the grounding
 /// strength/radius, the tonemap mode, and the clock and key count of each keyed section; a keyed value reads as its
 /// clock and key count. The sections are authored through <c>world.row.set render</c>; every field is optional and an
 /// absent one reads <c>default</c>, which is the engine's pinned value for that field of that kind, not zero.
@@ -246,6 +246,13 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                         .Field(key: "shape", value: (pattern.Shape ?? WorldSkyPatternShape.Checker).ToString().ToLowerInvariant())
                         .Field(key: "cells", value: Describe(value: pattern.Cells));
                 }
+            case WorldRenderSkyLayer.Panel panel: {
+                return echo.Field(key: "color", value: Describe(color: panel.Color))
+                    .Field(key: "intensity", value: Describe(value: panel.Intensity))
+                    .Field(key: "blur", value: Describe(value: panel.Blur))
+                    .Field(key: "direction", value: panel.Direction?.ToString() ?? "default")
+                    .Field(key: "size", value: panel.Size?.ToString() ?? "default");
+            }
             case WorldRenderSkyLayer.Panorama panorama: {
                     return echo
                         .Field(key: "type", value: "panorama")
@@ -294,23 +301,6 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                 .Field(
             key: "shadow",
             value: (directional.Shadow ?? WorldShadowMode.Never).ToString().ToLowerInvariant()
-        ),
-            WorldRenderLight.Hemisphere hemisphere => echo
-                .Field(
-            key: "type",
-            value: "hemisphere"
-        )
-                .Field(
-            key: "color",
-            value: Describe(color: hemisphere.Color)
-        )
-                .Field(
-            key: "base",
-            value: Describe(value: hemisphere.Base)
-        )
-                .Field(
-            key: "gradient",
-            value: Describe(value: hemisphere.Gradient)
         ),
             WorldRenderLight.Rim rim => echo
                 .Field(
@@ -465,20 +455,8 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
         echo = echo
             .Segment()
             .Head(head: "environment")
-            .Field(
-            key: "softboxes",
-            value: ((environment?.Softboxes is { } softboxes)
-            ? softboxes.Count.ToString(provider: CultureInfo.InvariantCulture)
-            : "default")
-        )
-            .Field(
-            key: "horizonLow",
-            value: Describe(color: environment?.Horizon?.Low)
-        )
-            .Field(
-            key: "horizonHigh",
-            value: Describe(color: environment?.Horizon?.High)
-        )
+            .Field(key: "ambient", value: Describe(value: environment?.Ambient))
+            .Field(key: "reflection", value: Describe(value: environment?.Reflection))
             .Segment()
             .Head(head: "tonemap")
             .Field(
@@ -508,7 +486,7 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
-            description: "Reports the render.lighting, render.sky, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the last presented named shadow holders with their selection ranks and transition state, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, the grounding strength/radius, the tonemap mode, and the clock and key count of each keyed section. A keyed value reads keys(clock: <name>, <n> keys); an unauthored field reads 'default' — the engine's pinned value for it, not zero.",
+            description: "Reports the render.lighting, render.sky, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the last presented named shadow holders with their selection ranks and transition state, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the environment ambient and reflection gains, the grounding strength/radius, the tonemap mode, and the clock and key count of each keyed section. A keyed value reads keys(clock: <name>, <n> keys); an unauthored field reads 'default' — the engine's pinned value for it, not zero.",
             describe: server => ((DescribeLighting(definition: server.Definition) + " | ") + (shadowReport?.Invoke(server.Definition) ?? "shadowSlots unavailable: no presented frame of this authority")),
             name: "world.lighting"
         );

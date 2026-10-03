@@ -23,7 +23,7 @@ namespace Puck.World.Client;
 /// </para>
 /// </summary>
 public sealed partial class WorldEnvironmentResolve : IDisposable {
-    // An unauthored lighting section seeds from the pinned sun and hemisphere; an authored list seeds from nothing.
+    // An unauthored lighting section seeds from the pinned sun; an authored list seeds from nothing.
     private static readonly SdfLights Pinned = SdfLights.Default();
     private static readonly SdfLights Empty = new();
     private static readonly SdfSky Unauthored = new();
@@ -196,14 +196,6 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             Color: Vector3.One,
             Weight: SdfLights.DefaultSunWeight,
             Param: SdfLights.DefaultPenumbraSlope,
-            Shadows: false
-        ),
-        WorldRenderLight.Hemisphere => new SdfLight(
-            Kind: SdfLightKind.Hemisphere,
-            Direction: Vector3.Zero,
-            Color: Vector3.One,
-            Weight: SdfLights.DefaultAmbientBase,
-            Param: SdfLights.DefaultAmbientHemisphere,
             Shadows: false
         ),
         WorldRenderLight.Occluder => new SdfLight(
@@ -417,7 +409,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         );
     }
     // The one document-to-records writer. The lights seed from the pinned ones when the world authors no light list (the
-    // pinned sun and hemisphere) and from nothing when it does, the sky from the unauthored one, and an absent field
+    // pinned sun) and from nothing when it does, the sky from the unauthored one, and an absent field
     // takes its kind's default.
     private void Write(WorldStateMirror mirror, WorldRenderLighting? lighting, WorldRenderSky? sky, WorldRenderEnvironment? environment) {
         var into = m_resolvedLights;
@@ -470,27 +462,6 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                                 mirror: mirror,
                                 scalar: directional.Weight,
                                 field: WorldValueFields.DirectionalWeight,
-                                site: lightSite
-                            ),
-                        },
-                        WorldRenderLight.Hemisphere hemisphere => pinned with {
-                            Color = Rgb(
-                                color: hemisphere.Color,
-                                fallback: pinned.Color,
-                                mirror: mirror
-                            ),
-                            Param = Scalar(
-                                fallback: pinned.Param,
-                                mirror: mirror,
-                                scalar: hemisphere.Gradient,
-                                field: WorldValueFields.HemisphereGradient,
-                                site: lightSite
-                            ),
-                            Weight = Scalar(
-                                fallback: pinned.Weight,
-                                mirror: mirror,
-                                scalar: hemisphere.Base,
-                                field: WorldValueFields.HemisphereBase,
                                 site: lightSite
                             ),
                         },
@@ -687,6 +658,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             WorldRenderSkyLayer.Aurora aurora => into.Add(blend: blend, label: label, opacity: opacity, parameters: AuroraOf(aurora: aurora, mirror: mirror, site: site), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Noise noise => into.Add(blend: blend, label: label, opacity: opacity, parameters: NoiseOf(mirror: mirror, noise: noise, site: site), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Pattern pattern => into.Add(blend: blend, label: label, opacity: opacity, parameters: PatternOf(mirror: mirror, pattern: pattern), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Panel panel => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanelOf(mirror: mirror, panel: panel, site: site), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Panorama panorama => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanoramaOf(mirror: mirror, panorama: panorama, site: site), tier: tier, visibility: visibility),
             _ => -1,
         };
@@ -980,42 +952,18 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         Projection = ((panorama.Projection == WorldSkyProjection.Octahedral) ? SdfSkyProjection.Octahedral : SdfSkyProjection.Equirectangular),
         Screen = (panorama.Screen ?? -1),
     };
+
+    private SdfSkyPanel PanelOf(WorldStateMirror mirror, WorldRenderSkyLayer.Panel panel, in WorldValueSite site) => new() {
+        Direction = panel.Direction ?? Vector3.UnitY,
+        Size = panel.Size ?? new Vector2(0.3f),
+        Color = Rgb(color: panel.Color, fallback: Vector3.One, mirror: mirror),
+        Intensity = Scalar(fallback: 1f, field: WorldValueFields.PanelIntensity, mirror: mirror, scalar: panel.Intensity, site: site),
+        Blur = Scalar(fallback: 0f, field: WorldValueFields.PanelBlur, mirror: mirror, scalar: panel.Blur, site: site),
+    };
     private void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfSky into) {
-        var count = Math.Min(
-            val1: (environment?.Softboxes?.Count ?? 0),
-            val2: SdfSky.MaxSoftboxes
-        );
-
-        for (var index = 0; (index < count); index++) {
-            var authored = environment!.Softboxes![index];
-
-            into.SetSoftbox(
-                index: index,
-                softbox: new SdfSoftbox(
-                    Blur: (authored.Blur ?? 0f),
-                    Color: Rgb(
-                        color: authored.Color,
-                        fallback: Vector3.One,
-                        mirror: mirror
-                    ),
-                    Direction: authored.Direction,
-                    Size: authored.Size,
-                    Weight: (authored.Weight ?? 1f)
-                )
-            );
-        }
-
-        into.SoftboxCount = count;
-        into.Block.HorizonLow = Rgb(
-            color: environment?.Horizon?.Low,
-            fallback: Vector3.Zero,
-            mirror: mirror
-        );
-        into.Block.HorizonHigh = Rgb(
-            color: environment?.Horizon?.High,
-            fallback: Vector3.Zero,
-            mirror: mirror
-        );
+        var site = new WorldValueSite("render.environment");
+        into.Block.Ambient = Scalar(fallback: 1f, field: WorldValueFields.EnvironmentAmbient, mirror: mirror, scalar: environment?.Ambient, site: site);
+        into.Block.Reflection = Scalar(fallback: 1f, field: WorldValueFields.EnvironmentReflection, mirror: mirror, scalar: environment?.Reflection, site: site);
     }
 }
 /// <summary>A frame's resolved lights and sky (<see cref="WorldEnvironmentResolve.Resolve"/>), which the frame carries as

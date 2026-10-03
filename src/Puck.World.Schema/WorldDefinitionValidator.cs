@@ -390,7 +390,7 @@ public static partial class WorldDefinitionValidator {
 
         return false;
     }
-    // The lights a sun disc's slot indexes: the authored list, or the pinned sun and hemisphere when the section
+    // The lights a sun disc's slot indexes: the authored list, or the pinned sun when the section
     // authors no list (a curvature-only section keeps the pinned lights).
     private static WorldRenderLighting ResolvedLightingShape(WorldRenderLighting? lighting) => (lighting switch {
         { Lights: not null } authored => authored,

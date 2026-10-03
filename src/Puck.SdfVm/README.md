@@ -99,12 +99,12 @@ planner decides every barrier. `place` then places the output in its seat rect,
 copying the texels exactly when the output's scheduled extent equals the rect's
 pixels and resampling them otherwise. The residency counts its upload as four
 passes, `fillers`, `bricks`, `upload` and `environment`, the sky's environment
-map and its coefficients, rendered only when its gradient changes
+map and its coefficients, rendered only when lighting-visible irradiance changes by at least one display code
 (`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
 counts the view's passes as `sdf.world$mask` through `sdf.world$composite`, their
 kernels' march steps, texels written and sky evaluations, hashes and texture
-loads among them. The sky and composite expose per-layer detail rows, and the
+loads among them. The sky, composite and views expose per-layer detail rows, and the
 shadow exposes its slot; the ledger reconciles these with the plain remainder
 into each pass's totals. The views
 kernel ships in three compiled variants

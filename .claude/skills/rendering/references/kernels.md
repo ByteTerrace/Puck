@@ -79,7 +79,7 @@ under the residency as `sdf:<name>` with four passes (`SdfWorldTables.PassLabels
 `bricks`, the brick staging copy, the bake dispatches and the pool's barriers
 when that work is pending; `upload`, the region copies; and `environment`, the
 sky's environment map and its coefficients, rendered only on an upload whose sky
-gradient moved while the fog reads it (`SdfWorldTables.SkyEnvironment.cs`;
+lighting-visible irradiance differs by at least 1/255 while fog or lighting reads it (`SdfWorldTables.SkyEnvironment.cs`;
 `sdf-sky-environment.comp` then `sdf-sky-environment-reduce.comp`). An upload
 skips a pass it has no work for. Every pass of the view counts its own march steps
 (`sdfWorkSteps`: each field evaluation of a march or a query, and each bounded
@@ -103,7 +103,7 @@ of its passes. The upload and the view's passes, in order:
 
 | Label | Kernel | Does |
 |---|---|---|
-| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, frame grid, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws, the lights, active shadow handoff controls and the sky's block, stops and softboxes) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
+| `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, frame grid, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws, the lights, active shadow handoff controls and the sky's block and layers) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |

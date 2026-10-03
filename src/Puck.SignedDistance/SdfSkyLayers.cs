@@ -24,6 +24,8 @@ public enum SdfSkyLayerKind : uint {
     Panorama = 6,
     /// <summary>A disc about a light's direction, glowing or textured (<see cref="SdfSkyDisc"/>), a point kind.</summary>
     Disc = 7,
+    /// <summary>A rectangular emitter at infinity (<see cref="SdfSkyPanel"/>), a point kind.</summary>
+    Panel = 8,
 }
 /// <summary>Where a sky layer draws: everywhere, in an elevation band of the sky frame, or in a cone about a direction.
 /// The mask's weight scales the layer's alpha, its edge widened by <see cref="SdfSkyLayer.MaskSoftness"/>.</summary>

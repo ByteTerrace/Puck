@@ -1,0 +1,259 @@
+{
+  "host": {
+    "authority": null,
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 256,
+    "journalDepth": 2000,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "offscreen",
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0,
+    "width": 256
+  },
+  "render": {
+    "farDistance": 100,
+    "temporal": false,
+    "ambientOcclusion": false,
+    "shadows": "Off",
+    "lighting": {
+      "lights": []
+    },
+    "environment": {
+      "ambient": 1,
+      "reflection": 0
+    },
+    "sky": {
+      "clock": "skyMode",
+      "layers": [
+        {
+          "$type": "gradient",
+          "name": "camera",
+          "visibility": "camera",
+          "stops": [
+            {
+              "elevation": -1,
+              "color": "#000000"
+            },
+            {
+              "elevation": 1,
+              "color": "#000000"
+            }
+          ]
+        },
+        {
+          "$type": "gradient",
+          "name": "air",
+          "visibility": "lighting",
+          "stops": [
+            {
+              "elevation": -1,
+              "color": "#102840"
+            },
+            {
+              "elevation": 1,
+              "color": "#102840"
+            }
+          ]
+        },
+        {
+          "$type": "fog",
+          "density": 0
+        }
+      ],
+      "keys": [
+        {
+          "at": 0,
+          "layers": {
+            "air": {
+              "$type": "gradient",
+              "stops": [
+                {
+                  "elevation": -1,
+                  "color": "#401008"
+                },
+                {
+                  "elevation": 1,
+                  "color": "#401008"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "at": 0.5,
+          "layers": {
+            "air": {
+              "$type": "gradient",
+              "stops": [
+                {
+                  "elevation": -1,
+                  "color": "#102840"
+                },
+                {
+                  "elevation": 1,
+                  "color": "#102840"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "schema": "puck.world.definition.v1",
+  "views": {
+    "layouts": [
+      {
+        "name": "world",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "sky-cam",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
+      }
+    ],
+    "seatControl": {
+      "maxPitch": 0.01,
+      "minPitch": -0.01,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "world",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 0.01,
+          "pitch": 0.45,
+          "yaw": 0
+        },
+        {
+          "$type": "fieldOfView",
+          "fieldOfViewRadians": 1.4
+        }
+      ],
+      "version": "puck.camera.program.v1"
+    }
+  },
+  "state": {
+    "world": [
+      {
+        "name": "skyMode",
+        "kind": "Fixed",
+        "value": "0.5"
+      }
+    ]
+  },
+  "timeline": {
+    "clocks": [
+      {
+        "name": "skyMode",
+        "state": "skyMode"
+      }
+    ]
+  },
+  "cameras": [
+    {
+      "name": "sky-cam",
+      "renderWidth": 256,
+      "renderHeight": 256,
+      "rig": {
+        "name": "sky-cam",
+        "version": "puck.camera.program.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0,
+                -1
+              ]
+            }
+          },
+          {
+            "$type": "fieldOfView",
+            "fieldOfViewRadians": 1.4
+          }
+        ]
+      }
+    }
+  ],
+  "prototypes": [
+    {
+      "id": "target",
+      "document": {
+        "name": "target",
+        "schema": "puck.creation.v1",
+        "palette": [
+          {
+            "roughness": 1,
+            "specular": 0,
+            "color": "#FFFFFF"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "sphere",
+            "type": "Sphere",
+            "material": 0,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              2,
+              2,
+              2
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "id": "target",
+        "scale": 1,
+        "yawDegrees": 0,
+        "position": [
+          0,
+          0,
+          -4
+        ],
+        "prototypeId": "target"
+      }
+    ]
+  }
+}

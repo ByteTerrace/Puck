@@ -1836,7 +1836,8 @@ The `sky-still`, `sky-drift`, `sky-twinkle`, and `sky-cycle` worlds under
 `tests/Puck.Counters`, each run with `sky.script.txt`, hold the camera still
 and enable cadence. They isolate an unchanging sky, cloud drift, star twinkle,
 and a changing cycle value so their pass counts show which work each change
-requires. Each has its own ceilings beside it, recorded on the floor machine
+requires. The cycle also carries a lighting-only panel, counting its projection
+and analytic reflection work. Each has its own ceilings beside it, recorded on the floor machine
 (`sky-still.ceilings.json` and so on); pass it with `--ceilings`, because the
 default ceilings cover only the default workload. A cadence-omitted node has no completed sample
 in the report, so missing rows must not be read as measured zeros.

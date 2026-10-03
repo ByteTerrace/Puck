@@ -34,10 +34,14 @@ public static class WorldValueFields {
         Maximum: MathF.Atan(x: SdfLights.MaxPenumbraSlope),
         Minimum: 0f
     ));
-    /// <summary>A hemisphere light's base.</summary>
-    public static WorldValueField HemisphereBase { get; } = new(typeof(WorldRenderLight.Hemisphere), nameof(WorldRenderLight.Hemisphere.Base), WorldValueDomain.NonNegative);
-    /// <summary>A hemisphere light's gradient.</summary>
-    public static WorldValueField HemisphereGradient { get; } = new(typeof(WorldRenderLight.Hemisphere), nameof(WorldRenderLight.Hemisphere.Gradient), WorldValueDomain.Finite);
+    /// <summary>The sky's ambient gain.</summary>
+    public static WorldValueField EnvironmentAmbient { get; } = new(typeof(WorldRenderEnvironment), nameof(WorldRenderEnvironment.Ambient), WorldValueDomain.NonNegative);
+    /// <summary>The sky's reflection gain.</summary>
+    public static WorldValueField EnvironmentReflection { get; } = new(typeof(WorldRenderEnvironment), nameof(WorldRenderEnvironment.Reflection), WorldValueDomain.NonNegative);
+    /// <summary>A sky panel's intensity.</summary>
+    public static WorldValueField PanelIntensity { get; } = new(typeof(WorldRenderSkyLayer.Panel), nameof(WorldRenderSkyLayer.Panel.Intensity), WorldValueDomain.NonNegative);
+    /// <summary>A sky panel's blur.</summary>
+    public static WorldValueField PanelBlur { get; } = new(typeof(WorldRenderSkyLayer.Panel), nameof(WorldRenderSkyLayer.Panel.Blur), WorldValueDomain.NonNegative);
     /// <summary>A rim light's weight.</summary>
     public static WorldValueField RimWeight { get; } = new(typeof(WorldRenderLight.Rim), nameof(WorldRenderLight.Rim.Weight), WorldValueDomain.NonNegative);
     /// <summary>A rim light's power.</summary>
@@ -182,8 +186,10 @@ public static class WorldValueFields {
     public static IReadOnlyList<WorldValueField> All { get; } = [
         DirectionalWeight,
         DirectionalAngularRadius,
-        HemisphereBase,
-        HemisphereGradient,
+        PanelIntensity,
+        PanelBlur,
+        EnvironmentAmbient,
+        EnvironmentReflection,
         RimWeight,
         RimPower,
         PointRadius,

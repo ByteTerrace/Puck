@@ -83,7 +83,7 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         var skyBlocks = new SdfSkyBlock[1];
         var skyLayers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-        new SdfSky().Pack(block: out skyBlocks[0], details: new SdfSkyDetails(), layers: skyLayers, lights: SdfLights.Default(), softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]);
+        new SdfSky().Pack(block: out skyBlocks[0], details: new SdfSkyDetails(), layers: skyLayers, lights: SdfLights.Default());
         using var skyBuffer = services.BufferFactory.CreateHostVisible(data: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: skyBlocks.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         using var layerBuffer = services.BufferFactory.CreateHostVisible(data: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: skyLayers.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)(Rows * GpuKernelCounters.RowBytes)), usage: GpuBufferUsage.Storage);

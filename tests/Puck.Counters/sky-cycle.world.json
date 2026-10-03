@@ -224,6 +224,23 @@
           "spin": 0,
           "curl": 0.3,
           "name": "clouds"
+        },
+        {
+          "$type": "panel",
+          "name": "studio-key",
+          "direction": [
+            0.2,
+            1,
+            0.3
+          ],
+          "size": [
+            0.2,
+            0.5
+          ],
+          "color": "#FFF4E8",
+          "intensity": 2,
+          "blur": 0.02,
+          "visibility": "lighting"
         }
       ],
       "clock": "skyMode",

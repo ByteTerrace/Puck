@@ -5,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The host-written tables: program words, dynamic transforms, the frame instance grid, screen surfaces, screen mappings,
-// screen lights, volumes, glyph decals, mesh draws, the lights and the sky's block, stops and softboxes, plus the staged
+// screen lights, volumes, glyph decals, mesh draws, the lights and the sky's block and layers, plus the staged
 // shadow handoff controls. Each table uses a GpuRegion under the policy GpuResidency.Select chooses for
 // its size with the upload ring's readers in flight, a ring's buffers in the memory GpuResidency.RingMemory chooses. A
 // frame writes each table into its region, which owes only the words that differ; the upload flushes its ring slot's
@@ -24,7 +24,7 @@ public sealed partial class SdfWorldTables {
     private const int MeshRegionIndex = 8;
     private const int ProgramRegionIndex = 0;
     // The per-frame regions RegionAt names.
-    private const int RegionCount = 14;
+    private const int RegionCount = 13;
     private const int ScreenLightRegionIndex = 4;
     private const int ScreenMappingRegionIndex = 7;
     private const int ScreenSurfaceRegionIndex = 3;
@@ -175,7 +175,6 @@ public sealed partial class SdfWorldTables {
         LightRegionIndex => m_lightRegion,
         SkyRegionIndex => m_skyRegion,
         SkyLayerRegionIndex => m_skyLayerRegion,
-        SoftboxRegionIndex => m_softboxRegion,
         _ => m_shadowHandoffRegion,
     };
     // The debug name of region index's objects, its reserved copy sets included: its table's role.
@@ -192,7 +191,6 @@ public sealed partial class SdfWorldTables {
         LightRegionIndex => "lights",
         SkyRegionIndex => "sky",
         SkyLayerRegionIndex => "sky-layers",
-        SoftboxRegionIndex => "softboxes",
         ShadowHandoffRegionIndex => "shadow-handoffs",
         _ => "brick-staging",
     });

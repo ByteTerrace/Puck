@@ -7,7 +7,7 @@ namespace Puck.SdfVm.Tests;
 /// The counted cost of an <c>sdf.world</c> pass's constant data, held to the generated interface: every pass block is
 /// the world interface's pass block, which holds the view and frame values and no light or sky table, and each kernel
 /// the build deploys binds the lights table and the sky's block and tables only when its pass reads them (the lights
-/// the shadow and views passes, the sky block and its stops the sky and views passes, the softboxes views alone, the sky's
+/// the shadow and views passes, the sky block and its stops the sky and views passes, the coefficients views alone, the sky's
 /// environment map the composite alone), as its SPIR-V reflects.
 /// </summary>
 public sealed class SdfPassBindingLawTests {
@@ -22,9 +22,9 @@ public sealed class SdfPassBindingLawTests {
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
         (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, SdfKernel.ShadowFade1, SdfKernel.ShadowFade2, .. ViewsKernels]),
         (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, .. ViewsKernels]),
-        (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite]),
-        (SdfKernelInterfaces.Softboxes, ViewsKernels),
-        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite]),
+        (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite, .. ViewsKernels]),
+        (SdfKernelInterfaces.SkyCoefficients, ViewsKernels),
+        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite, .. ViewsKernels]),
     ];
 
     private static ShaderInterfaceGroupLayout Group(ShaderInterfaceLayout layout, ShaderInterfaceGroup group) =>

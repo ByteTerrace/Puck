@@ -16,7 +16,7 @@ struct SdfLightSource {
     float weight;
     // A directional's unit direction toward the light; a point's, an occluder's or a screen's world position.
     float3 position;
-    // A hemisphere's gradient, a rim's exponent, a point's falloff radius or an occluder's radius.
+    // A rim's exponent, a point's falloff radius or an occluder's radius.
     float param;
     // A screen's face normal.
     float3 facing;
@@ -127,7 +127,6 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
 }
 // What `light` adds at `surface`:
 // - a directional its wrapped Lambert term under its own shadow visibility;
-// - a hemisphere its floor plus its gradient along the normal's height under ambient occlusion;
 // - a point its wrapped Lambert term and its own GGX lobe under an inverse-square falloff and ambient occlusion;
 // - a rim its view-dependent silhouette brighten;
 // - an occluder a Gaussian dimming of reflected light, facing the surface;
@@ -148,10 +147,6 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
         float occlusion = sdfLightVisibility(light.index, surface.shadowVisibility, surface.incomingVisibility, surface.ambientOcclusion);
 
         response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
-    } else if (light.kind == SDF_LIGHT_HEMISPHERE) {
-        float ambient = (light.weight + (light.param * normal.y));
-
-        response.diffuse = (light.color * (ambient * surface.ambientOcclusion));
     } else if (light.kind == SDF_LIGHT_POINT) {
         float3 toLight = (light.position - surface.position);
         float pointDistance = length(toLight);

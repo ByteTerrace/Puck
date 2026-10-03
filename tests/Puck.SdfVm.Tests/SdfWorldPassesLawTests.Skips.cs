@@ -147,14 +147,14 @@ public sealed partial class SdfWorldPassesLawTests {
     // A pass block's words that change every frame form one run each; the run list is bounded (GpuRegion.HostRunCapacity),
     // and a past-the-bound range merges neighbours across the words between them, re-sending them. The work counter row
     // and the first detail row sit side by side in the block, so a hit pass writing its row adds no run and no
-    // coalescing: its bytes are the mask pass's plus the four of its row word.
+    // coalescing: its bytes are the mask pass's plus the row word, and the detail word for views.
     [Fact]
     public void ADetailRowBesideTheCounterRowAddsNoRunToAHitPassesBlock() {
         var bytes = HostBytesOf(frame: Frame());
         var mask = bytes["sdf.world$mask"];
 
         foreach (var part in new[] { SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views }) {
-            Assert.Equal(expected: (mask + 4L), actual: bytes[$"sdf.world${part}"]);
+            Assert.Equal(expected: (mask + (part == SdfWorldPackage.Parts.Views ? 8L : 4L)), actual: bytes[$"sdf.world${part}"]);
         }
     }
     [Fact]

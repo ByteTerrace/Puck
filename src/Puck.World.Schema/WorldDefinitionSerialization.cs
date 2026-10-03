@@ -153,7 +153,6 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldAnchor.RecentSpeaker), TypeInfoPropertyName = "WorldAnchorRecentSpeaker")]
 [JsonSerializable(typeof(WorldRenderLight))]
 [JsonSerializable(typeof(WorldRenderLight.Directional), TypeInfoPropertyName = "WorldRenderLightDirectional")]
-[JsonSerializable(typeof(WorldRenderLight.Hemisphere), TypeInfoPropertyName = "WorldRenderLightHemisphere")]
 [JsonSerializable(typeof(WorldRenderLight.Rim), TypeInfoPropertyName = "WorldRenderLightRim")]
 // WorldRenderLight.Point and WorldMarkerSource.Point share a simple name (see the WorldCameraSubject.Placement
 // note above) — named explicitly.
@@ -167,6 +166,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldRenderSkyLayer.Aurora), TypeInfoPropertyName = "WorldRenderSkyLayerAurora")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Noise), TypeInfoPropertyName = "WorldRenderSkyLayerNoise")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Pattern), TypeInfoPropertyName = "WorldRenderSkyLayerPattern")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Panel), TypeInfoPropertyName = "WorldRenderSkyLayerPanel")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Panorama), TypeInfoPropertyName = "WorldRenderSkyLayerPanorama")]
 [JsonSerializable(typeof(WorldCameraAnchorCandidate))]
 [JsonSerializable(typeof(WorldLookCue))]

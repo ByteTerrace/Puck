@@ -85,7 +85,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // staged, so it takes no aperture buffer.
         using (var rig = new Rig(profile: discrete, slots: 40)) {
             rig.Warm();
-            Assert.Equal(expected: (12 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
+            Assert.Equal(expected: (11 * SdfWorldTables.FrameRingSize), actual: rig.Gpu.ApertureBuffers);
             rig.Move(slot: 3);
             rig.Render(time: 0f);
             Assert.Equal(expected: 0, actual: rig.Gpu.UploadCopies);

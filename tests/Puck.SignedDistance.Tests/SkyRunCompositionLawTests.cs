@@ -90,12 +90,13 @@ public sealed class SkyRunCompositionLawTests {
             (SdfSkyPattern.Kind, SdfSkyPattern.Class),
             (SdfSkyPanorama.Kind, SdfSkyPanorama.Class),
             (SdfSkyDisc.Kind, SdfSkyDisc.Class),
+            (SdfSkyPanel.Kind, SdfSkyPanel.Class),
         };
 
         Assert.Equal(actual: kinds.Select(selector: static kind => kind.Kind).Order(), expected: Enum.GetValues<SdfSkyLayerKind>().Order());
         Assert.Equal(
             actual: kinds.Where(predicate: static kind => (kind.Class == SdfSkyLayerClass.Point)).Select(selector: static kind => kind.Kind).Order(),
-            expected: new[] { SdfSkyLayerKind.Stars, SdfSkyLayerKind.Disc }.Order()
+            expected: new[] { SdfSkyLayerKind.Stars, SdfSkyLayerKind.Disc, SdfSkyLayerKind.Panel }.Order()
         );
 
         // Every kind in a stack, each blend in turn: a gradient, stars, clouds, aurora, noise, a pattern, a panorama and a
@@ -175,7 +176,7 @@ public sealed class SkyRunCompositionLawTests {
 
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-        sky.Pack(block: out var block, details: new SdfSkyDetails(), layers: layers, lights: SdfLights.Default(), softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]);
+        sky.Pack(block: out var block, details: new SdfSkyDetails(), layers: layers, lights: SdfLights.Default());
         Assert.Equal(actual: block.LayerCount, expected: 6u);
         Assert.Equal(actual: block.BaseRun, expected: 1u);
         Assert.Equal(actual: block.UpperRuns, expected: ((uint)SdfSky.MaxUpperFieldRuns));

@@ -555,7 +555,7 @@ counts call for them.
 hand-numbered environment table is a second hand-kept layout beside the frame
 data, and carried in every pass block it makes every dispatch bind constant data
 that only the sky, shadow and views passes read. The lights table and the sky's
-block, stops and softboxes are C# records whose HLSL declarations are generated
+block and layers are C# records whose HLSL declarations are generated
 from the types, written as regions that owe only the words that changed, and
 referenced only by the kernels that read them, so a pass block holds the view
 and frame values alone.

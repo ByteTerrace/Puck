@@ -345,45 +345,6 @@
       "additionalProperties": false,
       "title": "WorldRenderLightDirectional"
     },
-    "WorldRenderLightHemisphere": {
-      "description": "A hemisphere ambient: a floor plus a gradient on the surface normal\u0027s Y (sky above, darker below), scaled by ambient occlusion.",
-      "properties": {
-        "$type": {
-          "const": "hemisphere"
-        },
-        "color": {
-          "$ref": "#/$defs/BindableColor",
-          "description": "The ambient\u0027s colour.",
-          "default": null
-        },
-        "base": {
-          "$ref": "#/$defs/BindableScalar",
-          "description": "The floor. Absent is the pinned ambient floor.",
-          "default": null
-        },
-        "gradient": {
-          "$ref": "#/$defs/BindableScalar",
-          "description": "The hemisphere gradient. Absent is the pinned gradient.",
-          "default": null
-        },
-        "name": {
-          "description": "The name a section key addresses the light by, unique among the lights.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "lightName": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderLightHemisphere"
-    },
     "WorldRenderLightRim": {
       "description": "A view-dependent silhouette brighten: weight \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
       "properties": {
@@ -713,9 +674,6 @@
           "$ref": "#/$defs/WorldRenderLightDirectional"
         },
         {
-          "$ref": "#/$defs/WorldRenderLightHemisphere"
-        },
-        {
           "$ref": "#/$defs/WorldRenderLightRim"
         },
         {
@@ -941,7 +899,7 @@
         },
         "blend": {
           "$ref": "#/$defs/WorldSkyBlend",
-          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel."
         },
         "opacity": {
           "$ref": "#/$defs/BindableScalar",
@@ -1001,7 +959,7 @@
         },
         "blend": {
           "$ref": "#/$defs/WorldSkyBlend",
-          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel."
         },
         "opacity": {
           "$ref": "#/$defs/BindableScalar",
@@ -1102,7 +1060,7 @@
         },
         "blend": {
           "$ref": "#/$defs/WorldSkyBlend",
-          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel."
         },
         "opacity": {
           "$ref": "#/$defs/BindableScalar",
@@ -1225,7 +1183,7 @@
         },
         "blend": {
           "$ref": "#/$defs/WorldSkyBlend",
-          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel."
         },
         "opacity": {
           "$ref": "#/$defs/BindableScalar",
@@ -1424,7 +1382,7 @@
         },
         "blend": {
           "$ref": "#/$defs/WorldSkyBlend",
-          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel."
         },
         "opacity": {
           "$ref": "#/$defs/BindableScalar",
@@ -1533,7 +1491,7 @@
         },
         "blend": {
           "$ref": "#/$defs/WorldSkyBlend",
-          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel."
         },
         "opacity": {
           "$ref": "#/$defs/BindableScalar",
@@ -1643,7 +1601,7 @@
         },
         "blend": {
           "$ref": "#/$defs/WorldSkyBlend",
-          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel."
         },
         "opacity": {
           "$ref": "#/$defs/BindableScalar",
@@ -1747,7 +1705,7 @@
         },
         "blend": {
           "$ref": "#/$defs/WorldSkyBlend",
-          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel."
         },
         "opacity": {
           "$ref": "#/$defs/BindableScalar",
@@ -1828,7 +1786,7 @@
         },
         "blend": {
           "$ref": "#/$defs/WorldSkyBlend",
-          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel."
         },
         "opacity": {
           "$ref": "#/$defs/BindableScalar",
@@ -1860,6 +1818,104 @@
       },
       "additionalProperties": false,
       "title": "WorldRenderSkyLayerPanorama"
+    },
+    "DocumentVector2": {
+      "title": "DocumentVector2",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+        }
+      ]
+    },
+    "WorldRenderSkyLayerPanel": {
+      "description": "A rectangular emitter at infinity, evaluated analytically in reflections. Its default visibility is lighting only and its default blend is add.",
+      "properties": {
+        "$type": {
+          "const": "panel"
+        },
+        "direction": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The direction toward its centre in the layer frame. Absent is \u002By.",
+          "default": null
+        },
+        "size": {
+          "$ref": "#/$defs/DocumentVector2",
+          "description": "The angular half extents in radians, both positive. Absent is (0.3, 0.3).",
+          "default": null
+        },
+        "color": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "The linear radiance. Absent is white.",
+          "default": null
+        },
+        "intensity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The nonnegative radiance gain. Absent is one.",
+          "default": null
+        },
+        "blur": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The nonnegative angular edge softness. Absent is zero.",
+          "default": null
+        },
+        "name": {
+          "description": "The name used by section keys and counted detail rows.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "layerName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerPanel"
     },
     "WorldRenderSkyLayer": {
       "description": "One sky layer. The $type string is the JSON discriminator. Every layer but fog also carries what any layer carries: its blend, opacity, mask, transform, clock, visibility and the lowest quality tier it draws at.",
@@ -1897,27 +1953,12 @@
         },
         {
           "$ref": "#/$defs/WorldRenderSkyLayerPanorama"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerPanel"
         }
       ],
       "title": "WorldRenderSkyLayer"
-    },
-    "DocumentVector2": {
-      "title": "DocumentVector2",
-      "anyOf": [
-        {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "minItems": 2,
-          "maxItems": 2
-        },
-        {
-          "type": "string",
-          "minLength": 1,
-          "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-        }
-      ]
     },
     "WorldScreenSourceNone": {
       "description": "No provider is bound \u2014 the engine shades the slot as dark glass, lit faintly by the sun.",

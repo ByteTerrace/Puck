@@ -109,24 +109,6 @@ public static partial class WorldDefinitionValidator {
 
                             break;
                         }
-                    case WorldRenderLight.Hemisphere hemisphere: {
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.HemisphereBase,
-                                path: $"{lightPath}.base",
-                                scalar: hemisphere.Base
-                            );
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.HemisphereGradient,
-                                path: $"{lightPath}.gradient",
-                                scalar: hemisphere.Gradient
-                            );
-
-                            break;
-                        }
                     case WorldRenderLight.Rim rim: {
                             JudgeScalar(
                                 definition: definition,
@@ -269,7 +251,6 @@ public static partial class WorldDefinitionValidator {
     }
     private static BindableColor? LightColor(WorldRenderLight light) => (light switch {
         WorldRenderLight.Directional directional => directional.Color,
-        WorldRenderLight.Hemisphere hemisphere => hemisphere.Color,
         WorldRenderLight.Rim rim => rim.Color,
         WorldRenderLight.Point point => point.Color,
         _ => null,
@@ -477,6 +458,18 @@ public static partial class WorldDefinitionValidator {
                             errors.Add(item: $"{layerPath}.softness {patternSoftness} lies outside [0, 0.5].");
                         }
 
+                        break;
+                    }
+                case WorldRenderSkyLayer.Panel panel: {
+                        JudgeColor(color: panel.Color, definition: definition, errors: errors, path: $"{layerPath}.color");
+                        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.PanelIntensity, path: $"{layerPath}.intensity", scalar: panel.Intensity);
+                        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.PanelBlur, path: $"{layerPath}.blur", scalar: panel.Blur);
+                        if (panel.Direction is { } direction && (!float.IsFinite(direction.X) || !float.IsFinite(direction.Y) || !float.IsFinite(direction.Z) || ((direction.X == 0f) && (direction.Y == 0f) && (direction.Z == 0f)))) {
+                            errors.Add(item: $"{layerPath}.direction must be finite and nonzero.");
+                        }
+                        if (panel.Size is { } size && (!float.IsFinite(size.X) || !float.IsFinite(size.Y) || !(size.X > 0f) || !(size.Y > 0f))) {
+                            errors.Add(item: $"{layerPath}.size must be finite and positive on both axes.");
+                        }
                         break;
                     }
                 case WorldRenderSkyLayer.Panorama panorama: {
@@ -813,86 +806,8 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (environment.Softboxes is { } softboxes) {
-            if (softboxes.Count > SdfSky.MaxSoftboxes) {
-                errors.Add(item: $"{path}.softboxes carries {softboxes.Count} softboxes; at most {SdfSky.MaxSoftboxes} fit the softbox table.");
-            }
 
-            for (var index = 0; (index < softboxes.Count); index++) {
-                var softbox = softboxes[index];
-                var softboxPath = $"{path}.softboxes[{index}]";
-
-                if (softbox is null) {
-                    errors.Add(item: $"{softboxPath} must be a softbox.");
-
-                    continue;
-                }
-
-                var direction = softbox.Direction;
-
-                if (
-                    !float.IsFinite(f: direction.X) ||
-                    !float.IsFinite(f: direction.Y) ||
-                    !float.IsFinite(f: direction.Z)
-                ) {
-                    errors.Add(item: $"{softboxPath}.direction must contain finite coordinates.");
-                } else if ((((direction.X * direction.X) + (direction.Y * direction.Y)) + (direction.Z * direction.Z)) <= 0f) {
-                    errors.Add(item: $"{softboxPath}.direction must be nonzero.");
-                }
-
-                var size = softbox.Size;
-
-                if (
-                    !float.IsFinite(f: size.X) ||
-                    !float.IsFinite(f: size.Y)
-                ) {
-                    errors.Add(item: $"{softboxPath}.size must contain finite coordinates.");
-                } else if (
-                    (size.X <= 0f) ||
-                    (size.Y <= 0f)
-                ) {
-                    errors.Add(item: $"{softboxPath}.size must be strictly positive on both axes.");
-                }
-
-                if (softbox.Weight is { } weight) {
-                    RequireNonNegative(
-                        errors: errors,
-                        name: $"{softboxPath}.weight",
-                        value: weight
-                    );
-                }
-
-                if (softbox.Blur is { } blur) {
-                    RequireNonNegative(
-                        errors: errors,
-                        name: $"{softboxPath}.blur",
-                        value: blur
-                    );
-                }
-
-                if (
-                    (softbox.Color is { } color) &&
-                    !color.IsAuthorable(definition: definition)
-                ) {
-                    errors.Add(item: $"{softboxPath}.color '{color}' {BindableColor.Grammar}.");
-                }
-            }
-        }
-
-        if (environment.Horizon is { } horizon) {
-            if (
-                (horizon.Low is { } low) &&
-                !low.IsAuthorable(definition: definition)
-            ) {
-                errors.Add(item: $"{path}.horizon.low '{low}' {BindableColor.Grammar}.");
-            }
-
-            if (
-                (horizon.High is { } high) &&
-                !high.IsAuthorable(definition: definition)
-            ) {
-                errors.Add(item: $"{path}.horizon.high '{high}' {BindableColor.Grammar}.");
-            }
-        }
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.EnvironmentAmbient, path: $"{path}.ambient", scalar: environment.Ambient);
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.EnvironmentReflection, path: $"{path}.reflection", scalar: environment.Reflection);
     }
 }

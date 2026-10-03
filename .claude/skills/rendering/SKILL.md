@@ -955,7 +955,7 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Host uploads go through regions.** Every table the SDF kernels read from
   the host that a residency writes (program words, dynamic transforms, the frame
   instance grid, screen surfaces, screen mappings, screen lights, volumes, glyph
-  decals, mesh draws, the lights table and the sky's block, stops and softboxes)
+  decals, mesh draws, the lights table and the sky's block and layers)
   is a `GpuRegion` of its `SdfWorldTables`
   (`SdfWorldTables.Regions.cs`, created by `CreateRegion` under
   `GpuResidency.Select` with a reader in flight), and brick staging is a staged
@@ -969,7 +969,7 @@ These are one-line cautions; the owning pages hold the derivations.
   a descriptor range; a new region takes a slice of that pool too. The lights
   and the sky are tables of generated records (`SdfWorldTables.LightsAndSky.cs`:
   `SdfLights.Pack` and `SdfSky.Pack` fill the lights table, the sky block, its
-  stops and its softboxes with their host bakes, each written whole into its
+  layers with their host bakes, each written whole into its
   region), which only the kernels that read them reference. A view's camera and
   quality, the frame's bench levers, its light count, shadow slot table and
   curvature shading are no table: each `sdf.world` pass writes them into its
@@ -1503,7 +1503,7 @@ as `SdfSky.MinCloudSoftness` for both cloud bands and
 clamp target the GPU may flush, so the kernel names no bound of its own. Plain-float ranges live
 in `WorldDefinitionValidator`. A new render field needs its domain or validator
 bound, its field on the record that carries it (a
-light's on `SdfLight`, the sky's on `SdfSkyBlock`, a kind's parameter record or `SdfSoftbox`,
+light's on `SdfLight`, the sky's on `SdfSkyBlock`, or a kind's parameter record,
 whose declarations `puck shaders generate` writes into `sdf-world.interface.hlsli`
 from the C# type) or else its pass-block value (`SdfWorldPackage.Values`, written
 by `SdfFrameBlock`), and its shader consumer in the same change. What a document field means belongs to

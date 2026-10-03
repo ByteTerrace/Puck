@@ -210,7 +210,7 @@ public sealed class SdfFrameBlockLawTests {
         );
         Assert.Equal(
             actual: (BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightCount))), BitConverter.ToInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlots)))),
-            expected: (2u, 1)
+            expected: (1u, 1)
         );
     }
     // Each shading lever, on the frame or in a view's quality, lands in its own pass-block member and nowhere else: from
