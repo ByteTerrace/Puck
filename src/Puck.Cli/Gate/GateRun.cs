@@ -51,7 +51,7 @@ internal static class GateRun {
         .Where(predicate: path => File.Exists(path: Path.Combine(path1: repositoryRoot, path2: path)))
         .Order(comparer: StringComparer.Ordinal)];
     /// <summary>Runs the selected plan using the CLI host's clock and a substitutable process/admission boundary.</summary>
-    public static int Run(string repositoryRoot, string target, bool gpu, bool record, IGateRunner runner, string directory, TimeProvider clock) {
+    public static int Run(string repositoryRoot, string target, bool gpu, bool record, IGateRunner runner, string directory, TimeProvider clock, int suiteJobs, int gpuJobs) {
         if (record && !gpu) {
             return CliExit.Refuse(verb: Verb, what: "--record", why: "requires --gpu and an all-green qualification.");
         }
@@ -87,7 +87,7 @@ internal static class GateRun {
 
         Console.Out.WriteLine(value: $"gate: {changed.Count} changed file(s) against {mergeBase[..12]}, the merge base of HEAD and {target}; full output in {shownLog}; steps in {shownSteps}.");
         try {
-            foreach (var step in GatePlan.Expand(repositoryRoot, mergeBase, fileList, (sources.Count > 0), gpu, record, affected!)) {
+            foreach (var step in GatePlan.Expand(repositoryRoot, mergeBase, fileList, (sources.Count > 0), gpu, record, affected!, suiteJobs, gpuJobs)) {
                 if (step.Record && (failed.Count > 0)) {
                     Console.Out.WriteLine(value: $"gate: {step.Name} skipped; qualification failed.");
                     continue;

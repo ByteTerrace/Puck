@@ -4,7 +4,7 @@
 // Reference sheets: docs/game/art/moth-concept-pack/.
 // The shader projects through its paired camera when supplied, exactly as the camera does; otherwise the orbit below.
 // Drag mouse: orbit. Release: hold view. Set AUTO_TURN to 1 for a turntable.
-// Approximate sculpt, not a mesh reconstruction. Front is +Z; units are artistic.
+// Approximate sculpt, not a mesh reconstruction. Front is -Z; positions and distances use world units.
 // CLOSE_UP: face/shoulder framing. AA: 1 = fast, 2 = four samples per pixel.
 // POSE: 0 rest, 1 jump prep, 2 takeoff, 3 hover, 4 flight, 5 brake, 6 land, 7 run.
 // ANIMATE_POSE loops rest / jump / hover / flight / brake / land using the same rig.
@@ -116,110 +116,110 @@ void prepareHair() {
     // Sample the authored curves once per pixel; march only the cached sweeps.
     for(int lock=0;lock<4;lock++) {
         float3 a,b,c; float width;
-        if(lock==0) { a=float3(.105,4.18,.285); b=float3(-.105,4.17,.57); c=float3(-.44,3.80,.36); width=.133; }
-        else if(lock==1) { a=float3(.09,4.18,.286); b=float3(.29,4.11,.53); c=float3(.45,3.88,.33); width=.088; }
-        else if(lock==2) { a=float3(-.33,3.925,.285); b=float3(-.435,3.72,.39); c=float3(-.365,3.55,.325); width=.074; }
-        else { a=float3(.355,3.93,.23); b=float3(.425,3.76,.315); c=float3(.348,3.60,.26); width=.067; }
+        if(lock==0) { a=float3(-0.0525,2.09,-0.1425); b=float3(0.0525,2.085,-0.285); c=float3(0.22,1.9,-0.18); width=0.0665; }
+        else if(lock==1) { a=float3(-0.045,2.09,-0.143); b=float3(-0.145,2.055,-0.265); c=float3(-0.225,1.94,-0.165); width=0.044; }
+        else if(lock==2) { a=float3(0.165,1.9625,-0.1425); b=float3(0.2175,1.86,-0.195); c=float3(0.1825,1.775,-0.1625); width=0.037; }
+        else { a=float3(-0.1775,1.965,-0.115); b=float3(-0.2125,1.88,-0.1575); c=float3(-0.174,1.8,-0.13); width=0.0335; }
         for(int i=0;i<13;i++) {
             float t=float(i)/12.;
             // Broad roots join the hair cap, then taper into swept, thin tips.
             float taper=(.80+.40*sin(PI*t))*(1.-smoothstep(.35,1.,t));
-            hairNodes[lock*13+i]=float4(bezier(a,b,c,t)*float3(1,1,3.1),.008+width*taper);
+            hairNodes[lock*13+i]=float4(bezier(a,b,c,t)*float3(1,1,3.1),0.004+width*taper);
         }
     }
 }
 float hairSculpt(float3 p) {
-    float bound=box(p-float3(0,3.94,.38),float3(.57,.48,.23),0.);
-    if(bound>.06) return bound;
+    float bound=box(p-float3(0,1.97,-0.19),float3(0.285,0.24,0.115),0.);
+    if(bound>0.03) return bound;
     p*=float3(1,1,3.1);
-    float d=10.;
+    float d=5.;
     for(int i=0;i<48;i++) {
         int node=i+i/12;
         float4 a=hairNodes[node],b=hairNodes[node+1];
         float3 v=b.xyz-a.xyz;
         float t=clamp(dot(p-a.xyz,v)/dot(v,v),0.,1.);
         float strand=length(p-lerp(a.xyz,b.xyz,t))-lerp(a.w,b.w,t);
-        d=smoothUnion(d,strand,.014);
+        d=smoothUnion(d,strand,0.007);
     }
     return d*.27;
 }
 float3 eyeCoordinates(float3 p) {
-    p.x=abs(p.x); p-=float3(.174,3.743,.421);
-    p.xz=mul(p.xz,rot(-.21)); p.xy=mul(p.xy,rot(.055));
+    p.x=-abs(p.x); p-=float3(-0.087,1.8715,-0.2105);
+    p.xz=mul(p.xz,rot(-.21)); p.xy=mul(p.xy,rot(-.055));
     return p;
 }
-static const float3 EYE_RADII=float3(.145,.145,.098);
-float eyeFront(float2 p) { return .098*sqrt(max(1.-dot(p,p)/(.145*.145),.0001)); }
+static const float3 EYE_RADII=float3(0.0725,0.0725,0.049);
+float eyeFront(float2 p) { return -0.049*sqrt(max(1.-dot(p,p)/(0.0725*0.0725),.0001)); }
 float2 eyelidHeights(float x) {
-    float u=x/.110,arch=pow(max(1.-u*u,0.),.65);
-    return float2(.083*arch+.012*u,-.071*arch+.012*u)*eyeOpen;
+    float u=-x/0.055,arch=pow(max(1.-u*u,0.),.65);
+    return float2(0.0415*arch+0.006*u,-0.0355*arch+0.006*u)*eyeOpen;
 }
 float eyeOpening(float3 q) {
     float2 lids=eyelidHeights(q.x);
-    return max(max(q.y-lids.x,lids.y-q.y),abs(q.x)-.110)*.60;
+    return max(max(q.y-lids.x,lids.y-q.y),abs(q.x)-0.055)*.60;
 }
 float lidDistance(float3 q,bool upper) {
-    float x=clamp(q.x,-.108,.108);
+    float x=clamp(q.x,-0.054,0.054);
     float2 heights=eyelidHeights(x);
     float y=upper?heights.x:heights.y;
     float z=eyeFront(float2(x,y));
-    float radius=upper?(.010+.005*smoothstep(-.07,.12,x)):.0035;
+    float radius=upper?(0.005+0.0025*smoothstep(-0.035,0.06,-x)):0.00175;
     return (length(q-float3(x,y,z))-radius)*.30;
 }
-static const float3 FACE_CENTER=float3(0,3.725,.235);
-static const float3 FACE_RADII=float3(.400,.375,.295);
+static const float3 FACE_CENTER=float3(0,1.8625,-0.1175);
+static const float3 FACE_RADII=float3(0.2,0.1875,0.1475);
 float faceWidth(float y) {
-    float jaw=lerp(.84,1.,smoothstep(3.38,3.65,y));
-    return .400*jaw*(1.-.045*smoothstep(3.90,4.10,y));
+    float jaw=lerp(.84,1.,smoothstep(1.69,1.825,y));
+    return 0.2*jaw*(1.-.045*smoothstep(1.95,2.05,y));
 }
-float smileHeight(float x) { return 3.496+1.75*x*x+.018*x; }
+float smileHeight(float x) { return 1.748+3.5*x*x-.018*x; }
 float faceOffset(float2 p) {
     // A small lip volume on a broad facial surface; cheeks are shaped by planes.
-    float muzzle=(1.-smoothstep(.08,.21,abs(p.x)))
-                 *smoothstep(3.42,3.49,p.y)*(1.-smoothstep(3.53,3.60,p.y));
-    float2 lip=float2(p.x/.105,(p.y-smileHeight(clamp(p.x,-.13,.13))+.014)/.012);
-    return .010*muzzle+.004*exp(-dot(lip,lip));
+    float muzzle=(1.-smoothstep(0.04,0.105,abs(p.x)))
+                 *smoothstep(1.71,1.745,p.y)*(1.-smoothstep(1.765,1.8,p.y));
+    float2 lip=float2(p.x/0.0525,(p.y-smileHeight(clamp(p.x,-0.065,0.065))+0.007)/0.006);
+    return 0.005*muzzle+0.002*exp(-dot(lip,lip));
 }
 float faceFront(float2 p) {
     float2 q=float2(p.x/faceWidth(p.y),(p.y-FACE_CENTER.y)/FACE_RADII.y);
-    return FACE_CENTER.z+faceOffset(p)+FACE_RADII.z*sqrt(max(1.-dot(q,q),0.));
+    return FACE_CENTER.z-faceOffset(p)-FACE_RADII.z*sqrt(max(1.-dot(q,q),0.));
 }
 float faceSculpt(float3 p) {
     // Broad cheek planes narrow into a rounded mandible, without added cheek balls.
-    float3 q=p-FACE_CENTER; q.z-=faceOffset(p.xy);
+    float3 q=p-FACE_CENTER; q.z+=faceOffset(p.xy);
     float d=ell(q,float3(faceWidth(p.y),FACE_RADII.yz));
-    float3 s=p; s.x=abs(s.x);
-    float jaw=.68*s.x-.70*(p.y-3.40)+.18*(p.z-.24)-.136;
-    d=smoothIntersection(d,jaw,.055);
-    d=smoothIntersection(d,3.367-p.y,.020);
-    d=smoothUnion(d,cap(p,float3(0,3.710,.504),float3(0,3.636,.529),.010),.028);
-    d=smoothUnion(d,ell(p-float3(0,3.610,.548),float3(.036,.024,.034)),.024);
-    d=smoothUnion(d,ell(s-float3(.026,3.601,.534),float3(.017,.013,.018)),.017);
+    float3 s=p; s.x=-abs(s.x);
+    float jaw=-.68*s.x-.70*(p.y-1.7)+-.18*(p.z+0.12)-0.068;
+    d=smoothIntersection(d,jaw,0.0275);
+    d=smoothIntersection(d,1.6835-p.y,0.01);
+    d=smoothUnion(d,cap(p,float3(0,1.855,-0.252),float3(0,1.818,-0.2645),0.005),0.014);
+    d=smoothUnion(d,ell(p-float3(0,1.805,-0.274),float3(0.018,0.012,0.017)),0.012);
+    d=smoothUnion(d,ell(s-float3(-0.013,1.8005,-0.267),float3(0.0085,0.0065,0.009)),0.0085);
     return d*.70;
 }
 float skinGeometry(float3 p) {
     // A recessed throat widens into the jaw and shoulder root. Keep the front
     // behind the chin so the mandible has an underside instead of a skin stalk.
-    float waist=exp(-square((p.y-3.28)/.105));
-    float base=1.-smoothstep(3.14,3.27,p.y);
-    float2 radius=float2(.151-.019*waist+.036*base,.104+.022*base);
-    float2 section=float2(p.x,p.z-.125)/radius;
+    float waist=exp(-square((p.y-1.64)/0.0525));
+    float base=1.-smoothstep(1.57,1.635,p.y);
+    float2 radius=float2(0.0755-0.0095*waist+0.018*base,0.052+0.011*base);
+    float2 section=float2(p.x,p.z+0.0625)/radius;
     float neck=(length(section)-1.)*radius.y;
-    neck=smoothIntersection(neck,max(3.12-p.y,p.y-3.49),.025)*.60;
-    float skin=smoothUnion(faceSculpt(p),neck,.016);
-    float3 ear=p; ear.x=abs(ear.x);
-    return min(skin,ell(ear-float3(.365,3.645,.22),float3(.048,.090,.055)));
+    neck=smoothIntersection(neck,max(1.56-p.y,p.y-1.745),0.0125)*.60;
+    float skin=smoothUnion(faceSculpt(p),neck,0.008);
+    float3 ear=p; ear.x=-abs(ear.x);
+    return min(skin,ell(ear-float3(-0.1825,1.8225,-0.11),float3(0.024,0.045,0.0275)));
 }
 float edgePlane(float2 p,float2 a,float2 b) {
     float2 e=b-a;
-    return dot(p-a,float2(-e.y,e.x))/length(e);
+    return dot(p-a,float2(e.y,-e.x))/length(e);
 }
 float fiveSides(float2 p,float2 a,float2 b,float2 c,float2 d,float2 e) {
-    // Clockwise convex profile; half-plane distances are conservative at corners.
-    float f=smoothIntersection(edgePlane(p,a,b),edgePlane(p,b,c),.018);
-    f=smoothIntersection(f,edgePlane(p,c,d),.018);
-    f=smoothIntersection(f,edgePlane(p,d,e),.018);
-    return smoothIntersection(f,edgePlane(p,e,a),.018);
+    // Counterclockwise convex profile; half-plane distances are conservative at corners.
+    float f=smoothIntersection(edgePlane(p,a,b),edgePlane(p,b,c),0.009);
+    f=smoothIntersection(f,edgePlane(p,c,d),0.009);
+    f=smoothIntersection(f,edgePlane(p,d,e),0.009);
+    return smoothIntersection(f,edgePlane(p,e,a),0.009);
 }
 float roundedExtrusion(float profile,float depth,float bevel) {
     // Quarter-circle rounding in the profile/depth plane preserves the broad faces.
@@ -241,122 +241,122 @@ float carvePanel(float plate,float seam,float width,float depth,float bevel) {
     return max(plate,-trench);
 }
 float shoulderProfile(float2 p) {
-    return fiveSides(p,float2(-.12,.10),float2(.08,.20),float2(.29,.10),
-                     float2(.48,-.45),float2(.12,-.24));
+    return fiveSides(p,float2(0.06,0.05),float2(-0.04,0.1),float2(-0.145,0.05),
+                     float2(-0.24,-0.225),float2(-0.06,-0.12));
 }
 float shoulderPlate(float3 q) {
     // Preserve a continuous outer wall and a rounded rim around the blade.
     // The cavity opens only toward the arm, on the hidden medial side.
-    float radius=.31*(1.-.50*smoothstep(.05,.45,-q.y));
-    float section=superEllipse(float2(q.x+.02,q.z),float2(.50,radius),2.6);
-    float outer=roundedExtrusion(shoulderProfile(q.xy),section,.018);
-    float inside=superEllipse(float2(q.x+.02,q.z),float2(.465,radius-.036),2.6);
-    float cavityProfile=min(shoulderProfile(q.xy)+.038,q.x+.035);
-    inside=max(inside,max(cavityProfile,q.y-.072));
+    float radius=0.155*(1.-.50*smoothstep(0.025,0.225,-q.y));
+    float section=superEllipse(float2(q.x-0.01,q.z),float2(0.25,radius),2.6);
+    float outer=roundedExtrusion(shoulderProfile(q.xy),section,0.009);
+    float inside=superEllipse(float2(q.x-0.01,q.z),float2(0.2325,radius-0.018),2.6);
+    float cavityProfile=min(shoulderProfile(q.xy)+0.019,-q.x+0.0175);
+    inside=max(inside,max(cavityProfile,q.y-0.036));
     return max(outer,-inside)*.65;
 }
 float2 shinRadii(float y) {
-    float flare=clamp((1.41-y)/1.12,0.,1.);
-    return float2(.23,.21)+float2(.155,.23)*flare
-         +float2(.035,.040)*sin(PI*flare);
+    float flare=clamp((0.705-y)/0.56,0.,1.);
+    return float2(0.115,0.105)+float2(0.0775,0.115)*flare
+         +float2(0.0175,0.02)*sin(PI*flare);
 }
 float curvedSection(float2 p,float2 r) {
     // Between an ellipse and a rounded rectangle: broad, gently curved plate faces.
     return superEllipse(p,r,2.6);
 }
 float shinSection(float3 q,float inset) {
-    float flare=clamp((1.41-q.y)/1.12,0.,1.);
+    float flare=clamp((0.705-q.y)/0.56,0.,1.);
     // Round at the knee, with tensioned broad faces at the flared ankle.
     float power=lerp(2.15,3.65,flare*flare);
     return superEllipse(q.xz,shinRadii(q.y)-inset,power);
 }
 float ankleOpening(float2 p) {
-    float arch=(length(float2(p.x,p.y-.27)/float2(.302,.30))-1.)*.30;
-    return max(.285-p.y,-arch);
+    float arch=(length(float2(p.x,p.y-0.135)/float2(0.151,0.15))-1.)*0.15;
+    return max(0.1425-p.y,-arch);
 }
 float footOutline(float3 q) {
-    float outline=curvedSection(float2(q.x,q.z-.17),float2(.33,.48));
-    float toeCorners=(abs(q.x)+.50*(q.z-.48)-.30)/1.118;
-    return smoothIntersection(outline,toeCorners,.018);
+    float outline=curvedSection(float2(q.x,q.z+0.085),float2(0.165,0.24));
+    float toeCorners=(abs(q.x)+-.50*(q.z+0.24)-0.15)/1.118;
+    return smoothIntersection(outline,toeCorners,0.009);
 }
 float3 gauntletCoordinates(float3 p) {
-    p-=float3(.92,2.10,.015); p.xy=mul(p.xy,rot(.23));
+    p-=float3(-0.46,1.05,-0.0075); p.xy=mul(p.xy,rot(-.23));
     return p;
 }
 float gauntletShell(float3 q) {
     // A bowed exterior with a high elbow point and a rounded wrist cheek.
-    float3 a=q-float3(.085,.015,.015);
-    a.x+=.14*a.y+.18*a.y*a.y;
-    float shell=ell(a,float3(.265,.425,.275))*.78;
-    float bevel=max(.8*a.x+.15*a.y+.58*abs(a.z)-.245,
-                    max(-a.y+.28*a.x-.37,.9*a.y+.25*a.x-.34));
-    shell=smoothIntersection(shell,bevel,.024);
-    shell=smoothIntersection(shell,abs(a.z)-(.214+.10*a.y),.016);
-    return smoothIntersection(shell,-q.x-.035-.25*q.y,.025);
+    float3 a=q-float3(-0.0425,0.0075,-0.0075);
+    a.x-=.14*a.y+0.36*a.y*a.y;
+    float shell=ell(a,float3(0.1325,0.2125,0.1375))*.78;
+    float bevel=max(-.8*a.x+.15*a.y+.58*abs(a.z)-0.1225,
+                    max(-a.y-.28*a.x-0.185,.9*a.y-.25*a.x-0.17));
+    shell=smoothIntersection(shell,bevel,0.012);
+    shell=smoothIntersection(shell,abs(a.z)-(0.107+.10*a.y),0.008);
+    return smoothIntersection(shell,q.x-0.0175-.25*q.y,0.0125);
 }
-float3 nozzlePosition() { return float3(.225,2.010,-.410); }
+float3 nozzlePosition() { return float3(-0.1125,1.005,0.205); }
 float3 nozzleCoordinates(float3 p) {
     p-=nozzlePosition();
     float cant=lerp(.48,.12,smoothstep(0.,.3,motion.thrust));
-    cant-=.28*smoothstep(.02,.16,-motion.pitch);
-    p.xy=mul(p.xy,rot(-.18)); p.yz=mul(p.yz,rot(cant));
+    cant-=.28*smoothstep(.02,.16,motion.pitch);
+    p.xy=mul(p.xy,rot(.18)); p.yz=mul(p.yz,rot(-cant));
     return p;
 }
 float podBandCoordinate(float3 p) {
-    float xRel=max(p.x-.038,0.);
-    return p.y+.38*pow(xRel,1.15);
+    float xRel=max(-p.x-0.019,0.);
+    return p.y+0.19*pow(xRel*2.,1.15);
 }
 float podBandEdges(float3 p) {
     float u=podBandCoordinate(p);
-    float hSeams=min(abs(abs(u-2.72)-.11),abs(abs(u-2.33)-.11));
-    float vSeam=abs(p.x-.205);
+    float hSeams=min(abs(abs(u-1.36)-0.055),abs(abs(u-1.165)-0.055));
+    float vSeam=abs(p.x+0.1025);
     return min(hSeams,vSeam);
 }
 float podShell(float3 q) {
     // Moth-wing elytron shell: sculpted aerodynamic airfoil with sweeping convex outer curve,
     // separated inner spine margin, sharp angled jet aperture, and protective wingtip cowl.
-    float t=clamp((q.y-1.82)/1.34,0.,1.);
+    float t=clamp((q.y-0.91)/0.67,0.,1.);
 
-    // Inner edge: straight vertical spine margin leaving a clean reveal gap (0.038),
-    // rounding gently into the top shoulder dome above y = 3.08
-    float xIn=.038+.020*smoothstep(3.08,3.16,q.y);
+    // Inner edge: straight vertical spine margin leaving a clean reveal gap (0.019),
+    // rounding gently into the top shoulder dome above y = 1.54
+    float xIn=-(0.019+0.01*smoothstep(1.54,1.58,q.y));
 
     // Outer aerodynamic wing contour:
-    // Holds width through shoulder (0.31 at y=3.0), swells to broad belly (0.465 at y=2.45),
-    // and tapers to lower beak (0.346 at y=1.84)
-    float dy=q.y-2.45;
-    float curve=dy>0.?.52*dy*dy:.32*dy*dy;
-    float xOut=.465-curve;
+    // Holds width through shoulder (0.155 at y=1.5), swells to broad belly (0.2325 at y=1.225),
+    // and tapers to lower beak (0.173 at y=0.92).
+    float dy=q.y-1.225;
+    float curve=dy>0.?1.04*dy*dy:0.64*dy*dy;
+    float xOut=-0.2325+curve;
 
     // Top apex shoulder dome:
-    float dTop=(q.y-3.16)+1.65*square(q.x-.170);
+    float dTop=(q.y-1.58)+3.3*square(q.x+0.085);
 
-    // Bottom cowl rake: cuts from outer wingtip beak (y=1.84) up-inward to inner spine (y=2.10)
-    float yCut=q.x>.22?2.10-1.25*(q.x-.22):2.10;
+    // Bottom cowl rake: cuts from outer wingtip beak (y=0.92) up-inward to inner spine (y=1.05).
+    float yCut=q.x<-0.11?1.05+1.25*(q.x+0.11):1.05;
     float dCut=(yCut-q.y)/1.50;
 
     // Smoothly blend outer contour with top dome and bottom beak to avoid clipped edges:
-    float dOuter=q.x-xOut;
-    float dTopCorner=smoothIntersection(dOuter,dTop,.045);
-    float dBeak=smoothIntersection(dOuter,dCut,.025);
-    float d2D=max(max(xIn-q.x,dCut),max(dTopCorner,dBeak));
+    float dOuter=xOut-q.x;
+    float dTopCorner=smoothIntersection(dOuter,dTop,0.0225);
+    float dBeak=smoothIntersection(dOuter,dCut,0.0125);
+    float d2D=max(max(q.x-xIn,dCut),max(dTopCorner,dBeak));
 
     // 3D Airfoil camber with authentic wing volume:
-    // Longitudinal crest line runs at x = 0.205
-    float zApex=-.410-.135*sin(PI*pow(t,.75));
-    float crestX=.205;
-    float zRear=zApex+.45*square(q.x-crestX);
-    float zFront=-.265;
-    float dRear=zRear-q.z;
-    float dFront=q.z-zFront;
+    // Longitudinal crest line runs at x = -0.1025
+    float zApex=0.205+0.0675*sin(PI*pow(t,.75));
+    float crestX=-0.1025;
+    float zRear=zApex-0.9*square(q.x-crestX);
+    float zFront=0.1325;
+    float dRear=q.z-zRear;
+    float dFront=zFront-q.z;
     float dZ=max(dRear,dFront);
 
     float2 dBox=max(float2(d2D,dZ),0.);
-    float shell=length(dBox)+min(max(d2D,dZ),0.)-.018;
+    float shell=length(dBox)+min(max(d2D,dZ),0.)-0.009;
 
     // Cowl interior cavity: hollows out the inside for the recessed thruster nozzle
     float3 noz=nozzleCoordinates(q);
-    float cowlCavity=max(length(noz.xz)-.098,abs(noz.y+.025)-.085);
+    float cowlCavity=max(length(noz.xz)-0.049,abs(noz.y+0.0125)-0.0425);
     shell=max(shell,-cowlCavity);
 
     return shell*.72;
@@ -373,35 +373,35 @@ void rotateFrame(inout float3x3 basis,inout float3 offset,float3 pivot,float ang
 MotionPose poseAt(int pose) {
     MotionPose p={0.,0.,(float2)0,(float2)0,(float2)0,(float2)0,(float2)0,0.,0.,0.,.12};
     if(pose==1) { // Compress over planted, flat soles.
-        p.pitch=.24; p.hip=(float2)(-.68); p.knee=(float2)0.98;
-        p.arm=(float2)0.24; p.elbow=(float2)(-.30); p.grip=.40;
+        p.pitch=-.24; p.hip=(float2)(.68); p.knee=(float2)-0.98;
+        p.arm=(float2)-0.24; p.elbow=(float2)(.30); p.grip=.40;
     } else if(pose==2) {
-        p.pitch=.10; p.lift=.40; p.hip=float2(-.10,-.34); p.knee=float2(.20,.64);
-        p.arm=float2(-.34,-.46); p.elbow=(float2)(-.38); p.opening=.68; p.thrust=.9;
+        p.pitch=-.10; p.lift=0.2; p.hip=float2(.10,.34); p.knee=float2(-.20,-.64);
+        p.arm=float2(.34,.46); p.elbow=(float2)(.38); p.opening=.68; p.thrust=.9;
         p.trail=.22; p.grip=.20;
     } else if(pose==3) {
-        p.lift=.68; p.hip=(float2)(-.10); p.knee=(float2)0.25;
-        p.arm=(float2)(-.05); p.elbow=(float2)(-.20); p.opening=.85; p.thrust=.62;
+        p.lift=0.34; p.hip=(float2)(.10); p.knee=(float2)-0.25;
+        p.arm=(float2)(.05); p.elbow=(float2)(.20); p.opening=.85; p.thrust=.62;
         p.trail=.12;
     } else if(pose==4) {
-        p.pitch=.60; p.lift=.84; p.hip=float2(.06,.13); p.knee=float2(.30,.46);
-        p.arm=float2(-.95,-.90); p.elbow=float2(-1.20,-1.25);
+        p.pitch=-.60; p.lift=0.42; p.hip=float2(-.06,-.13); p.knee=float2(-.30,-.46);
+        p.arm=float2(.95,.90); p.elbow=float2(1.20,1.25);
         p.opening=1.; p.thrust=1.; p.trail=.95; p.grip=.90;
     } else if(pose==5) {
-        p.pitch=-.18; p.lift=.64; p.hip=float2(-.58,-.50); p.knee=float2(.58,.50);
-        p.arm=float2(-.44,-.32); p.elbow=(float2)(-.30); p.opening=.95; p.thrust=.85;
+        p.pitch=.18; p.lift=0.32; p.hip=float2(.58,.50); p.knee=float2(-.58,-.50);
+        p.arm=float2(.44,.32); p.elbow=(float2)(.30); p.opening=.95; p.thrust=.85;
         p.trail=-.35; p.grip=.08;
     } else if(pose==6) {
-        p.pitch=.32; p.hip=(float2)(-.84); p.knee=(float2)1.12;
-        p.arm=(float2)(-.55); p.elbow=(float2)(-.40); p.opening=.52; p.trail=-.16;
+        p.pitch=-.32; p.hip=(float2)(.84); p.knee=(float2)-1.12;
+        p.arm=(float2)(.55); p.elbow=(float2)(.40); p.opening=.52; p.trail=-.16;
     } else if(pose==7) {
-        p.pitch=.13; p.hip=float2(-.75,.65); p.knee=float2(.38,.90);
-        p.arm=float2(-.75,1.38); p.elbow=float2(-1.20,-.15); p.trail=1.; p.grip=.86;
+        p.pitch=-.13; p.hip=float2(.75,-.65); p.knee=float2(-.38,-.90);
+        p.arm=float2(.75,-1.38); p.elbow=float2(1.20,.15); p.trail=1.; p.grip=.86;
     }
     // Feet articulate independently from shin armor. Contact poses have level soles.
     p.ankle=-p.hip-p.knee-(float2)p.pitch;
-    if(pose>=2 && pose<=5) p.ankle=lerp(p.ankle,(float2)(-.08),.68);
-    if(pose==7) p.ankle=float2(.12,-.35);
+    if(pose>=2 && pose<=5) p.ankle=lerp(p.ankle,(float2)(.08),.68);
+    if(pose==7) p.ankle=float2(-.12,.35);
     return p;
 }
 MotionPose blendPose(MotionPose a,MotionPose b,float t) {
@@ -428,36 +428,36 @@ void preparePose() {
     // Cache inverse rigid frames once per pixel, outside all distance queries.
     for(int i=0;i<16;i++) {
         float3x3 basis=float3x3(1,0,0,0,1,0,0,0,1); float3 offset=(float3)0;
-        rotateFrame(basis,offset,float3(0,2.15,0),motion.pitch);
+        rotateFrame(basis,offset,float3(0,1.075,0),motion.pitch);
         bool otherSide=(i==4 || i==5 || i==8 || i==9 || i==11 || i==15);
         int side=otherSide?1:0;
         if(i==1) {
-            rotateFrame(basis,offset,float3(0,3.15,0),-.66*motion.pitch);
-            offset.y+=.185;
+            rotateFrame(basis,offset,float3(0,1.575,0),-.66*motion.pitch);
+            offset.y+=0.0925;
             float3x3 scale=float3x3(float3(1./.88,0,0),float3(0,1./.88,0),float3(0,0,1./.90));
             basis=mul(basis,scale);
-            offset=mul(offset-float3(0,3.2,0),scale)+float3(0,3.2,0);
+            offset=mul(offset-float3(0,1.6,0),scale)+float3(0,1.6,0);
         } else if(i>=2 && (i<12 || i>=14)) {
             if(otherSide) {
                 float3x3 mirror=float3x3(float3(-1,0,0),float3(0,1,0),float3(0,0,1));
                 basis=mul(basis,mirror); offset.x=-offset.x;
             }
             if(i<=5 || i>=14) {
-                rotateFrame(basis,offset,float3(.29,2.055,0),motion.hip[side]);
+                rotateFrame(basis,offset,float3(-0.145,1.0275,0),motion.hip[side]);
                 if(i==3 || i==5 || i>=14)
-                    rotateFrame(basis,offset,float3(.38,1.49,0),motion.knee[side]);
-                if(i>=14) rotateFrame(basis,offset,float3(.4,.34,.015),motion.ankle[side]);
+                    rotateFrame(basis,offset,float3(-0.19,0.745,0),motion.knee[side]);
+                if(i>=14) rotateFrame(basis,offset,float3(-0.2,0.17,-0.0075),motion.ankle[side]);
             } else if(i<=9) {
-                rotateFrame(basis,offset,float3(.59,2.90,0),motion.arm[side]);
-                if(i==7 || i==9) rotateFrame(basis,offset,float3(.78,2.35,.01),motion.elbow[side]);
-            } else rotateFrame(basis,offset,float3(.59,2.90,0),.30*motion.arm[side]);
+                rotateFrame(basis,offset,float3(-0.295,1.45,0),motion.arm[side]);
+                if(i==7 || i==9) rotateFrame(basis,offset,float3(-0.39,1.175,-0.005),motion.elbow[side]);
+            } else rotateFrame(basis,offset,float3(-0.295,1.45,0),.30*motion.arm[side]);
         }
         partFrame[i]=basis; partOffset[i]=offset;
     }
     // Contact is computed from transformed sole support points, then lift is added.
-    float lowest=10.;
+    float lowest=5.;
     for(int foot=14;foot<16;foot++) for(int j=0;j<4;j++) {
-        float3 sole=float3(.4+(j<2?-.24:.24),-.003,(j==0 || j==2)?-.23:.61);
+        float3 sole=float3(-(0.2+(j<2?-0.12:0.12)),-0.0015,-((j==0 || j==2)?-0.115:0.305));
         float3 world=mul(sole-partOffset[foot],transpose(partFrame[foot]));
         lowest=min(lowest,world.y);
     }
@@ -475,91 +475,91 @@ void preparePack() {
         float side=i==0?1.:-1.;
         float3x3 mirror=float3x3(float3(side,0,0),float3(0,1,0),float3(0,0,1));
         float3x3 basis=mul(partFrame[0],mirror); float3 offset=mul(partOffset[0],mirror);
-        float3 pivot=float3(.14,3.04,-.29);
+        float3 pivot=float3(-0.07,1.52,0.145);
         float settle=ANIMATE_PACK==1?.035*sin(frameGroup.time*1.1+side*.35)*packOpening:0.;
         float opening=clamp(packOpening+settle,0.,1.);
-        float2x2 r=rot(.26*opening);
+        float2x2 r=rot(-.26*opening);
         float3x3 hinge=float3x3(float3(r[0],0),float3(r[1],0),float3(0,0,1));
         basis=mul(basis,hinge); offset=mul(offset-pivot,hinge)+pivot;
-        rotateFrame(basis,offset,pivot,.085*opening);
+        rotateFrame(basis,offset,pivot,-.085*opening);
         partFrame[12+i]=basis; partOffset[12+i]=offset;
     }
 }
 float2 podScene(float3 p,bool detail) {
-    float bound=box(p-float3(.25,2.50,-.38),float3(.42,.78,.30),.02);
-    if(bound>.15) return float2(bound,-1.);
-    float2 h=float2(10.,LILAC);
+    float bound=box(p-float3(-0.125,1.25,0.19),float3(0.21,0.39,0.15),0.01);
+    if(bound>0.075) return float2(bound,-1.);
+    float2 h=float2(5.,LILAC);
     // Paint boundaries, shallow reveals and wear use the same curved coordinates.
     float shell=podShell(p),u=podBandCoordinate(p);
     // Pillowed 3D banding relief on all slats:
-    float d1=abs(u-2.72)-.11,d2=abs(u-2.33)-.11;
-    float t1=clamp(1.0-square((u-2.72)/.11),0.,1.);
-    float t2=clamp(1.0-square((u-2.33)/.11),0.,1.);
-    float tMid=clamp(1.0-square((u-2.53)/.07),0.,1.);
-    shell-=.0038*max(max(t1,t2),tMid);
-    if(detail && GEOMETRIC_SEAMS==1 && abs(shell)<.024)
-        shell=carvePanel(shell,podBandEdges(p),.0024,.0048,.0012);
+    float d1=abs(u-1.36)-0.055,d2=abs(u-1.165)-0.055;
+    float t1=clamp(1.0-square((u-1.36)/0.055),0.,1.);
+    float t2=clamp(1.0-square((u-1.165)/0.055),0.,1.);
+    float tMid=clamp(1.0-square((u-1.265)/0.035),0.,1.);
+    shell-=0.0019*max(max(t1,t2),tMid);
+    if(detail && GEOMETRIC_SEAMS==1 && abs(shell)<0.012)
+        shell=carvePanel(shell,podBandEdges(p),0.0012,0.0024,0.0006);
     // Top intake cavity on shoulder dome:
-    float topVent=box(p-float3(.170,3.03,-.425),float3(.024,.016,.030),.005);
-    shell=max(shell,-(topVent+.006));
+    float topVent=box(p-float3(-0.085,1.515,0.2125),float3(0.012,0.008,0.015),0.0025);
+    shell=max(shell,-(topVent+0.003));
     // Badges and vent markings on bands:
-    float dBadge=max(abs(p.x-.285)-.022,abs(u-2.33)-.009);
-    float dPin=length(float2(p.x-.355,u-2.33))-.0045;
-    float dPinUpper=length(float2(p.x-.260,u-2.72))-.004;
+    float dBadge=max(abs(p.x+0.1425)-0.011,abs(u-1.165)-0.0045);
+    float dPin=length(float2(p.x+0.1775,u-1.165))-0.00225;
+    float dPinUpper=length(float2(p.x+0.13,u-1.36))-0.002;
     add(h,shell,LILAC);
     float ivory=min(d1,d2);
-    add(h,max(shell-.0015,ivory),IVORY);
-    if(dBadge<0. && shell<.012) add(h,shell-.0026,STEEL);
-    if(dPin<0. && shell<.012) add(h,shell-.0029,JOINT);
-    if(dPinUpper<0. && shell<.012) add(h,shell-.0028,JOINT);
-    if(topVent<0. && p.z<-.38) add(h,topVent,JOINT);
+    add(h,max(shell-0.00075,ivory),IVORY);
+    if(dBadge<0. && shell<0.006) add(h,shell-0.0013,STEEL);
+    if(dPin<0. && shell<0.006) add(h,shell-0.00145,JOINT);
+    if(dPinUpper<0. && shell<0.006) add(h,shell-0.0014,JOINT);
+    if(topVent<0. && p.z>0.19) add(h,topVent,JOINT);
     // Thruster assembly nested inside the cowl:
     float3 noz=nozzleCoordinates(p);
-    float flare=.082-.15*clamp(noz.y,-.050,.050);
-    float bell=max(abs(noz.y)-.050,abs(length(noz.xz)-flare)-.008);
+    float flare=0.041-.15*clamp(noz.y,-0.025,0.025);
+    float bell=max(abs(noz.y)-0.025,abs(length(noz.xz)-flare)-0.004);
     add(h,bell,JOINT);
-    float lip=length(float2(length(noz.xz)-.085,noz.y+.044))-.007;
+    float lip=length(float2(length(noz.xz)-0.0425,noz.y+0.022))-0.0035;
     add(h,lip,STEEL);
-    float cyanCore=ell(noz-float3(0,-.025,0),float3(.066,.012,.066));
+    float cyanCore=ell(noz-float3(0,-0.0125,0),float3(0.033,0.006,0.033));
     add(h,cyanCore,CYAN);
-    float hub=ell(noz-float3(0,-.028,0),float3(.022,.014,.022));
+    float hub=ell(noz-float3(0,-0.014,0),float3(0.011,0.007,0.011));
     add(h,hub,STEEL);
     // Beveled steel cowl rim around opening:
-    float cowlLip=length(float2(length(noz.xz)-.098,noz.y+.030))-.006;
-    if(cowlLip<0. && shell<.012) add(h,shell-.002,STEEL);
+    float cowlLip=length(float2(length(noz.xz)-0.049,noz.y+0.015))-0.003;
+    if(cowlLip<0. && shell<0.006) add(h,shell-0.001,STEEL);
     return h;
 }
 float3 braidCenter(float t) {
     // The visible root exits the front aperture beside her right cheek.
-    float3 root=float3(-.365,3.565,.325);
+    float3 root=float3(0.1825,1.7825,-0.1625);
     float aft=max(motion.trail,0.),forward=max(-motion.trail,0.)*2.;
-    float3 middle=lerp(float3(-.54,2.98,.65),float3(-.92,3.16,.20),aft);
-    float3 tip=lerp(float3(-.51,2.52,.51),float3(-1.13,3.10,-.66),aft);
-    middle=lerp(middle,float3(-.62,3.15,.85),forward);
-    tip=lerp(tip,float3(-.60,3.07,1.05),forward);
+    float3 middle=lerp(float3(0.27,1.49,-0.325),float3(0.46,1.58,-0.1),aft);
+    float3 tip=lerp(float3(0.255,1.26,-0.255),float3(0.565,1.55,0.33),aft);
+    middle=lerp(middle,float3(0.31,1.575,-0.425),forward);
+    tip=lerp(tip,float3(0.3,1.535,-0.525),forward);
     // The first handle clears the cheek and shoulder in every pose.
-    float3 a=lerp(root,float3(-.56,3.26,.62),t);
-    float3 b=lerp(float3(-.56,3.26,.62),middle,t);
+    float3 a=lerp(root,float3(0.28,1.63,-0.31),t);
+    float3 b=lerp(float3(0.28,1.63,-0.31),middle,t);
     float3 c=lerp(middle,tip,t);
     return lerp(lerp(a,b,t),lerp(b,c,t),t);
 }
 float3 braidStrand(float t,float strand) {
     float3 tangent=normalize(braidCenter(t+.001)-braidCenter(t-.001));
-    float3 u=normalize(cross(tangent,float3(0,0,1))),v=cross(tangent,u);
+    float3 u=normalize(cross(tangent,float3(0,0,-1))),v=cross(tangent,u);
     // A figure-eight cross-section alternates the over/under crossings of a flat plait.
     float phase=t*6.*PI+strand*2.*PI/3.;
-    return braidCenter(t)+(u*cos(phase)*.056+v*sin(2.*phase)*.050)*(1.-.30*t);
+    return braidCenter(t)+(u*cos(phase)*0.028+v*sin(2.*phase)*0.025)*(1.-.30*t);
 }
 static float4 braidNodes[75];
 static float3 braidTip,braidDirection;
 static float3 braidBoundsCenter,braidBoundsHalf;
 void prepareBraid() {
-    float3 lo=(float3)10,hi=(float3)(-10);
+    float3 lo=(float3)5,hi=(float3)(-5);
     for(int strand=0;strand<3;strand++) for(int i=0;i<25;i++) {
         float t=float(i)/24.;
-        float4 node=float4(braidStrand(t,float(strand)),.050-.010*t);
+        float4 node=float4(braidStrand(t,float(strand)),0.025-0.005*t);
         braidNodes[strand*25+i]=node;
-        lo=min(lo,node.xyz-(float3)0.051); hi=max(hi,node.xyz+(float3)0.051);
+        lo=min(lo,node.xyz-(float3)0.0255); hi=max(hi,node.xyz+(float3)0.0255);
     }
     braidBoundsCenter=(lo+hi)*.5; braidBoundsHalf=(hi-lo)*.5;
     braidTip=braidCenter(1.);
@@ -567,8 +567,8 @@ void prepareBraid() {
 }
 float braidSculpt(float3 p) {
     float bound=box(p-braidBoundsCenter,braidBoundsHalf,0.);
-    if(bound>.045) return bound;
-    float d=10.;
+    if(bound>0.0225) return bound;
+    float d=5.;
     for(int i=0;i<72;i++) {
         int node=i+i/24;
         d=min(d,cap(p,braidNodes[node].xyz,braidNodes[node+1].xyz,braidNodes[node].w));
@@ -577,7 +577,7 @@ float braidSculpt(float3 p) {
 }
 
 float2 braidScene(float3 p) {
-    float2 h=float2(10.,HAIR);
+    float2 h=float2(5.,HAIR);
     // Three interwoven strands share one front root throughout the pose sequence.
     add(h,braidSculpt(p),HAIR);
     float3 tip=braidTip;
@@ -585,72 +585,72 @@ float2 braidScene(float3 p) {
     float3 tie=p-tip;
     float tieY=dot(tie,tangent);
     float3 radial=tie-tangent*tieY;
-    float2 band=float2(length(radial)-.073,abs(tieY)-.021);
-    add(h,min(max(band.x,band.y),0.)+length(max(band,0.))-.006,GOLD);
-    float3 side=normalize(cross(tangent,float3(0,0,1))),depth=cross(tangent,side);
-    float3 tuft=float3(dot(tie,side),tieY-.095,dot(tie,depth));
-    tuft.x-=.013*sin(clamp(tieY/.21,0.,1.)*PI);
-    add(h,ell(tuft,float3(.048,.105,.034)),HAIR);
+    float2 band=float2(length(radial)-0.0365,abs(tieY)-0.0105);
+    add(h,min(max(band.x,band.y),0.)+length(max(band,0.))-0.003,GOLD);
+    float3 side=normalize(cross(tangent,float3(0,0,-1))),depth=cross(tangent,side);
+    float3 tuft=float3(-(dot(tie,side)),tieY-0.0475,-(dot(tie,depth)));
+    tuft.x+=0.0065*sin(clamp(tieY/0.105,0.,1.)*PI);
+    add(h,ell(tuft,float3(0.024,0.0525,0.017)),HAIR);
 
     return h;
 }
 float skullBound(float3 p) {
-    return box(p-float3(0,3.835,0),float3(.73,.625,.61),.005);
+    return box(p-float3(0,1.9175,0),float3(0.365,0.3125,0.305),0.0025);
 }
 float2 helmetShell(float3 p) {
     // The same open-bottom shell is used by camera, shadow and occlusion rays.
-    float3 q=p-float3(0,3.77,-.035);
-    float outer=ell(q,float3(.655,.685,.55));
-    float inner=ell(q-float3(0,-.01,.055),float3(.555,.587,.49));
-    float width=.505*(.84+.16*smoothstep(-.50,-.10,q.y));
-    float2 opening=(q.xy-float2(0,-.045))/float2(width,.548);
-    float cut=max((length(opening)-1.)*width,.07-q.z);
-    float chinHeight=3.34-.055*smoothstep(.20,.55,abs(p.x));
-    chinHeight-=.030*(1.-smoothstep(-.15,.12,p.z));
+    float3 q=p-float3(0,1.885,0.0175);
+    float outer=ell(q,float3(0.3275,0.3425,0.275));
+    float inner=ell(q-float3(0,-0.005,-0.0275),float3(0.2775,0.2935,0.245));
+    float width=0.2525*(.84+.16*smoothstep(-0.25,-0.05,q.y));
+    float2 opening=(q.xy-float2(0,-0.0225))/float2(width,0.274);
+    float cut=max((length(opening)-1.)*width,0.035+q.z);
+    float chinHeight=1.67-0.0275*smoothstep(0.1,0.275,abs(p.x));
+    chinHeight-=0.015*(1.-smoothstep(-0.075,0.06,-p.z));
     float throatCut=p.y-chinHeight;
     float d=max(max(max(outer,-inner),-cut),-throatCut);
-    float hoodMaterial=(cut<.090 && q.z>.075)?IVORY:LILAC;
-    if(throatCut<.018) hoodMaterial=p.z>.10?IVORY:JOINT;
-    if(-inner>max(max(outer,-cut),-throatCut)-.001) hoodMaterial=JOINT;
-    if(q.z<-.24 && q.y<-.30-.45*q.x*q.x) hoodMaterial=JOINT;
+    float hoodMaterial=(cut<0.045 && q.z<-0.0375)?IVORY:LILAC;
+    if(throatCut<0.009) hoodMaterial=p.z<-0.05?IVORY:JOINT;
+    if(-inner>max(max(outer,-cut),-throatCut)-0.0005) hoodMaterial=JOINT;
+    if(q.z>0.12 && q.y<-0.15-0.9*q.x*q.x) hoodMaterial=JOINT;
     return float2(d,hoodMaterial);
 }
 float2 headScene(float3 p) {
-    float3 q,s=p; s.x=abs(s.x);
+    float3 q,s=p; s.x=-abs(s.x);
     float d;
-    float2 h=float2(10.,HAIR);
-    float bound=box(p-float3(-.24,3.34,-.28),float3(1.15,1.16,1.25),.025);
-    if(bound>.20) return float2(bound,-1.);
+    float2 h=float2(5.,HAIR);
+    float bound=box(p-float3(0.12,1.67,0.14),float3(0.575,0.58,0.625),0.0125);
+    if(bound>0.1) return float2(bound,-1.);
     h=braidScene(p);
     float skull=skullBound(p);
-    if(skull>.10) { add(h,skull,-1.); return h; }
+    if(skull>0.05) { add(h,skull,-1.); return h; }
     float2 hood=helmetShell(p); add(h,hood.x,hood.y);
-    add(h,cylX(s-float3(.626,3.70,-.035),.218,.033)-.007,IVORY);
-    add(h,cylX(s-float3(.672,3.70,-.035),.159,.011)-.007,LILAC);
-    add(h,cylX(s-float3(.696,3.70,-.035),.100,.005)-.004,GOLD);
-    add(h,cylX(s-float3(.708,3.70,-.035),.075,.005)-.003,LILAC);
+    add(h,cylX(s-float3(-0.313,1.85,0.0175),0.109,0.0165)-0.0035,IVORY);
+    add(h,cylX(s-float3(-0.336,1.85,0.0175),0.0795,0.0055)-0.0035,LILAC);
+    add(h,cylX(s-float3(-0.348,1.85,0.0175),0.05,0.0025)-0.002,GOLD);
+    add(h,cylX(s-float3(-0.354,1.85,0.0175),0.0375,0.0025)-0.0015,LILAC);
     // Separate cheek guards extend the hood's shaped ivory edge below each ear.
-    q=s-float3(.465,3.47,.240);
-    q.z+=.16*q.y;
-    float guard=fiveSides(q.xy,float2(-.02,.15),float2(.09,.105),float2(.085,-.04),
-                         float2(-.145,-.125),float2(-.175,-.060));
-    add(h,roundedExtrusion(guard,abs(q.z)-.052,.018),IVORY);
-    add(h,cap(s,float3(.46,3.57,.13),float3(.325,3.405,.18),.027),JOINT);
+    q=s-float3(-0.2325,1.735,-0.12);
+    q.z-=.16*q.y;
+    float guard=fiveSides(q.xy,float2(0.01,0.075),float2(-0.045,0.0525),float2(-0.0425,-0.02),
+                         float2(0.0725,-0.0625),float2(0.0875,-0.03));
+    add(h,roundedExtrusion(guard,abs(q.z)-0.026,0.009),IVORY);
+    add(h,cap(s,float3(-0.23,1.785,-0.065),float3(-0.1625,1.7025,-0.09),0.0135),JOINT);
 
     // Continuous cheeks, button nose and lip volume, with inset almond eye openings.
     float face=skinGeometry(p);
     q=eyeCoordinates(p);
-    float socket=max(eyeOpening(q),-.025-q.z);
-    face=smoothIntersection(face,-socket,.006);
-    float mouthX=clamp(p.x,-.132,.132);
+    float socket=max(eyeOpening(q),-0.0125+q.z);
+    face=smoothIntersection(face,-socket,0.003);
+    float mouthX=clamp(p.x,-0.066,0.066);
     float smile=smileHeight(mouthX);
-    float mouthWidth=max(1.-square(mouthX/.133),0.);
+    float mouthWidth=max(1.-square(mouthX/0.0665),0.);
     float lipZ=faceFront(float2(mouthX,smile));
-    float mouth=max(max(abs(p.y-smile)-(.002+.003*mouthWidth),abs(p.x)-.133),lipZ-.012-p.z);
+    float mouth=max(max(abs(p.y-smile)-(0.001+0.0015*mouthWidth),abs(p.x)-0.0665),p.z-lipZ-0.006);
     float faceWithMouth=max(face,-mouth);
     add(h,faceWithMouth,(-mouth>face)?MOUTH:SKIN);
-    if(h.y==SKIN && p.z>.565) {
-        float nostril=length((float2(s.x,p.y)-float2(.028,3.591))/float2(.008,.0035));
+    if(h.y==SKIN && p.z<-0.2825) {
+        float nostril=length((float2(s.x,p.y)-float2(-0.014,1.7955))/float2(0.004,0.00175));
         if(nostril<1.) h.y=MOUTH;
     }
 
@@ -659,128 +659,128 @@ float2 headScene(float3 p) {
     add(h,max(ell(q,EYE_RADII),eyeOpening(q)),EYE);
     add(h,lidDistance(q,true),HAIR);
     add(h,lidDistance(q,false),SKIN);
-    float3 lashRoot=float3(.097,.036*eyeOpen,eyeFront(float2(.097,.036*eyeOpen)));
-    float3 lashTip=float3(.134,.043*eyeOpen,eyeFront(float2(.114,.012))-.010);
+    float3 lashRoot=float3(-0.0485,0.018*eyeOpen,eyeFront(float2(-0.0485,0.018*eyeOpen)));
+    float3 lashTip=float3(-0.067,0.0215*eyeOpen,eyeFront(float2(-0.057,0.006))+0.005);
     float3 lashVector=lashTip-lashRoot;
     float lashT=clamp(dot(q-lashRoot,lashVector)/dot(lashVector,lashVector),0.,1.);
-    add(h,(length(q-lerp(lashRoot,lashTip,lashT))-lerp(.012,.0015,lashT))*.75,HAIR);
-    float3 tear=float3(-.102,-.012*eyeOpen,eyeFront(float2(-.102,-.012)));
-    add(h,ell(q-tear,float3(.009,.005*eyeOpen+.001,.006)),LIP);
-    float browT=clamp((s.x-.069)/.226,0.,1.);
-    float3 brow=bezier(float3(.069,3.915,.516),float3(.165,3.953,.524),float3(.295,3.918,.432),browT);
+    add(h,(length(q-lerp(lashRoot,lashTip,lashT))-lerp(0.006,0.00075,lashT))*.75,HAIR);
+    float3 tear=float3(0.051,-0.006*eyeOpen,eyeFront(float2(0.051,-0.006)));
+    add(h,ell(q-tear,float3(0.0045,0.0025*eyeOpen+0.0005,0.003)),LIP);
+    float browT=clamp((-s.x-0.0345)/0.113,0.,1.);
+    float3 brow=bezier(float3(-0.0345,1.9575,-0.258),float3(-0.0825,1.9765,-0.262),float3(-0.1475,1.959,-0.216),browT);
     // Brows follow the forehead surface; a thin depth keeps them from floating in profile.
-    brow.z=faceFront(brow.xy)+.001;
-    add(h,(length((s-brow)*float3(1,1,4.5))-(.012+.009*sin(PI*browT)))*.20,HAIR);
+    brow.z=faceFront(brow.xy)-0.0005;
+    add(h,(length((s-brow)*float3(1,1,4.5))-(0.006+0.0045*sin(PI*browT)))*.20,HAIR);
 
     // The fringe is built from flattened, tapered curve sweeps over the scalp.
-    q=p-float3(0,3.80,.19);
-    d=ell(q,float3(.445,.43,.35));
-    d=smoothIntersection(d,max(3.91-p.y,p.z-.335),.025);
+    q=p-float3(0,1.9,-0.095);
+    d=ell(q,float3(0.2225,0.215,0.175));
+    d=smoothIntersection(d,max(1.955-p.y,-p.z-0.1675),0.0125);
     add(h,d,HAIR);
     add(h,hairSculpt(p),HAIR);
     return h;
 }
 
 float2 upperLegScene(float3 p) {
-    float2 h=float2(10.,JOINT);
+    float2 h=float2(5.,JOINT);
     float3 q,s=p;
     float d;
-    float bound=box(p-float3(.38,1.90,.04),float3(.29,.46,.30),.02);
-    if(bound>.18) return float2(bound,-1.);
+    float bound=box(p-float3(-0.19,0.95,-0.02),float3(0.145,0.23,0.15),0.01);
+    if(bound>0.09) return float2(bound,-1.);
     // Symmetric limbs. Armor stays separate to retain joint gaps.
 
-    add(h,cap(s,float3(.27,2.05,0),float3(.37,1.48,0),.19),JOINT);
-    q=s-float3(.365,1.84,.015); q.xy=mul(q.xy,rot(-.12));
-    d=smoothIntersection(ell(q,float3(.235,.32,.228)),-q.x-.022,.018);
-    d=smoothIntersection(d,abs(q.z)-(.185-.10*q.y),.022);
-    d=smoothIntersection(d,q.x-.18-.06*q.y,.022);
+    add(h,cap(s,float3(-0.135,1.025,0),float3(-0.185,0.74,0),0.095),JOINT);
+    q=s-float3(-0.1825,0.92,-0.0075); q.xy=mul(q.xy,rot(.12));
+    d=smoothIntersection(ell(q,float3(0.1175,0.16,0.114)),q.x-0.011,0.009);
+    d=smoothIntersection(d,abs(q.z)-(0.0925-.10*q.y),0.011);
+    d=smoothIntersection(d,-q.x-0.09-.06*q.y,0.011);
     add(h,d,LILAC);
-    q=s-float3(.445,2.115,.04); q.xy=mul(q.xy,rot(-.40));
-    float hip=fiveSides(q.xy,float2(-.09,.18),float2(.08,.18),float2(.13,.035),
-                       float2(.05,-.20),float2(-.12,-.04));
-    d=roundedExtrusion(hip,abs(q.z)-.19+.30*q.y*q.y,.024)*.8;
-    add(h,d,(q.z>.14)?IVORY:LILAC);
+    q=s-float3(-0.2225,1.0575,-0.02); q.xy=mul(q.xy,rot(.40));
+    float hip=fiveSides(q.xy,float2(0.045,0.09),float2(-0.04,0.09),float2(-0.065,0.0175),
+                       float2(-0.025,-0.1),float2(0.06,-0.02));
+    d=roundedExtrusion(hip,abs(q.z)-0.095+0.6*q.y*q.y,0.012)*.8;
+    add(h,d,(q.z<-0.07)?IVORY:LILAC);
     return h;
 }
 
 float2 lowerLegScene(float3 p) {
-    float2 h=float2(10.,JOINT);
+    float2 h=float2(5.,JOINT);
     float3 q,s=p;
     float d;
-    float bound=box(p-float3(.41,.77,.075),float3(.45,.90,.62),.02);
-    if(bound>.18) return float2(bound,-1.);
-    add(h,ell(s-float3(.38,1.49,0),float3(.19,.17,.195)),JOINT);
-    add(h,cylX(s-float3(.575,1.49,0),.092,.017)-.008,JOINT);
-    q=s-float3(.38,1.49,.21); q.xy=mul(q.xy,rot(-.12));
-    float knee=fiveSides(q.xy,float2(-.12,.16),float2(.115,.16),float2(.15,-.02),
-                        float2(.06,-.18),float2(-.105,-.135));
-    add(h,roundedExtrusion(knee,abs(q.z)-.095+.5*q.x*q.x,.025)*.9,IVORY);
+    float bound=box(p-float3(-0.205,0.385,-0.0375),float3(0.225,0.45,0.31),0.01);
+    if(bound>0.09) return float2(bound,-1.);
+    add(h,ell(s-float3(-0.19,0.745,0),float3(0.095,0.085,0.0975)),JOINT);
+    add(h,cylX(s-float3(-0.2875,0.745,0),0.046,0.0085)-0.004,JOINT);
+    q=s-float3(-0.19,0.745,-0.105); q.xy=mul(q.xy,rot(.12));
+    float knee=fiveSides(q.xy,float2(0.06,0.08),float2(-0.0575,0.08),float2(-0.075,-0.01),
+                        float2(-0.03,-0.09),float2(0.0525,-0.0675));
+    add(h,roundedExtrusion(knee,abs(q.z)-0.0475+1.*q.x*q.x,0.0125)*.9,IVORY);
     // Continuously flared shin shell, with a real arched ankle cutout.
-    q=s-float3(.4,0,.025);
-    q.z-=.035*sin(PI*clamp((1.41-q.y)/1.12,0.,1.));
+    q=s-float3(-0.2,0,-0.0125);
+    q.z+=0.0175*sin(PI*clamp((0.705-q.y)/0.56,0.,1.));
     float side=shinSection(q,0.);
     float ankleCut=ankleOpening(q.xy);
-    float kneeSeat=(length(float2(q.x,q.y-1.46)/float2(.145,.15))-1.)*.145;
-    float ends=max(max(q.y-1.41+.10*q.z,ankleCut),-kneeSeat);
-    float outer=chamferIntersection(side,ends,.018);
-    float cavity=shinSection(q,.038);
+    float kneeSeat=(length(float2(q.x,q.y-0.73)/float2(0.0725,0.075))-1.)*0.0725;
+    float ends=max(max(q.y-0.705-.10*q.z,ankleCut),-kneeSeat);
+    float outer=chamferIntersection(side,ends,0.009);
+    float cavity=shinSection(q,0.019);
     float shin=max(outer,-cavity)*.64;
 #if OWNER_COLORWAY == 1
     add(h,shin,-cavity>outer?JOINT:IVORY);
     // The lilac trim follows the arch all the way around the boot.
-    add(h,max(shin-.003,-ankleCut-.095),LILAC);
+    add(h,max(shin-0.0015,-ankleCut-0.0475),LILAC);
     // A narrow lilac side panel follows the bowed shin, tapering toward the knee.
-    float cheek=fiveSides(q.zy,float2(-.13,1.25),float2(.07,1.25),float2(.14,.96),
-                          float2(-.045,.53),float2(-.26,.74));
-    add(h,max(shin-.008,max(cheek,.20-q.x)),LILAC);
+    float cheek=fiveSides(q.zy,float2(0.065,0.625),float2(-0.035,0.625),float2(-0.07,0.48),
+                          float2(0.0225,0.265),float2(0.13,0.37));
+    add(h,max(shin-0.004,max(cheek,0.1+q.x)),LILAC);
 #else
     add(h,shin,-cavity>outer?JOINT:LILAC);
     // The ivory trim follows the arch all the way around the boot.
-    add(h,max(shin-.003,-ankleCut-.095),IVORY);
+    add(h,max(shin-0.0015,-ankleCut-0.0475),IVORY);
     // A narrow ivory side panel follows the bowed shin, tapering toward the knee.
-    float cheek=fiveSides(q.zy,float2(-.13,1.25),float2(.07,1.25),float2(.14,.96),
-                          float2(-.045,.53),float2(-.26,.74));
-    add(h,max(shin-.008,max(cheek,.20-q.x)),IVORY);
+    float cheek=fiveSides(q.zy,float2(0.065,0.625),float2(-0.035,0.625),float2(-0.07,0.48),
+                          float2(0.0225,0.265),float2(0.13,0.37));
+    add(h,max(shin-0.004,max(cheek,0.1+q.x)),IVORY);
 #endif
-    add(h,ell(s-float3(.4,.38,.015),float3(.17,.17,.185)),JOINT);
-    add(h,cap(s,float3(.4,.48,.015),float3(.38,1.39,0),.143),JOINT);
-    add(h,cylX(s-float3(.772,.365,.005),.114,.025)-.008,JOINT);
-    add(h,cylX(s-float3(.804,.365,.005),.078,.012)-.006,LILAC);
+    add(h,ell(s-float3(-0.2,0.19,-0.0075),float3(0.085,0.085,0.0925)),JOINT);
+    add(h,cap(s,float3(-0.2,0.24,-0.0075),float3(-0.19,0.695,0),0.0715),JOINT);
+    add(h,cylX(s-float3(-0.386,0.1825,-0.0025),0.057,0.0125)-0.004,JOINT);
+    add(h,cylX(s-float3(-0.402,0.1825,-0.0025),0.039,0.006)-0.003,LILAC);
     return h;
 }
 float2 footScene(float3 p) {
-    float bound=box(p-float3(.4,.30,.15),float3(.37,.32,.58),.03);
-    if(bound>.12) return float2(bound,-1.);
-    float2 h=float2(10.,JOINT);
+    float bound=box(p-float3(-0.2,0.15,-0.075),float3(0.185,0.16,0.29),0.015);
+    if(bound>0.06) return float2(bound,-1.);
+    float2 h=float2(5.,JOINT);
     float3 q,s=p;
     // Sculpted instep and rounded, broad toe, resting on a flat rubber sole.
-    add(h,ell(s-float3(.4,.44,.015),float3(.172,.155,.180)),JOINT);
-    q=s-float3(.4,0,0);
+    add(h,ell(s-float3(-0.2,0.22,-0.0075),float3(0.086,0.0775,0.09)),JOINT);
+    q=s-float3(-0.2,0,0);
     float outline=footOutline(q);
-    outline=smoothIntersection(outline,(q.z+.45*q.y-.73)/1.096,.035);
-    float crown=1.-.75*clamp(square(q.x/.33),0.,1.);
-    float top=.225+.34*exp(-square((q.z-.15)/.36))*crown;
-    float shoe=roundedExtrusion(outline,max(.055-q.y,q.y-top),.03)*.45;
-    float toe=q.z-(.46-.12*square(q.x/.33));
-    add(h,shoe,(toe>0. || q.z+.45*q.y>.69 || q.y<.15 || q.z<-.17)?LILAC:IVORY);
-    add(h,roundedExtrusion(outline+.003,abs(q.y-.048)-.036,.015),JOINT);
-    add(h,cylZ(s-float3(.4,.31,-.345),.14,.032)-.012,JOINT);
-    add(h,cylZ(s-float3(.4,.31,-.383),.106,.014)-.008,LILAC);
-    add(h,cylZ(s-float3(.4,.31,-.405),.086,.016),JOINT);
-    add(h,ell(s-float3(.4,.31,-.421),float3(.070,.070,.026)),CYAN);
+    outline=smoothIntersection(outline,(-q.z+.45*q.y-0.365)/1.096,0.0175);
+    float crown=1.-.75*clamp(square(q.x/0.165),0.,1.);
+    float top=0.1125+0.17*exp(-square((q.z+0.075)/0.18))*crown;
+    float shoe=roundedExtrusion(outline,max(0.0275-q.y,q.y-top),0.015)*.45;
+    float toe=-q.z-(0.23-0.06*square(q.x/0.165));
+    add(h,shoe,(toe>0. || -q.z+.45*q.y>0.345 || q.y<0.075 || q.z>0.085)?LILAC:IVORY);
+    add(h,roundedExtrusion(outline+0.0015,abs(q.y-0.024)-0.018,0.0075),JOINT);
+    add(h,cylZ(s-float3(-0.2,0.155,0.1725),0.07,0.016)-0.006,JOINT);
+    add(h,cylZ(s-float3(-0.2,0.155,0.1915),0.053,0.007)-0.004,LILAC);
+    add(h,cylZ(s-float3(-0.2,0.155,0.2025),0.043,0.008),JOINT);
+    add(h,ell(s-float3(-0.2,0.155,0.2105),float3(0.035,0.035,0.013)),CYAN);
 
     return h;
 }
 
 float2 upperArmScene(float3 p) {
-    float2 h=float2(10.,JOINT);
+    float2 h=float2(5.,JOINT);
     float3 q,s=p;
     float d;
-    float bound=box(p-float3(.68,2.61,0),float3(.30,.49,.23),.02);
-    if(bound>.18) return float2(bound,-1.);
+    float bound=box(p-float3(-0.34,1.305,0),float3(0.15,0.245,0.115),0.01);
+    if(bound>0.09) return float2(bound,-1.);
     // Upper arm, elbow and gently splayed forearm.
-    add(h,cap(s,float3(.59,2.90,0),float3(.77,2.39,0),.16),JOINT);
-    add(h,ell(s-float3(.78,2.35,.01),float3(.17,.16,.175)),JOINT);
+    add(h,cap(s,float3(-0.295,1.45,0),float3(-0.385,1.195,0),0.08),JOINT);
+    add(h,ell(s-float3(-0.39,1.175,-0.005),float3(0.085,0.08,0.0875)),JOINT);
     return h;
 }
 
@@ -791,169 +791,169 @@ float taperedCap(float3 p,float3 a,float3 b,float ra,float rb) {
 }
 float handSculpt(float3 p) {
     // A single wrist frame joins the cuff, palm and all five digits.
-    float3 q=gauntletCoordinates(p)+float3(0,.32,0);
+    float3 q=gauntletCoordinates(p)+float3(0,0.16,0);
     q.xz=mul(q.xz,rot(-.28));
-    float bound=box(q-float3(-.025,-.16,-.025),float3(.21,.245,.15),.01);
-    if(bound>.06) return bound;
-    float wrist=cap(q*float3(1,1,1.15),float3(0,.045,0),float3(0,-.11,0),.080)/1.15;
-    float3 palmP=abs(q-float3(0,-.140,-.004))/float3(.134,.108,.080);
-    float palm=(pow(dot(pow(palmP,(float3)2.8),(float3)1),1./2.8)-1.)*.080;
-    float d=smoothUnion(wrist,palm,.026);
+    float bound=box(q-float3(0.0125,-0.08,0.0125),float3(0.105,0.1225,0.075),0.005);
+    if(bound>0.03) return bound;
+    float wrist=cap(q*float3(1,1,1.15),float3(0,0.0225,0),float3(0,-0.055,0),0.04)/1.15;
+    float3 palmP=abs(q-float3(0,-0.07,0.002))/float3(0.067,0.054,0.04);
+    float palm=(pow(dot(pow(palmP,(float3)2.8),(float3)1),1./2.8)-1.)*0.04;
+    float d=smoothUnion(wrist,palm,0.013);
     for(int i=0;i<4;i++) {
-        float x=-.093+.062*float(i);
-        float extra=i==1?.012:(i==2?.007:(i==3?-.021:0.));
-        float3 a=float3(x,-.211,.006);
-        float3 b=lerp(float3(x,-.290-extra,.008),float3(x,-.257,.038),motion.grip);
-        float3 c=lerp(float3(x*.96,-.335-extra,-.033),float3(x*.98,-.292,-.034),motion.grip);
-        float3 e=lerp(float3(x*.92,-.322-extra,-.077),float3(x*.94,-.235,-.087),motion.grip);
-        float finger=taperedCap(q,a,b,.030,.028);
-        finger=smoothUnion(finger,taperedCap(q,b,c,.028,.025),.007);
-        finger=smoothUnion(finger,taperedCap(q,c,e,.025,.023),.006);
-        d=smoothUnion(d,finger,.010);
+        float x=0.0465-0.031*float(i);
+        float extra=i==1?0.006:(i==2?0.0035:(i==3?-0.0105:0.));
+        float3 a=float3(x,-0.1055,-0.003);
+        float3 b=lerp(float3(x,-0.145-extra,-0.004),float3(x,-0.1285,-0.019),motion.grip);
+        float3 c=lerp(float3(x*.96,-0.1675-extra,0.0165),float3(x*.98,-0.146,0.017),motion.grip);
+        float3 e=lerp(float3(x*.92,-0.161-extra,0.0385),float3(x*.94,-0.1175,0.0435),motion.grip);
+        float finger=taperedCap(q,a,b,0.015,0.014);
+        finger=smoothUnion(finger,taperedCap(q,b,c,0.014,0.0125),0.0035);
+        finger=smoothUnion(finger,taperedCap(q,c,e,0.0125,0.0115),0.003);
+        d=smoothUnion(d,finger,0.005);
     }
     // The thumb originates on the medial palm and crosses the curled fingers.
-    float3 a=float3(-.090,-.108,-.010),b=float3(-.149,-.172,-.018);
-    float3 c=lerp(float3(-.145,-.243,-.053),float3(-.102,-.231,-.093),motion.grip);
-    float3 e=lerp(float3(-.097,-.268,-.084),float3(-.026,-.241,-.108),motion.grip);
-    float thumb=taperedCap(q,a,b,.045,.038);
-    thumb=smoothUnion(thumb,taperedCap(q,b,c,.038,.032),.012);
-    thumb=smoothUnion(thumb,taperedCap(q,c,e,.032,.026),.008);
-    return smoothUnion(d,thumb,.018);
+    float3 a=float3(0.045,-0.054,0.005),b=float3(0.0745,-0.086,0.009);
+    float3 c=lerp(float3(0.0725,-0.1215,0.0265),float3(0.051,-0.1155,0.0465),motion.grip);
+    float3 e=lerp(float3(0.0485,-0.134,0.042),float3(0.013,-0.1205,0.054),motion.grip);
+    float thumb=taperedCap(q,a,b,0.0225,0.019);
+    thumb=smoothUnion(thumb,taperedCap(q,b,c,0.019,0.016),0.006);
+    thumb=smoothUnion(thumb,taperedCap(q,c,e,0.016,0.013),0.004);
+    return smoothUnion(d,thumb,0.009);
 }
 
 float2 forearmScene(float3 p) {
-    float2 h=float2(10.,JOINT);
+    float2 h=float2(5.,JOINT);
     float3 q,s=p;
     float d;
-    float bound=box(p-float3(.96,2.02,.03),float3(.44,.69,.40),.02);
-    if(bound>.18) return float2(bound,-1.);
+    float bound=box(p-float3(-0.48,1.01,-0.015),float3(0.22,0.345,0.2),0.01);
+    if(bound>0.09) return float2(bound,-1.);
     q=gauntletCoordinates(p);
-    float2 barrelRadii=float2(.177,.185)+.055*smoothstep(-.32,.22,q.y);
-    float barrelEnds=max(q.y-.31+.28*q.x,-q.y-.32+.12*q.x);
-    d=roundedExtrusion(curvedSection(q.xz+float2(.025,0),barrelRadii),barrelEnds,.025)*.8;
+    float2 barrelRadii=float2(0.0885,0.0925)+0.0275*smoothstep(-0.16,0.11,q.y);
+    float barrelEnds=max(q.y-0.155-.28*q.x,-q.y-0.16-.12*q.x);
+    d=roundedExtrusion(curvedSection(q.xz+float2(-0.0125,0),barrelRadii),barrelEnds,0.0125)*.8;
     add(h,d,LILAC);
     add(h,gauntletShell(q),IVORY);
-    float3 lens=q-float3(.24,-.235,.18); lens.xz=mul(lens.xz,rot(-.86));
-    add(h,cylZ(lens,.119,.025)-.012,IVORY);
-    add(h,cylZ(lens-float3(0,0,.031),.091,.016)-.006,JOINT);
-    add(h,ell(lens-float3(0,0,.052),float3(.060,.060,.023)),CYAN);
+    float3 lens=q-float3(-0.12,-0.1175,-0.09); lens.xz=mul(lens.xz,rot(-.86));
+    add(h,cylZ(lens,0.0595,0.0125)-0.006,IVORY);
+    add(h,cylZ(lens-float3(0,0,-0.0155),0.0455,0.008)-0.003,JOINT);
+    add(h,ell(lens-float3(0,0,-0.026),float3(0.03,0.03,0.0115)),CYAN);
     add(h,handSculpt(p),JOINT);
 
     return h;
 }
 
 float2 shoulderScene(float3 p) {
-    float2 h=float2(10.,JOINT);
+    float2 h=float2(5.,JOINT);
     float3 q,s=p;
     float d;
-    float bound=box(p-float3(.77,2.93,.015),float3(.42,.37,.36),.02);
-    if(bound>.18) return float2(bound,-1.);
+    float bound=box(p-float3(-0.385,1.465,-0.0075),float3(0.21,0.185,0.18),0.01);
+    if(bound>0.09) return float2(bound,-1.);
     // Swept overlapping plates. The upper saddle sits behind the long outer blade.
-    q=s-float3(.61,3.155,-.025);
+    q=s-float3(-0.305,1.5775,0.0125);
     q.y*=1.25;
-    float saddle=ell(q-float3(.04,-.05,0),float3(.30,.21,.29));
-    float saddleInside=ell(q-float3(.04,-.085,0),float3(.245,.165,.235));
-    saddle=smoothIntersection(saddle,max(-saddleInside,-.035-q.y-.32*q.x),.012);
+    float saddle=ell(q-float3(-0.02,-0.025,0),float3(0.15,0.105,0.145));
+    float saddleInside=ell(q-float3(-0.02,-0.0425,0),float3(0.1225,0.0825,0.1175));
+    saddle=smoothIntersection(saddle,max(-saddleInside,-0.0175-q.y+.32*q.x),0.006);
     add(h,saddle*.85,LILAC);
-    q=s-float3(.62,3.00,.015);
+    q=s-float3(-0.31,1.5,-0.0075);
     d=shoulderPlate(q);
     add(h,d,LILAC);
-    float stripe=(q.y+.43*q.x+.025)/1.09;
-    add(h,max(d-.002,abs(stripe)-.037),IVORY);
-    add(h,cylZ(s-float3(.60,2.98,.322),.146,.037)-.012,LILAC);
-    add(h,cylZ(s-float3(.60,2.98,.373),.059,.010)-.007,IVORY);
+    float stripe=(q.y-.43*q.x+0.0125)/1.09;
+    add(h,max(d-0.001,abs(stripe)-0.0185),IVORY);
+    add(h,cylZ(s-float3(-0.3,1.49,-0.161),0.073,0.0185)-0.006,LILAC);
+    add(h,cylZ(s-float3(-0.3,1.49,-0.1865),0.0295,0.005)-0.0035,IVORY);
 
     return h;
 }
 
 float2 torsoScene(float3 p) {
-    float2 h=float2(10.,JOINT);
+    float2 h=float2(5.,JOINT);
     float3 q,s=p;
     float d;
-    float bound=box(p-float3(0,2.53,-.16),float3(.73,.84,.79),.02);
-    if(bound>.18) return float2(bound,-1.);
+    float bound=box(p-float3(0,1.265,0.08),float3(0.365,0.42,0.395),0.01);
+    if(bound>0.09) return float2(bound,-1.);
     // A compact breastplate with a curved ivory inset and a beveled lower edge.
-    add(h,ell(p-float3(0,2.58,0),float3(.325,.57,.245)),JOINT);
-    float chest=ell(p-float3(0,2.79,.025),float3(.48,.345,.32));
-    chest=chamferIntersection(chest,(2.46+.24*abs(p.x)-p.y)/1.03,.016);
-    float breastPlane=(p.z+.32*abs(p.x)+.20*(2.80-p.y)-.337)/1.069;
-    chest=smoothIntersection(chest,breastPlane,.025);
-    float neckHole=ell(p-float3(0,3.135,.055),float3(.235,.16,.30));
-    chest=smoothIntersection(chest,-neckHole,.018);
+    add(h,ell(p-float3(0,1.29,0),float3(0.1625,0.285,0.1225)),JOINT);
+    float chest=ell(p-float3(0,1.395,-0.0125),float3(0.24,0.1725,0.16));
+    chest=chamferIntersection(chest,(1.23+.24*abs(p.x)-p.y)/1.03,0.008);
+    float breastPlane=(-p.z+.32*abs(p.x)+.20*(1.4-p.y)-0.1685)/1.069;
+    chest=smoothIntersection(chest,breastPlane,0.0125);
+    float neckHole=ell(p-float3(0,1.5675,-0.0275),float3(0.1175,0.08,0.15));
+    chest=smoothIntersection(chest,-neckHole,0.009);
     // A broad ivory breastplate sits beneath the lilac upper yoke.
-    float yoke=max(p.y-(2.80+.24*abs(p.x)),2.53+.23*abs(p.x)-p.y);
-    yoke=max(yoke,abs(p.x)-.395);
-    add(h,chest,(yoke<0. && p.z>.13)?IVORY:LILAC);
+    float yoke=max(p.y-(1.4+.24*abs(p.x)),1.265+.23*abs(p.x)-p.y);
+    yoke=max(yoke,abs(p.x)-0.1975);
+    add(h,chest,(yoke<0. && p.z<-0.065)?IVORY:LILAC);
     // Two overlapping abdominal plates connect the breastplate to the belt.
     for(int i=0;i<2;i++) {
-        q=p-float3(0,2.43-.135*float(i),.244);
-        float abdomen=fiveSides(q.xy,float2(-.250,.085),float2(.250,.085),
-                                float2(.265,-.008),float2(0,-.110),float2(-.265,-.008));
-        float plate=roundedExtrusion(abdomen,abs(q.z)+.18*abs(q.x)-.055,.014);
+        q=p-float3(0,1.215-0.0675*float(i),-0.122);
+        float abdomen=fiveSides(q.xy,float2(0.125,0.0425),float2(-0.125,0.0425),
+                                float2(-0.1325,-0.004),float2(0,-0.055),float2(0.1325,-0.004));
+        float plate=roundedExtrusion(abdomen,abs(q.z)+.18*abs(q.x)-0.0275,0.007);
         add(h,plate,LILAC);
     }
-    q=p-float3(0,2.18,0);
-    add(h,chamferIntersection(ell(q,float3(.385,.13,.265)),abs(q.y)-.06,.012),OCHRE);
-    q=p-float3(0,2.21,.275);
-    float buckle=fiveSides(q.xy,float2(-.11,.085),float2(.11,.085),
-                           float2(.15,-.02),float2(0,-.09),float2(-.15,-.02));
-    add(h,roundedExtrusion(buckle,abs(q.z)-.045,.015),OCHRE);
-    add(h,ell(p-float3(0,2.04,0),float3(.39,.285,.295)),JOINT);
-    q=p-float3(0,2.030,.265);
-    float pelvis=fiveSides(q.xy,float2(-.235,.155),float2(.235,.155),
-                          float2(.270,-.015),float2(0,-.220),float2(-.270,-.015));
-    float pelvicPlate=roundedExtrusion(pelvis,abs(q.z)+.22*abs(q.x)-.072,.018);
+    q=p-float3(0,1.09,0);
+    add(h,chamferIntersection(ell(q,float3(0.1925,0.065,0.1325)),abs(q.y)-0.03,0.006),OCHRE);
+    q=p-float3(0,1.105,-0.1375);
+    float buckle=fiveSides(q.xy,float2(0.055,0.0425),float2(-0.055,0.0425),
+                           float2(-0.075,-0.01),float2(0,-0.045),float2(0.075,-0.01));
+    add(h,roundedExtrusion(buckle,abs(q.z)-0.0225,0.0075),OCHRE);
+    add(h,ell(p-float3(0,1.02,0),float3(0.195,0.1425,0.1475)),JOINT);
+    q=p-float3(0,1.015,-0.1325);
+    float pelvis=fiveSides(q.xy,float2(0.1175,0.0775),float2(-0.1175,0.0775),
+                          float2(-0.135,-0.0075),float2(0,-0.11),float2(0.135,-0.0075));
+    float pelvicPlate=roundedExtrusion(pelvis,abs(q.z)+.22*abs(q.x)-0.036,0.009);
     add(h,pelvicPlate,LILAC);
 
     // Central spine and compact mounts sit between the two curved flight shells.
-    add(h,box(p-float3(0,2.61,-.375),float3(.028,.49,.024),.008),JOINT);
+    add(h,box(p-float3(0,1.305,0.1875),float3(0.014,0.245,0.012),0.004),JOINT);
     for(int i=0;i<5;i++)
-        add(h,box(p-float3(0,2.30+.135*float(i),-.392),float3(.025,.022,.014),.005),JOINT);
-    s=p; s.x=abs(s.x);
-    add(h,cap(s,float3(.02,3.06,-.30),float3(.17,3.06,-.32),.018),JOINT);
-    add(h,cylZ(s-float3(.17,3.06,-.32),.026,.014)-.004,STEEL);
-    q=p-float3(0,2.12,-.215);
-    add(h,smoothIntersection(ell(q,float3(.165,.19,.075)),-q.y-.17+.6*abs(q.x),.02),OCHRE);
+        add(h,box(p-float3(0,1.15+0.0675*float(i),0.196),float3(0.0125,0.011,0.007),0.0025),JOINT);
+    s=p; s.x=-abs(s.x);
+    add(h,cap(s,float3(-0.01,1.53,0.15),float3(-0.085,1.53,0.16),0.009),JOINT);
+    add(h,cylZ(s-float3(-0.085,1.53,0.16),0.013,0.007)-0.002,STEEL);
+    q=p-float3(0,1.06,0.1075);
+    add(h,smoothIntersection(ell(q,float3(0.0825,0.095,0.0375)),-q.y-0.085+.6*abs(q.x),0.01),OCHRE);
     // The collar is seated in the breastplate. A broad, low undersuit yoke
     // joins it to the shoulders; there is no exposed spherical neck joint.
-    float neckYoke=ell(p-float3(0,2.987,.005),float3(.350,.140,.230));
+    float neckYoke=ell(p-float3(0,1.4935,-0.0025),float3(0.175,0.07,0.115));
     add(h,neckYoke,JOINT);
-    q=p-float3(0,3.077,.090);
-    float taper=1.-.09*clamp(q.y/.044,-1.,1.);
-    float collarSide=(length(q.xz/(float2(.181,.142)*taper))-1.)*.129;
-    float collarHole=(length(q.xz/float2(.130,.100))-1.)*.100;
+    q=p-float3(0,1.5385,-0.045);
+    float taper=1.-.09*clamp(q.y/0.022,-1.,1.);
+    float collarSide=(length(q.xz/(float2(0.0905,0.071)*taper))-1.)*0.0645;
+    float collarHole=(length(q.xz/float2(0.065,0.05))-1.)*0.05;
     // The front edge dips slightly to follow the throat, rather than a level choker.
-    float collarHeight=q.y+.012*smoothstep(-.05,.12,q.z);
-    float collar=roundedExtrusion(collarSide,abs(collarHeight)-.044,.010)*.80;
+    float collarHeight=q.y+0.006*smoothstep(-0.025,0.06,-q.z);
+    float collar=roundedExtrusion(collarSide,abs(collarHeight)-0.022,0.005)*.80;
     add(h,max(collar,-collarHole),OCHRE);
-    add(h,cylZ(p-float3(.040,3.066,.235),.022,.004)-.002,JOINT);
+    add(h,cylZ(p-float3(-0.02,1.533,-0.1175),0.011,0.002)-0.001,JOINT);
 
     return h;
 }
 
 float2 torsoPackMountScene(float3 p) {
-    float2 h=float2(10.,JOINT);
+    float2 h=float2(5.,JOINT);
     // Central spine column terminating neatly between the wing shoulder domes
-    add(h,box(p-float3(0,2.59,-.375),float3(.028,.48,.024),.008),JOINT);
+    add(h,box(p-float3(0,1.295,0.1875),float3(0.014,0.24,0.012),0.004),JOINT);
     // 5 prominent ribbed vertebrae plates protruding proudly between the wings
     for(int i=0;i<5;i++)
-        add(h,box(p-float3(0,2.26+.15*float(i),-.392),float3(.025,.022,.014),.005),JOINT);
+        add(h,box(p-float3(0,1.13+0.075*float(i),0.196),float3(0.0125,0.011,0.007),0.0025),JOINT);
     // Base bracket between thruster cutouts
-    add(h,box(p-float3(0,2.10,-.365),float3(.038,.040,.024),.008),JOINT);
+    add(h,box(p-float3(0,1.05,0.1825),float3(0.019,0.02,0.012),0.004),JOINT);
     // Upper mounting arms and cylindrical hinge pivots (seated behind the wings)
-    float3 s=p; s.x=abs(s.x);
-    add(h,cap(s,float3(.02,3.02,-.28),float3(.14,3.02,-.29),.016),JOINT);
-    add(h,cylZ(s-float3(.14,3.02,-.29),.022,.012)-.004,STEEL);
+    float3 s=p; s.x=-abs(s.x);
+    add(h,cap(s,float3(-0.01,1.51,0.14),float3(-0.07,1.51,0.145),0.008),JOINT);
+    add(h,cylZ(s-float3(-0.07,1.51,0.145),0.011,0.006)-0.002,STEEL);
     // Body-facing mounting backplate (inferred mounting surfaces)
-    add(h,box(s-float3(.13,2.62,-.290),float3(.080,.32,.020),.015),JOINT);
+    add(h,box(s-float3(-0.065,1.31,0.145),float3(0.04,0.16,0.01),0.0075),JOINT);
     return h;
 }
 
 float2 scene(float3 p) {
     float2 h=float2(p.y,0.);
 #if ISOLATE_PACK == 1
-    float bound=box(p-float3(0,2.55+characterLift,-.40),float3(.65,.75,.45),.02);
-    if(bound>.15) { add(h,bound,-1.); return h; }
+    float bound=box(p-float3(0,1.275+characterLift,0.2),float3(0.325,0.375,0.225),0.01);
+    if(bound>0.075) { add(h,bound,-1.); return h; }
     float2 part=torsoPackMountScene(localPosition(p,0)); add(h,part.x,part.y);
     for(int i=0;i<2;i++) {
         part=podScene(localPosition(p,12+i),true);
@@ -961,8 +961,8 @@ float2 scene(float3 p) {
     }
     return h;
 #else
-    float bound=box(p-float3(0,2.15+characterLift,0),float3(1.9,2.7,3.),.03);
-    if(bound>.35) { add(h,bound,-1.); return h; }
+    float bound=box(p-float3(0,1.075+characterLift,0),float3(0.95,1.35,1.5),0.015);
+    if(bound>0.175) { add(h,bound,-1.); return h; }
     float2 part=torsoScene(localPosition(p,0)); add(h,part.x,part.y);
     part=headScene(localPosition(p,1)); add(h,part.x*.88,part.y+20.);
     for(int side=0;side<2;side++) {
@@ -984,11 +984,11 @@ float2 scene(float3 p) {
 float4 surfaceGradient(float3 p) {
     float3 n=(float3)0;
     for(int i=0;i<4;i++) {
-        float3 e=.5773503*(2.*float3(float((i+3)/2%2),float(i/2%2),float(i%2))-1.);
-        n+=e*scene(p+e*.0015).x;
+        float3 e=float3(-.5773503,.5773503,-.5773503)*(2.*float3(float((i+3)/2%2),float(i/2%2),float(i%2))-1.);
+        n+=e*scene(p+e*0.00075).x;
     }
     // Preserve the gradient magnitude: conservative distance estimates are not unit SDFs.
-    float magnitude=length(n)/.002;
+    float magnitude=length(n)/0.001;
     return float4(normalize(n),clamp(magnitude,.12,1.5));
 }
 float2 secondaryScene(float3 p) {
@@ -1003,16 +1003,16 @@ float2 secondaryScene(float3 p) {
 #else
     float3 q=localPosition(p,1);
     float skull=skullBound(q);
-    if(skull>.10) add(h,skull*.88,-1.);
+    if(skull>0.05) add(h,skull*.88,-1.);
     else {
         float2 hood=helmetShell(q); add(h,hood.x*.88,hood.y);
         add(h,skinGeometry(q)*.88,SKIN);
     }
-    float braidBound=box(q-braidBoundsCenter,braidBoundsHalf+(float3)0.10,0.);
-    if(braidBound>.10) add(h,braidBound*.88,-1.);
+    float braidBound=box(q-braidBoundsCenter,braidBoundsHalf+(float3)0.05,0.);
+    if(braidBound>0.05) add(h,braidBound*.88,-1.);
     else {
-        float braid=min(cap(q,braidCenter(0.),braidCenter(.40),.095),
-                        cap(q,braidCenter(.40),braidTip,.078));
+        float braid=min(cap(q,braidCenter(0.),braidCenter(.40),0.0475),
+                        cap(q,braidCenter(.40),braidTip,0.039));
         add(h,braid*.88,HAIR);
     }
     piece=torsoScene(localPosition(p,0)); add(h,piece.x,piece.y);
@@ -1032,18 +1032,18 @@ float2 secondaryScene(float3 p) {
 #endif
 }
 float shadow(float3 p,float3 l,float distanceScale) {
-    float v=1.,t=.025;
+    float v=1.,t=0.0125;
     for(int i=0;i<SHADOW_STEPS;i++) {
         float2 hit=secondaryScene(p+l*t);
         float d=hit.x;
         // An actual blocker is fully occluded. Returning the current penumbra
         // estimate here leaks quantized light into the nose and throat shadows.
-        if(d<.0008) return 0.;
+        if(d<0.0004) return 0.;
         // Bounds accelerate traversal but do not represent shadow-casting surfaces.
         if(floorMod(hit.y,20.)<18.) v=min(v,7.*d/(t*distanceScale));
         // Small near-surface steps keep grazing rays from skipping narrow plate details.
-        t+=clamp(d*.9,.004,.10);
-        if(t>6.) break;
+        t+=clamp(d*.9,0.002,0.05);
+        if(t>3.) break;
     }
     return clamp(v,0.,1.);
 }
@@ -1052,7 +1052,7 @@ float ambientOcclusion(float3 p,float3 n,float distanceScale,out float3 bleed) {
     float v=0.,w=1.;
     bleed=(float3)0;
     for(int i=1;i<=4;i++) {
-        float t=.055*float(i);
+        float t=0.0275*float(i);
         float2 hit=secondaryScene(p+n*t);
         if(floorMod(hit.y,20.)<18.) {
             float separation=hit.x/distanceScale;
@@ -1064,7 +1064,7 @@ float ambientOcclusion(float3 p,float3 n,float distanceScale,out float3 bleed) {
         w*=.55;
     }
     bleed*=.16;
-    return clamp(1.-2.7*v,.25,1.);
+    return clamp(1.-5.4*v,.25,1.);
 }
 struct Surface {
     float3 base;
@@ -1097,21 +1097,21 @@ float3 materialAlbedo(float m) { return material(m).base; }
 float3 skinTransmission(float3 p,float3 normal,float3 light) {
     // March only the skin volume from just inside the surface to its light-facing
     // exit. A bounded thin-feature transmission estimate, not a scattering solver.
-    float3 origin=p-normal*.006;
-    float travel=.006;
+    float3 origin=p-normal*0.003;
+    float travel=0.003;
     for(int i=0;i<10;i++) {
         float d=skinGeometry(origin+light*travel);
-        if(d>.0004) return exp(-travel*float3(14.,32.,55.));
-        travel+=clamp(-d*.85,.006,.045);
-        if(travel>.28) break;
+        if(d>0.0002) return exp(-travel*float3(28.,64.,110.));
+        travel+=clamp(-d*.85,0.003,0.0225);
+        if(travel>0.14) break;
     }
     return (float3)0; // Opaque when this short march cannot find an exit.
 }
 void eyeSurface(float3 p,float pixel,inout Surface surf,out float occlusion,out float3 glints) {
     // Authored graphic iris under the shallow eye surface. No refracted fibers.
     float3 q=eyeCoordinates(p);
-    float2 uv=float2(q.x*float(sign(p.x)),q.y)*float2(1.,.86)-float2(.002,.003);
-    float aa=max(pixel*1.1,.00065),radius=length(uv);
+    float2 uv=float2(q.x*float(sign(p.x)),q.y)*float2(2.,1.72)-float2(.002,.003);
+    float aa=max(pixel*2.2,.00065),radius=length(uv);
     float irisMask=1.-smoothstep(.067-aa,.067+aa,radius);
     float upperShade=smoothstep(-.045,.043,uv.y);
     float3 amber=lerp(float3(.22,.085,.022),float3(.040,.014,.006),upperShade);
@@ -1125,7 +1125,7 @@ void eyeSurface(float3 p,float pixel,inout Surface surf,out float occlusion,out 
     amber=lerp(amber,float3(.006,.003,.002),pupil);
     surf.base=lerp(float3(.84,.79,.69),amber,irisMask);
     float upper=eyelidHeights(q.x).x;
-    occlusion=.38+.62*smoothstep(.002,.078,upper-q.y);
+    occlusion=.38+.62*smoothstep(0.001,0.039,upper-q.y);
     surf.base*=occlusion;
     // Both eyes share the same illustrated light direction; highlights are emission
     // so the graphic design survives the studio lighting and the iris stays dark.
@@ -1138,81 +1138,81 @@ void eyeSurface(float3 p,float pixel,inout Surface surf,out float occlusion,out 
 // Analytic panel lines and fastener recesses, evaluated only at a surface hit.
 // These are shallow shading details, so the ray-marched silhouette stays intact.
 float2 armorDetail(float3 p,float m) {
-    float3 q=p; q.x=abs(q.x);
-    float seam=1.,rivet=1.;
-    if(p.y>3.28) {
-        q=p-float3(0,3.77,-.035);
+    float3 q=p; q.x=-abs(q.x);
+    float seam=0.5,rivet=0.5;
+    if(p.y>1.64) {
+        q=p-float3(0,1.885,0.0175);
         if(m==IVORY) {
-            float a=atan2(q.x,q.y);
-            seam=abs(sin(4.*a+.2))*.14;
+            float a=atan2(-q.x,q.y);
+            seam=abs(sin(4.*a+.2))*0.07;
             // A small pair of cheek fasteners, set into the ivory rim.
-            rivet=length(float2(abs(q.x)-.43,q.y+.39));
+            rivet=length(float2(abs(q.x)-0.215,q.y+0.195));
         } else {
-            float a=atan2(q.x,q.z);
-            seam=min(abs(abs(a)-.67),abs(abs(a)-1.9))*.48;
-            seam=min(seam,abs(q.y-.39));
-            rivet=length(float2(abs(q.x)-.40,q.y-.36));
+            float a=atan2(-q.x,-q.z);
+            seam=min(abs(abs(a)-.67),abs(abs(a)-1.9))*0.24;
+            seam=min(seam,abs(q.y-0.195));
+            rivet=length(float2(abs(q.x)-0.2,q.y-0.18));
         }
         // Side discs have their own concentric machining line.
-        if(abs(p.x)>.679 && length(q.yz)<.215) {
-            seam=abs(length(q.yz)-.139); rivet=1.;
+        if(abs(p.x)>0.3395 && length(q.yz)<0.1075) {
+            seam=abs(length(q.yz)-0.0695); rivet=0.5;
         }
         return float2(seam,rivet);
     }
-    if(q.x>.72 && p.y<2.56 && p.y>1.70) {
+    if(q.x<-0.36 && p.y<1.28 && p.y>0.85) {
         q=gauntletCoordinates(p);
         if(m==IVORY) {
-            seam=min(abs(q.y-.13-.28*q.z),abs(q.y+.16+.30*q.z));
-            seam=min(seam,abs(q.z-.10+.25*q.y));
-            rivet=length(float2(q.y-.255,q.z+.045));
+            seam=min(abs(q.y-0.065+.28*q.z),abs(q.y+0.08-.30*q.z));
+            seam=min(seam,abs(-q.z-0.05+.25*q.y));
+            rivet=length(float2(q.y-0.1275,q.z-0.0225));
         } else {
-            seam=min(abs(q.y-.265),abs(q.y+.25));
-            seam=min(seam,abs(q.x+.18));
-            rivet=length(float2(q.x+.11,q.y-.20));
+            seam=min(abs(q.y-0.1325),abs(q.y+0.125));
+            seam=min(seam,abs(q.x-0.09));
+            rivet=length(float2(q.x-0.055,q.y-0.1));
         }
         return float2(seam,rivet);
-    } else if(p.y<1.41 && p.y>.40) {
-        q-=float3(.4,0,.025);
-        q.z-=.035*sin(PI*clamp((1.41-q.y)/1.12,0.,1.));
+    } else if(p.y<0.705 && p.y>0.2) {
+        q-=float3(-0.2,0,-0.0125);
+        q.z+=0.0175*sin(PI*clamp((0.705-q.y)/0.56,0.,1.));
         float2 radii=shinRadii(q.y);
-        float angle=atan2(q.x/radii.x,q.z/radii.y);
-        seam=min(abs(abs(angle)-.66),abs(abs(angle)-2.40))*.23;
-        seam=min(seam,abs(q.y-1.275));
-        seam=min(seam,abs(ankleOpening(q.xy)+.098));
-        rivet=length(float2(abs(q.x)-.14,q.y-1.10));
+        float angle=atan2(-q.x/radii.x,-q.z/radii.y);
+        seam=min(abs(abs(angle)-.66),abs(abs(angle)-2.40))*0.115;
+        seam=min(seam,abs(q.y-0.6375));
+        seam=min(seam,abs(ankleOpening(q.xy)+0.049));
+        rivet=length(float2(abs(q.x)-0.07,q.y-0.55));
         return float2(seam,rivet);
-    } else if(p.y<.40) {
-        q-=float3(.4,0,0);
-        float toe=q.z-(.46-.12*square(q.x/.33));
-        seam=min(abs(toe)*.65,abs(footOutline(q)+.032));
-        rivet=length(float2(abs(q.x)-.20,q.z-.38));
+    } else if(p.y<0.2) {
+        q-=float3(-0.2,0,0);
+        float toe=-q.z-(0.23-0.06*square(q.x/0.165));
+        seam=min(abs(toe)*.65,abs(footOutline(q)+0.016));
+        rivet=length(float2(abs(q.x)-0.1,q.z+0.19));
         return float2(seam,rivet);
-    } else if(p.y>2.54 && q.x>.47 && p.z>-.32) {
-        if(p.z>.355 && length(p.xy-float2(float(sign(p.x))*.6,2.98))<.17)
-            return float2(abs(length(p.xy-float2(float(sign(p.x))*.6,2.98))-.135),1.);
-        q-=float3(.62,3.00,.015);
-        seam=abs(shoulderProfile(q.xy)+.032);
-        rivet=length(q.xy-float2(.315,-.20));
+    } else if(p.y>1.27 && q.x<-0.235 && p.z<0.16) {
+        if(p.z<-0.1775 && length(p.xy-float2(float(sign(p.x))*0.3,1.49))<0.085)
+            return float2(abs(length(p.xy-float2(float(sign(p.x))*0.3,1.49))-0.0675),0.5);
+        q-=float3(-0.31,1.5,-0.0075);
+        seam=abs(shoulderProfile(q.xy)+0.016);
+        rivet=length(q.xy-float2(-0.1575,-0.1));
         return float2(seam,rivet);
-    } else if(p.y>2.56 && q.x<.43) {
+    } else if(p.y>1.28 && q.x>-0.215) {
         // A shallow contour follows the upper lip of the ivory chest inset.
-        seam=abs(p.y-(2.965-.082*exp(-square(p.x/.18))));
-        if(p.y<2.91) seam=min(seam,abs(p.x));
-        rivet=length(float2(abs(p.x)-.275,p.y-2.915));
+        seam=abs(p.y-(1.4825-0.041*exp(-square(p.x/0.09))));
+        if(p.y<1.455) seam=min(seam,abs(p.x));
+        rivet=length(float2(abs(p.x)-0.1375,p.y-1.4575));
         return float2(seam,rivet);
-    } else return (float2)1.;
+    } else return (float2)0.5;
 }
 float armorHeight(float2 d) {
-    float groove=exp(-square(d.x/.0027));
-    float recess=exp(-square(square(d.y/.008)));
-    return -.0015*groove-.002*recess;
+    float groove=exp(-square(d.x/0.00135));
+    float recess=exp(-square(square(d.y/0.004)));
+    return -0.00075*groove-0.001*recess;
 }
 float2 detailAt(float3 p,float m,int part) {
     float3 q=localPosition(p,part);
     if(part==12 || part==13) {
         float u=podBandCoordinate(q);
-        float notch1=length(float2(max(abs(q.x-.365)-.015,0.),u-2.88));
-        float notch2=length(float2(max(abs(q.x-.355)-.015,0.),u-2.38));
+        float notch1=length(float2(max(abs(q.x+0.1825)-0.0075,0.),u-1.44));
+        float notch2=length(float2(max(abs(q.x+0.1775)-0.0075,0.),u-1.19));
         return float2(podBandEdges(q),min(notch1,notch2));
     }
     return armorDetail(q,m);
@@ -1241,61 +1241,61 @@ float scratches(float2 uv,float pixel,float seed) {
 void armorWear(float3 p,float3 n,float2 detail,float pixel,int part,inout Surface surf) {
     if(WEAR==0) return;
     // Authored contact zones keep wear off broad, protected paint surfaces.
-    float edge=detail.x+.020,contact=.05,dust=0.;
-    float3 q=p; q.x=abs(q.x);
+    float edge=detail.x+0.01,contact=.05,dust=0.;
+    float3 q=p; q.x=-abs(q.x);
     if(part==3 || part==5 || part==14 || part==15) {
-        q-=float3(.4,0,0);
-        if(q.y<.40) {
-            edge=min(abs(q.y-.135),abs(q.z+.45*q.y-.69)*.8);
-            contact=.40+.6*smoothstep(.33,.65,q.z);
-            dust=(1.-smoothstep(.07,.24,q.y))*.09;
-        } else if(q.y<1.42) {
+        q-=float3(-0.2,0,0);
+        if(q.y<0.2) {
+            edge=min(abs(q.y-0.0675),abs(-q.z+.45*q.y-0.345)*.8);
+            contact=.40+.6*smoothstep(0.165,0.325,-q.z);
+            dust=(1.-smoothstep(0.035,0.12,q.y))*.09;
+        } else if(q.y<0.71) {
             float3 shin=q;
-            shin.z-=.025+.035*sin(PI*clamp((1.41-q.y)/1.12,0.,1.));
+            shin.z+=0.0125+0.0175*sin(PI*clamp((0.705-q.y)/0.56,0.,1.));
             float side=shinSection(shin,0.);
-            edge=max(min(abs(ankleOpening(q.xy)),abs(q.y-1.41+.10*q.z)),abs(side));
+            edge=max(min(abs(ankleOpening(q.xy)),abs(q.y-0.705-.10*q.z)),abs(side));
             contact=.24;
-        } else { edge=min(edge,.7*abs(q.y-1.58)); contact=.45; }
+        } else { edge=min(edge,.7*abs(q.y-0.79)); contact=.45; }
     } else if(part==7 || part==9) {
         q=gauntletCoordinates(p);
-        float side=curvedSection(q.xz,float2(.177,.185)+.055*smoothstep(-.32,.22,q.y));
-        float end=min(abs(q.y+.32-.12*q.x),abs(q.y-.31+.28*q.x));
-        edge=min(detail.x+.010,max(end,abs(side)));
+        float side=curvedSection(q.xz,float2(0.0885,0.0925)+0.0275*smoothstep(-0.16,0.11,q.y));
+        float end=min(abs(q.y+0.16+.12*q.x),abs(q.y-0.155-.28*q.x));
+        edge=min(detail.x+0.005,max(end,abs(side)));
         contact=.34;
     } else if(part==12 || part==13) {
-        edge=min(podBandEdges(q)+.012,min(abs(q.y-1.92),abs(q.y-3.16)));
+        edge=min(podBandEdges(q)+0.006,min(abs(q.y-0.96),abs(q.y-1.58)));
         contact=.15;
     } else if(part>=10) {
-        q-=float3(.62,3.,.015);
-        float radius=.31*(1.-.5*smoothstep(.05,.45,-q.y));
-        float side=curvedSection(float2(q.x+.02,q.z),float2(.5,radius));
+        q-=float3(-0.31,1.5,-0.0075);
+        float radius=0.155*(1.-.5*smoothstep(0.025,0.225,-q.y));
+        float side=curvedSection(float2(q.x-0.01,q.z),float2(0.25,radius));
         edge=min(edge,max(abs(shoulderProfile(q.xy)),abs(side)));
         contact=.14;
     } else if(part==1) {
-        q=p-float3(0,3.77,-.035);
-        float opening=(length((q.xy-float2(0,-.045))/float2(.505,.548))-1.)*.505;
-        if(q.z>.075) edge=min(edge,abs(opening-.090));
+        q=p-float3(0,1.885,0.0175);
+        float opening=(length((q.xy-float2(0,-0.0225))/float2(0.2525,0.274))-1.)*0.2525;
+        if(q.z<-0.0375) edge=min(edge,abs(opening-0.045));
         contact=.035;
     }
     // Three-dimensional masks stay attached through all joint and camera motion.
-    float3 sampleP=p+float3(float(part)*1.71,0,.37*float(part));
-    float coarse=noise3(sampleP*32.),fine=noise3(sampleP*135.);
-    float aa=max(pixel,.0007);
-    float reach=.002+.014*smoothstep(.54,.76,coarse);
+    float3 sampleP=p+float3(-(float(part)*0.855),0,-(0.185*float(part)));
+    float coarse=noise3(sampleP*float3(-64.,64.,-64.)),fine=noise3(sampleP*float3(-270.,270.,-270.));
+    float aa=max(pixel,0.00035);
+    float reach=0.001+0.007*smoothstep(.54,.76,coarse);
     float chips=(1.-smoothstep(reach-aa,reach+aa,edge))*smoothstep(.50,.72,fine);
-    chips*=1.-smoothstep(.005,.016,pixel);
+    chips*=1.-smoothstep(0.0025,0.008,pixel);
     float3 weights=pow(abs(n),(float3)6.); weights/=max(dot(weights,(float3)1),.001);
-    float scratch=dot(weights,float3(scratches(p.zy,pixel,float(part)+1.),
-                                   scratches(p.xz,pixel,float(part)+8.),
-                                   scratches(p.xy,pixel,float(part)+19.)));
-    scratch*=.16+.65*contact+.45*exp(-edge/.04);
+    float scratch=dot(weights,float3(scratches(p.zy*float2(-2.,2.),pixel*2.,float(part)+1.),
+                                   scratches(p.xz*-2.,pixel*2.,float(part)+8.),
+                                   scratches(p.xy*float2(-2.,2.),pixel*2.,float(part)+19.)));
+    scratch*=.16+.65*contact+.45*exp(-edge/0.02);
     float3 primer=lerp(float3(.12,.105,.15),float3(.23,.21,.19),surf.base.r);
     surf.base=lerp(surf.base,primer,chips*.85);
     float metal=chips*smoothstep(.65,.83,fine);
     surf.base=lerp(surf.base,float3(.32,.33,.35),metal);
     surf.base=lerp(surf.base,surf.base*.60+float3(.16,.145,.12),scratch*.8);
     surf.base=lerp(surf.base,float3(.25,.205,.16),dust*(.55+.45*coarse));
-    surf.roughness=clamp(surf.roughness+.035*(noise3(sampleP*9.)-.5)
+    surf.roughness=clamp(surf.roughness+.035*(noise3(sampleP*float3(-18.,18.,-18.))-.5)
                         +.12*scratch+.10*chips+.06*contact*coarse,.20,.75);
     surf.metal=max(surf.metal,metal*.7);
     surf.coat*=1.-clamp(chips+scratch*.5+dust,0.,1.);
@@ -1303,18 +1303,18 @@ void armorWear(float3 p,float3 n,float2 detail,float pixel,int part,inout Surfac
 void finishArmor(float3 p,float3 geometricNormal,float m,float pixel,int part,
                  inout float3 n,inout Surface surf) {
     float2 d=detailAt(p,m,part);
-    float aa=max(pixel*.65,.00065);
-    float panelLine=1.-smoothstep(.0015,.0015+aa,d.x);
-    float lip=1.-smoothstep(.0015,.0015+aa,abs(d.x-.005));
-    float recess=1.-smoothstep(.005,.008+aa,d.y);
+    float aa=max(pixel*.65,0.000325);
+    float panelLine=1.-smoothstep(0.00075,0.00075+aa,d.x);
+    float lip=1.-smoothstep(0.00075,0.00075+aa,abs(d.x-0.0025));
+    float recess=1.-smoothstep(0.0025,0.004+aa,d.y);
     surf.base*=1.-.38*panelLine-.17*recess;
     surf.base=lerp(surf.base,surf.base*1.12,lip*.6);
     surf.roughness+=panelLine*.09+recess*.13;
     // Finite differences of the shallow height field give a recessed normal.
-    float e=max(pixel*.6,.0008),a=armorHeight(d);
-    float3 g=float3(armorHeight(detailAt(p+float3(e,0,0),m,part))-a,
+    float e=max(pixel*.6,0.0004),a=armorHeight(d);
+    float3 g=float3(armorHeight(detailAt(p+float3(-e,0,0),m,part))-a,
                 armorHeight(detailAt(p+float3(0,e,0),m,part))-a,
-                armorHeight(detailAt(p+float3(0,0,e),m,part))-a)/e;
+                armorHeight(detailAt(p+float3(0,0,-e),m,part))-a)*float3(-1,1,-1)/e;
     g-=geometricNormal*dot(g,geometricNormal);
     g*=min(1.,.3/max(length(g),.0001));
     n=normalize(geometricNormal-g*.65);
@@ -1360,23 +1360,23 @@ float softbox(float3 r,float3 direction,float2 size,float blur) {
 float3 studioReflection(float3 r,float roughness) {
     float3 env=lerp(float3(.095,.080,.072),float3(.28,.27,.29),smoothstep(-.35,.8,r.y));
     float blur=.035+roughness*roughness*.85;
-    env+=float3(3.3,3.1,2.9)*softbox(r,normalize(float3(-3,5,4)),float2(.32,.48),blur);
-    env+=float3(.95,1.03,1.18)*softbox(r,normalize(float3(4,2,3)),float2(.19,.52),blur);
-    env+=float3(1.7,1.45,1.8)*softbox(r,normalize(float3(1,3,-4)),float2(.18,.42),blur);
+    env+=float3(3.3,3.1,2.9)*softbox(r,normalize(float3(3,5,-4)),float2(.32,.48),blur);
+    env+=float3(.95,1.03,1.18)*softbox(r,normalize(float3(-4,2,-3)),float2(.19,.52),blur);
+    env+=float3(1.7,1.45,1.8)*softbox(r,normalize(float3(-1,3,4)),float2(.18,.42),blur);
     return env;
 }
 float3 hairTangent(float3 p) {
-    if(p.x<-.32 && p.y<3.55) {
-        float t=clamp(lerp((3.565-p.y)/1.045,(-.365-p.x)/.765,max(motion.trail,0.)),0.,1.);
+    if(p.x>0.16 && p.y<1.775) {
+        float t=clamp(lerp((1.7825-p.y)/0.5225,(-0.1825+p.x)/0.3825,max(motion.trail,0.)),0.,1.);
         return normalize(braidCenter(t+.005)-braidCenter(t-.005));
     }
-    return normalize(float3(.85,float(sign(p.x))*-.6,.15));
+    return normalize(float3(-.85,float(sign(p.x))*.6,-.15));
 }
 float2 jetInterval(float3 ro,float3 rd) {
     // Intersect only a tight local volume; most screen pixels do no plume work.
-    float3 inv=1./(float3(sign(rd+(float3)(1e-8)))*max(abs(rd),(float3)(1e-7)));
-    float3 a=(float3(-.16,-.47,-.16)-ro)*inv;
-    float3 b=(float3(.16,-.025,.16)-ro)*inv;
+    float3 inv=1./(float3(sign(rd+float3(-1e-8,1e-8,-1e-8)))*max(abs(rd),(float3)(1e-7)));
+    float3 a=(float3(0.08,-0.235,0.08)-ro)*inv;
+    float3 b=(float3(-0.08,-0.0125,-0.08)-ro)*inv;
     float3 lo=min(a,b),hi=max(a,b);
     return float2(max(lo.x,max(lo.y,lo.z)),min(hi.x,min(hi.y,hi.z)));
 }
@@ -1388,31 +1388,31 @@ float4 integrateJet(float3 ro,float3 rd,float2 interval,float solidDepth,float s
     float time=frameGroup.time+seed;
     for(int i=0;i<32;i++) {
         float3 p=ro+rd*(begin+(float(i)+.5+sampleOffset*.65)*stepLength);
-        p.y+=.055; // Gas begins at the bell lip, not inside the injector.
+        p.y+=0.0275; // Gas begins at the bell lip, not inside the injector.
         float axial=max(-p.y,0.);
-        float jetLength=.24+.16*motion.thrust;
+        float jetLength=0.12+0.08*motion.thrust;
         float tail=1.-smoothstep(jetLength*.35,jetLength,axial);
-        float ignition=1.-smoothstep(-.005,.025,p.y);
+        float ignition=1.-smoothstep(-0.0025,0.0125,p.y);
         // Advected noise deforms the gas, with increasing breakup downstream.
-        float3 flow=float3(p.x*39.,axial*15.-time*9.,p.z*39.+seed*7.);
+        float3 flow=float3(p.x*-78.,axial*30.-time*9.,p.z*-78.+seed*7.);
         float turbulence=noise3(flow),fine=noise3(flow*1.93+float3(7,3,-5));
-        float2 center=.012*axial*float2(sin(axial*16.-time*8.),cos(axial*13.-time*11.));
-        float width=.055*(1.-.30*clamp(axial/jetLength,0.,1.));
-        width*=1.+.11*sin(axial*34.-.6*sin(time*4.));
+        float2 center=-.012*axial*float2(sin(axial*32.-time*8.),cos(axial*26.-time*11.));
+        float width=0.0275*(1.-.30*clamp(axial/jetLength,0.,1.));
+        width*=1.+.11*sin(axial*68.-.6*sin(time*4.));
         float radius=length(p.xz-center)/width;
-        radius+=(turbulence-.5)*(.22+1.7*axial);
+        radius+=(turbulence-.5)*(.22+3.4*axial);
         float core=exp(-3.4*radius*radius)*tail*ignition;
         float sheath=exp(-1.05*radius*radius)*tail*ignition;
         sheath*=lerp(.60,1.35,turbulence)*lerp(.75,1.2,fine);
         // Pressure cells sit in a narrow fast core; the surrounding gas remains soft.
-        float cells=pow(.5+.5*cos(axial*37.-.45*sin(time*3.)),7.);
-        cells*=exp(-7.*radius*radius)*exp(-2.8*axial)*tail*ignition;
+        float cells=pow(.5+.5*cos(axial*74.-.45*sin(time*3.)),7.);
+        cells*=exp(-7.*radius*radius)*exp(-5.6*axial)*tail*ignition;
         float pulse=.94+.06*sin(time*17.);
         float3 emission=(float3(.008,.46,1.25)*sheath+float3(.24,2.3,3.8)*core
-                       +float3(2.8,3.4,3.8)*cells)*pulse*14.*motion.thrust;
-        float extinction=(.30*sheath+.70*core)*6.;
+                       +float3(2.8,3.4,3.8)*cells)*pulse*28.*motion.thrust;
+        float extinction=(.30*sheath+.70*core)*12.;
         float segment=exp(-extinction*stepLength);
-        radiance+=transmission*emission*(1.-segment)/max(extinction,.0001);
+        radiance+=transmission*emission*(1.-segment)/max(extinction,0.0002);
         transmission*=segment;
     }
     return float4(radiance,transmission);
@@ -1420,9 +1420,9 @@ float4 integrateJet(float3 ro,float3 rd,float2 interval,float solidDepth,float s
 float3 compositeJets(float3 col,float3 ro,float3 rd,float solidDepth,float2 sampleOffset) {
     if(JETS==0 || motion.thrust<.001) return col;
     float3 a=nozzleCoordinates(localPosition(ro,12));
-    float3 ad=nozzleCoordinates(localPosition(ro+rd,12))-a;
+    float3 ad=(nozzleCoordinates(localPosition(ro+rd*.5,12))-a)*2.;
     float3 b=nozzleCoordinates(localPosition(ro,13));
-    float3 bd=nozzleCoordinates(localPosition(ro+rd,13))-b;
+    float3 bd=(nozzleCoordinates(localPosition(ro+rd*.5,13))-b)*2.;
     float2 ia=jetInterval(a,ad),ib=jetInterval(b,bd);
     float4 left=integrateJet(a,ad,ia,solidDepth,0.,sampleOffset.x+sampleOffset.y*.5);
     float4 right=integrateJet(b,bd,ib,solidDepth,1.73,sampleOffset.x+sampleOffset.y*.5);
@@ -1433,18 +1433,15 @@ float3 compositeJets(float3 col,float3 ro,float3 rd,float solidDepth,float2 samp
 float3 render(float2 uv,float2 lightSample) {
     float3 ro,ww,uu,vv,rd;
     float focal=2.25;
-    // A paired camera's ray is the camera's own: the pixel's ray through its vertical field of view, at the placed
-    // aspect, in world space. The world model faces -Z at half this model's scale, so the model's placement maps the ray
-    // into the model's frame by a rotation of 180 degrees about Y and a uniform scale, which preserves handedness, the
-    // ground plane and every projection, so the pane shows each surface on the ray a pick through it continues along.
-    const float3 modelFromWorld=float3(-2.,2.,-2.);
+    // The paired camera projects each pixel at its vertical field of view and placed aspect.
+    // Geometry and rays share world units: +Y up, -Z forward, with the ground at Y=0.
     if(frameGroup.cameraFov>0.) {
         float3 forward=normalize(frameGroup.cameraTarget-frameGroup.cameraPosition);
         float3 right=normalize(cross(forward,normalize(frameGroup.cameraUp)));
         float3 up=cross(right,forward);
         focal=.5/tan(frameGroup.cameraFov*.5);
-        ro=frameGroup.cameraPosition*modelFromWorld;
-        rd=normalize((uv.x*right+uv.y*up+focal*forward)*modelFromWorld);
+        ro=frameGroup.cameraPosition;
+        rd=normalize(uv.x*right+uv.y*up+focal*forward);
     } else {
     float yaw=POSE==7?-.75:.22, pitch=.055;
     if(PACK_VIEW==1) { yaw=-2.65; pitch=.10; }
@@ -1453,20 +1450,20 @@ float3 render(float2 uv,float2 lightSample) {
         yaw=(frameGroup.pointer.x/resolution.x-.5)*2.*PI;
         pitch=clamp((.5-frameGroup.pointer.y/resolution.y)*1.3,-.32,.72);
     }
-    float3 target=float3(0,2.22,0);
-    float cameraDistance=11.8;
+    float3 target=float3(0,1.11,0);
+    float cameraDistance=5.9;
     target.y+=.60*characterLift;
-    cameraDistance+=.6*smoothstep(0.,.3,motion.lift);
-    if(CLOSE_UP==1) { target=worldPosition(float3(0,3.64,.06),1); cameraDistance=4.8; }
-    if(PACK_VIEW==1) { target=worldPosition(float3(0,2.63,-.43),0); cameraDistance=6.8; }
-    ro=target+cameraDistance*float3(sin(yaw)*cos(pitch),sin(pitch),cos(yaw)*cos(pitch));
+    cameraDistance+=0.3*smoothstep(0.,0.15,motion.lift);
+    if(CLOSE_UP==1) { target=worldPosition(float3(0,1.82,-0.03),1); cameraDistance=2.4; }
+    if(PACK_VIEW==1) { target=worldPosition(float3(0,1.315,0.215),0); cameraDistance=3.4; }
+    ro=target+cameraDistance*float3(-(sin(yaw)*cos(pitch)),sin(pitch),-(cos(yaw)*cos(pitch)));
     ww=normalize(target-ro); uu=normalize(cross(ww,float3(0,1,0)));
     vv=cross(uu,ww);
     rd=normalize(uv.x*uu+uv.y*vv+focal*ww);
     }
     float3 col=lerp(float3(.49,.455,.415),float3(.34,.32,.31),smoothstep(-.5,.8,uv.y));
     float3 background=col;
-    float t=0.,radius=0.,stepLength=0.,contour=100.; float2 h=float2(1,0); bool hit=false;
+    float t=0.,radius=0.,stepLength=0.,contour=100.; float2 h=float2(.5,0); bool hit=false;
     for(int i=0;i<MAX_STEPS;i++) {
         float candidate=t+stepLength;
         h=scene(ro+rd*candidate);
@@ -1481,14 +1478,14 @@ float3 render(float2 uv,float2 lightSample) {
         }
         t=candidate;
         if(h.y>0. && floorMod(h.y,20.)<18.)
-            contour=min(contour,max(h.x,0.)/max(candidate/(resolution.y*focal),.0004));
-        float hitEpsilon=.0009*max(1.,t*.16);
+            contour=min(contour,max(h.x,0.)/max(candidate/(resolution.y*focal),0.0002));
+        float hitEpsilon=0.00045*max(1.,t*0.32);
         // Resolve the small neck silhouette more closely than the broad armor.
-        if(h.y==20.+SKIN && localPosition(ro+rd*t,1).y<3.48) hitEpsilon*=.20;
+        if(h.y==20.+SKIN && localPosition(ro+rd*t,1).y<1.74) hitEpsilon*=.20;
         if(h.x<hitEpsilon) { hit=true; break; }
-        radius=max(nextRadius,.00035);
+        radius=max(nextRadius,0.000175);
         stepLength=radius*(RELAXED_TRACE==1?1.30:1.);
-        if(t>80.) break;
+        if(t>40.) break;
     }
     if(hit) {
         float3 p=ro+rd*t;
@@ -1509,18 +1506,18 @@ float3 render(float2 uv,float2 lightSample) {
         }
         float skin=(h.y==SKIN || h.y==LIP)?1.:0.;
         if(skin>.5) {
-            float2 cheekP=(float2(abs(paintP.x),paintP.y)-float2(.255,3.595))/float2(.11,.072);
+            float2 cheekP=(float2(abs(paintP.x),paintP.y)-float2(0.1275,1.7975))/float2(0.055,0.036);
             float cheek=exp(-dot(cheekP,cheekP));
             surf.base=lerp(surf.base,float3(.39,.105,.047),cheek*.25);
-            float mouthX=clamp(paintP.x,-.133,.133);
-            float2 lipP=float2(paintP.x/.115,(paintP.y-smileHeight(mouthX)+.014)/.012);
-            float lip=exp(-dot(lipP,lipP))*smoothstep(.36,.47,paintP.z);
+            float mouthX=clamp(paintP.x,-0.0665,0.0665);
+            float2 lipP=float2(-paintP.x/0.0575,(paintP.y-smileHeight(mouthX)+0.007)/0.006);
+            float lip=exp(-dot(lipP,lipP))*smoothstep(0.18,0.235,-paintP.z);
             surf.base=lerp(surf.base,float3(.43,.158,.069),lip*.55);
             // Keep broad facial lighting smooth while preserving the modeled nose and lips.
             float3 guide=normalize((paintP-FACE_CENTER)/(FACE_RADII*FACE_RADII));
             guide=normalize(mul(guide,transpose(partFrame[part])));
-            float nose=exp(-dot((paintP.xy-float2(0,3.62))/float2(.085,.17),(paintP.xy-float2(0,3.62))/float2(.085,.17)));
-            float front=smoothstep(.36,.50,paintP.z);
+            float nose=exp(-dot((paintP.xy-float2(0,1.81))/float2(0.0425,0.085),(paintP.xy-float2(0,1.81))/float2(0.0425,0.085)));
+            float front=smoothstep(0.18,0.25,-paintP.z);
             if(h.y==SKIN) n=normalize(lerp(n,guide,.10*front*(1.-nose)*(1.-lip)));
         }
         float eyeOcclusion=1.; float3 eyeGlints=(float3)0;
@@ -1528,22 +1525,22 @@ float3 render(float2 uv,float2 lightSample) {
             eyeSurface(paintP,pixel,surf,eyeOcclusion,eyeGlints);
             // The cornea has its own optical normal; socket CSG must not flatten it.
             float3 cornea=normalize(eyeCoordinates(paintP)/(EYE_RADII*EYE_RADII));
-            cornea.xy=mul(cornea.xy,rot(-.055));
+            cornea.xy=mul(cornea.xy,rot(.055));
             cornea.xz=mul(cornea.xz,rot(.21));
-            cornea.x*=float(sign(paintP.x));
+            cornea.x*=-float(sign(paintP.x));
             n=normalize(mul(cornea,transpose(partFrame[part])));
         }
         float3 bleed;
         float ao=ambientOcclusion(p,ng,gradient.w,bleed);
         if(skin>.5) ao=lerp(ao,1.,.35);
         if(h.y==EYE) ao=max(ao,.70);
-        float3 key=normalize(float3(-3.,5.,4.));
-        float3 fill=normalize(float3(4.,2.,3.));
-        float3 rim=normalize(float3(1.,3.,-4.));
+        float3 key=normalize(float3(3.,5.,-4.));
+        float3 fill=normalize(float3(-4.,2.,-3.));
+        float3 rim=normalize(float3(-1.,3.,4.));
         float3 lightRight=normalize(cross(key,float3(0,1,0)));
         float3 lightUp=cross(lightRight,key);
         float3 shadowDirection=normalize(key+.42*(lightSample.x*lightRight+lightSample.y*lightUp));
-        float sh=shadow(p+ng*.008,shadowDirection,gradient.w);
+        float sh=shadow(p+ng*0.004,shadowDirection,gradient.w);
         col=directLight(surf,n,v,key,float3(3.15,3.,2.85),sh,skin);
         col+=directLight(surf,n,v,fill,float3(.65,.70,.82),ao,skin);
         col+=directLight(surf,n,v,rim,float3(1.7,1.45,1.9),ao,0.);
@@ -1564,8 +1561,8 @@ float3 render(float2 uv,float2 lightSample) {
                 float3 tip=nozzlePosition();
                 float3 source=mul(tip-partOffset[12+i],transpose(partFrame[12+i]))-p;
                 float reach=length(source);
-                float facing=max(dot(n,source/max(reach,.001)),0.);
-                bounce+=facing*exp(-reach*5.)/(.15+reach*reach);
+                float facing=max(dot(n,source/max(reach,0.0005)),0.);
+                bounce+=facing*exp(-reach*10.)/(0.0375+reach*reach)*.25;
             }
             col+=surf.base*float3(.010,.095,.14)*bounce*ao*motion.thrust;
         }
@@ -1574,14 +1571,14 @@ float3 render(float2 uv,float2 lightSample) {
         float specAO=clamp(pow(ao,1.+surf.roughness),0.,1.);
         col+=studioReflection(reflect(-v,n),surf.roughness)*f*specAO*(h.y==EYE?.08:.75);
         if(h.y==EYE) col+=eyeGlints;
-        if(h.y==HAIR && (abs(paintP.x)>.31 || paintP.y>3.94)) {
+        if(h.y==HAIR && (abs(paintP.x)>0.155 || paintP.y>1.97)) {
             float3 tangent=normalize(mul(hairTangent(paintP),transpose(partFrame[part])));
             float3 halfVector=normalize(key+v);
             // Two shifted, bounded sheen lobes approximate surface and internal reflection.
             float th=dot(tangent,halfVector);
             float primary=pow(max(1.-square(th+.05),0.),65.);
             float secondary=pow(max(1.-square(th-.10),0.),18.);
-            float strand=.90+.10*sin(dot(paintP,float3(145.,53.,89.)));
+            float strand=.90+.10*sin(dot(paintP,float3(-290.,106.,-178.)));
             col+=(float3(.044,.041,.038)*primary+float3(.037,.025,.014)*secondary)
                   *strand*max(dot(n,key),0.)*sh;
         }
@@ -1594,9 +1591,9 @@ float3 render(float2 uv,float2 lightSample) {
         }
         if(h.y<.5) {
             // Broad contact grounding, supplementing ray-marched shadows.
-            float contact=exp(-2.8*dot(p.xz,p.xz)-4.*motion.lift);
+            float contact=exp(-11.2*dot(p.xz,p.xz)-8.*motion.lift);
             col*=1.-.22*contact;
-            col=lerp(col,background,smoothstep(14.,45.,t));
+            col=lerp(col,background,smoothstep(7.,22.5,t));
         }
     }
     if(INK==1 && (!hit || h.y<.5)) {
@@ -1604,7 +1601,7 @@ float3 render(float2 uv,float2 lightSample) {
         float ink=1.-smoothstep(.15,.55,contour);
         col=lerp(col,float3(.025,.018,.032),ink*.8);
     }
-    return compositeJets(col,ro,rd,hit?t:80.,lightSample);
+    return compositeJets(col,ro,rd,hit?t:40.,lightSample);
 }
 float4 shade(float2 pixel) {
     float blinkPhase=(frac((frameGroup.time+1.1)/5.1)-.50)/.023;

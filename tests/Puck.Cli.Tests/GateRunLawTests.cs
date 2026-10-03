@@ -129,8 +129,10 @@ public sealed partial class GateRunLawTests {
         gpu: gpu,
         record: record,
         clock: runner.Clock,
+        gpuJobs: 3,
         repositoryRoot: branches.Checkout.Root,
         runner: runner,
+        suiteJobs: 2,
         target: target
     ));
 
@@ -170,7 +172,7 @@ public sealed partial class GateRunLawTests {
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Success);
-        Assert.Equal(actual: runner.Steps[0], expected: ["affected", "--merge-base", branches.Base, "--run"]);
+        Assert.Equal(actual: runner.Steps[0], expected: ["affected", "--merge-base", branches.Base, "--run", "--suite-jobs", "2"]);
         Assert.Equal(actual: runner.FormatSources, expected: ["src/Branch.cs", "src/Branch.puck"]);
         Assert.Contains(expectedSubstring: $"gate: 3 changed file(s) against {branches.Base[..12]}, the merge base of HEAD and main;", actualString: output);
     }
@@ -234,6 +236,11 @@ public sealed partial class GateRunLawTests {
             Assert.DoesNotContain(collection: runner.Steps[0], expected: "--gpu");
             Assert.Equal(actual: runner.Steps.Count(predicate: static step => (step[0] == "canary")), expected: (gpu ? 1 : 0));
             Assert.Equal(actual: runner.Steps.Count(predicate: static step => (step[0] == "parity")), expected: (gpu ? 1 : 0));
+            // Each bound travels with the step it bounds.
+            Assert.Equal(actual: runner.Steps[0][^2..], expected: ["--suite-jobs", "2"]);
+            if (gpu) {
+                Assert.Equal(actual: runner.Steps.Single(predicate: static step => (step[0] == "canary"))[1..3], expected: ["--gpu-jobs", "3"]);
+            }
         }
 
         Assert.Equal(actual: ConsoleCapture.RunSplit(run: static () => PuckRootCommand.Invoke(args: ["affected", "--gpu"])).ExitCode, expected: CliExit.Refused);

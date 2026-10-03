@@ -394,10 +394,9 @@
                 "M:Puck.World.WorldSchema.TryGetInlineRoot(System.Text.Json.Nodes.JsonNode,System.Int32@)",
                 "P:Puck.Assets.Documents.DocumentVector3.X",
                 "P:Puck.Assets.Documents.DocumentVector3.Y",
-                "P:Puck.Assets.Documents.DocumentVector3.Z",
-                "P:Puck.SignedDistance.SdfAtmosphere.Default"
+                "P:Puck.Assets.Documents.DocumentVector3.Z"
             ],
-            "shape": "ccfc447e0e49c591",
+            "shape": "d943ebf6d5819c29",
             "source": "src/Puck.World.Authoring/Authoring/CreationDocument.cs",
             "token": "puck.creation.v1"
         },
@@ -546,7 +545,7 @@
                 "M:Puck.World.WorldSchema.ToCanonicalText(System.Text.Json.Nodes.JsonNode)",
                 "M:System.IO.TextWriter.WriteLine(System.String)"
             ],
-            "shape": "82131f46dc789a47",
+            "shape": "6653ce4857a1ee64",
             "source": "src/Puck.Launcher/Release/OfficialManifest.cs",
             "token": "puck.official.manifest.v1"
         },
@@ -646,7 +645,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Shaders.ShaderToolchain.Identity"
             ],
-            "shape": "34345b59a34c3390",
+            "shape": "f4defeca10504554",
             "source": "src/Puck.Cli/Qualification/QualificationReport.cs",
             "token": "puck.qualification.report.v1"
         },
@@ -729,7 +728,7 @@
                 "M:Puck.World.WorldSchema.ToTypeScript(System.Text.Json.Nodes.JsonObject)",
                 "M:System.IO.TextWriter.WriteLine(System.String)"
             ],
-            "shape": "485a3e0cd142acec",
+            "shape": "a511536a62558cfc",
             "source": "src/Puck.Cli/Qualification/ReleaseProfile.cs",
             "token": "puck.release.profile.v1"
         },
@@ -797,7 +796,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Hosting.RenderGraphRefresh.EveryFrame"
             ],
-            "shape": "a488fa230a57852d",
+            "shape": "fa684c8ceb3196ba",
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },
@@ -1037,7 +1036,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "b1c9d4f1ce5ceb49",
+            "shape": "d2e03cce30cc1a53",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "1"
         },
@@ -1056,7 +1055,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "b1c9d4f1ce5ceb49",
+            "shape": "d2e03cce30cc1a53",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "PWBK"
         },
@@ -1080,13 +1079,12 @@
                 "M:Puck.World.WorldFaceCatalog.DerivedCameraName(System.String,System.String)",
                 "M:Puck.World.WorldFaceCatalog.For(Puck.World.WorldDefinition)",
                 "M:System.IO.TextWriter.WriteLine(System.String)",
-                "P:Puck.SignedDistance.SdfAtmosphere.Default",
                 "P:Puck.World.WorldPlacement.ShownPrototypeId",
                 "P:Puck.World.WorldPrototype.EngineDocument",
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "232b3ccd55bbcf54",
+            "shape": "374fb89d72506360",
             "source": "src/Puck.World.Schema/WorldCameraProgram.cs",
             "token": "puck.camera.program.v1"
         },
@@ -1156,15 +1154,15 @@
                 "M:Puck.Cli.CliHelp.Detail(System.CommandLine.Command,System.String)",
                 "M:Puck.Cli.CliOptions.Check(System.String)",
                 "M:Puck.Cli.CliOptions.Output(System.String,System.Boolean)",
-                "M:Puck.Cli.Counters.CountersCeilings.IsRequiredZero(Puck.Abstractions.Counting.WorkKind,Puck.Abstractions.Counting.WorkClass,System.Int64)",
+                "M:Puck.Cli.Counters.CountersCeilings.Malformation(Puck.World.WorldCountersCeilings)",
                 "M:Puck.Cli.Counters.CountersCommand.CreateCompare",
-                "M:Puck.Cli.Counters.CountersCommand.Run(System.String,System.Boolean,System.Boolean,System.String,System.String,System.String)",
+                "M:Puck.Cli.Counters.CountersCommand.Run(System.String,System.Boolean,System.Boolean,System.String,System.String,System.String,System.String)",
                 "M:Puck.World.WorldJsonContext.#ctor(System.Boolean)",
                 "M:Puck.World.WorldSchema.LoadXmlDocIndex(System.Collections.Generic.IReadOnlyList{System.ValueTuple{System.String,System.Type}})",
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersCeilings"
             ],
-            "shape": "78fb5ee9580d9311",
+            "shape": "d966feb0465e5cdf",
             "source": "src/Puck.World.Schema/WorldCountersCeilings.cs",
             "token": "puck.counters.ceilings.v1"
         },
@@ -1177,13 +1175,13 @@
                 "M:Puck.Cli.CliOptions.Check(System.String)",
                 "M:Puck.Cli.CliOptions.Output(System.String,System.Boolean)",
                 "M:Puck.Cli.Counters.CountersCommand.Compare(System.String,System.String)",
-                "M:Puck.Cli.Counters.CountersCommand.Run(System.String,System.Boolean,System.Boolean,System.String,System.String,System.String)",
+                "M:Puck.Cli.Counters.CountersCommand.Run(System.String,System.Boolean,System.Boolean,System.String,System.String,System.String,System.String)",
                 "M:Puck.World.WorldJsonContext.#ctor(System.Boolean)",
                 "M:Puck.World.WorldSchema.LoadXmlDocIndex(System.Collections.Generic.IReadOnlyList{System.ValueTuple{System.String,System.Type}})",
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersReport"
             ],
-            "shape": "6c4687474e18aef3",
+            "shape": "aad199b55a1aa6d0",
             "source": "src/Puck.World.Schema/WorldCountersReport.cs",
             "token": "puck.counters.report.v1"
         },
@@ -1419,7 +1417,6 @@
                 "M:Puck.World.WorldDefinitionValidator.ValidateProperties(Puck.World.WorldPropertyRegistrySection,System.Collections.Generic.Dictionary{System.String,Puck.World.WorldStateRow},System.Collections.Generic.List{System.String})",
                 "M:Puck.World.WorldDefinitionValidator.ValidatePrototypes(Puck.World.WorldDefinition,System.Collections.Generic.IReadOnlyList{Puck.World.WorldPrototype},System.Collections.Generic.HashSet{System.String},System.Boolean,System.Collections.Generic.List{System.String})",
                 "M:Puck.World.WorldDefinitionValidator.ValidateReferences(System.Collections.Generic.IReadOnlyList{Puck.World.WorldReference},System.Collections.Generic.List{System.String})",
-                "M:Puck.World.WorldDefinitionValidator.ValidateRenderAtmosphere(Puck.World.WorldDefinition,Puck.World.WorldRenderAtmosphere,System.Collections.Generic.List{System.String},System.String)",
                 "M:Puck.World.WorldDefinitionValidator.ValidateRenderEnvironment(Puck.World.WorldDefinition,Puck.World.WorldRenderEnvironment,System.Collections.Generic.List{System.String},System.String)",
                 "M:Puck.World.WorldDefinitionValidator.ValidateRenderFarDistance(System.Nullable{System.Single},System.Collections.Generic.List{System.String})",
                 "M:Puck.World.WorldDefinitionValidator.ValidateRenderLighting(Puck.World.WorldDefinition,Puck.World.WorldRenderLighting,System.Collections.Generic.List{System.String},System.String)",
@@ -1498,7 +1495,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "61dfa8e3f66df252",
+            "shape": "c090dbdf56beabe6",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
@@ -1634,7 +1631,7 @@
                 "P:Puck.World.WorldDefinition.State",
                 "P:Puck.World.WorldJsonContext.WorldProjectionDocument"
             ],
-            "shape": "e6c7ef9997b72a64",
+            "shape": "a50d8daa1d027e5d",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },
@@ -2025,7 +2022,7 @@
                 "M:Puck.World.WorldSiloDefinitionValidator.TryValidateFederationKey(SafeName,Puck.World.WorldSiloFederation,System.String@)",
                 "P:Puck.World.WorldJsonContext.WorldSiloDefinition"
             ],
-            "shape": "379adf01c58b1922",
+            "shape": "6377767d00889970",
             "source": "src/Puck.World.Schema/WorldSiloDefinition.cs",
             "token": "puck.silo.configuration.v1"
         }
