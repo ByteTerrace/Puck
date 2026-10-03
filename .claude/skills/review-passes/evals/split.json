@@ -1,0 +1,21 @@
+{
+  "seed": 4092083762,
+  "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 6 or 7 of the 12 cases, on case counts only, before any case had been run. A split with an empty train side cannot drive a hill-climb, so the first suite is split by the rule; new cases go to test by hand until it holds about 10.",
+  "train": [
+    "r01-brief-for-a-codex-pass",
+    "r02-landing-a-codex-pass",
+    "r03-who-reviews-and-when-it-ends",
+    "r04-round-two-finds-blockers",
+    "r08-companion-job-keyed-by-cwd",
+    "r09-range-given-as-two-dots",
+    "r11-broker-holds-the-worktree"
+  ],
+  "test": [
+    "r05-fix-pass-introduces-a-regression",
+    "r06-reviewer-claims-absent-from-the-tree",
+    "r07-write-pass-cannot-build",
+    "r10-task-help",
+    "r12-nonblocking-finding-after-round-two"
+  ]
+}
