@@ -36,6 +36,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public readonly bool[] OverridePlanned;
 
         public IGpuBuffer[]? Buffers;
+        public bool Borrowed;
         public IGpuImage[]? Images;
         // The image an export copies this storage into, the export that created it, and whether a copy has written it.
         public IGpuExportableImage? Export;
@@ -84,7 +85,7 @@ public sealed partial class ShaderPipelineRenderNode {
                     image?.Dispose();
                 }
             }
-            if (Buffers is not null) {
+            if ((Buffers is not null) && !Borrowed) {
                 foreach (var buffer in Buffers) {
                     buffer?.Dispose();
                 }

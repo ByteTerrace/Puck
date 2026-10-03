@@ -170,9 +170,6 @@ public enum RenderGraphInstanceRefusalCode : byte {
     /// <summary>A read's kind is not what its producer's output carries: an image read of a buffer output, or a buffer
     /// read of an image output.</summary>
     KindMismatch = 8,
-    /// <summary>An external producer declares a buffer read: it is handed only images, as leases, when it
-    /// produces.</summary>
-    ExternalReads = 9,
     /// <summary>An instance carries settings but is no source, or a source names no producer id, refreshes other than on
     /// every frame its cadence allows, or declares an output that is not an image.</summary>
     SourceDeclaration = 11,

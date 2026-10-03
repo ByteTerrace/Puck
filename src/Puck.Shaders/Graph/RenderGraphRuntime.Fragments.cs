@@ -21,6 +21,8 @@ public sealed partial class RenderGraphRuntime {
         }
     }
     private void RefreshPackageFragments() {
+        var changed = false;
+
         for (var index = 0; (index < m_set.Instances.Count); index++) {
             var instance = m_set.Instances[index];
 
@@ -46,8 +48,15 @@ public sealed partial class RenderGraphRuntime {
                 m_fragmentGraphs.Add(key: key, value: graph);
             }
             m_nodes[index]!.Swap(pipeline: graph.Pipeline);
-            m_graphs[index] = graph;
+            m_graphs[index] = graph with { Inputs = factory.InputsOf(instance: instance.Name) };
+            changed = true;
             m_packageFragments[instance.Name] = fragment;
+        }
+        if (changed) {
+            if (!TryBindAll(set: m_set, graphs: m_graphs, producers: m_producers, packages: m_packages, inputs: out var inputs, refusal: out var refusal)) {
+                throw new InvalidDataException(message: refusal.Message);
+            }
+            m_inputs = inputs;
         }
     }
 }

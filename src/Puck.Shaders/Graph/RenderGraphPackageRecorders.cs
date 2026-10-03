@@ -162,6 +162,22 @@ public interface IRenderGraphPackageRecorder : IDisposable {
 /// <see cref="BuildAsync"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the
 /// graph installs, and <see cref="Create"/> takes those objects on the frame thread when it installs.</summary>
 public interface IRenderGraphPackageFactory {
+    /// <summary>Gets whether buffer outputs are residency-owned. Their owner accounts for their bytes and supplies
+    /// every allocation through <see cref="BorrowedBuffer"/>; the graph owns only its passes and descriptors.</summary>
+    bool OwnsBuffers => false;
+
+    /// <summary>Returns a residency-owned buffer for a package output, or null when the graph allocates it. Called on
+    /// the frame thread after the package builds. The package build and recorder keep its owner alive until retirement;
+    /// the graph tracks barriers and publication but never disposes the borrowed buffer.</summary>
+    /// <param name="context">The package pass that writes the storage.</param>
+    /// <param name="built">The successful package build.</param>
+    /// <param name="resource">The output storage declaration.</param>
+    /// <returns>The borrowed allocation, or null.</returns>
+    IGpuBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource) => null;
+    /// <summary>Returns the instance edges bound to a selected implicit fragment's external input versions.</summary>
+    /// <param name="instance">The package instance.</param>
+    /// <returns>The external bindings.</returns>
+    IReadOnlyList<RenderGraphRuntimeInput> InputsOf(string instance) => [];
     /// <summary>Builds what a pass's recorder needs that the frame thread must not create: its shader modules,
     /// pipelines and render passes. It runs on the thread pool, awaits whatever it waits for (a pipeline lease, a
     /// residency's tables) so a waiting build holds no thread, creates objects through

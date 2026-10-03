@@ -9,8 +9,8 @@ namespace Puck.Hosting;
 /// <see cref="RenderGraphRead.PreviousFrame"/>, takes the producer's previous completed frame, so it orders nothing
 /// and may close a loop; a loop of same-frame reads is refused with every instance in it named. Image and buffer reads
 /// order alike, and a read whose kind is not what its producer's output carries is refused naming both. An external
-/// producer (<see cref="RenderGraphInstanceKind.External"/>) reads only images, so its buffer read is refused by name;
-/// it may read its own output and any instance's previous frame, and any instance may read an external producer's
+/// package may read buffers when its runtime runs a graph fragment; a producer that hands out images is validated by
+/// the runtime that resolves its factory. An instance may read its own output and any instance's previous frame, and any instance may read an external producer's
 /// previous frame. The set declares how deep its views nest (<see cref="NestingDepth"/>), which the reads never
 /// decide.</summary>
 public sealed class RenderGraphInstanceSet {
@@ -226,18 +226,6 @@ public sealed class RenderGraphInstanceSet {
                 refusal = Refuse(
                     RenderGraphInstanceRefusalCode.PassesInvalid,
                     $"Render-graph instance '{instance.Name}' records {instance.Passes} passes; a render records at least one.",
-                    instance.Name
-                );
-
-                return false;
-            }
-            if (
-                (instance.Kind == RenderGraphInstanceKind.External) &&
-                (instance.Reads ?? []).Any(predicate: static read => (read.Kind != ShaderPipelineResourceKind.Image))
-            ) {
-                refusal = Refuse(
-                    RenderGraphInstanceRefusalCode.ExternalReads,
-                    $"Render-graph instance '{instance.Name}' is the external producer '{instance.ExternalPackage}', which is handed only images, but it declares a buffer read.",
                     instance.Name
                 );
 

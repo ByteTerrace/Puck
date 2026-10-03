@@ -485,8 +485,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                     instance: instance,
                     packages: packages
                 )) {
-                    installed[index] = PackageGraphOf(
-                        fault: out _,
+                    installed[index] = PackageGraphFor(
+                        instance: instance.Name,
+                        packages: packages,
                         package: instance.ExternalPackage!
                     );
                 } else if (packages.ServesSource(package: instance.ExternalPackage!)) {
@@ -598,10 +599,11 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
             var reason = ((graphs[index] is not null)
                 ? "is given a graph, but its producer renders it"
-                : ((instance.Output != ShaderPipelineResourceKind.Image)
+                : (((instance.Output != ShaderPipelineResourceKind.Image) && !RunsPackage(instance: instance, packages: packages))
                     ? $"declares a {instance.Output} output, but an external producer hands out images"
                     : ((packages.ServesProducer(package: instance.ExternalPackage!) || packages.ServesSource(package: instance.ExternalPackage!))
-                        ? null
+                        ? ((instance.Reads ?? []).Any(read => (read.Kind != ShaderPipelineResourceKind.Image))
+                            ? "is an image producer, but declares a buffer read" : null)
                         : PackageRefusal(
                             package: instance.ExternalPackage!,
                             packages: packages
