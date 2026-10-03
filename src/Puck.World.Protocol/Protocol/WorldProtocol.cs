@@ -5,6 +5,9 @@ public static class WorldProtocol {
     /// <summary>The first World application contract, distinguished from federation, replay, and guest messages.
     /// Its shape is still developed in place; there is no compatibility reader for earlier development builds.</summary>
     public const ulong WireProtocolKey = 0x314C52574B435550UL; // "PUCKWRL1"
+    /// <summary>The shape fingerprint of the wire contract: every hello carries it after the key, and the door refuses
+    /// a peer of the same key and another shape by name.</summary>
+    public const string WireShape = FormatShapes.WorldProtocolWireProtocolKey;
 }
 /// <summary>A Hello-door refusal. The name is the stable protocol diagnostic; detail is narration only. This is the
 /// version-compatibility door only — checked first, over the wire-protocol key alone, before any identity is asked
@@ -14,6 +17,9 @@ public static class WorldProtocol {
 public enum WorldHelloRefusal : byte {
     /// <summary>The offered opaque wire identity is not the one this build accepts.</summary>
     WireProtocolKeyMismatch,
+
+    /// <summary>The offered key is this build's, but the peer speaks another shape of the wire contract.</summary>
+    WireShapeMismatch,
 }
 /// <summary>The Hello door every connection checks before admission — <c>Server.WorldPeerHost</c>'s raw handshake for a
 /// remote peer, and the loopback <c>Session.Join</c> path for a local one — both before any frame is admitted. This
@@ -25,11 +31,22 @@ public enum WorldHelloRefusal : byte {
 public static class WorldHelloDoor {
     /// <summary>Checks one offered wire identity.</summary>
     /// <param name="offeredKey">The peer's opaque wire identity.</param>
+    /// <param name="offeredShape">The shape fingerprint the peer offered with it.</param>
     /// <param name="refusal">The named refusal on mismatch; default on success.</param>
-    /// <returns><see langword="true"/> only for this build's exact key.</returns>
-    public static bool TryAccept(ulong offeredKey, out WorldHelloRefusal refusal) {
+    /// <returns><see langword="true"/> only for this build's exact key and shape.</returns>
+    public static bool TryAccept(ulong offeredKey, string offeredShape, out WorldHelloRefusal refusal) {
         if (offeredKey != WorldProtocol.WireProtocolKey) {
             refusal = WorldHelloRefusal.WireProtocolKeyMismatch;
+
+            return false;
+        }
+
+        if (!string.Equals(
+            a: offeredShape,
+            b: WorldProtocol.WireShape,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            refusal = WorldHelloRefusal.WireShapeMismatch;
 
             return false;
         }

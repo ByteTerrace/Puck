@@ -12,5 +12,6 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
         <Using Include="Xunit" />
         <ProjectReference Include="../../src/Puck.HumbleGamingDeck.Post/Puck.HumbleGamingDeck.Post.csproj" />
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
     </ItemGroup>
 </Project>

@@ -392,15 +392,18 @@ coordinates, the format/version BCH codes, masking, and matrix placement.
 `ChunkContainer` is the one binary container every chunked Puck product uses: a
 compiled world (`Puck.World.CompiledWorld`, magic `PWLD`) and a Game Boy art
 bake (`PbakBundle`, magic `PBAK`). A format supplies its four-byte magic, a
-format version, and a header whose bytes it owns; the container supplies the
-chunk layout and the refusals. Every integer is written by
+format version, the shape fingerprint `puck formats` records for the format
+(sixteen ASCII digits, written after the version), and a header whose bytes it
+owns; the container supplies the chunk layout and the refusals, and a decode of
+the same magic and version under another shape fingerprint is refused by the
+fingerprint before the header is read. Every integer is written by
 `CanonicalBinaryWriterExtensions`—minimal little-endian base-128 unsigned
 integers, sign-and-magnitude integers, length-prefixed UTF-8 text, and
 little-endian 64-bit words—and `CanonicalBinaryReader` accepts only that
 spelling, so equal containers are equal bytes.
 
 ```text
-magic[4]  formatVersion:varuint  headerLength:varuint  header  chunkCount:varuint
+magic[4]  formatVersion:varuint  shape[16]  headerLength:varuint  header  chunkCount:varuint
 chunk:
   code[4]  version:varuint
   inputCount:varuint  { name:text  present:byte  [hash:u64] }  (ascending ordinal name order)

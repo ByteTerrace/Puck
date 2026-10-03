@@ -403,6 +403,7 @@ public sealed class WorldCompileCache {
 
             if (
                 !string.Equals(a: reader.ReadString(), b: CompilerIdentity, comparisonType: StringComparison.Ordinal) ||
+                !string.Equals(a: reader.ReadString(), b: FormatShapes.WorldCompileCacheMagic, comparisonType: StringComparison.Ordinal) ||
                 !string.Equals(a: reader.ReadString(), b: key, comparisonType: StringComparison.Ordinal)
             ) {
                 return false;
@@ -470,6 +471,7 @@ public sealed class WorldCompileCache {
             output: stream
         )) {
             writer.Write(value: CompilerIdentity);
+            writer.Write(value: FormatShapes.WorldCompileCacheMagic);
             writer.Write(value: key);
             writer.Write(value: compiled.Inputs.Count);
             foreach (var input in compiled.Inputs) {

@@ -525,13 +525,14 @@ public sealed partial class WorldGrants {
                     // in addition to this check, once this one succeeds.
                     if (!WorldHelloDoor.TryAccept(
                         offeredKey: join.WireProtocolKey,
+                        offeredShape: join.WireShape,
                         refusal: out var helloRefusal
                     )) {
                         return new SessionReply(
                             Accepted: false,
                             AssignedIndex: -1,
                             RosterEcho: string.Empty,
-                            Reason: $"{helloRefusal}: wire key 0x{join.WireProtocolKey:x16} != server 0x{WorldProtocol.WireProtocolKey:x16}"
+                            Reason: $"{helloRefusal}: wire key 0x{join.WireProtocolKey:x16} shape {join.WireShape} != server 0x{WorldProtocol.WireProtocolKey:x16} shape {WorldProtocol.WireShape}"
                         );
                     }
 

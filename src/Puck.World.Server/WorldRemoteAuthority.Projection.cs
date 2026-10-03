@@ -36,6 +36,7 @@ public sealed partial class WorldRemoteAuthority {
         await HandshakeWireFormat.WriteHelloAsync(
             ct: ct,
             key: WorldFederationCodec.WireKey,
+            shape: WorldFederationCodec.WireShape,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
         await upstream.AuthenticateAsync(

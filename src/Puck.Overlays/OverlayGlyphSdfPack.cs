@@ -26,7 +26,10 @@ namespace Puck.Overlays;
 /// </remarks>
 public sealed class OverlayGlyphSdfPack {
     private const int PackHashBytes = 32;
-    private const int PackHeaderBytes = (((sizeof(uint) * 6) + sizeof(float)) + (PackHashBytes * 3));
+    // The shape fingerprint (FormatShapes) follows the magic and version; every field after it sits ShapeBytes later.
+    private const int ShapeBytes = 16;
+    private const int HashStart = (28 + ShapeBytes);
+    private const int PackHeaderBytes = ((((sizeof(uint) * 6) + sizeof(float)) + ShapeBytes) + (PackHashBytes * 3));
     // The pack is ~1.4 MiB of already-flattened cells (larger once a world appends icon glyphs), but building it
     // from the atlas decodes the WHOLE combined MTSDF PNG (4435x4440 RGBA ~79 MiB, >=150 MiB transient with the
     // decoder's scanlines) at every startup. The binary artifact below persists the finished pack beside the atlas,
@@ -73,7 +76,7 @@ public sealed class OverlayGlyphSdfPack {
     public ReadOnlySpan<uint> SdfWords => m_packedSdf;
 
     /// <summary>Reads a prepacked artifact, returning <see langword="null"/> when the file is absent, malformed, a
-    /// different format version, or keyed to different source bytes (a rebaked atlas or a different appended
+    /// different format version or shape, or keyed to different source bytes (a rebaked atlas or a different appended
     /// codepoint list).</summary>
     /// <param name="path">The artifact path.</param>
     /// <param name="pngHash">The SHA-256 of the current combined-atlas PNG bytes.</param>
@@ -102,29 +105,33 @@ public sealed class OverlayGlyphSdfPack {
 
         if (
             (BinaryPrimitives.ReadUInt32LittleEndian(source: span) != PackMagic) ||
-            (BinaryPrimitives.ReadUInt32LittleEndian(source: span[4..]) != PackVersion)
+            (BinaryPrimitives.ReadUInt32LittleEndian(source: span[4..]) != PackVersion) ||
+            !span.Slice(
+                length: ShapeBytes,
+                start: 8
+            ).SequenceEqual(other: System.Text.Encoding.ASCII.GetBytes(s: FormatShapes.OverlayGlyphSdfPackPackVersion))
         ) {
             return null;
         }
 
-        var cellWidth = BinaryPrimitives.ReadInt32LittleEndian(source: span[8..]);
-        var cellHeight = BinaryPrimitives.ReadInt32LittleEndian(source: span[12..]);
-        var distanceRange = BinaryPrimitives.ReadSingleLittleEndian(source: span[16..]);
-        var wordCount = BinaryPrimitives.ReadInt32LittleEndian(source: span[20..]);
-        var glyphCount = BinaryPrimitives.ReadInt32LittleEndian(source: span[24..]);
+        var cellWidth = BinaryPrimitives.ReadInt32LittleEndian(source: span[(8 + ShapeBytes)..]);
+        var cellHeight = BinaryPrimitives.ReadInt32LittleEndian(source: span[(12 + ShapeBytes)..]);
+        var distanceRange = BinaryPrimitives.ReadSingleLittleEndian(source: span[(16 + ShapeBytes)..]);
+        var wordCount = BinaryPrimitives.ReadInt32LittleEndian(source: span[(20 + ShapeBytes)..]);
+        var glyphCount = BinaryPrimitives.ReadInt32LittleEndian(source: span[(24 + ShapeBytes)..]);
 
         if (
             !span.Slice(
             length: PackHashBytes,
-            start: 28
+            start: HashStart
         ).SequenceEqual(other: pngHash) ||
             !span.Slice(
             length: PackHashBytes,
-            start: (28 + PackHashBytes)
+            start: (HashStart + PackHashBytes)
         ).SequenceEqual(other: jsonHash) ||
             !span.Slice(
             length: PackHashBytes,
-            start: (28 + (PackHashBytes * 2))
+            start: (HashStart + (PackHashBytes * 2))
         ).SequenceEqual(other: extraHash)
         ) {
             return null;
@@ -176,37 +183,44 @@ public sealed class OverlayGlyphSdfPack {
             destination: span[4..],
             value: PackVersion
         );
+        System.Text.Encoding.ASCII.GetBytes(
+            bytes: span.Slice(
+                length: ShapeBytes,
+                start: 8
+            ),
+            chars: FormatShapes.OverlayGlyphSdfPackPackVersion
+        );
         BinaryPrimitives.WriteInt32LittleEndian(
-            destination: span[8..],
+            destination: span[(8 + ShapeBytes)..],
             value: AtlasCellWidth
         );
         BinaryPrimitives.WriteInt32LittleEndian(
-            destination: span[12..],
+            destination: span[(12 + ShapeBytes)..],
             value: AtlasCellHeight
         );
         BinaryPrimitives.WriteSingleLittleEndian(
-            destination: span[16..],
+            destination: span[(16 + ShapeBytes)..],
             value: DistanceRange
         );
         BinaryPrimitives.WriteInt32LittleEndian(
-            destination: span[20..],
+            destination: span[(20 + ShapeBytes)..],
             value: m_packedSdf.Length
         );
         BinaryPrimitives.WriteInt32LittleEndian(
-            destination: span[24..],
+            destination: span[(24 + ShapeBytes)..],
             value: GlyphCount
         );
         pngHash.CopyTo(destination: span.Slice(
             length: PackHashBytes,
-            start: 28
+            start: HashStart
         ));
         jsonHash.CopyTo(destination: span.Slice(
             length: PackHashBytes,
-            start: (28 + PackHashBytes)
+            start: (HashStart + PackHashBytes)
         ));
         extraHash.CopyTo(destination: span.Slice(
             length: PackHashBytes,
-            start: (28 + (PackHashBytes * 2))
+            start: (HashStart + (PackHashBytes * 2))
         ));
 
         var payload = span[PackHeaderBytes..];

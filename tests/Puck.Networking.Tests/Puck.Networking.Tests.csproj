@@ -17,6 +17,7 @@
         <ProjectReference Include="../../src/Puck.Networking/Puck.Networking.csproj" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
     </ItemGroup>
 </Project>

@@ -99,6 +99,7 @@ public sealed partial class FederationTransferLawTests {
         await HandshakeWireFormat.WriteHelloAsync(
             ct: ct,
             key: WorldFederationCodec.WireKey,
+            shape: FormatLedgerShapes.Of(id: "WorldFederationCodec.WireKey"),
             stream: stream
         );
 

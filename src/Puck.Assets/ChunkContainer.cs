@@ -172,6 +172,7 @@ public sealed class ContainerChunk {
 /// remaining bytes cannot hold, or trailing bytes. A container is read whole or not at all, and no decode allocates
 /// more than the bytes it was given can justify.</para>
 /// </summary>
+[FormatLeaf]
 public sealed class ChunkContainer {
     /// <summary>The default largest container a decode accepts, in bytes.</summary>
     public const int DefaultMaximumBytes = ((1024 * 1024) * 1024);
@@ -222,12 +223,13 @@ public sealed class ChunkContainer {
     /// <summary>Decodes a container from untrusted bytes.</summary>
     /// <param name="content">The container's bytes; decoded headers and payloads are slices of them, never copies.</param>
     /// <param name="magic">The four bytes the format's containers open with.</param>
+    /// <param name="shape">The shape fingerprint of the format, which its containers carry after the version.</param>
     /// <param name="maximumBytes">The largest container accepted, in bytes.</param>
     /// <returns>The container.</returns>
     /// <exception cref="ArgumentException"><paramref name="magic"/> is not four bytes.</exception>
-    /// <exception cref="InvalidDataException">The bytes are not a canonical container of this format, or exceed
+    /// <exception cref="InvalidDataException">The bytes are not a canonical container of this format and shape, or exceed
     /// <paramref name="maximumBytes"/>.</exception>
-    public static ChunkContainer Decode(ReadOnlyMemory<byte> content, ReadOnlySpan<byte> magic, int maximumBytes = DefaultMaximumBytes) {
+    public static ChunkContainer Decode(ReadOnlyMemory<byte> content, ReadOnlySpan<byte> magic, string shape, int maximumBytes = DefaultMaximumBytes) {
         RequireMagic(magic: magic);
 
         if (content.Length > maximumBytes) {
@@ -239,6 +241,9 @@ public sealed class ChunkContainer {
         reader.Expect(value: magic);
 
         var formatVersion = reader.ReadVarUInt();
+
+        reader.ExpectShape(shape: shape);
+
         var headerLength = reader.ReadBoundedInt(maximum: reader.Remaining);
         var header = content.Slice(
             length: headerLength,
@@ -329,10 +334,11 @@ public sealed class ChunkContainer {
         ((PayloadAlignment - (offset % PayloadAlignment)) % PayloadAlignment);
     /// <summary>Encodes the container in its canonical form.</summary>
     /// <param name="magic">The four bytes the format's containers open with.</param>
+    /// <param name="shape">The shape fingerprint of the format, written after the version.</param>
     /// <returns>The container's bytes.</returns>
     /// <exception cref="ArgumentException"><paramref name="magic"/> is not four bytes, or an input name has no UTF-8
     /// spelling.</exception>
-    public byte[] Encode(ReadOnlySpan<byte> magic) {
+    public byte[] Encode(ReadOnlySpan<byte> magic, string shape) {
         RequireMagic(magic: magic);
 
         var writer = new ArrayBufferWriter<byte>();
@@ -340,6 +346,7 @@ public sealed class ChunkContainer {
 
         writer.WriteBytes(value: magic);
         writer.WriteVarUInt(value: FormatVersion);
+        writer.WriteShape(shape: shape);
         writer.WriteVarUInt(value: checked((uint)Header.Length));
         writer.WriteBytes(value: Header.Span);
         writer.WriteVarUInt(value: checked((uint)Chunks.Count));

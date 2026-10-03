@@ -51,6 +51,7 @@ internal sealed class WorldFederationLaneProtocol(WorldRemoteAuthority owner) : 
     public Task WriteHelloAsync(Stream stream, CancellationToken ct) => HandshakeWireFormat.WriteHelloAsync(
         ct: ct,
         key: WorldFederationCodec.WireKey,
+            shape: WorldFederationCodec.WireShape,
         stream: stream
     );
     /// <inheritdoc/>

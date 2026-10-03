@@ -126,6 +126,9 @@ public enum WorldFederationRefusal : byte {
 
     /// <summary>The persistent lane to this peer is not carrying traffic.</summary>
     LaneUnavailable,
+
+    /// <summary>The dialer's hello carried this authority's federation key and another shape of its wire contract.</summary>
+    WireShapeMismatch,
 }
 /// <summary>
 /// The one authority-to-authority codec. It carries the same frame grammar, bounded reader, and named refusal
@@ -147,6 +150,9 @@ public static partial class WorldFederationCodec {
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames.</summary>
     public const ulong WireKey = 0x314445464B435550UL; // "PUCKFED1"
+    /// <summary>The shape fingerprint of the federation wire contract, written after <see cref="WireKey"/> in every
+    /// hello; a dialer of this key and another shape is refused by name.</summary>
+    public const string WireShape = FormatShapes.WorldFederationCodecWireKey;
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;

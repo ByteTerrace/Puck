@@ -8,6 +8,6 @@ namespace Puck.HumbleGamingBrick {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>MachineIdentity.CurrentVersion</c>, declared in <c>src/Puck.HumbleGamingBrick/MachineSnapshot.cs</c>.</summary>
-        public const string MachineIdentityCurrentVersion = "bdeb524870be17fc";
+        public const string MachineIdentityCurrentVersion = "94f078ba93c3b99e";
     }
 }
