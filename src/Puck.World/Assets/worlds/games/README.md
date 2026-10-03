@@ -646,7 +646,7 @@ pins the export after a three-question game.
 
 [snake.puck](snake.puck) is a module, not a bootable document: it declares the
 state and rules and leaves the seat, the input channels and the population to a
-host. [minimal-snake-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json)
+host. [minimal-snake-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-snake-host.puck)
 is the smallest host that completes it—one local seat on the shared `walk` kit,
 plus the `forward`/`strafe` bipolar channels the four turn presses arrive on.
 

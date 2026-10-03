@@ -7,7 +7,7 @@
 // body ends the run, and a respawn deadline restarts it.
 //
 // This is a module: a host supplies the seat, the channels the four turn presses arrive on,
-// and the population. tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json is the
+// and the population. tests/Puck.World.Tests/Fixtures/minimal-snake-host.puck is the
 // smallest one that completes it.
 //
 // Deliberate reductions, stated rather than left to be discovered: the field wraps instead

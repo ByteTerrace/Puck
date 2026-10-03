@@ -15,7 +15,7 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class EngageBodyIndexLawTests : IDisposable {
     // A world that authors a population past its one local seat, so its last body is a population entry.
-    private const string World = "tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json";
+    private const string World = "tests/Puck.World.Tests/Fixtures/minimal-snake-host.puck";
 
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-engage-index-");
 

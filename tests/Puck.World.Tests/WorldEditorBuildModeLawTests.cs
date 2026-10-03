@@ -18,7 +18,7 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class WorldEditorBuildModeLawTests : IDisposable {
     private const float FloorTop = 1.25f;
-    private const string World = "tests/Puck.World.Tests/Fixtures/minimal-snake-host.world.json";
+    private const string World = "tests/Puck.World.Tests/Fixtures/minimal-snake-host.puck";
 
     private static readonly GridOverlayState SurfaceGrid = (GridOverlayState.Hidden with {
         Flags = GridOverlayFlags.World | GridOverlayFlags.Surface,

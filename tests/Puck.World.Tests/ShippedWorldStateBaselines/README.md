@@ -117,7 +117,7 @@ with — optionally adding rows a sibling district would have supplied
 | pipeline | `pipeline.world.json` | document | 600 | no |
 | poker | `games/poker.puck` | spliced | 610 | yes |
 | reversi | `games/reversi.puck` | document | 600 | yes |
-| snake | `games/snake.puck` | fixture `minimal-snake-host.world.json` | 635 | yes |
+| snake | `games/snake.puck` | fixture `minimal-snake-host.puck` | 635 | yes |
 | solitaire | `games/solitaire.puck` | spliced | 600 | no |
 | spider | `games/spider.puck` | spliced | 810 | yes |
 | tetromino | `games/tetromino.puck` | document | 130 | yes |
