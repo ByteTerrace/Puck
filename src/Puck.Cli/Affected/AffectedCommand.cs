@@ -273,11 +273,10 @@ internal static class AffectedCommand {
         return true;
     }
 
-    // Builds the game, whose build writes the catalog, then checks the catalog against a fresh tree compile of the
-    // sources build/WorldAssets.targets passes: every .puck and .world.json under the shipped tree.
-    private static int CheckCatalog(string repositoryRoot) {
+    // The game's build writes the catalog from the sources build/WorldAssets.targets passes.
+    private static int BuildCatalog(string repositoryRoot, string[] arguments) {
         var build = CliProcess.RunCaptured(
-            arguments: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", "-v", "q", "-nologo"],
+            arguments: arguments,
             fileName: "dotnet",
             input: string.Empty,
             timeout: TimeSpan.FromMinutes(minutes: 30),
@@ -290,19 +289,23 @@ internal static class AffectedCommand {
             return CliExit.Failed;
         }
 
-        var tree = Path.Combine(path1: repositoryRoot, path2: ShippedTree);
+        return CliExit.Success;
+    }
+    private static string[] CatalogBuildArguments() => ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", CliOptions.NoNodeReuse, "-v", "q", "-nologo"];
 
-        return PuckRootCommand.Invoke(args: [
-            "compile",
-            "--tree",
-            tree,
-            "--output",
-            Path.Combine(path1: repositoryRoot, path2: ShippedCatalog),
-            "--check",
-            .. Directory.EnumerateFiles(path: tree, searchOption: SearchOption.AllDirectories, searchPattern: "*")
-                .Where(predicate: static file => (file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".puck") || file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".world.json")))
-                .Order(comparer: StringComparer.Ordinal),
-        ]);
+    /// <summary>Returns the shipped catalog check's arguments, with repository-relative, forward-slashed paths.</summary>
+    /// <returns>The arguments both the printed plan and the in-process check use from the repository root.</returns>
+    public static string[] CatalogCheckArguments() => ["compile", "--tree", ShippedTree, "--output", ShippedCatalog, "--check"];
+    /// <summary>Builds the shipped catalog and dispatches its check through the root command.</summary>
+    /// <param name="build">Runs the prerequisite build with the supplied dotnet arguments.</param>
+    /// <param name="root">The command tree that runs the catalog check.</param>
+    /// <returns>The build's failure, or the check's exit code when the build succeeds.</returns>
+    public static int CheckCatalog(Func<string[], int> build, RootCommand root) {
+        var exit = build(CatalogBuildArguments());
+
+        return ((exit == 0)
+            ? PuckRootCommand.Invoke(args: CatalogCheckArguments(), root: root)
+            : exit);
     }
 
     /// <summary>Resolves the base a plan compares against: <paramref name="since"/> as given, or with
@@ -337,7 +340,32 @@ internal static class AffectedCommand {
         return true;
     }
 
+    // A plan line is repository-relative and runs from the root, so --run runs its in-process commands from the root
+    // whatever directory the verb starts in.
     private static int Execute(string repositoryRoot, AffectedPlan plan, bool gpu, int gpuJobs, int suiteJobs) {
+        var caller = Environment.CurrentDirectory;
+
+        Environment.CurrentDirectory = repositoryRoot;
+
+        try {
+            return ExecuteAtRoot(gpu: gpu, gpuJobs: gpuJobs, plan: plan, repositoryRoot: repositoryRoot, suiteJobs: suiteJobs);
+        } finally {
+            Environment.CurrentDirectory = caller;
+        }
+    }
+
+    /// <summary>The shared Release suite build, which leaves no MSBuild node behind (<see cref="CliOptions.NoNodeReuse"/>).</summary>
+    public static string[] BuildArguments(string suite) => ["build", $"tests/{suite}/{suite}.csproj", "-c", "Release", CliOptions.NoNodeReuse, "-v", "q", "-nologo"];
+    /// <summary>The shared Release suite run over the binaries a build already wrote. Microsoft.Testing.Platform hands
+    /// every option it does not own to the test application, which refuses MSBuild switches, so the run builds nothing
+    /// and takes none.</summary>
+    public static string[] TestArguments(string suite) => ["test", "--project", $"tests/{suite}/{suite}.csproj", "-c", "Release", "--no-build"];
+
+    /// <summary>The selection of a suite's CPU tests: every test whose class does not carry the <c>Gpu</c> trait.</summary>
+    public static readonly string[] CpuSelection = ["--filter-not-trait", "Category=Gpu"];
+
+    private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu, int gpuJobs, int suiteJobs) {
+        // The suites build once and run their CPU tests side by side (AffectedSuites).
         var failed = new List<string>(collection: AffectedSuites.Run(
             jobs: suiteJobs,
             repositoryRoot: repositoryRoot,
@@ -350,7 +378,10 @@ internal static class AffectedCommand {
             }
         }
 
-        if (plan.Catalog && (CheckCatalog(repositoryRoot: repositoryRoot) != 0)) {
+        if (plan.Catalog && (CheckCatalog(
+            build: arguments => BuildCatalog(arguments: arguments, repositoryRoot: repositoryRoot),
+            root: PuckRootCommand.Create(clock: TimeProvider.System)
+        ) != 0)) {
             failed.Add(item: "catalog");
         }
 
@@ -382,7 +413,7 @@ internal static class AffectedCommand {
     }
 
     /// <summary>Writes a plan as the verb prints it: one line per chosen suite (<c>suite</c>), world (<c>test</c>, run with
-    /// <c>puck test</c>) and canary (<c>canary</c>); the catalog, named with the check <c>--run</c> makes of it; parity; then
+    /// <c>puck test</c>) and canary (<c>canary</c>); the catalog, followed by the build and check <c>--run</c> makes of it; parity; then
     /// each unmapped and deleted source with the note that explains it.</summary>
     /// <param name="plan">The plan.</param>
     /// <param name="into">The writer.</param>
@@ -404,7 +435,9 @@ internal static class AffectedCommand {
         }
 
         if (plan.Catalog) {
-            into.WriteLine(value: $"catalog {ShippedCatalog} (puck compile --tree {ShippedTree} --check)");
+            into.WriteLine(value: $"catalog {ShippedCatalog}");
+            into.WriteLine(value: $"dotnet {string.Join(separator: ' ', value: CatalogBuildArguments())}");
+            into.WriteLine(value: $"puck {string.Join(separator: ' ', value: CatalogCheckArguments())}");
         }
 
         if (plan.Parity) {
@@ -442,15 +475,9 @@ internal static class AffectedCommand {
 
         if (record) {
             using var scratch = RunDirectory.Create(prefix: "puck-affected-");
-            var exit = (AffectedCoverage.TryRecord(canaryExit: out var canaryExit, cli: typeof(AffectedCommand).Assembly.Location, error: out var recordError, repositoryRoot: repositoryRoot, scratch: scratch.Path)
-                ? CliExit.Success
-                : CliExit.Refuse(verb: Verb, what: AffectedCommand.CoveragePath, why: recordError)
-            );
-
-            // The run directory holds the recording World and the inner canary run's transcript
-            // (AffectedCoverage.CanaryTranscriptName): evidence whenever that run or the recording failed.
-            scratch.Conclude(passed: ((exit == CliExit.Success) && (canaryExit == CliExit.Success)));
-
+            var exit = Record(repositoryRoot, typeof(AffectedCommand).Assembly.Location, scratch.Path);
+            // A failed build or inner canary run keeps the recording World and transcript; coverage is unchanged.
+            scratch.Conclude(passed: (exit == CliExit.Success));
             return exit;
         }
 
@@ -481,6 +508,11 @@ internal static class AffectedCommand {
         );
     }
 
+    /// <summary>Refreshes coverage only after the recording build and inner canary run succeed.</summary>
+    internal static int Record(string repositoryRoot, string cli, string scratch, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? execute = null) =>
+        (AffectedCoverage.TryRecord(canaryExit: out _, cli: cli, error: out var error, execute: execute, repositoryRoot: repositoryRoot, scratch: scratch)
+            ? CliExit.Success
+            : CliExit.Refuse(verb: Verb, what: CoveragePath, why: error));
     /// <summary>Creates <c>--merge-base</c>, the revision whose merge base with <c>HEAD</c> a change is read against;
     /// <c>puck affected</c> and <c>puck gate</c> share it.</summary>
     /// <param name="description">What the verb compares against the merge base.</param>
@@ -494,7 +526,7 @@ internal static class AffectedCommand {
     public static Command Create() {
         var sinceOption = new Option<string>(name: "--since") { Description = "The base revision the working tree is compared against (default: HEAD, so only uncommitted changes)." };
         var mergeBaseOption = MergeBase(description: "Compare the working tree against the merge base of HEAD and this revision, so what the target gained after the branch left it is not the branch's change. Excludes --since.");
-        var runOption = new Option<bool>(name: "--run") { Description = "Build the chosen suites once and run them side by side, then puck test on the chosen worlds, then the catalog check." };
+        var runOption = new Option<bool>(name: "--run") { Description = "Build the chosen suites once and run their CPU tests side by side, then puck test on the chosen worlds, then the catalog check." };
         var gpuOption = Gpu();
         var gpuJobsOption = CanaryCommand.GpuJobs();
         var suiteJobsOption = AffectedSuites.Jobs();
@@ -528,14 +560,16 @@ internal static class AffectedCommand {
               never unmapped.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test, and
-              prints as a test line. A catalog line names the game's Release catalog, which --run checks
-              with the compile it names; it holds no test worlds. Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
+              prints as a test line. A catalog line names the game's Release catalog, followed by the
+              dotnet build and puck compile --check commands --run uses, runnable from the repository root;
+              it holds no test worlds. Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
 
-              --run builds the chosen suites in one build and runs up to --suite-jobs of them at once,
-              never two heavy suites (<PuckSuiteLoad>heavy</PuckSuiteLoad>) at once, and none beside
-              another while free memory is under its floor; each suite prints its verdict and wall time
-              as it ends. It then runs the worlds and the catalog check. --run --gpu then runs the chosen
-              canaries, up to --gpu-jobs legs on the GPU at once, and then parity.
+              --run builds the chosen suites in one build and runs the CPU tests of up to --suite-jobs
+              of them at once, never two heavy suites (<PuckSuiteLoad>heavy</PuckSuiteLoad>) at once,
+              and none beside another while free memory is under its floor; each suite prints its
+              verdict and wall time as it ends. It then runs the worlds and the catalog check.
+              --run --gpu then runs the chosen canaries, up to --gpu-jobs legs on the GPU at once, and
+              then parity.
 
               Exit codes: 0 planned or every chosen check passed, 1 a chosen check failed, 2 refused.
             """);

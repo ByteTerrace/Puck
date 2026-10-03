@@ -6,8 +6,8 @@ namespace Puck.SignedDistance;
 /// <summary>The kind of one <see cref="SdfLight"/>.</summary>
 public enum SdfLightKind : uint {
     /// <summary>A Lambert directional light. <see cref="SdfLight.Param"/> is the penumbra half-slope (the tangent of
-    /// the light's angular radius); the one light with <see cref="SdfLight.Shadows"/> set drives the soft-shadow
-    /// march, every other directional is scaled by ambient occlusion instead.</summary>
+    /// the light's angular radius). The frame's shadow slots select which directional lights march; every
+    /// directional receives its own shadow visibility.</summary>
     Directional = 0,
     /// <summary>A hemisphere ambient: <see cref="SdfLight.Weight"/> is the floor, <see cref="SdfLight.Param"/> the
     /// gradient scaling the surface normal's Y. Scaled by ambient occlusion.</summary>
@@ -47,7 +47,7 @@ public record struct SdfLight {
     /// <summary>The kind's second scalar: penumbra half-slope, hemisphere gradient, rim exponent, or a point's or an
     /// occluder's radius.</summary>
     [FieldOffset(32)] public float Param;
-    /// <summary>One when the light is a directional that drives the soft-shadow march, zero otherwise.</summary>
+    /// <summary>One when the directional participates in a stable shadow slot or active handoff, zero otherwise.</summary>
     [FieldOffset(36)] public uint Shadows;
     /// <summary>A point's or an occluder's dynamic-transform slot its position is read from every frame, or
     /// <see cref="SdfProgram.NoDynamicTransformSlot"/> for the static authored position in <see cref="Direction"/>;
@@ -61,7 +61,7 @@ public record struct SdfLight {
     /// <param name="Color">The linear RGB color.</param>
     /// <param name="Weight">The strength; a hemisphere's floor.</param>
     /// <param name="Param">The kind's second scalar.</param>
-    /// <param name="Shadows">A directional only: whether this light drives the soft-shadow march.</param>
+    /// <param name="Shadows">A directional only: whether this light may cast a shadow; the frame's slots select its march.</param>
     /// <param name="DynamicSlot">A point or an occluder only: the dynamic-transform slot its position rides, or
     /// <see cref="SdfProgram.NoDynamicTransformSlot"/>. Packed as zero for every other kind.</param>
     public SdfLight(SdfLightKind Kind, Vector3 Direction, Vector3 Color, float Weight, float Param, bool Shadows, int DynamicSlot = SdfProgram.NoDynamicTransformSlot) {
@@ -74,8 +74,7 @@ public record struct SdfLight {
         this.DynamicSlot = (IsPositional(kind: Kind) ? DynamicSlot : 0);
     }
 
-    /// <summary>Gets whether the light drives the soft-shadow march: a directional with <see cref="Shadows"/>
-    /// set.</summary>
+    /// <summary>Gets whether the light may cast a shadow: a directional with <see cref="Shadows"/> set.</summary>
     public readonly bool CastsShadow => ((Shadows != 0u) && (Kind == SdfLightKind.Directional));
 
     /// <summary>Returns whether a light of a kind sits at a position its <see cref="DynamicSlot"/> may ride: a point or an

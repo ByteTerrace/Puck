@@ -10,6 +10,9 @@ namespace Puck.Cli;
 internal static class CliOptions {
     /// <summary>The build configuration every verb that reads or makes a build defaults to.</summary>
     public const string DefaultConfiguration = "Release";
+    /// <summary>The MSBuild switch on every dotnet build, test, pack and restore a verb launches. The fleet's machines are
+    /// shared: a node kept alive for reuse outlives the verb and holds memory other agents and GPU work need.</summary>
+    public const string NoNodeReuse = "-nodeReuse:false";
 
     /// <summary>Gets the default for <see cref="Jobs"/>: half the logical processors, at least one and at most
     /// eight.</summary>

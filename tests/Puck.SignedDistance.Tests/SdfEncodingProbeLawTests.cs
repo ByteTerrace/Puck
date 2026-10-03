@@ -7,7 +7,8 @@ namespace Puck.SignedDistance.Tests;
 /// Laws for <see cref="SdfEncodingProbe"/>, the instruction set's encoding exercised for its fingerprint: every probe
 /// call builds, and every call stays valid with each input raised; together they carry every operation, shape type and
 /// blend, both lifts, the shape flags, and every member of each enum an instruction lane carries, in the lane that
-/// carries it, and they pack every side table and flag (compiled part programs traced independently, a material with
+/// carries it (every wallpaper group a program accepts; SdfWallpaperFoldLawTests holds the refused groups' refusal),
+/// and they pack every side table and flag (compiled part programs traced independently, a material with
 /// every layer, sweep and path tables); the description moves when the builder or packer puts any field elsewhere,
 /// whether a float lane, a bitfield inside a word, a material layer's field or a table entry; and the packer writes each
 /// header lane where the model's lane constants place it.
@@ -55,7 +56,10 @@ public sealed class SdfEncodingProbeLawTests {
 
         Covers<SdfNoiseFlavor>(lanes: Emitted(op: SdfOp.CellJitter).Select(selector: static instruction => instruction.Blend));
         Covers<SdfCellMode>(lanes: Emitted(op: SdfOp.CellDisplace).Select(selector: static instruction => instruction.Blend));
-        Covers<SdfWallpaperGroup>(lanes: Emitted(op: SdfOp.WallpaperFold).Select(selector: static instruction => instruction.Shape));
+        Assert.Equal(
+            actual: Emitted(op: SdfOp.WallpaperFold).Select(selector: static instruction => ((SdfWallpaperGroup)instruction.Shape)).ToHashSet(),
+            expected: Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous).ToHashSet()
+        );
         Covers<SdfPlane>(lanes: Emitted(op: SdfOp.WallpaperFold).Select(selector: static instruction => instruction.Blend));
         Covers<SdfPlane>(lanes: Emitted(op: SdfOp.RotatePlane).Select(selector: static instruction => instruction.Shape));
         Covers<SdfAxis>(lanes: Emitted(op: SdfOp.RotatePlane).Select(selector: static instruction => instruction.Blend));

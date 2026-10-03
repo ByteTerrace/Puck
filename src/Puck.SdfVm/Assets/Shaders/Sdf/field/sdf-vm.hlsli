@@ -9,7 +9,16 @@
 #include "../isa/sdf-isa.hlsli"
 #include "sdf-hash.hlsli"
 // Every resource and world value the world kernels read, generated from SdfWorldInterfaces.World.
+#ifndef SDF_SHADOW_FADE_SLOTS
+#define SDF_SHADOW_FADE_SLOTS 0
+#endif
+#if SDF_SHADOW_FADE_SLOTS == 1
+#include "../isa/sdf-world-fade1.interface.hlsli"
+#elif SDF_SHADOW_FADE_SLOTS == 2
+#include "../isa/sdf-world-fade2.interface.hlsli"
+#else
 #include "../isa/sdf-world.interface.hlsli"
+#endif
 
 // The field modules, in the order the interpreter declares them: each reads only what the modules before it declare.
 #include "sdf-program.hlsli"

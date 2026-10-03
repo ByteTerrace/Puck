@@ -105,7 +105,7 @@ with the sequence and the game's per-tick work budget. The baselines are
 evidence for review: after a change, you re-record them and read what moved.
 
 ```powershell
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~ShippedWorldStateBaselineTests"
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*ShippedWorldStateBaselineTests"
 ```
 
 To re-record, run `puck baselines state`, and `puck baselines state --check`

@@ -20,7 +20,7 @@ internal sealed record AffectedSuiteResult(int ExitCode, IReadOnlyList<string> R
 /// <summary>
 /// Runs the suites <c>puck affected --run</c> chose: builds them once, in one MSBuild invocation over a solution filter
 /// of exactly those projects, then runs their test hosts concurrently, each on the build that invocation left
-/// (<c>dotnet test --no-build</c>). How many run at once follows the host-load capacity rules: at most
+/// (<c>dotnet test --project &lt;suite&gt; --no-build</c>, CPU tests only). How many run at once follows the host-load capacity rules: at most
 /// <c>--suite-jobs</c> hosts, never two heavy suites at once, and a suite starts beside others only while the machine
 /// has the free memory its weight needs.
 /// </summary>
@@ -226,7 +226,7 @@ internal static class AffectedSuites {
         // below then only run tests, so no two of them ever write the same project's output.
         var clock = Stopwatch.StartNew();
         var build = CliProcess.RunCaptured(
-            arguments: ["build", filter, "-c", CliOptions.DefaultConfiguration, "-nodeReuse:false", "-v", "q", "-nologo"],
+            arguments: ["build", filter, "-c", CliOptions.DefaultConfiguration, CliOptions.NoNodeReuse, "-v", "q", "-nologo"],
             fileName: "dotnet",
             input: string.Empty,
             timeout: Ceiling,
@@ -274,20 +274,20 @@ internal static class AffectedSuites {
         return [.. suites.Where(predicate: failed.Contains)];
     }
 
-    // dotnet test applies the settings the project binds (RunSettingsFilePath), so an opt-in tier such as Maths' Deep and
-    // Exhaustive stays out exactly as it does in CI. The console logger is named at minimal verbosity: under a quiet run
-    // it would otherwise print a failed test's name on standard error and its message nowhere, and minimal prints each
-    // failure with its message and stack, and nothing for a pass.
+    // Microsoft.Testing.Platform hands every option it does not own to the test application, which refuses MSBuild
+    // switches, so the run builds nothing and takes none (AffectedCommand.TestArguments). A plain run selects exactly
+    // what CI's does, so an explicit tier such as Maths' Deep and Exhaustive stays out, and the Gpu trait keeps device
+    // laws out (AffectedCommand.CpuSelection). The platform prints each failure with its message and stack.
     private static AffectedSuiteResult RunSuite(string repositoryRoot, string suite) {
         var run = CliProcess.RunCaptured(
-            arguments: ["test", ProjectPath(repositoryRoot: repositoryRoot, suite: suite), "-c", CliOptions.DefaultConfiguration, "--no-build", "-v", "q", "-nologo", "--logger", "console;verbosity=minimal"],
+            arguments: [.. AffectedCommand.TestArguments(suite: suite), .. AffectedCommand.CpuSelection],
             fileName: "dotnet",
             input: string.Empty,
             timeout: Ceiling,
             workingDirectory: repositoryRoot
         );
         var output = Lines(text: run.Stdout);
-        var total = (output.LastOrDefault(predicate: static line => (line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "Passed!") || line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "Failed!")))?.Trim() ?? "no summary");
+        var total = CliTestRun.Summary(output: output);
 
         return new AffectedSuiteResult(
             ExitCode: run.ExitCode,

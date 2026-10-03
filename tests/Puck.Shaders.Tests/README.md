@@ -5,6 +5,10 @@ versioned resources and the planned barriers, binding layouts and the generated 
 compiled-bytecode freshness. It tests the document and build contracts without
 claiming correctness for every GPU driver.
 
+`RenderGraphWorkDetailLawTests` holds counter slot growth after its fence wait,
+pending submissions' detail labels, peak budget refusal and the installed memory
+account. `ShaderWorkCountersLawTests` holds generated named-row columns and carry.
+
 `ShaderPipelineRenderNodeLawTests` run the pipeline render node against
 `FakePipelineGpu`, which implements the node's factory seams with no device.
 The fake counts every object it creates, the thread that created it, and each

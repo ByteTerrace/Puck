@@ -44,11 +44,13 @@ public sealed class PackLightsAndSkyLawTests {
         lights.Set(index: 2, light: Light(direction: Vector3.Zero, kind: SdfLightKind.Hemisphere, weight: 0.3f));
         lights.Set(index: 3, light: Light(direction: Vector3.Zero, kind: SdfLightKind.Rim, weight: 0.4f));
         lights.Set(index: 4, light: Light(direction: new Vector3(x: 0f, y: 0f, z: 2f), kind: SdfLightKind.Directional, weight: 0.9f));
+        lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 1);
+        lights.ShadowSlots.SetSlot(light: 0, slot: 0);
 
         var records = Packed(lights: lights);
 
         Assert.Equal(expected: 5, actual: lights.Count);
-        Assert.Equal(expected: 0, actual: lights.ShadowLight);
+        Assert.Equal(expected: 0, actual: lights.ShadowSlots[0]);
         // A directional packs its direction normalized.
         Assert.Equal(expected: Vector3.UnitZ, actual: records[4].Direction);
         Assert.Equal(expected: 0.9f, actual: records[4].Weight);
@@ -111,14 +113,16 @@ public sealed class PackLightsAndSkyLawTests {
         );
     }
     // The sky block carries what the sky draws by, baked from the lights so the sky pass reads no light: the disc's
-    // direction is its light's packed direction, and the clouds are lit by the shadow light, or the pinned sun and white
-    // when no light shadows.
+    // direction is its light's packed direction, and the clouds are lit by stable slot zero, or the pinned sun and
+    // white when that slot is vacant.
     [Fact]
     public void TheSkyBakesItsDiscAndCloudLightFromTheLights() {
         var lights = new SdfLights { Count = 2 };
 
         lights.Set(index: 0, light: Light(direction: new Vector3(x: 0f, y: 3f, z: 0f), kind: SdfLightKind.Directional, weight: 1f));
         lights.Set(index: 1, light: (Light(direction: new Vector3(x: 2f, y: 0f, z: 0f), kind: SdfLightKind.Directional, shadows: true, weight: 1f) with { Color = new Vector3(x: 1f, y: 0.5f, z: 0.25f) }));
+        lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 1);
+        lights.ShadowSlots.SetSlot(light: 1, slot: 0);
 
         var sky = new SdfSky { SunDiscRadians = 0.05f };
 

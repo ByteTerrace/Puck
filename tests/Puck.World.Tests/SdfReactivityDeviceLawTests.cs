@@ -16,6 +16,7 @@ namespace Puck.World.Tests;
 // describe the shaded material rather than the primary visibility record's material. The readback uses the graph's
 // normal package-copy path and therefore observes the buffer the real views pass wrote on each backend.
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class SdfReactivityDeviceLawTests {
     private const uint Extent = 32;
 

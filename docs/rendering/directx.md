@@ -82,8 +82,10 @@ and resource flags vary), and `DirectXTextures.CreateCommitted` (a single-mip,
 single-sample 2D texture on a default heap; extent, format, heap flags, initial
 state, resource flags and optimized clear value vary). `DirectXTextures.OfUsage`
 and `InitialStateOf` give an image the flags, clear value and initial state its
-declared `GpuImageUsage` needs: `DirectXGpuImage`, `DirectXGpuExportableImage`
-and the surface upload's texture all go through them. A depth attachment's
+declared `GpuImageUsage` needs, and `DirectXGpuImage` takes both from them.
+`DirectXGpuExportableImage` states its own flags (simultaneous access, and a
+render target or storage image by its access) and the surface upload its own copy-destination
+state to `CreateCommitted`. A depth attachment's
 texture is created from its attachment (`IGpuImageFactory.CreateDepth`) with
 that attachment's `GpuDepthAttachment.ClearDepth` as its optimized clear value,
 so a render pass clearing it takes the fast path and the debug layer reports no
@@ -140,8 +142,7 @@ var adapterApi = new DirectXNativeAdapterApi();
 var deviceApi = new DirectXNativeDeviceApi();
 
 foreach (var adapter in adapterApi.EnumerateAdapters()) {
-    var maxLevel = deviceApi.ProbeMaxFeatureLevel(adapterLuid: adapter.AdapterLuid);
-    // adapter.Description, adapter.DedicatedVideoMemory, adapter.IsSoftware, maxLevel ...
+    // adapter.AdapterLuid, adapter.Description, adapter.DedicatedVideoMemory, adapter.IsSoftware ...
 }
 
 // WARP is always available — handy for headless/CI verification with no GPU.
@@ -156,7 +157,6 @@ it like any other Puck handle owner.
 | Concern | Interface | Native call(s) | Result |
 |---------|-----------|----------------|--------|
 | Adapter enumeration | `IDirectXAdapterApi` | `CreateDXGIFactory2`, `IDXGIFactory4::EnumAdapters1` | `IReadOnlyList<DirectXAdapterDescription>` |
-| Feature-level probe | `IDirectXDeviceApi` | `D3D12CreateDevice` (null device) | `DirectXFeatureLevel?` |
 | Device creation | `IDirectXDeviceApi` | `D3D12CreateDevice` | `DirectXDevice` (owns `ID3D12Device`) |
 | Software fallback | `IDirectXDeviceApi` | `IDXGIFactory4::EnumWarpAdapter` + `D3D12CreateDevice` | `DirectXDevice` (WARP) |
 | Memory profile | `IDirectXDeviceApi` | `ID3D12Device::CheckFeatureSupport` (architecture, options 16), `IDXGIAdapter1::GetDesc1` | `GpuMemoryProfile` |
@@ -178,7 +178,7 @@ everything created with it, so the context's next use creates the device again.
 
 When `DirectXDeviceContext` creates its device it reads the device's memory
 profile beside its identity (`IDirectXDeviceApi.GetMemoryProfile`) and reports
-it as `IGpuDeviceContext.MemoryProfile`. `DirectXNativeDeviceApi.MemoryProfile`
+it as `IGpuDeviceContext.MemoryProfile`. `DirectXFeatureReads.MemoryProfile`
 fills it from three native structures:
 
 - `D3D12_FEATURE_DATA_ARCHITECTURE`: `UMA` with `CacheCoherentUMA` is coherent

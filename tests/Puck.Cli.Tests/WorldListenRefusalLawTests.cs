@@ -14,6 +14,9 @@ public sealed class WorldListenRefusalLawTests {
     // binds, says so, and quits 0 on its script.
     [Fact]
     public void AWorldBootedOntoAnOccupiedEndpointRefusesByNameWithTheUnsupportedExitCode() {
+        // The free boot below binds a QUIC listener, which a host without QUIC refuses the same way the occupied one is.
+        if (!System.Net.Quic.QuicListener.IsSupported) { Assert.Skip(reason: "the free boot needs QUIC (msquic with TLS 1.3 and dual-mode sockets) on this host."); return; }
+
         using var occupant = new Socket(
             addressFamily: AddressFamily.InterNetwork,
             protocolType: ProtocolType.Udp,

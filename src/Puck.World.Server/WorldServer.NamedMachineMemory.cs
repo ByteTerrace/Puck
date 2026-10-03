@@ -105,6 +105,7 @@ public sealed partial class WorldServer {
 
         return null;
     }
+
     /// <summary>Synchronizes the ordered <c>machines[].memory</c> bindings after rules and before machine advance.
     /// Each hardware scalar crosses the provider barrier once, so a word cannot combine bytes from different guest
     /// steps. Read bindings mirror through the ordinary world-state mutation door.</summary>

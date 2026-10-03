@@ -19,7 +19,7 @@ public enum SdfVisibilityKind : uint {
 /// it. <see cref="SdfIsaHlsl"/> generates the kernels' spellings of every one of them into <c>sdf-isa.hlsli</c>, so a
 /// kernel and a pick read one definition.
 /// </summary>
-public static class SdfVisibility {
+public static partial class SdfVisibility {
     /// <summary>The bit the identity's kind starts at; the source fills the bits below it.</summary>
     public const int KindShift = 30;
     /// <summary>The identity's source field.</summary>

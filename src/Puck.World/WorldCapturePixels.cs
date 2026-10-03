@@ -8,8 +8,11 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// A desktop capture's CPU route: the frames its source captures, each converted through the image source conversion its
-/// pixel format names (<see cref="RenderGraphRuntime.CreateConverter"/>) into the image a frame samples. It answers a frame
+/// The frames a desktop capture converts before a frame samples them: on its CPU route, the frames its source captures,
+/// each converted through the image source conversion its pixel format names (<see cref="RenderGraphRuntime.CreateConverter"/>);
+/// on the Direct3D 12 host, an HDR display's half-float scRGB copies the platform makes on the GPU, each converted there
+/// through the image conversion its format names (<see cref="RenderGraphRuntime.CreateImageConverter"/>), so none is read
+/// back. It answers a frame
 /// from that converted image, never from the captured pixels alone: rendered once a captured frame has converted, refused
 /// while the conversion refuses, and waiting otherwise, so a conversion that cannot produce an image refuses the source's
 /// consumers rather than leaving them waiting on an image that never comes. Every member runs on the thread that produces
@@ -72,6 +75,28 @@ public sealed class WorldCapturePixels : IDisposable {
     /// <summary>Drops every converter's device objects after a device loss; the next captured frame converts on the
     /// recreated device.</summary>
     public void OnDeviceLost() => m_pixels.OnDeviceLost();
+    /// <summary>Converts an imported frame on the device: an HDR display's half-float scRGB copy the platform made into
+    /// a shared target on the render device, read whole by the image conversion under its lease, which the conversion's
+    /// submission holds until it retires (at once when nothing submits).</summary>
+    /// <param name="runtime">The runtime whose converter converts the frame, or <see langword="null"/> before one runs,
+    /// when nothing converts.</param>
+    /// <param name="context">The host's frame context.</param>
+    /// <param name="image">The copy, on the runtime's device.</param>
+    /// <param name="lease">The platform slot's acquisition, carrying the wait the copy's submission signals.</param>
+    /// <param name="color">How the copy's pixels are encoded.</param>
+    /// <returns><see langword="true"/> when the conversion was submitted; <see langword="false"/> while its graph builds,
+    /// before a runtime runs, or when no conversion reads the image.</returns>
+    public bool Convert(RenderGraphRuntime? runtime, in FrameContext context, ShaderPipelineExternalImage image, GpuImageLease lease, ImageColorEncoding color) {
+        Captured = true;
+
+        return m_pixels.TryConvert(
+            color: color,
+            context: in context,
+            image: image,
+            lease: lease,
+            runtime: runtime
+        );
+    }
     /// <summary>Captures the source's current frame and converts it, or advances the last captured frame's pending
     /// conversion when the source has no newer frame.</summary>
     /// <param name="source">The source to capture from.</param>

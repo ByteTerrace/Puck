@@ -129,6 +129,23 @@ separate constraint on dense populations; reusable appearances do not remove it.
   path for scene rows and `puck.creation.v1` placements.
 - `WorldViewComposer.cs`—offscreen view composition (the diegetic world
   cameras): layout selection and eased transitions for the main window.
+- `WorldDynamicResolution.cs`, `WorldFramePresenter.DynamicResolution.cs`,
+  `WorldRenderSettings.Resolution.cs`—dynamic resolution, a presentation-only
+  policy that reads no simulation state. `WorldRenderSettings` keeps each view's
+  live state (`WorldRenderViewResolution`: its own `WorldDynamicResolution`
+  controller, an automatic-mode override and a pin) beside the view's authored
+  `views.quality` row, which gives its ceiling and tier floor. Each frame
+  `WorldFramePresenter.DressResolution` advances the view's controller and
+  carries the result as `SdfViewSnapshot.ResolvedRenderScale`, so the grid moves
+  inside the allocation the ceiling sized and no frame reallocates or resets
+  history. The controller reads one load signal: the views' GPU frame time, the
+  present timing where the device times nothing, or the counted march steps
+  against a budget the counters ceilings record
+  (`WorldDynamicResolution.StepBudgetPerPixel`); a pin overrides all three. The
+  `world.render-scale` grammar (`[view] [<scale>|floor <tier>|pin <scale>|auto
+  [on|off]]`) is parsed in `Puck.World`'s `WorldRenderScaleCommand` and applied
+  through `WorldSessionLevers`; pins and controllers are session state and never
+  enter a saved document or replay.
 - `WorldOverlayCapacity.cs`—`FromSchema()`, the one bridge from
   `WorldBodiesLimits.LocalSeatCount`, `WorldHudCapacity`,
   `WorldBindingBarCapacity`, `WorldMarkerCapacity`, and the
@@ -188,7 +205,10 @@ separate constraint on dense populations; reusable appearances do not remove it.
 - `WorldSessionLevers.cs`—the knob vocabulary (the `world.<knob>` verb names
   without their prefix) and the composition-time registration binding each to
   render settings, present pacing, the audio mix gain (`IWorldAudioLever`), or
-  the binding-bar visibility.
+  the binding-bar visibility. Its sibling `WorldSessionLevers.Fold.cs` folds the
+  live levers back into their document sections for a `world.save` snapshot,
+  creating a section only for a moved render ceiling, view quality or editor
+  value; pins never fold.
 - `WorldBindingBarVisibility.cs`—the live per-seat binding-bar visibility
   override the `binding-bar` lever writes and the root's bar-policy resolver
   reads.
@@ -235,11 +255,44 @@ separate constraint on dense populations; reusable appearances do not remove it.
   up again when `WorldStateMirror.Generation` moves. `WorldClient.DeliverState` refreshes the slots the delivery's
   `WorldStateStamp` moved, `DeliverSnapshot` hands the snapshot's field cells to
   the mirror's state view and refreshes the field rows they moved and the
-  trait-bearing slots still moving, `DeliverDefinition` re-resolves every slot, and
-  `WorldFramePresenter.CaptureFrame` applies the frame's interpolation fraction
+  trait-bearing slots still moving, then publishes the complete delivery through
+  `WorldStateMirror.Delivered`. The earlier state refresh publishes no partial
+  delivery. `DeliverDefinition` re-resolves every slot and publishes its new
+  definition and revision with the delivery, so selection detects a pure light
+  reorder before its reset decision. Its next snapshot installs again after
+  supplying field cells, with `completingDelivery: true`, so selection resamples even at the same
+  tick without another identity reset. `WorldFramePresenter.CaptureFrame`
+  applies the frame's interpolation fraction
   (pinned to one offscreen) before anything reads it. `StateMirrorFor` answers
   the mirror of the authority a seat is routed to: this one for the authority
   the client observes, and that authority's followed session mirror otherwise.
+- `WorldShadowSelection.cs` consumes complete delivered samples through that
+  mirror, resolving each named directional's color and weight at the delivered
+  tick. It reduces them to `WorldShadowAllocator`'s bounded slots before a
+  later frame can skip an intermediate delivery. It retains no borrowed
+  mirror; a lock protects the candidate and slot arrays when a session's
+  delivery thread and the frame reader differ. `WorldEnvironmentResolve`
+  reads the selected interval, reports held slots, active handoffs and queued
+  crossings, and forwards the full selection through `SdfLights.ShadowSlots`
+  to the counted GPU march. Active handoffs upload each light's indices, slot
+  and presented weight; shading scales each light's own shadow deficit.
+  `WorldShadowAllocator` holds fixed current and prior handoff records, with
+  integer crossing ticks and durations. Each read derives progress from the
+  presented tick, without advancing a fade or allocating. Queued crossings
+  wait for their slot, identity or fade capacity; the first delivered tick
+  that clears the blocker starts the still-needed crossing. Waiting targets
+  take free fade capacity before fresh crossings, oldest first and then by slot
+  index. Reset installs have no fade and preserve surviving selected names in
+  their held slots. Instant overflow
+  releases overlapping participants and installs the new owner atomically.
+  `CopyPresented` samples the selection's actual delivered interval at the frame's fraction,
+  so a lazy frame mirror
+  that coalesces several ticks cannot mislabel the slot report's tick. The
+  report copies its slots, policy and tick under one lock. A followed session uses
+  `WorldSessionMirror.ObserveDeliveredState` to reduce structural reseeds and
+  every completed delivery independently of `FollowState`'s frame sampling; disposing the
+  observation ends those callbacks synchronously. The fade readout and GPU
+  slot policy are described in the [World guide](../Puck.World/README.md#graphics-options).
 - `WorldStateLease.cs` is one holder's acquired slots: a stamp registration's
   lanes, drivers, gates, poses and effectors, a body's scale, a seat's
   state-backed binding contexts. A body's holder calls `Arrive` with what the

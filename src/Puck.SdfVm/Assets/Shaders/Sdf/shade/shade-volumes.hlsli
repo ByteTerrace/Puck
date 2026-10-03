@@ -173,7 +173,8 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
 // without per-pixel arrays or an unrolled copy of the integrator for every capacity slot. A volume that ends before the
 // surface integrates once for both shares; one the surface clips integrates again over the surface share's span.
 // Overlapping media still composite as whole volumes; this is not a combined-density integral through their overlap.
-// `covered` is one where any volume composites over the ray's span, which a temporal view treats as reactive.
+// `covered` is one where any volume composites over the ray's span. Nothing reads it: the composite alone integrates volumes,
+// after the views pass, and a temporal view's reactivity is written by the views pass only, so a covered volume is not reactive.
 float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance, float3 sky, float3 rayOrigin, float3 rayDirection, float nearDistance, float farDistance, uint2 pixel, out float covered) {
     covered = 0.0;
     bool surfaceShare = (surfaceCoverage > 0.0);

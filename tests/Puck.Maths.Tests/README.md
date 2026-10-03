@@ -55,19 +55,18 @@ they never fall back to rewriting the live report in place.
 
 ## Tiers and how to run them
 
-Tier selection is fully declarative; no environment variable selects a tier. The project binds
-`default.runsettings` through `RunSettingsFilePath`, whose `TestCaseFilter` excludes Deep and Exhaustive, so a plain
-`dotnet test` runs **Smoke + Default** only. Each other tier is a committed `*.runsettings` selected with
-`--settings` (a CLI `--settings` overrides the bound default). A CLI `--filter` does not override it: it is combined
-with the bound default's filter, so `--filter "tier=Exhaustive"` selects no test. To run one law of an opt-in tier,
-pass its tier's `--settings` together with a `--filter` on the law's id.
+Tier selection is fully declarative; no environment variable selects a tier. Every case carries its tier as the
+`tier` trait, and Deep and Exhaustive cases are explicit, so a plain `dotnet test` runs **Smoke + Default** only. A run
+opts into the explicit cases with `--explicit on` and selects one tier with `--filter-trait tier=<tier>`; without
+`--explicit on`, a Deep or Exhaustive filter selects no test. To run one law, filter on its id, which is the case's
+display name: `--explicit on --filter-display-name <law-id>`.
 
 | Tier | Command | Budget |
 | --- | --- | --- |
 | Default (Smoke + Default) | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release` | < 30 s |
-| Smoke | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/smoke.runsettings` | < 2 s |
-| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings` | exhaustive |
-| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/exhaustive.runsettings` | long—full-width sweeps over an ENTIRE carrier; on demand or nightly, never in a change loop |
+| Smoke | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke` | < 2 s |
+| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep` | exhaustive |
+| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive` | long—full-width sweeps over an ENTIRE carrier; on demand or nightly, never in a change loop |
 
 ## The ratchet
 

@@ -1,0 +1,221 @@
+{
+  "id": "moth-pane-projection",
+  "title": "The Moth pane projects through its paired camera exactly as the camera does, so the surface it shows lies on the ray a pick through the pane continues along",
+  "binding": "Both legs boot an offscreen 64x64 world whose one layout slot fills the display with the Moth pipeline pane, paired with a camera 2.7 units behind the studio origin looking at the flight pack, its clock standing still. Once the pane has installed and submitted its frame, world.screenshot captures the composed display. The pack fills the centre, so a 12x12 centre region holds pixels outside the warm-grey studio background's bounds, and the band of rows 13 to 16 across the middle of the image, just above where the camera's own projection puts the top of the pack, is background in every pixel. The discriminating leg pairs the pane with the same camera at the field of view a focal length 1.48 times the camera's projects, the magnification the pane once applied to its paired camera: the pack grows about the image centre over that band, so the band observation turns red while the centre still shows the pack. Both backends capture the same pixels.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/moth-pane-projection/fixture.world.json",
+    "script": "pane.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "the-pack-shows-at-the-centre",
+        "capture": "frame.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.40625,
+          0.40625,
+          0.59375,
+          0.59375
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.7,
+          0.68,
+          0.66,
+          1
+        ],
+        "maximum": [
+          0.8,
+          0.78,
+          0.76,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-band-above-the-packs-projected-top-is-background",
+        "capture": "frame.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.375,
+          0.203125,
+          0.625,
+          0.265625
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.7,
+          0.68,
+          0.66,
+          1
+        ],
+        "maximum": [
+          0.8,
+          0.78,
+          0.76,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/moth-pane-projection/magnified.world.json",
+    "script": "pane.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "pipeline.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "the-pack-shows-at-the-centre",
+        "capture": "frame.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.40625,
+          0.40625,
+          0.59375,
+          0.59375
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.7,
+          0.68,
+          0.66,
+          1
+        ],
+        "maximum": [
+          0.8,
+          0.78,
+          0.76,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "the-band-above-the-packs-projected-top-is-background",
+        "capture": "frame.png",
+        "extent": [
+          64,
+          64
+        ],
+        "region": [
+          0.375,
+          0.203125,
+          0.625,
+          0.265625
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.7,
+          0.68,
+          0.66,
+          1
+        ],
+        "maximum": [
+          0.8,
+          0.78,
+          0.76,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": false
+      }
+    ]
+  }
+}

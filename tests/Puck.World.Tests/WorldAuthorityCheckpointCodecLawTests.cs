@@ -16,13 +16,13 @@ namespace Puck.World.Tests;
 
 /// <summary>Round-trip and refusal laws for <see cref="WorldAuthorityCheckpointCodec"/>, then the hermetic wiring
 /// through <see cref="WorldAuthorityBlobStore"/> over <see cref="FakeObjectBlobStore"/>.</summary>
-public sealed class WorldAuthorityCheckpointCodecLawTests {
+public sealed partial class WorldAuthorityCheckpointCodecLawTests {
     private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
     // Capturing boots a server and steps it; the checkpoint is an immutable record, so one capture serves every law.
-    private static readonly Lazy<WorldAuthorityCheckpoint> Captured = new(valueFactory: Capture);
+    private static readonly Lazy<WorldAuthorityCheckpoint> Captured = new(valueFactory: static () => Capture());
 
     private static WorldAuthorityCheckpoint CapturedCheckpoint() => Captured.Value;
-    private static WorldAuthorityCheckpoint Capture() {
+    private static WorldAuthorityCheckpoint Capture(WorldTransferCommitMember? commitMember = null) {
         using var fixture = Fixtures.FreshServer();
 
         Assert.True(
@@ -51,7 +51,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: SampleHostRow(dynamicState: dynamicState),
+                hostRow: SampleHostRow(commitMember: commitMember, dynamicState: dynamicState),
                 reason: out var reason
             ),
             userMessage: reason
@@ -61,8 +61,8 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
     }
     // Carries one populated WorldInDoubtTransferCheckpoint (commit members AND landed members both non-empty) so the
     // round-trip laws below actually exercise every leaf the in-doubt shape added, not just its zero-length case.
-    private static WorldAuthorityHostRowCheckpoint SampleHostRow(WorldBodyTransferState dynamicState) {
-        var commitMember = new WorldTransferCommitMember(
+    private static WorldAuthorityHostRowCheckpoint SampleHostRow(WorldBodyTransferState dynamicState, WorldTransferCommitMember? commitMember = null) {
+        commitMember ??= new WorldTransferCommitMember(
             ActionContinuity: new WorldTransferActionContinuity(
                 Channels: [new WorldTransferChannelEdge(
                         Name: "move",
@@ -855,6 +855,49 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         Assert.Contains(
             actualString: reason,
             expectedSubstring: $"checkpoint version {version} is not the supported version"
+        );
+    }
+
+    // The envelope's header: the "PCKP" magic (4 bytes), the u16 version, then the shape fingerprint as a u16-prefixed string.
+    private const int FingerprintOffset = (4 + 2);
+
+    private static string HeaderFingerprint(byte[] encoded) => System.Text.Encoding.UTF8.GetString(
+        bytes: encoded.AsSpan(
+            length: System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(source: encoded.AsSpan(start: FingerprintOffset)),
+            start: (FingerprintOffset + sizeof(ushort))
+        )
+    );
+
+    [Fact]
+    public void The_envelope_carries_the_shape_fingerprint_the_ledger_records_for_this_codec() {
+        Assert.Equal(
+            actual: HeaderFingerprint(encoded: WorldAuthorityCheckpointCodec.Encode(checkpoint: CapturedCheckpoint())),
+            expected: FormatLedgerShapes.Of(id: "WorldAuthorityCheckpointCodec.SupportedVersion")
+        );
+    }
+    // The same nominal version with a different shape is refused by the fingerprint, by name, before any section is read:
+    // the body is corrupted too, and the refusal still names the fingerprint rather than the body.
+    [Fact]
+    public void A_blob_of_the_same_version_and_another_shape_refuses_by_its_fingerprint_before_its_body_is_read() {
+        var encoded = WorldAuthorityCheckpointCodec.Encode(checkpoint: CapturedCheckpoint());
+        var expected = HeaderFingerprint(encoded: encoded);
+        var other = ((expected[0] == '0') ? ('1' + expected[1..]) : ('0' + expected[1..]));
+
+        System.Text.Encoding.UTF8.GetBytes(
+            bytes: encoded.AsSpan(start: (FingerprintOffset + sizeof(ushort))),
+            chars: other
+        );
+        encoded[^1] ^= 0xFF;
+
+        Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(
+            bytes: encoded,
+            checkpoint: out var checkpoint,
+            reason: out var reason
+        ));
+        Assert.Null(@object: checkpoint);
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: $"checkpoint shape fingerprint {other}, expected {expected}"
         );
     }
 }

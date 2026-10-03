@@ -7966,13 +7966,17 @@ export type WorldPrototype = {
          */
         spacing: unknown;
         /**
-         * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedLimit per axis, far past any authored reach).
+         * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedRepeatLimit per axis, a lattice with no edge).
          */
         limit?: unknown;
         /**
          * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
          */
         origin?: unknown;
+        /**
+         * Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program's own answer (IsUnboundedRepeat) decides it.
+         */
+        isUnbounded?: boolean;
       } | {
         $type?: "polar";
         /**
@@ -7998,7 +8002,7 @@ export type WorldPrototype = {
       } | {
         $type?: "wallpaper";
         /**
-         * The wallpaper group.
+         * The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.
          */
         group: "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
         /**
@@ -8006,7 +8010,7 @@ export type WorldPrototype = {
          */
         cell: unknown;
         /**
-         * The repeat-cell limit per plane axis (null = UnboundedLimit per axis).
+         * The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal).
          */
         limit?: unknown;
         /**
@@ -8017,10 +8021,6 @@ export type WorldPrototype = {
          * The parity-material stride (null = 0, geometric only).
          */
         materialStride?: number | null;
-        /**
-         * The symmetry-LOD distance threshold (null = 0, off).
-         */
-        lodDistance?: number | null;
       } | null)[] | null;
       /**
        * The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none).
@@ -8781,6 +8781,22 @@ export type WorldQualityPreset = {
    */
   dynamicResolution?: boolean;
   /**
+   * The number of held shadow slots, from 0 through 4.
+   */
+  shadowLights?: number;
+  /**
+   * The number of additional shadow handoff slots, from 0 through 2.
+   */
+  shadowFadeSlots?: number;
+  /**
+   * The length of a shadow handoff in delivered ticks; zero selects instant changes.
+   */
+  shadowFadeTicks?: number;
+  /**
+   * How a crossing proceeds when its handoff capacity is occupied.
+   */
+  shadowOverflow?: WorldShadowOverflow;
+  /**
    * The per-view floor tier the preset selects (Quarter by default).
    */
   renderScaleFloor?: WorldRenderScaleTier;
@@ -8990,6 +9006,22 @@ export type WorldRenderDefaults = {
    * The far distance in world units: the depth at which every camera march ends — the far plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
    */
   farDistance?: number | null;
+  /**
+   * The boot number of held shadow slots, from 0 through 4; one keeps the pinned sun selected.
+   */
+  shadowLights?: number;
+  /**
+   * The boot number of additional shadow handoff slots, from 0 through 2.
+   */
+  shadowFadeSlots?: number;
+  /**
+   * The boot length of a shadow handoff in delivered ticks; zero selects instant changes.
+   */
+  shadowFadeTicks?: number;
+  /**
+   * How a crossing proceeds when its handoff capacity is occupied.
+   */
+  shadowOverflow?: WorldShadowOverflow;
 };
 
 export type WorldRenderEnvironment = {
@@ -9041,11 +9073,11 @@ export type WorldRenderLightDirectional = {
    */
   angularRadius?: BindableAngle;
   /**
-   * Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.
+   * How this light competes for shadow slots. Absent is Never. A directional without a presented shadow slot is scaled by ambient occlusion instead.
    */
-  shadows?: boolean | null;
+  shadow?: WorldShadowMode | null;
   /**
-   * The name a section key addresses the light by, unique among the lights.
+   * The unique identity a section key and the shadow allocator address. Required when Shadow is Always or Auto.
    */
   name?: string | null;
   lightName?: string | null;
@@ -9161,7 +9193,7 @@ export type WorldRenderLightRim = {
 
 export type WorldRenderLighting = {
   /**
-   * The lights, at most SdfLights.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.
+   * The lights, at most SdfLights.MaxLights, in authored order. Shadow-capable directionals compete for the quality row's shadow slots by mode and tick-resolved luminance.
    */
   lights?: (WorldRenderLight | null)[] | null;
   /**
@@ -10111,6 +10143,10 @@ export type WorldSequenceNullable = {
    */
   step: number;
 };
+
+export type WorldShadowMode = "always" | "auto" | "never";
+
+export type WorldShadowOverflow = "instant" | "queue";
 
 export type WorldShaping = {
   /**

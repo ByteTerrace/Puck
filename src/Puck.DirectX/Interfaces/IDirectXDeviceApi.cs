@@ -4,8 +4,8 @@ using Puck.DirectX.Interop;
 namespace Puck.DirectX.Interfaces;
 
 /// <summary>
-/// Wraps the Direct3D 12 device-creation entry points: probing an adapter's capabilities and creating owning
-/// device wrappers from a hardware adapter or the software (WARP) renderer.
+/// Wraps the Direct3D 12 device-creation entry points: creating owning device wrappers from a hardware adapter or the
+/// software (WARP) renderer, and reading what a created device is and can do.
 /// </summary>
 [SupportedOSPlatform("windows8.1")]
 public interface IDirectXDeviceApi {
@@ -21,11 +21,6 @@ public interface IDirectXDeviceApi {
     /// <returns>An owning device wrapper.</returns>
     /// <exception cref="DirectXException">Device creation failed.</exception>
     DirectXDevice CreateWarpDevice(DirectXFeatureLevel minimumFeatureLevel);
-    /// <summary>Probes the highest Direct3D 12 feature level the adapter identified by a LUID supports.</summary>
-    /// <param name="adapterLuid">The packed adapter LUID, as reported on a <see cref="Messages.DirectXAdapterDescription"/>.</param>
-    /// <returns>The highest supported feature level, or <see langword="null"/> if the adapter does not support Direct3D 12.</returns>
-    /// <exception cref="ArgumentException">No adapter with the given LUID was found.</exception>
-    DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid);
     /// <summary>Reads the packed adapter LUID a created device was placed on (<c>ID3D12Device::GetAdapterLuid</c>).
     /// The Direct3D 12 peer of <c>IVulkanPhysicalDeviceApi.GetDeviceLuid</c>: the reverse cross-backend path reads a
     /// Direct3D 12 host's adapter LUID through this to LUID-match a bespoke Vulkan producer device to the same GPU.</summary>

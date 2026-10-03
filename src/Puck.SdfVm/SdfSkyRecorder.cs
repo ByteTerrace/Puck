@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -50,8 +51,8 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
 
         var fragment = owner.FragmentOf(instance: context.Instance)!;
 
-        m_resolved = !ReferenceEquals(objA: fragment, objB: SdfWorldPackage.NativeFragment);
-        m_temporal = ReferenceEquals(objA: fragment, objB: SdfWorldPackage.TemporalFragment);
+        m_resolved = fragment.Passes.Any(predicate: static pass => (pass.Name == SdfWorldPackage.Resolve));
+        m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
         m_fragmentPass = fragment.Passes.Single(predicate: pass => string.Equals(a: pass.Name, b: context.Part, comparisonType: StringComparison.Ordinal));
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: m_kernel).GroupLayoutHandles);
@@ -66,6 +67,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         m_owner.Unhold(residency: m_view.Residency);
         m_view.Residency.Release();
     }
+    public IReadOnlyList<string> WorkDetails(in FrameContext context) => SdfWorldWorkDetails.Of(part: ((m_kernel == SdfKernel.Composite) ? SdfWorldPackage.Parts.Composite : SdfWorldPackage.Parts.Sky));
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         if ((m_owner.ViewOf(instance: m_context.Instance) is { } current) && (current != m_view)) {
             if (!ReferenceEquals(objA: current.Residency, objB: m_view.Residency)) {

@@ -13,7 +13,9 @@ presentation and backend assembly. The composition root that hosts it is
 [`Puck.World`](../Puck.World/README.md).
 
 Project references: `Puck.World.Schema`, `Puck.World.Protocol`, `Puck.Networking`,
-`Puck.Storage`, `Puck.Hosting`, `Puck.Assets` (the release and authority content pins), and—through the schema—`Puck.State`, whose
+`Puck.Storage`, `Puck.Hosting`, `Puck.Assets` (the release and authority content pins),
+`Puck.Abstractions`, `Puck.Attestation`, `Puck.Audio`, `Puck.Physics`,
+`Puck.Shaders`, `Puck.SignedDistance`, `Puck.State.Rules`, `Puck.State.Search`, and—through the schema—`Puck.State`, whose
 reader, catalog, topologies, and rule evaluator the tick runs; `WorldRuleHost`
 is the evaluator's host (`WorldRuleHost*.cs`: the reads, the mutation door, the
 world's effect arms—over the arena, `WorldServer.Arena.cs`, see below—plus the
@@ -341,7 +343,9 @@ carries the runtime key ledger plus the participant and identity lanes; a
 capacity refusal therefore leaves both the installed document and arena alone.
 A whole-document rebuild (`world.load`, `world.reload`, `world.reset`, and the
 load door a history seek restores through) prepares its replacement the same
-way, before anything moves, whenever the candidate's state catalog is not the
+way, before anything moves and after every refusal that judges the candidate
+alone (a population capacity other than the boot-allocated one refuses by name
+there, before any arena is built), whenever the candidate's state catalog is not the
 live arena's (`WorldServer.ReloadsArenaInPlace`): the candidate's rows are the
 truth it installs, so a row it re-declares with another kind, shape or trait
 installs as declared, and a section no arena holds refuses the rebuild by name
@@ -860,7 +864,7 @@ Checkpoint restoration preserves the sleep tick, any partially accumulated
 idle floor, and a pending contact-field wake. It records whether the body's
 field observation was current, rather than depending on a process-local
 counter surviving reconstruction. Ordinary transfers still wake the body.
-The version 9 checkpoint codec carries this continuation state, identity-owned
+The checkpoint codec carries this continuation state, identity-owned
 record snapshots, and generation-qualified rule latches. It refuses older envelopes.
 
 Body-frame policy is compiled separately from that provider seam. Every body
@@ -1271,6 +1275,11 @@ A reservation only reads the traveler's mobility credential
 (`WorldPopulation.ReadMobility`); the departure's detach mints it
 (`DetachForTransfer`), the one step a replay's re-drive also runs, so a refused,
 retried or aborted reservation changes nothing the authoritative hash folds.
+The reservation releases the authority gate for the peer call, so the detach
+compares the reserved mobility, slot generation included, with the occupant's
+inside the same gated operation: a peer that replaced the reserved traveler
+refuses by name and is never detached, committed or restored under the
+original traveler's credential.
 A contradictory peer commit verdict after rollback leaves recovery held and
 reports once; it cannot create another body or stop unrelated worlds.
 Non-atomic parties split before reservation, so a parent lease cannot block its
@@ -1431,8 +1440,8 @@ document's own authored `admission` section, mapping the verified identity to
 that entry's own authored grant templates. Each door refuses by its OWN named
 spelling (`version-mismatch: …` vs `identity-refused: …`)—the two are never
 conflated. Only once BOTH doors pass does population admission run
-(`WorldServer.TryAdmitPeerConnection`, refused by name when the 128-body table
-is full or the document's `networkPlayers` admission cap is already met); every
+(`WorldServer.TryAdmitPeerConnection`, refused by name when the entity table
+has no free slot or the document's `networkPlayers` admission cap is already met); every
 subsequent frame
 (decoded through the SAME `WorldFrameCodec`/`WorldSubmissionCodec` leaves the
 loopback and tape use), and disconnect
@@ -1503,8 +1512,8 @@ hold that implementation itself (`build/Architecture.props` denies it a
 narration must be attached from its constructor's `narrationSink` parameter,
 not after—the document's own authored grants narrate during construction,
 before any post-build wiring step could reach them. The machine host
-(`Puck.World.Addons.Machines.WorldMachineHost`, reached here through
-`IWorldMachineHost`) takes an optional `WorldOutputHub`/narration sink
+(`WorldMachineHost` in [`Puck.World.Machines`](../Puck.World.Machines/README.md),
+reached here through `IWorldMachineHost`) takes an optional `WorldOutputHub`/narration sink
 because it owns no single server of its own to share (a peer singleton to
 `WorldServer`, constructed first; `WorldOwnedWorlds`,
 `WorldRemoteAuthority`, and `WorldFederatedServerLink` carry the same shape
@@ -1515,12 +1524,10 @@ to that one branch—the compiler hoists a captured loop-body variable into a
 display class allocated at its own declaration, not at the closure literal, so
 an unguarded capture allocates every iteration regardless of whether a sink is
 attached (`WorldTick.Responses.cs`'s `SweepPlacementResponses` is the worked
-example). A handful of `Console.Error` sites remain in `WorldDocument.Apply.cs`,
-`WorldRuleHost.cs`, `WorldTick.Step.cs`, and `WorldPopulation.Admission.cs`,
-owned by other in-flight work; `build/Architecture.props`'s
-`PuckArchitectureDeniedApi` lane states the eventual destination (no
-`System.Console` reference under this project) and stays disabled until those
-land.
+example). No `Console.Error` write remains under this project:
+`build/Architecture.props`'s `PuckArchitectureDeniedApi` lane for `System.Console`
+is armed, and `PuckArchitectureDeniedApiGate` fails the build (PUCKARCH008) if the
+compiled assembly references it.
 
 ### One admission entry, every ingress
 
@@ -1898,8 +1905,7 @@ device receives its first write even when the world value did not change. The me
 decides whether the next tick pokes or mirrors, so it is simulation state: a
 checkpoint carries it ordered by machine and binding name, and every restore
 replaces the live memo with it rather than merging. A restored world therefore
-leaves alone a byte the machine's own program rewrote, as the uninterrupted run does. The
-screen-owned route described below remains during the output-reference migration.
+leaves alone a byte the machine's own program rewrote, as the uninterrupted run does.
 
 A booted `IMachineRuntime` (a diegetic screen's cartridge/cabinet—
 `Puck.Abstractions.Machines`) is CORE state, not presentation-fed, but this
@@ -1907,10 +1913,10 @@ project carries no reference to the emulator cores or `Puck.SdfVm`—a
 machine is a mounted guest, like a WASM addon. `IWorldMachineHost`, defined
 here, is every member `WorldServer` and every offline re-drive (the replay
 tape/inspector, a spawned `WorldInstanceHost` row) reach a booted machine
-through; the concrete `WorldMachineHost`—the emulator cores, the Tune
-instrument engine, and the boot/step/cable-link/reconfigure/memory-peek
-machinery—lives in `Puck.World.Addons.Machines` (which references this
-project, never the reverse) and is constructed by the composition root, a
+through; the concrete `WorldMachineHost`—the boot/step/cable-link/reconfigure/
+hardware-access machinery over the `IMachineEngine`s the composed extensions
+contribute—lives in [`Puck.World.Machines`](../Puck.World.Machines/README.md)
+(which references this project, never the reverse) and is constructed by the composition root, a
 peer DI singleton `WorldServer` takes as a constructor parameter typed
 `IWorldMachineHost`, never a private field it builds, so the container
 disposes the machines it holds. A caller inside this project that needs to
@@ -1958,7 +1964,8 @@ has stepped), and `AnyScreenOpEverApplied` (once any screen op has applied
 AT ALL, independent of stepping—screen ops apply synchronously, between
 fixed steps, so an insert/eject/select/options/link/unlink can change live
 host state before a single tick has run, which the other two latches would
-miss). Successful screen memory access sets the screen-operation latch too.
+miss). A named machine operation sets the screen-operation latch too when it reaches
+its runtime commit barrier, even if the provider then faults.
 A world with named machines also refuses recording after its first world tick:
 paused machines still synchronize bindings, and neither their prior writes nor
 their memo belongs to the tape's boot image. Offline replay reconstructs a fresh host from the tape's embedded
@@ -1970,8 +1977,8 @@ instance's upload writes an output's frames, `WriteFrame`, and the light
 lights the room) and still owns the genuinely presentation
 screen sources (test pattern, authored QR, webcam, compositor capture,
 jumbotron view) that are not this type's concern. See
-`Puck.World.Addons/README.md` for the concrete host's own shipped-engine
-list and boot/link mechanics.
+[`Puck.World.Machines`](../Puck.World.Machines/README.md) for the concrete host's
+boot, link and content mechanics.
 
 ### Machine memory bindings (`WorldServer.NamedMachineMemory.cs`)
 
@@ -2038,7 +2045,7 @@ lane write that would leave a cell as it is queues nothing, so a quiet tick
 moves no row version. Cells are never removed: a HUD binding a lane cell must
 find it declared, and the row's authored `capacity` bounds bodies times facts.
 
-Both of the arena's slot lanes are sized from `population.capacity`, because
+Both of the arena's slot lanes are sized from `bodies.capacity`, because
 both are per-body: a body's named action state rides the participant lane for a
 `state.body` declaration and the identity lane for a `state.identity` one, each
 at the body's own entity index. `Puck.World.Schema`'s `WorldSlotLanes.Options`
@@ -2253,7 +2260,16 @@ live-vs-recorded hash divergence is narrated on stderr without stopping.
 `replay.fork <name> <tick> <new>` fast-forwards the same drive to `<tick>`
 (a burst of recorded ticks per shell call) and hands over to a recording
 whose leading tick groups are the parent's, with `ForkedFrom` in the header;
-the child is standalone. `replay.record <name>` captures the running session's record-start definition,
+the child is standalone. When a drive ends, cancelled or at its target, every
+local seat whose id and mobility `WorldServer.HomeSeatIdentity` resolves to an
+identity this authority's catalog owns rebinds from the drive's detached copy to
+that identity, narrating the copy's differences on `replay.profile`. A fork
+therefore continues on an identity its tape's boot image does not pin, and
+records one `SeatIdentity` entry per rebound seat at the head of its first tick,
+carrying that identity's projection; a re-drive applies it before that tick's
+step, in a detached identity that saves nothing, and refuses by name
+(`ReplayRefusal.SeatSwitchRefused`) a switch naming a seat the re-drive's
+population does not hold. `replay.record <name>` captures the running session's record-start definition,
 active seats, mounted-guest receipts, and the per-tick server-input stream,
 while sampling both the LIVE population hash and authoritative state-system
 hash; `replay.stop`
@@ -2277,9 +2293,11 @@ trace; the pose trace remains the human-readable trajectory diagnostic.
 Presentation (screen pixels,
 cameras, overlays, audio) is excluded by design: a match proves the covered
 state-system lanes, not the whole document, grant table, HUD, or machine cores. Known scope limit—the tape
-captures every one of the twelve envelope payload kinds except `Lever`
-(command, grant, revoke, session, designation, rebuild, mutation, undo,
-composition, query, and screen-op) plus intents and the two
+captures eleven of the thirteen envelope payload kinds (command, grant,
+revoke, session, designation, rebuild, mutation, undo, composition, query, and
+screen-op). `Lever` is live presentation state with no capture point, and a
+machine `Operation` is refused while a recording runs, since the format does not
+capture provider operations. The tape also captures intents and the two
 peer-lifecycle server events; a mid-session capture honestly reports
 MISMATCH at tick 0—carried in
 [`docs/game/design.md`](../../docs/game/design.md).
@@ -2441,10 +2459,13 @@ re-record any persisted tape it invalidates in the same change (`AGENTS.md`
 rule 4).
 
 Adjacency/federation changes additionally run
-`puck canary four-corners-sharded`. It starts five distinct authorities
-(four ground worlds plus the floating island) and exercises generation-
-addressed forwarding through a full four-ground-authority human circuit.
-The automatic smaller proof is `puck canary seamless-adjacency`.
+`puck canary four-corners-sharded`. It starts five separate `Puck.World`
+processes (four ground worlds plus the floating island), crosses one traveler
+from `nw` onto `ne`'s own process, and records a tape on each of those two
+authorities. The onward hops are not asserted there, because a rigid arrival
+cannot transfer again; `puck canary seamless-four-corners-circuit` proves the
+four-hop ring colocated in one process. The automatic smaller proof of
+generation-addressed forwarding is `puck canary seamless-adjacency`.
 
 Verify a network-transport change by running two `Puck.World` processes: a
 headless host (`--headless --listen <ip:port> --state-dir <tmp>`) and a

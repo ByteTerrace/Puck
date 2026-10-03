@@ -277,7 +277,7 @@ refuses at boot. A `BodyMotionOp` reading a further facet owes
 never a hunt.
 
 A seated player's live profile overrides the kit's `Speed.Value`
-(feel stays real-time under `profile.set`/`identity.motion`);
+(feel stays real-time under `identity.motion`);
 `WorldSpeed.Envelope` is the world's own counter-pin — an
 authored `MotionScalarEnvelope { min, max }` that clamps the RESOLVED
 speed at the seat-time read (`WorldBody.ResolveMoveSpeed`, before the
@@ -543,8 +543,8 @@ that case.
 
 A `Medium` row is the ONLY spelling of the medium law — `ApplyHold` runs it
 against the row `ResolveHold` took, and `WorldMediumLawTests` pins it to a
-recorded 240-tick fixed-point trace. The garden's `fishKit` (`puck.world.json`) is
-the worked example: a kit whose `fishMotion` program runs
+recorded 240-tick fixed-point trace. The dive module's `fishKit` (`modules/dive.world.json`) is
+the worked example: a kit whose `diveFishMotion` program runs
 `ResolveHold`/`ApplyHold` over a `water` row carrying the five medium facets,
 and a trailing `air` row (`Free`, `Gravity`) for the water's own dry fallback.
 That row authors no `thrust` because its wander producer never writes the

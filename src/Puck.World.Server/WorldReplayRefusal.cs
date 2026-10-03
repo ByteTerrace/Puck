@@ -1,10 +1,11 @@
 namespace Puck.World;
 
-/// <summary>The <c>replay.tape</c> door's covered refusal vocabulary — the tape's shape-identity gate
+/// <summary>The <c>replay.tape</c> door's covered refusal vocabulary, thirteen members — the tape's shape-identity gate
 /// (<see cref="WorldReplaySnapshot.Read"/>'s leading magic/shape-token check), its mount-pin gate
-/// (<see cref="WorldReplaySnapshot"/>'s <c>VerifyMountedAddons</c>), and its rate pin
-/// (<see cref="WorldReplaySnapshot.Drive"/>'s leading simulation-rate check), which together are what keeps a
-/// re-drive from silently running a world the tape never recorded. Not the whole codec: the many per-enum "unknown wire value"
+/// (<see cref="WorldReplaySnapshot"/>'s <c>VerifyMountedAddons</c>), its rate pin
+/// (<see cref="WorldReplaySnapshot.Drive"/>'s leading simulation-rate check), its rebuild, transfer-integrity and
+/// mutation-outcome checks, and the crossing and seat-switch records a re-drive cannot reproduce, which together are
+/// what keeps a re-drive from silently running a world the tape never recorded. Not the whole codec: the many per-enum "unknown wire value"
 /// guards and the plain corruption checks (truncated length prefixes, a duplicate mounted-addon name, an out-of-range
 /// seat slot) stay bare <see cref="InvalidDataException"/>s outside this catalog — see
 /// <see cref="ReplayRefusalExtensions"/>'s remarks for why this door's v1 scope stops here.</summary>
