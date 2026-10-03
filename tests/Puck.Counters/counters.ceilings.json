@@ -231,14 +231,6 @@
               "detail": null
             },
             {
-              "node": "world",
-              "pass": "sdf.world$composite",
-              "kind": "gpu.sky.evaluations",
-              "class": "per-backend-deterministic",
-              "ceiling": 110135,
-              "detail": null
-            },
-            {
               "node": "sdf:world",
               "pass": "bricks",
               "kind": "gpu.dispatches",
@@ -3651,14 +3643,6 @@
               "kind": "gpu.texels.written",
               "class": "per-backend-deterministic",
               "ceiling": 2073600,
-              "detail": null
-            },
-            {
-              "node": "world",
-              "pass": "sdf.world$composite",
-              "kind": "gpu.sky.evaluations",
-              "class": "per-backend-deterministic",
-              "ceiling": 110135,
               "detail": null
             },
             {
