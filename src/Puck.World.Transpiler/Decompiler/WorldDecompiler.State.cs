@@ -338,8 +338,9 @@ public static partial class WorldDecompiler {
     private static bool PoolsHaveSugar(JsonArray pools) => pools.All(predicate: node =>
         ((node is JsonObject pool) && !pool.ContainsKey(propertyName: "snapshot") &&
         pool.All(predicate: pair => (pair.Key is "name" or "record" or "capacity" or "initial")) &&
-        ((pool["initial"] is not JsonArray initial) || initial.Select(selector: (seed, index) =>
-            ((seed is JsonObject seedObject) && (seedObject["slot"]?.GetValue<int>() == index))).All(predicate: value => value))));
+        // The sugar spells a pool's seeds, and a pool seeding nothing spells none: an authored empty list stays on the generic path.
+        ((pool["initial"] is not JsonArray initial) || ((initial.Count > 0) && initial.Select(selector: (seed, index) =>
+            ((seed is JsonObject seedObject) && (seedObject["slot"]?.GetValue<int>() == index))).All(predicate: value => value)))));
     private static bool RecordsHaveSugar(JsonArray records) => records.All(predicate: node =>
         ((node is JsonObject record) &&
         record.All(predicate: pair => (pair.Key is "name" or "fields")) &&

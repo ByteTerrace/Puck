@@ -583,20 +583,6 @@ declared by an aliased `use` has no printed form, so the canary's five
 documents stay JSON; done when they decompile, compile back as parsed, and the
 JSON is deleted.
 
-**Open:** a `.puck` section lowers with every list member present, so a host
-that authors `placements { policy … }` (or `views { … }`) and no rows emits
-`rows: []`, and a composition replaces a shared list wholesale when the overlay
-holds no identity key (`WorldDocumentBasis.MergeList`): the empty list discards
-the rows its basis and imports bring. `tests/Puck.World.Canaries/front-door/host.world.json`,
-which omits `rows` and so merges the `jump` and `studio` modules' placements,
-composes to a different world as `host.puck` (`jump$jumpFallZone` and
-`studio$studioTurntable` undeclared), and stays JSON. Done when a section's
-lowering emits a list only where the source authors one, or the composition reads
-an empty overlay as nothing to replace with, and `front-door/host.world.json`
-decompiles, composes to the same world, and is deleted. Any shipped world that
-authors a section without its rows and imports a module is composing without the
-module's rows today.
-
 ### S7 — Records and pools
 
 The [implementation contract](records-and-pools.md) specifies instance lifetimes,

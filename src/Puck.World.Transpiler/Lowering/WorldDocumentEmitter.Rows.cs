@@ -82,10 +82,6 @@ public static partial class WorldDocumentEmitter {
             placementsObj = [];
             parent["placements"] = placementsObj;
         }
-        if (placementsObj["rows"] is not JsonArray rowsArr) {
-            rowsArr = [];
-            placementsObj["rows"] = rowsArr;
-        }
 
         var placementsPointer = $"{scope.CurrentPointer}/placements";
         var oldPointer = scope.CurrentPointer;
@@ -100,6 +96,13 @@ public static partial class WorldDocumentEmitter {
             scope
         )) {
             if (stmt is BlockNode { Identifier: "placement" } row) {
+                // The list exists once a row is written: a section that authors only its policy leaves `rows` absent, and an
+                // absent list composes with the imported modules' rows where an empty one would replace them.
+                if (placementsObj["rows"] is not JsonArray rowsArr) {
+                    rowsArr = [];
+                    placementsObj["rows"] = rowsArr;
+                }
+
                 var rowIdx = rowsArr.Count;
 
                 rowScope.CurrentPointer = $"{placementsPointer}/rows/{rowIdx}";

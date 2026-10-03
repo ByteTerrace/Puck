@@ -714,6 +714,12 @@ public static partial class WorldDecompiler {
         ) &&
             (layoutsNode is JsonArray layoutsArr)
         ) {
+            first = EmitEmptyViewsList(
+                first: first,
+                list: layoutsArr,
+                name: "layouts",
+                sb: sb
+            );
             foreach (var layoutItem in layoutsArr) {
                 if (layoutItem is JsonObject layoutObj) {
                     if (!first) {
@@ -806,6 +812,12 @@ public static partial class WorldDecompiler {
                 continue;
             }
 
+            first = EmitEmptyViewsList(
+                first: first,
+                list: rows,
+                name: rowsKey,
+                sb: sb
+            );
             foreach (var row in rows) {
                 if (row is JsonObject rowObj) {
                     if (!first) {
@@ -855,6 +867,24 @@ public static partial class WorldDecompiler {
         }
 
         sb.AppendLine(value: "}");
+    }
+    // A present empty list prints as its own property: it replaces the imported rows where an absent one keeps them, and
+    // no row would carry it. Returns the block's `first` flag after it.
+    private static bool EmitEmptyViewsList(bool first, JsonArray list, string name, StringBuilder sb) {
+        if (list.Count != 0) {
+            return first;
+        }
+        if (!first) {
+            sb.AppendLine();
+        }
+        EmitField(
+            indentLevel: 1,
+            key: name,
+            sb: sb,
+            value: list
+        );
+
+        return false;
     }
     private static void DecompileSeatRigBlock(StringBuilder sb, string? name, JsonObject srObj, int indentLevel) {
         var indent = new string(
