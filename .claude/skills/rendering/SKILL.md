@@ -1831,6 +1831,24 @@ session moves, and a `WorldViewSet` publishes them only when one changed, so a
 steady frame allocates nothing; a capture frame renders every tainted view
 again.
 
+An infinity view (`sky$<layer>`, nested `<view>$sky$<layer>`; P18-11) is a view
+of this kind beside the session screens, driven by one neutral record,
+`InfinityViewSpec` (`src/Puck.SdfVm/Views/Infinity`), that the sky layer or body
+shape lowers to. `InfinityViewFit.Fit` is the CPU reference of what it renders:
+the camera at the anchor, turned with the viewer and never translated by it, over
+the bounding rectangle the mask's cone projects to on the viewer's camera plane,
+as an off-axis frustum of the viewer's own. `WorldInfinityViewPlan` nests the
+views to the graph's depth (a view past it draws its fallback colour) and caps a
+world at `MaxViews` instances; `WorldInfinityViews` publishes each as a
+`WorldView` with `WorldViewDemand.Sky` (the world's viewers read its latest image
+within the frame) and, only while a viewer's previous frame showed it and its
+region is in the frustum, `SkySeen`, which the graph host turns into a footprint,
+so an unseen view renders nothing and keeps its last image
+(`InfinityViewDemand`). `WorldInfinityViewScene` rewrites the emitter's frame to
+the fitted camera, a quality with shadows and ambient occlusion off unless the
+view's levers turn them on, and the view's far distance; far geometry is a
+`WorldSessionSceneEmitter` given `onlyPrototypes`.
+
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):
 placement, warp, UV layout, fit and crop as data, inverted in fixed point by

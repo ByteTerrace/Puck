@@ -7537,6 +7537,23 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       tainted view is withheld as a screen's is; a far planet's instance
       renders only its angular rect; a world authoring one infinity view past
       the cap is refused by name, and one at the cap boots.
+    - Landed beneath the vocabulary: the neutral record the kinds and shapes
+      lower to (`InfinityViewSpec`), the frame an instance renders for a viewer
+      (`InfinityViewFit`: the anchor, the viewer's turn, the cone's bounding
+      rectangle as an off-axis frustum, the extent at the dressed scale), the demand
+      (`InfinityViewDemand`, published as `WorldViewDemand.Sky` and `SkySeen`, which
+      the graph host turns into a footprint), the plan (`WorldInfinityViewPlan`:
+      nesting to the graph's depth with the fallback beyond it, a cap of
+      `MaxViews` instances), the instance names (`WorldViewNames.Sky`,
+      `NestedSky`), the scene (`WorldInfinityViewScene`, and far geometry as a
+      `WorldSessionSceneEmitter` holding only named prototypes), each with CPU laws.
+      Still open: the `view` and `far` layer kinds, the body shapes and the
+      validator's cap refusal bind to the record when P18-8's layer record lands;
+      the composite's sampling of the instance image by the pixel's direction,
+      its shown-texel count (the demand's report) and its fallback colour sit in
+      that layer loop; the binder owns a `WorldInfinityViews` and registers the
+      scenes; `world.budget` reports `WorldInfinityViewPlan.Describe`; the
+      `sky-portal` canary, the ceilings and the GPU legs follow.
     - Counted-cost gate: the infinity instance's rows at its dressed quality,
       zero when no uncovered pixel shows it, and its dispatches' extent within
       its rect; its residency's aperture bytes and the live count against the
