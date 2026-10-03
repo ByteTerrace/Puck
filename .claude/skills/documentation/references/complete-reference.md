@@ -486,9 +486,18 @@ changes materially, and treat a gap as a grader fault.
 **Never score an invalid run.** A reply that starts with "API Error" is not an
 answer. Re-run it, and report the number re-run.
 
-**Measure noise first.** Run the unchanged skill several times; the spread of
-the train and test means is the smallest effect a change can claim. Use at
-least five runs per case when comparing a change.
+**Judge with sonnet for any result you act on.** Use `--judge-model sonnet`
+for every run whose score decides a change or goes in a report; use haiku only
+for smoke checks, such as whether a case parses and a grader can pass. A cheaper
+judge fails correct long answers that a stronger judge passes, and the
+calibration set cannot show it.
+
+**Measure the noise floor before changing anything.** Run the unchanged skill
+at least three times, each with at least five runs per case, over the same case
+set and judge. For each split, take the spread of its mean score (highest minus
+lowest) across those repeats: that spread is the noise floor of that split. A
+change smaller than the floor is not a result. Measure again after the case set
+or a grader changes, since either moves the floor.
 
 **Hill-climb one change at a time.**
 
@@ -498,10 +507,10 @@ least five runs per case when comparing a change.
 2. Change the skill by one rule, stated generally; never paste a failing
    case's content into it. A grader or task at fault is fixed in the case, not
    worked around in the skill.
-3. Evaluate train and test. Keep the change when the case it targets improves
-   and neither aggregate falls by more than the noise. A rule that only one
-   case can see leaves the test mean flat; treat that as no harm, not as
-   generalisation.
+3. Evaluate train and test. Keep the change when the case it targets rises and
+   neither split's mean falls by more than that split's noise floor. A rule that
+   only one case can see leaves the other split's mean flat; that shows no harm,
+   not generalisation, and the report says so.
 4. Revert a change that does not move its target twice.
 
 At a plateau, write the root cause of each remaining failure as skill, grader
