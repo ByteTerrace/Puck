@@ -21,12 +21,12 @@ namespace Puck.Testing;
 /// The verdict decides the rest (<see cref="Conclude"/>). A law that fails keeps the directory and writes its absolute
 /// path to the law's output as a <see cref="RunDirectory.KeptLine"/>, so the evidence survives. A law that passes deletes
 /// it, retrying while a handle closes, within the same bound; a delete that never completes fails the law naming its
-/// last error and what is still present. Between tries the files are compared with the record taken when the owners
-/// returned, as a secondary signal: a file that is new or changed since then fails the law by name. That check sees only
-/// a write that lands before the delete succeeds, and a file a worker holds exclusively shows its change only once it is
-/// released, so it is a net under the contract and proves nothing about a worker that has already finished. A
-/// best-effort directory (<paramref name="bestEffortDelete"/>) skips the check and leaves a directory a handle still
-/// holds to a later sweep.
+/// last error and what is still present. Nothing is deleted until every file has been read through a handle no other
+/// holds, so each read is the file's final state, and a file that is new or changed since the owners returned fails the
+/// law by name. A write made through a handle that outlived the owners is therefore always seen; a worker that wrote and
+/// let go before the owners returned is part of the record, so the check proves nothing about it. A best-effort directory
+/// (<paramref name="bestEffortDelete"/>) skips the check and leaves a directory a handle still holds to a later
+/// sweep.
 /// </para>
 /// <para>Disposal inside a running law, before its verdict exists, defers the resolution to the end of that law
 /// (<see cref="TemporaryDirectoryVerdictAttribute"/>); disposal from a test class's own <c>Dispose</c>, after the verdict,
@@ -152,6 +152,46 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan?
         Volatile.Write(location: ref m_teardownStep, value: $"recording {RootPath}");
         m_settled = Snapshot();
     }
+    // Reads every file under the directory through a handle no other holds, so each read is the file's final state: a
+    // worker that still holds a file refuses the open, and the file is read again on the next try. A file that is new or
+    // changed since the owners returned is a stray. Returns the refusal of a file still held, or null when none is.
+    private Exception? ReadReleased(Dictionary<string, (long Length, long Written)> settled, List<string> strays) {
+        FileInfo[] files;
+
+        try {
+            files = new DirectoryInfo(path: RootPath).GetFiles(
+                searchOption: SearchOption.AllDirectories,
+                searchPattern: "*"
+            );
+        } catch (Exception error) when ((error is (DirectoryNotFoundException or FileNotFoundException))) {
+            return null;
+        }
+
+        Exception? held = null;
+
+        foreach (var file in files) {
+            var key = Path.GetRelativePath(path: file.FullName, relativeTo: RootPath);
+
+            try {
+                using var stream = new FileStream(
+                    access: FileAccess.Read,
+                    mode: FileMode.Open,
+                    path: file.FullName,
+                    share: FileShare.None
+                );
+
+                if (!settled.TryGetValue(key: key, value: out var before) || (before != (stream.Length, File.GetLastWriteTimeUtc(fileHandle: stream.SafeFileHandle).Ticks))) {
+                    strays.Add(item: key);
+                }
+            } catch (Exception error) when ((error is (DirectoryNotFoundException or FileNotFoundException))) {
+                // The file went away after it was listed; there is nothing left to read.
+            } catch (Exception error) when ((error is (IOException or UnauthorizedAccessException))) {
+                held = error;
+            }
+        }
+
+        return held;
+    }
     private void DeleteStrictly(CancellationToken cancellationToken) {
         var failures = new List<Exception>();
         var strays = new List<string>();
@@ -160,7 +200,7 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan?
         if (!Directory.Exists(path: RootPath)) {
             failures.Add(item: new DirectoryNotFoundException(message: $"The directory {RootPath} was removed before its law finished."));
         } else {
-            var previous = (m_settled ?? Snapshot());
+            var settled = (m_settled ?? Snapshot());
             Exception? lastFailure = null;
 
             try {
@@ -168,15 +208,14 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan?
                     reason: () => Describe(lastFailure: lastFailure, strays: strays),
                     step: () => {
                         cancellationToken.ThrowIfCancellationRequested();
-                        var current = Snapshot();
+                        // Nothing is deleted until every file has been read alone: a delete that succeeded the moment
+                        // a worker let go would take with it a write the worker made after the owners returned.
+                        if (ReadReleased(settled: settled, strays: strays) is { } held) {
+                            lastFailure = held;
+                            Volatile.Write(location: ref m_teardownStep, value: Describe(lastFailure: lastFailure, strays: strays));
 
-                        foreach (var (file, state) in current) {
-                            if (!previous.TryGetValue(key: file, value: out var before) || (before != state)) {
-                                strays.Add(item: file);
-                            }
+                            return false;
                         }
-
-                        previous = current;
 
                         cancellationToken.ThrowIfCancellationRequested();
                         var deleted = TryDelete(failure: out lastFailure, path: RootPath);

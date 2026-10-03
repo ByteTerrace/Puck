@@ -19,7 +19,7 @@ public sealed class TemporaryDirectoryLawTests {
     // An owner whose disposal returns at once and leaves a worker running, the way a background build that was cancelled
     // but not joined does: the worker holds a file open and releases it after a while or, given a signal, writes to it
     // once the signal is set and then releases it. The signalled write lands after the owners returned and before the
-    // handle closes, so the delete, which cannot succeed while the handle is open, always sees it.
+    // handle closes, and the directory reads the file only once the handle has closed, so that read always sees it.
     private sealed class Straggler(FileStream held, ManualResetEventSlim? write = null) : IDisposable {
         public void Dispose() => _ = Task.Factory.StartNew(
             action: () => {
@@ -127,7 +127,8 @@ public sealed class TemporaryDirectoryLawTests {
         Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "an open handle blocks a delete only where the file system refuses it.");
         var state = new TemporaryDirectory(prefix: "puck-fixture-never-delete-", teardownBound: TeardownBound);
         using var held = Hold(state: state);
-        var expected = Assert.Throws<IOException>(testCode: () => Directory.Delete(path: state.RootPath, recursive: true));
+        // The directory reads each file alone before it deletes anything, so its last error is that read's refusal.
+        var expected = Assert.Throws<IOException>(testCode: () => new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: state.PathOf(name: Late), share: FileShare.None));
         var teardown = Task.Factory.StartNew(
             function: () => Record.Exception(testCode: () => {
                 state.Dispose();
