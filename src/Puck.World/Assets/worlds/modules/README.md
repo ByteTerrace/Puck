@@ -20,7 +20,7 @@ count); it reads the island's.
 | `granaries` | `granaries.puck` | The platform twin's storage court, dealt from the deployment's inventory rows |
 | `arcade` | `arcade.world.json` | Two cabinets and a handheld, each booting an authored cartridge |
 | `dive` | `dive.world.json` | The pool: a medium lattice, a diver kit, fish, a depth row |
-| `kart` | `kart.world.json` | A track on a curve, a kart kit, gates, a lap counter |
+| `kart` | `kart.puck` | A track on a curve, a kart kit, gates, a lap counter |
 | `jump` | `jump.world.json` | A platform course rising from the shard steps, a vaulter kit, a trophy |
 | `arena` | `arena.world.json` | The hp/targeting/attack and elemental suites in a walled yard |
 | `studio` | `studio.world.json` | A flat stage for character work, look cycling, a mirror wall, a gate that opens once awakened |
@@ -228,7 +228,7 @@ See [service composition](../../../../Puck.World.Server/ExtensionConfiguration.m
 for projection authority and lifecycle, and the
 [Azure adapter](../../../../Puck.World.Azure/README.md) for query settings and bounds.
 
-## The kart district (`kart.world.json`, alias `kart`)
+## The kart district (`kart.puck`, alias `kart`)
 
 A closed racing loop: a `curves` row (`kartTrack`, eight knots, constant curvature—an
 exact circle, never control points) traces the lap direction, and `kartCourt` carries a
@@ -247,7 +247,7 @@ its frame resolved by the `ResolveDriveFrame` body-motion op instead of the walk
 speed-scaled authority curve, `turn.referenceSpeed`/`turn.falloff`, rather than snapping
 to the commanded direction every tick), and a `shaping` row carrying an `across` facet—
 the anisotropic drive decomposition: longitudinal throttle/brake/coast via `along`,
-lateral grip converging out slip via `across.lateral`. `kart.world.json` authors exactly
+lateral grip converging out slip via `across.lateral`. `kart.puck` authors exactly
 this: kit `kart`, program `kartDrive` (`ResolveDriveFrame`, `ResolveHold`,
 `ComputePlanarTargetVelocity`, `ShapeVelocity`, `RunActionTriggers`, `ApplyHold`,
 `IntegratePlanarAndVerticalVelocity`, `CommitPose`—the walking program's `SnapYawToPlanarIntent`
