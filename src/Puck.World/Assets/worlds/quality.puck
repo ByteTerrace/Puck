@@ -1,11 +1,13 @@
 // The graphics presets every shipped world shares: `world.quality low|medium|high` applies one, each writing its
 // shadow tier and slot policy, its ambient-occlusion switch, its temporal-reconstruction switch, its dynamic-resolution switch (off
-// in every preset), its scalar render ceiling and its floor tier into the live render levers.
+// in every preset), its scalar render ceiling, its floor tier and its sky tier (`world.sky-quality`) into the live render
+// levers.
 // A world boots on its own render levers and nothing here changes them until a tier is chosen. `low` is the floor
 // tier a player, or a Steam Deck, drops to; `high` is the fullest render. The standard world imports this table, so
 // every world built on it inherits the table, and a world with another basis imports it by name.
 render {
   low {
+    sky: low
     shadows: Off
     shadowLights: 0
     shadowFadeSlots: 0
@@ -18,6 +20,7 @@ render {
     renderScale: 0.70980394
   }
   medium {
+    sky: medium
     shadows: Medium
     shadowLights: 1
     shadowFadeSlots: 0
@@ -30,6 +33,7 @@ render {
     renderScale: 0.8666667
   }
   high {
+    sky: high
     shadows: High
     shadowLights: 2
     shadowFadeSlots: 0

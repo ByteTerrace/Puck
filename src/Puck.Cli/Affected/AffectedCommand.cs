@@ -1,6 +1,7 @@
 using System.CommandLine;
 using Puck.Cli.Architecture;
 using Puck.Cli.Canary;
+using Puck.Cli.Host;
 
 namespace Puck.Cli.Affected;
 
@@ -379,6 +380,14 @@ internal static class AffectedCommand {
     /// <summary>The selection of a suite's CPU tests: every test whose class does not carry the <c>Gpu</c> trait.</summary>
     public static readonly string[] CpuSelection = ["--filter-not-trait", "Category=Gpu"];
 
+    // A heavy suite waits while another process runs one, machine-wide, and for memory and disk headroom: two at once
+    // exhaust the memory. The waiting process's own runs never hold it back.
+    internal static bool AdmitHeavySuite(string repositoryRoot, string suite) {
+        var probe = new HostProbe(checkoutRoot: repositoryRoot);
+
+        return HostAdmission.Wait(cancellationToken: CancellationToken.None, clock: TimeProvider.System, delay: Thread.Sleep, device: false, error: Console.Error, heavySuite: true, sample: () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), step: suite);
+    }
+
     private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu, int gpuJobs, int suiteJobs) {
         var failed = new List<string>();
 
@@ -618,10 +627,9 @@ internal static class AffectedCommand {
               followed by the exact puck baselines <artifact> --check command the gate runs.
 
               --run runs manifest checks, then builds the chosen suites in one build and runs the CPU
-              tests of up to --suite-jobs of them at once, never two heavy suites
-              (<PuckSuiteLoad>heavy</PuckSuiteLoad>) at once, and none beside another while free memory
-              is under its floor; each suite prints its verdict and wall time as it ends. It then runs
-              the worlds and the catalog check. --run --gpu then runs the chosen canaries, up to
+              tests of up to --suite-jobs of them at once; a heavy suite starts first and waits on the
+              machine-wide heavy-suite admission before its run. Each suite prints its verdict and wall
+              time as it ends. It then runs the worlds and the catalog check. --run --gpu then runs the chosen canaries, up to
               --gpu-jobs legs on the GPU at once, and then parity. Baseline checks run only through
               puck gate.
 

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Puck.Cli.Affected;
+using Puck.Cli.Host;
 
 namespace Puck.Cli.Gate;
 
@@ -15,8 +16,8 @@ internal interface IGateRunner {
     /// line the verb writes as it writes it, so a long step can report while it runs.</summary>
     GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments, Action<string>? progress = null);
     /// <summary>Waits for host capacity before a step; a step that opens a device (<see cref="GateStep.Gpu"/>) also waits
-    /// for an idle GPU.</summary>
-    bool WaitForCapacity(string repositoryRoot, string step, bool device);
+    /// for an idle GPU, and a heavy suite also waits while another process runs one.</summary>
+    bool WaitForCapacity(string repositoryRoot, string step, bool device, bool heavySuite);
 }
 /// <summary>Executes the batch plan serially, recording each step and withholding coverage on any failure.</summary>
 internal static class GateRun {
@@ -91,7 +92,7 @@ internal static class GateRun {
                     Console.Out.WriteLine(value: $"gate: {step.Name} skipped; qualification failed.");
                     continue;
                 }
-                if (step.Heavy && !runner.WaitForCapacity(device: step.Gpu, repositoryRoot: repositoryRoot, step: step.Name)) {
+                if (step.Heavy && !runner.WaitForCapacity(device: step.Gpu, heavySuite: ((step.Kind == GateStepKind.DeviceSuite) && HostProcesses.IsHeavyTestAssembly(assembly: step.Name)), repositoryRoot: repositoryRoot, step: step.Name)) {
                     refused = true;
                     Console.Error.WriteLine(value: $"gate: {step.Name} refused; host capacity did not return.");
                     break;

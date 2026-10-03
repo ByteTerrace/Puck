@@ -143,6 +143,38 @@ public sealed class HostLoadLawTests {
     [Theory]
     public void ADeviceTestRunThatCanSelectADeviceLawIsGpuWork(string name, string commandLine) =>
         Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
+    [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.exe --filter-not-trait Category=Gpu")]
+    [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-trait Category=Gpu")]
+    [InlineData("dotnet", "dotnet exec tests/Puck.World.Tests/bin/Release/net10.0/Puck.World.Tests.dll --filter-not-trait Category=Gpu")]
+    [InlineData("dotnet", "dotnet\0/tmp/a path/Puck.World.Tests.dll\0--filter-class\0*CaptureLawTests\0")]
+    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.dll")]
+    [Theory]
+    public void AHeavyTestRunIsAnyRunningPuckWorldTestsWhateverItsFilter(string name, string commandLine) =>
+        Assert.True(condition: HostProcesses.IsHeavyTest(commandLine: commandLine, name: name));
+    [InlineData("dotnet", "dotnet test --project tests/Puck.World.Tests -c Release --no-build --filter-not-trait Category=Gpu")]
+    [InlineData("dotnet", "dotnet build tests/Puck.World.Tests -c Release -m:2 -nodeReuse:false")]
+    [InlineData("grep", "grep.exe --line-buffered Puck.World.Tests")]
+    [InlineData("Puck.Cli.Tests", @"C:\Puck\tests\Puck.Cli.Tests\bin\Release\net10.0\Puck.Cli.Tests.exe --filter-class Puck.Cli.Tests.HostLoadLawTests")]
+    [InlineData("Puck.DirectX.Tests", "Puck.DirectX.Tests.exe --filter-trait Category=Gpu")]
+    [Theory]
+    public void ADriverBuildFollowerOrLighterSuiteIsNoHeavyTestRun(string name, string commandLine) =>
+        Assert.False(condition: HostProcesses.IsHeavyTest(commandLine: commandLine, name: name));
+    [Fact]
+    public void AProcessesDescendantsAreItsChildrenTransitivelyAndNeverARecycledParentsOlderProcess() {
+        var root = new DateTime(day: 1, hour: 12, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2000);
+        var tree = new Dictionary<int, (int Parent, DateTime Started)> {
+            [10] = (1, root),
+            [11] = (10, root.AddSeconds(value: 1)),
+            [12] = (11, root.AddSeconds(value: 2)),
+            [20] = (1, root.AddSeconds(value: 3)),
+            // Started before 10, so 10 is a recycled id of its dead parent, not its parent; nor is its child ours.
+            [13] = (10, root.AddSeconds(value: -5)),
+            [14] = (13, root.AddSeconds(value: -4)),
+        };
+
+        Assert.Equal(expected: [11, 12], actual: HostProcesses.Descendants(processes: tree, root: 10).Order());
+        Assert.Empty(collection: HostProcesses.Descendants(processes: tree, root: 12));
+    }
     [Fact]
     public void EveryDeviceSuiteIsGpuWorkUnderItsGateSelectionAndNotUnderTheCpuSelection() {
         foreach (var (suite, selection) in GatePlan.DeviceSuites) {

@@ -3,38 +3,33 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using System.Xml.Linq;
 using Puck.Cli.Host;
 
 namespace Puck.Cli.Affected;
 
 /// <summary>One chosen suite as <c>puck affected --run</c> schedules it.</summary>
 /// <param name="Name">The suite's project name, which is also its directory under <c>tests/</c>.</param>
-/// <param name="Heavy">Whether its project declares <c>&lt;PuckSuiteLoad&gt;heavy&lt;/PuckSuiteLoad&gt;</c>: a run whose
-/// peak alone is a heavy job on the host (<see cref="AffectedSuites.Admits"/>).</param>
+/// <param name="Heavy">Whether its full run is heavy (<see cref="HostProcesses.IsHeavyTestAssembly"/>), so it starts
+/// first and is admitted machine-wide before it runs (<see cref="AffectedCommand.AdmitHeavySuite"/>).</param>
 internal sealed record AffectedSuite(string Name, bool Heavy);
 /// <summary>One suite's outcome.</summary>
-/// <param name="ExitCode">The test host's exit code.</param>
+/// <param name="ExitCode">The test host's exit code, or <see cref="CliExit.Refused"/> when admission refused it.</param>
 /// <param name="Report">The verdict line's summary, then, for a failed suite, its whole report.</param>
 internal sealed record AffectedSuiteResult(int ExitCode, IReadOnlyList<string> Report);
 /// <summary>
 /// Runs the suites <c>puck affected --run</c> chose: builds them once, in one MSBuild invocation over a solution filter
-/// of exactly those projects, then runs their test hosts concurrently, each on the build that invocation left
-/// (<c>dotnet test --project &lt;suite&gt; --no-build</c>, CPU tests only). How many run at once follows the host-load capacity rules: at most
-/// <c>--suite-jobs</c> hosts, never two heavy suites at once, and a suite starts beside others only while the machine
-/// has the free memory its weight needs.
+/// of exactly those projects, then runs their test hosts side by side, at most <c>--suite-jobs</c> at once, each on the
+/// build that invocation left (<c>dotnet test --project &lt;suite&gt; --no-build</c>, CPU tests only). Heavy suites start
+/// first, and each is admitted by the one machine-wide heavy-suite rule before it runs
+/// (<see cref="AffectedCommand.AdmitHeavySuite"/>, <see cref="HostAdmission"/>): no other heavy run on the machine, and
+/// memory and disk headroom.
 /// </summary>
 internal static class AffectedSuites {
-    /// <summary>The project property that declares a suite heavy.</summary>
-    public const string LoadProperty = "PuckSuiteLoad";
-
-    // How long a suite waiting on free memory sleeps before the machine is read again, when no running suite ends first.
-    private static readonly TimeSpan MemoryPoll = TimeSpan.FromSeconds(value: 2);
     // A build or a suite killed at this ceiling has hung; the slowest suite runs for a few minutes.
     private static readonly TimeSpan Ceiling = TimeSpan.FromMinutes(minutes: 30);
 
     /// <summary>Gets the suites run at once unless <c>--suite-jobs</c> says otherwise: a quarter of the logical
-    /// processors, at least one, since every xUnit host already runs its own tests in parallel across the
+    /// processors, at least one, since every test host already runs its own tests in parallel across the
     /// machine.</summary>
     public static int DefaultJobs => Math.Max(
         val1: 1,
@@ -44,19 +39,13 @@ internal static class AffectedSuites {
     private static IReadOnlyList<string> Lines(string text) => [.. text.Split(separator: '\n')
         .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
         .Where(predicate: static line => (line.Length > 0))];
-    private static string ProjectPath(string repositoryRoot, string suite) => Path.Combine(
-        path1: repositoryRoot,
-        path2: "tests",
-        path3: suite,
-        path4: $"{suite}.csproj"
-    );
 
     /// <summary>Creates <c>--suite-jobs</c>; <c>puck affected</c> and <c>puck gate</c> share it.</summary>
     /// <returns>The option.</returns>
     public static Option<int> Jobs() {
         var option = new Option<int>(name: "--suite-jobs") {
             DefaultValueFactory = static _ => DefaultJobs,
-            Description = "Maximum test suites to run at once (default: a quarter of the logical processors). Never two heavy suites at once, and none beside another while free memory is short.",
+            Description = "Maximum test suites to run at once (default: a quarter of the logical processors). A heavy suite starts first and waits for host admission before it runs.",
         };
 
         option.Validators.Add(item: static result => {
@@ -67,75 +56,33 @@ internal static class AffectedSuites {
 
         return option;
     }
-    /// <summary>Answers whether <paramref name="suite"/> may start now. With nothing running any suite starts, so a run
-    /// always progresses on a loaded machine. Beside others, a suite needs a free <paramref name="jobs"/> slot, a heavy
-    /// one needs no other heavy suite running, and each needs free memory above its floor: an eighth of the machine's
-    /// memory for a light suite (the pressure line, 4 GB on a 32 GB machine), a quarter for a heavy one (8 GB on a 32 GB
-    /// machine, the free memory a heavy step waits for).</summary>
-    /// <param name="suite">The suite waiting to start.</param>
-    /// <param name="running">The suites running.</param>
-    /// <param name="heavyRunning">Whether a heavy suite is running.</param>
-    /// <param name="jobs">The most suites run at once.</param>
-    /// <param name="freeRamGb">Free physical memory now, or NaN when it cannot be read.</param>
-    /// <param name="totalRamGb">The machine's physical memory.</param>
-    /// <returns>Whether it starts.</returns>
-    public static bool Admits(AffectedSuite suite, int running, bool heavyRunning, int jobs, double freeRamGb, double totalRamGb) {
-        if (running == 0) {
-            return true;
-        }
-        if (
-            (running >= jobs) ||
-            (suite.Heavy && heavyRunning)
-        ) {
-            return false;
-        }
-
-        var floor = (totalRamGb / (suite.Heavy
-            ? 4
-            : 8));
-
-        return (double.IsNaN(d: freeRamGb) || (freeRamGb > floor));
-    }
-    /// <summary>The order suites are offered to <see cref="Admits"/> in: heavy suites first, since they run longest,
-    /// then the rest in the plan's order.</summary>
+    /// <summary>The order suites start in: heavy suites first, since they run longest, then the rest in the plan's
+    /// order.</summary>
     /// <param name="suites">The chosen suites, in the plan's order.</param>
     /// <returns>The start order.</returns>
     public static List<AffectedSuite> StartOrder(IReadOnlyList<AffectedSuite> suites) => [
         .. suites.Where(predicate: static suite => suite.Heavy),
         .. suites.Where(predicate: static suite => !suite.Heavy),
     ];
-    /// <summary>Runs every suite through <paramref name="run"/>, starting each as soon as <see cref="Admits"/> lets it,
-    /// and hands each finished one, with its wall time, to <paramref name="completed"/> on the calling thread.</summary>
+    /// <summary>Runs every suite through <paramref name="run"/>, at most <paramref name="jobs"/> at once, starting them in
+    /// <see cref="StartOrder"/>, and hands each finished one, with its wall time, to <paramref name="completed"/> on the
+    /// calling thread.</summary>
     /// <param name="suites">The suites, in the plan's order.</param>
-    /// <param name="jobs">The most suites run at once.</param>
-    /// <param name="run">Runs one suite on its own thread.</param>
-    /// <param name="freeRamGb">Reads free physical memory.</param>
-    /// <param name="totalRamGb">The machine's physical memory.</param>
+    /// <param name="jobs">The most suites run at once; at least one runs.</param>
+    /// <param name="run">Runs one suite on its own thread, its admission included.</param>
     /// <param name="completed">Receives each suite as it ends.</param>
-    public static void RunConcurrently(IReadOnlyList<AffectedSuite> suites, int jobs, Func<AffectedSuite, AffectedSuiteResult> run, Func<double> freeRamGb, double totalRamGb, Action<AffectedSuite, AffectedSuiteResult, TimeSpan> completed) {
-        var waiting = StartOrder(suites: suites);
+    public static void RunConcurrently(IReadOnlyList<AffectedSuite> suites, int jobs, Func<AffectedSuite, AffectedSuiteResult> run, Action<AffectedSuite, AffectedSuiteResult, TimeSpan> completed) {
+        var waiting = new Queue<AffectedSuite>(collection: StartOrder(suites: suites));
         var running = new List<(Task<(AffectedSuiteResult Result, TimeSpan Elapsed)> Task, AffectedSuite Suite)>(capacity: suites.Count);
+        var bound = Math.Max(
+            val1: 1,
+            val2: jobs
+        );
 
         while ((waiting.Count > 0) || (running.Count > 0)) {
-            while (waiting.Count > 0) {
-                var heavyRunning = running.Any(predicate: static entry => entry.Suite.Heavy);
-                var free = freeRamGb();
-                var next = waiting.FindIndex(match: suite => Admits(
-                    freeRamGb: free,
-                    heavyRunning: heavyRunning,
-                    jobs: jobs,
-                    running: running.Count,
-                    suite: suite,
-                    totalRamGb: totalRamGb
-                ));
+            while ((waiting.Count > 0) && (running.Count < bound)) {
+                var suite = waiting.Dequeue();
 
-                if (next < 0) {
-                    break;
-                }
-
-                var suite = waiting[next];
-
-                waiting.RemoveAt(index: next);
                 running.Add(item: (Task.Factory.StartNew(
                     cancellationToken: CancellationToken.None,
                     creationOptions: TaskCreationOptions.LongRunning,
@@ -149,17 +96,7 @@ internal static class AffectedSuites {
                 ), suite));
             }
 
-            // A suite held back by memory alone waits for the machine as well as for a running suite to end.
-            var finished = Task.WaitAny(
-                tasks: [.. running.Select(selector: static entry => entry.Task)],
-                timeout: ((waiting.Count > 0)
-                    ? MemoryPoll
-                    : Timeout.InfiniteTimeSpan)
-            );
-
-            if (finished < 0) {
-                continue;
-            }
+            var finished = Task.WaitAny(tasks: [.. running.Select(selector: static entry => entry.Task)]);
 
             var (task, done) = running[finished];
 
@@ -170,20 +107,6 @@ internal static class AffectedSuites {
             completed(arg1: done, arg2: outcome, arg3: elapsed);
         }
     }
-    /// <summary>Reads whether a suite's project declares itself heavy.</summary>
-    /// <param name="repositoryRoot">The repository root.</param>
-    /// <param name="suite">The suite's name.</param>
-    /// <returns>The suite.</returns>
-    public static AffectedSuite Read(string repositoryRoot, string suite) => new(
-        Heavy: string.Equals(
-            a: XDocument.Load(uri: ProjectPath(repositoryRoot: repositoryRoot, suite: suite))
-                .Descendants()
-                .FirstOrDefault(predicate: static element => (element.Name.LocalName == LoadProperty))?.Value.Trim(),
-            b: "heavy",
-            comparisonType: StringComparison.Ordinal
-        ),
-        Name: suite
-    );
     /// <summary>Builds and runs <paramref name="suites"/>, printing each suite's verdict line, with its wall time, as it
     /// ends; a failed suite's whole report follows its line.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
@@ -264,11 +187,9 @@ internal static class AffectedSuites {
                     _ = failed.Add(item: suite.Name);
                 }
             },
-            freeRamGb: HostProbe.FreeRamGb,
             jobs: jobs,
-            run: suite => RunSuite(repositoryRoot: repositoryRoot, suite: suite.Name),
-            suites: [.. suites.Select(selector: suite => Read(repositoryRoot: repositoryRoot, suite: suite))],
-            totalRamGb: (GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1073741824.0)
+            run: suite => RunSuite(repositoryRoot: repositoryRoot, suite: suite),
+            suites: [.. suites.Select(selector: static suite => new AffectedSuite(Heavy: HostProcesses.IsHeavyTestAssembly(assembly: suite), Name: suite))]
         );
 
         return [.. suites.Where(predicate: failed.Contains)];
@@ -278,20 +199,26 @@ internal static class AffectedSuites {
     // switches, so the run builds nothing and takes none (AffectedCommand.TestArguments). A plain run selects exactly
     // what CI's does, so an explicit tier such as Maths' Deep and Exhaustive stays out, and the Gpu trait keeps device
     // laws out (AffectedCommand.CpuSelection). The platform prints each failure with its message and stack.
-    private static AffectedSuiteResult RunSuite(string repositoryRoot, string suite) {
+    private static AffectedSuiteResult RunSuite(string repositoryRoot, AffectedSuite suite) {
+        if (suite.Heavy && !AffectedCommand.AdmitHeavySuite(repositoryRoot: repositoryRoot, suite: suite.Name)) {
+            return new AffectedSuiteResult(
+                ExitCode: CliExit.Refused,
+                Report: [$"REFUSED — host admission did not return within {HostAdmission.HeavyTimeout.TotalHours.ToString(format: "0", provider: CultureInfo.InvariantCulture)} hours"]
+            );
+        }
+
         var run = CliProcess.RunCaptured(
-            arguments: [.. AffectedCommand.TestArguments(suite: suite), .. AffectedCommand.CpuSelection],
+            arguments: [.. AffectedCommand.TestArguments(suite: suite.Name), .. AffectedCommand.CpuSelection],
             fileName: "dotnet",
             input: string.Empty,
             timeout: Ceiling,
             workingDirectory: repositoryRoot
         );
         var output = Lines(text: run.Stdout);
-        var total = CliTestRun.Summary(output: output);
 
         return new AffectedSuiteResult(
             ExitCode: run.ExitCode,
-            Report: [total, .. ((run.ExitCode == 0)
+            Report: [CliTestRun.Summary(output: output), .. ((run.ExitCode == 0)
                 ? []
                 : output.Concat(second: Lines(text: run.Stderr)))]
         );

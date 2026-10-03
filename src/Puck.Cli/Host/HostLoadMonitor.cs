@@ -10,7 +10,9 @@ namespace Puck.Cli.Host;
 /// <param name="GpuHolder">The process holding the GPU (its name and id), or <see langword="null"/> when none does.</param>
 /// <param name="ReuseNodes">MSBuild nodes left running for reuse (a build or restore run without
 /// <c>-nodeReuse:false</c>).</param>
-internal readonly record struct HostSample(DateTimeOffset At, double CpuPercent, double FreeRamGb, double FreeDiskGb, string? GpuHolder, int ReuseNodes);
+/// <param name="HeavyTestHolder">A heavy test run (<see cref="HostProcesses.IsHeavyTest"/>) the reading process did not
+/// start, its name and id, or <see langword="null"/> when none runs.</param>
+internal readonly record struct HostSample(DateTimeOffset At, double CpuPercent, double FreeRamGb, double FreeDiskGb, string? GpuHolder, int ReuseNodes, string? HeavyTestHolder = null);
 /// <summary>The thresholds that turn readings into admission lines. A threshold left out is never judged, so with
 /// none the monitor reports only GPU transitions.</summary>
 /// <param name="CapacityCpuPercent">CAPACITY needs the CPU mean below this.</param>

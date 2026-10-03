@@ -242,6 +242,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             framesInFlight: FrameRingSize,
             name: "gpu.sdf-tables"
         ));
+        m_skyDetails = (options.SkyDetails ?? new SdfSkyDetails());
 
         var gpu = GpuWorkCounting.Wrap(
             ledger: m_work,
@@ -356,7 +357,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         ));
         m_lightRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_lightRecords), region: LightRegionIndex));
         m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
-        m_skyStopRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyStopRecords), region: SkyStopRegionIndex));
+        m_skyLayerRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyLayerRecords), region: SkyLayerRegionIndex));
         m_softboxRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_softboxRecords), region: SoftboxRegionIndex));
         m_shadowHandoffBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: RegionName(region: ShadowHandoffRegionIndex), sizeBytes: ((ulong)RecordBytes(records: m_shadowHandoffs)), usage: GpuBufferUsage.Storage));

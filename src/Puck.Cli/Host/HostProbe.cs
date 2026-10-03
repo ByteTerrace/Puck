@@ -13,6 +13,7 @@ namespace Puck.Cli.Host;
 /// ntdll; Linux through <c>/proc</c>.
 /// </summary>
 internal sealed partial class HostProbe(string checkoutRoot) {
+    private const uint ProcessBasicInformation = 0;
     private const uint ProcessCommandLineInformation = 60;
     private const uint ProcessQueryLimitedInformation = 0x1000;
 
@@ -90,6 +91,41 @@ internal sealed partial class HostProbe(string checkoutRoot) {
             _ = CloseHandle(handle: process);
         }
     }
+    // The id of the process that started another one, or -1 when it cannot be read.
+    private static unsafe int ParentId(int processId) {
+        if (OperatingSystem.IsLinux()) {
+            try {
+                // pid (comm) state ppid …: the name may hold spaces and parentheses, so read after its last ')'.
+                var stat = File.ReadAllText(path: $"/proc/{processId.ToString(provider: CultureInfo.InvariantCulture)}/stat");
+                var fields = stat[(stat.LastIndexOf(value: ')') + 2)..].Split(separator: ' ');
+
+                return int.Parse(provider: CultureInfo.InvariantCulture, s: fields[1]);
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or FormatException or IndexOutOfRangeException)) {
+                return -1;
+            }
+        }
+        if (!OperatingSystem.IsWindows()) {
+            return -1;
+        }
+
+        var process = OpenProcess(access: ProcessQueryLimitedInformation, inherit: false, processId: ((uint)processId));
+
+        if (process == 0) {
+            return -1;
+        }
+
+        try {
+            // PROCESS_BASIC_INFORMATION: exit status, PEB, affinity, base priority, own id, then the parent's id, each
+            // pointer-sized.
+            var information = stackalloc nint[6];
+
+            return ((NtQueryInformationProcess(information: information, informationClass: ProcessBasicInformation, length: ((uint)(6 * IntPtr.Size)), process: process, returned: out _) == 0)
+                ? ((int)information[5])
+                : -1);
+        } finally {
+            _ = CloseHandle(handle: process);
+        }
+    }
     // Busy and total CPU time since boot, in the platform's ticks.
     private static (ulong Idle, ulong Total)? CpuTimes() {
         if (OperatingSystem.IsWindows()) {
@@ -107,10 +143,7 @@ internal sealed partial class HostProbe(string checkoutRoot) {
 
         return null;
     }
-
-    /// <summary>Reads free physical memory, in gigabytes, or NaN when the platform offers no reading.</summary>
-    /// <returns>The free memory.</returns>
-    internal static double FreeRamGb() {
+    private static double FreeRamGb() {
         if (OperatingSystem.IsWindows()) {
             var status = new MemoryStatusEx { Length = ((uint)Marshal.SizeOf<MemoryStatusEx>()) };
 
@@ -176,24 +209,45 @@ internal sealed partial class HostProbe(string checkoutRoot) {
         m_previous = times;
 
         string? holder = null;
+        string? heavy = null;
         var reuse = 0;
         var self = Environment.ProcessId;
+        var running = new List<(int Id, string Name, string CommandLine)>();
+        var tree = new Dictionary<int, (int Parent, DateTime Started)>();
 
         foreach (var process in Process.GetProcesses()) {
             using (process) {
+                DateTime started;
+
+                try {
+                    started = process.StartTime;
+                } catch (Exception exception) when ((exception is Win32Exception or InvalidOperationException or NotSupportedException)) {
+                    started = DateTime.MinValue;
+                }
+
+                tree[process.Id] = (ParentId(processId: process.Id), started);
+
                 // The probe never matches itself, whatever its own command line says.
-                if (process.Id == self) {
-                    continue;
+                if (process.Id != self) {
+                    running.Add(item: (process.Id, process.ProcessName, CommandLine(processId: process.Id)));
                 }
+            }
+        }
 
-                var commandLine = CommandLine(processId: process.Id);
+        // A heavy test run this process started is its own work, never another's hold on the machine.
+        var own = HostProcesses.Descendants(processes: tree, root: self);
 
-                if ((holder is null) && HostProcesses.IsGpuWork(commandLine: commandLine, name: process.ProcessName)) {
-                    holder = $"{process.ProcessName} {process.Id.ToString(provider: CultureInfo.InvariantCulture)}";
-                }
-                if (HostProcesses.IsReuseNode(commandLine: commandLine, name: process.ProcessName)) {
-                    reuse++;
-                }
+        foreach (var (id, name, commandLine) in running) {
+            var label = $"{name} {id.ToString(provider: CultureInfo.InvariantCulture)}";
+
+            if ((holder is null) && HostProcesses.IsGpuWork(commandLine: commandLine, name: name)) {
+                holder = label;
+            }
+            if ((heavy is null) && !own.Contains(item: id) && HostProcesses.IsHeavyTest(commandLine: commandLine, name: name)) {
+                heavy = label;
+            }
+            if (HostProcesses.IsReuseNode(commandLine: commandLine, name: name)) {
+                reuse++;
             }
         }
 
@@ -203,7 +257,8 @@ internal sealed partial class HostProbe(string checkoutRoot) {
             FreeDiskGb: FreeDiskGb(availableBytes: AvailableDiskBytes, directory: checkoutRoot),
             FreeRamGb: FreeRamGb(),
             GpuHolder: holder,
-            ReuseNodes: reuse
+            ReuseNodes: reuse,
+            HeavyTestHolder: heavy
         );
     }
 }

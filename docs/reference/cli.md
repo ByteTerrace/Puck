@@ -864,12 +864,11 @@ the chosen suites once, in one build over a solution filter of exactly those
 projects, then runs their CPU tests (`--filter-not-trait Category=Gpu`) side by
 side on that build, then `puck test` on the chosen worlds, then the catalog
 check, and exits 1 when any of them fails. At most `--suite-jobs` suites run at
-once (default: a quarter of the logical processors). A suite whose project
-declares `<PuckSuiteLoad>heavy</PuckSuiteLoad>`, as `Puck.World.Tests` does,
-starts first and never beside another heavy one. Beside others, a suite starts
-only while free memory is above its floor, an eighth of the machine's memory
-for a light suite and a quarter for a heavy one; a suite with nothing else
-running always starts. Each suite prints one verdict line with its wall time
+once (default: a quarter of the logical processors). A heavy suite
+(`Puck.World.Tests`) starts first and, before its run, waits on the one
+machine-wide heavy-suite admission the gate uses (see
+[`puck gate`](#puck-gatethe-change-scoped-gate)): no other process running a
+heavy suite, and memory and disk headroom. Each suite prints one verdict line with its wall time
 as it ends; a failed one follows it with its whole report, each failed test
 with its message and stack, and a failed build prints its errors and runs no
 suite, so the log `puck gate` keeps names every failure. `--gpu`, which needs
@@ -964,14 +963,26 @@ Before the solution build, affected run, each baseline check, selected canaries
 and parity, each device suite, each counters
 workload, citations and recording, admission uses
 [`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s default
-classification in-process. A step that opens a device (the canaries, parity,
-each device suite, counters, citations and recording, the steps that run only
-with `--gpu`) waits for capacity and an idle GPU; the build, affected run and
-baseline checks run no `Gpu`-trait test and wait for CPU and memory capacity
-alone, whatever holds the GPU. A step with what it needs admits immediately.
-Otherwise the gate reports waiting on stderr, samples every ten seconds for
-at most thirty minutes, and reports when capacity returns. Expiry refuses the
-remaining run. Completed child processes do not hold admission; builds and
+thresholds in-process. Memory and disk decide: every heavy step waits for free
+memory over the capacity threshold (5 GB) and free disk over the pressure
+threshold (10 GB), since running out of either is what fails a build or a heavy
+suite. CPU load only slows a step, so it is advisory: a step admitted while the
+CPU is over the capacity threshold (50%) runs, and the gate prints the load it
+ran under; the gate never waits or refuses for CPU alone. A step that opens a
+device (the canaries, parity, each device suite, counters, citations and
+recording, the steps that run only with `--gpu`) also waits for an idle GPU; the
+build, affected run and baseline checks run no `Gpu`-trait test and never wait
+on a GPU holder. A heavy suite (`Puck.World.Tests`, whatever its filter) also
+waits while another process on the machine runs one, since two at once exhaust
+its memory: the gate's `Puck.World.Tests` device suite waits before it starts,
+and `affected --run` waits before each heavy suite's run, so a CPU run inside one
+gate and another gate's run never overlap. The waiting process's own descendants
+never hold it back. A step with what it needs admits immediately. Otherwise the
+gate reports waiting on stderr, naming the holder again when it changes, samples
+every ten seconds, prints a still-waiting line after ten silent minutes, and
+reports when capacity returns. A step waits at most thirty minutes and a heavy
+suite at most two hours, since a full `Puck.World.Tests` under load takes up to
+half an hour and a gate can queue behind two; expiry refuses the remaining run. Completed child processes do not hold admission; builds and
 reusable MSBuild nodes are not GPU holders.
 
 A failed build or CLI copy stops the gate. Other failed steps allow later checks
