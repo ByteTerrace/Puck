@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/a14232a52d94d4602ca187c71a62392c984ce26ef515e6a342ca9a5d67bda24c). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/30aca87cbb31dbec45c2ed4a96b7a2efb7cac400c0cd42d1d412ff3c3ac68b86). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -188,8 +188,8 @@ struct SdfWorldPass {
     [[vk::offset(460)]] uint _pad460;
     [[vk::offset(464)]] float3 viewUp;
     [[vk::offset(476)]] uint viewportCount;
-    [[vk::offset(480)]] uint workCounterDetailRow;
-    [[vk::offset(484)]] uint workCounterRow;
+    [[vk::offset(480)]] uint workCounterRow;
+    [[vk::offset(484)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaCD9F88B9 : register(b0, space3);
 #define passGroup passGroupIsaCD9F88B9
@@ -248,10 +248,10 @@ void puckCountWork(uint steps, uint texels) {
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
 // Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
-    if (passGroup.workCounterDetailRow == 0u) {
+    if (passGroup.workCounterRowDetail == 0u) {
         return;
     }
-    uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
     puckAddWork((row + PuckWorkStepsWord), steps);
     puckAddWork((row + PuckWorkTexelsWord), texels);
     puckAddWork((row + PuckWorkSkyWord), evaluations);

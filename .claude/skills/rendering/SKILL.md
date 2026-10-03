@@ -1084,7 +1084,7 @@ These are one-line cautions; the owning pages hold the derivations.
   recording gets its row in `RenderGraphPackageRecording.WorkCounters`; a
   package recorder writes it through `RenderGraphPackageWorkCounters`, which
   binds the buffer at `workCounters` and writes the row into the pass
-  block (`workCounterRow`, and `workCounterDetailRow` for named rows), and SDF compute kernels end with
+  block (`workCounterRow`, and `workCounterRowDetail` for named rows), and SDF compute kernels end with
   `puckCountWork(sdfWorkSteps, sdfWorkTexels)` (`frame/sdf-work.hlsli`), after
   every lane that did work. A shadow uses `puckCountDetail` for its slot, and sky
   layers count evaluations, hashes and field-run loads at their own operations.

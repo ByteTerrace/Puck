@@ -1,4 +1,4 @@
-// Generated from shader interface 'place' (sha256/cedf04ad4e14ce5cf2fb64cb835996bdcc41e8d268d93bc4dc25e0d73bbe5c48). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'place' (sha256/05d8543b0d353185f146cf27240e0f69378240ddc5d59ddfc6d99b64d1bf977b). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_PLACE
 #define PUCK_SHADER_INTERFACE_PLACE
 
@@ -34,8 +34,8 @@ struct PlacePass {
     [[vk::offset(36)]] float sharpness;
     [[vk::offset(40)]] uint tonemap;
     [[vk::offset(44)]] float wipe;
-    [[vk::offset(48)]] uint workCounterDetailRow;
-    [[vk::offset(52)]] uint workCounterRow;
+    [[vk::offset(48)]] uint workCounterRow;
+    [[vk::offset(52)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<PlacePass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] Texture2D<float4> base : register(t1, space3);
@@ -85,10 +85,10 @@ void puckCountWork(uint steps, uint texels) {
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
 // Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
-    if (passGroup.workCounterDetailRow == 0u) {
+    if (passGroup.workCounterRowDetail == 0u) {
         return;
     }
-    uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
     puckAddWork((row + PuckWorkStepsWord), steps);
     puckAddWork((row + PuckWorkTexelsWord), texels);
     puckAddWork((row + PuckWorkSkyWord), evaluations);

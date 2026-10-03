@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-transfer' (sha256/c61af51c046d248e45346e07ed1a495dff8433596b1bec9817b29e1cec6b5ac9). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-transfer' (sha256/d7650931cc65ed3cdf2ece0e120914f6e4c82c7b8d1200ec648e611edeb7dbe8). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_TRANSFER
 #define PUCK_SHADER_INTERFACE_SOURCE_TRANSFER
 
@@ -28,8 +28,8 @@ struct SourceTransferFrame {
 struct SourceTransferPass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] float paperWhiteNits;
-    [[vk::offset(12)]] uint workCounterDetailRow;
-    [[vk::offset(16)]] uint workCounterRow;
+    [[vk::offset(12)]] uint workCounterRow;
+    [[vk::offset(16)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SourceTransferPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);
@@ -76,10 +76,10 @@ void puckCountWork(uint steps, uint texels) {
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
 // Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
-    if (passGroup.workCounterDetailRow == 0u) {
+    if (passGroup.workCounterRowDetail == 0u) {
         return;
     }
-    uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
     puckAddWork((row + PuckWorkStepsWord), steps);
     puckAddWork((row + PuckWorkTexelsWord), texels);
     puckAddWork((row + PuckWorkSkyWord), evaluations);

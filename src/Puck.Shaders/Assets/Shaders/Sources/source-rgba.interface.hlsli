@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-rgba' (sha256/f0aafbd9d9c1c111dea70e73e319d3409a3db5f7560debb846a8d691ab9a88cd). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-rgba' (sha256/5d2b3c22c375804a8694d1a199aff3f75f70b38c91a1e83d909a282a4c2d0a02). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_RGBA
 #define PUCK_SHADER_INTERFACE_SOURCE_RGBA
 
@@ -28,8 +28,8 @@ struct SourceRgbaFrame {
 struct SourceRgbaPass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] float paperWhiteNits;
-    [[vk::offset(12)]] uint workCounterDetailRow;
-    [[vk::offset(16)]] uint workCounterRow;
+    [[vk::offset(12)]] uint workCounterRow;
+    [[vk::offset(16)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SourceRgbaPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);
@@ -76,10 +76,10 @@ void puckCountWork(uint steps, uint texels) {
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
 // Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
-    if (passGroup.workCounterDetailRow == 0u) {
+    if (passGroup.workCounterRowDetail == 0u) {
         return;
     }
-    uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
     puckAddWork((row + PuckWorkStepsWord), steps);
     puckAddWork((row + PuckWorkTexelsWord), texels);
     puckAddWork((row + PuckWorkSkyWord), evaluations);

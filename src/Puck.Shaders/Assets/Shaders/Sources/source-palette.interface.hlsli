@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-palette' (sha256/a081bd62f615f1be9574b35a5ac16dc4c6cdfdf418fd05e19f78bd9bd96fa15d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-palette' (sha256/bf57f9be73e5f8a92971c177af42b2cc39c139f6beea878afb7ed541fb0f4286). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_PALETTE
 #define PUCK_SHADER_INTERFACE_SOURCE_PALETTE
 
@@ -28,8 +28,8 @@ struct SourcePaletteFrame {
 struct SourcePalettePass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] float paperWhiteNits;
-    [[vk::offset(12)]] uint workCounterDetailRow;
-    [[vk::offset(16)]] uint workCounterRow;
+    [[vk::offset(12)]] uint workCounterRow;
+    [[vk::offset(16)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SourcePalettePass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);
@@ -76,10 +76,10 @@ void puckCountWork(uint steps, uint texels) {
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
 // Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
-    if (passGroup.workCounterDetailRow == 0u) {
+    if (passGroup.workCounterRowDetail == 0u) {
         return;
     }
-    uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
     puckAddWork((row + PuckWorkStepsWord), steps);
     puckAddWork((row + PuckWorkTexelsWord), texels);
     puckAddWork((row + PuckWorkSkyWord), evaluations);

@@ -21,7 +21,7 @@ public static class ShaderWorkCounters {
     /// (<see cref="GpuKernelCounterRow.Row"/>) (<c>uint</c>).</summary>
     public const string Row = "workCounterRow";
     /// <summary>The first named detail row, or zero when the pass has no named details.</summary>
-    public const string DetailRow = "workCounterDetailRow";
+    public const string DetailRow = "workCounterRowDetail";
     /// <summary>The frame slot's counter buffer, a read-write <c>uint</c> buffer the pass adds to.</summary>
     public const string Buffer = "workCounters";
 

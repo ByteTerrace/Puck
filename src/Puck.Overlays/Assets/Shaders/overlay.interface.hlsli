@@ -1,4 +1,4 @@
-// Generated from shader interface 'overlay' (sha256/9c9064cf8a3bfe481813b79ecce0f008627f09fac2b24e1374448967a55408b5). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'overlay' (sha256/192026822ff30b1eb27e7b6b88e52215c9c1435b491cc8870f9eeb455e8f78e4). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_OVERLAY
 #define PUCK_SHADER_INTERFACE_OVERLAY
 
@@ -32,8 +32,8 @@ struct OverlayPass {
     [[vk::offset(16)]] float4 counts;
     [[vk::offset(32)]] float4 misc;
     [[vk::offset(48)]] float4 sdf;
-    [[vk::offset(64)]] uint workCounterDetailRow;
-    [[vk::offset(68)]] uint workCounterRow;
+    [[vk::offset(64)]] uint workCounterRow;
+    [[vk::offset(68)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<OverlayPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] Texture2D<float4> source : register(t1, space3);
@@ -89,10 +89,10 @@ void puckCountWork(uint steps, uint texels) {
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
 // Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
-    if (passGroup.workCounterDetailRow == 0u) {
+    if (passGroup.workCounterRowDetail == 0u) {
         return;
     }
-    uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
     puckAddWork((row + PuckWorkStepsWord), steps);
     puckAddWork((row + PuckWorkTexelsWord), texels);
     puckAddWork((row + PuckWorkSkyWord), evaluations);

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-film-grain' (sha256/d21c7d3dd13294084eca206a47cc48fbfb34e2b37e151568077865b24abd6988). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-film-grain' (sha256/26adc9ddb6f1052f9f17641ab7271f8aa7831cfb68f3e7a47834433a4dda49f2). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_FILM_GRAIN
 #define PUCK_SHADER_INTERFACE_SDF_FILM_GRAIN
 
@@ -31,8 +31,8 @@ struct SdfFilmGrainPass {
     [[vk::offset(12)]] float intensity;
     [[vk::offset(16)]] uint seed;
     [[vk::offset(20)]] float size;
-    [[vk::offset(24)]] uint workCounterDetailRow;
-    [[vk::offset(28)]] uint workCounterRow;
+    [[vk::offset(24)]] uint workCounterRow;
+    [[vk::offset(28)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfFilmGrainPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] Texture2D<float4> source : register(t1, space3);
@@ -79,10 +79,10 @@ void puckCountWork(uint steps, uint texels) {
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
 // Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
-    if (passGroup.workCounterDetailRow == 0u) {
+    if (passGroup.workCounterRowDetail == 0u) {
         return;
     }
-    uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
     puckAddWork((row + PuckWorkStepsWord), steps);
     puckAddWork((row + PuckWorkTexelsWord), texels);
     puckAddWork((row + PuckWorkSkyWord), evaluations);

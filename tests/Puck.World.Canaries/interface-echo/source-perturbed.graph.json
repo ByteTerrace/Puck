@@ -26,8 +26,8 @@
       ],
       "config": {
         "paperWhiteNits": { "type": "float", "default": 80, "min": 80, "max": 10000, "description": "The paper-white level, in cd/m², a working value of one shows at." },
-        "workCounterDetailRow": { "type": "uint", "default": 0, "description": "The pass's first named detail row of the work counters." },
-        "workCounterRow": { "type": "uint", "default": 0, "description": "The pass's row of the work counters." }
+        "workCounterRow": { "type": "uint", "default": 0, "description": "The pass's row of the work counters." },
+        "workCounterRowDetail": { "type": "uint", "default": 0, "description": "The pass's first named detail row of the work counters." }
       }
     }
   ],

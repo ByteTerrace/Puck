@@ -87,6 +87,75 @@ public sealed partial class SdfWorldPassesLawTests {
         return (Ran(part: SdfWorldPackage.Parts.Ambient), Ran(part: SdfWorldPackage.Parts.Shadow));
     }
 
+    // The host-visible bytes each part of a view's latest completed frame wrote, by part.
+    private static Dictionary<string, long> HostBytesOf(SdfFrame frame) {
+        var gpu = new FakeGpuDevice();
+        var pipelines = SdfTestPipelines.Cache();
+        using var view = new SdfTestView(
+            device: gpu,
+            extent: Extent,
+            pipelines: pipelines,
+            residency: new SdfWorldResidency(
+                brickPoolVoxelCapacity: 0,
+                frameSource: new FixedFrameSource(frame: frame),
+                height: Extent,
+                kernels: SdfTestPipelines.Kernels(),
+                name: SdfTestView.Instance,
+                pipelines: pipelines,
+                width: Extent
+            )
+        );
+        var context = new FrameContext(
+            AccumulatorTicks: 0UL,
+            DeltaTicks: 0UL,
+            ElapsedTicks: 0UL,
+            FrameDeltaTicks: 0UL,
+            Host: new HostContext(capabilities: new Dictionary<Type, object> {
+                [typeof(IGpuDeviceContext)] = gpu,
+            }),
+            StepTicks: 0UL,
+            TargetHeight: Extent,
+            TargetWidth: Extent
+        );
+
+        TestLiveness.Until(
+            step: () => view.Produce(context: in context),
+            reason: () => view.NotReadyReason,
+            wait: view.Residency.WaitPipelineBuilds
+        );
+        for (var frameIndex = 0; (frameIndex < 3); frameIndex++) {
+            _ = view.Produce(context: in context);
+        }
+
+        var sample = new GpuWorkSample();
+
+        Assert.True(condition: view.Runtime.Work(instance: 0).TryReadCompleted(sample: sample));
+
+        var column = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.HostVisibleUploadBytes);
+        var bytes = new Dictionary<string, long>();
+
+        for (var pass = 0; (pass < sample.PassLabels.Length); pass++) {
+            _ = sample.TryGetPassCount(column: column, pass: pass, value: out var value);
+            bytes[sample.PassLabels[pass]] = value;
+        }
+
+        return bytes;
+    }
+
+    // A pass block's words that change every frame form one run each; the run list is bounded (GpuRegion.HostRunCapacity),
+    // and a past-the-bound range merges neighbours across the words between them, re-sending them. The work counter row
+    // and the first detail row sit side by side in the block, so a hit pass writing its row adds no run and no
+    // coalescing: its bytes are the mask pass's plus the four of its row word.
+    [Fact]
+    public void ADetailRowBesideTheCounterRowAddsNoRunToAHitPassesBlock() {
+        var bytes = HostBytesOf(frame: Frame());
+        var mask = bytes["sdf.world$mask"];
+
+        foreach (var part in new[] { SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views }) {
+            Assert.Equal(expected: (mask + 4L), actual: bytes[$"sdf.world${part}"]);
+        }
+    }
+
     [Fact]
     public void TheAmbientAndShadowPartsRunExactlyWhenTheirLeversTurnThemOn() {
         var frame = Frame();

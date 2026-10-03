@@ -71,7 +71,7 @@ public sealed class ShaderWorkCountersLawTests {
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkRowWords = 10u;");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyHashesWord = 6u;");
         Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyTextureLoadsWord = 8u;");
-        Assert.Contains(actualString: generated, expectedSubstring: "uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);");
+        Assert.Contains(actualString: generated, expectedSubstring: "uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);");
         Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkSkyHashesWord), hashes);");
         Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);");
         Assert.Contains(actualString: generated, expectedSubstring: "if (before > (0xFFFFFFFFu - amount))");

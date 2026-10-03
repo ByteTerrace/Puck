@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'overlay-perturbed' (sha256/6e840fad06dc11a871454e9ec7511ba034ea0b65b8984a6e558e3d3e796a05dc), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'overlay-perturbed' (sha256/5c742cfe0a575819dccc93604c84c9d0f92d9eb51748abc99b6d7328b1a58aff), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "overlay-perturbed.interface.hlsli"
 
@@ -24,6 +24,6 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(14, 0)] = ((asuint(passGroup.counts.x) == 0x400053A5u) && (asuint(passGroup.counts.y) == 0x400063A5u) && (asuint(passGroup.counts.z) == 0x400073A5u) && (asuint(passGroup.counts.w) == 0x400083A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(15, 0)] = ((asuint(passGroup.misc.x) == 0x400093A5u) && (asuint(passGroup.misc.y) == 0x4000A3A5u) && (asuint(passGroup.misc.z) == 0x4000B3A5u) && (asuint(passGroup.misc.w) == 0x4000C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(16, 0)] = ((asuint(passGroup.sdf.x) == 0x4000D3A5u) && (asuint(passGroup.sdf.y) == 0x4000E3A5u) && (asuint(passGroup.sdf.z) == 0x4000F3A5u) && (asuint(passGroup.sdf.w) == 0x400103A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(17, 0)] = ((asuint(passGroup.workCounterDetailRow) == 0x400113A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(18, 0)] = ((asuint(passGroup.workCounterRow) == 0x400133A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(17, 0)] = ((asuint(passGroup.workCounterRow) == 0x400113A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(18, 0)] = ((asuint(passGroup.workCounterRowDetail) == 0x400133A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

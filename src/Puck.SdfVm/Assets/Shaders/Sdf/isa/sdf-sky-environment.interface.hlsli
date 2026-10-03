@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky-environment' (sha256/1cff4b2078b2c90659569e195f754d063a312adcb8ed8909797795f7b699419f). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky-environment' (sha256/4dafec4ed532fdc5b7713d5c5681c4133c9823450eb1db8232a0af394cfe24d6). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 #define PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 
@@ -65,8 +65,8 @@ struct SdfSkyEnvironmentFrame {
 // The Pass group: descriptor set 3, register space 3.
 struct SdfSkyEnvironmentPass {
     [[vk::offset(0)]] uint2 extent;
-    [[vk::offset(8)]] uint workCounterDetailRow;
-    [[vk::offset(12)]] uint workCounterRow;
+    [[vk::offset(8)]] uint workCounterRow;
+    [[vk::offset(12)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsaCD9F88B9 : register(b0, space3);
 #define passGroup passGroupIsaCD9F88B9
@@ -118,10 +118,10 @@ void puckCountWork(uint steps, uint texels) {
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
 // Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
-    if (passGroup.workCounterDetailRow == 0u) {
+    if (passGroup.workCounterRowDetail == 0u) {
         return;
     }
-    uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
     puckAddWork((row + PuckWorkStepsWord), steps);
     puckAddWork((row + PuckWorkTexelsWord), texels);
     puckAddWork((row + PuckWorkSkyWord), evaluations);

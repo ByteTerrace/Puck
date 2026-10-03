@@ -77,8 +77,8 @@
         "viewRight": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's view right." },
         "viewUp": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's view up." },
         "viewportCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's view count." },
-        "workCounterDetailRow": { "type": "uint", "default": 0, "description": "The sdf.world pass's first named detail row of the work counters." },
-        "workCounterRow": { "type": "uint", "default": 0, "description": "The sdf.world pass's row of the work counters." }
+        "workCounterRow": { "type": "uint", "default": 0, "description": "The sdf.world pass's row of the work counters." },
+        "workCounterRowDetail": { "type": "uint", "default": 0, "description": "The sdf.world pass's first named detail row of the work counters." }
       }
     }
   ],
