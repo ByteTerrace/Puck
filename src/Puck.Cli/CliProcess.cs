@@ -134,7 +134,7 @@ internal static class CliProcess {
     }
     private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
         Func<CliProcessOutputLine, bool>? continueWhen, string continuationInput, Task? continuationGate, TimeProvider clock, CancellationToken cancellationToken, string? workingDirectory,
-        IReadOnlyDictionary<string, string?>? environment) {
+        IReadOnlyDictionary<string, string?>? environment, Action<CliProcessOutputLine>? onOutput) {
         cancellationToken.ThrowIfCancellationRequested();
 
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -189,6 +189,7 @@ internal static class CliProcess {
         var exited = process.WaitForExitAsync(cancellationToken: cancellation.Token);
         // Both pumps invoke this under eventGate, preserving observation order for stateful predicates.
         void Observe(CliProcessOutputLine line) {
+            onOutput?.Invoke(line);
             if (continueWhen?.Invoke(line) == true) { continuation.TrySetResult(); }
         }
         var stdout = PumpAsync(
@@ -198,7 +199,7 @@ internal static class CliProcess {
             eventGate: eventGate,
             nextSequence: () => Interlocked.Increment(location: ref sequence),
             startedAt: startedAt,
-            onOutput: ((continueWhen is null) ? null : Observe)
+            onOutput: (((continueWhen is null) && (onOutput is null)) ? null : Observe)
         );
         var stderr = PumpAsync(
             reader: errors,
@@ -207,7 +208,7 @@ internal static class CliProcess {
             eventGate: eventGate,
             nextSequence: () => Interlocked.Increment(location: ref sequence),
             startedAt: startedAt,
-            onOutput: ((continueWhen is null) ? null : Observe)
+            onOutput: (((continueWhen is null) && (onOutput is null)) ? null : Observe)
         );
         var inputPump = WriteInputAsync(
             writer: process.StandardInput,
@@ -332,7 +333,8 @@ internal static class CliProcess {
     // inherits this process's environment with each environment entry applied: a value sets the variable, null removes it.
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout,
         Func<CliProcessOutputLine, bool>? continueWhen = null, string continuationInput = "", TimeProvider? clock = null, Task? continuationGate = null,
-        CancellationToken cancellationToken = default, string? workingDirectory = null, IReadOnlyDictionary<string, string?>? environment = null) =>
+        CancellationToken cancellationToken = default, string? workingDirectory = null, IReadOnlyDictionary<string, string?>? environment = null,
+        Action<CliProcessOutputLine>? onOutput = null) =>
         RunCapturedAsync(
             arguments: arguments,
             cancellationToken: cancellationToken,
@@ -343,6 +345,7 @@ internal static class CliProcess {
             environment: environment,
             fileName: fileName,
             input: input,
+            onOutput: onOutput,
             timeout: timeout,
             workingDirectory: workingDirectory
         ).GetAwaiter().GetResult();

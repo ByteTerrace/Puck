@@ -185,7 +185,7 @@ landing on a row of any cell kind, a placement's `respond` reading an ordinary
 cell, an inhabit facet whose count is a state cell, identity-carried facts, and
 a `machine` screen booting a `puck.cartridge.v1` document.
 
-**Delivers:** the island authored on those primitives; `granaries.world.json`
+**Delivers:** the island authored on those primitives; `granaries.puck`
 moved under the modules rather than deleted; the frozen documents, the
 scenarios, and their canaries retired with a ledger naming each successor. After [S6](state-and-language.md#s6--modules-and-the-forcing-world)
 lands, the island and its districts move onto the same modules.
