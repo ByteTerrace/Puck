@@ -27,7 +27,7 @@ public readonly record struct SdfBakeWork(long MeshEvaluations, long TextureEval
 public sealed record SdfBake(SdfBakedMesh Mesh, IReadOnlyList<SdfBakedTexture> Textures, SdfBakedImpostor Impostor, SdfBakeWork Work);
 /// <summary>
 /// Bakes a signed-distance program into presentation assets, reading the field only through
-/// <see cref="SdfFieldEvaluator"/>, the fixed-point interpreter contact and queries read. The mesh is extracted by dual
+/// <see cref="SdfFieldEvaluator"/>, the fixed-point interpreter contact and queries read. The mesh is extracted by manifold dual
 /// contouring over a lattice around the program's reach; the surface textures and the impostor sample the same
 /// field.
 /// <para>A bake is the same bytes on every machine. Everything it reads from the field is fixed point, and every float

@@ -288,6 +288,15 @@ These are one-line cautions; the owning pages hold the derivations.
   (`SdfBakeField` counts each evaluation); never add a second interpreter or
   march for baking. A program the evaluator refuses has no bake, and a creation
   bakes only its contact emission (`CreationStampEmitter.EmitFixed`).
+- **A vertex per cell patch.** `SdfDualContouring` places a vertex for each
+  connected piece of a cell's marching-cubes surface (`Patches`, from the eight
+  corner signs alone), never one per cell, so two sheets in a cell are two
+  vertices and no edge is shared by more than two quads. An ambiguous face is cut
+  by a rule of its own four signs (separate the inside corners), which both
+  cells that share it read alike; make it depend on the cell, the side or the
+  axis and the mesh cracks. `SdfBakerLawTests` hold it with a plate about a cell
+  thick, counted by position, which scenes with sharp clamped features cannot
+  be (coincident vertices read as shared edges there).
 - **The fingerprint follows the code.** `[Derivation(name: "bake")]` marks
   `CreationBaker.TryBake`, `CreationBakeCodec.Encode` and `EncodeRefusal`.
   `puck derivations` follows their transitive source dependencies across

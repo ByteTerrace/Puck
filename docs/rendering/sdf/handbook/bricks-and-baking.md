@@ -198,14 +198,21 @@ already computes: it is presentation only, and nothing it produces is read back
 into simulation state. Unlike a brick, it is durable data keyed by its creation's
 content, so a build ships it in its bake pack and a device keeps it.
 
-**The mesh** is extracted by dual contouring over a cube of cells around the
+**The mesh** is extracted by manifold dual contouring over a cube of cells around the
 program's reach, one empty cell of padding on each side. A block of four cells a
 side whose center's scaled field value proves no surface lies within the block
 takes that center's sign at every corner, so empty space costs one evaluation
 per block; a corner is evaluated only when a sign-changing edge needs its value.
-Each crossed cell's vertex is the least-squares point of the tangent planes at
-its edges' crossings, drawn weakly toward their mean and clamped into the cell,
-and its normal is the field's gradient there. Each quad is split along the
+A crossed cell holds one vertex for each patch of the surface inside it: its
+patches are the connected pieces of the marching-cubes surface, found from the
+eight corner signs alone by joining the sign-changing cube edges along each face's
+marching-squares segments, so a cell two sheets cross, as a plate about a cell
+thick crosses its cells, holds a vertex for each and no edge of the mesh is shared
+by more than two quads. A face whose diagonal corners agree is cut to separate its
+inside corners whichever cell reads it, so the two cells that share a face agree
+and the mesh has no crack. A patch's vertex is the least-squares point of the
+tangent planes at its edges' crossings, drawn weakly toward their mean and clamped
+into the cell, and its normal is the field's gradient there. Each quad is split along the
 diagonal whose triangles face the way the corner normals point, else the shorter
 one. The mesh stays within half a cell of the field: the largest field magnitude
 at any vertex, edge midpoint or triangle centroid is at most half the cell size.
