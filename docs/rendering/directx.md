@@ -309,8 +309,10 @@ buffer before it retires the current ones and their image view, so a creation th
 device refuses leaves the current texture and view in place.
 Each upload first waits for the queue to finish the previous submission, even when its
 wait failed, before it writes staging memory, reuses or replaces its command
-allocator, or retires a texture; the rebuild publishes its replacement texture,
-buffer, view and extent together.
+allocator, or releases a replaced texture; the rebuild publishes its replacement
+texture, buffer, view and extent together, and releases the replaced texture and
+buffer only after the queue's fence passes the work submitted before it, because
+another consumer's submission may still read them.
 
 The compositor creates its swap chain as SDR in the preferred 8-bit unsigned
 normalized format, then chooses its `DisplayOutput` through

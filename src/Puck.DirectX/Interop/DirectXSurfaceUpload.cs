@@ -23,7 +23,8 @@ namespace Puck.DirectX.Interop;
 /// lets a DirectX host sample a surface that arrived as host memory. A recording that fails is discarded: the next
 /// <see cref="Upload"/> replaces the command allocator and list, so one failed upload never wedges the instance. A
 /// rebuild creates the replacement texture and buffer before it retires the current ones, so a refused creation leaves
-/// the current texture and its view in place.
+/// the current texture and its view in place, and the replaced texture and buffer are released only once the queue's
+/// fence passes everything submitted before the replacement, which a consumer may still be reading.
 /// Single-thread affine.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -52,6 +53,12 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
     private uint m_levels;
     private uint[] m_rowCounts = [];
     private ulong[] m_rowSizes = [];
+
+    // The textures and staging buffers a rebuild replaced, each with the value of the fence signalled behind everything
+    // submitted when it was replaced. Command lists hold no reference to what they read, so another consumer's pending
+    // submission may still read a replaced texture; it is released once the fence passes that value.
+    private readonly List<(ulong Value, nint Buffer, nint Texture)> m_retired = [];
+
     // True from the moment a recording is submitted until the queue is known to have finished it: while it holds, the
     // command allocator, the staging buffer and the texture are in use by the GPU.
     private bool m_submitted;
@@ -167,6 +174,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             width: width
         );
         SettleSubmission();
+        ReleaseCompleted();
         EnsureResources(
             format: format,
             height: height,
@@ -310,8 +318,8 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         );
 
         // The replacement is built whole before anything is swapped, so a creation that fails leaves the current
-        // texture, its buffer and its view as they were. Upload settled the last submission before it came here, so
-        // retiring the current resources below cannot release one the GPU is reading.
+        // texture, its buffer and its view as they were. The current texture and buffer are not released here: another
+        // consumer's submission may still read them, so they wait on the retired list for the fence.
         var description = DirectXTextures.Describe(
             format: dxgiFormat,
             height: height,
@@ -364,11 +372,25 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             throw;
         }
 
-        // Registering the view is the last step that can fail, so it comes before the replacement is published; the
-        // table reserves the room releasing it needs, so retiring the current resources cannot fail either.
+        // Everything that can fail comes before the replacement is published: the room for the retired entry, the fence
+        // signal that orders its release behind every submission made so far, and the view's registration, which comes
+        // last. The table reserves the room releasing the old view needs, so retiring it cannot fail.
         nint view;
+        var retireValue = m_fenceValue;
 
         try {
+            m_retired.EnsureCapacity(capacity: (m_retired.Count + 1));
+
+            if (0 != m_texture) {
+                DirectXCommandCalls.Signal(
+                    calls: m_calls,
+                    fence: ((ID3D12Fence*)m_fence),
+                    queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle),
+                    value: retireValue
+                );
+                m_fenceValue = (retireValue + 1);
+            }
+
             view = DirectXImageViews.Register(view: new DirectXImageView {
                 Format = dxgiFormat,
                 ResourceHandle = ((nint)texture),
@@ -395,11 +417,13 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         m_height = height;
         m_levels = levels;
         m_width = width;
-        RetireImageResources(
-            buffer: retiredBuffer,
-            texture: retiredTexture,
-            view: retiredView
-        );
+        DirectXImageViews.Release(handle: retiredView);
+
+        if (0 != retiredTexture) {
+            m_retired.Add(item: (retireValue, retiredBuffer, retiredTexture));
+        }
+
+        ReleaseCompleted();
     }
     // Creates the command allocator and the closed list that records into it, then releases the pair they replace: the
     // first pair at construction, and the pair a failed recording left open. Nothing submitted has used the old pair:
@@ -478,6 +502,24 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         if (m_submitted) {
             WaitForGpu();
             m_submitted = false;
+            ReleaseCompleted();
+        }
+    }
+    // Releases the replaced textures and buffers the fence has passed; a removed device's fence reads complete, so
+    // none is kept past a loss.
+    private void ReleaseCompleted() {
+        while (m_retired.Count > 0) {
+            var (value, buffer, texture) = m_retired[0];
+
+            if (value > m_calls.CompletedValue(fence: ((ID3D12Fence*)m_fence))) {
+                return;
+            }
+
+            m_retired.RemoveAt(index: 0);
+            RetireNativeResources(
+                buffer: buffer,
+                texture: texture
+            );
         }
     }
     // Counts a texture no owner will hold as released and releases it.
@@ -491,18 +533,16 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             Release(pointer: ref texture);
         }
     }
-    // Retires a texture, its staging buffer and its view, each in turn whether or not the one before it failed.
-    private void RetireImageResources(nint buffer, nint texture, nint view) {
+    // Releases a staging buffer and a texture, the texture whether or not the buffer's release failed.
+    private void RetireNativeResources(nint buffer, nint texture) {
         try {
-            DirectXImageViews.Release(handle: view);
+            Release(pointer: ref buffer);
         } finally {
-            try {
-                Release(pointer: ref buffer);
-            } finally {
-                DiscardTexture(texture: texture);
-            }
+            DiscardTexture(texture: texture);
         }
     }
+    // Releases every replaced texture and buffer and the current ones with the view, whether or not the fence has passed:
+    // the owner has drained the queue, or the device is gone.
     private void DisposeImageResources() {
         var buffer = m_uploadBuffer;
         var texture = m_texture;
@@ -511,11 +551,27 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         m_imageViewHandle = 0;
         m_texture = 0;
         m_uploadBuffer = 0;
-        RetireImageResources(
-            buffer: buffer,
-            texture: texture,
-            view: view
-        );
+
+        try {
+            DirectXImageViews.Release(handle: view);
+        } finally {
+            try {
+                while (m_retired.Count > 0) {
+                    var (_, retiredBuffer, retiredTexture) = m_retired[0];
+
+                    m_retired.RemoveAt(index: 0);
+                    RetireNativeResources(
+                        buffer: retiredBuffer,
+                        texture: retiredTexture
+                    );
+                }
+            } finally {
+                RetireNativeResources(
+                    buffer: buffer,
+                    texture: texture
+                );
+            }
+        }
     }
 
     /// <summary>Drains the queue, then releases the texture, upload buffer and command resources. A removed

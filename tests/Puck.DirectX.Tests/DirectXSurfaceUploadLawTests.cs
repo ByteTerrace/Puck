@@ -226,6 +226,37 @@ public sealed unsafe class DirectXSurfaceUploadLawTests {
         );
         rig.Settled = true;
     }
+    [Fact]
+    public void ARebuildKeepsTheReplacedTextureAliveUntilTheQueuePassesWorkSubmittedBeforeIt() {
+        using var rig = new Rig(memory: null);
+        var first = rig.Upload.Upload(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, pixels: new byte[((4 * 4) * 4)], width: 4);
+
+        Assert.NotNull(@object: DirectXImageViews.Resolve(handle: first));
+
+        // Another consumer's submission reads the first texture and waits on a fence nothing has signalled. The
+        // rebuild must not release that texture while it can still be read; the second upload's own wait releases the
+        // fence, and the texture goes after the queue passes it.
+        rig.Calls.HoldQueue();
+
+        var second = rig.Upload.Upload(format: GpuPixelFormat.R8G8B8A8Unorm, height: 8, pixels: new byte[((8 * 8) * 4)], width: 8);
+
+        Assert.Equal(
+            actual: (rig.Calls.HoldReleasedBySettling, rig.Calls.ReferencesToFirstResourceWhenHoldReleased),
+            expected: (true, 2)
+        );
+        Assert.Equal(
+            actual: rig.Calls.Created.Select(selector: created => rig.Calls.ReferencesTo(resource: created.Resource)),
+            expected: new[] { 1, 1, 2, 2 }
+        );
+        Assert.Null(@object: DirectXImageViews.Resolve(handle: first));
+        Assert.NotNull(@object: DirectXImageViews.Resolve(handle: second));
+        rig.Upload.Dispose();
+        Assert.Equal(
+            actual: rig.Calls.Created.Select(selector: created => rig.Calls.ReferencesTo(resource: created.Resource)),
+            expected: new[] { 1, 1, 1, 1 }
+        );
+        rig.Settled = true;
+    }
 
     // A software device whose upload asks a FaultingCommandCalls, torn down so that a leak the body already asserted on
     // is never replaced by the teardown's report of it.
@@ -275,6 +306,7 @@ public sealed unsafe class DirectXSurfaceUploadLawTests {
         public D3D12_RESOURCE_DIMENSION? Failing { get; set; }
         public bool HoldNextSubmission { get; set; }
         public bool HoldReleasedBySettling { get; private set; }
+        public int ReferencesToFirstResourceWhenHoldReleased { get; private set; }
         public bool ReplacedAllocatorWhilePending { get; private set; }
 
         public FaultingCommandCalls(DirectXDeviceContext context) {
@@ -302,6 +334,28 @@ public sealed unsafe class DirectXSurfaceUploadLawTests {
                 _ = ((IUnknown*)m_hold)->Release();
                 m_hold = 0;
             }
+        }
+        // Queues a wait on a fence nothing has signalled, so every later submission on the queue stays pending: another
+        // consumer's work, submitted before the next upload replaces its texture.
+        public void HoldQueue() {
+            var device = ((ID3D12Device*)m_context.Device.Handle);
+
+            device->CreateFence(
+                Flags: default,
+                InitialValue: 0,
+                ppFence: out var created,
+                riid: ID3D12Fence.IID_Guid
+            );
+
+            var hold = ((ID3D12Fence*)created);
+
+            m_hold = ((nint)hold);
+            m_released = false;
+            _ = m_real.QueueWait(
+                fence: hold,
+                queue: ((ID3D12CommandQueue*)m_context.CommandQueueHandle),
+                value: 1UL
+            );
         }
 
         private void ReleaseHold() {
@@ -367,24 +421,7 @@ public sealed unsafe class DirectXSurfaceUploadLawTests {
                 result.Succeeded
             ) {
                 HoldNextSubmission = false;
-
-                var device = ((ID3D12Device*)m_context.Device.Handle);
-
-                device->CreateFence(
-                    Flags: default,
-                    InitialValue: 0,
-                    ppFence: out var created,
-                    riid: ID3D12Fence.IID_Guid
-                );
-                var hold = ((ID3D12Fence*)created);
-
-                m_hold = ((nint)hold);
-                m_released = false;
-                _ = m_real.QueueWait(
-                    fence: hold,
-                    queue: ((ID3D12CommandQueue*)m_context.CommandQueueHandle),
-                    value: 1UL
-                );
+                HoldQueue();
             }
 
             return result;
@@ -409,6 +446,9 @@ public sealed unsafe class DirectXSurfaceUploadLawTests {
                 !m_released
             ) {
                 HoldReleasedBySettling = true;
+                ReferencesToFirstResourceWhenHoldReleased = ((Created.Count > 0)
+                    ? ReferencesTo(resource: Created[0].Resource)
+                    : -1);
                 ReleaseHold();
             }
 
