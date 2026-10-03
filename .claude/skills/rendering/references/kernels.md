@@ -127,7 +127,7 @@ and ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it use
 `Fragment`, and a view asking for temporal reconstruction uses
 `SdfWorldPackage.TemporalFragment` at any ceiling (the reduced passes plus the
 reactivity buffer and the history, [SKILL](../SKILL.md#temporal-reconstruction)).
-In `Fragment`: views writes `currentColor` (one transient allocation) at the active
+In `Fragment`: views writes `currentColor` (one retained allocation) at the active
 render grid, then `sdf-resolve.comp` writes the lit image and the surface transport
 at the output grid, the sky evaluates its runs on the render grid from views' color, and the composite follows the resolve at the output grid, reading its render grid from the recording
 (`RenderGraphPackageRecording.RenderWidth`), the node's one resolution of it.
@@ -150,15 +150,20 @@ groupshared candidate mask. Before primary, the
 `mesh` pass (`sdf-mesh.*.hlsl`, a graphics pass of the fragment) rasterizes the
 frame's mesh draws into the mesh visibility target that primary bounds its
 march by (`sdfMeshSampleAt`); primary alone reads it, and records a mesh hit's
-draw and triangle for the later stages; the target and its depth attachment are transient fragment
+draw and triangle for the later stages; the target and its depth attachment are retained fragment
 resources the instance allocates with its graph. The pass draws with its own
 `sdf-mesh` interface, one set per frame slot from a pool of its own, pushes the
 draw (`SdfKernelInterfaces.MeshPushedIndex`), and skips a frame with no mesh
 draws (`IRenderGraphPackageRecorder.Skips`), recording neither its draws nor its
 target and depth barriers, when the pass block's `meshDraws` tells the hit
 passes not to read the target. A view the cadence gate declares unchanged records none of
-its passes, and its latest output stands; `world.cadence off` disables the gate
-for measurement.
+its passes, and its latest output stands. Each pass also declares a signature:
+visual edits execute sky/composite, hit lighting adds views and resolve, selected
+shadow directions add shadow, and geometry/camera changes execute every active
+pass. Temporal sampling renders geometry while samples are owed; visual edits
+leave settled lit history and its ring standing. `world.cadence off` disables
+both gates for measurement. Retained inputs use their last queued writes, and
+standing passes use the existing tracker without recording their planned accesses.
 
 The visibility record is 64 bytes per pixel of the view's render ceiling
 (`SdfWorldPackage.VisibilityRecordByteLength`), the fragment's counted
@@ -168,13 +173,17 @@ through primary's, surface's, ambient's and shadow's versions;
 sixteen words in six rows: V (t, identity, material, march flags), exact; C
 (terminal radius, threshold, then the seam blend weight as a 15-bit fraction
 packed with its other material plus one); L (the exact winning dynamic frame slot
-in its first word, -1 for static, or a mesh hit's triangle; other words reserved); N (a 16-bit octahedral geometric normal and the gradient magnitude);
+in its first word, -1 for static, or a mesh hit's triangle; words 9 and 10 hold
+replaceable AO and shadow query tallies, generated from `SdfVisibility`); N (a 16-bit octahedral geometric normal and the gradient magnitude);
 and S (curvature and raw AO as halves, then the surface flags packed with the
-saturated surface, AO and shadow query count); and K (four stable visibilities
+saturated surface query count); and K (four stable visibilities
 packed as 8-bit lanes, current only on a frame the shadow pass runs). The packing moves presentation pixels by at
 most one code against the full record and leaves identity and state exact.
 Primary writes V, C and L;
-surface writes N and S; ambient updates S. Every reader and writer uses the
+surface writes N and S; ambient updates S and its own tally, shadow K and its
+own tally. Views sums the enabled stages' tallies. A repeated shadow write
+does not accumulate queries in retained surface data. Each forwarding version
+declares predecessor preservation. Every reader and writer uses the
 module's typed load and store functions, so a layout change edits only that
 module and `VisibilityRecordByteLength`. A record is current only inside the frame's
 dispatch box, where primary writes every active pixel, misses included: a
@@ -201,7 +210,7 @@ per-pass work `world.counters gpu` counts.
 Shadow and views have F = 0, 1 and 2 kernel variants in addition to the views
 ISA tiers. Their `SDF_SHADOW_FADE_SLOTS` value selects the generated interface:
 F = 0 has no incoming image binding; F = 1 uses R8, and F = 2 R8G8. The graph
-fragment allocates `incomingVisibility` as transient storage at the render
+fragment allocates `incomingVisibility` as retained storage at the render
 ceiling whenever policy permits fades, including frames without an active
 handoff. Only active incoming slots march and write it, and only active
 handoffs read it. The host uploads each active 16-byte `SdfShadowHandoff`
@@ -217,7 +226,7 @@ port names (a compute read or write, the indirect arguments, a color
 attachment), and `ShaderPipelineCompiler.Accesses.cs` gives every access its
 prior state and barrier, the first use of a frame included, which orders it
 after the frame before. `SdfWorldPassRecorder` records no barrier; the
-instance's node records the planned ones before each pass. Scratch is transient,
+instance's node records the planned ones before each executing pass. Scratch is retained,
 one allocation per instance shared by every frame slot, and a counted buffer is
 sized by the bases the residency reports (`SdfWorldResidency.CountsAt`,
 through `IRenderGraphPackageFactory.CounterOf`); the view's color is published

@@ -89,7 +89,7 @@ misses included. **surface** adds the geometric normal and curvature to it.
 **shadow** gathers and marches each selected light from each lit surface,
 packing four 8-bit stable visibilities into the record's K word. Each active
 handoff adds one incoming march, bounded by K + F; its visibility uses a
-policy-sized transient texture, one byte per pixel at F = 1 and two at F = 2,
+policy-sized retained texture, one byte per pixel at F = 1 and two at F = 2,
 absent at F = 0. **views** reads those visibilities and computes materials, lighting and
 volumes. A view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or
 soft shadows off skips that pass; quality is each view's, so views of one frame
@@ -101,6 +101,27 @@ to its output extent. Reduced views reconstruct their current color in `resolve`
 before the render graph's `place` pass puts that output in its seat rect. In split screen each view is an instance of its own (`world`,
 `world$2`, and so on) over the one residency, so the graph schedules and places
 the seats the same way it places panes.
+
+## A cadence per pass
+
+Each pass has a signature for the inputs it reads. Private fragment resources
+retain their last queued writes across frame slots. A pass stands only while
+its signature, extent and retained inputs and outputs remain valid. A standing
+pass records no dispatch or barrier and its counter row reads `standing`;
+the next executing reader follows the last actual access through the existing
+resource tracker. A disabled optional pass reads `skipped` instead.
+
+Cloud drift, twinkle, gradient colour and moving bounded media change only
+`sky` and `composite`. Fog density and light colour also change `views` and
+`resolve` when present. A selected shadow direction adds `shadow`; geometry
+or camera changes render every active pass. The shared environment map keeps
+its own layer refresh, so a gradient change with enabled fog also refreshes
+that map. `world.lighting` reports each keyed value's change class, including
+fields keyed through a section.
+
+Temporal sampling renders the geometry again while a sample is owed. Once
+lit history converges, visual edits leave its sample count and ring standing.
+`world.cadence off` forces active passes to render for measurement.
 
 ## What each pass costs
 
@@ -172,7 +193,7 @@ allocation (`SdfViewSnapshot.ResolvedRenderScale`, bounded by the ceiling). A
 smaller current grid changes dispatch dimensions and the visibility stride and
 nothing else: no target is reallocated and no graph is rebuilt, so the grid can
 move every frame. A layout transition's dip moves only this grid. The shaded
-color at the render grid is one transient allocation that every frame slot
+color at the render grid is one retained allocation that every frame slot
 shares. The final `resolve` pass writes full-output color with the same
 bilinear and clamped Catmull-Rom filter as `place`; coverage remains the
 color's alpha. A spatial resolve writes nothing beside the color; the temporal
@@ -598,7 +619,7 @@ view's passes are submitted and the fences do the pacing. A capture reads a
 view back through the render graph, which serves it from a frame it renders.
 
 A view's device-local scratch (tile buffers, instance masks, indirect
-arguments, visibility records, the mesh target) is *transient*: one allocation
+arguments, visibility records, the mesh target) is *retained*: one allocation
 per instance, shared by every frame slot rather than duplicated. The planner
 orders each scratch resource's first use in a frame after the previous frame's
 last use of it, which serializes that view's GPU frames against each other

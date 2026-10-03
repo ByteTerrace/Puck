@@ -6441,12 +6441,12 @@ packaging, and compiled worlds in the runtime and delivery programme.
   the lit image over the runs and integrates the bounded media. The fog's
   in-scatter is the gradient, which the composite reads from the residency's
   environment map rather than evaluating it at each fogged pixel.
-- **A sky-only change re-runs the view.** The cadence
+- **A sky-only change re-runs sky and composite.** The cadence
   (`SdfWorldTables.Cadence.cs`) hashes the tables and the pass block, the light
   and sky regions and the volume table among them, with their presented-tick
   bakes: the twinkle phase, the cloud offsets, a medium's advection and pulse.
-  A changed signature re-runs every pass of the view, so a drifting cloud, a
-  twinkling star or a moving medium re-renders the march until P18-6. Only a
+  Pass-group signatures leave camera traversal, hit shading and converged
+  history standing on a drifting cloud, twinkle or moving medium. Only a
   declared screen slab, an in-progress carve bake or a frame with the cadence
   gate off forces a render regardless of the signature (`ForcesRender`).
 - **Three gradients over elevation:** the sky's stops, which an unauthored world
@@ -7420,17 +7420,21 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      gathered weight as half floats. An edge pixel whose media reach past its
      surface integrates them once more, counted in the composite's march steps.
 6. **P18-6, a cadence per pass.**
-   - Landed foundation: the graph can retain private intermediate resources
+   - The graph retains private intermediate resources
      and leave a pass standing while its signature, extent, inputs and outputs
      remain valid. Standing has its own counted state and no pass work. The
      existing resource tracker preserves the last actual access and restores
      its state when a frame fails before successful submission. Installed cadence
-     metadata is counted in the graph's CPU memory rows. The SDF change
-     classes, sky/composite scheduling and temporal-history integration below
-     remain to be connected and verified. The residency's `environment` pass
+     metadata is counted in the graph's CPU memory rows. SDF passes declare
+     geometry, shadow, lighting and visual signatures over their packed inputs.
+     Fragment scratch retains its last queued write across flight slots;
+     disjoint visibility writers preserve predecessor fields and replace their
+     own query tallies. Skipped optional passes forward content identities.
+     Visual changes leave converged lit history and its ring standing, while
+     changed surface inputs restart temporal settling. The residency's `environment` pass
      already renders only on a change of the map's layers (P18-5); the change
      classes adopt that refresh rather than a second one.
-   - Delivers: the pass-group signatures, retained fragment resources, the
+   - Delivers: pass-group signatures, retained fragment resources, the
      planner's barriers for a standing pass, the rule that a pass stands only
      when its group signature and its inputs do, and the four change classes
      (visual-only, lighting-visible, shadow direction, geometry or camera),
@@ -7438,19 +7442,23 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Touches: `SdfWorldTables.Cadence.cs`, `SdfWorldPasses`,
      `SdfWorldPassRecorder`, `IRenderGraphPackageRecorder`,
      `src/Puck.Shaders/Pipeline` (retained resources), `RenderGraphRuntime`.
-   - Done when: a law over the fake device drives one change of each class
+   - Checks: `SdfWorldPassesLawTests` drives one change of each class
      over a still camera and holds each frame to exactly its class's
-     dispatches, with the barriers the plan states: a cloud drift, a twinkle, a
+     dispatches, including the retained last-access barriers: a cloud drift, a twinkle, a
      fog colour edit and a moving volume to `sky` and `composite`; a fog density
      edit, which each hit's transmittance in the lit image carries, to `views`,
      `resolve`, `sky` and `composite`; a keyed light
-     colour to `views`, `sky` and `composite` (and, from P18-9, a keyed colour
+     colour to `views`, `resolve` when present, `sky` and `composite` (and, from P18-9, a keyed colour
      on a lighting-visible layer to those and the `environment` pass); an orbiting
      shadowed body to those and `shadow` (red leg:
      a lighting-visible change that skips `views` fails, and a camera move
      runs every pass); `RenderGraphRuntimeLawTests` hold a standing pass's
-     retained output to its last write; a `sky-cadence` canary reads zero march
-     steps on the sky leg's drift frames.
+     retained output to its last write across flight slots. Additional laws hold
+     temporal visual changes, the off-switch, floor-tier dispatches, replaceable
+     query tallies and the value/section-key class read-back.
+     `sky-cadence` declares zero march work on drift frames, with cadence off
+     as its discriminating leg. Its Vulkan and Direct3D 12 runs, parity and
+     per-class floor-device counter re-records remain GPU verification work.
    - Counted-cost gate, per class, against the baseline P18-1 records: a
      meshless view at the floor tier runs 9 SDF compute dispatches (`mask`,
      `beam`, `cull-args`, `primary`, `surface`, `views`, `resolve` at the floor
@@ -7797,21 +7805,16 @@ fraction of them that hit, and L the fraction in live tiles, at least h.
   composite paid one gradient evaluation per fogged output pixel, 110,135 a
   frame on the 1920 by 1080 counters workload. Cost comparisons include both
   passes; a view that hits nothing and needs no fallback evaluates P field runs.
-- **Visual-only frames** (a drift, a twinkle, a camera-only keyed colour, an
-  atmosphere edit, a moving volume). Every pass of the view runs: 9 SDF compute
-  dispatches for a meshless view at the floor tier (`mask`, `beam`,
-  `cull-args`, `primary`, `surface`, `views`, `resolve` at the reduced scale,
-  `sky`, `composite`), 11 with `ambient` and `shadow`, and the mesh draw when
-  a mesh draws, with the whole march. After P18-6, 2 dispatches and zero march
-  steps.
+- **Visual-only frames** (a drift, a twinkle, a camera-only keyed colour or a
+  moving volume) run 2 dispatches (`sky`, `composite`) and zero camera march
+  steps. Bounded media still count their own integration in `composite`.
 - **Lighting-visible frames** (a keyed light or lighting-visible colour). The
-  same dispatches and the march. After P18-6, 3 (`views`, `sky`,
+  view runs 3 dispatches (`views`, `sky`,
   `composite`), plus the `environment` pass's 2 when a change crosses a display code
   and `resolve` with reconstruction on, and zero march steps.
-- **Bounded media.** A moving volume re-renders every pass of a view on each
-  frame whose presented tick moves it, because the volume table is part of the
-  view's signature. After P18-6, `composite` alone, and only on frames whose
-  presented tick moves.
+- **Bounded media.** A moving volume changes the visual signature, so sky and
+  composite render on frames whose presented tick moves it. Its integration
+  stays outside the lit image and temporal history.
 - **Pass-block size and binding.** The pass block is 512 bytes, including the
   light count, the shadow slot table, the stable and active fade counts and the
   curvature shading, and the lights and sky tables are referenced only by the
@@ -8064,8 +8067,8 @@ textures and impostor (P17) come before P6's choice between a bake and the field
 
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to
-P18-6) run behind `resolve`; P18-2 to P18-5 have landed and P18-6 has its
-foundation. Its views of other worlds (P18-11) can build on the shared
+P18-6) run behind `resolve`; P18-2 to P18-6 are implemented, with P18-6's GPU
+verification pending. Its views of other worlds (P18-11) can build on the shared
 residency for routed seats and eligible windows and on camera views of the
 world's own residency; other session screens still use separate residencies,
 and infinity-view routing and quality levers remain to be implemented. Its shadow
