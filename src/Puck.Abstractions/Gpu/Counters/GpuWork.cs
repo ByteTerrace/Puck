@@ -42,7 +42,7 @@ public static partial class GpuWork {
     internal const int SkyEvaluationsColumn = 18;
     internal const int SkyHashesColumn = 19;
     internal const int SkyTextureLoadsColumn = 20;
-    internal const int SubmissionColumnCount = (ShadowStepsFirstColumn + ShadowSlotCount);
+    internal const int SubmissionColumnCount = (ShadowPixelsColumn + 1);
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
 
@@ -138,7 +138,7 @@ public static partial class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
-        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps];
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps, ShadowPixels];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -157,6 +157,8 @@ public static partial class GpuWork {
         }
         private static WorkKind[] CreateSubmission() {
             var kinds = new WorkKind[SubmissionColumnCount];
+
+            kinds[ShadowPixelsColumn] = ShadowPixels;
 
             kinds[DispatchesColumn] = Dispatches;
             kinds[IndirectDispatchesColumn] = IndirectDispatches;

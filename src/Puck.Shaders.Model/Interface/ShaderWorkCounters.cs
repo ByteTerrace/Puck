@@ -79,6 +79,8 @@ public static class ShaderWorkCounters {
                 }
                 void puckCountShadow(uint slot, uint steps) {
                 }
+                void puckCountShadowDecision(uint detail, uint slot, uint steps) {
+                }
                 void puckCountFragmentWork(uint steps, uint texels) {
                 }
 
@@ -104,6 +106,7 @@ public static class ShaderWorkCounters {
             static const uint PuckWorkSkyTextureLoadsWord = {{number((4 * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkShadowWord = {{number((GpuWork.ShadowStepsFirstKind * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkShadowSlots = {{number(GpuWork.ShadowSlotCount)}}u;
+            static const uint PuckWorkShadowPixelsWord = {{number((GpuWork.ShadowPixelsKind * GpuKernelCounters.CountWords))}}u;
             // Adds to one count: the low word atomically, then the high word by one when that addition carries.
             void puckAddWork(uint word, uint amount) {
                 if (amount == 0u) {
@@ -150,6 +153,17 @@ public static class ShaderWorkCounters {
 
                 if ((slot < PuckWorkShadowSlots) && WaveIsFirstLane()) {
                     puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkShadowWord + (slot * {{number(GpuKernelCounters.CountWords)}}u)), waveSteps);
+                }
+            }
+            // One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
+            // while its pixel count exposes rejections and reuse even when a march takes zero field samples.
+            void puckCountShadowDecision(uint detail, uint slot, uint steps) {
+                puckAddWork((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkShadowPixelsWord, 1u);
+                if (passGroup.{{DetailRow}} != 0u) {
+                    uint row = ((passGroup.{{DetailRow}} + detail) * PuckWorkRowWords);
+                    puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
+                    puckAddWork(row + PuckWorkStepsWord, steps);
+                    puckAddWork(row + PuckWorkShadowWord + (slot * {{number(GpuKernelCounters.CountWords)}}u), steps);
                 }
             }
             // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
