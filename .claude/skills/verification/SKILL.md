@@ -208,7 +208,10 @@ World run with effective `host.presentation: none` uses no GPU; the
 `puck-world` skill owns the presentation modes and deployment overrides.
 
 - A GPU runs one GPU leg at a time. Legs compete for the device, the ports and
-  the frame budget, and a contended leg times out.
+  the frame budget, and a contended leg times out. One `puck canary` run (or
+  `puck affected --gpu`, `puck gate --gpu`) is one GPU leg: it schedules its
+  own canary legs side by side up to its `--gpu-jobs` bound, so nothing else
+  GPU-bound runs beside it.
 - While another GPU leg runs, run test suites with
   `--filter-not-trait Category=Gpu` and list the skipped `Gpu` classes as
   owed. Every class that opens a hardware GPU device carries
@@ -231,16 +234,14 @@ World run with effective `host.presentation: none` uses no GPU; the
   the change means to move pixels or simulation state, and otherwise once at
   the lane's end. The `rendering` skill owns which canaries a render change
   owes.
-- Treat `puck counters --check` on a non-recording device as partial ledger
-  evidence under the
-  [rules](../../../docs/reference/cli.md#puck-counterswork-counter-collector).
-  On every device it judges `deterministic` ceilings and the required zeros of
-  kernel kinds (`requiredZero`: march steps, texels written, sky evaluations).
-  It skips `per-backend-deterministic` magnitudes and device-following zeros
-  (the SDF `upload` and `bricks` passes), and its note says how many counts
-  were not judged and how many required zeros still were. Require each
-  backend's recorded device identity to match before claiming the whole ledger
-  was judged; use the recording device (the floor GPU) for a re-record.
+- `puck counters --check` judges every count on a device the ledger holds a
+  record for, and fails on any other device with `no ceilings recorded for
+  <device>` ([rules](../../../docs/reference/cli.md#counted-cost-ceilings)).
+  That failure is owed work, not a flake: record the device
+  (`puck counters --record`, once per ledger under a GPU grant) in the change
+  that adds it. A change that moves per-backend counts re-records every device
+  the ledger holds, each on its own machine; a record never touches another
+  device's record. `--report <file>` judges a saved report with no GPU.
 
 ### GPU process checks and script runs
 
