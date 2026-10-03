@@ -15,7 +15,7 @@ namespace Puck.World.Tests;
 /// captured at any point still restores the live definition bit-identically.
 /// </summary>
 public sealed class JournalDepthLawTests {
-    private static WorldDefinition WithDepth(int depth) {
+    internal static WorldDefinition WithDepth(int depth) {
         var source = Fixtures.BuildDocument();
 
         return (source with { HostRaw = (source.Host with { JournalDepth = depth }) });

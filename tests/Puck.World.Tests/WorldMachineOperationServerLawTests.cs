@@ -16,7 +16,7 @@ public sealed class WorldMachineOperationServerLawTests {
         return document.RootElement.Clone();
     }
     private static byte[] DefinitionBytes(WorldServer server) => WorldDefinitionSerialization.Serialize(definition: server.Definition);
-    private static WorldDefinition Document() => Fixtures.BuildDocument() with {
+    internal static WorldDefinition Document() => Fixtures.BuildDocument() with {
         MachinesRaw = [
             new WorldMachine(
             "cabinet",
@@ -31,7 +31,7 @@ public sealed class WorldMachineOperationServerLawTests {
         ],
         ScreensRaw = null,
     };
-    private static WorldMachineOperation Operation(string instance, ulong generation, string model) {
+    internal static WorldMachineOperation Operation(string instance, ulong generation, string model) {
         using var document = JsonDocument.Parse($"{{\"schema\":\"puck.operation-test.model.v1\",\"model\":\"{model}\"}}");
 
         return new WorldMachineOperation(
@@ -41,7 +41,7 @@ public sealed class WorldMachineOperationServerLawTests {
             document.RootElement
         );
     }
-    private static WorldSubmissionResult Submit(WorldServer server, Principal principal, WorldMachineOperation operation) {
+    internal static WorldSubmissionResult Submit(WorldServer server, Principal principal, WorldMachineOperation operation) {
         WorldSubmissionResult? completion = null;
 
         server.Submit(
@@ -305,7 +305,7 @@ public sealed class WorldMachineOperationServerLawTests {
         );
     }
 
-    private sealed class OperationEngine : IMachineEngine, IMachineOperationProvider {
+    internal sealed class OperationEngine : IMachineEngine, IMachineOperationProvider {
         public string Id => "operation-test";
 
         public List<OperationRuntime> Created { get; } = [];
@@ -377,7 +377,7 @@ public sealed class WorldMachineOperationServerLawTests {
             }
         }
     }
-    private sealed class OperationRuntime(string model) : IMachineRuntime {
+    internal sealed class OperationRuntime(string model) : IMachineRuntime {
         public string Model { get; set; } = model;
         public MachineRuntimeStatus Status => MachineRuntimeStatus.Running;
 
