@@ -17,13 +17,13 @@ count); it reads the island's.
 
 | Alias | File | District |
 |---|---|---|
-| `granaries` | `granaries.world.json` | The platform twin's storage court, dealt from the deployment's inventory rows |
-| `arcade` | `arcade.world.json` | Two cabinets and a handheld, each booting an authored cartridge |
-| `dive` | `dive.world.json` | The pool: a medium lattice, a diver kit, fish, a depth row |
-| `kart` | `kart.world.json` | A track on a curve, a kart kit, gates, a lap counter |
-| `jump` | `jump.world.json` | A platform course rising from the shard steps, a vaulter kit, a trophy |
-| `arena` | `arena.world.json` | The hp/targeting/attack and elemental suites in a walled yard |
-| `studio` | `studio.world.json` | A flat stage for character work, look cycling, a mirror wall, a gate that opens once awakened |
+| `granaries` | `granaries.puck` | The platform twin's storage court, dealt from the deployment's inventory rows |
+| `arcade` | `arcade.puck` | Two cabinets and a handheld, each booting an authored cartridge |
+| `dive` | `dive.puck` | The pool: a medium lattice, a diver kit, fish, a depth row |
+| `kart` | `kart.puck` | A track on a curve, a kart kit, gates, a lap counter |
+| `jump` | `jump.puck` | A platform course rising from the shard steps, a vaulter kit, a trophy |
+| `arena` | `arena.puck` | The hp/targeting/attack and elemental suites in a walled yard |
+| `studio` | `studio.puck` | A flat stage for character work, look cycling, a mirror wall, a gate that opens once awakened |
 
 The island places the courts on its crown: `dive` north at (0, 0, -46), `kart` east at (48, 0, 0), `jump`
 south at (0, 0, 52), `studio` west at (-42, 0, 0), `arena` north-east at (46, 0, -46), `arcade` at (26, 0, 12),
@@ -228,7 +228,7 @@ See [service composition](../../../../Puck.World.Server/ExtensionConfiguration.m
 for projection authority and lifecycle, and the
 [Azure adapter](../../../../Puck.World.Azure/README.md) for query settings and bounds.
 
-## The kart district (`kart.world.json`, alias `kart`)
+## The kart district (`kart.puck`, alias `kart`)
 
 A closed racing loop: a `curves` row (`kartTrack`, eight knots, constant curvature—an
 exact circle, never control points) traces the lap direction, and `kartCourt` carries a
@@ -247,7 +247,7 @@ its frame resolved by the `ResolveDriveFrame` body-motion op instead of the walk
 speed-scaled authority curve, `turn.referenceSpeed`/`turn.falloff`, rather than snapping
 to the commanded direction every tick), and a `shaping` row carrying an `across` facet—
 the anisotropic drive decomposition: longitudinal throttle/brake/coast via `along`,
-lateral grip converging out slip via `across.lateral`. `kart.world.json` authors exactly
+lateral grip converging out slip via `across.lateral`. `kart.puck` authors exactly
 this: kit `kart`, program `kartDrive` (`ResolveDriveFrame`, `ResolveHold`,
 `ComputePlanarTargetVelocity`, `ShapeVelocity`, `RunActionTriggers`, `ApplyHold`,
 `IntegratePlanarAndVerticalVelocity`, `CommitPose`—the walking program's `SnapYawToPlanarIntent`
@@ -296,7 +296,7 @@ first gate—`kart$gateStage` stays 0 and `kart$lap` never reaches 1—proving t
 discriminate on ORDER, not mere proximity.
 ## The jump district
 
-`modules/jump.world.json` is a course of platforms rising from a starting deck: `jumpCourt` (the one root
+`modules/jump.puck` is a course of platforms rising from a starting deck: `jumpCourt` (the one root
 placement every other row parents under, so the island moves the whole district by restating that row's
 position and yaw alone), four stepped platforms and a wall panel climbing away from it, a trophy floating
 in open air off to one side, and a wide catch net well below the whole course. The `vaulter` kit is the
@@ -347,7 +347,7 @@ qualified row (`jump$reached`/`jump$falls`).
 ## Verifying headless
 
 `tests/Puck.World.Canaries/jump-trophy/host.puck` is a minimal `standard.world.json`-based world that
-imports `modules/jump.world.json` under alias `jump` and spawns its one local seat on `jump-arrival` with
+imports `modules/jump.puck` under alias `jump` and spawns its one local seat on `jump-arrival` with
 the `vaulter` kit—the same shape a future island import uses. Drive it directly:
 
 ```text
@@ -363,7 +363,7 @@ course runs from the arrival deck at `z=+3` out to the trophy at `z=-10`—a cou
 around would need its `forward` sign flipped in any driving script, never the channel itself.
 ## The studio district
 
-`studio.world.json` is a flat stage for character work: a lit floor, a turntable a
+`studio.puck` is a flat stage for character work: a lit floor, a turntable a
 body stands on, a mirror wall that shows the stage's own camera, and a counter a
 seat cycles by pressing the jump channel while standing on the turntable. It carries
 no bodies of its own—a visiting seat brings its own avatar and kit.
@@ -425,7 +425,7 @@ the count or on the turntable's occupancy, advance the count, or bind it to a HU
 
 ## Import
 
-Import `modules/studio.world.json` under an alias (`{"document": "modules/studio",
+Import `modules/studio.puck` under an alias (`{"document": "modules/studio",
 "as": "studio"}`). The module's declarations are qualified by the alias: its rows (`look`), its rule
 (`studio-look-cycle`), and its placements and prototypes (`studioCourt`, `studioTurntable`, `studioMirror`,
 `studioGateClosed`), so a host reads the counter as `<alias>$look` (`world.state studio$look` under alias
@@ -444,7 +444,7 @@ without it `setIdentityFact`/`$identity:` both refuse by name at compile, and
 
 ## The arcade
 
-`modules/arcade.world.json` is the arcade district: two cabinets and a handheld
+`modules/arcade.puck` is the arcade district: two cabinets and a handheld
 on a stand, each booting an authored `puck.cartridge.v1` document from
 `src/Puck.World/Assets/cartridges/` rather than a ROM file. The game is the
 same on both bricks: a pip walks a room whose four walls are the district
@@ -573,7 +573,7 @@ screen.peek 8 0xC200
 press, and the second `screen.peek` reads a larger `x` than the first.
 ## Dive
 
-`modules/dive.world.json` is the pool: a `diveCourt` root placement (a small wooden
+`modules/dive.puck` is the pool: a `diveCourt` root placement (a small wooden
 dock, itself the district's whole moveable frame—every other row below carries
 `parent: "diveCourt"` and moves with it), a `diveBasin` placement (one floor-plus-walls
 creation, open at the top) holding a dedicated `pool` field lattice whose `water` row
@@ -620,7 +620,7 @@ to move the whole district (the convention every module here follows) must also
 translate the `pool` lattice's and navigation domain's own `origin` by the same offset;
 nothing does this automatically today.
 
-Prove the pool in isolation: a minimal host importing `modules/dive.world.json` under
+Prove the pool in isolation: a minimal host importing `modules/dive.puck` under
 alias `dive`, with a one-seat `diver` kit, boots headless, waits, and poses the seat body
 into the basin (`body.pose 0 -2.6 5 0 0 0` for the shipped basin's own coordinates).
 `body.where` reports `facts=grounded|inmedium`; `world.state dive$depth` reads positive
