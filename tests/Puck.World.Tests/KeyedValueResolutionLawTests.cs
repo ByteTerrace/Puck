@@ -126,8 +126,8 @@ public sealed class KeyedValueResolutionLawTests {
         );
 
         Assert.Equal(expected: 0f, actual: night.Sky.Block.FogDensity);
-        Assert.Equal(expected: 0f, actual: night.Sky.Block.DiscIntensity);
-        Assert.Equal(expected: (0xB6 / 255f), actual: night.Sky.Stops[3].Color.X, precision: 6);
+        Assert.Equal(expected: 0f, actual: night.Sky.First<SdfSkyDisc>().Intensity);
+        Assert.Equal(expected: (0xB6 / 255f), actual: night.Sky.First<SdfSkyGradient>().Stop(index: 3).Color.X, precision: 6);
 
         var dayDefinition = WithRow(definition: courtyard, row: "skyMode", value: 0.5d);
         var day = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(
@@ -137,8 +137,8 @@ public sealed class KeyedValueResolutionLawTests {
         );
 
         Assert.Equal(expected: 0.004f, actual: day.Sky.Block.FogDensity, precision: 6);
-        Assert.Equal(expected: 1.5f, actual: day.Sky.Block.DiscIntensity, precision: 6);
-        Assert.Equal(expected: (0x3C / 255f), actual: day.Sky.Stops[3].Color.X, precision: 6);
+        Assert.Equal(expected: 1.5f, actual: day.Sky.First<SdfSkyDisc>().Intensity, precision: 6);
+        Assert.Equal(expected: (0x3C / 255f), actual: day.Sky.First<SdfSkyGradient>().Stop(index: 3).Color.X, precision: 6);
 
         // A quarter of the way round the night's density holds the line between the two keys.
         var dusk = WithRow(definition: courtyard, row: "skyMode", value: 0.25d);
@@ -228,12 +228,12 @@ public sealed class KeyedValueResolutionLawTests {
         var before = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: (Wrap - 1UL)), revision: 0);
         var after = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: Wrap), revision: 0);
         (float Before, float After, double Rate, double Modulus)[] lanes = [
-            (before.Sky.Block.CloudDriftOffset.X, after.Sky.Block.CloudDriftOffset.X, 0.02d, SdfVolume.NoisePeriodCells),
-            (before.Sky.Block.CloudDriftOffset.Y, after.Sky.Block.CloudDriftOffset.Y, -0.01d, SdfVolume.NoisePeriodCells),
-            (before.Sky.Block.CloudShearOffset.X, after.Sky.Block.CloudShearOffset.X, 0.005d, SdfVolume.NoisePeriodCells),
-            (before.Sky.Block.CloudShearOffset.Y, after.Sky.Block.CloudShearOffset.Y, 0.003d, SdfVolume.NoisePeriodCells),
-            (before.Sky.Block.CloudSpinAngle, after.Sky.Block.CloudSpinAngle, 0.1d, Math.Tau),
-            (before.Sky.Block.TwinklePhase, after.Sky.Block.TwinklePhase, 2d, 1d),
+            (before.Sky.First<SdfSkyClouds>().DriftOffset.X, after.Sky.First<SdfSkyClouds>().DriftOffset.X, 0.02d, SdfVolume.NoisePeriodCells),
+            (before.Sky.First<SdfSkyClouds>().DriftOffset.Y, after.Sky.First<SdfSkyClouds>().DriftOffset.Y, -0.01d, SdfVolume.NoisePeriodCells),
+            (before.Sky.First<SdfSkyClouds>().ShearOffset.X, after.Sky.First<SdfSkyClouds>().ShearOffset.X, 0.005d, SdfVolume.NoisePeriodCells),
+            (before.Sky.First<SdfSkyClouds>().ShearOffset.Y, after.Sky.First<SdfSkyClouds>().ShearOffset.Y, 0.003d, SdfVolume.NoisePeriodCells),
+            (before.Sky.First<SdfSkyClouds>().SpinAngle, after.Sky.First<SdfSkyClouds>().SpinAngle, 0.1d, Math.Tau),
+            (before.Sky.First<SdfSkyStars>().TwinklePhase, after.Sky.First<SdfSkyStars>().TwinklePhase, 2d, 1d),
         ];
 
         // Across 2^32 engine ticks each offset moves by one tick's worth of its rate.
@@ -250,6 +250,6 @@ public sealed class KeyedValueResolutionLawTests {
             ])),
         };
 
-        Assert.Equal(expected: 0f, actual: new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: dark, mirror: ClientFixtures.StateMirror(definition: dark, engineTick: (Wrap + 1234UL)), revision: 0).Sky.Block.TwinklePhase);
+        Assert.Equal(expected: 0f, actual: new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: dark, mirror: ClientFixtures.StateMirror(definition: dark, engineTick: (Wrap + 1234UL)), revision: 0).Sky.First<SdfSkyStars>().TwinklePhase);
     }
 }

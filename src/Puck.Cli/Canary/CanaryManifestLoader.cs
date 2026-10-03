@@ -1715,8 +1715,10 @@ internal static partial class CanaryManifestLoader {
     /// manifest — a dead world path, a stale command claim — must never block every OTHER proof from running, which
     /// is exactly the failure mode that once left the whole gate dark for weeks. A structural refusal that is not
     /// about any one manifest (no canary directory at all, a stray root file, zero directories, zero SURVIVING
-    /// manifests) still fails outright in both modes, since there is then no "the rest" to keep running.</summary>
-    public static bool TryLoadAll(string repositoryRoot, bool strict, out IReadOnlyList<CanaryManifest> manifests, out IReadOnlyList<(string Directory, string Reason)> refused, out string error) {
+    /// manifests) still fails outright in both modes, since there is then no "the rest" to keep running.
+    /// When <paramref name="only"/> names ids, discovery is restricted to those directories and refuses unknown ids;
+    /// the named manifests still pass every strict load check.</summary>
+    public static bool TryLoadAll(string repositoryRoot, bool strict, out IReadOnlyList<CanaryManifest> manifests, out IReadOnlyList<(string Directory, string Reason)> refused, out string error, IReadOnlySet<string>? only = null) {
         var canaryRoot = Path.Combine(
             path1: repositoryRoot,
             path2: "tests",
@@ -1754,6 +1756,17 @@ internal static partial class CanaryManifestLoader {
         }
 
         var directories = Directory.GetDirectories(path: canaryRoot).Order(comparer: StringComparer.Ordinal).ToArray();
+
+        if (only is not null) {
+            var known = directories.Select(selector: static directory => Path.GetFileName(path: directory)).ToHashSet(comparer: StringComparer.Ordinal);
+            var missing = only.Except(second: known, comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
+
+            if (missing.Length > 0) {
+                error = $"unknown canary id(s): {string.Join(separator: ", ", value: missing)}.";
+                return false;
+            }
+            directories = [.. directories.Where(predicate: directory => only.Contains(item: Path.GetFileName(path: directory)))];
+        }
 
         if (directories.Length == 0) {
             error = "canary discovery found zero manifests; an empty suite cannot report green.";

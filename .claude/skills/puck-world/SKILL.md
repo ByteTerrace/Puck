@@ -48,8 +48,9 @@ A world document is authored in `.puck` source, not hand-written JSON.
 `Puck.World.Transpiler` — the `puck.world.definition.v1` vocabulary, a peer of
 `Puck.GamingBricks.Transpiler`'s `puck.cartridge.v1`, both riding the
 schema-agnostic `Puck.Transpiler` core — lowers a parsed `.puck` document to
-the same JSON this file describes; JSON stays the wire form and the
-checked-in shape of every shipped world. `Puck.World`'s boot loader
+the same JSON this file describes. JSON stays the wire form; a world with a
+`.puck` source has no committed document beside it. The build emits its
+document into the output tree. `Puck.World`'s boot loader
 (`PuckWorldLoader.TryResolveWorld`) transparently compiles a `--world
 <x>.puck` path before composing and validating it exactly like a JSON boot.
 Every door that needs only a source's documents (the boot, the composer's

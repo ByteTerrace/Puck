@@ -61,7 +61,8 @@ public sealed class AffectedDocumentsLawTests {
             declaresTests: static _ => false,
             projects: [new AffectedProject(Directory: "src/World", IsSuite: false, Name: "World", References: [])],
             standInsFor: static _ => [],
-            worldClosure: new HashSet<string>(collection: ["World"], comparer: StringComparer.OrdinalIgnoreCase)
+            worldClosure: new HashSet<string>(collection: ["World"], comparer: StringComparer.OrdinalIgnoreCase),
+            worldInput: static _ => false
         );
 
         Assert.Equal(actual: plan.Canaries, expected: ["ink"]);

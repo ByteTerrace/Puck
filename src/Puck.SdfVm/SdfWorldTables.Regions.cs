@@ -174,7 +174,7 @@ public sealed partial class SdfWorldTables {
         MeshRegionIndex => m_meshRegion,
         LightRegionIndex => m_lightRegion,
         SkyRegionIndex => m_skyRegion,
-        SkyStopRegionIndex => m_skyStopRegion,
+        SkyLayerRegionIndex => m_skyLayerRegion,
         SoftboxRegionIndex => m_softboxRegion,
         _ => m_shadowHandoffRegion,
     };
@@ -191,7 +191,7 @@ public sealed partial class SdfWorldTables {
         MeshRegionIndex => "mesh-region",
         LightRegionIndex => "lights",
         SkyRegionIndex => "sky",
-        SkyStopRegionIndex => "sky-stops",
+        SkyLayerRegionIndex => "sky-layers",
         SoftboxRegionIndex => "softboxes",
         ShadowHandoffRegionIndex => "shadow-handoffs",
         _ => "brick-staging",

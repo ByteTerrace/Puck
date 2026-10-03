@@ -4,13 +4,14 @@ using Puck.SignedDistance.Illumination;
 namespace Puck.SignedDistance;
 
 /// <summary>
-/// The CPU reference for the sky's environment: the map and its coefficients a residency renders once per change of its
-/// sky's gradient, which the composite reads the fog's in-scattered colour from. The map is <see cref="Size"/> by
-/// <see cref="Size"/> texels over the octahedral projection the radiance cache's maps use, the pole at +y
+/// The CPU reference for the sky's environment: the map and its coefficients a residency renders once per change of the
+/// layers its lighting sees, which the composite reads the fog's in-scattered colour from. The map is <see cref="Size"/>
+/// by <see cref="Size"/> texels over the octahedral projection the radiance cache's maps use, the pole at world +y
 /// (<see cref="IrradianceLattice.Encode"/>), so the upper hemisphere is the inner diamond and the lower one folds into
-/// the corners; each texel holds the gradient at its centre's direction (<see cref="Gradient"/>), the layer the fog
-/// in-scatters, as four half floats (<see cref="Quantize"/>). No body, star or cloud enters it, so a bright disc never
-/// smears into the fog around it. A lookup (<see cref="Sample"/>) filters the four texels about a
+/// the corners; each texel holds the layers the lighting sees at its centre's direction (<see cref="Evaluate"/>), as four
+/// half floats (<see cref="Quantize"/>). No disc enters it, so a bright body never smears into the fog around it, and a
+/// layer only the camera sees (stars and clouds by default) is left out. A lookup (<see cref="Sample"/>) filters the
+/// four texels about a
 /// direction bilinearly, a tap one texel past an edge read from the texel the octahedral fold puts there
 /// (<see cref="IrradianceLattice.BorderSource(int, int, int)"/>), so the filter is continuous across every edge. The
 /// coefficients are the nine real second-order spherical harmonics of the map per colour channel (<see cref="Basis"/>),
@@ -173,38 +174,115 @@ public static class SdfSkyEnvironment {
         y: ((float)((Half)Math.Clamp(max: MaxRadiance, min: 0f, value: color.Y))),
         z: ((float)((Half)Math.Clamp(max: MaxRadiance, min: 0f, value: color.Z)))
     );
-    /// <summary>Renders a sky's map: each texel the gradient at its centre's direction, as the texel holds it
-    /// (<see cref="Quantize"/>). The disc, the stars and the clouds never enter it.</summary>
+    /// <summary>Renders a sky's map: each texel the layers the lighting sees, composed over black in their authored order
+    /// at its centre's direction, as the texel holds it (<see cref="Quantize"/>). A disc never enters it. The reference
+    /// evaluates the gradient kind (<see cref="Gradient"/>) and the stack's composition: the sky frame, each layer's
+    /// rotation, mask, opacity and blend.</summary>
     /// <param name="block">The packed sky block.</param>
-    /// <param name="stops">Its stops table.</param>
+    /// <param name="layers">Its layer table.</param>
     /// <param name="map">Receives the map, <see cref="Texels"/> colours, row after row.</param>
     /// <exception cref="ArgumentException"><paramref name="map"/> holds other than <see cref="Texels"/> colours.</exception>
-    public static void Render(in SdfSkyBlock block, ReadOnlySpan<SdfSkyStop> stops, Span<Vector3> map) {
+    /// <exception cref="NotSupportedException">A layer the lighting sees is of a kind the reference does not evaluate.</exception>
+    public static void Render(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers, Span<Vector3> map) {
         if (map.Length != Texels) {
             throw new ArgumentException(message: $"A map holds {Texels} texels; {map.Length} were given.", paramName: nameof(map));
         }
 
         for (var y = 0; (y < Size); y++) {
             for (var x = 0; (x < Size); x++) {
-                map[((y * Size) + x)] = Quantize(color: Gradient(direction: Direction(x: x, y: y), stopCount: block.StopCount, stops: stops));
+                map[((y * Size) + x)] = Quantize(color: Evaluate(block: in block, direction: Direction(x: x, y: y), layers: layers));
             }
         }
     }
-    /// <summary>Returns the sky's gradient in a direction, the lowest field run: the stops piecewise-linear in its
-    /// elevation, clamped to the end stops (<c>sdfSkyGradient</c>).</summary>
-    /// <param name="stops">The stops table.</param>
-    /// <param name="stopCount">The stops in use, at least one.</param>
-    /// <param name="direction">The unit direction.</param>
+    /// <summary>Returns the colour the lighting sees in a world direction: the layers the lighting sees, but a disc,
+    /// composed over black in their authored order (<c>sdfSkyEnvironmentColor</c>).</summary>
+    /// <param name="block">The packed sky block.</param>
+    /// <param name="layers">Its layer table.</param>
+    /// <param name="direction">The unit world direction.</param>
     /// <returns>The colour.</returns>
-    public static Vector3 Gradient(ReadOnlySpan<SdfSkyStop> stops, uint stopCount, Vector3 direction) {
-        var previous = stops[0];
+    /// <exception cref="NotSupportedException">A layer the lighting sees is of a kind the reference does not evaluate.</exception>
+    public static Vector3 Evaluate(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers, Vector3 direction) {
+        var sky = FrameDirection(block: in block, direction: direction);
+        var color = Vector3.Zero;
+        var count = Math.Min(val1: ((int)block.LayerCount), val2: layers.Length);
+
+        for (var index = 0; (index < count); index++) {
+            var layer = layers[index];
+
+            if (!IsLit(layer: in layer)) {
+                continue;
+            }
+            if (layer.Kind != SdfSkyLayerKind.Gradient) {
+                throw new NotSupportedException(message: $"The environment's reference evaluates gradient layers; layer {index} is a {layer.Kind} layer the lighting sees.");
+            }
+
+            var weight = (layer.Opacity * MaskWeight(direction: sky, layer: in layer));
+
+            if (weight <= 0f) {
+                continue;
+            }
+
+            var gradient = SdfSky.PayloadOf<SdfSkyGradient>(layer: ref layer);
+
+            var (scale, offset) = SdfSkyRuns.Affine(layer: new SdfSkyLayerSample(
+                Alpha: weight,
+                Blend: layer.Blend,
+                Class: SdfSkyLayerClass.Field,
+                Color: Gradient(direction: Rotate(direction: sky, rotation: layer.Rotation), gradient: in gradient)
+            ));
+
+            color = ((scale * color) + offset);
+        }
+
+        return color;
+    }
+    /// <summary>Returns a world direction in the sky frame: its components along the block's frame axes.</summary>
+    /// <param name="block">The packed sky block.</param>
+    /// <param name="direction">The world direction.</param>
+    /// <returns>The sky-frame direction.</returns>
+    public static Vector3 FrameDirection(in SdfSkyBlock block, Vector3 direction) => new(
+        x: Vector3.Dot(vector1: direction, vector2: block.FrameRight),
+        y: Vector3.Dot(vector1: direction, vector2: block.FrameUp),
+        z: Vector3.Dot(vector1: direction, vector2: block.FrameForward)
+    );
+    /// <summary>Returns a direction rotated by a layer's unit quaternion, v + 2·q × (q × v + w·v).</summary>
+    /// <param name="direction">The direction.</param>
+    /// <param name="rotation">The quaternion (x, y, z, w).</param>
+    /// <returns>The rotated direction.</returns>
+    public static Vector3 Rotate(Vector3 direction, Vector4 rotation) {
+        var axis = new Vector3(x: rotation.X, y: rotation.Y, z: rotation.Z);
+
+        return (direction + (2f * Vector3.Cross(vector1: axis, vector2: (Vector3.Cross(vector1: axis, vector2: direction) + (rotation.W * direction)))));
+    }
+    /// <summary>Returns a layer's mask weight at a sky-frame direction, in <c>[0, 1]</c>.</summary>
+    /// <param name="layer">The layer.</param>
+    /// <param name="direction">The sky-frame direction.</param>
+    /// <returns>The weight.</returns>
+    public static float MaskWeight(in SdfSkyLayer layer, Vector3 direction) {
+        var soft = layer.MaskSoftness;
+
+        return layer.Mask switch {
+            SdfSkyMask.Elevation => (Rise(edge: layer.MaskBand.X, soft: soft, value: direction.Y) * (1f - Rise(edge: (layer.MaskBand.Y + soft), soft: soft, value: direction.Y))),
+            SdfSkyMask.Cone => Rise(edge: layer.MaskBand.W, soft: soft, value: Vector3.Dot(vector1: direction, vector2: new Vector3(x: layer.MaskBand.X, y: layer.MaskBand.Y, z: layer.MaskBand.Z))),
+            _ => 1f,
+        };
+    }
+    /// <summary>Returns a gradient's colour in a layer-frame direction: the stops piecewise-linear in its height, clamped
+    /// to the end stops (the <c>gradient</c> kind's module).</summary>
+    /// <param name="gradient">The gradient.</param>
+    /// <param name="direction">The unit layer-frame direction.</param>
+    /// <returns>The colour.</returns>
+    public static Vector3 Gradient(in SdfSkyGradient gradient, Vector3 direction) {
+        var previous = gradient.Stop(index: 0);
 
         if (direction.Y <= previous.Elevation) {
             return previous.Color;
         }
 
-        for (var index = 1; (index < stopCount); index++) {
-            var next = stops[index];
+        var count = Math.Min(val1: ((int)gradient.Count), val2: SdfSky.MaxStops);
+
+        for (var index = 1; (index < count); index++) {
+            var next = gradient.Stop(index: index);
 
             if (direction.Y <= next.Elevation) {
                 var t = Math.Clamp(value: ((direction.Y - previous.Elevation) / MathF.Max(x: (next.Elevation - previous.Elevation), y: 1e-5f)), max: 1f, min: 0f);
@@ -217,21 +295,65 @@ public static class SdfSkyEnvironment {
 
         return previous.Color;
     }
-    /// <summary>Returns whether two packed skies draw the same map: the same stops in use. Everything else the block
-    /// carries (the fog's density, the disc, the stars and their twinkle, the clouds, the studio horizon) leaves the map
-    /// as it is.</summary>
+    /// <summary>Returns whether two packed skies draw the same map: the same frame, the same quality tier, and the same
+    /// layers the lighting sees, but discs, in the same order. Everything else (the fog's density, every layer only the
+    /// camera sees, a disc, the studio horizon) leaves the map as it is.</summary>
     /// <param name="block">One sky block.</param>
-    /// <param name="stops">Its stops table.</param>
+    /// <param name="layers">Its layer table.</param>
     /// <param name="otherBlock">The other sky block.</param>
-    /// <param name="otherStops">Its stops table.</param>
+    /// <param name="otherLayers">Its layer table.</param>
     /// <returns><see langword="true"/> when a map rendered from one stands for the other.</returns>
-    public static bool SameMap(in SdfSkyBlock block, ReadOnlySpan<SdfSkyStop> stops, in SdfSkyBlock otherBlock, ReadOnlySpan<SdfSkyStop> otherStops) {
-        if (block.StopCount != otherBlock.StopCount) {
+    public static bool SameMap(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers, in SdfSkyBlock otherBlock, ReadOnlySpan<SdfSkyLayer> otherLayers) {
+        if (
+            (block.FrameRight != otherBlock.FrameRight) ||
+            (block.FrameUp != otherBlock.FrameUp) ||
+            (block.FrameForward != otherBlock.FrameForward) ||
+            (block.Quality != otherBlock.Quality)
+        ) {
             return false;
         }
 
-        var used = Math.Min(val1: ((int)Math.Min(val1: block.StopCount, val2: SdfSky.MaxStops)), val2: Math.Min(val1: stops.Length, val2: otherStops.Length));
+        var count = Math.Min(val1: ((int)block.LayerCount), val2: layers.Length);
+        var otherCount = Math.Min(val1: ((int)otherBlock.LayerCount), val2: otherLayers.Length);
+        var other = 0;
 
-        return stops[..used].SequenceEqual(other: otherStops[..used]);
+        for (var index = 0; (index <= count); index++) {
+            while ((index < count) && !IsLit(layer: in layers[index])) {
+                index++;
+            }
+            while ((other < otherCount) && !IsLit(layer: in otherLayers[other])) {
+                other++;
+            }
+
+            var done = (index >= count);
+            var otherDone = (other >= otherCount);
+
+            if (done || otherDone) {
+                return (done && otherDone);
+            }
+            if (layers[index] != otherLayers[other]) {
+                return false;
+            }
+
+            other++;
+        }
+
+        return true;
+    }
+    /// <summary>Returns whether the environment map draws a layer: the lighting sees it and it is not a disc.</summary>
+    /// <param name="layer">The layer.</param>
+    /// <returns><see langword="true"/> when the map draws it.</returns>
+    public static bool IsLit(in SdfSkyLayer layer) =>
+        (((layer.Visibility & SdfSkyVisibility.Lighting) != 0) && (layer.Kind != SdfSkyLayerKind.Disc));
+
+    // A step from zero below an edge to one at it, widened downward over a soft width (smoothstep's cubic).
+    private static float Rise(float edge, float soft, float value) {
+        if (!(soft > 0f)) {
+            return ((value >= edge) ? 1f : 0f);
+        }
+
+        var t = Math.Clamp(max: 1f, min: 0f, value: ((value - (edge - soft)) / soft));
+
+        return ((t * t) * (3f - (2f * t)));
     }
 }
