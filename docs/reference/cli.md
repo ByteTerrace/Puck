@@ -3095,8 +3095,12 @@ explicit. A call into any other repository member is *open*: the shape cannot se
 of any wire is marked `[FormatSeam("its behaviour sets no byte because …")]`, which is not followed and not open, and
 `puck formats` refuses a seam with an empty reason. Prefer moving the call out of the codec (decode to data, apply
 outside) to marking it. `puck formats` records each format's open calls in the ledger and refuses a call that is not
-already recorded, so the boundary only tightens: a call never joins the list without a reviewer seeing the ledger edit,
-and `--check` reports one that has left it as `stale` until the ledger is re-recorded. `puck formats --explain <id>`
+already recorded, so the boundary only tightens, with one sanctioned exception: the ledger records the closure engine's
+fingerprint (`engine`, the trivia-free tokens of `FormatShapeClosure.cs` and the Roslyn version), and `puck formats` records
+new open calls only when that fingerprint has changed, naming the change, because a deliberate widening of reach finds calls
+no codec author added. The same engine finding more is a codec that grew an uncovered call and is refused, and no option
+skips this. `--check` reports a call that has left the list as `stale` until the ledger is re-recorded, and a changed
+engine as `stale` until `puck formats` records under it. `puck formats --explain <id>`
 prints the units a format covers, by file, and the calls it leaves open. Platform and package members are outside the
 repository and outside the digest.
 

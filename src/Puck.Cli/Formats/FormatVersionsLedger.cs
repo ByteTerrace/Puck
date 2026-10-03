@@ -33,8 +33,12 @@ internal sealed record FormatEntry(string Id, string Source, string Shape, strin
 internal static partial class FormatVersionsLedger {
     /// <summary>The ledger's file name at the repository root.</summary>
     public const string FileName = "FormatVersions.json";
+    /// <summary>The engine fingerprint of a source tree that carries no closure engine (a fixture).</summary>
+    public const string NoEngine = "0000000000000000";
+    /// <summary>The source file of the closure engine, whose syntax is the engine's identity.</summary>
+    public const string EngineSource = "src/Puck.Cli/Formats/FormatShapeClosure.cs";
     /// <summary>The ledger's own shape version.</summary>
-    public const int Format = 3;
+    public const int Format = 4;
 
     // Members that carry a binary format's token when their initializer holds exactly one literal. A document
     // schema is recognised by its value instead (SchemaToken), whatever the member is called.
@@ -225,11 +229,12 @@ internal static partial class FormatVersionsLedger {
     /// <summary>Renders the ledger in its one spelling: entries in ordinal id order, members in ordinal order, four-space
     /// indentation, one value per line, one final line feed.</summary>
     /// <param name="entries">The formats.</param>
+    /// <param name="engine">The fingerprint of the closure engine that found them (<see cref="EngineOf"/>).</param>
     /// <returns>The ledger text.</returns>
-    public static string Render(IReadOnlyList<FormatEntry> entries) {
+    public static string Render(IReadOnlyList<FormatEntry> entries, string engine = NoEngine) {
         var builder = new StringBuilder();
 
-        builder.Append(value: $"{{\n    \"format\": {Format.ToString(provider: CultureInfo.InvariantCulture)},\n    \"formats\": {{\n");
+        builder.Append(value: $"{{\n    \"format\": {Format.ToString(provider: CultureInfo.InvariantCulture)},\n    \"engine\": {Quote(text: engine)},\n    \"formats\": {{\n");
 
         for (var index = 0; (index < entries.Count); index++) {
             var entry = entries[index];
@@ -280,10 +285,18 @@ internal static partial class FormatVersionsLedger {
     /// <param name="entries">The recorded formats, or empty.</param>
     /// <param name="error">Why the text is unusable, or empty.</param>
     /// <returns><see langword="true"/> when the text is a ledger.</returns>
-    public static bool TryParse(string json, out IReadOnlyList<FormatEntry> entries, out string error) {
+    public static bool TryParse(string json, out IReadOnlyList<FormatEntry> entries, out string error) => TryParse(engine: out _, entries: out entries, error: out error, json: json);
+    /// <summary>Parses a recorded ledger strictly, with the engine fingerprint it records.</summary>
+    /// <param name="json">The ledger text.</param>
+    /// <param name="entries">The recorded formats, or empty.</param>
+    /// <param name="engine">The recorded engine fingerprint, or empty.</param>
+    /// <param name="error">Why the text is unusable, or empty.</param>
+    /// <returns><see langword="true"/> when the text is a ledger.</returns>
+    public static bool TryParse(string json, out IReadOnlyList<FormatEntry> entries, out string engine, out string error) {
         var parsed = new List<FormatEntry>();
 
         entries = parsed;
+        engine = string.Empty;
 
         try {
             using var document = JsonDocument.Parse(json: json);
@@ -291,15 +304,18 @@ internal static partial class FormatVersionsLedger {
 
             if (
                 (root.ValueKind != JsonValueKind.Object) ||
-                !root.EnumerateObject().Select(selector: static member => member.Name).Order(comparer: StringComparer.Ordinal).SequenceEqual(second: ["format", "formats"]) ||
+                !root.EnumerateObject().Select(selector: static member => member.Name).Order(comparer: StringComparer.Ordinal).SequenceEqual(second: ["engine", "format", "formats"]) ||
+                (root.GetProperty(propertyName: "engine").ValueKind != JsonValueKind.String) ||
                 !root.GetProperty(propertyName: "format").TryGetInt32(value: out var format) ||
                 (format != Format) ||
                 (root.GetProperty(propertyName: "formats").ValueKind != JsonValueKind.Object)
             ) {
-                error = $"the ledger must be an object of exactly format ({Format}) and formats";
+                error = $"the ledger must be an object of exactly format ({Format}), engine and formats";
 
                 return false;
             }
+
+            engine = root.GetProperty(propertyName: "engine").GetString()!;
 
             foreach (var member in root.GetProperty(propertyName: "formats").EnumerateObject()) {
                 if (
@@ -333,6 +349,34 @@ internal static partial class FormatVersionsLedger {
             return false;
         }
     }
+    /// <summary>Fingerprints the closure engine: the tokens of <see cref="EngineSource"/>, without trivia, and the Roslyn
+    /// version that resolves its symbols. A deliberate change to how far a closure reaches changes it; formatting and comments
+    /// do not, and neither does an edit anywhere else.</summary>
+    /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
+    /// <returns>Sixteen lowercase hexadecimal digits of a SHA-256, or <see cref="NoEngine"/> when the tree carries no engine.</returns>
+    public static string EngineOf(IReadOnlyDictionary<string, string> files) {
+        if (!files.TryGetValue(key: EngineSource, value: out var text)) { return NoEngine; }
+
+        var builder = new StringBuilder();
+
+        builder.Append(value: typeof(CSharpCompilation).Assembly.GetName().Version);
+
+        foreach (var token in CSharpSyntaxTree.ParseText(text: text, options: CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview)).GetRoot().DescendantTokens()) {
+            builder.Append(value: '\u0001').Append(value: token.Text);
+        }
+
+        return Convert.ToHexString(inArray: System.Security.Cryptography.SHA256.HashData(source: Encoding.UTF8.GetBytes(s: builder.ToString())))[..16].ToLowerInvariant();
+    }
+    /// <summary>The new open calls the ledger refuses to record. A call joins a format's open set only when the closure engine
+    /// that finds it has changed: the same engine finding more is a codec that grew a call nothing covers, and refuses.</summary>
+    /// <param name="recorded">The recorded formats.</param>
+    /// <param name="recordedEngine">The engine fingerprint the ledger records.</param>
+    /// <param name="current">The formats <see cref="Discover"/> finds now.</param>
+    /// <param name="engine">The fingerprint of the engine that found them (<see cref="EngineOf"/>).</param>
+    /// <returns>One refusal per new open call, or none when the engine changed.</returns>
+    public static IReadOnlyList<string> GrowthRefusals(IReadOnlyList<FormatEntry> recorded, string recordedEngine, IReadOnlyList<FormatEntry> current, string engine) => (string.Equals(a: recordedEngine, b: engine, comparisonType: StringComparison.Ordinal)
+        ? Refusals(current: current, recorded: recorded)
+        : []);
     /// <summary>The calls a format makes that its shape cannot see and the ledger does not already record: the boundary only
     /// tightens, so a call joins the open set by hand-editing the ledger, which a reviewer sees, or never.</summary>
     /// <param name="recorded">The recorded formats.</param>
@@ -361,8 +405,10 @@ internal static partial class FormatVersionsLedger {
     /// <param name="recorded">The recorded formats.</param>
     /// <param name="recordedText">The ledger file's text.</param>
     /// <param name="current">The formats <see cref="Discover"/> finds now.</param>
+    /// <param name="recordedEngine">The engine fingerprint the ledger records.</param>
+    /// <param name="engine">The fingerprint of the engine that found <paramref name="current"/>.</param>
     /// <returns>Every problem, each naming its fix; empty when the ledger holds.</returns>
-    public static IReadOnlyList<string> Check(IReadOnlyList<FormatEntry> recorded, string recordedText, IReadOnlyList<FormatEntry> current) {
+    public static IReadOnlyList<string> Check(IReadOnlyList<FormatEntry> recorded, string recordedText, IReadOnlyList<FormatEntry> current, string recordedEngine = NoEngine, string engine = NoEngine) {
         var problems = new List<string>();
         var recordedById = recorded.ToDictionary(
             comparer: StringComparer.Ordinal,
@@ -403,7 +449,11 @@ internal static partial class FormatVersionsLedger {
             problems.Add(item: $"stale: '{entry.Id}' ({entry.Source}) is recorded but no longer declared");
         }
 
-        problems.AddRange(collection: Refusals(current: current, recorded: recorded));
+        if (!string.Equals(a: recordedEngine, b: engine, comparisonType: StringComparison.Ordinal)) {
+            problems.Add(item: $"stale: the closure engine is now {engine} and the ledger records {recordedEngine}; run 'puck formats' to re-record under it, which may record open calls the engine newly sees");
+        }
+
+        problems.AddRange(collection: GrowthRefusals(current: current, engine: engine, recorded: recorded, recordedEngine: recordedEngine));
 
         foreach (var entry in current) {
             if (recordedById.TryGetValue(key: entry.Id, value: out var was)) {
@@ -417,7 +467,7 @@ internal static partial class FormatVersionsLedger {
             (problems.Count == 0) &&
             !string.Equals(
                 a: recordedText,
-                b: Render(entries: current),
+                b: Render(engine: engine, entries: current),
                 comparisonType: StringComparison.Ordinal
             )
         ) {

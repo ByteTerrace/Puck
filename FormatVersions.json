@@ -1,5 +1,6 @@
 {
-    "format": 3,
+    "format": 4,
+    "engine": "77af5a72e1a109d2",
     "formats": {
         "AddonAbi.AbiVersion": {
             "open": [
@@ -833,9 +834,9 @@
                 "M:Puck.Cli.Formats.FormatShapeClosure.#ctor(System.Collections.Generic.IReadOnlyDictionary{System.String,System.String})",
                 "M:Puck.Cli.Formats.FormatShapeClosure.Of(System.Collections.Generic.IReadOnlyList{System.ValueTuple{System.String,System.String,System.String}})"
             ],
-            "shape": "bfe5a05814a608ca",
+            "shape": "1a721ec070205d30",
             "source": "src/Puck.Cli/Formats/FormatVersionsLedger.cs",
-            "token": "3"
+            "token": "4"
         },
         "HgdMachineIdentity.CurrentVersion": {
             "open": [

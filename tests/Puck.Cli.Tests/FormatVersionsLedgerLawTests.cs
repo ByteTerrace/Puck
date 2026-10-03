@@ -282,6 +282,7 @@ public sealed class FormatVersionsLedgerLawTests {
 
         Assert.True(
             condition: FormatVersionsLedger.TryParse(
+                engine: out var recordedEngine,
                 entries: out var recorded,
                 error: out var error,
                 json: text
@@ -290,9 +291,12 @@ public sealed class FormatVersionsLedgerLawTests {
         );
         Assert.Empty(collection: FormatVersionsLedger.Check(
             current: current,
+            engine: FormatVersionsLedger.EngineOf(files: Shipped.Value.Sources),
             recorded: recorded,
+            recordedEngine: recordedEngine,
             recordedText: text
         ));
+        Assert.NotEqual(actual: recordedEngine, expected: FormatVersionsLedger.NoEngine);
 
         foreach (var id in new[] { "SdfBaker.Version", "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldFederationCodec.WireKey", "WorldProtocol.WireProtocolKey", "PeerWireProtocol.ProtocolKey", "WorldReplaySnapshot.ShapeToken", "LocalEndpointCapability.Revision", "RatchetLedger.Format" }) {
             Assert.Contains(
@@ -784,5 +788,52 @@ public sealed class FormatVersionsLedgerLawTests {
         );
 
         Assert.Contains(collection: Format(sources: sources).Open, filter: static call => call.StartsWith(comparisonType: StringComparison.Ordinal, value: "M:Puck.Demo.Bytes.Enumerator.MoveNext"));
+    }
+    [Fact]
+    public void OpenGrowthWithTheEngineUnchangedRefusesAndWithTheEngineChangedRecords() {
+        var entry = Format(sources: Boundary());
+        var recorded = entry with { Open = [] };
+        var oldEngine = "1111111111111111";
+        var newEngine = "2222222222222222";
+
+        var refusals = FormatVersionsLedger.GrowthRefusals(current: [entry], engine: oldEngine, recorded: [recorded], recordedEngine: oldEngine);
+
+        Assert.Single(collection: refusals);
+        Assert.Contains(actualString: refusals[0], expectedSubstring: "M:Puck.Demo.Helper.Normalize");
+        Assert.Empty(collection: FormatVersionsLedger.GrowthRefusals(current: [entry], engine: newEngine, recorded: [recorded], recordedEngine: oldEngine));
+
+        var text = FormatVersionsLedger.Render(engine: oldEngine, entries: [recorded]);
+        var unchanged = FormatVersionsLedger.Check(current: [entry], engine: oldEngine, recorded: [recorded], recordedEngine: oldEngine, recordedText: text);
+        var changed = FormatVersionsLedger.Check(current: [entry], engine: newEngine, recorded: [recorded], recordedEngine: oldEngine, recordedText: text);
+
+        Assert.Contains(collection: unchanged, filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "refused:"));
+        Assert.DoesNotContain(collection: changed, filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "refused:"));
+        Assert.Contains(collection: changed, filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "stale: the closure engine is now 2222222222222222 and the ledger records 1111111111111111"));
+    }
+    [Fact]
+    public void TheEngineFingerprintMovesWithTheEnginesCodeAndNotWithItsCommentsOrFormatting() {
+        const string Engine = "namespace Puck.Cli.Formats; internal sealed class FormatShapeClosure { public int Reach() { return 1; } }";
+        var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal) { [FormatVersionsLedger.EngineSource] = Engine };
+        var baseline = FormatVersionsLedger.EngineOf(files: files);
+
+        Assert.NotEqual(actual: baseline, expected: FormatVersionsLedger.NoEngine);
+        Assert.Equal(expected: FormatVersionsLedger.NoEngine, actual: FormatVersionsLedger.EngineOf(files: new Dictionary<string, string>(comparer: StringComparer.Ordinal)));
+
+        files[FormatVersionsLedger.EngineSource] = ("// a note\n" + Engine.Replace(newValue: "{ return 1; }", oldValue: "{\n    return 1; /* one */\n}"));
+        Assert.Equal(expected: baseline, actual: FormatVersionsLedger.EngineOf(files: files));
+
+        files[FormatVersionsLedger.EngineSource] = Engine.Replace(newValue: "return 2;", oldValue: "return 1;");
+        Assert.NotEqual(expected: baseline, actual: FormatVersionsLedger.EngineOf(files: files));
+    }
+    [Fact]
+    public void TheLedgerRecordsItsEngineAndRoundTripsIt() {
+        var entries = FormatVersionsLedger.Discover(files: Boundary());
+        var text = FormatVersionsLedger.Render(engine: "abcdef0123456789", entries: entries);
+
+        Assert.Contains(actualString: text, expectedSubstring: "\"engine\": \"abcdef0123456789\",");
+        Assert.True(condition: FormatVersionsLedger.TryParse(engine: out var engine, entries: out var parsed, error: out var error, json: text), userMessage: error);
+        Assert.Equal(actual: engine, expected: "abcdef0123456789");
+        Assert.Equal(expected: text, actual: FormatVersionsLedger.Render(engine: engine, entries: parsed));
+        Assert.False(condition: FormatVersionsLedger.TryParse(entries: out _, error: out _, json: text.Replace(newValue: string.Empty, oldValue: "    \"engine\": \"abcdef0123456789\",\n")));
     }
 }
