@@ -100,7 +100,7 @@ with — optionally adding rows a sibling district would have supplied
 
 | World | Document | Composition | Ticks | Moves state |
 |---|---|---|---|---|
-| arena | `games/arena.puck` | fixture `minimal-arena-host.world.json` | 224 | yes |
+| arena | `games/arena.puck` | fixture `minimal-arena-host.puck` | 224 | yes |
 | backgammon | `games/backgammon.puck` | document | 630 | yes |
 | billiards | `games/billiards.puck` | fixture `minimal-billiards-host.world.json` | 510 | yes |
 | bowling | `games/bowling.puck` | spliced | 600 | no |

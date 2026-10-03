@@ -853,7 +853,7 @@ three clues: the third was within 0.9 cosine of one already on file and
 [arena.puck](arena.puck) is a module, not a bootable document: two fighters,
 two health pickups and the rules that score them, left to a host for its seats,
 its `attack` channel and its population.
-[minimal-arena-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-arena-host.world.json)
+[minimal-arena-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-arena-host.puck)
 is the smallest one that completes it—two local seats on one floating kit, the
 `attack` channel the fighters shoot on, a four-body population (seats 0 and 1,
 the two items) and the `arenaItem` look the item placements wear.

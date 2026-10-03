@@ -13,7 +13,7 @@
 //
 // This is a module: a host supplies the seats, the attack channel the two fighters reach the
 // match through, the population capacity, the pickup bodies' motion program and their look.
-// tests/Puck.World.Tests/Fixtures/minimal-arena-host.world.json is the smallest one that
+// tests/Puck.World.Tests/Fixtures/minimal-arena-host.puck is the smallest one that
 // completes it.
 //
 // Deliberate reductions, stated rather than left to be discovered: a shot always hits (there is
