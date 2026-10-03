@@ -77,6 +77,16 @@ commit body is a debt. Track each one when merging, and settle it on the merged
 head, under a GPU grant when it needs the GPU, before the batch lands, with the
 reason in the commit that records it.
 
+Partners cannot see local batches. When a partner designs against code that
+exists only in an unpushed batch, send it those lanes' contracts and answer its
+contract questions from the local code; a stale remote makes false "failing"
+claims.
+
+The audit of owed GPU legs covers the unlanded lane branches entering a batch as
+well as the commits already integrated. Run a canary's pending legs before the
+batch, since a bound recorded in an unlanded branch is stale by the time the
+batch runs it.
+
 The lead runs any merge an agent is denied. Agents resolve conflicts in
 generated files, including shader interfaces, fingerprints and generated
 schemas, by running their generators; never hand-merge those files.
@@ -97,19 +107,20 @@ grants, GPU work classification and execution.
 Run a load governor on any machine that hosts many agents, through
 `puck host load`, which samples the machine's load and names its state:
 
-- On capacity, admit light work only. A heavy job (a solution build plus a full
-  suite, about 7 GB at its peak) needs more than 14 GB free on a 32 GB machine,
-  and a full `Puck.World.Tests` run is one: never run two at once.
-- On pressure, admit nothing, and gate the running agents' heavy steps on free
-  memory.
+- Size admission by the job's measured peak. On capacity, admit light work only.
+  A heavy job (a solution build plus a full suite, about 7 GB at its peak) needs
+  more than 14 GB free on a 32 GB machine, and a full `Puck.World.Tests` run is
+  one: never run two at once.
+- On pressure, admit nothing. Running agents gate their heavy steps on more than
+  8 GB of free memory rather than being killed.
 - On GPU idle, start the next GPU leg. A device test host counts as GPU work.
 - Thresholds follow the machine class. A 32 GB, 16-thread machine has capacity
   while CPU is under 60% and free RAM over 10 GB, and is under pressure below
   4 GB free. A 16 GB, 6-thread machine has capacity while CPU is under 50% and
   free RAM over 5 GB, and is under pressure below 2 GB free or 10 GB of disk.
 
-Every build, a Codex brief's included, passes `-nodeReuse:false`, and so does
-`dotnet restore`, which otherwise leaves reuse nodes that hold memory.
+Every build, a Codex brief's included, passes `-nodeReuse:false`
+([`verification`](../verification/SKILL.md#build-before-you-test) says why).
 
 ## Select models and route findings
 
@@ -126,7 +137,13 @@ a small direction into a quota or an always rule.
 The lead rules on what the second round still raises: a scoped fix, a recorded
 open item, or a dismissal with its reason. Every finding gets a destination
 before it is set aside: a lane, or a named deferral where scope is tracked. A
-finding called out of scope without a destination is not set aside.
+finding called out of scope without a destination is not set aside. After the
+final review round the lead decides each remaining blocker as a scoped fix, sends
+it to the author with the ruling, and reads the diff; there is no third round.
+
+Route reviews by where the work lives. A pushed branch can be reviewed in any
+machine's Codex slot; a local-only lane needs the lead's own slots. When the
+lead's slots are full, send reviews of pushed branches to partners.
 
 ## Rule on collisions
 

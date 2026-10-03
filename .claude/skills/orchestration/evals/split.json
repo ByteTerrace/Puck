@@ -1,7 +1,7 @@
 {
   "seed": 4045387051,
   "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
-  "seed_note": "Drawn at random from 32 bits and redrawn (3 draws in all) until train held 8 or 9 of the 14 cases; the redraw looked at case counts only, before any case had been run. Cases o15 to o21 were added afterwards and assigned by the rule without a redraw.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (3 draws in all) until train held 8 or 9 of the 14 cases; the redraw looked at case counts only, before any case had been run. Cases o15 to o24 were added afterwards and assigned by the rule without a redraw.",
   "train": [
     "o02-landed-batch-and-denied-merge",
     "o03-machines-by-capability",
@@ -15,7 +15,8 @@
     "o18-gated-partner-with-nothing-queued",
     "o19-batch-dependent-lane-before-landing",
     "o20-counters-regression-with-owed-note",
-    "o21-brief-a-codex-partner-to-build"
+    "o21-brief-a-codex-partner-to-build",
+    "o23-review-slots-are-full"
   ],
   "test": [
     "o01-base-claim-from-two-dot",
@@ -25,6 +26,8 @@
     "o10-stale-ceiling-or-regression",
     "o13-done-message-without-trailer",
     "o15-owner-says-partners-look-idle",
-    "o17-box-with-five-builds-and-a-gpu-leg"
+    "o17-box-with-five-builds-and-a-gpu-leg",
+    "o22-partner-designs-against-an-unpushed-batch",
+    "o24-gpu-debt-in-an-unlanded-branch"
   ]
 }

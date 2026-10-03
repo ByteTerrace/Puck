@@ -52,6 +52,11 @@ same change. The user's current instruction outranks it.
 - Send every build and test run's full output to a lane-named log
   (`<scratchpad>/<lane>-gate.log`) and stop at the first build error. A flake
   needs its failure message to be judged.
+- Pass `-nodeReuse:false` to every build, and to `dotnet restore` as well:
+  restore otherwise leaves MSBuild reuse nodes that hold memory after it exits.
+- A build interrupted under memory pressure can leave a corrupt assembly under
+  `obj/` (the `ref` assembly), and every dependent compile then fails with
+  errors that point at it. Delete that `obj` `ref` directory and rebuild.
 - Do not edit the source tree while a canary, parity or test run is going:
   canaries rebuild from source, and tests read baselines, schemas and generated
   tables from it.
