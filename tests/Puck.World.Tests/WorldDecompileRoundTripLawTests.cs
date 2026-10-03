@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Puck.World.Transpiler;
 using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Decompiler;
+using Puck.World.Transpiler.Lowering;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -167,6 +168,46 @@ public sealed partial class WorldDecompileRoundTripLawTests {
 
         return files;
     }
+    // A shape or placement row sugar defaults a member it leaves out, so a row that omits it and a row that states the
+    // default are one row: both composed trees are held with those members dropped.
+    private static void DropDefaulted(JsonObject document) {
+        if (document["placements"]?["rows"] is JsonArray placements) {
+            foreach (var row in placements.OfType<JsonObject>()) {
+                foreach (var key in WorldDocumentRowDefaults.PlacementKeys) {
+                    if (row.ContainsKey(propertyName: key) && WorldDocumentRowDefaults.IsDefaultValue(
+                        index: 0,
+                        key: key,
+                        shape: false,
+                        value: row[key]
+                    )) {
+                        _ = row.Remove(propertyName: key);
+                    }
+                }
+            }
+        }
+        if (document["prototypes"] is JsonArray prototypes) {
+            foreach (var prototype in prototypes.OfType<JsonObject>()) {
+                if (prototype["document"]?["shapes"] is not JsonArray shapes) {
+                    continue;
+                }
+                for (var index = 0; (index < shapes.Count); ++index) {
+                    if (shapes[index] is not JsonObject shape) {
+                        continue;
+                    }
+                    foreach (var key in WorldDocumentRowDefaults.ShapeKeys) {
+                        if (shape.ContainsKey(propertyName: key) && WorldDocumentRowDefaults.IsDefaultValue(
+                            index: index,
+                            key: key,
+                            shape: true,
+                            value: shape[key]
+                        )) {
+                            _ = shape.Remove(propertyName: key);
+                        }
+                    }
+                }
+            }
+        }
+    }
     private static (bool Composed, JsonObject? Document, string Reason) Compose(string path, JsonObject root) {
         var composed = PuckDocumentComposer.TryComposeWorldDocument(
             catalog: TestHookInstaller.CreateMachineCatalog(),
@@ -178,7 +219,10 @@ public sealed partial class WorldDecompileRoundTripLawTests {
         );
 
         // A root that names neither a basis nor an import composes to itself.
-        return (composed, (document ?? root), reason);
+        document = ((document ?? root).DeepClone() as JsonObject)!;
+        DropDefaulted(document: document);
+
+        return (composed, document, reason);
     }
     // The verdict of one document: null when it round-trips, else what was lost.
     private static string? RoundTrip(string path, string relative, HashSet<string> refused, ref int checkedCount) {
