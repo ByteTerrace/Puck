@@ -4562,7 +4562,10 @@ render {
   }
   upscaleSharpness: 0
   tonemap: Filmic
-  environment { ambient: 0.4, reflection: 1 }
+  environment {
+    ambient: 0.4
+    reflection: 1
+  }
 }
 
 rule "airborne-on" {
