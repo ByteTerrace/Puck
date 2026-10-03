@@ -7,7 +7,7 @@
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/lattice-draw-fill/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/lattice-draw-fill/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -126,7 +126,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/lattice-draw-fill/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/lattice-draw-fill/discriminating.puck",
     "script": "discriminating.script.txt",
     "commands": [
       {
