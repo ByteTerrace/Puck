@@ -60,9 +60,19 @@ public sealed partial class SdfFieldEvaluator {
     /// instance whose bound sphere lies at or beyond the running interval's upper end from every point of the box can
     /// only offer a candidate no point's running answer would take, so skipping it leaves every point answer inside
     /// the interval. It rests on the same sphere containment the point cull's exactness rests on.</remarks>
-    public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance, out int instructionsWalked) {
+    public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance, out int instructionsWalked) =>
+        TryDistanceBounds(distance: out distance, instructionsWalked: out instructionsWalked, lower: lower, rotationsExpanded: out _, upper: upper);
+    /// <summary>Encloses the box and counts visited instructions and full interval rotation expansions.</summary>
+    /// <param name="lower">The box's least corner.</param>
+    /// <param name="upper">The box's greatest corner.</param>
+    /// <param name="distance">The enclosing interval on success.</param>
+    /// <param name="instructionsWalked">The instructions visited after culling.</param>
+    /// <param name="rotationsExpanded">The rotations evaluated through the full interval formula.</param>
+    /// <returns>Whether the field can enclose this box.</returns>
+    public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance, out int instructionsWalked, out int rotationsExpanded) {
         distance = FixedInterval.FromPoint(value: FixedQ4816.Zero);
         instructionsWalked = 0;
+        rotationsExpanded = 0;
 
         if (
             !m_hasShape ||
@@ -83,6 +93,7 @@ public sealed partial class SdfFieldEvaluator {
 
         distance = BoundsOver(
             instructionsWalked: out instructionsWalked,
+            rotationsExpanded: out rotationsExpanded,
             world: new IntervalVector3(
                 X: new FixedInterval(lower: lowerPoint.X, upper: upperPoint.X),
                 Y: new FixedInterval(lower: lowerPoint.Y, upper: upperPoint.Y),
@@ -131,7 +142,7 @@ public sealed partial class SdfFieldEvaluator {
             var radius = Math.Min(val1: (1L << middle), val2: ceiling);
             var side = new FixedInterval(lower: FixedQ4816.FromRawBits(value: -radius), upper: FixedQ4816.FromRawBits(value: radius));
 
-            if (!evaluator.BoundsOver(instructionsWalked: out _, world: new IntervalVector3(X: side, Y: side, Z: side)).IsUnbounded) {
+            if (!evaluator.BoundsOver(instructionsWalked: out _, rotationsExpanded: out _, world: new IntervalVector3(X: side, Y: side, Z: side)).IsUnbounded) {
                 frame = radius;
                 low = (middle + 1);
             } else {
@@ -146,7 +157,7 @@ public sealed partial class SdfFieldEvaluator {
             ? (0UL - unchecked((ulong)raw))
             : ((ulong)raw));
     // The bounds over a box whose every point the frame holds, and the instructions the walk visited.
-    private FixedInterval BoundsOver(IntervalVector3 world, out int instructionsWalked) {
+    private FixedInterval BoundsOver(IntervalVector3 world, out int instructionsWalked, out int rotationsExpanded) {
         var local = world;
         var distanceScale = Point(value: FixedQ4816.One);
         var result = FixedInterval.FromPoint(value: FarDistance);
@@ -154,6 +165,8 @@ public sealed partial class SdfFieldEvaluator {
 
         var cullIndex = 0;
         var walked = 0;
+
+        rotationsExpanded = 0;
 
         for (var index = 0; (index < m_instructions.Length); index++) {
             if (
@@ -186,7 +199,12 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfOp.Rotate: {
-                        local = RotateBoundsByInverseQuaternion(instruction: instruction, p: local);
+                        if (TryAxialRotationBounds(instruction: instruction, p: local, rotated: out var axial)) {
+                            local = axial;
+                        } else {
+                            rotationsExpanded++;
+                            local = RotateBoundsByInverseQuaternion(instruction: instruction, p: local);
+                        }
                         break;
                     }
                 case SdfOp.Scale: {
@@ -364,6 +382,56 @@ public sealed partial class SdfFieldEvaluator {
                 lower: Fold(x: value.Lower, e: extent),
                 upper: Fold(x: value.Upper, e: extent)
             ));
+    }
+    // Simplifies the general formula only when its quaternion coefficients are exactly 0 or +/-1. A half turn still
+    // intersects the three-use interval with the slackened linear image: returning just the negated interval would
+    // tighten the old answer and could move a sweep. The range guard proves every intermediate of the general formula
+    // bounded (at most three copies of an endpoint, plus four raws); outside it, including Entire, use that formula
+    // so its absorbing overflow and frame discovery remain identical.
+    private static bool TryAxialRotationBounds(IntervalVector3 p, CompiledInstruction instruction, out IntervalVector3 rotated) {
+        rotated = p;
+
+        if (!FitsAxialRotation(axis: p.X) || !FitsAxialRotation(axis: p.Y) || !FitsAxialRotation(axis: p.Z)) {
+            return false;
+        }
+
+        var x = instruction.Data0X;
+        var y = instruction.Data0Y;
+        var z = instruction.Data0Z;
+        var w = instruction.Data0W;
+        var zero = FixedQ4816.Zero;
+        var one = FixedQ4816.One;
+
+        if ((x == zero) && (y == zero) && (z == zero)) {
+            return ((w == one) || (w == -one));
+        }
+
+        if (w != zero) {
+            return false;
+        }
+
+        var aroundX = (((x == one) || (x == -one)) && (y == zero) && (z == zero));
+        var aroundY = ((x == zero) && ((y == one) || (y == -one)) && (z == zero));
+        var aroundZ = ((x == zero) && (y == zero) && ((z == one) || (z == -one)));
+
+        if (!aroundX && !aroundY && !aroundZ) {
+            return false;
+        }
+
+        rotated = new IntervalVector3(
+            X: (aroundX ? p.X : HalfTurnBounds(axis: p.X)),
+            Y: (aroundY ? p.Y : HalfTurnBounds(axis: p.Y)),
+            Z: (aroundZ ? p.Z : HalfTurnBounds(axis: p.Z))
+        );
+        return true;
+    }
+    private static bool FitsAxialRotation(FixedInterval axis) =>
+        (!axis.IsUnbounded && (axis.Lower.Value >= -(long.MaxValue / 4L)) && (axis.Upper.Value <= (long.MaxValue / 4L)));
+    private static FixedInterval HalfTurnBounds(FixedInterval axis) {
+        var negated = -axis;
+        var slack = new FixedInterval(lower: FixedQ4816.FromRawBits(value: -LinearRotationSlackRaws), upper: FixedQ4816.FromRawBits(value: LinearRotationSlackRaws));
+
+        return Intersect(first: ((axis + negated) + negated), second: (negated + slack));
     }
     // FixedQuaternion.Rotate's two fused stages over the conjugate, each stage's three-term sum enclosed by the sum of its
     // outward-rounded products: t = u×v + w·v, then d = u×t, then v + 2d.
