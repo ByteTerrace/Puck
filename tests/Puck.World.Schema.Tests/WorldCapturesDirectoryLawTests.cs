@@ -13,7 +13,7 @@ public sealed class WorldCapturesDirectoryLawTests {
     private static readonly string[] ShippedCaptureWorlds = [
         "src/Puck.World/Assets/worlds/puck.world.json",
         "tests/Puck.Parity/parity.world.json",
-        "tests/Puck.Parity/parity-inside.world.json",
+        "tests/Puck.Parity/parity-inside.puck",
         "tests/Puck.Parity/paths.puck",
     ];
 

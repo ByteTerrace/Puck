@@ -104,7 +104,7 @@ tick's regions fails there whatever its pixels.
 `WorldCaptureSchedulerLawTests` (`tests/Puck.World.Tests`) drives this without
 a GPU.
 
-`parity-inside.world.json` is the negative-path proof: its camera is authored
+`parity-inside.puck` is the negative-path proof: its camera is authored
 inside solid geometry, so every scheduled capture must refuse with
 `refusal: "cameraInside"` and no frame written. If it ever produces a frame,
 the camera-validity gate is broken.
