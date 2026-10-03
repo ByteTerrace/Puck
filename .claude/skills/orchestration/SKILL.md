@@ -88,12 +88,22 @@ Allocate one GPU leg per GPU at a time and keep heavy builds off its machine
 while the leg runs. Use [`verification`](../verification/SKILL.md#gpu-legs) for
 grants, GPU work classification and execution.
 
-Run a load governor on any machine that hosts many agents: admit queued work on
-measured spare capacity (CPU and free RAM), hold on memory pressure, and start
-GPU legs on GPU-idle transitions. Measure the heavy jobs: a full
-`Puck.World.Tests` run takes about 7 GB, so never run two at once on a 32 GB
-machine. Every build, a Codex brief's included, passes `-nodeReuse:false`, so no
-build server lingers and holds memory.
+Run a load governor on any machine that hosts many agents, through
+`puck host load`, which samples the machine's load and names its state:
+
+- On capacity, admit light work only. A heavy job (a solution build plus a full
+  suite, about 7 GB at its peak) needs more than 14 GB free on a 32 GB machine,
+  and a full `Puck.World.Tests` run is one: never run two at once.
+- On pressure, admit nothing, and gate the running agents' heavy steps on free
+  memory.
+- On GPU idle, start the next GPU leg. A device test host counts as GPU work.
+- Thresholds follow the machine class. A 32 GB, 16-thread machine has capacity
+  while CPU is under 60% and free RAM over 10 GB, and is under pressure below
+  4 GB free. A 16 GB, 6-thread machine has capacity while CPU is under 50% and
+  free RAM over 5 GB, and is under pressure below 2 GB free or 10 GB of disk.
+
+Every build, a Codex brief's included, passes `-nodeReuse:false`, and so does
+`dotnet restore`, which otherwise leaves reuse nodes that hold memory.
 
 ## Select models and route findings
 
