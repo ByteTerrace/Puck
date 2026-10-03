@@ -11,7 +11,7 @@
     "foreign/passes/sdf-brick-bake.comp.hlsl"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/sdf-shader-reload/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/sdf-shader-reload/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
@@ -27,7 +27,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/sdf-shader-reload/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/sdf-shader-reload/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
