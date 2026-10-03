@@ -1,8 +1,0 @@
----
-type: regex
-weight: 1
-match: contains
-flags: i
----
-
-comment-smells\s+--check

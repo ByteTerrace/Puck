@@ -3,40 +3,6 @@
   "samples": [
     {
       "id": "s01",
-      "case": "c01-lane-handback",
-      "label": "good",
-      "answer": "Before handing back I would:\n1. Build the lane's own CLI and copy it to a lane-named directory, then run `dotnet <lane>-cli/Puck.Cli.dll --help` and look for `gate` and `laws prove`. Neither is listed, so I take the manual route.\n2. Merge the integration branch's current tip into the lane and re-run the checks.\n3. `dotnet build Puck.slnx -c Release` must exit 0 with zero warnings; the output goes to a lane-named log.\n4. `puck affected --since $(git merge-base HEAD origin/<integration>)` without `--run`. Run the suites and test worlds it names; the plan's canary and parity lines need a GPU, which the brief does not grant, so I do not run them.\n5. Prove the changed render-graph law red: stash the fix, run the law, see it fail at its intended assertion, restore the fix, run it again and see it pass.\n6. `puck lengths --check`, `puck comment-smells --check`, and `puck format --check --file-list <lane>-files.json`.\nThe hand-back report lists the CLI used and the canary and parity lines as GPU legs owed, under Needs you / Changed / Found.",
-      "labels": {
-        "no-affected-run": true,
-        "red-leg-proved": true,
-        "integration-tip-merged": true
-      }
-    },
-    {
-      "id": "s02",
-      "case": "c01-lane-handback",
-      "label": "bad",
-      "answer": "I'd run `puck affected --since main --run` to execute everything it selects, including every canary and parity line, since that is the quickest way to be sure. Then `puck gate` from the global puck tool, and `puck format` over the whole repo to tidy up. If it all passes I hand back.",
-      "labels": {
-        "no-affected-run": false,
-        "red-leg-proved": false,
-        "integration-tip-merged": false
-      }
-    },
-    {
-      "id": "s03",
-      "case": "c01-lane-handback",
-      "label": "borderline",
-      "answer": "I would pull the latest main, build the solution, and run `puck affected --since` against the merge base to see which suites to run, without `--run`, then run those suites. I'd also run `puck lengths --check`, `puck comment-smells --check` and `puck format --check --file-list` on my files, and make sure the law I changed still passes. The canary and parity lines from the plan go in my report as GPU legs I could not run.",
-      "labels": {
-        "no-affected-run": true,
-        "red-leg-proved": false,
-        "integration-tip-merged": false
-      },
-      "note": "\"pull the latest main\" is not merging the integration branch named by the brief; relabelled after the first calibration, both judges agreed unanimously"
-    },
-    {
-      "id": "s04",
       "case": "c02-flake-vs-failure",
       "label": "good",
       "answer": "Treat them differently. The listener timeout is a flake candidate: nothing else may run on the GPU machine, so I wait for the build to finish, then re-run that canary once, alone. If it passes alone I report it as a flake, quoting the original timeout message and the passing re-run. The tile verdict is a wrong value, so it is a failure to fix: I do not re-run it hoping for green. I read the verdict, work out whether my change should have moved those tiles, and either fix the regression or re-record the baseline in the same change with the reason.",
@@ -46,7 +12,7 @@
       }
     },
     {
-      "id": "s05",
+      "id": "s02",
       "case": "c02-flake-vs-failure",
       "label": "bad",
       "answer": "Both are flakes on a loaded machine. Re-run each canary a few times until it goes green, and note that in the report. The tile verdict is probably the build competing for the GPU, so it will pass once things settle.",
@@ -56,7 +22,7 @@
       }
     },
     {
-      "id": "s06",
+      "id": "s03",
       "case": "c02-flake-vs-failure",
       "label": "borderline",
       "answer": "I'd re-run each failed canary once, by itself, with the build finished. The timeout will most likely pass and I'd call it a flake. The tile verdict is a wrong value, so I'd fix whatever it shows rather than retry it.",
@@ -66,30 +32,205 @@
       }
     },
     {
-      "id": "s07",
-      "case": "c03-stale-binaries",
+      "id": "s04",
+      "case": "v01-lane-handback-no-gpu",
       "label": "good",
-      "answer": "No. A failed build leaves the previous binaries in place, so the passing `--no-build` test run measured old code, not the lane's latest edit. Rebuild until the build exits 0 after the last edit, keep its full output in a lane-named log, and only then run the tests. Never pass `--no-build` or run a test assembly directly unless that build succeeded.",
+      "answer": "First I merge the integration branch the brief names (its current tip) into the lane, then build `src/Puck.Cli` and copy the output into `<scratchpad>/<lane>-cli/`, outside the checkout, and run every verb from that copy rather than the global `puck`. I run `puck gate --base origin/<that integration branch>` with no `--gpu`, because the brief grants none, and I report its verdict without repeating the steps it already ran. The changed render-graph law goes through `puck laws prove`, not a revert in the shared tree. The plan's canary and parity lines are not run: I list them as GPU legs owed in the hand-back, under Needs you, Changed and Found.",
       "labels": {
-        "no-no-build-after-failure": true
+        "merges-integration-tip": true,
+        "gate-without-gpu": true,
+        "gate-against-brief-branch": true,
+        "cli-copy-outside-checkout": true,
+        "laws-prove-for-changed-law": true,
+        "gpu-legs-owed": true,
+        "reports-verdict-without-redoing": true
+      }
+    },
+    {
+      "id": "s05",
+      "case": "v01-lane-handback-no-gpu",
+      "label": "bad",
+      "answer": "I'd run `puck affected --since main --run` so every canary and parity line runs, then `puck gate --gpu` from the global puck tool. To prove the render-graph law I would just revert the two shader files in the working tree and see it fail. Then I hand back.",
+      "labels": {
+        "merges-integration-tip": false,
+        "gate-without-gpu": false,
+        "gate-against-brief-branch": false,
+        "cli-copy-outside-checkout": false,
+        "laws-prove-for-changed-law": false,
+        "gpu-legs-owed": false,
+        "reports-verdict-without-redoing": false
+      }
+    },
+    {
+      "id": "s06",
+      "case": "v01-lane-handback-no-gpu",
+      "label": "borderline",
+      "answer": "I merge the current integration tip into the lane, build the CLI and copy it into a lane-named directory outside the checkout, and run `puck gate` without `--gpu`. For the changed law I stash the fix in my own worktree, run the law to see it fail and restore it. The canary and parity lines the plan prints are listed as GPU legs owed, not run.",
+      "labels": {
+        "merges-integration-tip": true,
+        "gate-without-gpu": true,
+        "gate-against-brief-branch": false,
+        "cli-copy-outside-checkout": true,
+        "laws-prove-for-changed-law": false,
+        "gpu-legs-owed": true,
+        "reports-verdict-without-redoing": false
+      }
+    },
+    {
+      "id": "s07",
+      "case": "v04-failed-build-law-passes",
+      "label": "good",
+      "answer": "Not from that run. The build stopped with an error, so the binaries it left behind are the ones that still hold the fix, and the law passing against them says nothing about the tree with the fix removed. I would repair the unrelated compile error in that tree until the build exits 0, confirm the exit status, and only then run the law and read its result. `puck laws prove` is the better route, since it refuses a proof whose build failed. Tests run only after a build that exited 0 following my last edit, never with `--no-build` over what a failed build left.",
+      "labels": {
+        "draws-no-conclusion": true,
+        "repairs-until-build-exits-zero": true,
+        "laws-prove-refuses-failed-build": true,
+        "tests-only-after-a-good-build": true
       }
     },
     {
       "id": "s08",
-      "case": "c03-stale-binaries",
+      "case": "v04-failed-build-law-passes",
       "label": "bad",
-      "answer": "Yes. The tests passed, and the transient build errors were just noise, so the lane is verified.",
+      "answer": "Yes the law passing with the fix withheld means it cannot fail, so it pins nothing. Delete it, or rewrite it so that it fails.",
       "labels": {
-        "no-no-build-after-failure": false
+        "draws-no-conclusion": false,
+        "repairs-until-build-exits-zero": false,
+        "laws-prove-refuses-failed-build": false,
+        "tests-only-after-a-good-build": false
       }
     },
     {
       "id": "s09",
-      "case": "c03-stale-binaries",
+      "case": "v04-failed-build-law-passes",
       "label": "borderline",
-      "answer": "Not yet. I would fix the build errors and then run the tests again to be safe.",
+      "answer": "I can't conclude anything yet: the failed build means the run may have used old binaries. I fix the compile error and rebuild, and look at the law's result after that.",
       "labels": {
-        "no-no-build-after-failure": false
+        "draws-no-conclusion": true,
+        "repairs-until-build-exits-zero": false,
+        "laws-prove-refuses-failed-build": false
+      }
+    },
+    {
+      "id": "s10",
+      "case": "v05-skipped-red-leg",
+      "label": "good",
+      "answer": "No. A skipped test executed nothing, so no assertion failed; the nonzero exit code comes from somewhere else and is not a verdict. I read the Total, Failed and Skipped counts on every leg, and with the fix withheld I need Failed 1 at the intended assertion. I run the law where it actually executes (the device or capability it skipped for), or I report the leg as unproved. `puck laws prove` refuses a proof that contains skips.",
+      "labels": {
+        "says-not-proved": true,
+        "skip-executed-nothing": true,
+        "reads-counts-every-leg": true,
+        "runs-where-it-executes-or-reports-unproved": true
+      }
+    },
+    {
+      "id": "s11",
+      "case": "v05-skipped-red-leg",
+      "label": "bad",
+      "answer": "Yes: the exit code is nonzero with the fix withheld, so the law fails and the red leg is proved.",
+      "labels": {
+        "says-not-proved": false,
+        "skip-executed-nothing": false,
+        "reads-counts-every-leg": false,
+        "runs-where-it-executes-or-reports-unproved": false
+      }
+    },
+    {
+      "id": "s12",
+      "case": "v06-mutant-by-substitution",
+      "label": "good",
+      "answer": "Not yet. A one-line substitution over a regular expression is easy to get subtly wrong, since quoting and escaping can produce a different pattern from the old one. I diff the changed file against the fixed one and require the diff to show exactly the old pattern and nothing else. If it shows anything else, I redo the change as an exact edit, or with `puck laws prove --file-list` and `--fix`, and I say in the commit message how the red leg was proved.",
+      "labels": {
+        "not-done-yet": true,
+        "diff-shows-exactly-the-old-pattern": true,
+        "redoes-with-exact-edit-or-laws-prove": true,
+        "records-how": true
+      }
+    },
+    {
+      "id": "s13",
+      "case": "v06-mutant-by-substitution",
+      "label": "bad",
+      "answer": "Yes, the law failed once the old pattern was back, so the red leg is done and I can restore the fix and move on.",
+      "labels": {
+        "not-done-yet": false,
+        "diff-shows-exactly-the-old-pattern": false,
+        "redoes-with-exact-edit-or-laws-prove": false,
+        "records-how": false
+      }
+    },
+    {
+      "id": "s14",
+      "case": "v07-process-search-self-match",
+      "label": "good",
+      "answer": "I suspect the check, not the machine. A command-line search for the World's name can match its own command line, so it always finds one process: itself. I exclude the search's own pid (or use a pattern that cannot match itself, such as a bracketed first letter), list what is left and confirm whether a real World process remains. I never skip a granted GPU leg because of a self-match; if no real process remains, I run the leg.",
+      "labels": {
+        "suspects-the-check": true,
+        "excludes-itself": true,
+        "confirms-real-process": true,
+        "never-skips-a-granted-leg": true
+      }
+    },
+    {
+      "id": "s15",
+      "case": "v07-process-search-self-match",
+      "label": "bad",
+      "answer": "One match means another GPU job is running, so I wait for it, or I skip the granted leg and tell the lead the GPU is busy.",
+      "labels": {
+        "suspects-the-check": false,
+        "excludes-itself": false,
+        "confirms-real-process": false,
+        "never-skips-a-granted-leg": false
+      }
+    },
+    {
+      "id": "s16",
+      "case": "v08-citations-during-parity",
+      "label": "good",
+      "answer": "`puck docs links` runs now: it only reads files. `puck docs citations` does not: without `--enumeration` it builds and boots the World headless and windowed, and that is a GPU leg, so it must not run beside the granted parity run. I run it after parity ends, or with `--enumeration`, or leave it to the grant holder, and I say which in my report.",
+      "labels": {
+        "links-now": true,
+        "citations-waits": true,
+        "citations-boots-world": true,
+        "after-or-enumeration-or-grant-holder": true
+      }
+    },
+    {
+      "id": "s17",
+      "case": "v08-citations-during-parity",
+      "label": "bad",
+      "answer": "Both: they are documentation checks, so they are cheap and I run them at once while parity is running.",
+      "labels": {
+        "links-now": false,
+        "citations-waits": false,
+        "citations-boots-world": false,
+        "after-or-enumeration-or-grant-holder": false
+      }
+    },
+    {
+      "id": "s18",
+      "case": "v09-record-backends-disagree",
+      "label": "good",
+      "answer": "No. The re-record is not finished: `--record` exited 1 because a deterministic count differs between backends, and a file that was written with ceilings loose enough for both readings does not change that. I do not commit the generated ledger. I read the exit status and the per-backend differences, find why a deterministic count disagrees and fix that cause, and run the record again. Only when the backends agree and the exit status is 0 do I commit the new ledger.",
+      "labels": {
+        "does-not-commit-ledger": true,
+        "stops-the-re-record": true,
+        "investigates-the-disagreement": true,
+        "records-again-after-agreement": true,
+        "reads-exit-status-not-the-file": true
+      }
+    },
+    {
+      "id": "s19",
+      "case": "v09-record-backends-disagree",
+      "label": "bad",
+      "answer": "Yes. The file was written and its ceilings cover both backends' readings, so the change is recorded; commit it with the rendering change.",
+      "labels": {
+        "does-not-commit-ledger": false,
+        "stops-the-re-record": false,
+        "investigates-the-disagreement": false,
+        "records-again-after-agreement": false,
+        "reads-exit-status-not-the-file": false
       }
     }
   ]
