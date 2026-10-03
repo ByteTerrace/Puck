@@ -5,7 +5,6 @@ using Puck.DirectX;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Puck.Platform.Windows;
-using Puck.Testing;
 using Puck.Vulkan;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Factories;
@@ -258,7 +257,7 @@ public sealed unsafe class SharedFenceLawTests {
         var context = new DirectXDeviceContext(
             adapterLuid: adapterLuid,
             deviceApi: (warp
-                ? new WarpDeviceApi()
+                ? new DirectXWarpDeviceApi()
                 : new DirectXNativeDeviceApi()),
             minimumFeatureLevel: DirectXFeatureLevel.Level110
         );

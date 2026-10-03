@@ -183,7 +183,7 @@ owed when your change relies on it.
 GPU work is `puck parity`, `puck counters`, any canary requiring `gpu`
 (including `--merge`), a windowed or offscreen `Puck.World` run, any verb that
 boots one in those modes, and any test that opens a device. This includes a
-full `Puck.World.Tests` run: its device-law classes open the GPU. `puck docs
+full `Puck.World.Tests` run: its `Gpu` classes open the GPU. `puck docs
 citations` builds `Puck.World` and boots it headless and windowed to read its
 help vocabulary, so it waits for the GPU like any other GPU leg; given
 `--enumeration <file>`, a saved `help` listing, it boots nothing and may run
@@ -196,7 +196,9 @@ World run with effective `host.presentation: none` uses no GPU; the
 - While another GPU leg runs, run test suites with
   `--filter-not-trait Category=Gpu` and list the skipped `Gpu` classes as
   owed. Every class that opens a hardware GPU device carries
-  `[Trait("Category", "Gpu")]`, whatever its name. Keep the CPU-heavy work restriction below.
+  `[Trait("Category", "Gpu")]`, whatever its name, and the build refuses a class
+  that reaches a way onto the GPU marked `[OpensGpuDevice]` without it (GPU001).
+  Keep the CPU-heavy work restriction below.
 - In delegated work, run GPU legs only under a grant the lead issues in your
   brief. Without one, run none: list each leg you need (verb, canaries,
   backend) in your hand-back report.

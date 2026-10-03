@@ -51,6 +51,7 @@ internal sealed unsafe class SharedFenceWriter : IDisposable {
     /// host has no such device.</summary>
     /// <param name="warp">Whether the device is the software renderer.</param>
     /// <returns>The writer, owned by the caller, or <see langword="null"/>.</returns>
+    [OpensGpuDevice]
     public static SharedFenceWriter? TryCreate(bool warp) {
         nint device;
         nint context;

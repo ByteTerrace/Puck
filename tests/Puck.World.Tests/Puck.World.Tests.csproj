@@ -90,7 +90,6 @@
         <Compile Include="../Shared/SpirvEdits.cs" Link="SpirvEdits.cs" />
         <Compile Include="../Shared/SdfTestView.cs" Link="SdfTestView.cs" />
         <Compile Include="../Shared/ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
-        <Compile Include="../Shared/WarpDeviceApi.cs" Link="WarpDeviceApi.cs" />
         <Compile Include="../Shared/DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
         <Compile Include="../Shared/HeadlessVulkanDevice.cs" Link="HeadlessVulkanDevice.cs" />
         <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />

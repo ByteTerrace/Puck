@@ -34,8 +34,9 @@ holds each RGBA8 channel within one code of the value's own code, headroom
 saturating to 255; it shares that collection for the same debug-layer leg.
 The device laws share `tests/Shared`'s
 `HeadlessVulkanDevice` and `DirectXTestDevices`. Every class that opens a
-hardware device carries `[Trait("Category", "Gpu")]`, so
-`--filter-not-trait Category=Gpu` runs the rest of the suite beside a GPU leg. A Vulkan device law's
+hardware device carries `[Trait("Category", "Gpu")]`, which the build holds
+(GPU001), so `--filter-not-trait Category=Gpu` runs the rest of the suite beside a
+GPU leg. A Vulkan device law's
 instance runs under `VK_LAYER_KHRONOS_validation` as the one switch
 `HeadlessVulkanDevice.Validation` says (on), unless the law passes
 `validation` itself; a host without the layer skips the law by name. An instance

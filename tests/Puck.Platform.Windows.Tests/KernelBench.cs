@@ -44,6 +44,7 @@ internal sealed unsafe class KernelBench : IDisposable {
     // Packed the same way Win32D3D11.FindAdapterByLuid matches it: (HighPart << 32) | LowPart.
     public long AdapterLuid { get; }
 
+    [OpensGpuDevice]
     public static KernelBench? TryCreate(bool requireVideoSupport = false) {
         var adapter = FindHardwareAdapter();
 

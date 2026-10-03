@@ -15,6 +15,7 @@ namespace Puck.DirectX.Apis;
 /// The native implementation of <see cref="IDirectXDeviceApi"/>, marshaling to <c>D3D12CreateDevice</c> and the
 /// DXGI adapter entry points used to locate a target adapter.
 /// </summary>
+[OpensGpuDevice]
 [SupportedOSPlatform("windows8.1")]
 public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
     private static DirectXDevice CreateDevice(IUnknown* adapter, DirectXFeatureLevel minimumFeatureLevel) {

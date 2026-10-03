@@ -2,8 +2,8 @@
 
 Puck.Analyzers provides the Roslyn analyzers and code fixes used when building
 the repository. It checks verified-code declarations, source-file length
-limits, comment smells, strict-enum usage, unmanaged function-pointer calls, and
-environment reads. It is a
+limits, comment smells, strict-enum usage, unmanaged function-pointer calls,
+environment reads, and the GPU trait on test classes. It is a
 compiler extension, not an engine runtime dependency or a published package.
 
 ## Usage
@@ -30,6 +30,16 @@ and any read whose name is not a compile-time constant. Nothing in Puck is
 switched by an environment variable; the
 [configuration guide](../../docs/development/contributing.md#configuration-and-diagnostics)
 names what replaces one.
+
+GPU001 refuses a test class that reaches the host's GPU without
+`[Trait("Category", "Gpu")]`, the trait a test run beside a GPU leg leaves out
+with `--filter-not-trait Category=Gpu`. The ways onto the GPU carry
+`[OpensGpuDevice]` (`build/OpensGpuDeviceAttribute.cs`, linked into every
+project): the native device APIs and the test helpers that bring a device up. A
+helper that reaches a marked member carries the mark and hands the obligation to
+its callers. The rule runs only in assemblies that reference xUnit. A device
+reached through a composed host, or through a native entry point no mark names,
+is outside what it sees.
 
 INTEROP001 refuses a call through an unmanaged function pointer whose signature
 mentions a type parameter anywhere but behind a pointer, because that call throws
