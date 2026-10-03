@@ -173,11 +173,11 @@
   ],
   "render": {
     "dynamicResolution": true,
-    "renderScale": "Native",
+    "renderScale": 1,
     "low": {
       "shadows": "Off",
       "ambientOcclusion": false,
-      "renderScale": "Half"
+      "renderScale": 0.70980394
     }
   },
   "schema": "puck.world.definition.v1",

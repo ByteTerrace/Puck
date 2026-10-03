@@ -225,7 +225,7 @@
     "low": {
       "shadows": "Off",
       "ambientOcclusion": false,
-      "renderScale": "Half"
+      "renderScale": 0.70980394
     }
   },
   "rules": [

@@ -4530,7 +4530,7 @@ render {
       hemisphere(color: "#F1E5DE", base: 0.3, gradient: 0.1)
     ]
   }
-  renderScale: Native
+  renderScale: 1
   shadowCrowdRadius: 0
   shadows: High
   sky {
