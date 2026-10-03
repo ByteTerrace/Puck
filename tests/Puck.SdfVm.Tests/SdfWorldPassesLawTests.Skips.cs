@@ -56,6 +56,16 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.True(condition: view.Runtime.Work(instance: 0).TryReadCompleted(sample: sample));
 
+        // Every part SdfWorldWorkDetails names reports its rows, whichever recorder serves it: the sky's and the composite's
+        // evaluations are counted in their gradient rows, and a part that named none would drop them.
+        foreach (var part in new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Parts.Shadow }) {
+            var pass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${part}");
+
+            foreach (var label in SdfWorldWorkDetails.Of(part: part)) {
+                Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: pass), collection: sample.Details.ToArray());
+            }
+        }
+
         var binds = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.PipelineBinds);
 
         bool Ran(string part) {

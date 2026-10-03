@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -66,6 +67,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         m_owner.Unhold(residency: m_view.Residency);
         m_view.Residency.Release();
     }
+    public IReadOnlyList<string> WorkDetails(in FrameContext context) => SdfWorldWorkDetails.Of(part: ((m_kernel == SdfKernel.Composite) ? SdfWorldPackage.Parts.Composite : SdfWorldPackage.Parts.Sky));
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         if ((m_owner.ViewOf(instance: m_context.Instance) is { } current) && (current != m_view)) {
             if (!ReferenceEquals(objA: current.Residency, objB: m_view.Residency)) {
