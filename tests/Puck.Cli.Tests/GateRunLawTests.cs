@@ -59,8 +59,10 @@ public sealed class GateRunLawTests {
     private static (int ExitCode, string Output, string Error) Gate(Branches branches, FakeRunner runner, TemporaryDirectory directory, bool gpu = false, string target = "main") => ConsoleCapture.RunSplit(run: () => GateRun.Run(
         directory: directory.RootPath,
         gpu: gpu,
+        gpuJobs: 3,
         repositoryRoot: branches.Checkout.Root,
         runner: runner,
+        suiteJobs: 2,
         target: target
     ));
 
@@ -99,7 +101,7 @@ public sealed class GateRunLawTests {
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Success);
-        Assert.Equal(actual: runner.Steps[0], expected: ["affected", "--merge-base", branches.Base, "--run"]);
+        Assert.Equal(actual: runner.Steps[0], expected: ["affected", "--merge-base", branches.Base, "--run", "--suite-jobs", "2"]);
         Assert.Equal(actual: runner.FormatSources, expected: ["src/Branch.cs", "src/Branch.puck"]);
         Assert.Contains(expectedSubstring: $"gate: 3 changed file(s) against {branches.Base[..12]}, the merge base of HEAD and main;", actualString: output);
     }
@@ -158,6 +160,11 @@ public sealed class GateRunLawTests {
             _ = Gate(branches: branches, directory: directory, gpu: gpu, runner: runner);
 
             Assert.Equal(actual: runner.Steps[0].Contains(value: "--gpu"), expected: gpu);
+            // The GPU bound travels with the GPU work and only with it.
+            Assert.Equal(actual: runner.Steps[0].Contains(value: "--gpu-jobs"), expected: gpu);
+            if (gpu) {
+                Assert.Equal(actual: runner.Steps[0][^2..], expected: ["--gpu-jobs", "3"]);
+            }
             Assert.Equal(actual: runner.Steps.Count(predicate: static step => step.Contains(value: "--gpu")), expected: (gpu ? 1 : 0));
         }
 

@@ -7,7 +7,7 @@ namespace Puck.Cli.Gate;
 internal static class GateCommand {
     private const string Verb = "gate";
 
-    private static int Run(string target, bool gpu) {
+    private static int Run(string target, bool gpu, int gpuJobs, int suiteJobs) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -24,8 +24,10 @@ internal static class GateCommand {
         return GateRun.Run(
             directory: directory,
             gpu: gpu,
+            gpuJobs: gpuJobs,
             repositoryRoot: repositoryRoot,
             runner: new ProcessGateRunner(),
+            suiteJobs: suiteJobs,
             target: target
         );
     }
@@ -33,10 +35,12 @@ internal static class GateCommand {
     public static Command Create() {
         var mergeBaseOption = AffectedCommand.MergeBase(description: "The branch the change lands on; the change is read against its merge base with HEAD.");
         var gpuOption = AffectedCommand.Gpu();
+        var gpuJobsOption = Canary.CanaryCommand.GpuJobs();
+        var suiteJobsOption = AffectedSuites.Jobs();
         var command = new Command(
             description: "Build the solution and run the checks a branch's change needs, against its merge base.",
             name: Verb
-        ) { mergeBaseOption, gpuOption };
+        ) { mergeBaseOption, gpuOption, gpuJobsOption, suiteJobsOption };
 
         mergeBaseOption.DefaultValueFactory = static _ => GateRun.DefaultTarget;
         command.Detail(detail: """
@@ -44,10 +48,11 @@ internal static class GateCommand {
                 1. dotnet build Puck.slnx -c Release; a failed build prints its errors and stops the gate.
                 2. Copy the CLI that build wrote into the run's own temporary directory; every later
                    step runs that copy, so it runs the candidate's code and nothing else overwrites it.
-                3. puck affected --merge-base <merge base> --run: the suites, the .puck test worlds and
-                   the catalog check the change reaches, read against the merge base of HEAD and
-                   --merge-base, so commits the target gained after the branch left it are not counted.
-                   --gpu adds --gpu: the chosen canaries, then parity, one after the other.
+                3. puck affected --merge-base <merge base> --run --suite-jobs <n>: the suites, side by
+                   side, the .puck test worlds and the catalog check the change reaches, read against the
+                   merge base of HEAD and --merge-base, so commits the target gained after the branch left
+                   it are not counted. --gpu adds --gpu --gpu-jobs <n>: the chosen canaries, up to n legs
+                   on the GPU at once, then parity.
                 4. puck format --check over the changed C# and .puck sources, puck lengths --check,
                    puck comment-smells --check, puck docs links, puck schema --check,
                    puck architecture --check, puck registry --check, puck vocabulary --check,
@@ -62,6 +67,8 @@ internal static class GateCommand {
             """);
         command.SetAction(action: parseResult => Run(
             gpu: parseResult.GetValue(option: gpuOption),
+            gpuJobs: parseResult.GetValue(option: gpuJobsOption),
+            suiteJobs: parseResult.GetValue(option: suiteJobsOption),
             target: parseResult.GetValue(option: mergeBaseOption)!
         ));
 

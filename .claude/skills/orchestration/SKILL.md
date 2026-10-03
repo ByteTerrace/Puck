@@ -120,7 +120,9 @@ Run a load governor on any machine that hosts many agents, through
 - Size admission by the job's measured peak. On capacity, admit light work only.
   A heavy job (a solution build plus a full suite, about 7 GB at its peak) needs
   more than 14 GB free on a 32 GB machine, and a full `Puck.World.Tests` run is
-  one: never run two at once.
+  one: never run two at once. Within one `puck affected --run`, a suite whose
+  project declares `<PuckSuiteLoad>heavy</PuckSuiteLoad>` already follows this
+  rule.
 - On pressure, admit nothing. Running agents gate their heavy steps on more than
   8 GB of free memory rather than being killed.
 - On GPU idle, start the next GPU leg. A device test host counts as GPU work.

@@ -817,13 +817,21 @@ A `test` line is a `.puck` source run with `puck test`. The `catalog` line
 names the game's Release catalog, the compiled worlds the build writes, which
 holds no test worlds: `--run` checks it with the compile the line names.
 
-`--run` builds and runs the chosen suites, then `puck test` on the chosen
-worlds, then the catalog check, and exits 1 when any of them fails. A suite
-prints one verdict line; a failed one follows it with its whole report, each
-failed test with its message and stack or the build errors that stopped it, so
-the log `puck gate` keeps names every failure. `--gpu`,
-which needs `--run`, then runs the chosen canaries and then parity, one after
-the other: they boot real Worlds and hold both GPU backends, so they run only
+`--run` builds the chosen suites once, in one build over a solution filter of
+exactly those projects, then runs their test hosts side by side on that build,
+then `puck test` on the chosen worlds, then the catalog check, and exits 1 when
+any of them fails. At most `--suite-jobs` suites run at once (default: a
+quarter of the logical processors). A suite whose project declares
+`<PuckSuiteLoad>heavy</PuckSuiteLoad>`, as `Puck.World.Tests` does, starts
+first and never beside another heavy one. Beside others, a suite starts only
+while free memory is above its floor, an eighth of the machine's memory for a
+light suite and a quarter for a heavy one; a suite with nothing else running
+always starts. Each suite prints one verdict line with its wall time as it
+ends; a failed one follows it with its whole report, each failed test with its
+message and stack, and a failed build prints its errors and runs no suite, so
+the log `puck gate` keeps names every failure. `--gpu`, which needs `--run`,
+then runs the chosen canaries, up to `--gpu-jobs` legs on the GPU at once, and
+then parity: they boot real Worlds and hold both GPU backends, so they run only
 when asked for, on a machine with no competing build or GPU work.
 [`puck gate`](#puck-gatethe-change-scoped-gate) runs this step on the
 candidate's own CLI.
@@ -853,9 +861,10 @@ against the merge base of `HEAD` and the branch it lands on, `--merge-base`
 2. Copy the CLI that build wrote into the run's own temporary directory. Every
    later step runs that copy, so it runs the candidate's code, and no other
    run's build or copy can replace it mid-gate.
-3. `puck affected --merge-base <merge base> --run`: the suites, `.puck` test
-   worlds and catalog check the change reaches. `--gpu` adds `--gpu`, which
-   runs the chosen canaries and then parity.
+3. `puck affected --merge-base <merge base> --run --suite-jobs <n>`: the
+   suites, `.puck` test worlds and catalog check the change reaches. `--gpu`
+   adds `--gpu --gpu-jobs <n>`, which runs the chosen canaries and then
+   parity. The gate's own `--suite-jobs` and `--gpu-jobs` set both bounds.
 4. The repository checks, each in its check form only: `puck format --check`
    over the changed C# and `.puck` sources, `puck lengths --check`,
    `puck comment-smells --check`, `puck docs links`, `puck schema --check`,
@@ -1098,20 +1107,29 @@ started, starts no further leg, and exits with code 2. A leg that fails with
 an exception stops the run the same way. The runner waits for the other legs'
 processes to die before it reports the failure.
 
-Legs run concurrently, up to `--jobs` World processes at once. The default is
-half the processor count, at most eight and at least one. A leg holds one slot
-for each process it runs: two for a companion-authority leg, one for each
-listener in an `authorities` leg. A windowed or offscreen leg, and a leg whose
-manifest declares any requirement (`gpu`, `audio-output`, or input hardware),
-holds every slot, so its GPU, window, or device never shares the machine with
-another leg. Legs start in authored
-order, and each proof's report prints whole and in authored order.
-`--jobs 1` runs the legs one at a time.
+Legs run concurrently under two bounds. `--jobs` bounds the World processes
+running at once; the default is the logical processor count. A leg holds one
+of them for each process it runs: two for a companion-authority leg, one for
+each listener in an `authorities` leg. `--gpu-jobs` bounds the legs on the GPU
+at once, a windowed or offscreen leg or one that requires `gpu`; the default
+is 4. Every leg runs in its own run directory, state directory and loopback
+endpoints, so legs side by side share nothing they write. A manifest that
+declares `"exclusive": true` runs each of its legs alone, before every other
+leg; a proof says so when what it observes depends on how busy the machine
+is, as `four-corners-sharded` does, whose five processes keep independent
+wall clocks that its crossing must line up. Otherwise legs start in authored
+order as their bounds allow, a leg that does not fit yet never holding back a
+smaller one behind it. Each leg prints one line with its wall time as it ends
+(`canary: [12/332] pipeline-ink on vulkan positive held in 9.4s`), each
+proof's report prints whole and in authored order, and the closing `FAIL` line
+names the failed proofs in authored order. `--jobs 1` runs the legs one at a
+time.
 
 After the last proof the runner prints what the run started and how its legs
 ended: the World boots, the processes it started for legs (World, stub
-launcher, and `shaders package`), whether it built `Puck.World`, and how many
-legs ended at their script's `quit`, at their timeout, or otherwise.
+launcher, and `shaders package`), whether it built `Puck.World`, how many
+legs ended at their script's `quit`, at their timeout, or otherwise, and the
+legs' summed time against the run's wall time.
 
 A `bootShape: "stub"` manifest runs its leg through `Puck.Launcher.Stub` from a
 leg-private, disposable `<run>/install/` tree, never the shared build path,
@@ -1233,6 +1251,7 @@ puck canary --capability <class>    filter automatic/headless/windowed/offscreen
 puck canary --merge                 run the merge gate: the automatic set plus every proof requiring gpu
 puck canary --backend <name> ...    run every backend-declaring proof on vulkan or directx only
 puck canary --jobs <n>              run at most n World processes at once (n ≥ 1)
+puck canary --gpu-jobs <n>          run at most n legs on the GPU at once (n ≥ 1)
 puck canary --plan                  print a selection's counts and ceiling without building or running
 puck canary --keep-transcripts ...  keep every leg's run directory whatever its verdict
 ```
@@ -1253,8 +1272,8 @@ Like the automatic set and `--all`, a merge run fails when a manifest was
 skipped as unreadable.
 
 `--plan` counts a selection from its manifests alone and prints it without
-building or running anything: one line per proof, then the legs (serial and
-parallel), the World boots, the processes the run would start for its legs,
+building or running anything: one line per proof, then the legs (alone, on
+the GPU, and headless), the World boots, the processes the run would start for its legs,
 the builds, and the summed per-leg timeouts. Every value is a count of the
 manifests, so the output is the same on every machine, and a GPU selection can
 be costed on a machine without a GPU. The two gate selections, the automatic
@@ -1287,7 +1306,7 @@ never narrates the engine ready, never lands its capture, or prints no counts
 fails the selection with exit 2, naming its backend, before any leg starts.
 
 The selection forms are mutually exclusive and every execution selection must
-be nonempty. `--jobs` combines with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
+be nonempty. `--jobs` and `--gpu-jobs` combine with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
 command declares `accepted` or intentionally expected `refused`, bound to its
 verb and occurrence; an accepted claim may add `"stream": "stderr"` to expect
 its confirmation there instead of stdout—the shape server narration

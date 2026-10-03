@@ -68,12 +68,14 @@ internal static class GateRun {
     /// <param name="target">The branch the change lands on; the change is read against its merge base with
     /// <c>HEAD</c>.</param>
     /// <param name="gpu">Whether to run the chosen canaries and parity after the CPU checks.</param>
+    /// <param name="gpuJobs">The most canary legs on the GPU at once, with <paramref name="gpu"/>.</param>
+    /// <param name="suiteJobs">The most suites run at once.</param>
     /// <param name="runner">Runs the steps.</param>
     /// <param name="directory">The run's own empty directory: it receives the CLI copy, the format file list and the log,
     /// and keeps the log.</param>
     /// <returns><see cref="CliExit.Success"/> when every step passed, <see cref="CliExit.Failed"/> when the build or any
     /// step failed, and <see cref="CliExit.Refused"/> when no merge base could be resolved.</returns>
-    public static int Run(string repositoryRoot, string target, bool gpu, IGateRunner runner, string directory) {
+    public static int Run(string repositoryRoot, string target, bool gpu, int gpuJobs, int suiteJobs, IGateRunner runner, string directory) {
         if (!AffectedCommand.TryResolveBase(error: out var baseError, mergeBase: target, repositoryRoot: repositoryRoot, resolved: out var mergeBase, since: null)) {
             return CliExit.Refuse(verb: Verb, what: target, why: baseError);
         }
@@ -142,7 +144,7 @@ internal static class GateRun {
         }
 
         List<(string Name, string[] Arguments)> steps = [
-            ("affected", ["affected", "--merge-base", mergeBase, "--run", .. (gpu ? (string[])["--gpu"] : [])]),
+            ("affected", ["affected", "--merge-base", mergeBase, "--run", "--suite-jobs", suiteJobs.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), .. (gpu ? (string[])["--gpu", "--gpu-jobs", gpuJobs.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)] : [])]),
         ];
 
         if (sources.Count > 0) {

@@ -107,7 +107,10 @@ internal sealed partial class HostProbe(string checkoutRoot) {
 
         return null;
     }
-    private static double FreeRamGb() {
+
+    /// <summary>Reads free physical memory, in gigabytes, or NaN when the platform offers no reading.</summary>
+    /// <returns>The free memory.</returns>
+    internal static double FreeRamGb() {
         if (OperatingSystem.IsWindows()) {
             var status = new MemoryStatusEx { Length = ((uint)Marshal.SizeOf<MemoryStatusEx>()) };
 

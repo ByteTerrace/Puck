@@ -489,9 +489,10 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   proofs your change touches. The runner closes every leg's script with
   `wire.errors` and `quit`, so a leg lasts as long as its script; a manifest's
   `timeoutSeconds` is only the kill ceiling (each child World also gets
-  `--exit-after-seconds` at it as a backstop), `--jobs` runs legs
-  concurrently (a windowed, offscreen, or requirement-declaring leg runs
-  alone), and Ctrl+C or a leg that throws kills every child the run
+  `--exit-after-seconds` at it as a backstop), `--jobs` bounds the
+  World processes running at once and `--gpu-jobs` the legs on the GPU
+  (`CanaryCommand.CanaryLegSlots`; a manifest declaring `"exclusive": true`
+  runs each leg alone), and Ctrl+C or a leg that throws kills every child the run
   started (`CanaryCommand.RunLegsConcurrently`, exit 2). `--plan` prints a
   selection's World boots, spawns, builds and leg budget without running;
   the automatic set and `--merge` are refused past their ceilings recorded

@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <!-- A full run peaks near a heavy job's memory, so puck affected never runs two heavy suites at once. -->
+        <PuckSuiteLoad>heavy</PuckSuiteLoad>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
