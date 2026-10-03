@@ -1671,6 +1671,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // A frame whose render inputs match the previous one re-composites the retained image instead of
             // re-marching it; any camera, program, pose, lever or twinkle change renders.
             EnableCadenceGate = m_settings.CadenceGate,
+            IndirectTier = m_settings.IndirectTier,
             Volumes = m_volumes,
             // Every emitter's mesh draws: the static placements' and the stamp pool's, then the neighbour worlds'.
             MeshDraws = meshDraws,

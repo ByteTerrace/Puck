@@ -1916,7 +1916,7 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.temporal`, `world.upscale-sharpness`,
+`world.temporal`, `world.indirect`, `world.upscale-sharpness`,
 `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
@@ -1939,6 +1939,14 @@ resolves them over its history, and under `world.cadence on` stands once a still
 view has converged; `world.upscale-sharpness` then sharpens what it resolves.
 Camera and session views never reconstruct over time. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
+`world.indirect off|medium|high` selects the session's residency-owned traced
+and partitioned cache. It starts off. Enabled views of one residency share one
+cache, and a completed cache schedules no more rays until demand or geometry
+changes. It applies no light yet. `world.debug-view indirect-probes` shows probe
+classes across the whole view, including empty sky, with scene hits occluding
+the spheres. `world.debug-view indirect-cells` shows proved components at hits;
+`world.counters sdf.indirect` reads its deterministic schedule and `world.budget`
+reports the allocated pools and regions.
 `world.render-scale [view]` echoes the selected view's ceiling, saved quality
 floor, grid, budget and signal. With no target it echoes the primary view;
 ceiling and floor changes write the defaults that named rows inherit, while

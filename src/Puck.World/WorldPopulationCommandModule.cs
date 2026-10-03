@@ -87,6 +87,21 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
         return (visibility, mesh);
     }
+    private string DescribeIndirectBudget() {
+        if ((renderProbe is null) || (renderProbe.IndirectResidencies.Count == 0)) { return "indirect off, 0 byte(s)"; }
+        return string.Join(" | ", renderProbe.IndirectResidencies.OrderBy(residency => residency.Name, StringComparer.Ordinal).Select(residency => {
+            if (residency.Tables?.IndirectLayout is not { } layout) { return $"indirect {residency.Name} pending"; }
+            var bytes = residency.Tables.IndirectBytes;
+            var probes = ((ulong)layout.ProbeCapacity);
+            var hitBytes = (((probes * ((ulong)layout.RaysPerProbe)) * ((ulong)Puck.SignedDistance.SdfIndirectLayout.HitWords)) * sizeof(uint));
+            var stateBytes = ((probes * ((ulong)Puck.SignedDistance.SdfIndirectLayout.ProbeWords)) * sizeof(uint));
+            var cellBytes = ((probes * ((ulong)Puck.SignedDistance.SdfIndirectLayout.CellWords)) * sizeof(uint));
+            var proofBytes = ((((ulong)layout.ProofCapacity) * ((ulong)Puck.SignedDistance.SdfIndirectLayout.ProofWords)) * sizeof(uint));
+
+            return string.Create(CultureInfo.InvariantCulture,
+                $"indirect {residency.Name} tier={layout.Tier.ToString().ToLowerInvariant()} hits={hitBytes} cells={cellBytes} state={stateBytes} proofs={proofBytes} irradiance=0 radiance=0 light-view=0 light-fragment=0 regions-device={(bytes.DeviceLocal - layout.ByteLength)} regions-host={bytes.HostVisible} device={bytes.DeviceLocal} host={bytes.HostVisible} byte(s)");
+        }));
+    }
     private string DescribeBudget() {
         var (visibilityBytes, meshAttachmentBytes) = WorldViewBytes();
         var render = ((renderProbe?.Residency is { } node)
@@ -169,7 +184,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var ruleBudget = server.CostReport.WorkBudget;
         var rules = $"rules {ruleBudget.RuleRows}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{RuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
 
-        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()} | {server.CostReport.Presentation.Describe()} | {DescribeLiveBudget()}]";
+        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()} | {server.CostReport.Presentation.Describe()} | {DescribeLiveBudget()} | {DescribeIndirectBudget()}]";
     }
     private static string DescribeDistribution(WorldDistribution distribution) {
         var region = distribution.Region switch {

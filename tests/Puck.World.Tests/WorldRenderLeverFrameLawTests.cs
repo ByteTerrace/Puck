@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.Testing;
 using Puck.World.Client;
 using Xunit;
@@ -47,6 +48,11 @@ public sealed class WorldRenderLeverFrameLawTests : IDisposable {
 
         settings.AmbientOcclusion = true;
         settings.ShadowReach = 1f;
+        Assert.Equal(SdfIndirectTier.Off, Dress().IndirectTier);
+        foreach (var tier in Enum.GetValues<SdfIndirectTier>()) {
+            settings.IndirectTier = tier;
+            Assert.Equal(tier, Dress().IndirectTier);
+        }
         settings.ShadowMask = ShadowMaskMode.Auto;
         settings.ShadowMarch = ShadowMarchMode.Auto;
         settings.AmbientOcclusionQuality = AmbientOcclusionMode.Auto;

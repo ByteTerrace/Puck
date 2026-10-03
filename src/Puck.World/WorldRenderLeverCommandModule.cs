@@ -2,6 +2,7 @@ using System.Globalization;
 using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.SdfVm;
+using Puck.SignedDistance;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -508,6 +509,27 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     : 0.0),
                     formatEcho: () => new CommandResult(Output: CadenceEcho(settings: settings))
                 );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.indirect",
+            description: "Selects the residency's traced and partitioned cache: world.indirect [off|medium|high]. Starts off; the cache does not yet apply lighting.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.indirect: {settings.IndirectTier.ToString().ToLowerInvariant()}]");
+                if (args.Count == 0) { return Echo(); }
+                var tier = ((args.Count != 1) ? ((SdfIndirectTier?)null) : args[0] switch {
+                    "off" => SdfIndirectTier.Off,
+                    "medium" => SdfIndirectTier.Medium,
+                    "high" => SdfIndirectTier.High,
+                    _ => ((SdfIndirectTier?)null),
+                });
+
+                if (tier is not { } selected) {
+                    return CommandResult.Error(output: "[world.indirect: expected off|medium|high]");
+                }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.Indirect,
+                    a: ((int)selected), formatEcho: Echo);
             }
         );
         yield return CommandDefinition.WithWireArgs(

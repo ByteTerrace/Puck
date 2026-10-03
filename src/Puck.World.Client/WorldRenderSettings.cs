@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.SignedDistance;
 
 namespace Puck.World;
 
@@ -35,6 +36,7 @@ public sealed partial class WorldRenderSettings {
     private bool m_cadenceGate;
     private bool m_dynamicResolution;
     private bool m_farBound;
+    private SdfIndirectTier m_indirectTier;
     private float m_renderScale;
     private int m_revision;
     private float m_shadowCrowdRadius;
@@ -82,6 +84,16 @@ public sealed partial class WorldRenderSettings {
     /// durable config. Rides each view's <see cref="Puck.SdfVm.SdfViewQuality.DisableFarBound"/> lane,
     /// which <c>WorldFramePresenter</c> inverts each frame, so no rebuild.</summary>
     public bool FarBound { get => m_farBound; set { m_farBound = value; m_revision++; } }
+    /// <summary>The residency's trace and partition cache tier. It starts off and remains session state;
+    /// the cache does not yet apply lighting.</summary>
+    public SdfIndirectTier IndirectTier {
+        get => m_indirectTier;
+        set {
+            if (!Enum.IsDefined(value)) { throw new ArgumentOutOfRangeException(nameof(value)); }
+            m_indirectTier = value;
+            m_revision++;
+        }
+    }
     /// <summary>Whether a prototype whose bake is ready draws its baked mesh, textured, in place of its field
     /// (<c>world.bakes on|off</c>), or <see langword="null"/>, the default, for the world's own answer: its bakes draw
     /// when the loaded world carries them (a released or compiled tree's <c>BAKE</c> chunk, whose pack holds every bake
