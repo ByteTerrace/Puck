@@ -403,9 +403,15 @@ public sealed partial class ShaderPipelineRenderNode {
             slot: slot
         );
         var outcome = pass.Package!.Record(recording: new RenderGraphPackageRecording(
+            // The arguments resolve as their access's barrier did (InstanceIndex), so a history buffer's dispatch reads
+            // the instance its writer last wrote, not the submission slot's.
             Arguments: ((pass.PackageArguments is { } arguments)
                 ? ResolveBuffer(
-                    index: slot,
+                    index: InstanceIndex(
+                        previous: false,
+                        resource: m_resourceLookup[arguments],
+                        slot: slot
+                    ),
                     name: arguments,
                     resource: m_resourceLookup[arguments]
                 )
