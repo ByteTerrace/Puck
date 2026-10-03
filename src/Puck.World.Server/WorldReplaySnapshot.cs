@@ -119,13 +119,15 @@ public abstract record WorldReplayEntry {
     /// <see cref="Puck.World.WorldReplayTape"/>'s class remarks).</summary>
     /// <param name="Paused"><see langword="true"/> for a pause, <see langword="false"/> for a resume.</param>
     internal sealed record RateLever(bool Paused) : WorldReplayEntry;
+
     /// <summary>A seat's switch from the identity the tape pinned to another, applied at the head of the tick it is recorded on.
     /// A fork records one for each seat its drive rebound to the live owned identity, so the fork's tape holds the identity
     /// the fork actually continues with and a re-drive switches at the same step the live fork did. The seat takes the
     /// projection exactly, facts and records included, in a detached identity that saves nothing.</summary>
     /// <param name="Slot">The local seat's body index.</param>
     /// <param name="Profile">The projection the seat continues with.</param>
-    internal sealed record SeatIdentity(int Slot, WorldIdentityProjection Profile) : WorldReplayEntry;
+    public sealed record SeatIdentity(int Slot, WorldIdentityProjection Profile) : WorldReplayEntry;
+
     /// <summary>A crossing this authority decided as its source, recorded by
     /// <see cref="Puck.World.WorldReplayTape.NoteTransfer"/> when <c>Puck.World.WorldInstanceHost</c> settles the
     /// transfer. It changes nothing on a re-drive: each body left, and any came back, at its own
@@ -294,12 +296,12 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
     // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 10 carries the recorded authority, its typed rebuild origins and its document paths, each starting seat's
+    // Shape 9 carries the recorded authority, its typed rebuild origins and its document paths, each starting seat's
     // full identity projection, the companion tapes of a set, each departure and its rollback where the authority
     // decided it, settlements by target authority, every arrival a commit decided with its outcome and each traveler as
     // its identity projection alone, federated input, and the seat identity a fork switches to. Refuse earlier tapes at
     // intake instead of reporting their old shape as a simulation divergence.
-    private const uint ShapeToken = 10u;
+    private const uint ShapeToken = 9u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>

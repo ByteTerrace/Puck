@@ -29,7 +29,7 @@ public sealed class ReplayForkLawTests {
         );
 
         Assert.Equal(
-            expected: 10u,
+            expected: 9u,
             actual: BitConverter.ToUInt32(
                 startIndex: sizeof(uint),
                 value: buffer.ToArray()
@@ -70,13 +70,15 @@ public sealed class ReplayForkLawTests {
         fixture.Step();
         tape.NoteTick();
     }
-    private static WorldReplaySnapshot Snapshot(int ticks, WorldReplayForkProvenance? forkedFrom) {
+    private static WorldReplaySnapshot Snapshot(int ticks, WorldReplayForkProvenance? forkedFrom, IReadOnlyList<WorldReplayEntry>? firstTick = null) {
         var tickInputs = new List<WorldReplayTickInput>(capacity: ticks);
         var hashes = new ulong[ticks];
 
         for (var tick = 0; (tick < ticks); tick++) {
             tickInputs.Add(item: new WorldReplayTickInput(
-                Authority: [],
+                Authority: ((tick == 0)
+                    ? (firstTick ?? [])
+                    : []),
                 Intents: []
             ));
             hashes[tick] = ((ulong)(tick + 1));
@@ -95,7 +97,44 @@ public sealed class ReplayForkLawTests {
             Ticks = tickInputs,
         };
     }
+    private static WorldReplaySnapshot WithSeatIdentity(int slot) => Snapshot(
+        firstTick: [new WorldReplayEntry.SeatIdentity(
+            Profile: new WorldIdentityProjection(Id: "guest", Name: "Guest", ColorHex: "#112233", MoveSpeed: null, TurnSpeed: null),
+            Slot: slot
+        )],
+        forkedFrom: null,
+        ticks: 1
+    );
 
+    // The switch a fork records for a rebound seat survives the tape file: its slot and the projection it names.
+    [Fact]
+    public void ASeatIdentityEntry_RoundTripsThroughTheTape() {
+        var entry = Assert.IsType<WorldReplayEntry.SeatIdentity>(@object: Assert.Single(collection: RoundTrip(recording: WithSeatIdentity(slot: 1)).Ticks[0].Authority));
+
+        Assert.Equal(expected: 1, actual: entry.Slot);
+        Assert.Equal(expected: "guest", actual: entry.Profile.Id);
+        Assert.Equal(expected: "#112233", actual: entry.Profile.ColorHex);
+    }
+    // A doctored slot would index straight past the local seats during a re-drive, so the reader refuses it by name.
+    // The red leg drops the range check: the file reads back and the throw never comes.
+    [Fact]
+    public void ASeatIdentityEntry_NamingASlotOutsideTheLocalSeats_IsRefusedByName() {
+        var slot = ((int)WorldBodiesLimits.LocalSeatCount);
+        using var buffer = new MemoryStream();
+
+        WorldReplaySnapshot.Write(
+            stream: buffer,
+            recording: WithSeatIdentity(slot: slot)
+        );
+        buffer.Position = 0L;
+
+        var exception = Assert.ThrowsAny<Exception>(testCode: () => WorldReplaySnapshot.Read(stream: buffer));
+
+        Assert.Contains(
+            expectedSubstring: $"seat identity names slot {slot}",
+            actualString: exception.Message
+        );
+    }
     [Fact]
     public void Cancel_EndsTheDriveWhereItStands_AndSeatsAreLiveAgain() {
         using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");
