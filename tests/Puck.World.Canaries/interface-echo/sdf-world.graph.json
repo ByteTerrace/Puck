@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 70,
+        "width": 71,
         "height": 1
       }
     }
@@ -59,6 +59,7 @@
         "gridWorldPitch": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's grid world pitch." },
         "historyFrames": { "type": "uint", "default": 0, "description": "The sdf.world pass's contributed history frames." },
         "imageExtent": { "type": "uint2", "default": [0, 0], "description": "The sdf.world pass's render extent, in pixels." },
+        "indirectTier": { "type": "uint", "default": 0, "description": "The sdf.world pass's indirect cache tier, zero disabling every cache read." },
         "instanceMaskWordCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's per-tile instance-mask width." },
         "jitter": { "type": "float2", "default": [0, 0], "description": "The sdf.world pass's pixel jitter." },
         "lightCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's light count." },

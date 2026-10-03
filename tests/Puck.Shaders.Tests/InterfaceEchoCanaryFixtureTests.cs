@@ -12,7 +12,7 @@ namespace Puck.Shaders.Tests;
 /// <see cref="SdfWorldInterfaces"/> rather than the catalog, is a target by name. Where DXC is on the search path, compiler reflection holds each echo to its layout.</summary>
 public sealed class InterfaceEchoCanaryFixtureTests {
     // The echo documents, one per row of the canary's world, in its row order.
-    private static readonly string[] Echoes = ["ink-simulation", "ink-visualize", "ink-finish", "tint", "sdf-film-grain", "place", "overlay", "sdf-world", "source"];
+    private static readonly string[] Echoes = ["ink-simulation", "ink-visualize", "ink-finish", "tint", "sdf-film-grain", "place", "overlay", "sdf-world", "source", "indirect"];
 
     private static string FixturePath(string fileName) => RepositoryPaths.Resolve(relativePath: $"tests/Puck.World.Canaries/interface-echo/{fileName}");
     private static ShaderPipelinePlannedPass[] PassesOf(string path) =>
@@ -53,6 +53,8 @@ public sealed class InterfaceEchoCanaryFixtureTests {
         // slice extent alone, ink finish's.
         ("sdf-world", $"package {RenderGraphPackageCatalog.SdfWorld}", static () => PackageOf(id: RenderGraphPackageCatalog.SdfWorld)),
         ("ink-finish", $"package {RenderGraphPackageCatalog.SdfBricks}", static () => SdfWorldInterfaces.BrickBakeLayout),
+        // The indirect cache's classify and trace passes: the per-view pass block with the cache's own values.
+        ("indirect", $"package {RenderGraphPackageCatalog.Indirect}", static () => PackageOf(id: RenderGraphPackageCatalog.Indirect)),
     ];
 
     public static TheoryData<string> EchoNames() => [.. Echoes];
