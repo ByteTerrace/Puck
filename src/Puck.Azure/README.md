@@ -30,7 +30,8 @@ exporter's `DisablePersistOnShutdown` switch. Without it, a shutting-down provid
 writes its batch to local disk instead of sending it. Telemetry recorded after the
 providers shut down, while the container is disposed, is not exported.
 
-The [Functions host](../Puck.Azure.Functions/README.md) is a consumer. This
+The [Functions host](../Puck.Azure.Functions/README.md) and the
+[Actors host](../Puck.Actors/README.md) are consumers. This
 library does not provision resources or host HTTP endpoints; the
 [resource project](../Puck.Azure.Resources/README.md) owns infrastructure.
 Reflection-based SDK and key-ring serialization also mean the project does

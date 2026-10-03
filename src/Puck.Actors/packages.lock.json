@@ -11,17 +11,6 @@
           "Azure.Core": "1.53.0"
         }
       },
-      "Azure.Monitor.OpenTelemetry.Exporter": {
-        "type": "Direct",
-        "requested": "[1.*, 2.0.0)",
-        "resolved": "1.9.0",
-        "contentHash": "gXe64QuF30HQkuo1B+FqsekN9coca1vcFKDWCgioo39Hb5Yc0lMS6g8OAa7rGBIssQBoaQQAxIM6Dn4pJbXz+g==",
-        "dependencies": {
-          "Azure.Core": "1.62.0",
-          "OpenTelemetry.Extensions.Hosting": "1.18.0",
-          "OpenTelemetry.PersistentStorage.FileSystem": "1.1.1"
-        }
-      },
       "Microsoft.AspNetCore.Authentication.JwtBearer": {
         "type": "Direct",
         "requested": "[10.*, 11.0.0)",
@@ -224,6 +213,16 @@
         "contentHash": "sGAZL0Kw3ErcPPdN3+OcMM+fTCeyGtP/No0+D7PP4tCI5VqKB2DxOlu/tdF4UYuk6YXE3XAZ/yHDjmzEaqr59g==",
         "dependencies": {
           "Azure.Core": "1.46.2"
+        }
+      },
+      "Azure.Monitor.OpenTelemetry.Exporter": {
+        "type": "Transitive",
+        "resolved": "1.9.0",
+        "contentHash": "gXe64QuF30HQkuo1B+FqsekN9coca1vcFKDWCgioo39Hb5Yc0lMS6g8OAa7rGBIssQBoaQQAxIM6Dn4pJbXz+g==",
+        "dependencies": {
+          "Azure.Core": "1.62.0",
+          "OpenTelemetry.Extensions.Hosting": "1.18.0",
+          "OpenTelemetry.PersistentStorage.FileSystem": "1.1.1"
         }
       },
       "Azure.Security.KeyVault.Keys": {
