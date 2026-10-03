@@ -242,7 +242,7 @@ public sealed class CountersCeilingsLawTests {
         Assert.Empty(collection: verdict.Failures);
         Assert.Equal(
             actual: Assert.Single(collection: verdict.Notes),
-            expected: "vulkan: 1 per-backend-deterministic count(s) not judged, 13 required zero(s) still judged: the ceilings were recorded on Example GPU (driver 566.36), this run's device is Example GPU (driver 580.01)"
+            expected: "vulkan: 1 per-backend-deterministic count(s) not judged, 14 required zero(s) still judged: the ceilings were recorded on Example GPU (driver 566.36), this run's device is Example GPU (driver 580.01)"
         );
 
         var executing = recordingRun with {

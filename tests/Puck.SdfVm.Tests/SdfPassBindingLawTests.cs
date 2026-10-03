@@ -13,7 +13,7 @@ namespace Puck.SdfVm.Tests;
 public sealed class SdfPassBindingLawTests {
     // The pass block's bytes: the extent and the world values, the view, the levers, the light count and shadow slots, and
     // the curvature shading, 16-aligned.
-    private const uint PassBlockBytes = 512;
+    private const uint PassBlockBytes = 528;
 
     private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds,
         SdfKernel.ViewsFade1, SdfKernel.ViewsCoreFade1, SdfKernel.ViewsFoldsFade1,

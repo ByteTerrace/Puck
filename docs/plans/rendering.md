@@ -6429,9 +6429,10 @@ packaging, and compiled worlds in the runtime and delivery programme.
 - **Separate records.** `SdfLights` and `SdfSky` (`src/Puck.SignedDistance`)
   pack the lights, sky block, gradient stops and studio softboxes into four
   World-group regions. Their HLSL structures are generated from the C#
-  records. Active shadow handoff controls occupy a fifth region. The 512-byte
+  records. Active shadow handoff controls occupy a fifth region. The 528-byte
   pass block holds the light count, `shadowSlots` int4, configured stable
-  count, active fade count and curvature shading; the sky and light records are read only by the
+  count, active fade count, curvature shading and P18-13's amortization switch
+  and two rejection masks; the sky and light records are read only by the
   kernels that use them.
 - **The sky once, where it is seen.** `shade/sdf-sky.hlsli` holds the stars,
   the clouds and the gradient, grouped into the runs they compose in, over the
@@ -7851,9 +7852,9 @@ fraction of them that hit, and L the fraction in live tiles, at least h.
   frame whose presented tick moves it, because the volume table is part of the
   view's signature. After P18-6, `composite` alone, and only on frames whose
   presented tick moves.
-- **Pass-block size and binding.** The pass block is 512 bytes, including the
-  light count, the shadow slot table, the stable and active fade counts and the
-  curvature shading, and the lights and sky tables are referenced only by the
+- **Pass-block size and binding.** The pass block is 528 bytes, including the
+  light count, the shadow slot table, the stable and active fade counts, the
+  curvature shading and P18-13's amortization switch and rejection masks, and the lights and sky tables are referenced only by the
   kernels that read them. Every
   region uploads only the words that changed, so the tables carry no upload
   cost beyond their changes.
