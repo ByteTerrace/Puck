@@ -615,7 +615,9 @@ deliberately carries no span.
   issue #331). `GC.KeepAlive(store)` follows every guest invoke (wasmtime-dotnet finalizer-hazard
   discipline).
 - **Memory cap:** each store gets a hard `SetLimits(memorySize: …)` ceiling (256 pages) plus a
-  load-time region-bounds pre-flight; `memory.grow` is fuel-charged.
+  load-time region-bounds pre-flight; `memory.grow` is fuel-charged. A memory declared past the
+  ceiling is refused before instantiation as `MemoryLimit`; a `memory.grow` past it returns -1 to
+  the guest, which faults only if the guest traps on it.
 
 | `AddonFaultKind` | Raised by |
 |---|---|
@@ -625,6 +627,7 @@ deliberately carries no span.
 | `HashMismatch` | Module content does not match the descriptor's declared `moduleHash` pin. |
 | `OutOfFuel` | The tick exhausted its fuel budget and trapped deterministically. |
 | `StackOverflow` / `MemoryOutOfBounds` / `Unreachable` / `Trap` | Guest traps, classified in that order of specificity. |
+| `MemoryLimit` | The guest's exported memory declares more pages than the 256-page ceiling, refused before instantiation. |
 
 Every fault is loud and attributed. Detail lines are formatted for the console and keyed by the
 addon's **name**, so an operator reading a run log sees which addon failed, why, and what to do:

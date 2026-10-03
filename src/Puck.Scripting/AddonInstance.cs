@@ -25,7 +25,8 @@ namespace Puck.Scripting;
 public sealed class AddonInstance : IDisposable {
     // A hard per-store linear-memory ceiling (256 wasm pages), enforced via the runtime store limiter the WS1
     // spike confirmed on Wasmtime 44.0.0. Trusted, path-declared authors; generous but bounded.
-    private const long MaxMemoryBytes = (256L * 65536L);
+    private const long MaxMemoryBytes = (256L * WasmPageBytes);
+    private const long WasmPageBytes = 65536L;
 
     private readonly AddonChannelBinding[] m_channelBindings;
     private readonly IAddonChannelResolver? m_channelResolver;
@@ -188,6 +189,21 @@ public sealed class AddonInstance : IDisposable {
                 reason: $"BadExport — {exportError}"
             );
             return;
+        }
+
+        // The store's limiter would refuse a memory declared past the ceiling inside Wasmtime's instantiation, where
+        // it surfaces only as an error message; read from the module's own declaration instead, it refuses by name.
+        foreach (var export in m_module.Exports) {
+            if (
+                (export is MemoryExport declared) &&
+                (declared.Minimum > (MaxMemoryBytes / WasmPageBytes))
+            ) {
+                SetFault(
+                    kind: AddonFaultKind.MemoryLimit,
+                    reason: $"MemoryLimit — {export.Name} declares {declared.Minimum} pages, past the {(MaxMemoryBytes / WasmPageBytes)}-page ceiling"
+                );
+                return;
+            }
         }
 
         Store? store = null;

@@ -140,7 +140,7 @@ public sealed class AddonGuestLawTests {
 
         Assert.Equal(expected: AddonState.Enabled, actual: atCeiling.State);
         Assert.Equal(expected: AddonState.Faulted, actual: pastCeiling.State);
-        Assert.NotEqual(expected: AddonFaultKind.None, actual: pastCeiling.Fault.Kind);
+        Assert.Equal(expected: AddonFaultKind.MemoryLimit, actual: pastCeiling.Fault.Kind);
     }
     [Fact]
     public void AGuestThatNeverReturnsRunsOutOfFuelAndSpendsTheSameFuelEveryRun() {
