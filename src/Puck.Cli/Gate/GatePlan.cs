@@ -1,9 +1,10 @@
 using System.Text.Json;
 using Puck.Cli.Affected;
+using Puck.Cli.Baselines;
 
 namespace Puck.Cli.Gate;
 
-internal enum GateStepKind { Build, CopyCli, Puck, DeviceSuite, Counters }
+internal enum GateStepKind { Build, CopyCli, Puck, DeviceSuite, Counters, Baseline, Canaries, Parity }
 internal sealed record GateStep(string Name, GateStepKind Kind, string[] Arguments, bool Heavy = false, bool Gpu = false, bool Record = false, bool Sources = false);
 /// <summary>The ordered batch qualification, shared by execution, help and the documentation laws.</summary>
 internal static class GatePlan {
@@ -21,7 +22,7 @@ internal static class GatePlan {
     public static readonly IReadOnlyList<GateStep> Steps = [
         new("build", GateStepKind.Build, ["build", "Puck.slnx", "-c", CliOptions.DefaultConfiguration, CliOptions.NoNodeReuse, "-v", "q", "-nologo"], Heavy: true),
         new("copy CLI", GateStepKind.CopyCli, []),
-        new("affected", GateStepKind.Puck, ["affected", "--merge-base", "<merge base>", "--run"], Heavy: true),
+        new("affected", GateStepKind.Puck, ["affected", "--merge-base", "<merge base>", "--run", "--suite-jobs", "<suite-jobs>"], Heavy: true),
         new("format", GateStepKind.Puck, ["format", "--check", "--file-list", "<file list>"], Sources: true),
         new("lengths", GateStepKind.Puck, ["lengths", "--check"]),
         new("comment-smells", GateStepKind.Puck, ["comment-smells", "--check"]),
@@ -35,6 +36,10 @@ internal static class GatePlan {
         new("formats", GateStepKind.Puck, ["formats", "--check"]),
         new("canary-ceilings", GateStepKind.Puck, ["canary-ceilings", "--check"]),
         new("derivations", GateStepKind.Puck, ["derivations", "--check"]),
+        .. BaselinesCommand.Artifacts.OrderBy(keySelector: static artifact => artifact.Name, comparer: StringComparer.Ordinal)
+            .Select(selector: static artifact => new GateStep(("baselines " + artifact.Name), GateStepKind.Baseline, artifact.CheckArguments(), Heavy: true)),
+        new("affected canaries", GateStepKind.Canaries, ["canary", "--gpu-jobs", "<gpu-jobs>", "<canaries>"], Heavy: true, Gpu: true),
+        new("parity", GateStepKind.Parity, ["parity"], Heavy: true, Gpu: true),
         .. DeviceSuites.Select(selector: static device => DeviceSuite(selection: device.Selection, suite: device.Suite)),
         new("counters", GateStepKind.Counters, ["counters", "--check", "--world", "<world>", "--ceilings", "<ceilings>"], Heavy: true, Gpu: true),
         new("docs citations", GateStepKind.Puck, ["docs", "citations"], Heavy: true, Gpu: true),
@@ -46,17 +51,8 @@ internal static class GatePlan {
         ["packages"] = "Its valued --check needs the document whose generated package section is checked.",
         ["embed"] = "Needs an authored embedding root; checked by its owning change.",
         ["migrate"] = "Needs a named migration and source path; no migration is implied by qualification.",
-        ["baselines corpus-inventory"] = "Runs the author-expression corpus inventory suite; checked by the corpus change.",
-        ["baselines state"] = "Runs committed state baselines twice; checked by the world-state change.",
-        ["baselines maths-ledger"] = "Runs the Maths default tier to regenerate law records; checked by the Maths change.",
-        ["baselines browser-parity"] = "Runs browser-state baseline recording tests; checked by the browser change.",
     };
 
-    // The affected step's bounds: its suites side by side, and with the GPU its canary legs side by side.
-    private static string[] AffectedBounds(bool gpu, int suiteJobs, int gpuJobs) => [
-        "--suite-jobs", suiteJobs.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
-        .. (gpu ? (string[])["--gpu", "--gpu-jobs", gpuJobs.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)] : []),
-    ];
     private static GateStep DeviceSuite(string suite, string[] selection) => new(suite, GateStepKind.DeviceSuite,
         [.. AffectedCommand.TestArguments(suite: suite), .. selection], Heavy: true, Gpu: true);
     // An argument a shell would split or pipe is quoted, so a printed step runs as written.
@@ -65,7 +61,7 @@ internal static class GatePlan {
         : argument);
 
     public static string Detail() => ("Steps, in order:\n" + string.Join(separator: "\n", values: Steps.Select(selector: (step, index) =>
-        $"  {(index + 1)}. {step.Name}: {((step.Kind == GateStepKind.CopyCli) ? "copy the freshly built CLI into the run directory" : (((step.Kind is GateStepKind.Build or GateStepKind.DeviceSuite) ? "dotnet " : "puck ") + string.Join(separator: ' ', values: step.Arguments.Select(selector: Quoted))))}{(step.Record ? " (only --gpu --record, after every prior step passes)" : (step.Gpu ? " (only --gpu)" : (step.Sources ? " (only when sources changed)" : string.Empty)))}.")));
+        $"  {(index + 1)}. {step.Name}: {((step.Kind == GateStepKind.CopyCli) ? "copy the freshly built CLI into the run directory" : (((step.Kind is GateStepKind.Build or GateStepKind.DeviceSuite) ? "dotnet " : "puck ") + string.Join(separator: ' ', values: step.Arguments.Select(selector: Quoted))))}{(step.Record ? " (only --gpu --record, after every prior step passes)" : ((step.Kind == GateStepKind.Baseline) ? " (only when affected reaches its inputs)" : (step.Gpu ? " (only --gpu)" : (step.Sources ? " (only when sources changed)" : string.Empty))))}.")));
     /// <summary>Expands every recorded workload in ordinal order; unrecorded worlds are not qualification steps.</summary>
     public static IEnumerable<GateStep> CounterWorkloads(string repositoryRoot, GateStep step) {
         const string DirectoryName = "tests/Puck.Counters";
@@ -104,13 +100,20 @@ internal static class GatePlan {
     /// <param name="sources">Whether any C# or <c>.puck</c> source changed.</param>
     /// <param name="gpu">Whether the run takes the GPU steps.</param>
     /// <param name="record">Whether the run ends by recording canary coverage.</param>
+    /// <param name="affected">The affected plan, which chooses the baseline, canary and parity steps.</param>
     /// <param name="suiteJobs">The most suites the affected step runs at once.</param>
     /// <param name="gpuJobs">The most canary legs the affected step keeps on the GPU at once, with
     /// <paramref name="gpu"/>.</param>
     /// <returns>The steps.</returns>
-    public static IEnumerable<GateStep> Expand(string repositoryRoot, string mergeBase, string fileList, bool sources, bool gpu, bool record, int suiteJobs, int gpuJobs) {
+    public static IEnumerable<GateStep> Expand(string repositoryRoot, string mergeBase, string fileList, bool sources, bool gpu, bool record, AffectedPlan affected, int suiteJobs, int gpuJobs) {
         foreach (var step in Steps) {
             if ((step.Gpu && !gpu) || (step.Record && !record) || (step.Sources && !sources)) { continue; }
+            if ((step.Kind == GateStepKind.Baseline) && !affected.Baselines.Any(predicate: artifact => (artifact.Name == step.Arguments[1]))) { continue; }
+            if ((step.Kind == GateStepKind.Parity) && !affected.Parity) { continue; }
+            if (step.Kind == GateStepKind.Canaries) {
+                if (affected.Canaries.Count > 0) { yield return step with { Arguments = ["canary", "--gpu-jobs", gpuJobs.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), .. affected.Canaries] }; }
+                continue;
+            }
             if (step.Kind == GateStepKind.Counters) {
                 foreach (var workload in CounterWorkloads(repositoryRoot: repositoryRoot, step: step)) { yield return workload; }
                 continue;
@@ -119,8 +122,9 @@ internal static class GatePlan {
                 Arguments = [.. step.Arguments.Select(selector: argument => argument switch {
                 "<merge base>" => mergeBase,
                 "<file list>" => fileList,
+                "<suite-jobs>" => suiteJobs.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
                 _ => argument,
-            }), .. ((step.Name == "affected") ? AffectedBounds(gpu: gpu, gpuJobs: gpuJobs, suiteJobs: suiteJobs) : [])],
+            })],
             };
         }
     }

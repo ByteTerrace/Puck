@@ -26,8 +26,11 @@ same change. The user's current instruction outranks it.
   counters workload and docs citations, serially. `--record` requires `--gpu`
   and refreshes canary coverage only after every qualification step passes.
   Without a GPU grant, omit `--gpu` and list those GPU additions as owed.
-  Admission uses host load's defaults before heavy steps; `gate.log` and
-  `gate.steps` retain output and the flushed step timeline.
+  The affected map selects committed baseline checks from their owning projects
+  and declared data inputs. Each runs after the repository checks and before GPU
+  steps; `affected --run` leaves them to the gate. Admission uses host load's
+  defaults before heavy steps; `gate.log` and `gate.steps` retain output and the
+  flushed step timeline.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
   or changed law, with `--fix <commit>` or with `--file-list` for an
   uncommitted fix, instead of the manual withholding below: it withholds the
@@ -36,8 +39,7 @@ same change. The user's current instruction outranks it.
   selected test is skipped or the two legs ran different tests.
 
 Run covered steps by hand only where a brief rules a verb out, for example a
-machine that must not build the solution. Complete checks the gate omits:
-`puck baselines <artifact> --check` for affected committed baselines, explicit
+machine that must not build the solution. Complete checks the gate omits: explicit
 `puck docs links <document>...` for changed documents outside its default set,
 and `puck docs citations` when required below, under the GPU rules.
 

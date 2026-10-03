@@ -54,11 +54,14 @@ internal static class GateCommand {
         mergeBaseOption.DefaultValueFactory = static _ => GateRun.DefaultTarget;
         command.Detail(detail: (GatePlan.Detail() + $"""
 
-            The affected step passes --suite-jobs, and with --gpu adds --gpu --gpu-jobs for the chosen
-            canaries, side by side, then parity. Counters expands every
+            Baseline steps run only when affected reaches their owning project or declared data inputs.
+            The affected step runs its suites side by side up to --suite-jobs. The chosen canaries, side by
+            side up to --gpu-jobs legs on the GPU, and parity follow the baseline checks, only with --gpu.
+            Counters expands every
             tests/Puck.Counters/*.world.json with matching ceilings, using its sibling script when
             present or the script recorded in its ceilings. Checks write nothing; --record writes coverage.
-            Before each heavy step, admission uses host load's default classification in-process.
+            Before each heavy step, admission uses host load's default classification in-process. A step that
+            opens a device (the --gpu steps) also waits for an idle GPU; every other step waits for capacity alone.
             It waits at most {HostAdmission.Timeout.TotalMinutes:0} minutes, reporting when waiting starts and capacity returns.
             A failed build or CLI copy stops the run. Other failures allow later checks, but skip recording.
             gate.log holds full output; gate.steps records each start and exit with UTC time and whole seconds.

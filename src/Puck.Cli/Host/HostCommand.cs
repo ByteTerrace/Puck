@@ -74,7 +74,8 @@ internal static class HostCommand {
               free RAM above {HostLoadThresholds.Default.CapacityRamGb}GB; pressure below {HostLoadThresholds.Default.PressureRamGb}GB RAM or {HostLoadThresholds.Default.PressureDiskGb}GB disk. Options override these defaults; gate uses them unchanged.
 
               GPU work is the World (Puck.World or Puck.World.dll), a canary, parity or counters verb,
-              or a test host for Puck.DirectX.Tests, Puck.Vulkan.Tests, Puck.World.Tests or Puck.Platform.Windows.Tests. Builds,
+              or a test host for Puck.DirectX.Tests, Puck.Vulkan.Tests, Puck.World.Tests or Puck.Platform.Windows.Tests
+              whose arguments can select a Gpu-trait test: a run carrying --filter-not-trait Category=Gpu is not. Builds,
               restores, MSBuild nodes, compilers and shells never are, and the verb never counts itself.
               Canary --list/--plan, parity/counters compare, and help run no GPU work.
               reuseNodes counts MSBuild nodes left for reuse by a build or restore run without
