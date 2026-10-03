@@ -389,9 +389,11 @@ own source again ([gap G7](#g7-a-screen-has-no-way-back-to-its-authored-source))
 composition is unavailable on a host without a GPU device. Headless, only screen
 0, the machine's video, publishes a mapping with a known extent, so the law runs
 on screen 0 and reads the mapping's source instance, the first token of its
-mapping segment. A pipeline node has no rendered instance to pause and the views
-are not configured, so the pipeline pause, the camera-view retarget and a census
-that moves stay uncovered; the census is still read before and after. The
+mapping segment. A pipeline node has no rendered instance to pause headless, and
+only the render root configures the views, so the pipeline pause, the
+camera-view retarget and a census that moves are the offscreen canary
+`displayed-source-render-root`, which requires a GPU and is owed on a GPU host;
+the headless law still reads the census before and after. The
 retarget is a QR source, and under it the route leg also reads the QR's
 authoring back, which proves the live bind survived. Red legs: a `row` form that
 leaves the live bind fails the return; a route change that drops the live bind
