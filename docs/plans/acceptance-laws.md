@@ -21,10 +21,11 @@ only on those lanes, and each is marked.
 ## Implementation status
 
 Nothing on this page is implemented. The design was read against the
-integration branch and the lanes the coming integration batch lands. Designing
-the laws found five gaps (G1 to G5), each a defect on the integration branch,
-and that batch fixes all five with laws of their own, so the six laws are
-written against the fixed contracts:
+integration branch and the lanes the coming integration batch lands, and a
+review checked that no law can pass while its claim is false. Designing the
+laws found seven gaps. The coming integration batch fixes five of them (G1 to
+G5) with laws of their own, so the six laws are written against the fixed
+contracts:
 
 - G1 and G2 decide law 1: a seek delivers once, and a viewer never keeps a
   future clock anchor.
@@ -34,7 +35,9 @@ written against the fixed contracts:
 - G5 decides law 3: a checkpoint carries what the bindings last saw.
 
 Once the batch lands, each law also confirms its gap's fix on the integration
-head. G6 is follow-up work for law 6 and blocks nothing.
+head. The other two land with their laws: G6 is part of law 6, which enumerates
+a classification the refusals declare in code rather than a list it carries, and
+G7 is the return seam law 4 needs.
 
 The open items are in [the plan checklist](open-items.md#cross-plan-maintenance).
 
@@ -72,13 +75,16 @@ The viewer is a sink, not a session: a seek refuses while a session is live,
 because session input and grants are not captured, so a session cannot witness
 it.
 
-Three variants run the same steps:
+Four variants run the same steps:
 
 - the keyframe restores in place;
 - a structural edit between keyframe and seek forces the restore through the
   load door;
 - the clock row holds no number at the keyframe and a number after it, which
-  is [gap G2](#g2-a-rewound-clock-can-leave-the-viewer-a-future-anchor)'s case.
+  is [gap G2](#g2-a-rewound-clock-can-leave-the-viewer-a-future-anchor)'s case;
+- the seek targets a tick between keyframes, so the restore re-simulates
+  intermediate ticks before the target, which is where a seek could deliver
+  more than once.
 
 **Decided by.**
 
@@ -92,7 +98,13 @@ Three variants run the same steps:
 - A row whose visibility the viewer may not read never appears in the hold,
   before or after the seek.
 - The sink receives one definition and one snapshot for the seek's target
-  tick, through either restore door.
+  tick, through either restore door, and nothing for any re-simulated tick
+  before it. The non-keyframe variant is the one that exercises this.
+- The hold's whole structural projection (its row set, each row's members and
+  kinds, and the definition it was built from) equals the projection a fresh
+  sink receives when it attaches after the seek. Correct counts and a correct
+  clock are not enough: a hold that kept a row the structural edit added, or
+  lost one it removed, fails here.
 
 **Crosses.**
 
@@ -146,7 +158,9 @@ record a replay tape, with the companion set recorded.
 
 A federated variant runs the same walk across the in-process federation harness.
 A rollback variant refuses the commit, so the traveller stays and the source seat
-is restored.
+is restored. A shared-identity variant seats seats 0 and 1 under one identity and
+walks both into the door in one transfer: the integration batch's contract is
+that a shared identity is one detached binding, not one per seat.
 
 **Decided by.**
 
@@ -157,6 +171,9 @@ is restored.
   `DepartedFrom`, its generation, its profile id and identity projection, its
   pose, yaw, and planar and vertical velocity, its travel turn, its catalog rig
   and the census all equal the live run's.
+- Shared-identity variant: the source detaches one binding for the identity,
+  the destination seats both travellers under it, and the replay matches the
+  live run on both.
 - Red leg: strip the arrival entry from the tape, and the replay diverges at the
   arrival tick.
 
@@ -200,7 +217,12 @@ also implements `IMachineCheckpointRuntime`. Two servers, A and B, boot from it.
 3. A's checkpoint is captured, encoded, decoded and restored into B.
 4. Both step three ticks.
 
-A Read leg runs the same steps with a Read binding. A third leg seeks back with
+A Read leg runs the same steps with a Read binding. A collision leg runs the Write
+steps over two machines with two bindings each, named so that every key part is
+shared with another binding: the same binding name on both machines, and the
+same ordinal in both. Each guest edits each bound value differently, so a memo
+restored under the wrong key rewrites the wrong value. A single binding cannot
+see that. A fourth leg seeks back with
 `world.history` over a machine with bindings and compares the result with an
 uninterrupted run. A seek's own verdict leaves machine cores outside its match
 proof and says so (`MachineCoresOutsideProof`), so this leg compares the guest
@@ -212,6 +234,8 @@ state itself.
   runtime state bytes and the document bytes are equal in A and B.
 - Read leg: A and B journal the same number of mutations, and their
   authoritative hashes are equal.
+- Collision leg: every guest value, per machine and binding, is equal in A and
+  B, and so are both runtimes' write counts.
 
 **Crosses.**
 
@@ -261,10 +285,19 @@ each step:
    then back to its original source;
 3. change screen 1's route input from Presentation to Simulation, then back.
 
+The route leg runs twice: once from the baseline, and once while the camera-view
+retarget is in force, so a route change that drops the screen's override is
+seen rather than masked by the baseline's own source.
+
 **Decided by.**
 
-- After every step, screen 1's mapping segment (the source instance's name and
-  handle) equals the baseline.
+- Each retarget takes effect: after it, screen 1's mapping segment (the source
+  instance's name and handle) names the new source, not the baseline. A
+  retarget that changes nothing fails here.
+- Returning restores the baseline: after the return, the mapping segment equals
+  the baseline.
+- Through the route leg, the mapping segment is unchanged: the baseline's when
+  run from the baseline, and the camera view's when run under the retarget.
 - The `input:` field differs only while the route is changed.
 - The view census returns to its baseline count, so no registration is left
   dangling.
@@ -293,8 +326,12 @@ its video output goes away, and the screen shows unbound glass until it resumes
 with the same output. The law pauses the pipeline node and the world rate, which
 keep the source bound.
 
-**What "back" means.** `screen.source` has no "row" kind, so "back" is an
-explicit bind of the original source, not an eject.
+**What "back" means.** `screen.source` has no "row" kind, so the only way back
+is an explicit bind of the original source, which proves a rebind, not a return
+to what the row authored. The law needs a return seam: a `screen.source` form
+that clears the live override and lets the row's own source show again
+([gap G7](#g7-a-screen-has-no-way-back-to-its-authored-source)). Until it exists,
+the return step uses the explicit bind and says so.
 
 **What the destination change does not prove.** A Simulation route maps through
 the row's own mapping, not the live bind, so the change proves only that the
@@ -360,10 +397,15 @@ whole owned document.
 **Claim.** Each intentionally unsupported operation refuses before any partial
 state change.
 
-**Scenario.** One theory over a catalogue of the operations the engine refuses on
-purpose. Each row carries its name, how to arrange it, the operation, and the
-refusal it expects. For each row, two servers boot from one document: A runs the
-operation at tick N and then steps, and B only steps. The catalogue as designed:
+**Scenario.** One theory over every refusal the engine classifies as an
+intentionally unsupported operation. The classification lives on the refusal in
+code (see [G6](#g6-the-catalogue-is-assembled-by-hand)), and the theory's rows are
+enumerated from it, so a new unsupported operation joins the law by being
+declared, and one with no arrangement fails the law by name. Each row carries its
+name, how to arrange it, the operation, and the refusal it expects. For each row,
+two servers boot from one document: A runs the operation at tick N and then
+steps, and B only steps. The set as designed, which the classification must
+reproduce:
 
 | Operation | Refusal |
 |---|---|
@@ -379,6 +421,8 @@ operation at tick N and then steps, and B only steps. The catalogue as designed:
 | An addon mutation it never requested | `AddonMutateRefusal.NotRequested` |
 | A transfer by an undeclared producer | the transfer's named refusal |
 | A history seek while a session is live | `world.history: seek refused — …` (on the time-travel lane) |
+| A transfer of a rigid body | the transfer's named refusal |
+| A transfer while the traveller carries another body | the transfer's named refusal |
 
 **Decided by.**
 
@@ -389,6 +433,14 @@ operation at tick N and then steps, and B only steps. The catalogue as designed:
   are equal.
 - The mutation journal count is unchanged.
 - Where a checkpoint can be taken, the encoded checkpoints are byte-identical.
+- State a checkpoint does not capture is compared through witnesses, because
+  the rows most likely to leak are the ones whose checkpoint capture refuses.
+  Each row declares the runtime surfaces it touches, and the law compares each:
+  a machine's registers and memory through its runtime's own capture (a digest
+  of `IMachineCheckpointRuntime` state, or the runtime's register read), and a
+  link's pending transport work through its outbox depth and pending operation
+  ids. A row that touches a surface with neither a checkpoint leaf nor a witness
+  fails the law, rather than passing with that surface unread.
 - Each row also runs the legal variant of its operation, with the shared
   refusal-with-control helper, so the observable is shown to move when the
   operation is allowed.
@@ -401,17 +453,17 @@ catalogue.
 **Not a duplicate of.** The all-or-nothing mutation laws, the batch compose law,
 the machine hardware and operation laws, the checkpoint laws and the addon
 prepare gate each prove one refusal leaves state alone, mostly by checking one
-field or the verdict. None compares a whole-state hash with a twin, and there is
-no catalogue. This law adds both, and with them a check that a new unsupported
-operation joins the catalogue.
+field or the verdict. None compares a whole-state hash with a twin, and nothing
+enumerates the unsupported operations. This law adds both: the twin comparison,
+with witnesses for what a checkpoint misses, over a set read from the code.
 
 **Lives in** `tests/Puck.World.Tests`. **GPU:** none.
 
 **Scope.** Delivered effect arms (a cue, a pose, a body motion, a rigid impulse,
 a field paint, a save) are outside the atomic promise by contract: they fire
 after the commit, and a refusal there is one counted `IrreversibleArmFailed`
-that undoes nothing. They are not in the catalogue
-([gap G6](#g6-the-catalogue-is-assembled-by-hand)).
+that undoes nothing. They are not classified as unsupported operations, and the
+classification says so for each of their refusals.
 
 ## Gaps found while designing the laws
 
@@ -529,13 +581,30 @@ hand and a new unsupported operation could be missed. Many refusals are free
 text rather than codes, and the code spelling moves from underscores to hyphens
 when the projection lane lands.
 
-The law's catalogue is the first list. Giving the refusal catalogue a
-classification, so the law can enumerate the catalogue instead of carrying its
-own copy, is follow-up work. It is not needed to land the law.
+The fix is part of law 6, not follow-up work. Every refusal declares in code
+whether it is an intentionally unsupported operation: one classification on the
+refusal's declaration (alongside `RefusalAttribute` and `RefusalKind`), which
+`RefusalCatalog` exposes and the law reads. Law 6 enumerates the classified set
+mechanically, so the universal claim is enforced rather than sampled, and the
+table above becomes the set the classification must reproduce. A classified
+refusal with no arrangement in the law fails it by name. Free-text refusals in
+the set gain codes as they are classified.
+
+### G7: a screen has no way back to its authored source
+
+`screen.source` binds a camera view, a QR source or another source, but has no
+form that clears the live override and returns the screen to the source its row
+authors. A return is therefore an explicit bind of the original source, which a
+law cannot tell apart from a rebind. Law 4 needs the return seam, a
+`screen.source` form that drops the override, to prove that a retarget can be
+undone.
 
 ## Order of work
 
 1. When the integration batch lands, implement laws 1 to 5 against it. Each
    confirms its gap's fix on the integration head. For law 5, also confirm the
    commit law in the federation transfer laws no longer asserts a full profile.
-2. Land law 6 with its hand-assembled catalogue, then G6.
+   Law 4 lands with G7's return seam, or names its explicit-bind return until
+   the seam exists.
+2. Land G6's classification and law 6 together, the law enumerating the
+   classified set.
