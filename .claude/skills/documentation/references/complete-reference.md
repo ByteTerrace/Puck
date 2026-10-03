@@ -512,6 +512,9 @@ or a grader changes, since either moves the floor.
    only one case can see leaves the other split's mean flat; that shows no harm,
    not generalisation, and the report says so.
 4. Revert a change that does not move its target twice.
+5. Read `git diff` before every measurement: an edit that did not apply makes
+   the run a repeat of the old skill, which is also how to see that one case
+   alone can swing by 0.2 between identical runs.
 
 At a plateau, write the root cause of each remaining failure as skill, grader
 or task, and stop.
