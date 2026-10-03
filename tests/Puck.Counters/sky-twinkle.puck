@@ -1,0 +1,174 @@
+schema: "puck.world.definition.v1"
+documentId: "counters-sky-twinkle"
+
+cameras [
+  {
+    anchor: null
+    name: "counters-cam"
+    renderHeight: 1080
+    renderWidth: 1920
+    rig {
+      name: "counters-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 1080
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 1920
+}
+
+placements {
+  placement "blockA" {
+    prototype: "block"
+    position [-1.5, 0, 0]
+  }
+
+  placement "blockB" {
+    prototype: "block"
+    position [1.5, 0, 0]
+    yawDegrees: 30deg
+  }
+}
+
+prototypes {
+  prototype "block" {
+    document {
+      frames [
+        {
+          name: "idle"
+          transforms []
+        }
+      ]
+      name: "block"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "base" {
+        chamfer: 0.2
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.6, 0.6, 0.6]
+      }
+
+      shape Sphere "cap" {
+        material: 1
+        position [0, 1.5, 0]
+        scale [0.4, 0.4, 0.4]
+      }
+    }
+  }
+}
+
+render {
+  sky {
+    layers [
+      gradient(stops: [
+        {
+          elevation: -1
+          color: "#101829"
+        }
+        {
+          elevation: 0
+          color: "#243455"
+        }
+        {
+          elevation: 1
+          color: "#071020"
+        }
+      ]
+      )
+      fog(density: 0.012)
+      sunDisc(light: 0, radius: 0.045, intensity: 2)
+      stars(density: 32, brightness: 4, seed: 3, twinkle: {
+        share: 1
+        depth: 0.8
+        rate: 1
+      }
+      )
+      clouds(coverage: 0.4, softness: 0.2, scale: 0.5, seed: 5, color: "#91A5C8", drift: [0, 0], shear: [0, 0], spin: 0, curl: 0.3)
+    ]
+  }
+  low {
+    shadows: Off
+    ambientOcclusion: false
+    renderScale: 0.70980394
+  }
+}
+
+rule "tick" {
+  when ticks >= 0
+  mode: Level
+  ticks += 1
+}
+
+simulation {
+  rateHz: 30
+}
+
+state {
+  world {
+    slot ticks = 0
+  }
+}
+
+views {
+  layout "counters" {
+    seatCount: 0
+    slots [
+      {
+        camera: "counters-cam"
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "counters-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}
