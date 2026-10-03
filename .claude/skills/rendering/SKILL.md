@@ -242,8 +242,18 @@ These are one-line cautions; the owning pages hold the derivations.
   large stand-in that a scale could overflow or shrink. `BeginInstance` admits it,
   `SdfProgram.IsUnmaskable` is the one classification every reader of an instance's
   bound asks (a declared `Unbounded` radius, or a tree whose composed bound is
-  unbounded, an inherited fold included, since an instance begins under the point
-  state before it), and only the packing writes `UnmaskableBoundRadius`.
+  unbounded), and only the packing writes `UnmaskableBoundRadius`.
+- **A segment starts from the world point, and the program enforces it.** The
+  directory and the instance mask skip or compile segments apart from their
+  neighbours, and a skipped segment passes the point before it along, so a stream
+  that may carry a moved point into a segment that reads it without its own
+  `ResetPoint` refuses by name (`RequireSegmentsStartAtTheWorldPoint`); an emitter
+  begins every chain with `ResetPoint` rather than trusting what ran before. The
+  classifier, the skip spheres and the part compiler start from the world point
+  because of it. `SdfOpRoles.Of` is the one table of point ops, field ops and
+  lattices, and a new op is classified there first. A scope's compose radius
+  reaches `L` times as far when the scope's field joins its parent divided by its
+  Lipschitz factor (`PopField.Data1.Y = 1/L`), and the halo says so.
 - **Bounds compose through the set operations.** `SdfBoundAlgebra` is the one
   statement: an intersection takes the smaller operand bound (unbounded and
   finite is finite), a subtraction its subject's, a union the larger (one

@@ -17,7 +17,9 @@ public sealed partial class SdfProgram {
     // - The SEGMENT DIRECTORY partitions the stream at ResetPoints into chain segments, each with one combined
     //   sphere over all its shapes; map()'s OUTER loop tests it and skips the whole chain — transforms included,
     //   which is where the per-step dynamic quaternion rotate cost lives. A skipped segment's transform state is
-    //   provably dead (every later segment begins with the ResetPoint the split was made at). Directory iteration is
+    //   provably dead (every later segment begins with a ResetPoint, or reads no point:
+    //   RequireSegmentsStartAtTheWorldPoint refuses a stream that may carry a moved point into one that does, which is also
+    //   why AnalyzeSegment can start every segment from the identity). Directory iteration is
     //   also what keeps the skip fast: the outer loop's counter never depends on a loaded value, so the per-segment
     //   sphere loads pipeline instead of serializing. A segment with any op but a rigid move or uniform scale, a field op (Onion/Dilate — a
     //   skip must never jump one), non-Union shape, unbounded shape, or mixed static/dynamic spheres gets mode 0:

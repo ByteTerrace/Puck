@@ -39,7 +39,11 @@ public static class WorldScreenStamper {
             m44: 1f
         ));
 
+        // The chain starts at the world point itself: it follows whatever the composition emitted before it, and an
+        // instance before it may have left its pose on the point (a stamp-pool slot's TransformDynamic), which a segment
+        // without its own ResetPoint would inherit.
         _ = builder
+            .ResetPoint()
             .Translate(offset: center)
             .Rotate(rotation: orientation)
             .ScreenSlab(

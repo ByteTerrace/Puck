@@ -24,21 +24,11 @@ public sealed class SdfBoundAlgebraLawTests {
 
     private delegate void Emit(SdfProgramBuilder builder, int material);
 
-    private enum Lattice { P6m, Repeat, RepeatLimitedUnbounded }
+    private enum Lattice { P6m, Repeat, RepeatLimitedUnbounded, CellJitter, LogSphere }
 
     // The lattice's own prototype: a sphere repeated without end (or a P6M hex lattice of them).
     private static void Unbounded(SdfProgramBuilder builder, int material, Lattice lattice, SdfBlendOp blend) {
-        switch (lattice) {
-            case Lattice.P6m:
-                _ = builder.WallpaperFold(cell: new Vector2(value: 4f), group: SdfWallpaperGroup.P6M, limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit));
-                break;
-            case Lattice.Repeat:
-                _ = builder.Repeat(spacing: Spacing);
-                break;
-            default:
-                _ = builder.RepeatLimited(spacing: Spacing, limit: new Vector3(value: SdfDomainOps.UnboundedRepeatLimit));
-                break;
-        }
+        Fold(builder: builder, lattice: lattice);
 
         _ = builder.Sphere(blend: blend, material: material, radius: SphereRadius);
     }
@@ -187,46 +177,178 @@ public sealed class SdfBoundAlgebraLawTests {
         Assert.False(condition: cost.Unmaskable);
         Assert.InRange(actual: cost.BoundRadius, low: BoxBound, high: (BoxBound * 1.05f));
     }
-    // An instance begins under the point state the stream left it (BeginInstance emits no reset), so a fold with no edge
-    // opened before the instance and not reset since leaves its shapes at every distance: the witness holds no wallpaper
-    // instruction of its own and must still pack the unmaskable bound, where its authored radius would drop the surface
-    // at (30, 1, 0) from a camera at (30, 2, 0).
+    // A segment starts from the world point, so a stream that may carry a moved point into a segment that reads it, with
+    // no ResetPoint to say otherwise, is refused by name: the witness opens a P6M fold of 0.001 cells in the world stream
+    // and begins an instance after it, which would have packed its authored radius and lost the surface at (30, 1, 0)
+    // from a camera at (30, 2, 0).
     [Fact]
-    public void AnInstanceBeginningUnderAnUnboundedFoldIsUncullable() {
+    public void AnInstanceBeginningUnderAMovedPointIsRefusedByName() {
         foreach (var lattice in Enum.GetValues<Lattice>()) {
             foreach (var scoped in new[] { true, false }) {
-                var cost = Inherited(lattice: lattice, resetBetween: false, resetInside: false, scoped: scoped);
+                var refusal = Assert.Throws<ArgumentException>(testCode: () => Inherited(lattice: lattice, resetBetween: false, resetFirst: false, scoped: scoped));
 
-                Assert.True(condition: cost.Unmaskable, userMessage: $"{lattice} opened before the instance, scoped {scoped}");
-                Assert.Equal(expected: SdfProgram.UnmaskableBoundRadius, actual: cost.BoundRadius);
+                Assert.Contains(expectedSubstring: "without a ResetPoint", actualString: refusal.Message);
+                Assert.Contains(expectedSubstring: "begins a segment of instance 0", actualString: refusal.Message);
             }
         }
     }
     [Fact]
-    public void AResetBeforeOrInsideTheInstanceEndsTheInheritedFold() {
+    public void AResetPointBeforeOrAtTheStartOfTheInstanceKeepsItBoundedAndCullable() {
         foreach (var lattice in Enum.GetValues<Lattice>()) {
             foreach (var scoped in new[] { true, false }) {
-                Assert.False(condition: Inherited(lattice: lattice, resetBetween: true, resetInside: false, scoped: scoped).Unmaskable, userMessage: $"{lattice} reset before the instance, scoped {scoped}");
-                Assert.False(condition: Inherited(lattice: lattice, resetBetween: false, resetInside: true, scoped: scoped).Unmaskable, userMessage: $"{lattice} reset inside the instance, scoped {scoped}");
+                Assert.False(condition: Inherited(lattice: lattice, resetBetween: true, resetFirst: false, scoped: scoped).Unmaskable, userMessage: $"{lattice} reset before the instance, scoped {scoped}");
+                Assert.False(condition: Inherited(lattice: lattice, resetBetween: false, resetFirst: true, scoped: scoped).Unmaskable, userMessage: $"{lattice} reset at the start of the instance, scoped {scoped}");
             }
         }
     }
+    // The producer of a fold is an instance too: culled, it leaves the next instance on the unfolded point, so the pair is
+    // refused, not classified. The consumer alone (after a ResetPoint of its own) is a program in its own right.
     [Fact]
-    public void AFoldOpenedInAnEarlierInstanceReachesTheNextOne() {
+    public void AFoldOpenedInOneInstanceCannotReachTheNext() {
+        foreach (var lattice in Enum.GetValues<Lattice>()) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+            _ = builder.ResetPoint();
+            Fold(builder: builder, lattice: lattice);
+            _ = builder.EndInstance();
+            _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+            _ = builder.Sphere(material: material, radius: 1f);
+            _ = builder.EndInstance();
+
+            var refusal = Assert.Throws<ArgumentException>(testCode: () => builder.Build());
+
+            Assert.Contains(expectedSubstring: "begins a segment of instance 1 without a ResetPoint", actualString: refusal.Message);
+        }
+    }
+    // A moved point reaches a later segment through a segment the directory can skip, so a ResetPoint between them does
+    // not clear it; one only a segment with no shape stands in, which is never skipped.
+    [Fact]
+    public void ASkippableSegmentPassesAMovedPointAlongAShapelessOneDoesNot() {
+        static SdfProgram Program(bool shapeInMiddle) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            _ = builder.ResetPoint();
+            _ = builder.Translate(offset: Vector3.UnitX);
+            _ = builder.Sphere(material: material, radius: 1f);
+            _ = builder.ResetPoint();
+
+            if (shapeInMiddle) {
+                _ = builder.Sphere(material: material, radius: 1f);
+            }
+
+            _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+            _ = builder.Sphere(material: material, radius: 1f);
+            _ = builder.EndInstance();
+
+            return builder.Build();
+        }
+
+        Assert.Null(@object: Record.Exception(testCode: () => Program(shapeInMiddle: false)));
+        _ = Assert.Throws<ArgumentException>(testCode: () => Program(shapeInMiddle: true));
+    }
+    // Rigid point state crossing an instance boundary is the same hazard: the per-shape skip spheres of the instance's
+    // segments are measured from the world point, so any op that moved the point before a segment that reads it, with no
+    // ResetPoint, would put its spheres in the wrong place.
+    [Fact]
+    public void AnyMovedPointInheritedByAnInstanceIsRefused() {
+        var movers = new (string Name, Action<SdfProgramBuilder> Move)[] {
+            ("Translate", builder => builder.Translate(offset: new Vector3(x: 100f, y: 0f, z: 0f))),
+            ("Rotate", builder => builder.Rotate(rotation: Quaternion.CreateFromAxisAngle(axis: Vector3.UnitY, angle: 1f))),
+            ("Scale", builder => builder.Scale(scale: new Vector3(value: 2f))),
+            ("DomainWarp", builder => builder.DomainWarp(frequency: Vector3.One, amplitude: 0.1f)),
+            ("Elongate", builder => builder.Elongate(extents: Vector3.One)),
+            ("SymmetryPlane", builder => builder.SymmetryPlane(normal: Vector3.UnitX, offset: 0f)),
+        };
+
+        foreach (var (name, move) in movers) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            _ = builder.ResetPoint();
+            move(builder);
+            _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+            _ = builder.Sphere(material: material, radius: 1f);
+            _ = builder.EndInstance();
+
+            var refusal = Assert.Throws<ArgumentException>(testCode: () => builder.Build());
+
+            Assert.Contains(expectedSubstring: "without a ResetPoint", actualString: refusal.Message);
+        }
+    }
+    // A scope's push and pop touch only the field, so an instance that opens with one and resets the point right after
+    // begins at the world point however the stream before it moved it.
+    [Fact]
+    public void AScopeOpeningAnInstanceBeforeItsResetPointIsNotAReadOfThePoint() {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
         _ = builder.ResetPoint();
-        Fold(builder: builder, lattice: Lattice.P6m);
-        _ = builder.EndInstance();
-        _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+        _ = builder.Translate(offset: Vector3.UnitX);
         _ = builder.Sphere(material: material, radius: 1f);
+        _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+        _ = builder.PushField(compose: SdfBlendOp.Union);
+        _ = builder.ResetPoint();
+        _ = builder.Sphere(material: material, radius: 1f);
+        _ = builder.PopField();
         _ = builder.EndInstance();
 
-        var program = builder.Build();
+        Assert.Null(@object: Record.Exception(testCode: () => builder.Build()));
+    }
+    // A smooth compose of a scope reaches L times its radius past the scope's geometry when the scope's field joins its
+    // parent divided by its own Lipschitz factor L: a warp of rate 200 and amplitude 0.5 makes L = 101, and the halo is
+    // the radius times 101, where the packed radius 2.0012 let the blended surface at (3, 0, 0) lie outside its bound.
+    [Fact]
+    public void ASoftComposeOfARescaledScopeReachesItsRadiusTimesTheScopesFactor() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        Assert.True(condition: program.InspectInstance(index: 1).Unmaskable);
+        _ = builder.Translate(offset: new Vector3(x: 4.1f, y: 0f, z: 0f));
+        _ = builder.Sphere(material: material, radius: 1f);
+        _ = builder.ResetPoint();
+        _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+        _ = builder.PushField(compose: SdfBlendOp.SmoothUnion, smooth: 1f);
+        _ = builder.WallpaperFold(cell: new Vector2(value: 4f), group: SdfWallpaperGroup.Pmm, limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit));
+        _ = builder.DomainWarp(frequency: new Vector3(x: 200f, y: 0f, z: 0f), amplitude: 0.5f);
+        _ = builder.Sphere(material: material, radius: 1f);
+        _ = builder.ResetPoint();
+        _ = builder.Sphere(blend: SdfBlendOp.Intersection, material: material, radius: 1f);
+        _ = builder.PopField();
+        _ = builder.EndInstance();
+
+        var cost = builder.Build().InspectInstance(index: 0);
+
+        Assert.False(condition: cost.Unmaskable);
+        Assert.True(condition: (cost.Halo >= 101f), userMessage: $"halo {cost.Halo}");
+        Assert.True(condition: (cost.BoundRadius >= (1f + 101f)), userMessage: $"bound {cost.BoundRadius}");
+    }
+    // Two lattices with no edge intersect to one with none, whichever kinds they are, CellJitter at zero jitter and the
+    // log-spherical shells included.
+    [Fact]
+    public void TwoUnboundedLatticesIntersectedStayUncullable() {
+        foreach (var first in Enum.GetValues<Lattice>()) {
+            foreach (var second in Enum.GetValues<Lattice>()) {
+                var cost = Cost(scoped: true, emit: (builder, material) => {
+                    Unbounded(blend: SdfBlendOp.Union, builder: builder, lattice: first, material: material);
+                    _ = builder.ResetPoint();
+                    Unbounded(blend: SdfBlendOp.Intersection, builder: builder, lattice: second, material: material);
+                });
+
+                Assert.True(condition: cost.Unmaskable, userMessage: $"{first} ∩ {second}");
+            }
+        }
+    }
+    [Fact]
+    public void EveryDefinedOpHasAPointStateRole() {
+        foreach (var op in Enum.GetValues<SdfOp>()) {
+            Assert.Null(@object: Record.Exception(testCode: () => SdfOpRoles.Of(op: op)));
+        }
+
+        Assert.Equal(expected: SdfOpRole.Lattice, actual: SdfOpRoles.Of(op: SdfOp.CellJitter));
+        Assert.Equal(expected: SdfOpRole.Lattice, actual: SdfOpRoles.Of(op: SdfOp.LogSphere));
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => SdfOpRoles.Of(op: ((SdfOp)999u)));
     }
     // The authored radius SdfBoundAlgebra.Unbounded is the declaration that nothing bounds the instance, wherever the tree
     // it covers is bounded; no other non-finite or negative radius is admitted.
@@ -253,18 +375,24 @@ public sealed class SdfBoundAlgebraLawTests {
     private static void Fold(SdfProgramBuilder builder, Lattice lattice) {
         switch (lattice) {
             case Lattice.P6m:
-                _ = builder.WallpaperFold(cell: new Vector2(value: 0.001f), group: SdfWallpaperGroup.P6M, limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit));
+                _ = builder.WallpaperFold(cell: new Vector2(value: 4f), group: SdfWallpaperGroup.P6M, limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit));
                 break;
             case Lattice.Repeat:
                 _ = builder.Repeat(spacing: Spacing);
                 break;
-            default:
+            case Lattice.RepeatLimitedUnbounded:
                 _ = builder.RepeatLimited(spacing: Spacing, limit: new Vector3(value: SdfDomainOps.UnboundedRepeatLimit));
+                break;
+            case Lattice.CellJitter:
+                _ = builder.CellJitter(spacing: Spacing, jitter: 0f);
+                break;
+            default:
+                _ = builder.LogSphere(shellRatio: 2f);
                 break;
         }
     }
     // The fold opens in the world stream, the instance begins after it and holds only a unit sphere.
-    private static SdfInstanceCost Inherited(Lattice lattice, bool scoped, bool resetBetween, bool resetInside) {
+    private static SdfInstanceCost Inherited(Lattice lattice, bool scoped, bool resetBetween, bool resetFirst) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
@@ -277,11 +405,11 @@ public sealed class SdfBoundAlgebraLawTests {
 
         _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
 
+        if (resetFirst) {
+            _ = builder.ResetPoint();
+        }
         if (scoped) {
             _ = builder.PushField(compose: SdfBlendOp.Union);
-        }
-        if (resetInside) {
-            _ = builder.ResetPoint();
         }
 
         _ = builder.Sphere(material: material, radius: 1f);

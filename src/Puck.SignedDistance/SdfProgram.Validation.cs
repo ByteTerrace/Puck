@@ -812,7 +812,10 @@ public sealed partial class SdfProgram {
             instructionOwners: instructionOwners,
             paramName: instructionsParamName
         );
-
+        RequireSegmentsStartAtTheWorldPoint(
+            instructionOwners: instructionOwners,
+            paramName: instructionsParamName
+        );
 
         return instructionOwners;
     }

@@ -999,9 +999,9 @@ public sealed partial class SdfProgram {
     /// unbounded operand. Inside a scope the operands compose through <see cref="SdfBoundAlgebra"/>: intersected with a
     /// finite shape it is bounded by that shape, subtracted from one it is bounded by it, and only a union with it, or
     /// the scope's whole field, leaves the scope unbounded. An unbounded scope is an unbounded instance. At depth 0 each
-    /// shape is its own operand of the world's field, so an unbounded one is an unbounded instance. An instance begins
-    /// under the point state before it, so a fold with no edge opened ahead of the instance, and not reset since,
-    /// makes its shapes unbounded operands exactly as one inside it would.</para>
+    /// shape is its own operand of the world's field, so an unbounded one is an unbounded instance. An instance begins at
+    /// the world point (<see cref="RequireSegmentsStartAtTheWorldPoint"/> refuses a stream that moves the point across
+    /// its start), so a fold never reaches it from outside.</para>
     /// <para>No bound inflation closes either gap, because the far-field answer is not the accumulator. Such an instance
     /// therefore packs <see cref="UnmaskableBoundRadius"/>, a bound so large that the beam prepass's sphere-vs-cone test
     /// passes for every tile and the instance is always evaluated — the same graceful degradation <c>AnalyzeSegment</c>
@@ -1012,9 +1012,10 @@ public sealed partial class SdfProgram {
     internal bool HasUnmaskableInfluence(int first, int end) {
         var scopeDepth = 0;
         // A point fold with no edge (an unbounded wallpaper or repeat) makes every shape after it unbounded until the
-        // next ResetPoint. A scope touches only the field, so it never ends one, and an instance begins under the
-        // point state its predecessors left (BeginInstance emits no reset), so a fold opened before it counts.
-        var foldUnbounded = IncomingFoldUnbounded(first: first);
+        // next ResetPoint. A scope touches only the field, so it never ends one. A slice starts from the world point:
+        // the program refuses a stream that may carry a moved point into a segment that reads it
+        // (RequireSegmentsStartAtTheWorldPoint), so no fold is inherited.
+        var foldUnbounded = false;
         // The open scope's field, as a bound under SdfBoundAlgebra (0 for finite, Unbounded for none), and
         // whether a shape has joined it. The cap is one scope deep (SdfProgramBuilder.MaxFieldScopeDepth).
         var scopeBound = 0f;
@@ -1143,28 +1144,6 @@ public sealed partial class SdfProgram {
             end: instance.End
         ));
 
-    // Whether an instruction opens a point fold whose lattice has no edge: an infinite Repeat, a RepeatLimited at the
-    // sentinel, or a wallpaper at it. The one test the classifier reads, inside an instance and before it.
-    private static bool OpensUnboundedFold(SdfInstruction instruction) =>
-        ((instruction.Op == SdfOp.Repeat) ||
-        ((instruction.Op == SdfOp.RepeatLimited) && SdfDomainOps.IsUnboundedRepeat(limit: new Vector3(x: instruction.Data1.X, y: instruction.Data1.Y, z: instruction.Data1.Z))) ||
-        ((instruction.Op == SdfOp.WallpaperFold) && SdfWallpaperFold.IsUnbounded(limit: new Vector2(x: instruction.Data1.X, y: instruction.Data1.Y))));
-    // The point state an instruction index begins under: the nearest ResetPoint before it clears an unbounded fold, the
-    // nearest such fold sets one, and with neither the point is the world's.
-    private bool IncomingFoldUnbounded(int first) {
-        for (var index = (first - 1); (index >= 0); index--) {
-            var instruction = m_instructions[index];
-
-            if (instruction.Op == SdfOp.ResetPoint) {
-                return false;
-            }
-            if (OpensUnboundedFold(instruction: instruction)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
     /// <summary>Returns whether an instance is shadow-transparent: omitting it from a soft-shadow march can only make
     /// the field more solid (never light-leak), so the <c>sdf.shadow-proxy</c> lever may safely drop it from the shadow
     /// occluder set. True iff the instance contains at least one shape and every shape compose is a subtraction-family
@@ -1358,6 +1337,17 @@ public sealed partial class SdfProgram {
             }
 
             var radius = MathF.Abs(x: instruction.Data1.X);
+
+            // A scope's field joins its parent divided by its own Lipschitz factor L (PopField.Data1.Y = 1/L, patched by
+            // AnalyzeLipschitz before the bounds are classified), so a soft compose blends wherever that quotient is within
+            // the radius of the parent: out to L times the radius beyond the scope's geometry. The halo is measured in the
+            // scope's own units, as the rescale leaves the scope's zero set where it was.
+            if (
+                (instruction.Op == SdfOp.PopField) &&
+                (instruction.Data1.Y > 0f)
+            ) {
+                radius /= instruction.Data1.Y;
+            }
 
             if (
                 (instruction.Blend == ((uint)SdfBlendOp.SmoothUnion)) ||

@@ -159,8 +159,7 @@ a finite margin and scaling it by a positive factor all leave it unbounded, so n
 placement scale overflows it, and only the program's packing turns it into
 `SdfProgram.UnmaskableBoundRadius`, the number the kernels read. An instance
 declares it by authoring `Unbounded` as its radius, and a tree the program finds
-unbounded packs the same bound, which also covers an instance that begins under a
-fold opened before it. `SdfBoundAlgebra` composes the bounds of a field's
+unbounded packs the same bound. `SdfBoundAlgebra` composes the bounds of a field's
 operands through its set operations, and the program and the authoring stamper
 both read it:
 
@@ -169,14 +168,21 @@ both read it:
 | Intersection | `max(a, b)` | the smaller: it is at least either operand, so an unbounded operand imposes nothing and unbounded with finite is finite |
 | Subtraction `a - b` | `max(a, -b)` | `a`'s: it is at least `a`, whatever `b` is |
 | Union | `min(a, b)` | the larger: one unbounded operand makes the union unbounded |
-| Smooth variant | the blend's own | the same, plus its blend radius, which is the halo `SdfProgram` adds once to the instance |
+| Smooth variant | the blend's own | the same, plus its blend radius, which is the halo `SdfProgram` adds once to the instance; a scope's compose radius is multiplied by the scope's Lipschitz factor `L`, since the scope's field joins its parent divided by `L` |
 
 Transforms, scales and repeats compose as they always have. The algebra holds over
 a field scope, whose shapes join one field by their blends: inside `PushField` an
 unbounded lattice intersected with a box is as bounded as the box, a box minus a
 lattice keeps the box's bound, and a lattice with a box unioned in is unbounded.
 Outside a scope every intersection, field op and fold with no edge reads the one
-global accumulator, so a flat instance holding one is unmaskable. A `Plane` is
+global accumulator, so a flat instance holding one is unmaskable. Every bound is measured from the world point: a segment starts there, because the
+directory and the instance mask can skip or compile a segment apart from its neighbours and a
+skipped one passes the point before it along, so `SdfProgram` refuses a stream that may
+carry a moved point into a segment that reads it without a `ResetPoint` of its own (a
+shapeless world segment, which is never skipped, is the one reset that holds across a
+boundary). A lattice opens an unbounded fold unless its limit gives it an edge; `SdfOpRoles`
+is the one table of which ops move the point, which move the field, and which open a lattice,
+and an op without a row refuses by name. A `Plane` is
 unmaskable wherever it stands, and `SdfBoundAlgebraLawTests` samples the field
 past each packed bound and holds it at least the distance to that bound.
 
