@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -19,107 +18,6 @@ namespace Puck.World;
 /// Puck.World.Server depends on Puck.World.Schema already, so this is the lowest layer both can reach without a new
 /// project reference.</summary>
 public static partial class WorldDefinitionFileSource {
-    // A composed image, held per resolved document path and catalog fingerprint, so a second reach for the same document merges nothing.
-    // One quilt shard names the island as its own basis and again as an adjacency neighbour, and each derived
-    // corner reaches it once more, so a single boot used to ask for the same twenty-one-document merge scores of
-    // times and pay for it every time. An image records every file its composition read and the exact bytes it read
-    // from each, and it is offered again only when all of them still hold those bytes, so an edit to the document
-    // itself, to a basis several hops above it, or to any import recomposes rather than serving a stale merge, and
-    // a file that has since vanished or turned unreadable does the same. Identity is the resolved path plus the catalog
-    // fingerprint, freshness is content: no clock takes part in either.
-    private static readonly ConcurrentDictionary<string, ComposedDocument> ComposedDocuments = new(comparer: StringComparer.OrdinalIgnoreCase);
-
-    // One file a composition read, with the bytes it read from it.
-    private readonly record struct ComposedDocumentLink(string Path, byte[] Bytes);
-
-    // An image is held per document path, catalog fingerprint and source: two sources may resolve one path's graph
-    // differently (the directory source refuses what the composer compiles), so neither answers for the other.
-    private static string CacheKey(string path, string fingerprint, IWorldDocumentSource source) => ((((path.Replace(
-        newChar: '/',
-        oldChar: '\\'
-    ) + "\0") + fingerprint) + "\0") + source.GetType().FullName);
-    // Mirrors File.ReadAllText's own encoding detection (BOM-sniffed, UTF-8 default), so a chain link read through
-    // any IWorldDocumentSource decodes exactly like a load through File.ReadAllText would.
-    private static string DecodeJson(byte[] bytes) {
-        using var reader = new StreamReader(
-            stream: new MemoryStream(buffer: bytes),
-            encoding: Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: true
-        );
-
-        return reader.ReadToEnd();
-    }
-    // Every document a load or a composition reads comes through here, so the boot ledger counts each read once.
-    private static bool TryReadDocument(IWorldDocumentSource source, string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
-        if (!source.TryRead(
-            content: out content,
-            name: name,
-            reason: out reason,
-            referrerName: referrerName,
-            resolvedName: out resolvedName
-        )) {
-            return false;
-        }
-
-        WorldBootWork.Count(kind: WorldBootWork.DocumentsRead);
-
-        return true;
-    }
-    // The one writer of s_composedDocuments: both of TryComposeLayers' success exits hold what they are about to
-    // return, so the next reader of the same path meets an image recorded together with the chain it was composed
-    // from. A composition over a source whose names are not files beside their referrers is never held: nothing
-    // could prove its image still stands.
-    private static void HoldComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, JsonObject composed, List<byte[]> touched, List<string> touchedPaths, int reach) {
-        if (!source.ResolvesFiles) {
-            return;
-        }
-
-        var chain = new List<ComposedDocumentLink>(capacity: touched.Count);
-
-        for (var index = 0; (index < touched.Count); index++) {
-            chain.Add(item: new ComposedDocumentLink(
-                Bytes: touched[index],
-                Path: touchedPaths[index]
-            ));
-        }
-
-        ComposedDocuments[CacheKey(
-            fingerprint: catalogFingerprint,
-            path: resolvedPath,
-            source: source
-        )] = new ComposedDocument(
-            Chain: chain,
-            ComposedJson: Encoding.UTF8.GetBytes(s: composed.ToJsonString()),
-            Reach: reach
-        );
-    }
-    // Whether a held image still answers for a reader whose own bytes are `ownBytes`: every document the image read
-    // must still read the same through its source (a .puck link recompiles). The image's own document is the chain's
-    // first link; a reader that has already read it passes its bytes, and one that has not reads it through the
-    // source like every other link.
-    // This one question also settles the cycle rule, which the walk above no longer gets to ask on a reuse: a
-    // document already on the reader's resolution path can only appear inside an image if that document reaches
-    // back into the image's own root, and an image exists only for a document whose own walk COMPLETED — a walk
-    // that would have met exactly that cycle and refused. The only way the two could disagree is a file that has
-    // changed since, which is what this check is.
-    private static bool ImageStillStands(ComposedDocument image, IWorldDocumentSource source, byte[]? ownBytes) {
-        for (var index = 0; (index < image.Chain.Count); index++) {
-            var link = image.Chain[index];
-            var stands = (((index == 0) && (ownBytes is not null))
-                ? ownBytes.AsSpan().SequenceEqual(other: link.Bytes)
-                : source.StillReads(
-                    content: link.Bytes,
-                    resolvedName: link.Path
-                )
-            );
-
-            if (!stands) {
-                return false;
-            }
-        }
-
-        return true;
-    }
     // The shared core both TryComposeDocumentTree overloads call: compose the graph over whichever
     // IWorldDocumentSource the caller supplied (disk-backed or resolver-backed), never duplicating
     // TryComposeLayers' walk itself.
@@ -188,6 +86,9 @@ public static partial class WorldDefinitionFileSource {
         }
     }
     private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null) {
+        var reads = new CompileInputLog();
+        using var recording = CompileInputs.Record(log: reads);
+
         stack = null;
         composed = null;
         touched = [bytes];
@@ -262,6 +163,8 @@ public static partial class WorldDefinitionFileSource {
 
         JsonObject? root;
 
+        var recordsInputs = (source.ResolvesFiles && source.RecordInputs(content: bytes, resolvedName: resolvedPath));
+
         try {
             root = (JsonNode.Parse(json: DecodeJson(bytes: bytes)) as JsonObject);
         } catch (JsonException) {
@@ -291,6 +194,7 @@ public static partial class WorldDefinitionFileSource {
             reason = string.Empty;
             WorldBootWork.Count(kind: WorldBootWork.Compositions);
             HoldComposedImage(
+                inputs: (recordsInputs ? reads.Inputs : null),
                 catalogFingerprint: catalogFingerprint,
                 composed: composed,
                 reach: reach,
@@ -571,6 +475,7 @@ public static partial class WorldDefinitionFileSource {
         reason = string.Empty;
         WorldBootWork.Count(kind: WorldBootWork.Compositions);
         HoldComposedImage(
+            inputs: (recordsInputs ? reads.Inputs : null),
             catalogFingerprint: catalogFingerprint,
             composed: composed!,
             reach: reach,
@@ -1032,13 +937,13 @@ public static partial class WorldDefinitionFileSource {
 
         if (
             !source.ResolvesFiles ||
-            !ComposedDocuments.TryGetValue(
+            !TryFindComposedImage(source: source,
             key: CacheKey(
                 fingerprint: catalogFingerprint,
                 path: resolvedPath,
                 source: source
             ),
-            value: out var image
+            image: out var image
         )
         ) {
             return false;
@@ -1402,13 +1307,13 @@ public static partial class WorldDefinitionFileSource {
 
         if (
             string.IsNullOrEmpty(value: resolvedPath) ||
-            !ComposedDocuments.TryGetValue(
+            !TryFindComposedImage(source: source,
             key: CacheKey(
                 fingerprint: catalogFingerprint,
                 path: resolvedPath,
                 source: source
             ),
-            value: out var image
+            image: out var image
         ) ||
             !ImageStillStands(
             image: image,
@@ -1931,7 +1836,6 @@ public static partial class WorldDefinitionFileSource {
     // rule: an image first composed at the top of a chain is offered to a reader deeper in one only while that
     // reader's own depth plus the reach still fits inside WorldDocumentBasis.MaxChainDepth, exactly as a fresh walk
     // of the same subtree would have had to.
-    private sealed record ComposedDocument(IReadOnlyList<ComposedDocumentLink> Chain, byte[] ComposedJson, int Reach);
 
     /// <summary>Gets the total bytes the held composed images occupy — each image's own composed tree as UTF-8
     /// JSON, plus the bytes of every file its composition read. A file's bytes are shared with every image whose

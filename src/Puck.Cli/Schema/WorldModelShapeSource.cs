@@ -90,7 +90,7 @@ internal static class WorldModelShapeSource {
                     }
 
                     properties.Add(item: new WorldModelMember(
-                        Access: (((property.GetMethod is null) ? WorldModelAccess.None : WorldModelAccess.Read) | ((property.SetMethod is null) ? WorldModelAccess.None : WorldModelAccess.Write)) | (property.IsDefined(attributeType: typeof(JsonIgnoreAttribute), inherit: true) ? WorldModelAccess.Ignored : WorldModelAccess.None),
+                        Access: (((property.GetMethod is null) ? WorldModelAccess.None : WorldModelAccess.Read) | ((property.SetMethod is null) ? WorldModelAccess.None : WorldModelAccess.Write)) | ((property.GetCustomAttribute<JsonIgnoreAttribute>() is { Condition: JsonIgnoreCondition.Always }) ? WorldModelAccess.Ignored : WorldModelAccess.None),
                         DeclaringType: (property.DeclaringType ?? type),
                         Member: property.Name,
                         Name: JsonNamingPolicy.CamelCase.ConvertName(name: property.Name),
@@ -177,7 +177,11 @@ internal static class WorldModelShapeSource {
 
         _ = text.Append(value: "            [\n");
         foreach (var member in members) {
-            _ = text.Append(value: $"                M({Literal(text: member.Name)}, typeof({CSharpName(type: member.Type)}), typeof({CSharpName(type: member.DeclaringType)}), {Literal(text: member.Member)}, {AccessText(access: member.Access)}),\n");
+            var getter = ((((member.Access & (WorldModelAccess.Read | WorldModelAccess.Ignored)) == WorldModelAccess.Read) && !member.Type.IsByRefLike)
+                ? $", static value => (({CSharpName(type: member.DeclaringType)})value).{member.Member}"
+                : string.Empty);
+
+            _ = text.Append(value: $"                M({Literal(text: member.Name)}, typeof({CSharpName(type: member.Type)}), typeof({CSharpName(type: member.DeclaringType)}), {Literal(text: member.Member)}, {AccessText(access: member.Access)}{getter}),\n");
         }
         _ = text.Append(value: "            ]");
     }

@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
 using Puck.Assets;
-using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Assets;
 

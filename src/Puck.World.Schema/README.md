@@ -876,7 +876,9 @@ load failure.
 table (`WorldModelShape.generated.cs`). The walks that read the model without
 serializing it (`WorldCallArguments` for the language's call-argument forms,
 `WorldModuleNamespace.Visit` for the aliased-import rewrite and the channel
-spelling) read this table, so no process describes a type at run time. `puck
+spelling, and `WorldNameRegistry.Walk` for name registration) read this table.
+Its generated member getters also read document values without reflective
+property access. `puck
 schema` writes it from the resolver's own description of the model and `puck
 schema --check` fails when the two disagree.
 
@@ -1759,7 +1761,10 @@ still names a cell is refused by name at the decode door. Law suite:
 
 The resolver caches traversal metadata by runtime type and omits branches whose
 sealed types cannot contain bound values. It still reads current document contents
-on every walk, including mutable collections and polymorphic members. Reference
+on every walk, including mutable collections and polymorphic members. Types
+in the document model use `WorldModelShape`'s generated getters. The graph
+API also accepts caller-owned shapes: it binds their getters once, omitting
+non-boxable properties, then invokes delegates on every walk. Reference
 searches do not construct diagnostic paths; resolution and flattening retain their
 named error paths. Every walk reuses one visited set per thread.
 `CollectReferencedRows` names every referenced row in one walk, and

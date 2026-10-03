@@ -1,3 +1,4 @@
+using Puck.Assets;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Modules;
@@ -135,6 +136,7 @@ public static class WorldCompiler {
     /// <param name="vocabulary">The described vocabulary every stage parses and lowers against; the shipped
     /// <see cref="WorldDocumentVocabulary.Instance"/> when omitted.</param>
     /// <param name="allowMultiple">Whether this consumer accepts every emitted world through <see cref="WorldCompilation.Worlds"/>.</param>
+    /// <param name="includeTests">Whether to lower test blocks into generated worlds.</param>
     /// <param name="updateAssets">Prepares refreshed asset pins without writing them. The caller saves the lock only after validation succeeds.</param>
     /// <returns>The compilation.</returns>
     public static WorldCompilation Compile(
@@ -149,7 +151,8 @@ public static class WorldCompiler {
         CancellationToken cancellationToken = default,
         WorldDocumentVocabulary? vocabulary = null,
         bool allowMultiple = false,
-        bool updateAssets = false
+        bool updateAssets = false,
+        bool includeTests = true
     ) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
@@ -174,6 +177,7 @@ public static class WorldCompiler {
                 diagnostics: diagnostics,
                 embeddings: embeddings,
                 imports: imports,
+                includeTests: includeTests,
                 source: source,
                 sourceMap: sourceMap,
                 sourcePath: sourcePath,
@@ -195,7 +199,7 @@ public static class WorldCompiler {
     }
 
     private static WorldCompilation CompileRecorded(string source, string? sourcePath, string? basePath, ImportHandling imports, EmbeddingLock? embeddings, string? defaultSchema, DiagnosticBag diagnostics, SourceMap sourceMap,
-        CancellationToken cancellationToken, WorldDocumentVocabulary vocabulary, bool allowMultiple, bool updateAssets, CompileInputLog basisReads) {
+        CancellationToken cancellationToken, WorldDocumentVocabulary vocabulary, bool allowMultiple, bool updateAssets, CompileInputLog basisReads, bool includeTests) {
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(
             defaultSchema: defaultSchema,
             diagnostics: diagnostics,
@@ -252,6 +256,7 @@ public static class WorldCompiler {
         var worlds = new List<WorldOutput>();
         var assets = ((sourcePath is null) ? null : new AssetCompilationContext(rootSourcePath: sourcePath, updateLock: updateAssets));
         var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
+            includeTests: includeTests,
             basePath: (basePath ?? ((sourcePath is null)
                 ? null
                 : Path.GetDirectoryName(path: sourcePath))),
@@ -299,6 +304,7 @@ public static class WorldCompiler {
     /// <param name="sourceMap">The map the lowering registers pointers in; a fresh one when omitted.</param>
     /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
     /// <param name="allowMultiple">Whether the caller accepts every emitted world through <see cref="WorldCompilation.Worlds"/>.</param>
+    /// <param name="includeTests">Whether to lower test blocks into generated worlds.</param>
     /// <param name="updateAssets">Prepares refreshed asset pins for an explicit save after validation.</param>
     /// <returns>The compilation.</returns>
     /// <exception cref="IOException">The file could not be read.</exception>
@@ -310,11 +316,13 @@ public static class WorldCompiler {
         SourceMap? sourceMap = null,
         CancellationToken cancellationToken = default,
         bool allowMultiple = false,
-        bool updateAssets = false
+        bool updateAssets = false,
+        bool includeTests = true
     ) {
         ArgumentNullException.ThrowIfNull(argument: path);
 
         return Compile(
+            includeTests: includeTests,
             allowMultiple: allowMultiple,
             updateAssets: updateAssets,
             cancellationToken: cancellationToken,

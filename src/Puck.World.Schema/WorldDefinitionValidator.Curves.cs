@@ -15,7 +15,7 @@ public static partial class WorldDefinitionValidator {
 
     private static readonly float CurveMaxTangentYaw = (MathF.PI + TangentYawSlack);
 
-    private static HashSet<string> ValidateCurves(IReadOnlyList<WorldCurveRow> curves, List<string> errors) {
+    internal static HashSet<string> ValidateCurves(IReadOnlyList<WorldCurveRow> curves, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         if (curves.Count > WorldCurves.MaxRows) {

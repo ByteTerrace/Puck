@@ -1,7 +1,7 @@
+using Puck.Assets;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Machines;
 using Puck.Transpiler.Diagnostics;
-using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Composition;
 
@@ -20,19 +20,30 @@ namespace Puck.World.Transpiler.Composition;
 /// through <see cref="WorldCompileCache.Shared"/>, so an unchanged source is compiled once however often a load reads
 /// or re-checks it. Resolved names use forward slashes on every platform.</summary>
 public sealed class PuckDocumentComposer : IWorldDocumentSource {
-    private PuckDocumentComposer() { }
+    private readonly WorldCompileCache m_cache;
 
-    /// <summary>Gets the composer. It holds no state, so one instance serves every composition and is the one a
-    /// host installs as its local document source (<see cref="WorldDefinitionFileSource.UseLocalDocuments"/>).</summary>
-    public static PuckDocumentComposer Instance { get; } = new();
+    /// <summary>Creates a document source backed by the selected compile and composition cache.</summary>
+    public PuckDocumentComposer(WorldCompileCache cache) {
+        ArgumentNullException.ThrowIfNull(cache);
+        m_cache = cache;
+    }
+
+    /// <summary>Gets the composer over <see cref="WorldCompileCache.Shared"/> that a host installs as its local
+    /// document source (<see cref="WorldDefinitionFileSource.UseLocalDocuments"/>).</summary>
+    public static PuckDocumentComposer Instance { get; } = new(cache: WorldCompileCache.Shared);
     /// <inheritdoc />
     public bool ResolvesFiles => true;
+    /// <inheritdoc />
+    public IWorldCompositionStore Compositions => m_cache;
+
+    /// <inheritdoc />
+    public bool RecordInputs(string resolvedName, byte[] content) => StillReads(content: content, resolvedName: resolvedName);
 
     // Compiles a source through the compile cache for what it emits. A source that cannot be read reports nothing
     // here: like a source that does not compile, it is left to the door that reads it to say why.
-    private static bool TryCompileSource(string path, out WorldCompiledSource? compiled, out WorldCompilation? failure) {
+    private bool TryCompileSource(string path, out WorldCompiledSource? compiled, out WorldCompilation? failure) {
         try {
-            return WorldCompileCache.Shared.TryCompile(
+            return m_cache.TryCompile(
                 compiled: out compiled,
                 failure: out failure,
                 path: path
@@ -128,7 +139,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
     // why a source whose stem spells the name carries no document of it, for a refusal to name. The index reads the
     // directory's listing and every source's bytes through CompileInputs, and the carrier compiles through the compile
     // cache, so a compile that resolves a name here rests on everything that decided it.
-    private static bool TrySelectCarrier(string directory, string leaf, out WorldDocumentCarrier? carrier, out WorldCompiledSource? compiled, out WorldCompilation? failure, out string? passed, out string reason) {
+    private bool TrySelectCarrier(string directory, string leaf, out WorldDocumentCarrier? carrier, out WorldCompiledSource? compiled, out WorldCompilation? failure, out string? passed, out string reason) {
         carrier = null;
         compiled = null;
         failure = null;

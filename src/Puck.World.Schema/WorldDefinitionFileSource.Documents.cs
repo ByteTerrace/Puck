@@ -1,3 +1,5 @@
+using Puck.Assets;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionFileSource {
@@ -49,8 +51,10 @@ public static partial class WorldDefinitionFileSource {
     private sealed class DirectoryDocumentSource(Func<string, byte[]?>? read = null) : IWorldDocumentSource {
         public bool ResolvesFiles => (read is null);
 
+        public bool RecordInputs(string resolvedName, byte[] content) => ((read is null) && CompileInputs.ReadAllBytes(path: resolvedName).AsSpan().SequenceEqual(other: content));
+
         private bool Exists(string path) => ((read is null)
-            ? File.Exists(path: path)
+            ? CompileInputs.Exists(path: path)
             : (read(arg: path) is not null));
 
         public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
@@ -80,7 +84,7 @@ public static partial class WorldDefinitionFileSource {
 
             try {
                 content = ((read is null)
-                    ? File.ReadAllBytes(path: resolvedName)
+                    ? CompileInputs.ReadAllBytes(path: resolvedName)
                     : read(arg: resolvedName));
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 reason = $"cannot read basis document '{name}': {WorldDocumentLabel.Failure(exception: exception)}";

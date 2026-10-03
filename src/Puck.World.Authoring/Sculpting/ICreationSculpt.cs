@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Puck.Assets.Documents;
 
 namespace Puck.World.Authoring.Sculpting;
 
@@ -27,7 +26,7 @@ public sealed record SculptContext(JsonObject Document) {
 
         return JsonSerializer.Deserialize<CreationDocument>(
             json: documentNode.ToJsonString(),
-            options: DocumentJsonOptions.Shared
+            options: CreationJsonContext.Document.Options
         );
     }
 }

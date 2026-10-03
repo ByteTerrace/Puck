@@ -1,9 +1,9 @@
+using Puck.Assets;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.State;
-using Puck.Transpiler.Modules;
 
 namespace Puck.World.Transpiler.Embeddings;
 

@@ -5,6 +5,50 @@ namespace Puck.Maths.Tests;
 /// branch or bound) rather than a swept <c>Domain</c>: the admissibility filter rejects almost every randomly drawn
 /// knot quadruple, so a random sweep would spend nearly all its draws on refusals rather than compiled curves.</summary>
 internal static partial class Subjects {
+    public static string? CurvatureSplineBinaryRoundTrip() {
+        var curves = EndpointCurvatureCases.Select(selector: test => CurvatureSpline.Compile(
+            [test.Start with { Elevation = CurvatureSplineD(value: 1) }, test.End with { Elevation = CurvatureSplineD(value: 3) }], false)).ToList();
+
+        curves.Add(item: CurvatureSpline.Compile(Enumerable.Range(count: 12, start: 0).Select(selector: index => CurvatureSplineCircleKnotAt(elevation: (index % 3), knotIndex: index, radius: 8, signedCurvature: 0.125, turnRadians: (Math.PI / 6))).ToArray(), true));
+        foreach (var curve in curves) {
+            using var stream = new MemoryStream();
+            using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+            curve.Write(writer: writer);
+            writer.Flush();
+            var bytes = stream.ToArray();
+
+            stream.Position = 0;
+            using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+            var restored = CompiledCurvatureSpline.Read(reader: reader);
+
+            if ((stream.Position != stream.Length) || (restored.Closed != curve.Closed) || (restored.TotalLengthRaw != curve.TotalLengthRaw) || (restored.SegmentCount != curve.SegmentCount)) { return "binary spline header or extent changed"; }
+            for (var index = 0; (index < curve.SegmentCount); index++) {
+                if (!SegmentsBitIdentical(left: curve.GetSegment(index: index), right: restored.GetSegment(index: index))) { return $"binary spline segment {index} changed"; }
+            }
+            long[] stations = [long.MinValue, -1, 0, 1, (curve.TotalLengthRaw - 1), curve.TotalLengthRaw, (curve.TotalLengthRaw + 1), long.MaxValue];
+
+            foreach (var station in stations.Concat(second: Enumerable.Range(count: 65, start: 0).Select(selector: index => ((curve.TotalLengthRaw / 64) * index)))) {
+                if (curve.EvaluateRaw(arcRaw: station) != restored.EvaluateRaw(arcRaw: station)) { return $"binary spline evaluation changed at {station}"; }
+            }
+            using var rewritten = new MemoryStream();
+            using var rewriting = new BinaryWriter(output: rewritten);
+
+            restored.Write(writer: rewriting);
+            rewriting.Flush();
+            if (!bytes.AsSpan().SequenceEqual(other: rewritten.ToArray())) { return "binary spline rewrite changed its bytes"; }
+            stream.Position = 0;
+            _ = reader.ReadString();
+            var fingerprintStart = (((int)stream.Position) + 1);
+
+            bytes[fingerprintStart] ^= 1;
+            using var foreign = new BinaryReader(input: new MemoryStream(buffer: bytes));
+
+            try { _ = CompiledCurvatureSpline.Read(reader: foreign); return "foreign binary spline fingerprint was accepted"; } catch (InvalidDataException) { }
+        }
+        return null;
+    }
+
     private static FixedQ4816 CurvatureSplineD(double value) =>
         FixedQ4816.FromDouble(value: value);
     private static CurvatureSplineKnot CurvatureSplineKnotAt(double x, double z, double elevation, double tangentYaw, double curvature) => new(

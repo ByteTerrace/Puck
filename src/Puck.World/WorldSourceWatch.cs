@@ -3,7 +3,7 @@ using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 using Puck.Commands;
 using Puck.Hosting;
-using Puck.Transpiler.Modules;
+using Puck.Assets;
 using Puck.World.Transpiler.Composition;
 
 namespace Puck.World;

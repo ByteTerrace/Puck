@@ -104,6 +104,7 @@ public static partial class WorldDocumentEmitter {
     // of the same name takes an ordinal so each generated world keeps its own name.
     // A world declaration's own name already heads every world its tests generate, so it brings them unqualified.
     private static void HoistModuleTests(CallExpressionNode call, DocumentScope scope, DocumentScope? invocation, string instance, bool qualify = true) {
+        if (scope.Annotations.GetValueOrDefault(key: "IncludeTests") is false) { return; }
         if (invocation is null) {
             return;
         }
@@ -308,6 +309,7 @@ public static partial class WorldDocumentEmitter {
     );
 
     private static IReadOnlyList<WorldTestWorld> LowerTests(JsonObject? document, IReadOnlyList<TestWorldSubject>? composition, DocumentScope scope, string stem) {
+        if (scope.Annotations.GetValueOrDefault(key: "IncludeTests") is false) { return []; }
         var tests = GetOrCreateTests(scope: scope);
 
         if (tests.Count == 0) {

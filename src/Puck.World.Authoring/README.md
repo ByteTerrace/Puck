@@ -112,7 +112,8 @@ not a requirement to fill every slot.
 ## Canonical form and the creation pin
 
 `CreationCanonicalizer.Canonicalize` validates a creation, normalizes it, and
-serializes the result through `DocumentJsonOptions.Shared`. The pin it reports
+serializes the result through `CreationJsonContext.Document`, the generated
+metadata using `DocumentJsonOptions.Shared`'s spelling. The pin it reports
 is the `ContentPin` of exactly the bytes it returns, and a world's
 `prototypes[].hash`, when authored, must equal it. Canonical form is a fixed
 point: canonicalizing the canonical document, its bytes read back, or the
@@ -652,7 +653,7 @@ does not own a Schema type for (`render`, `rules`, `state`, `dynamics`,
 `cameras`, `views.layouts`, a look row) as raw JSON matching the document's
 own wire spelling, and its caller (the `creation.sculpt` console verb, or
 `puck creation sculpt`) is the one that serializes a `CreationDocument` row
-through `DocumentJsonOptions.Shared` and validates the patched WHOLE
+through `CreationJsonContext.Document` and validates the patched WHOLE
 document through `WorldDefinitionSerialization`/`WorldDefinitionValidator`.
 
 `ICreationSculpt` is one registered generator: `Sculpt(SculptContext)`

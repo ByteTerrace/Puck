@@ -2860,6 +2860,13 @@
     },
     {
       "CoveredBy": [
+        "curvature-spline.binary-round-trip"
+      ],
+      "Id": "Puck.Maths.CompiledCurvatureSpline.Read(System.IO.BinaryReader)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
         "curvature-spline.arc-length-table",
         "curvature-spline.arc-station-oracle",
         "curvature-spline.deterministic-recompile",
@@ -2885,6 +2892,13 @@
         "curvature-spline.evaluate-raw-station-boundaries"
       ],
       "Id": "Puck.Maths.CompiledCurvatureSpline.TotalLengthRaw",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "curvature-spline.binary-round-trip"
+      ],
+      "Id": "Puck.Maths.CompiledCurvatureSpline.Write(System.IO.BinaryWriter)",
       "State": "covered"
     },
     {

@@ -7,6 +7,15 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 public sealed class WorldStateDocumentValuesLawTests {
+    private sealed class SpanHolder {
+        public ReadOnlySpan<int> Numbers => [1, 2];
+        public DocumentIdentifier Identifier { get; init; } = Bound();
+    }
+
+    [Fact]
+    public void NonBoxablePropertiesDoNotHideTheGraphsBoundValues() =>
+        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: new SpanHolder()));
+
     private static DocumentIdentifier Bound(string reference = "state.label") =>
         JsonSerializer.Deserialize<DocumentIdentifier>(json: JsonSerializer.Serialize(value: reference))!;
     private static WorldDefinition Source() => new(
