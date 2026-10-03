@@ -1,0 +1,224 @@
+{
+  "id": "sky-environment",
+  "title": "Fog in-scatters the sky's gradient from the residency's environment map: before a bright disc it reads the gradient alone, the composite evaluates no sky, and a still sky renders its map once",
+  "binding": "The positive leg boots an offscreen 128x128 native view, cadence off so every frame renders every pass, looking into the core of a sun disc sixteen times as bright as the sky, whose glow saturates every sky pixel about it, through a black unlit sphere of radius ten fifty units away under fog of density 0.1, over a uniform mid-grey gradient. The sphere is fogged to about 98 percent of the sky its pixels look into, and the composite reads that sky from the residency's environment map, which holds the sky's gradient and never a body: every pixel of a box in the sphere's interior, straight in front of the disc, reads the gradient's grey through the fog (code 127 of 255, within 0.48 to 0.515 and a code), where a map that held the disc would saturate it. The composite's line in world.counters gpu counts no sky evaluation although every sphere pixel fogs, and the residency's environment pass, after the upload that rendered the map once, reads skipped. The discriminating leg turns the fog off, so the sphere shows its own black and the box falls below the grey, while the composite still evaluates no sky and the map still stands.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sky-environment/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "fog-before-the-disc-is-the-skys-field-runs",
+        "capture": "fog.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.4,
+          0.6,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.48,
+          0.48,
+          0.48,
+          1
+        ],
+        "maximum": [
+          0.515,
+          0.515,
+          0.515,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "response",
+        "name": "the-frames-counts",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "composite-sky",
+            "field": "sky.evaluations",
+            "line": "work sdf.world$composite"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-composite-evaluates-no-sky",
+        "operator": "equal",
+        "left": {
+          "value": "composite-sky"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "line",
+        "name": "a-still-sky-renders-its-environment-once",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "  work environment skipped",
+        "present": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sky-environment/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.cadence",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "fog-before-the-disc-is-the-skys-field-runs",
+        "capture": "fog.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.4,
+          0.6,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.48,
+          0.48,
+          0.48,
+          1
+        ],
+        "maximum": [
+          0.515,
+          0.515,
+          0.515,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "response",
+        "name": "the-frames-counts",
+        "stream": "stdout",
+        "verb": "world.counters",
+        "occurrence": 1,
+        "count": 2,
+        "extract": [
+          {
+            "name": "composite-sky",
+            "field": "sky.evaluations",
+            "line": "work sdf.world$composite"
+          }
+        ]
+      },
+      {
+        "type": "relation",
+        "name": "the-composite-evaluates-no-sky",
+        "operator": "equal",
+        "left": {
+          "value": "composite-sky"
+        },
+        "right": {
+          "literal": 0
+        }
+      },
+      {
+        "type": "line",
+        "name": "a-still-sky-renders-its-environment-once",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "  work environment skipped",
+        "present": true
+      }
+    ]
+  }
+}

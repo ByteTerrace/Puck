@@ -278,12 +278,12 @@ scale and offset, and the runs compose as the stack does
   grid's uncovered pixels, not its output's.
 - The `composite` pass (`passes/sdf-composite.comp.hlsl`) writes the view's
   color. It adds the fog's glow, the gradient scaled by the surface transport's
-  in-scatter weight, and counts that gradient evaluation in
-  `gpu.sky.evaluations`; zero fog density gives a zero weight and evaluates no
-  gradient. Where the coverage is below one it composes the runs beneath the
+  in-scatter weight, reading the gradient from the residency's
+  [environment map](#the-environment-map) rather than evaluating it, so its fog
+  counts no `gpu.sky.evaluations`; zero fog density gives a zero weight and
+  reads no map. Where the coverage is below one it composes the runs beneath the
   lit image, filtered from the texels the sky evaluated (or evaluated in place,
-  and counted separately from the fog, where it evaluated none beside the
-  pixel), the disc and the stars evaluated at the pixel so they stay sharp, and
+  and counted, where it evaluated none beside the pixel), the disc and the stars evaluated at the pixel so they stay sharp, and
   puts the lit image over them by its coverage, so a silhouette blends toward
   the full sky at its pixel. The bounded media integrate last, over each share
   of the pixel separately: the surface share up to the surface transport's
@@ -293,6 +293,36 @@ An unauthored world renders the default look: the two-stop gradient and fog
 `SdfSky` starts from, read like any authored sky. A debug view's lit image is
 its whole picture, so it is not fogged, the sky evaluates nothing and the
 composite passes it through.
+
+### The environment map
+
+A residency keeps one environment map and its coefficients for its sky, however
+many views read it (`SdfWorldTables.SkyEnvironment.cs`, CPU reference
+`SdfSkyEnvironment`). The map is 64 by 64 texels over the octahedral projection
+the radiance cache uses, the pole at +y, each texel the gradient at its centre's
+direction as four half floats: the layer the fog in-scatters. No body enters it,
+so a bright sun disc never smears into the fog in front of it. The coefficients
+are the map's nine second-order spherical harmonics per colour channel, each
+texel weighted by its solid angle and the sums scaled so the weights total 4π.
+
+The residency's upload, the one submission a frame that every view of the
+residency follows, renders both in its `environment` pass
+(`passes/sdf-sky-environment.comp.hlsl`, one invocation a texel, then
+`passes/sdf-sky-environment-reduce.comp.hlsl`, one group summing in a fixed
+order), and only when the frame's gradient differs from the one the map holds
+while the fog reads it. A still sky renders the map once; every later upload
+records the pass as skipped, with no evaluation and no dispatch. A body, the
+stars, the twinkle, the clouds and the fog's density leave the map as it is. A
+refresh counts 4,096 `gpu.sky.evaluations` under the residency's
+`environment` pass. One copy serves every frame in flight, because the views
+that read it are queued before the upload that rewrites it, and that upload's
+first barrier orders their reads before its writes.
+
+The composite filters the four texels about the pixel's direction bilinearly,
+reading a tap past an edge from the texel the octahedral fold puts there. It
+reads the default look within half a display code in every direction; a
+gradient whose stops lie closer together than a texel's span, about 2.8°, is
+smoothed over that texel.
 
 ### Surface transport
 
@@ -325,7 +355,8 @@ combine); the temporal path sums it with the same Gaussian weights and
 reprojects it with the same history weights. The composite then adds `G` times
 the resolved weight and the sky runs times one minus the resolved coverage, so a
 pixel's fog is its samples' fog, exactly, whatever the footprint. The gradient
-is evaluated once at the output pixel's own direction, as the sky's runs are.
+is read once at the output pixel's own direction, from the environment map, as
+the sky's runs are read from their images.
 
 A bounded medium does not blend the same way, because whether it lies in front of
 a surface depends on that surface's distance. The composite therefore splits the

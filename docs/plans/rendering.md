@@ -2277,8 +2277,9 @@ the alternatives it was chosen over, are in
 - **What a world shares is already shared.** One `SdfWorldResidency` serves
   every view of a world (the seats, every camera view, every routed window onto
   a live local endpoint), and the brick pool is a residency-owned buffer that
-  `sdf.bricks` publishes to every view through a buffer edge. P18 plans one
-  `sky.environment` instance per world that every view of it reads.
+  `sdf.bricks` publishes to every view through a buffer edge. The sky's
+  environment map and its coefficients are one pair a residency keeps, which
+  its upload renders and every view of it reads through the World set (P18-5).
 - **The CPU can answer every transport question exactly.** `SdfFieldEvaluator`
   casts rays (`Raycast`), tests segments (`LineOfSight`, which folds a march
   that gives up into an obstruction) and reads distances, materials and
@@ -2335,14 +2336,14 @@ spends nothing updating the cache; a view that renders still pays only for its
 apply's reads.
 
 ```text
-upload → sky.environment → light view (depth only, cycling its slots and regions)
+upload (the sky's environment with it) → light view (depth only, cycling its slots and regions)
        → indirect (classify → trace → shade)
        → each view: mask → beam → cull-args → mesh → primary → surface → ambient → shadow
                     → views (applies the cache) → resolve → sky → composite
 ```
 
-`indirect` is an instance of its own per residency, as `sky.environment` is
-per world, ordered before the views that read it by a buffer edge, as
+`indirect` is an instance of its own per residency, ordered before the views
+that read it by a buffer edge, as
 `sdf.bricks`'s brick pool reaches them today. It exists only while some view
 of its residency has indirect light on; with none it is absent from the graph,
 so it records nothing and holds no memory. Its parts:
@@ -2626,7 +2627,7 @@ bounce and the computed one are never added together.
     session, a routed window, an infinity view) emits; a screen showing a
     camera view of its own world does not, an explicit rule against recursive
     views rather than a claim about real displays.
-  - *Sky:* world exits read `sky.environment`'s map in the ray's direction, so
+  - *Sky:* world exits read the residency's environment map in the ray's direction, so
     with the sky source on the cache holds sky light occluded by the world, and
     the views pass applies it in place of the unoccluded harmonic ambient. With
     the sky source off the view keeps the harmonic ambient and the cache holds
@@ -3082,7 +3083,7 @@ re-record explained in the same change.
      shadow-direction frame, nothing on a completed still world, and K + F
      slots charged during a fade.
 6. **G6, the sky through the cache.** After G4 and P18-9.
-   - Delivers: world exits reading `sky.environment`'s map; the `sky` source,
+   - Delivers: world exits reading the residency's environment map; the `sky` source,
      which when on replaces the harmonic ambient at the views pass and at hits;
      a sky change reaching the cache as lighting-visible; a lighting-visible
      sky `view` layer lighting the world through the map.
@@ -3181,7 +3182,7 @@ re-record explained in the same change.
   to the same declarations. G4 reads the light record P18-4 generates and walks
   today's one shadow light; P18-7's slots and fades reach the light view in G5,
   which also needs P18-6's change classes and signatures. G6 needs P18-9's
-  `sky.environment`; until then the sky source is absent, a view keeps its
+  harmonic ambient and the map's lighting-visible layers; until then the sky source is absent, a view keeps its
   ambient as its own term, and ambient is never a bounce source. G7's infinity
   views follow P18-11. P18-13's light-motion rule is the light view's refresh
   rule, one rule with two readers. G4 applies to P18-5's premultiplied lit
@@ -5549,8 +5550,8 @@ place:
   ceilings (P15-1). Besides the host-side API calls, every SDF compute pass's
   kernels count their march steps and texels written (`gpu.march.steps`,
   `gpu.texels.written`) into the node's kernel counters, and the upload counts
-  its fillers, brick writes and region copies under passes of their own
-  (`fillers`, `bricks`, `upload`).
+  its fillers, brick writes, region copies and the sky's environment under
+  passes of their own (`fillers`, `bricks`, `upload`, `environment`).
 - A converging capture freezes the armed tick's first presentation snapshot:
   animation, camera followers and pass-block inputs remain fixed while only
   its jitter index advances. Dependency frames that are not ready do not count,
@@ -6397,8 +6398,9 @@ clocks and its duplicates.
   the runs they compose in. Views shades hits only, into a lit image with its
   coverage; the `sky` pass evaluates the field runs only where coverage is below
   one, and the `composite` pass puts the lit image over the runs and fogs and
-  integrates the bounded media. The fog still blends toward the gradient alone,
-  until the environment map gives it the sky's in-scattered colour.
+  integrates the bounded media. The fog in-scatters the gradient, which the
+  composite reads from the residency's environment map rather than evaluating
+  it at each fogged pixel.
 - **Re-marched for sky-only changes.** The cadence (`SdfWorldTables.Cadence.cs`)
   hashes the twinkle tick and the pass block, cloud offsets included, so a
   drifting cloud or a twinkling star re-renders every pass of the view. A
@@ -6519,9 +6521,9 @@ the ray distance of the nearest render-extent sample it read. `sky` and
 `composite` then run at the output extent and read only that surface, never the
 render-extent record. Before P15-4 they run at the render extent and read the
 visibility record's ray distance and `lit` directly. Once per change of a
-lighting-visible sky value, a shared `sky.environment` instance per world
-renders the environment map and its ambient coefficients, which every view of
-that world reads.
+lighting-visible sky value, the residency's upload renders the environment map
+and its ambient coefficients (its `environment` pass), one pair every view of
+that residency reads.
 
 **Authoring, before and after.** Today a day-night courtyard is spelled in
 lanes a key must address by slot and index:
@@ -6761,11 +6763,12 @@ target; each step settles its own vocabulary rows in
   the environment map in the pixel's direction. The silhouette edge blends
   toward the full sky colour at the pixel, because `composite` has it, rather
   than the gradient alone.
-- **Environment lighting samples the same sky.** `sky.environment` renders the
-  lighting-visible layers, bodies excluded, into a 64 by 64 octahedral map and
-  reduces it to nine second-order spherical-harmonic coefficients per colour
-  channel, once per change of a lighting-visible value (a value of a layer the
-  environment map draws). A change whose irradiance differs from the rendered
+- **Environment lighting samples the same sky.** The residency's `environment`
+  pass renders the lighting-visible layers, bodies excluded, into a 64 by 64
+  octahedral map and reduces it to nine second-order spherical-harmonic
+  coefficients per colour channel, once per change of a lighting-visible value
+  (a value of a layer the environment map draws); until P18-8 gives layers a
+  visibility, the gradient is that layer (P18-5). A change whose irradiance differs from the rendered
   coefficients by less than one 8-bit display code in every direction counts as
   no change, so a slow day cycle re-lights in display-code steps rather than on
   every tick; the skipped re-renders are counted. Ambient is the
@@ -6803,8 +6806,8 @@ target; each step settles its own vocabulary rows in
     a body's disc, the atmosphere, the media). It runs `sky` and `composite`;
     nothing is marched, shaded or reconstructed.
   - **Lighting-visible**: a value the environment map draws, or a light's
-    colour or intensity. It runs `sky.environment` (unless the display-code
-    rule above counts it unchanged), `views`, `resolve` when reconstruction is
+    colour or intensity. It runs the residency's `environment` pass (unless the
+    display-code rule above counts it unchanged), `views`, `resolve` when reconstruction is
     on, `sky` and `composite`. The march group and `shadow` stand. With
     reconstruction on, `resolve` blends the re-shaded image into history
     through its rectification without new jitter samples; the identity and
@@ -7187,9 +7190,53 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      runs' texels are the `sky` pass's row, and per-run and per-layer rows wait for
      the detail labels P18-7 adds. A pixel covered with all its neighbours reads
      zero field evaluations in the sky pass (`SdfSkyEvaluationDeviceLawTests`).
-     Composite counts each gradient evaluation for surface fog and each in-place
-     field fallback; both can occur at one pixel. Zero fog density evaluates no
-     fog gradient (`SdfSkySamplingLawTests`).
+     Composite counts each in-place field fallback; its fog evaluates no sky
+     (`SdfSkySamplingLawTests`).
+   - Landed, the environment (owner decision I, moved here from P18-9): one
+     environment map and its coefficients a residency keeps for its resolved
+     sky (`SdfWorldTables.SkyEnvironment.cs`; CPU reference
+     `SdfSkyEnvironment`), rendered by the residency's upload, the one
+     submission a frame every view of the residency follows, in its
+     `environment` pass. `passes/sdf-sky-environment.comp.hlsl` writes the
+     gradient at each texel's centre direction of a 64 by 64 octahedral map
+     (the radiance cache's projection, pole at +y; four half floats a texel),
+     and `passes/sdf-sky-environment-reduce.comp.hlsl`, one group, reduces it
+     to nine second-order spherical-harmonic coefficients per colour channel,
+     each texel weighted by its solid angle and the sums scaled so the weights
+     total 4π, in a fixed order, so a device writes the same bytes on every
+     run. The pass renders only on an upload whose gradient differs from the
+     one the map holds while the fog reads it (a positive density): a still sky
+     renders once and the pass then reads skipped, with no evaluation,
+     dispatch or barrier, and a body, the stars, the twinkle, the clouds, the
+     fog's density and the studio horizon leave the map as it is; an installed
+     kernel reload renders it again. Every view's composite binds the map in
+     the World set and reads the fog's in-scattered sky from it, the four
+     texels about the pixel's direction filtered bilinearly across the
+     octahedral fold, so the fog evaluates no sky and the composite's
+     `gpu.sky.evaluations` are its fallbacks alone. One copy serves every
+     frame in flight: the views that read it are queued before the upload that
+     rewrites it, whose first barrier orders their reads before its writes, as
+     the brick pool's does. The map holds the gradient alone, the one layer the
+     fog in-scattered before it, until P18-8 gives layers a visibility and the
+     map draws the lighting-visible ones; no body ever enters it, so a bright
+     disc never smears into the fog before it. A lookup reads the default look
+     within half a display code in every direction; a gradient whose stops lie
+     closer than a texel's span (about 2.8°) is smoothed over a texel there. The
+     coefficients have no reader until P18-9, which keeps the lighting
+     consumers and the authoring; P18-6's change classes adopt the same
+     refresh.
+     The payload is 32,768 bytes of map and 144 of coefficients, 32,912 a
+     residency however many views read it, where the decision priced the pair
+     as three frame slots of a graph instance's outputs, 98,736 bytes; no graph
+     instance, node or edge carries it, so it adds no graph overhead. A refresh
+     counts 2 dispatches, 2 pipeline binds, 4 descriptor-set binds, 8 buffer
+     barriers, the kernel counters' clear and their 96-byte copy, 4,096 sky
+     evaluations and 4,105 texels written, under the residency's
+     `environment` pass; construction adds a frame set, a pass set per ring
+     slot (13 descriptor writes), two blocks (128 host-visible bytes), and a
+     counter and a readback buffer of 96 bytes per ring slot. The device law,
+     the `sky-environment` canary, parity's re-record and the counters
+     ceilings await a GPU run.
    - Delivers: `views` shading hits only into `lit`, premultiplied, with
      coverage in its alpha; `sky` evaluating the sky's field runs where
      coverage is below one, with a one-pixel dilation, into their scale and
@@ -7221,11 +7268,30 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `multiply` and `screen` field layers interleaved with point layers) (red
      leg: composing the field runs before the point layers dims no star); a
      `sky-coverage` canary holds a silhouette edge's blend to the sky at its
-     pixel; parity holds on both backends after its explained re-record.
+     pixel; parity holds on both backends after its explained re-record. For
+     the environment: `SdfSkyEnvironmentLawTests` hold the texels' solid angles
+     to 4π within 1e-6, a constant sky's coefficients to its colour times
+     √(4π) within 1e-6 and every other under 2e-3 of its colour, the default
+     look's linear gradient to its analytic first two coefficients within 1e-3,
+     a lookup of the default look to the gradient within half a display code in
+     every direction, a field linear in the direction to within 0.007 where a
+     filter tap reaches past an edge, read across the octahedral fold, and fog toward a disc fifty times the sky to the gradient
+     within the same bound; `SdfWorldTablesWorkLawTests` hold a still sky to
+     one render, only a gradient move to another, an unfogged sky to none until
+     its fog reads the map, and an installed reload to one more, with the
+     refresh's exact counts; `SdfSkySamplingLawTests` hold the composite's fog
+     to the map with no evaluator and the map's kernel to one counted gradient
+     evaluation a texel and no body; `SdfSkyEnvironmentDeviceLawTests` hold
+     both backends' map within a half-float step of the reference, their
+     coefficients within 1e-4 of the reference's projection of it, their
+     counts, and the same bytes on a second run; the `sky-environment` canary
+     holds fog before a bright disc to the gradient's grey, the composite to no
+     sky evaluation and a still sky's environment pass to skipped.
    - Counted-cost gate: `gpu.sky.evaluations` includes about (1 − h) × P field
-     evaluations per view, the dilated edge, composite fallbacks and fog gradients
-     at output resolution. The committed ceilings require a recording that
-     includes the composite's fog work; each pass reports its own row. The
+     evaluations per view, the dilated edge and composite fallbacks at output
+     resolution, and 4,096 in the residency's `environment` pass on the upload
+     that renders the map and none on any other; the composite's fog counts
+     none. Each pass reports its own row. The
      surface transport adds no storage: its word replaces the surface distance's,
      and the history surface keeps three words by holding the distance and the
      gathered weight as half floats. An edge pixel whose media reach past its
@@ -7238,7 +7304,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      its state when a frame fails before successful submission. Installed cadence
      metadata is counted in the graph's CPU memory rows. The SDF change
      classes, sky/composite scheduling and temporal-history integration below
-     remain to be connected and verified.
+     remain to be connected and verified. The residency's `environment` pass
+     already renders only on a change of the map's layers (P18-5); the change
+     classes adopt that refresh rather than a second one.
    - Delivers: the pass-group signatures, retained fragment resources, the
      planner's barriers for a standing pass, the rule that a pass stands only
      when its group signature and its inputs do, and the four change classes
@@ -7254,7 +7322,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      edit, which each hit's transmittance in the lit image carries, to `views`,
      `resolve`, `sky` and `composite`; a keyed light
      colour to `views`, `sky` and `composite` (and, from P18-9, a keyed colour
-     on a lighting-visible layer to those and `sky.environment`); an orbiting
+     on a lighting-visible layer to those and the `environment` pass); an orbiting
      shadowed body to those and `shadow` (red leg:
      a lighting-visible change that skips `views` fails, and a camera move
      runs every pass); `RenderGraphRuntimeLawTests` hold a standing pass's
@@ -7267,8 +7335,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `low`, and the mesh pass is a draw that a meshless frame skips), and adds
      `ambient`, `shadow` and the mesh draw at `high`. A visual-only frame runs 2
      (`sky`, `composite`). A lighting-visible frame runs 3 (`views`, `sky`,
-     `composite`), plus `sky.environment`'s two (the map and its reduction)
-     when it re-renders and `resolve` when reconstruction is on. A
+     `composite`), plus the residency's `environment` pass's two (the map and
+     its reduction) when it re-renders and `resolve` when reconstruction is on. A
      shadow-direction frame adds `shadow` at a tier that shadows. Each class
      records required zeros for the march group, and the visual-only and
      lighting-visible classes for `shadow`.
@@ -7333,16 +7401,17 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      tier, and clouds at `low` at a quarter or less of their `high` hashes per
      covered pixel.
 9. **P18-9, lighting derived from the sky.**
-   - Delivers: `sky.environment` (the environment map and its coefficients,
-     re-rendered only on a lighting-visible change larger than one display
-     code, with the skipped re-renders counted), ambient from the
+   - Delivers: the display-code rule on the `environment` pass P18-5 lands (the
+     map and its coefficients re-rendered only on a lighting-visible change
+     larger than one display code, with the skipped re-renders counted, where
+     P18-5 re-renders on any change of the map's layers), ambient from the
      coefficients, reflection from the map plus analytic `panel` layers,
      `render.environment`'s `ambient` and `reflection` gains, and the moth
      studio and mirror worlds' softboxes rewritten as `panel` layers.
    - Deletes: the hemisphere light kind (`WorldRenderLight.Hemisphere`,
      `SDF_LIGHT_HEMISPHERE`, its defaults), the horizon rows, the softboxes
      section and `worldStudioReflection`'s separate horizon.
-   - Touches: `src/Puck.Shaders/Graph` (the package), `shade/sdf-lighting.hlsli`,
+   - Touches: `SdfWorldTables.SkyEnvironment.cs`, `shade/sdf-lighting.hlsli`,
      `shade/sdf-light.hlsli`, `WorldRenderDefaults`, the shipped worlds,
      `tests/Puck.Parity`.
    - Done when: a law holds the coefficients of a constant sky to its
@@ -7354,8 +7423,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      camera-only change re-renders the map); `ambient-from-sky` holds a
      surface's ambient changing with a keyed sky colour; parity re-recorded,
      explained.
-   - Counted-cost gate: `sky.environment`'s 4,096 texel evaluations and one
-     reduction dispatch per sky change, zero on a still sky.
+   - Counted-cost gate: the `environment` pass's 4,096 texel evaluations and
+     one reduction dispatch per sky change crossing a display code, zero on a
+     still sky.
 10. **P18-10, the atmosphere.**
     - Delivers: `render.atmosphere` with fog, height fog, haze that scatters
       toward light-casting bodies, a medium (water, with its own extinction and
@@ -7468,10 +7538,12 @@ view at the floor tier's half scale), h the fraction of them that hit, and L the
 fraction in live tiles, at least h.
 
 - **Sky evaluations.** The sky pass evaluates about (1 − h) × P field runs plus
-  the dilated edge. Composite adds its in-place fallbacks and one gradient
-  evaluation per fogged output pixel. A covered pixel can therefore count a fog
-  gradient even when it needs no sky run. Cost comparisons include both passes;
-  a view that hits nothing and needs no fallback evaluates P field runs.
+  the dilated edge. Composite adds only its in-place fallbacks: its fog reads
+  the residency's environment map, whose 4,096 evaluations the upload pays once
+  per change of the map's layers, shared by every view (P18-5). Before it, the
+  composite paid one gradient evaluation per fogged output pixel, 110,135 a
+  frame on the 1920 by 1080 counters workload. Cost comparisons include both
+  passes; a view that hits nothing and needs no fallback evaluates P field runs.
 - **Visual-only frames** (a drift, a twinkle, a camera-only keyed colour, an
   atmosphere edit, a moving volume). Today every pass the view runs: 7 SDF
   compute dispatches for a meshless view at the floor tier, 9 and the mesh draw
@@ -7479,7 +7551,7 @@ fraction in live tiles, at least h.
   steps.
 - **Lighting-visible frames** (a keyed light or lighting-visible colour). Today
   the same 7 or 9 dispatches and the march. After P18-6, 3 (`views`, `sky`,
-  `composite`), plus `sky.environment`'s 2 when a change crosses a display code
+  `composite`), plus the `environment` pass's 2 when a change crosses a display code
   and `resolve` with reconstruction on, and zero march steps.
 - **Bounded media.** Today a single volume re-renders every view every frame.
   After P18-2 and P18-6, `composite` alone, and only on frames whose presented
@@ -7502,9 +7574,9 @@ fraction in live tiles, at least h.
   slot about as much again; the floor tier stays at zero. With P18-13 each
   secondary slot falls to about a quarter plus its rejections.
 - **Environment lighting.** 4,096 texel evaluations and one reduction per
-  lighting-visible change larger than a display code, zero on a still sky or a
-  visual-only change; one harmonic evaluation per lit pixel in place of the
-  hemisphere term.
+  lighting-visible change (from P18-9, one larger than a display code), zero on
+  a still sky or a visual-only change; one harmonic evaluation per lit pixel in
+  place of the hemisphere term.
 - **Shadow fades.** At most F fade slots beside the K held ones, and fade slots
   march only while a fade runs: at most 2 slots at `medium` and 3 at `high` on
   any frame.

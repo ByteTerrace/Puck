@@ -22,6 +22,8 @@ public static class SdfWorldInterfaces {
     public static ShaderPipelineParameterLayout ResolveParameters => Recorded.ResolveParameters;
     /// <summary>Gets <see cref="SdfKernelInterfaces.SkyParameters"/> for this build's instruction set.</summary>
     public static ShaderPipelineParameterLayout SkyParameters => Recorded.SkyParameters;
+    /// <summary>Gets <see cref="SdfKernelInterfaces.EnvironmentParameters"/> for this build's instruction set.</summary>
+    public static ShaderPipelineParameterLayout EnvironmentParameters => Recorded.EnvironmentParameters;
     /// <summary>Gets <see cref="SdfKernelInterfaces.World"/> for this build's instruction set.</summary>
     public static ShaderInterface World => Recorded.World;
     /// <summary>Gets <see cref="SdfKernelInterfaces.BrickBakeParameters"/> for this build's instruction set.</summary>
