@@ -37,7 +37,6 @@ public sealed partial class SdfSkySamplingLawTests {
         // Counting at the callee records both a fog gradient and a fallback at the same pixel, once each.
         Assert.Matches(expectedRegexPattern: @"float3 sdfSkyGradient\(float3 direction\) \{\s*puckCountDetail\(0u, 0u, 0u, 1u, 0u, 0u\);",
             actualString: CodeOf(path: "shade/sdf-sky.hlsli"));
-        foreach (var source in sources) { Assert.DoesNotContain(actualString: source.Code, expectedSubstring: "puckCountSky("); }
     }
     [Fact]
     public void DisabledFogDoesNotEvaluateTheGradient() {

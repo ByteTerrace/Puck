@@ -73,14 +73,6 @@ void puckCountWork(uint steps, uint texels) {
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
     }
 }
-// Adds an invocation's sky evaluations to its pass's row: the wave sums them, and its first active lane adds the sum.
-void puckCountSky(uint evaluations) {
-    uint waveEvaluations = WaveActiveSum(evaluations);
-
-    if (WaveIsFirstLane()) {
-        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
-    }
-}
 // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
 // Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {

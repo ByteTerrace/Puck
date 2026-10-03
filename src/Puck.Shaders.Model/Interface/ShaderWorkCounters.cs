@@ -9,8 +9,7 @@ namespace Puck.Shaders;
 /// their node's kernel counters (<see cref="GpuKernelCounters"/>): the pass's row and first named detail row, and the frame
 /// slot's counter buffer, bound read-write in the pass group. Every generated include (<see cref="ShaderInterfaceHlsl"/>)
 /// declares the counting functions: <c>puckCountWork(steps, texels)</c>, which sums a wave's counts and adds them with its
-/// first active lane, <c>puckCountSky(evaluations)</c>, which does the same for the sky's evaluations, and
-/// <c>puckCountFragmentWork(steps, texels)</c>, which does the same for a fragment stage over the
+/// first active lane, and <c>puckCountFragmentWork(steps, texels)</c>, which does the same for a fragment stage over the
 /// wave's lanes that are not helper lanes, since a helper lane's atomics have no effect. <c>puckCountDetail</c> adds to a
 /// named row per active invocation, including divergent layer branches. An interface that declares all
 /// members gets their counting bodies, laid out as <see cref="GpuKernelCounters"/> reads the row back from the constants
@@ -75,8 +74,6 @@ public static class ShaderWorkCounters {
                 // are declared empty, and a kernel written for a counting package compiles here unchanged.
                 void puckCountWork(uint steps, uint texels) {
                 }
-                void puckCountSky(uint evaluations) {
-                }
                 void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
                 }
                 void puckCountFragmentWork(uint steps, uint texels) {
@@ -126,14 +123,6 @@ public static class ShaderWorkCounters {
 
                     puckAddWork((row + PuckWorkStepsWord), waveSteps);
                     puckAddWork((row + PuckWorkTexelsWord), waveTexels);
-                }
-            }
-            // Adds an invocation's sky evaluations to its pass's row: the wave sums them, and its first active lane adds the sum.
-            void puckCountSky(uint evaluations) {
-                uint waveEvaluations = WaveActiveSum(evaluations);
-
-                if (WaveIsFirstLane()) {
-                    puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
                 }
             }
             // Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
