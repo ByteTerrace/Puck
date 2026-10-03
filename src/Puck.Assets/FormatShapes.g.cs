@@ -11,8 +11,6 @@ namespace Puck.Assets {
         public const string AutomaticIntegerSequenceCodecMagic = "ac9a04238960cd51";
         /// <summary>The shape fingerprint of <c>AutomaticIntegerSequenceCodec.Version</c>, declared in <c>src/Puck.Assets/AutomaticSequenceCodec.cs</c>.</summary>
         public const string AutomaticIntegerSequenceCodecVersion = "ac9a04238960cd51";
-        /// <summary>The shape fingerprint of <c>WasmBinaryFormat.Magic</c>, declared in <c>src/Puck.Assets/WasmBinaryFormat.cs</c>.</summary>
-        public const string WasmBinaryFormatMagic = "efcac5ab09c64267";
     }
 }
 

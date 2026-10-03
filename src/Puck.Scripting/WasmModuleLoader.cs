@@ -59,7 +59,7 @@ public sealed class WasmModuleLoader {
     // and a memory past the store's ceiling is known without instantiating anything. WAT text is converted to its
     // binary first, which parses but neither compiles nor instantiates.
     private CompiledModule Compile(ReadOnlyMemory<byte> content, string name) {
-        var binary = (content.Span.StartsWith(value: WasmBinaryFormat.Magic)
+        var binary = (content.Span.StartsWith(value: WasmBinaryFormat.WasmMagic)
             ? content.ToArray()
             : Module.ConvertText(wat: Encoding.UTF8.GetString(bytes: content.Span)));
 

@@ -25,7 +25,7 @@ internal sealed class WorldReleaseDeploymentStore(IObjectBlobStore blobs, Object
     IWorldReleaseSecretVersions secrets) {
     private const string Schema = "puck.world.release-deployment.v1";
 
-    private sealed record Reference(string Schema, string Release, string Group, string ContentHash, string SecretVersion);
+    private sealed record Reference(string Schema, string Shape, string Release, string Group, string ContentHash, string SecretVersion);
 
     private ObjectBlobAddress Address(string group, string release) {
         if (
@@ -46,6 +46,9 @@ internal sealed class WorldReleaseDeploymentStore(IObjectBlobStore blobs, Object
         if (bytes.Length > (16 * 1024)) { throw new InvalidDataException(message: "retained deployment reference exceeds its byte budget"); }
         var reference = (JsonSerializer.Deserialize<Reference>(bytes.Span) ?? throw new InvalidDataException(message: "empty retained deployment reference"));
 
+        if (reference.Shape != FormatShapes.WorldReleaseDeploymentStoreSchema) {
+            throw new InvalidDataException(message: $"retained deployment reference shape fingerprint '{reference.Shape}' is not '{FormatShapes.WorldReleaseDeploymentStoreSchema}'");
+        }
         if (
             (reference.Schema != Schema) ||
             (reference.Release != manifest.Identity) ||
@@ -189,6 +192,7 @@ internal sealed class WorldReleaseDeploymentStore(IObjectBlobStore blobs, Object
         if (!readBack.Span.SequenceEqual(other: bytes)) { throw new InvalidDataException(message: "retained deployment secret failed read-back verification"); }
         var reference = Encode(value: new Reference(
             Schema,
+            FormatShapes.WorldReleaseDeploymentStoreSchema,
             manifest.Identity,
             configuration.Group,
             pin,

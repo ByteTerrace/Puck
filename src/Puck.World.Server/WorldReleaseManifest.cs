@@ -18,6 +18,8 @@ public sealed record WorldReleaseManifest {
 
     /// <summary>The manifest schema.</summary>
     [JsonPropertyName("schema")] public string Schema { get; init; } = CurrentSchema;
+    /// <summary>The shape fingerprint of the manifest's layout, which a reader requires before any field is used.</summary>
+    [JsonPropertyName("shape")] public string Shape { get; init; } = FormatShapes.WorldReleaseManifestCurrentSchema;
     /// <summary>Canonical composed world definition pins keyed by stable world identity.</summary>
     [JsonPropertyName("definitions")] public IReadOnlyDictionary<string, string> Definitions { get; init; } = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
     /// <summary>Package-relative source paths for definitions, kept separate from stable world identities.</summary>
@@ -161,6 +163,14 @@ public sealed record WorldReleaseManifest {
             comparisonType: StringComparison.Ordinal
         )) {
             reason = $"unsupported release manifest schema '{manifest.Schema}'";
+            return false;
+        }
+        if (!string.Equals(
+            a: manifest.Shape,
+            b: FormatShapes.WorldReleaseManifestCurrentSchema,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            reason = $"release manifest shape fingerprint '{manifest.Shape}' is not '{FormatShapes.WorldReleaseManifestCurrentSchema}'";
             return false;
         }
         if (!string.Equals(
@@ -312,6 +322,7 @@ public sealed record WorldReleaseManifest {
                 ["peerProtocolContract"] = manifest.PeerProtocolContract,
                 ["persistenceContract"] = manifest.PersistenceContract,
                 ["schema"] = manifest.Schema,
+                ["shape"] = manifest.Shape,
                 ["sourceRevision"] = manifest.SourceRevision,
             };
 

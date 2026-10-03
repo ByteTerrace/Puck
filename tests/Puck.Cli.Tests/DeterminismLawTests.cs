@@ -145,6 +145,18 @@ public sealed class DeterminismLawTests {
         Assert.Contains(actualString: error, expectedSubstring: "not the version token puck.determinism.stream.v1");
         Assert.False(condition: DeterminismStream.TryParse(error: out error, stream: out _, text: text.Replace(newValue: "\r\n", oldValue: "\n")));
     }
+    // The first line names the version token, then the shape fingerprint the ledger records; the same version under another
+    // shape is refused by the fingerprint's name and never compared.
+    [Fact]
+    public void AStreamOfTheSameVersionAndAnotherShapeIsRefusedByItsFingerprint() {
+        var text = new DeterminismStream(ManifestPin: Pin, Scenarios: [Record(requestTick: 10)]).Render();
+        var recorded = FormatLedgerShapes.Of(id: "DeterminismStream.Version");
+
+        Assert.StartsWith(actualString: text, expectedStartString: $"{DeterminismStream.Version} {recorded}\n");
+        Assert.True(condition: DeterminismStream.TryParse(error: out _, stream: out _, text: text));
+        Assert.False(condition: DeterminismStream.TryParse(error: out var error, stream: out _, text: text.Replace(newValue: "0000000000000000", oldValue: recorded)));
+        Assert.Contains(actualString: error, expectedSubstring: "names shape fingerprint '0000000000000000'");
+    }
     [Fact]
     public void StreamsOfAnotherManifestOrScenarioListAreRefusedByNameNotCompared() {
         var record = Record(requestTick: 10);

@@ -26,9 +26,9 @@ namespace Puck.Cli.Automation {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReleaseExerciseResult.CurrentSchema</c>, declared in <c>src/Puck.Cli/Automation/WorldReleaseExerciseCommand.cs</c>.</summary>
-        public const string WorldReleaseExerciseResultCurrentSchema = "d20dc5a8a4e1675a";
+        public const string WorldReleaseExerciseResultCurrentSchema = "7af050f784d473c5";
         /// <summary>The shape fingerprint of <c>WorldReleaseQualificationRunner.Marker</c>, declared in <c>src/Puck.Cli/Automation/WorldReleaseQualificationRunner.cs</c>.</summary>
-        public const string WorldReleaseQualificationRunnerMarker = "2edc0a60cac45177";
+        public const string WorldReleaseQualificationRunnerMarker = "2b8f77ee9173c72c";
     }
 }
 
@@ -37,7 +37,7 @@ namespace Puck.Cli.Azure {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReleaseDeploymentStore.Schema</c>, declared in <c>src/Puck.Cli/Azure/WorldReleaseDeploymentStore.cs</c>.</summary>
-        public const string WorldReleaseDeploymentStoreSchema = "fcc36d37d6a8da14";
+        public const string WorldReleaseDeploymentStoreSchema = "0ae69dba0c02136c";
     }
 }
 
@@ -64,9 +64,9 @@ namespace Puck.Cli.Determinism {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>DeterminismManifest.Schema</c>, declared in <c>src/Puck.Cli/Determinism/DeterminismManifest.cs</c>.</summary>
-        public const string DeterminismManifestSchema = "5ec83ee1b8ac9f0f";
+        public const string DeterminismManifestSchema = "9e42b4cbef589ac9";
         /// <summary>The shape fingerprint of <c>DeterminismStream.Version</c>, declared in <c>src/Puck.Cli/Determinism/DeterminismStream.cs</c>.</summary>
-        public const string DeterminismStreamVersion = "1322d9ae38aea843";
+        public const string DeterminismStreamVersion = "e998f8680234aaa2";
     }
 }
 
@@ -95,6 +95,6 @@ namespace Puck.Cli.Qualification {
         /// <summary>The shape fingerprint of <c>QualificationReport.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/QualificationReport.cs</c>.</summary>
         public const string QualificationReportSchemaVersion = "d38ccf63aeb317b9";
         /// <summary>The shape fingerprint of <c>ReleaseProfile.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/ReleaseProfile.cs</c>.</summary>
-        public const string ReleaseProfileSchemaVersion = "63419c074d8a1095";
+        public const string ReleaseProfileSchemaVersion = "cc1167861be14b56";
     }
 }

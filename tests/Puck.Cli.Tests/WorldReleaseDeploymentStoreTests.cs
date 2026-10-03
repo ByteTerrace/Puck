@@ -128,6 +128,58 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
             Token
         ));
     }
+    // The retained reference carries the shape fingerprint the ledger records for its layout; a reference of the same schema
+    // under another shape is refused by the fingerprint's name before it selects a secret version.
+    [Fact]
+    public async Task AReferenceOfAnotherShapeIsRefusedByItsFingerprint() {
+        await Store().SaveAsync(
+            m_manifest,
+            Configuration(),
+            Token
+        );
+
+        var recorded = FormatLedgerShapes.Of(id: "WorldReleaseDeploymentStore.Schema");
+        var file = Assert.Single(
+            collection: Directory.EnumerateFiles(
+            path: m_directory.RootPath,
+            searchOption: SearchOption.AllDirectories,
+            searchPattern: "*.json"
+        ),
+            predicate: static candidate => candidate.Replace(
+            newChar: '/',
+            oldChar: Path.DirectorySeparatorChar
+        ).Contains(value: "/releases/deployments/")
+        );
+        var text = File.ReadAllText(path: file);
+
+        Assert.Contains(
+            actualString: text,
+            expectedSubstring: recorded
+        );
+        Assert.NotNull(@object: await Store().LoadAsync(
+            m_manifest,
+            "official",
+            Token
+        ));
+        File.WriteAllText(
+            contents: text.Replace(
+                newValue: "0000000000000000",
+                oldValue: recorded
+            ),
+            path: file
+        );
+
+        var refusal = await Assert.ThrowsAsync<InvalidDataException>(testCode: () => Store().LoadAsync(
+            m_manifest,
+            "official",
+            Token
+        ));
+
+        Assert.Contains(
+            actualString: refusal.Message,
+            expectedSubstring: "shape fingerprint '0000000000000000'"
+        );
+    }
     [Fact]
     public async Task RestartReadsExactVersionAndOrdinaryStorageContainsNoBootstrapSecret() {
         var configuration = Configuration();

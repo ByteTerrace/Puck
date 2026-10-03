@@ -21,9 +21,14 @@ public sealed record WorldCountersReport(
 ) {
     /// <summary>The document schema tag every well-formed <c>puck.counters.report.v1</c> document carries.</summary>
     public const string SchemaVersion = "puck.counters.report.v1";
+    /// <summary>The shape fingerprint <c>puck formats</c> records for this document, which a writer stamps and a reader
+    /// requires.</summary>
+    public const string CurrentShape = FormatShapes.WorldCountersReportSchemaVersion;
 
     /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
     public string Schema { get; init; } = SchemaVersion;
+    /// <summary>Gets the shape fingerprint of the document's layout — <see cref="CurrentShape"/> for a well-formed document.</summary>
+    public string Shape { get; init; } = CurrentShape;
 }
 /// <summary>The source a report's counts were produced from.</summary>
 /// <param name="Commit">The checkout's <c>HEAD</c> commit.</param>

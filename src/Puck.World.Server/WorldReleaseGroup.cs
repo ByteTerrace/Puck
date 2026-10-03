@@ -37,6 +37,7 @@ public sealed record WorldReleaseGroupRecord {
     [JsonPropertyName("rollbackEligible")] public bool RollbackEligible { get; init; }
     [JsonPropertyName("schema")] public required string Schema { get; init; }
 
+    [JsonPropertyName("shape")] public string Shape { get; init; } = FormatShapes.WorldReleaseGroupStoreSchema;
     [JsonPropertyName("recoveryRoots")] public IReadOnlyDictionary<string, string> RecoveryRoots { get; init; } = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
     [JsonPropertyName("history")] public IReadOnlyList<WorldReleaseGroupHistoryEntry> History { get; init; } = [];
 
@@ -791,6 +792,11 @@ public sealed partial class WorldReleaseGroupStore {
         }
     }
     private static void Validate(WorldReleaseGroupRecord record, string expectedGroup, Guid expectedOwner) {
+        if (!string.Equals(
+            a: record.Shape,
+            b: FormatShapes.WorldReleaseGroupStoreSchema,
+            comparisonType: StringComparison.Ordinal
+        )) { throw new InvalidDataException(message: $"release group record shape fingerprint '{record.Shape}' is not '{FormatShapes.WorldReleaseGroupStoreSchema}'"); }
         if (
             !string.Equals(
             a: record.Schema,
@@ -892,7 +898,20 @@ public sealed partial class WorldReleaseGroupStore {
         using var document = JsonDocument.Parse(bytes.ToArray());
 
         if (document.RootElement.ValueKind != JsonValueKind.Object) { throw new InvalidDataException(message: "release group record must be an object"); }
-        var allowed = new HashSet<string>(comparer: StringComparer.Ordinal) { "schema", "deploymentGroup", "owner", "activeRelease", "previousRelease", "pendingOperationId", "pendingSourceRelease", "pendingTargetRelease", "pendingPhase", "pendingCommitted", "pendingFailure", "recoveryRoots", "admission", "rollbackEligible", "authorityLease", "history", "revision" };
+        // The shape is named before any other member is looked at: a record written under another layout is refused by its
+        // fingerprint, not by whichever member of it this build happens to miss first.
+        if (
+            document.RootElement.TryGetProperty(
+                propertyName: "shape",
+                value: out var shape
+            ) &&
+            ((shape.ValueKind != JsonValueKind.String) || !string.Equals(
+            a: shape.GetString(),
+            b: FormatShapes.WorldReleaseGroupStoreSchema,
+            comparisonType: StringComparison.Ordinal
+        ))
+        ) { throw new InvalidDataException(message: $"release group record shape fingerprint {shape.GetRawText()} is not '{FormatShapes.WorldReleaseGroupStoreSchema}'"); }
+        var allowed = new HashSet<string>(comparer: StringComparer.Ordinal) { "schema", "shape", "deploymentGroup", "owner", "activeRelease", "previousRelease", "pendingOperationId", "pendingSourceRelease", "pendingTargetRelease", "pendingPhase", "pendingCommitted", "pendingFailure", "recoveryRoots", "admission", "rollbackEligible", "authorityLease", "history", "revision" };
         var required = new HashSet<string>(
             collection: allowed,
             comparer: StringComparer.Ordinal

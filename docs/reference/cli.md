@@ -1951,7 +1951,7 @@ The stream (`puck.determinism.stream.v1`) is text with LF line breaks and
 nothing that depends on the host:
 
 ```text
-puck.determinism.stream.v1
+puck.determinism.stream.v1 <the shape fingerprint puck formats records for this layout>
 manifest <the manifest's content pin>
 components <one name per per-tick hash>
 scenario <name> <ticks>
@@ -3442,6 +3442,14 @@ is refused.
 
 An authored document carries no shape field: its schema token and the JSON-schema refusal of an unknown or missing
 member are its shape check, so a document format records a shape in the ledger and nothing writes it into the text.
+
+A machine-written document that the same build reads back carries a `shape` member beside its schema token: the writer
+stamps the constant its project generates, and the reader names a mismatch before it reads another member (the
+determinism stream's first line, the capture and release manifests, the retained deployment reference, the release
+group, receipt snapshot, fixture inventory and recovery root, the counters report, the counterpart attestation). A
+ledger a verb rewrites (`FormatVersions.json`, the canary ceilings and coverage, the ratchet ledgers, the lock files) carries
+none: its verb's `--check` is its shape check. A document nothing in the repository reads back is not stamped, and one
+whose magic belongs to an outside specification (SPIR-V, WebAssembly) is not a Puck format and is not ledgered.
 
 CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
 

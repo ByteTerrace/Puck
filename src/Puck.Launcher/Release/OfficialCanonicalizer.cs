@@ -546,6 +546,7 @@ public static class OfficialCanonicalizer {
             Documents = documents,
             Engine = engine,
             Schema = OfficialManifest.CurrentSchema,
+            Shape = OfficialManifest.CurrentShape,
             Sources = sources,
         });
     }
@@ -564,6 +565,16 @@ public static class OfficialCanonicalizer {
             return [new DocumentValidationError(
                     Message: schemaViolation,
                     Path: "schema"
+                )];
+        }
+
+        if (DocumentCanonicalizer.SchemaViolationMessage(
+            declared: document.Shape,
+            recognized: OfficialManifest.CurrentShape
+        ) is { } shapeViolation) {
+            return [new DocumentValidationError(
+                    Message: shapeViolation,
+                    Path: "shape"
                 )];
         }
 
