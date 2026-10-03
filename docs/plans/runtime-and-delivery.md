@@ -317,15 +317,15 @@ that code moves the key and nothing is served stale. `puck derivations` computes
 the fingerprint of the bake producer's transitive source into
 `DerivationFingerprint.Bake`, which the bake keys and the `BAKE` chunk's version
 read; [the command reference](../reference/cli.md#puck-derivationscode-provenance-keys)
-owns what the verb does today. Four other products are not yet keyed this way.
+owns what the verb does today. Two other products are not yet keyed this way.
 Each slice reuses the verb's machinery: a `[Derivation]` entry point names the
 producer, the generated fingerprint carries its reach, and `--check` refuses a
 stale one.
 
 **Owns:** `DerivationsCommand`, `DerivationReach`, `DerivationAttribute` and the
-generated `DerivationFingerprint`, and the four products below.
+generated `DerivationFingerprint`, and the two products below.
 
-**Delivers, as four independent slices:**
+**Delivers, as two independent slices:**
 
 1. **Chunk versions.** `DEFN` and `ASST` carry integers edited by hand beside
    their derivations, and each chunk the simulation-chunks and everything-else
@@ -340,18 +340,6 @@ generated `DerivationFingerprint`, and the four products below.
    and a stored package is served. The key gains the packaging code's
    fingerprint. Check: a law that a packaging-code change misses a package stored
    under the earlier key and loads the rebuilt one.
-3. **Pipeline-cache content keys.** `GpuPipelineCacheStore.ContentKeyOf` hashes
-   the bytes it is given (the kernel bytecode, or a pass's shader bytes and
-   pipeline state), so a changed byte already starts a new cache file. The slice
-   decides whether any input to a created pipeline sits outside those bytes. If
-   one does, the key gains the fingerprint of the code that reads it; if none
-   does, this plan records that the byte hash is the whole key. Check: the
-   decision is written here with the inputs it enumerated, and any added input
-   is held by a law that moving it starts a new cache file.
-4. **Kernel sets.** `SdfKernelSet.ContentKey` hashes every kernel's bytecode in
-   order and is the host's pipeline-cache key. It follows slice 3: it gains a
-   fingerprint of the kernel producer only if slice 3 finds an input outside the
-   bytecode. Check: as slice 3.
 
 ### The presentation view
 

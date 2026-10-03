@@ -38,7 +38,7 @@ the reasoning behind every decision is in
 - **Not started:** the One World re-authoring, the content and federation
   waves, namespace normalization, the frames document, the neighbour tape, the
   seat's view state, the finder's units A to C and its slices, the Participant
-  profile and the document, recording and cost tools of MCP's local surface,
+  profile and the document, recording and rule-cost tools of MCP's local surface,
   the remote surface's parity job and approved device handles, composed play's
   chess outcomes and two-table compositions, the audio remainder, and the
   few-thousand-creature acceptance workload. One security claim is open rather
@@ -410,7 +410,7 @@ per group recorded.
 
 **Owns:** the Operator profile's tools and attachment (`puck mcp --profile
 operator`, `OperatorMcpServer`), the Participant composition over
-`WorldAgentBridge`, the document, recording and cost tools, and binding
+`WorldAgentBridge`, the document, recording and rule-cost tools, and binding
 lifecycle, bounded admission, receipts and retry semantics.
 
 **Delivers, in place:** the Operator surface uses Console identity and the
@@ -442,13 +442,13 @@ pump.
   after an uncertain disconnect, and disconnect cleanup that never issues an
   unannounced privileged Stop. `puck mcp` refuses every other local profile as
   a usage error today.
-- A document tool (read, validate, cost, mutate, save, with live mutation and
+- A document tool (read, validate, rule cost, mutate, save, with live mutation and
   offline save distinct) whose whole-document replacement carries an expected
   revision enforced at application. The Operator reaches the same verbs one
   console line at a time; no dedicated tool exists.
 - A recording and replay tool beside `puck_capture_frame`. The Operator reaches
   `replay.record` and the replay verbs through `puck_exec`.
-- A cost read returning `WorldCostReport.Generate`'s facts intact, with
+- A rule-cost read returning `WorldCostReport.Generate`'s facts intact, with
   `Admitted=false` distinct from validator rejection. The console reads that
   report through `world.budget.rules`; `world.cost` is the editor's
   per-placement verb ([E9](editor.md#e9--cost-per-object-and-gpu-pass-timing)),

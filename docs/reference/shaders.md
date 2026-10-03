@@ -1988,7 +1988,12 @@ graphics pass, each render-pass attachment's format, load, store and final
 layout. Two passes with equal keys are one pipeline; a changed kernel, layout,
 attachment format or depth test is another. The objects an entry creates are
 named `gpu.pass-pipelines/<name>/<content key>`, from the key alone, whichever
-holder built them.
+holder built them. The encoding writes every field of the description and the
+render pass, each length-prefixed by `GpuPipelineCacheStore.ContentKeyOf`, so no
+input a created pipeline reads sits outside the key and no code fingerprint
+joins it. The host's persistent pipeline-cache file is named by
+`SdfKernelSet.ContentKey`, the same hash over every kernel's bytecode in kernel
+order, beside the backend and the device identity.
 
 The candidate build takes a lease on each pass's entry on the thread pool and
 waits for it there. The first lease on a key builds the entry through
