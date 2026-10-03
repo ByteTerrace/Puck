@@ -8,7 +8,7 @@ namespace Puck.World.Authoring {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>CreationDocument.CurrentSchema</c>, declared in <c>src/Puck.World.Authoring/Authoring/CreationDocument.cs</c>.</summary>
-        public const string CreationDocumentCurrentSchema = "8bd556f51d2fef6e";
+        public const string CreationDocumentCurrentSchema = "9cde27c5b0a536a3";
         /// <summary>The shape fingerprint of <c>MusicDocument.CurrentSchema</c>, declared in <c>src/Puck.World.Authoring/Authoring/MusicDocument.cs</c>.</summary>
         public const string MusicDocumentCurrentSchema = "ef15ea90d47f44e9";
     }

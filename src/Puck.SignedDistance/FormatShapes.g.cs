@@ -8,6 +8,6 @@ namespace Puck.SignedDistance.Baking {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>SdfBaker.Version</c>, declared in <c>src/Puck.SignedDistance/Baking/SdfBaker.cs</c>.</summary>
-        public const string SdfBakerVersion = "874f6db60118861b";
+        public const string SdfBakerVersion = "32e3e474ef489470";
     }
 }

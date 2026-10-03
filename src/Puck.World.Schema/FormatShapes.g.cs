@@ -8,32 +8,32 @@ namespace Puck.World {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AssetChunk.Version</c>, declared in <c>src/Puck.World.Schema/CompiledWorldChunks.cs</c>.</summary>
-        public const string AssetChunkVersion = "1e06240020d8116e";
+        public const string AssetChunkVersion = "a327c647ed5ca369";
         /// <summary>The shape fingerprint of <c>CompiledWorld.FormatVersion</c>, declared in <c>src/Puck.World.Schema/CompiledWorld.cs</c>.</summary>
-        public const string CompiledWorldFormatVersion = "85400778aaffada8";
+        public const string CompiledWorldFormatVersion = "3c43b9e2342f2f46";
         /// <summary>The shape fingerprint of <c>CompiledWorld.Magic</c>, declared in <c>src/Puck.World.Schema/CompiledWorld.cs</c>.</summary>
-        public const string CompiledWorldMagic = "85400778aaffada8";
+        public const string CompiledWorldMagic = "3c43b9e2342f2f46";
         /// <summary>The shape fingerprint of <c>DefinitionChunk.Version</c>, declared in <c>src/Puck.World.Schema/CompiledWorldChunks.cs</c>.</summary>
-        public const string DefinitionChunkVersion = "1e06240020d8116e";
+        public const string DefinitionChunkVersion = "a327c647ed5ca369";
         /// <summary>The shape fingerprint of <c>WorldBakePack.FormatVersion</c>, declared in <c>src/Puck.World.Schema/WorldBakePack.cs</c>.</summary>
         public const string WorldBakePackFormatVersion = "9dfa0d926e7023b8";
         /// <summary>The shape fingerprint of <c>WorldBakePack.Magic</c>, declared in <c>src/Puck.World.Schema/WorldBakePack.cs</c>.</summary>
         public const string WorldBakePackMagic = "9dfa0d926e7023b8";
         /// <summary>The shape fingerprint of <c>WorldCameraProgram.CurrentVersion</c>, declared in <c>src/Puck.World.Schema/WorldCameraProgram.cs</c>.</summary>
-        public const string WorldCameraProgramCurrentVersion = "b241c919c7a9678f";
+        public const string WorldCameraProgramCurrentVersion = "e2983250643f821a";
         /// <summary>The shape fingerprint of <c>WorldCounterpartAttestation.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCounterpartAttestation.cs</c>.</summary>
-        public const string WorldCounterpartAttestationSchemaVersion = "11dc9160fd489c63";
+        public const string WorldCounterpartAttestationSchemaVersion = "04406755104a4611";
         /// <summary>The shape fingerprint of <c>WorldCountersCeilings.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCountersCeilings.cs</c>.</summary>
-        public const string WorldCountersCeilingsSchemaVersion = "d61a692d3b407a60";
+        public const string WorldCountersCeilingsSchemaVersion = "3cff02ebc6bbaba5";
         /// <summary>The shape fingerprint of <c>WorldCountersReport.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCountersReport.cs</c>.</summary>
-        public const string WorldCountersReportSchemaVersion = "df406a15d1eeb9b1";
+        public const string WorldCountersReportSchemaVersion = "c8ddbf353c76bf35";
         /// <summary>The shape fingerprint of <c>WorldDefinition.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldDefinition.cs</c>.</summary>
-        public const string WorldDefinitionSchemaVersion = "704bebecbf8ec524";
+        public const string WorldDefinitionSchemaVersion = "111c9f7f8cb79ec8";
         /// <summary>The shape fingerprint of <c>WorldProjectionDocument.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldProjection.cs</c>.</summary>
-        public const string WorldProjectionDocumentSchemaVersion = "c4b50b692fb15548";
+        public const string WorldProjectionDocumentSchemaVersion = "ad9d97ce46d3df6e";
         /// <summary>The shape fingerprint of <c>WorldScheduleSection.ManifestSchemaId</c>, declared in <c>src/Puck.World.Schema/WorldSchedule.cs</c>.</summary>
-        public const string WorldScheduleSectionManifestSchemaId = "00bc516979fa51d5";
+        public const string WorldScheduleSectionManifestSchemaId = "57d5bdc2ed9065f1";
         /// <summary>The shape fingerprint of <c>WorldSiloDefinition.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldSiloDefinition.cs</c>.</summary>
-        public const string WorldSiloDefinitionSchemaVersion = "c66e9a3e814f1f40";
+        public const string WorldSiloDefinitionSchemaVersion = "8b10005ce7447d2a";
     }
 }

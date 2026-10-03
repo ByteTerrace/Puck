@@ -8,7 +8,7 @@ namespace Puck.World.Transpiler.Assets {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AssetLock.SupportedFormat</c>, declared in <c>src/Puck.World.Transpiler/Assets/AssetLock.cs</c>.</summary>
-        public const string AssetLockSupportedFormat = "8620db23496b50ea";
+        public const string AssetLockSupportedFormat = "f58f9b53ee973244";
     }
 }
 
@@ -17,7 +17,7 @@ namespace Puck.World.Transpiler.Composition {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldCompileCache.Magic</c>, declared in <c>src/Puck.World.Transpiler/Composition/WorldCompileCache.cs</c>.</summary>
-        public const string WorldCompileCacheMagic = "5c8174f12a38b382";
+        public const string WorldCompileCacheMagic = "35d73162411f349f";
     }
 }
 

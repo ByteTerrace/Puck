@@ -26,7 +26,7 @@ namespace Puck.Cli.Automation {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReleaseExerciseResult.CurrentSchema</c>, declared in <c>src/Puck.Cli/Automation/WorldReleaseExerciseCommand.cs</c>.</summary>
-        public const string WorldReleaseExerciseResultCurrentSchema = "7ed366704cc0f19e";
+        public const string WorldReleaseExerciseResultCurrentSchema = "0d877522d8bef9ff";
         /// <summary>The shape fingerprint of <c>WorldReleaseQualificationRunner.Marker</c>, declared in <c>src/Puck.Cli/Automation/WorldReleaseQualificationRunner.cs</c>.</summary>
         public const string WorldReleaseQualificationRunnerMarker = "38ccc886fb84d9ab";
     }
@@ -55,7 +55,7 @@ namespace Puck.Cli.Canary {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>CanaryCeilingsLedger.Format</c>, declared in <c>src/Puck.Cli/Canary/CanaryCeilingsLedger.cs</c>.</summary>
-        public const string CanaryCeilingsLedgerFormat = "0bad76a4c3a56821";
+        public const string CanaryCeilingsLedgerFormat = "0216d716147a0f27";
     }
 }
 
@@ -64,7 +64,7 @@ namespace Puck.Cli.Formats {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>FormatVersionsLedger.Format</c>, declared in <c>src/Puck.Cli/Formats/FormatVersionsLedger.cs</c>.</summary>
-        public const string FormatVersionsLedgerFormat = "3ce3a22c899f1a69";
+        public const string FormatVersionsLedgerFormat = "bfe5a05814a608ca";
     }
 }
 
@@ -82,8 +82,8 @@ namespace Puck.Cli.Qualification {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>QualificationReport.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/QualificationReport.cs</c>.</summary>
-        public const string QualificationReportSchemaVersion = "40a2ec90645d5a9e";
+        public const string QualificationReportSchemaVersion = "890f040d35672b35";
         /// <summary>The shape fingerprint of <c>ReleaseProfile.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/ReleaseProfile.cs</c>.</summary>
-        public const string ReleaseProfileSchemaVersion = "9c69037b8f5a87e5";
+        public const string ReleaseProfileSchemaVersion = "50497be9a05ed752";
     }
 }
