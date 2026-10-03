@@ -1,6 +1,8 @@
 using Puck.Abstractions.Documents;
 using Puck.Testing;
+using Puck.World;
 using Puck.World.Transpiler;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -91,6 +93,22 @@ public sealed class TreeCompileReportLawTests {
         Assert.Contains(actualString: line, expectedSubstring: "worlds/rooms/fragment.world.json is not a valid");
         Assert.DoesNotContain(actualString: line, expectedSubstring: "\\worlds");
         Assert.Contains(actualString: line, expectedSubstring: "\"payload\\n quoted\"");
+    }
+    [Fact]
+    public void ARefusalPreservesASchemaValueThatMatchesTheComposedPath() {
+        var composed = Path.GetFullPath(path: "a.world.json");
+        var document = new JsonObject { ["schema"] = composed };
+
+        Assert.False(condition: WorldDefinitionFileSource.TryParseDocument(
+            definition: out _,
+            json: document.ToJsonString(),
+            reason: out var reason,
+            sourceName: composed
+        ));
+        var line = Transpiler.CompileCommand.NoCompiledWorld(besidePath: composed, composeAt: composed, reason: reason);
+
+        Assert.StartsWith(actualString: line, expectedStartString: "No compiled world for 'a.world.json': a.world.json is not a valid");
+        Assert.Contains(actualString: line, expectedSubstring: $"schema '{composed}' is not {WorldDefinition.SchemaVersion}");
     }
     [InlineData(false)]
     [InlineData(true)]

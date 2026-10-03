@@ -114,9 +114,10 @@ internal static partial class CompileCommand {
     /// <param name="reason">The loader's refusal.</param>
     /// <returns>The line.</returns>
     public static string NoCompiledWorld(string besidePath, string composeAt, string reason) {
-        var cause = reason
-            .Replace(comparisonType: StringComparison.OrdinalIgnoreCase, newValue: CliPaths.ToDisplay(fullPath: composeAt), oldValue: Path.GetFullPath(path: composeAt))
-            .ReplaceLineEndings(replacementText: " ");
+        // The loader prefixes its refusal with the source exactly as supplied; later occurrences can be quoted data.
+        var cause = (reason.StartsWith(comparisonType: StringComparison.Ordinal, value: (composeAt + " "))
+            ? (CliPaths.ToDisplay(fullPath: composeAt) + reason[composeAt.Length..])
+            : reason).ReplaceLineEndings(replacementText: " ");
 
         return $"No compiled world for '{CliPaths.ToDisplay(fullPath: besidePath)}': {((cause.Length > MaximumReasonLength) ? (cause[..MaximumReasonLength] + "...") : cause)}";
     }
