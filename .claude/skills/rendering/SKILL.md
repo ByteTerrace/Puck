@@ -531,7 +531,8 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Captures.** Create the `FrameCaptureRequest`, arm it with
   `ICaptureRequestTarget.RequestCapture`, and await its `Completion`. Never
   block the host pump on it. Let a readback `DeviceLostException` propagate
-  after completing the request. A scheduled capture raises
+  after completing the request. A scheduled capture, and a `world.screenshot`
+  armed through `WorldCaptureScheduler.ArmUnscheduled`, raises
   `IFixedStepSimulation.AwaitsFrame` until a frame serves it, so the pump
   composes that tick's frame before stepping on. Offscreen the pump also holds
   its clock (`IFixedStepSimulation.HoldsClock`): no tick past the armed one

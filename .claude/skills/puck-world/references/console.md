@@ -343,9 +343,15 @@ the whole truth, and a script reading only one of them reads a half-answer:
   `[capture] world -> <path>` (the world's instance did, as the root when
   nothing is drawn over the world). THIS is
   the line that says a file exists.
-- stderr, at shutdown: `[world.screenshot] WARNING: a capture of <path> was
-  still pending when the run ended … NO FILE WAS WRITTEN`
-  (`WorldPostBuildWiring`'s `ApplicationStopped` drain).
+- stderr, when no frame serves it: `[capture] refused <path>: <reason>`. A
+  capture still pending when the run ends is refused as `the run ended before
+  any frame served it (armed after tick A, last completed tick T)` before the
+  render root is disposed (`WorldCaptureScheduler.Drain`).
+
+The verb arms through `WorldCaptureScheduler.ArmUnscheduled`, so the offscreen
+host holds its clock for it exactly as for a scheduled capture: no tick past
+the one it was armed after runs until a frame serves it or a hold budget
+refuses it, and a `world.wait <ticks>` after it has the capture behind it.
 
 Arming a second capture while one is still pending is REFUSED by name
 (`RenderGraphRuntimeNode.PendingCapturePath`) and counts in `wire.errors`:

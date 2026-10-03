@@ -6,6 +6,7 @@ using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
 using Puck.SdfVm;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Puck.World.Server;
@@ -21,7 +22,10 @@ namespace Puck.World.Tests;
 /// one graph frame after every pump call. The residency's pipeline factory blocks every creation on a gate the law holds, which is how a cold driver shader
 /// cache behaves: the view presents nothing and serves no capture until the gate opens and its build installs. The
 /// scheduler reads the view's readiness, so the host time held while the build is held is spent from the
-/// pipeline-build budget, never from the capture hold budget.
+/// pipeline-build budget, never from the capture hold budget. A capture a script arms outside the schedule
+/// (<c>world.screenshot</c>, <see cref="WorldCaptureScheduler.ArmUnscheduled"/>) is held for the same way; its laws hold
+/// the display encode's graphics pipeline instead, the build a capture of the view's float output waits on once the
+/// view is ready.
 /// </summary>
 public sealed class WorldCaptureHoldLawTests : IDisposable {
     private const uint Extent = 32;
@@ -80,6 +84,10 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
     private sealed class Run : IDisposable {
         private readonly FrameContext m_context;
 
+        private readonly ManualResetEventSlim m_encodeEntered = new(initialState: false);
+
+        private readonly ManualResetEventSlim m_encodeGate;
+
         private readonly ManualResetEventSlim m_entered = new(initialState: false);
         private readonly ManualResetEventSlim m_gate = new(initialState: false);
 
@@ -89,13 +97,26 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         private readonly HostRow m_row;
         private readonly ulong m_stepTicks;
 
-        public Run(string directory, bool holdsClock) {
+        // A run whose scheduled rows are left out arms nothing on its own; one that holds the encode blocks the display
+        // encode's pipeline build in the driver until the law releases it.
+        public Run(string directory, bool holdsClock, bool scheduled = true, bool holdsEncode = false) {
             m_holdsClock = holdsClock;
+            m_encodeGate = new ManualResetEventSlim(initialState: !holdsEncode);
 
             var gpu = new FakeGpuDevice() {
                 BeforeComputePipeline = _ => {
                     m_entered.Set();
                     m_gate.Wait();
+                },
+                BeforeGraphicsPipeline = description => {
+                    if (string.Equals(
+                        a: description.Name,
+                        b: SurfaceEncoder.Description.Name,
+                        comparisonType: StringComparison.Ordinal
+                    )) {
+                        m_encodeEntered.Set();
+                        m_encodeGate.Wait();
+                    }
                 },
             };
 
@@ -103,16 +124,18 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 definition: (Fixtures.BuildDocument() with {
                     Captures = new WorldCapturesSection(
                         Directory: directory,
-                        Rows: [
-                            Row(
-                                station: "first",
-                                tick: FirstTick
-                            ),
-                            Row(
-                                station: "second",
-                                tick: SecondTick
-                            ),
-                        ]
+                        Rows: (scheduled
+                            ? [
+                                Row(
+                                    station: "first",
+                                    tick: FirstTick
+                                ),
+                                Row(
+                                    station: "second",
+                                    tick: SecondTick
+                                ),
+                            ]
+                            : [])
                     ),
                 }),
                 name: "boot"
@@ -207,11 +230,14 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
 
         public void Dispose() {
             m_gate.Set();
+            m_encodeGate.Set();
             View.Dispose();
             m_router.Dispose();
             m_row.Dispose();
             m_gate.Dispose();
             m_entered.Dispose();
+            m_encodeGate.Dispose();
+            m_encodeEntered.Dispose();
         }
         // One host iteration: host time (one step's worth unless given) through the pump, as the offscreen host takes it
         // (one step at most) when the pump holds its clock and as a wall-clock host does (every step the time covers)
@@ -260,6 +286,35 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             }
         );
         public void Release() => m_gate.Set();
+        public void ReleaseEncode() => m_encodeGate.Set();
+        // Iterates until the view is ready, its build released; the bound is liveness, and decides nothing.
+        public void IterateUntilReady() => TestLiveness.Until(
+            step: () => {
+                Iterate();
+
+                return View.IsReady;
+            }
+        );
+        // Iterates until the display encode's build is held in the driver, which the first frame serving a capture of the
+        // view's float output starts; the bound is liveness, and decides nothing.
+        public void IterateUntilEncoding() => TestLiveness.Until(
+            step: () => {
+                Iterate();
+
+                return m_encodeEntered.IsSet;
+            }
+        );
+        // Arms a capture outside the schedule on the view, as world.screenshot does, returning its request.
+        public FrameCaptureRequest Screenshot(string path) {
+            var request = new FrameCaptureRequest(path: path);
+
+            Scheduler.ArmUnscheduled(
+                request: request,
+                target: Target
+            );
+
+            return request;
+        }
         // Iterates until the residency's build is held in the driver and the view names it, so a refusal's reason reads the
         // same on every run; the bound is liveness, and decides nothing.
         public void IterateUntilBuilding() {
@@ -279,11 +334,12 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 }
             );
         }
-        // The offscreen host's teardown order: settle what is owed a frame, then dispose the render root. The gate
-        // opens first only because the residency's disposal waits out its build.
+        // The offscreen host's teardown order: settle what is owed a frame, then dispose the render root. The gates
+        // open first only because the residency's and the encoder's disposals wait out their builds.
         public void EndRun() {
             Simulation.SettleOwedFrames();
             m_gate.Set();
+            m_encodeGate.Set();
             View.Dispose();
         }
         // Asserts every request the scheduler armed ended by a frame or by the scheduler's own refusal, never by the
@@ -541,5 +597,101 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
             expected: ((long)(((ulong)HeldIterations) - FirstTick)),
             actual: run.TicksWhileArmed
         );
+    }
+    /// <summary>Law 5: a screenshot armed outside the schedule while the display encode it is read through is still
+    /// building holds the clock at the tick it was armed after, as a scheduled capture does; the view renders every
+    /// iteration and no tick steps until a frame serves it.</summary>
+    [Fact]
+    public async Task AScreenshotWaitingOnTheDisplayEncodeHoldsTheClockAtItsTick() {
+        using var run = new Run(
+            directory: m_directory.RootPath,
+            holdsClock: true,
+            holdsEncode: true,
+            scheduled: false
+        );
+
+        run.Release();
+        run.IterateUntilReady();
+
+        var armed = run.Tick;
+        var request = run.Screenshot(path: Path.Combine(
+            path1: m_directory.RootPath,
+            path2: "shot.png"
+        ));
+
+        run.IterateUntilEncoding();
+
+        for (var iteration = 0; (iteration < HeldIterations); iteration++) {
+            run.Iterate();
+        }
+
+        Assert.True(condition: run.View.IsReady);
+        Assert.False(condition: request.Completion.IsCompleted);
+        Assert.Equal(
+            expected: armed,
+            actual: run.Tick
+        );
+        Assert.True(condition: run.Scheduler.AwaitsFrame);
+
+        run.ReleaseEncode();
+        TestLiveness.Until(
+            step: () => {
+                run.Iterate();
+
+                return request.Completion.IsCompleted;
+            }
+        );
+
+        Assert.True(condition: (await request.Completion).Succeeded);
+        Assert.Equal(
+            expected: armed,
+            actual: run.Served[request.Path].Tick
+        );
+
+        run.Iterate();
+
+        Assert.True(condition: (run.Tick > armed));
+        Assert.Empty(collection: run.Scheduler.Entries);
+    }
+    /// <summary>Law 6: a run that ends while a screenshot armed outside the schedule still waits on the display encode
+    /// refuses it by name when it settles what is owed, before the view's disposal could refuse it, and writes no
+    /// manifest entry for it.</summary>
+    [Fact]
+    public async Task ARunEndingWhileAScreenshotWaitsOnTheDisplayEncodeRefusesItByNameBeforeTheNodeIsDisposed() {
+        using var run = new Run(
+            directory: m_directory.RootPath,
+            holdsClock: true,
+            holdsEncode: true,
+            scheduled: false
+        );
+
+        run.Release();
+        run.IterateUntilReady();
+
+        var armed = run.Tick;
+        var request = run.Screenshot(path: Path.Combine(
+            path1: m_directory.RootPath,
+            path2: "shot.png"
+        ));
+
+        run.IterateUntilEncoding();
+
+        for (var iteration = 0; (iteration < 10); iteration++) {
+            run.Iterate();
+        }
+
+        run.EndRun();
+
+        Assert.True(condition: request.Completion.IsCompletedSuccessfully);
+
+        var error = Assert.IsType<OperationCanceledException>(@object: (await request.Completion).Error);
+
+        Assert.Equal(
+            expected: $"the run ended before any frame served it (armed after tick {armed}, last completed tick {armed})",
+            actual: error.Message
+        );
+        Assert.False(condition: File.Exists(path: request.Path));
+        Assert.Empty(collection: run.Scheduler.Entries);
+        run.AssertNothingReachedDisposal();
     }
 }

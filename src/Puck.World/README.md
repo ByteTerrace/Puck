@@ -2163,7 +2163,11 @@ the root because nothing is drawn over it. The root reads the frame the display 
 overlay that draws nothing this frame publishes the world's image in its place,
 and the capture reads that. Arming a second capture while one is still
 pending is REFUSED by name—the earlier path would never be written—and a
-request still outstanding when the run ends prints a `WARNING` naming it. A
+request still outstanding when the run ends is refused as `[capture] refused
+<path>: the run ended before any frame served it …` before the render root is
+disposed. Offscreen, the host steps no tick past the one a capture was armed
+after until a frame serves it or its hold budget refuses it, so a
+`world.wait <ticks>` after it has the capture behind it. A
 scripted caller can therefore distinguish a reported write from an unserved
 request. In-process callers receive a `FrameCaptureRequest` from
 the render root (`RenderGraphRuntimeNode.RequestCapture`) and await its `Completion` for success or

@@ -97,6 +97,10 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets or sets a hook every compute pipeline creation runs first, with the pipeline's description, on
     /// whatever thread creates it — a law holds a pipeline build by blocking here, and counts or orders creations.</summary>
     public Action<GpuComputePipelineDescription>? BeforeComputePipeline { get; set; }
+    /// <summary>Gets or sets a hook every graphics pipeline creation runs first, with the pipeline's description, on
+    /// whatever thread creates it — a law holds one graphics pipeline's build, such as the display encode's, by blocking
+    /// here.</summary>
+    public Action<GpuGraphicsPipelineDescription>? BeforeGraphicsPipeline { get; set; }
     /// <summary>Gets or sets what every service call does besides being counted, given the call's key (such as
     /// <c>IGpuBindings.WriteSampledImage</c>): a law throws from it to fail that call, as a lost device does.</summary>
     public Action<string>? OnCall { get; set; }
@@ -278,6 +282,7 @@ internal sealed class FakeGpuDevice :
         );
     }
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) {
+        BeforeGraphicsPipeline?.Invoke(obj: description);
         Hit(key: "IGpuPipelineFactory.Create(graphics)");
 
         return Named(
