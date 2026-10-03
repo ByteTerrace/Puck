@@ -302,7 +302,7 @@
             "token": "puck.camera.program.v1"
         },
         "WorldCaptureManifest.SchemaId": {
-            "shape": "722a426ba7265d39",
+            "shape": "b25418bb1dba95c1",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -337,7 +337,7 @@
             "token": "puck.world.extensions.v1"
         },
         "WorldFederationCodec.WireKey": {
-            "shape": "c94989d70b994a38",
+            "shape": "e3ed73ab1071d98d",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED6"
         },
@@ -392,12 +392,12 @@
             "token": "puck.world.rewind.closed-group.v1"
         },
         "WorldReplaySnapshot.Magic": {
-            "shape": "982b76d5bcf4532e",
+            "shape": "1bff9c45e6c7bf6e",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
         "WorldReplaySnapshot.ShapeToken": {
-            "shape": "982b76d5bcf4532e",
+            "shape": "1bff9c45e6c7bf6e",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "9"
         },

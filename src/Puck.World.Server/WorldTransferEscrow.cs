@@ -1010,7 +1010,8 @@ public sealed partial class WorldTransferEscrow {
                 WorldReplaySnapshot.ReportAdoptionDrift(
                     current: owned,
                     narrationHub: m_server.Profiles.NarrationHub,
-                    taped: carried
+                    taped: carried,
+                    used: WorldReplaySnapshot.HomeArrivalTapedUsed
                 );
             }
             if (!adopted && m_server.Output.HasNarrationSink) {

@@ -958,4 +958,166 @@ public sealed class CrossingIdentityPrivacyLawTests {
             narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: $"could not save identity '{owned.Id}'")
         ));
     }
+
+    // Records one tick on a fresh server whose catalog owns the boot profile, seat 0 joined as that identity.
+    private static (WorldReplayTape Tape, WorldIdentity Owned) RecordOwnedSeat(WorldFixture fixture, string directory) {
+        var server = fixture.Server;
+        var owned = server.Profiles.BootProfile;
+
+        Assert.True(condition: server.ApplySession(request: new SessionRequest.Join(Principal: Principal.Seat(slot: 0), Slot: 0,
+            IdentityName: owned.Name, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        var tape = Tape(directory: directory, server: server);
+
+        Assert.True(condition: tape.TryBeginRecording(name: "arrivals", refusal: out var refusal), userMessage: refusal);
+        fixture.Step();
+        tape.NoteTick();
+        _ = tape.StopRecording();
+        return (tape, owned);
+    }
+    // Ends the drive `tape` holds the way the theory names: a cancel, or the one recorded tick stepped to its target.
+    private static void EndDrive(WorldFixture fixture, WorldReplayTape tape, bool cancel) {
+        if (cancel) {
+            _ = tape.CancelDrive();
+            return;
+        }
+        tape.InjectDriveTick();
+        fixture.Step();
+        tape.NoteTick();
+        Assert.Null(@object: tape.DriveProgress);
+    }
+    private static WorldIdentity SavedOnDisk(WorldOwnedWorlds catalog, WorldIdentity owned, WorldServer server) => new(
+        defaults: server.Definition.PlayerDefaults,
+        document: WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: Path.Combine(
+            path1: catalog.FilePath,
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: owned.Id))
+        )))
+    );
+
+    // THE LAW: when a live drive ends, a seat this authority's catalog owns is bound to the live catalog identity again,
+    // and the drive's detached copy is discarded. The drive's own write (a fact written while the seat drove the taped
+    // projection) is never saved, the owner's later edit is untouched, the two differences are narrated as drift on
+    // replay.profile, and a live write after the drive ends is saved to the catalog. A cancel and a drive that reaches its
+    // target end through the same door. The red leg leaves the seat on the detached copy: it is not the owned identity,
+    // and the live write after the drive stays on the copy and is never saved.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ADriveThatEndsRebindsAnOwnedSeatToTheLiveIdentity(bool cancel) {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-rebind-");
+        var hub = new WorldOutputHub();
+        var sink = new RecordingNarrationSink();
+
+        using var attached = hub.AttachNarrationSink(sink: sink);
+        using var fixture = Fixtures.FreshServer(catalogNarration: hub);
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+
+        var (tape, owned) = RecordOwnedSeat(directory: directory.RootPath, fixture: fixture);
+
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "laterFact"), reason: out var reason, value: 7), userMessage: reason);
+        var before = Saved(catalog: catalog, owned: owned);
+
+        Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: null, name: "arrivals", refusal: out reason, toTick: null), userMessage: reason);
+        var driven = server.Population.EntryBody(index: 0)!.Profile!;
+
+        Assert.NotSame(actual: driven, expected: owned);
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: driven, key: Name(value: "drivenFact"), reason: out reason, value: 5), userMessage: reason);
+        EndDrive(cancel: cancel, fixture: fixture, tape: tape);
+
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Null(@object: Fact(identity: owned, key: "drivenFact"));
+        AssertUnchanged(before: before, catalog: catalog, owned: owned);
+        Assert.Contains(collection: sink.Narrations, filter: static narration => ((narration.Channel == "replay.profile") && narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: "fact 'drivenFact' drifted since record-start — taped 5, live none")));
+        Assert.Contains(collection: sink.Narrations, filter: static narration => ((narration.Channel == "replay.profile") && narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: "fact 'laterFact' drifted since record-start — taped none, live 7")));
+
+        Assert.True(condition: catalog.TrySetFact(changed: out var changed, identity: server.Population.EntryBody(index: 0)!.Profile!, key: Name(value: "liveFact"), reason: out reason, value: 9), userMessage: reason);
+        Assert.True(condition: changed);
+        var saved = SavedOnDisk(catalog: catalog, owned: owned, server: server);
+
+        Assert.Equal(9L, Fact(identity: saved, key: "liveFact"));
+        Assert.Equal(7L, Fact(identity: saved, key: "laterFact"));
+        Assert.Null(@object: Fact(identity: saved, key: "drivenFact"));
+    }
+    // THE LAW: a drive's end touches only the seats this authority's catalog owns. Seat 1 drives a visitor the catalog
+    // holds no document for; after the drive it still carries the very identity the drive seated, and no drift is
+    // narrated for it. Seat 0, owned, is the control: it is rebound. The red leg rebinds every profiled seat, so the
+    // visitor seat loses its identity or the owned one is not rebound.
+    [Fact]
+    public void ADriveThatEndsLeavesASeatTheCatalogDoesNotOwnAlone() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-rebind-visitor-");
+        var hub = new WorldOutputHub();
+        var sink = new RecordingNarrationSink();
+
+        using var attached = hub.AttachNarrationSink(sink: sink);
+        using var fixture = Fixtures.FreshServer(catalogNarration: hub);
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+
+        Assert.True(condition: server.ApplySession(request: new SessionRequest.Join(Principal: Principal.Seat(slot: 1), Slot: 1,
+            IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        var visitor = WorldIdentity.FromProjection(
+            defaults: server.Definition.PlayerDefaults,
+            projection: new WorldIdentityProjection(Id: "guest-visitor", Name: "Guest", ColorHex: "#112233", MoveSpeed: null, TurnSpeed: null)
+        );
+
+        server.Population.SetSeatProfile(profile: visitor, slot: 1);
+        Assert.False(condition: catalog.Owns(identity: visitor));
+        var (tape, owned) = RecordOwnedSeat(directory: directory.RootPath, fixture: fixture);
+
+        Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: null, name: "arrivals", refusal: out var reason, toTick: null), userMessage: reason);
+        var seated = server.Population.EntryBody(index: 1)!.Profile!;
+
+        Assert.Equal(expected: "guest-visitor", actual: seated.Id);
+        Assert.NotSame(actual: server.Population.EntryBody(index: 0)!.Profile, expected: owned);
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: seated, key: Name(value: "visitFact"), reason: out reason, value: 2), userMessage: reason);
+        _ = tape.CancelDrive();
+
+        Assert.Same(expected: seated, actual: server.Population.EntryBody(index: 1)!.Profile);
+        Assert.Equal(2L, Fact(identity: seated, key: "visitFact"));
+        Assert.False(condition: catalog.Owns(identity: seated));
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.DoesNotContain(collection: sink.Narrations, filter: static narration => narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: "drifted since record-start"));
+    }
+    // THE LAW: a save failure's narration and refusal name the file under the catalog and the kind of failure, never a
+    // rooted path. A directory standing where the identity's file belongs fails the write; the narration the catalog's hub
+    // carries, the reason TrySave returns, and the reason an unowned identity is refused with, hold no part of the
+    // catalog's directory. The control is the same save succeeding with the directory gone. The red leg puts the exception
+    // message, which names the path, back into the narration.
+    [Fact]
+    public void ASaveFailureNarrationCarriesNoRootedPath() {
+        var hub = new WorldOutputHub();
+        var sink = new RecordingNarrationSink();
+
+        using var attached = hub.AttachNarrationSink(sink: sink);
+        using var fixture = Fixtures.FreshServer(catalogNarration: hub);
+        var catalog = fixture.Server.Profiles;
+        var owned = catalog.BootProfile;
+        var fileName = WorldDocumentName.For(id: SafeName.Parse(candidate: owned.Id));
+        var path = Path.Combine(path1: catalog.FilePath, path2: fileName);
+
+        Assert.True(condition: catalog.TrySave(identity: owned, reason: out var reason), userMessage: reason);
+        File.Delete(path: path);
+        _ = Directory.CreateDirectory(path: path);
+        try {
+            Assert.False(condition: catalog.TrySave(identity: owned, reason: out reason));
+            catalog.Save();
+        } finally {
+            Directory.Delete(path: path);
+        }
+
+        NarrationPaths.AssertNone(root: catalog.FilePath, text: reason);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: $"'{fileName}'");
+        Assert.NotEmpty(collection: sink.Narrations);
+
+        foreach (var narration in sink.Narrations) {
+            NarrationPaths.AssertNone(root: catalog.FilePath, text: narration.Text);
+        }
+
+        var visitor = WorldIdentity.FromProjection(defaults: fixture.Server.Definition.PlayerDefaults, projection: owned.Project());
+
+        Assert.False(condition: catalog.TrySave(identity: visitor, reason: out reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "not owned by this catalog");
+        NarrationPaths.AssertNone(root: catalog.FilePath, text: reason);
+        Assert.True(condition: catalog.TrySave(identity: owned, reason: out reason), userMessage: reason);
+    }
 }

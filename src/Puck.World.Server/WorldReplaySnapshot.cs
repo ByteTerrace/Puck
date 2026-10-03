@@ -1171,14 +1171,16 @@ public sealed partial class WorldReplaySnapshot {
     }
 
     /// <summary>Reports, as a pinned seat's drift is reported, where the owned identity as it stands now differs from the
-    /// projection a re-driven home arrival's tape carried: the name, either rate, and every fact whose presence or value
+    /// projection a re-driven home arrival's tape or a finished live drive's detached seat carried: the name, either
+    /// rate, and every fact whose presence or value
     /// differs, in ordinal key order. The re-drive binds the taped projection, so an edit made to the owned identity
     /// after the recording does not reach it; this names the edit rather than letting it pass unseen. It reads the owned
     /// identity and refuses nothing.</summary>
     /// <param name="narrationHub">The hub the report is narrated through, or <see langword="null"/> for none.</param>
     /// <param name="taped">The identity rebuilt from the taped projection.</param>
     /// <param name="current">The owned identity as it stands now.</param>
-    internal static void ReportAdoptionDrift(WorldOutputHub? narrationHub, WorldIdentity taped, WorldIdentity current) {
+    /// <param name="used">What the report says the replay ran on, appended to every line.</param>
+    internal static void ReportAdoptionDrift(WorldOutputHub? narrationHub, WorldIdentity taped, WorldIdentity current, string used) {
         if (narrationHub is not { HasNarrationSink: true }) {
             return;
         }
@@ -1189,7 +1191,7 @@ public sealed partial class WorldReplaySnapshot {
         )) {
             narrationHub.Narrate(
                 channel: "replay.profile",
-                text: $"[replay.profile: '{taped.Name}' name drifted since record-start — taped '{taped.Name}', live '{current.Name}'; {TapedUsed}]"
+                text: $"[replay.profile: '{taped.Name}' name drifted since record-start — taped '{taped.Name}', live '{current.Name}'; {used}]"
             );
         }
         ReportRateDrift(
@@ -1198,7 +1200,7 @@ public sealed partial class WorldReplaySnapshot {
             field: "move-speed",
             pinned: taped.FixedMoveSpeed,
             live: current.FixedMoveSpeed,
-            used: TapedUsed
+            used: used
         );
         ReportRateDrift(
             narrationHub: narrationHub,
@@ -1206,7 +1208,7 @@ public sealed partial class WorldReplaySnapshot {
             field: "turn-speed",
             pinned: taped.FixedTurnSpeed,
             live: current.FixedTurnSpeed,
-            used: TapedUsed
+            used: used
         );
 
         var carried = (taped.Facts?.Cells ?? []).ToDictionary(keySelector: static cell => cell.Key, elementSelector: static cell => cell.Value.AsInt);
@@ -1224,12 +1226,15 @@ public sealed partial class WorldReplaySnapshot {
 
             narrationHub.Narrate(
                 channel: "replay.profile",
-                text: $"[replay.profile: '{taped.Name}' fact '{key}' drifted since record-start — taped {tapedValue}, live {boundValue}; {TapedUsed}]"
+                text: $"[replay.profile: '{taped.Name}' fact '{key}' drifted since record-start — taped {tapedValue}, live {boundValue}; {used}]"
             );
         }
     }
 
-    private const string TapedUsed = "the home arrival used the TAPED projection, so this verdict reports the recording, not the edit";
+    // What the report says the replay ran on, so a verdict on a recording reads as the recording and not the edit.
+    internal const string HomeArrivalTapedUsed = "the home arrival used the TAPED projection, so this verdict reports the recording, not the edit";
+    internal const string DriveEndTapedUsed = "the drive ran on the TAPED projection and its writes were discarded, so the seat is back on the live identity";
+
     private const string PinnedUsed = "the replay used the PINNED value, so this verdict reports the recording, not the edit";
 
     // Compared on the RAW fixed lane, never on the rendered decimal: a drift too small to show in four places is still

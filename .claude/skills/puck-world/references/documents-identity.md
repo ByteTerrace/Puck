@@ -205,6 +205,10 @@ back with `WorldOwnedWorlds.Discarded` + `identity.list`'s `discarded=` column
 `WorldOwnedWorlds.Refused` + `identity.list`'s `refused=` column (everything
 left in place, whatever the class).
 
+Storage narration is path-free. A line or refusal reason about a file the catalog (or its cloud sync) could not
+read, write or move names the file under the catalog, or the quarantine directory, and the failure's kind
+(`WorldOwnedWorlds.DescribeStorageFailure`: access denied, file in use, no space left, ...), never an exception
+message or a rooted path. `NarrationPaths.AssertNone` holds that over the save, discard and refusal narration.
 **Seeding.** When the identity directory holds zero admitted documents,
 `WorldOwnedWorlds` seeds one owned world per `playerDefaults.identities` row
 (`WorldIdentitySeed(Id, Name, Color)`, validated non-empty, ids and names both

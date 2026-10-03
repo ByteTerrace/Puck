@@ -682,10 +682,71 @@ public sealed class OwnedWorldDisposalLawTests {
                 values: files.Select(selector: Path.GetFileName)
             )
         );
-        Assert.DoesNotContain(
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: narration
+        );
+    }
+    /// <summary>The discard line and a failed move's reason name the quarantine by its directory name under the
+    /// catalog and the failure by its kind, never by a rooted path: a retired document is moved aside (or, with a file
+    /// standing where the quarantine belongs, cannot be), and neither the stderr line nor any read-back reason carries
+    /// the catalog's own directory.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DiscardNarration_CarriesNoAbsolutePath(bool moveFails) {
+        using var dir = new TemporaryDirectory();
+        var files = Populate(dir: dir);
+        var originalError = Console.Error;
+        using var captured = new StringWriter();
+
+        foreach (var path in files) {
+            RetireCameraProgram(path: path);
+        }
+        if (moveFails) {
+            File.WriteAllText(
+                contents: "occupied",
+                path: QuarantineDirectory(dir: dir)
+            );
+        }
+
+        WorldOwnedWorlds swept;
+
+        try {
+            Console.SetError(newError: captured);
+
+            swept = Open(dir: dir);
+        } finally {
+            Console.SetError(newError: originalError);
+        }
+
+        var narration = captured.ToString();
+
+        Assert.Contains(
             actualString: narration,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: dir.RootPath
+            expectedSubstring: "unloadable owned world(s)"
         );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: narration
+        );
+
+        foreach (var entry in swept.Discarded) {
+            NarrationPaths.AssertNone(
+                root: dir.RootPath,
+                text: entry.Reason
+            );
+        }
+        if (moveFails) {
+            Assert.All(
+                action: static entry => Assert.Contains(
+                    actualString: entry.Reason,
+                    comparisonType: StringComparison.Ordinal,
+                    expectedSubstring: "it could not be moved aside"
+                ),
+                collection: swept.Discarded
+            );
+        }
     }
 }

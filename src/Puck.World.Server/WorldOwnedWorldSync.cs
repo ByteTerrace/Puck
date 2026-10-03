@@ -307,7 +307,7 @@ public sealed class WorldOwnedWorldSync {
             if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
                 m_worlds.NarrationHub?.Narrate(
                     channel: "storage",
-                    text: $"[storage] sync state unreadable, starting untracked ({exception.Message})"
+                    text: $"[storage] sync state unreadable, starting untracked ({WorldOwnedWorlds.DescribeStorageFailure(exception: exception)})"
                 );
             }
             m_basisTokens.Clear();
@@ -545,7 +545,7 @@ public sealed class WorldOwnedWorldSync {
             return new WorldSyncOutcome(
                 Id: id,
                 Ok: false,
-                Detail: $"local write failed — {exception.Message}"
+                Detail: $"local write failed — {WorldOwnedWorlds.DescribeStorageFailure(exception: exception)}"
             );
         } finally {
             try { File.Delete(path: probePath); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
@@ -875,7 +875,7 @@ public sealed class WorldOwnedWorldSync {
             if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
                 m_worlds.NarrationHub?.Narrate(
                     channel: "storage",
-                    text: $"[storage] sync state not persisted ({exception.Message})"
+                    text: $"[storage] sync state not persisted ({WorldOwnedWorlds.DescribeStorageFailure(exception: exception)})"
                 );
             }
         }
@@ -945,7 +945,7 @@ public sealed class WorldOwnedWorldSync {
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException)) {
-            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+            reason = WorldOwnedWorlds.DescribeStorageFailure(exception: exception);
 
             return false;
         }

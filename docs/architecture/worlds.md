@@ -675,7 +675,11 @@ binds the taped projection exactly, its facts and records included, in a detache
 takes nothing from the live catalog. It reports on `replay.profile` where the owned identity as it
 stands now differs from the taped projection, as a pinned seat's drifted rate is reported, so an
 owner's edit since the recording is named without making the replay diverge. A live
-`replay.drive` refuses a tape that lands travelers.
+`replay.drive` refuses a tape that lands travelers. It seats each profiled seat on such a detached
+copy too, and when the drive ends or is cancelled every seat this authority's catalog owns rebinds to
+the live catalog identity and the copy is discarded: a write the drive made never reaches the catalog,
+the same differences are reported on `replay.profile`, and a write after the drive is saved again. A
+seat the catalog does not own keeps what it carries.
 
 A world names a cross-owner neighbour without reaching its storage directly — worlds are users, so one
 owner's storage container is never reachable from another's. A cross-owner reference resolves through

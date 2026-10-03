@@ -606,6 +606,19 @@ public sealed partial class WorldPopulation {
 
         return (entry.Mobility.Value with { DepartedFrom = here });
     }
+    /// <summary>Reads an active occupant's committed mobility identity without minting or changing state.</summary>
+    /// <param name="index">The current population slot.</param>
+    /// <returns>The identity, or <see langword="null"/> when the slot is inactive, outside capacity, or its occupant
+    /// has never been given one.</returns>
+    public WorldMobilityIdentity? CurrentMobility(int index) {
+        if (((uint)index) >= ((uint)Capacity)) { return null; }
+        var entry = m_entries[index];
+
+        return ((entry.Active && (entry.Body is not null) && (entry.MobilityGeneration == entry.Generation))
+            ? entry.Mobility
+            : null
+        );
+    }
     /// <summary>Reads the slot an arrived occupant held under the authority it last left, without minting or
     /// changing state.</summary>
     /// <param name="index">The current population slot.</param>

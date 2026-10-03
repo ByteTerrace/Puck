@@ -85,12 +85,55 @@ public sealed partial class WorldReplayTape {
         EndDriveCore(completed: completed);
         m_liveServer.EndUnobservedSessions();
     }
+    // A drive seats each profiled seat on a detached copy of the identity its tape pinned, so a replayed identity write
+    // lands on the copy and never in the catalog. When the drive ends the copy is discarded: a seat this authority's own
+    // catalog owns returns to the live owned identity, where a later write is saved again, and where the copy differs from
+    // it the difference is narrated as drift. A seat the catalog does not own (a visitor, or an id it holds no document
+    // for) keeps what it carries.
+    private void RebindOwnedSeats() {
+        var population = m_liveServer.Population;
+        var profiles = m_liveServer.Profiles;
+
+        for (var slot = 0; (slot < population.LocalSeatCount); slot++) {
+            if (
+                !population.IsActive(index: slot) ||
+                (population.EntryBody(index: slot)?.Profile is not { } detached) ||
+                profiles.Owns(identity: detached) ||
+                (m_liveServer.HomeSeatIdentity(
+                    id: detached.Id,
+                    mobility: population.CurrentMobility(index: slot),
+                    slot: slot
+                ) is not { } live)
+            ) {
+                continue;
+            }
+
+            WorldReplaySnapshot.ReportAdoptionDrift(
+                current: live,
+                narrationHub: profiles.NarrationHub,
+                taped: detached,
+                used: WorldReplaySnapshot.DriveEndTapedUsed
+            );
+
+            var color = population.BodyColor(index: slot);
+
+            population.SetSeatProfile(
+                profile: live,
+                slot: slot
+            );
+            population.SetBodyColor(
+                color: color,
+                slot: slot
+            );
+        }
+    }
     private void EndDriveCore(bool completed) {
         var drive = m_drive!;
 
         m_drive = null;
         m_liveServer.Extensions.CompleteReplay();
         m_transport.InputMasked = false;
+        RebindOwnedSeats();
 
         var verdict = ((drive.DivergedAt < 0)
             ? "every driven tick matched the recording"

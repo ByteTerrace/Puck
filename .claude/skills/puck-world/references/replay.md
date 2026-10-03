@@ -562,6 +562,13 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   rule latches, fields, grants, held input, events, and population together.
   The replay boot restore keeps the pinned seat identities detached and leaves
   the owned catalog unchanged; recovery's home-seat rebind does not run here.
+  A drive's end (`EndDriveCore`, a cancel or the target reached) runs `RebindOwnedSeats`:
+  each local seat whose carried identity is not the catalog's own but whose id and
+  mobility `WorldServer.HomeSeatIdentity` resolves to an owned identity rebinds to it, the
+  detached copy is discarded, and `ReportAdoptionDrift` reports the copy's
+  difference from the live identity on `replay.profile` first. A replay's identity effects are
+  never persisted; a seat the catalog does not own is untouched. A fork hands over from
+  the same rebound seats.
   `VerifyMountedAddons` then pins the live receipts. On
   success `LoopbackTransport.InputMasked = true` and the mode is
   `Replaying`. The authority clock rewinds to the boot image. Hosts call

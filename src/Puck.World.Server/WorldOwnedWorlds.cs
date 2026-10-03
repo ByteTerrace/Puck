@@ -535,7 +535,7 @@ public sealed class WorldOwnedWorlds {
 
                 moved = true;
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                detail = $"{detail} — and it could not be moved aside ({exception.Message.ReplaceLineEndings(replacementText: " ")}), so its bytes stay where they are and it will be named again on the next boot";
+                detail = $"{detail} — and it could not be moved aside into {QuarantineDirectoryName}/ ({DescribeStorageFailure(exception: exception)}), so its bytes stay where they are and it will be named again on the next boot";
             }
 
             m_discarded.Add(item: new WorldOwnedWorldDisposal(
@@ -558,7 +558,7 @@ public sealed class WorldOwnedWorlds {
             if (m_narrationHub is { HasNarrationSink: true }) {
                 m_narrationHub?.Narrate(
                     channel: "identity",
-                    text: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))])}"
+                    text: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{QuarantineDirectoryName}' (beside the catalog's documents) — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))])}"
                 );
             }
         }
@@ -623,6 +623,24 @@ public sealed class WorldOwnedWorlds {
         value: $"cannot decode {path}:"
     )
     );
+
+    /// <summary>Names the kind of a storage failure without the machine-local path its message carries: the one door
+    /// every narration and refusal reason about a file this catalog (or its sync) could not read, write or move goes
+    /// through, so the player's state directory never reaches a console line.</summary>
+    /// <param name="exception">The failure.</param>
+    /// <returns>A short kind such as <c>access denied</c>, never a path.</returns>
+    internal static string DescribeStorageFailure(Exception exception) => exception switch {
+        UnauthorizedAccessException => "access denied",
+        System.Text.Json.JsonException => "the document is malformed",
+        PathTooLongException => "the path is too long",
+        DirectoryNotFoundException => "directory not found",
+        FileNotFoundException => "file not found",
+        // The Win32 sharing and lock violations, and the two disk-full codes; every other I/O failure is named plainly.
+        IOException { HResult: unchecked((int)0x80070020) or unchecked((int)0x80070021) } => "file in use by another process",
+        IOException { HResult: unchecked((int)0x80070027) or unchecked((int)0x80070070) } => "no space left on the device",
+        _ => "storage error",
+    };
+
     private static string Narrate(IReadOnlyList<(string FileName, string Reason)> entries) => string.Join(
         separator: "; ",
         values: entries
@@ -1156,7 +1174,7 @@ public sealed class WorldOwnedWorlds {
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             // An arrival may already be durable. Report the file refusal so its caller can finish binding the owned
             // identity and recording the arrival, rather than stranding a committed seat on its travelling copy.
-            reason = $"could not save identity '{identity.Id}': {exception.Message}";
+            reason = $"could not save identity '{identity.Id}' ('{Path.GetFileName(path: path)}'): {DescribeStorageFailure(exception: exception)}";
             return false;
         }
 
@@ -1201,7 +1219,7 @@ public sealed class WorldOwnedWorlds {
     /// <returns><see langword="true"/> when the catalog owns it.</returns>
     public bool Owns(WorldIdentity identity) => m_identities.Contains(item: identity);
 
-    private string NotOwned(WorldIdentity identity) => $"identity '{identity.Id}' is not owned by this catalog, so it is never saved into '{m_directory}'";
+    private string NotOwned(WorldIdentity identity) => $"identity '{identity.Id}' is not owned by this catalog, so it is never saved there";
 
     /// <summary>Asks an owned world to apply one tick-stamped durable-state operation.</summary>
     public WorldDocumentSubmissionReceipt Submit(WorldDocumentSubmission submission) {
