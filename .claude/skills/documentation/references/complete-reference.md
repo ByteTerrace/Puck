@@ -470,10 +470,18 @@ statement about what the reply contains ("The response states …"), one fact pe
 grader. Phrase a step as what the answer says or lists ("The response says the lead checks …"): a criterion that asks the answer to have performed an action fails a correct answer that describes it, under every judge tried. A criterion phrased as a pass/fail instruction ("Pass only when … fail
 if …") fails correct answers.
 
+**Decide what a token can decide.** Use a `regex` grader (with `match:
+not_contains` for "does not name X"), `tool_used` or `tool_order` for anything a
+token or a tool call settles: a command, flag or verb named in the answer, a
+file read, an order of calls. Keep `llm` graders for judgement, such as whether
+a reason is right or a step is skipped.
+
 **Split before running.** `split.json` records a random 32-bit seed and the
 rule: a case is `train` when the first byte of `sha256("<seed>:<case name>")` is
 below 154, else `test`. Adding a case never moves another. Redraw the seed only
-on case counts, before any case has run, and record that.
+on case counts, before any case has run, and record that. Until the test split
+holds about 10 cases, assign each new case to test by hand and record it; after
+that, by the rule.
 
 **Calibrate the judge.** `calibration/samples.json` holds fixed answers labelled
 good, bad or borderline, with the expected verdict of each LLM grader. Replay
@@ -505,16 +513,23 @@ or a grader changes, since either moves the floor.
    skill lacks the rule, the grader asks for more than the task raises, or the
    judge misreads a correct answer.
 2. Change the skill by one rule, stated generally; never paste a failing
-   case's content into it. A grader or task at fault is fixed in the case, not
+   case's content into it. A rule that names one case's situation, or only makes
+   sense for one prompt, is that case's answer key: generalise it into a
+   practice or drop it, and audit every kept rule for this before reporting. A grader or task at fault is fixed in the case, not
    worked around in the skill.
-3. Evaluate train and test. Keep the change when the case it targets rises and
-   neither split's mean falls by more than that split's noise floor. A rule that
-   only one case can see leaves the other split's mean flat; that shows no harm,
-   not generalisation, and the report says so.
-4. Revert a change that does not move its target twice.
+3. Evaluate train and test. Keep a step only when both splits improve by more
+   than their noise floors. A train-only gain is not evidence of generalisation:
+   revert the step, or generalise the rule and measure again.
+4. Revert a step that fails the keep rule.
 5. Read `git diff` before every measurement: an edit that did not apply makes
    the run a repeat of the old skill, which is also how to see that one case
    alone can swing by 0.2 between identical runs.
+
+**A small test split gives weak evidence.** With fewer than about 10 test cases
+and a swing of 0.2 on a single case between identical runs, a split mean moves
+by chance more than a rule moves it. Send each new case to the test split first
+until it holds about 10, and read a gain on a small split as a hint, not a
+result.
 
 At a plateau, write the root cause of each remaining failure as skill, grader
 or task, and stop.

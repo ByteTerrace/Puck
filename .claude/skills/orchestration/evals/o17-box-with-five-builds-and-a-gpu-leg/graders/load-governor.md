@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says a load governor on the machine admits queued work on measured spare CPU and free RAM and holds it under memory pressure.
+governor|puck host load

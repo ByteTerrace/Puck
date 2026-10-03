@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says the lead checks the base claim personally with `git merge-base --is-ancestor`.
+merge-base\s+--is-ancestor

@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says correctness-heavy work goes to Astra or Opus and well-specified work to Sol or Sonnet, and uses Fable only when genuinely needed.
+(Astra|Opus)[^.\n]{0,160}(Sol|Sonnet)|(Sol|Sonnet)[^.\n]{0,160}(Astra|Opus)

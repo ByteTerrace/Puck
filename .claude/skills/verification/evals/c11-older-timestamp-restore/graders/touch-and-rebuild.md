@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response touches the restored files (or restores them in a way that sets a new modification time), rebuilds, and sees the law pass before moving on.
+touch[\s\S]{0,240}rebuild|rebuild[\s\S]{0,240}touch

@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response names git's automatic maintenance or garbage collection, started by the scratch repository's commands, as the likely cause of the unrelated worktree losing files.
+maintenance|garbage collect|\bgc\b

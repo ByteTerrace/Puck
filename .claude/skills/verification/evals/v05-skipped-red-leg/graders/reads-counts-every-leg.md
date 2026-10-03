@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response reads the Total, Failed and Skipped counts of every leg, not only the exit code.
+Total[\s\S]{0,80}Failed[\s\S]{0,80}Skipped|Skipped[\s\S]{0,80}Failed[\s\S]{0,80}Total

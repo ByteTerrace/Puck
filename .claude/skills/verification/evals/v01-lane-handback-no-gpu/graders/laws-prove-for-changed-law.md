@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response lists `puck laws prove` among the commands for the changed render-graph law.
+laws prove

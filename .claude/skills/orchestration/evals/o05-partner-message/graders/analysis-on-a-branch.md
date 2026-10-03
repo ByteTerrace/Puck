@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says the long analysis goes on a branch and its path goes in the message.
+branch[^.\n]{0,100}path|path[^.\n]{0,100}branch

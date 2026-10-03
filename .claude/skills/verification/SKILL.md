@@ -91,12 +91,10 @@ changing canary cost, a baseline whose movement the change explains. Review the 
 and commit it in the same change. A ledger rewritten during verification hides
 the drift the check exists to report.
 
-A recording verb that exits nonzero has not recorded, whatever file it wrote:
-`puck counters --record` exits 1 when a deterministic count differs between
-backends, and the ceilings it wrote then accommodate both readings. Do not
-commit that ledger. Read the differences and the exit status, find the cause of
-the disagreement and fix it, and record again only after the backends agree and
-the exit status is 0.
+A recording verb that exits nonzero has not recorded, whatever file it wrote
+(`puck counters --record` exits 1 when a deterministic count differs between
+backends). Do not commit what it wrote. Read its exit status and its
+differences, fix the cause, and record again only when the verb exits 0.
 
 ## Choose what to run
 
@@ -123,11 +121,10 @@ nothing, however plausible it reads.
 
 1. Withhold the fix and keep the law: `git stash push -- <fix files>`, or a
    scratch worktree at the base with only the law applied. A mutation made by
-   text substitution is not the withheld fix until a diff against the fixed file
-   shows exactly the change you meant and nothing else: quoting and escaping can
-   produce a different mutant. Make the change as an exact edit, or let
-   `puck laws prove --file-list` or `--fix` withhold it, and record how in the
-   commit message.
+   text substitution can differ from the fix you meant to withhold, so it is not
+   the withheld fix until a diff against the fixed file shows exactly that change
+   and nothing else. Prefer an exact edit, or let `puck laws prove --file-list`
+   or `--fix` withhold it, and record how in the commit message.
 2. Build the withheld tree until the build exits 0, repairing even an unrelated
    compile error in it, and only then run the law: a run after a failed build
    measures the fixed binaries, so a pass there says nothing about the law. The
@@ -194,11 +191,11 @@ and runs at any time.
 A detector that waits for the GPU to go idle by matching process command lines
 excludes the matching shell (`powershell`, `pwsh` or `bash`). The query's own
 command line contains the strings it searches for; without this exclusion it
-waits on itself forever. A search that always reports exactly one match is
-suspect, not proof of a busy GPU: exclude the search's own process by process
-id, or use a pattern that cannot match its own command line (a bracketed first
-letter), then confirm whether a real process remains. Never skip or postpone a
-granted GPU leg because of a match that was the search itself. Run such a
+waits on itself forever. Treat a match you cannot account for as suspect, not as
+proof of a busy GPU: exclude the search's own process by process id, or use a
+pattern that cannot match its own command line (a bracketed first letter), then
+confirm whether a real process remains. Never skip or postpone a granted GPU leg
+because of a match that was the search itself. Run such a
 detector once by hand on an idle machine before trusting it.
 
 On Windows, stopping a background task can kill a wrapper shell and leave the
@@ -225,11 +222,8 @@ The same rule applies to load-sensitive CPU tests.
 
 A test that creates a scratch git repository under the temporary directory
 disables automatic maintenance in it (`maintenance.auto=false` and `gc.auto=0`
-in its configuration). Maintenance that a scratch repository's own commands
-start in the background outlives the test and has removed files from other
-worktrees on the machine. A lane that sees files vanish from an unrelated
-worktree while such a test runs suspects this first and checks whether the two
-repositories share an object store, alternates or a common directory.
+in its configuration). Background maintenance started by a scratch repository's
+own commands outlives the test and can touch other repositories on the machine.
 
 ## What a finished lane proves
 

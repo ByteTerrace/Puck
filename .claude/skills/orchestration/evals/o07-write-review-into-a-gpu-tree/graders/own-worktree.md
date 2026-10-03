@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says the review pass gets its own worktree on the author's branch, or waits for the GPU run to finish.
+(own|separate|new|fresh)\s+(git\s+)?worktree

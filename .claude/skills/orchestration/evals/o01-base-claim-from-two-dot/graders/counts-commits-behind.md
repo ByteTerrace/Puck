@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says the commits the base is behind are counted the integration head with `git rev-list --count`.
+rev-list\s+--count

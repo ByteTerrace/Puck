@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says agents resolve the generated-file conflicts by running their generators, not by hand-merging.
+generator

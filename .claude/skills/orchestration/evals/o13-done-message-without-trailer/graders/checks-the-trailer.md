@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says the last commit is checked to carry `Brief: <id> done` or `Brief: <id> blocked: <question>` and asks the lane to add it.
+Brief:

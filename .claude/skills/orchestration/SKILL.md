@@ -15,8 +15,8 @@ against a requested change is stale and is corrected in the same change.
 
 Plan backward from the milestone's critical path. Find the least-prepared item
 on it and put the best-fit partner there. Busy is not progress: never queue
-filler to make a partner look busy, and meet an owner's remark that partners
-look idle by checking the path, not by inventing work.
+filler to make a partner look busy. Idleness is a prompt to re-read the path, not
+to create work.
 
 ## Own tracks, not tasks
 

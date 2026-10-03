@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response requires the assignment's last commit to carry `Brief: <id> done` or `Brief: <id> blocked: <question>`.
+Brief:[^\n]{0,24}(done|blocked)
