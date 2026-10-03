@@ -71,6 +71,11 @@ internal enum ReplayRefusal {
     /// into an occupied index.</summary>
     [Refusal(door: "replay.tape", condition: "a recorded departure or its rollback cannot be reproduced against the re-drive's own population", kind: RefusalKind.Verdict)]
     DepartureRefused,
+
+    /// <summary>A recorded seat identity switch names a body that is not an active local seat in the re-drive's own
+    /// population at that tick.</summary>
+    [Refusal(door: "replay.tape", condition: "a recorded seat identity switch names a body that is not an active local seat in the re-drive's own population", kind: RefusalKind.Verdict)]
+    SeatSwitchRefused,
 }
 /// <summary>Constructs this door's <see cref="InvalidDataException"/>s tagged with the <see cref="ReplayRefusal"/>
 /// each throw site names. <see cref="InvalidDataException"/> is sealed (unlike <c>SdfDocumentException</c> elsewhere

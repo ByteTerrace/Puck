@@ -148,6 +148,10 @@ internal sealed class UploadModelGpu :
     /// <see langword="null"/>, the default, to record none.</summary>
     public List<(uint Group, nint Set)>? SetBinds { get; set; }
 
+    /// <summary>Gets or sets how many fenced submissions pass before the next one throws before any command reaches the
+    /// queue, or -1, the default, for none.</summary>
+    public int FencedSubmissionsBeforeRefusal { get; set; } = -1;
+
     /// <summary>Returns the handle of the buffer a set's binding names.</summary>
     /// <param name="set">The set.</param>
     /// <param name="binding">The binding.</param>
@@ -482,6 +486,13 @@ internal sealed class UploadModelGpu :
         m_inner.Services.QueueSubmitter.Submit(commandBufferHandles: commandBufferHandles);
     }
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+        if (FencedSubmissionsBeforeRefusal == 0) {
+            FencedSubmissionsBeforeRefusal = -1;
+            throw new InvalidOperationException(message: "Injected submission refusal.");
+        }
+        if (FencedSubmissionsBeforeRefusal > 0) {
+            FencedSubmissionsBeforeRefusal--;
+        }
         Replay(commandBufferHandles: commandBufferHandles);
         m_inner.Services.QueueSubmitter.Submit(
             commandBufferHandles: commandBufferHandles,

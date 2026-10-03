@@ -839,6 +839,7 @@ public static partial class WorldDefinitionValidator {
             farDistance: definition.Render.FarDistance,
             errors: errors
         );
+        ValidateRenderResolution(definition: definition, errors: errors);
 
         ValidateTimeline(
             definition: definition,
@@ -1828,12 +1829,6 @@ public static partial class WorldDefinitionValidator {
                     scope: scope,
                     errors: errors,
                     deferred: deferredSink
-                );
-                ValidateScreenMemory(
-                    definition: definition,
-                    bindings: screen.Memory,
-                    path: $"{path}.memory",
-                    errors: errors
                 );
 
                 // The screen's solidity facet — a box collider from the slab's frame + margin. The effective

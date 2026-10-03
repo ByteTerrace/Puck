@@ -65,33 +65,18 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             ? "on"
             : "off")}]";
     }
-    // The world.dynamic-resolution echo: the lever, the ceiling it bounds, the grid the views render the latest frame's
-    // choice at (the ceiling's before the first), the lowest grid measured over the budget that no rise reaches, the
-    // floor, the march-step budget the latest frame was held to (zero where timing moved it) and the signal that moved
-    // the grid.
-    private string DynamicResolutionEcho() {
-        var controller = renderProbe.DynamicResolution;
-        var ceiling = settings.RenderCeiling;
-        var on = (settings.DynamicResolution && ((controller?.Scale ?? 0f) > 0f));
-        var grid = (on
-            ? controller!.Grid
-            : Client.WorldDynamicResolution.GridOf(ceiling: ceiling, scale: ceiling));
-        var over = ((on && (controller!.OverGrid > 0d))
-            ? RenderScaleName(scale: ((float)controller.OverGrid))
-            : "none");
-        var state = (!settings.DynamicResolution
-            ? "off"
-            : ((settings.DynamicResolutionForced > 0f)
-                ? $"forced {RenderScaleName(scale: settings.DynamicResolutionForced)}"
-                : "on"));
-        var signal = (settings.DynamicResolution
-            ? (controller?.Signal ?? Client.WorldDynamicResolutionSignal.Off)
-            : Client.WorldDynamicResolutionSignal.Off);
+    private string RenderScaleEcho(string view) {
+        view = ((view == "*") ? WorldViewGraphs.WorldInstance : view);
+        var state = settings.Resolution(view: view);
+        var controller = state.Controller;
+        var ceiling = settings.Ceiling(view: view);
+        var enabled = settings.Enabled(view: view);
+        var mode = (!enabled ? "off" : ((state.Pin > 0f) ? $"pin {RenderScaleName(scale: state.Pin)}" : "auto"));
+        var grid = ((enabled && (controller.Grid > 0d)) ? controller.Grid : WorldDynamicResolution.GridOf(ceiling: ceiling, scale: ceiling));
+        var signal = (enabled ? controller.Signal : WorldDynamicResolutionSignal.Off);
 
-        return string.Create(
-            provider: CultureInfo.InvariantCulture,
-            handler: $"[world.dynamic-resolution: {state} ceiling={RenderScaleName(scale: ceiling)} grid={RenderScaleName(scale: ((float)grid))} over={over} floor={RenderScaleName(scale: settings.DynamicResolutionFloor)} budget={Math.Round(a: (controller?.StepBudget ?? 0d))} signal={signal.ToString().ToLowerInvariant()}]"
-        );
+        return string.Create(CultureInfo.InvariantCulture,
+            $"[world.render-scale: view={view} {mode} ceiling={RenderScaleName(scale: ceiling)} floor={RenderScaleName(scale: settings.Floor(view: view))} grid={RenderScaleName(scale: ((float)grid))} over={controller.OverGrid} budget={controller.StepBudget} signal={signal.ToString().ToLowerInvariant()}]");
     }
     // The world.temporal echo.
     private static string TemporalEcho(WorldRenderSettings settings) =>
@@ -225,40 +210,6 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         mode = default;
 
         return false;
-    }
-    private static bool TryParseRenderScale(ReadOnlySpan<char> text, out float scale) {
-        if (WorldRenderScaleTiers.TryParse(
-            name: text.ToString(),
-            tier: out var tier
-        )) {
-            scale = WorldRenderScaleTiers.Scale(tier: tier);
-
-            return true;
-        }
-
-        var token = text.Trim();
-        var percent = (!token.IsEmpty && (token[^1] == '%'));
-
-        if (percent) {
-            token = token[..^1];
-        }
-
-        if (!CommandArgs.TryParseFloat(
-            text: token,
-            value: out scale
-        )) {
-            return false;
-        }
-
-        if (percent) {
-            scale /= 100f;
-        }
-
-        return (
-            float.IsFinite(f: scale) &&
-            (scale >= 0.125f) &&
-            (scale <= 1f)
-        );
     }
     private static bool TryParseShadowReach(ReadOnlySpan<char> text, out float reach) {
         if (text.Equals(
@@ -684,33 +635,29 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
+            bindability: CommandBindability.Bindable,
             name: "world.render-scale",
-            description: "Sets internal SDF resolution live (no rebuild): world.render-scale [native|three-quarter|half|quarter|eighth|0.125..1|12.5%..100%]. Every player view renders at that fraction and the compositor reconstructs it to output resolution using world.upscale-sharpness; native is the bit-exact copy path. Numeric values make fine-grained 120 FPS sweeps possible.",
+            description: "Controls view resolution: world.render-scale [view] [<tier|fraction|percent>|floor <tier>|pin <scale>|auto [on|off]]. No argument echoes ceiling, saved quality floor, grid and signal. A pin is session-only and must lie between the floor and ceiling; auto releases it and resumes the policy from its grid. Sweeps inside the same ceiling allocate nothing. Defaults are off; the floor is Quarter unless a view's quality or tier authors another.",
             handler: (context, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: settings.RenderScale)} | named: {WorldRenderScaleTiers.ValidNames} | numeric: 12.5%..100%]");
+                settings.ReadQuality(definition: server.Definition);
+                if (!WorldRenderScaleCommand.TryParse(args: in args, command: out var command, refusal: out var refusal)) {
+                    return CommandResult.Error(output: $"[{refusal}]");
                 }
-
-                if (!TryParseRenderScale(
-                    text: args[0],
-                    scale: out var scale
-                )) {
-                    return CommandResult.Error(output: $"[world.render-scale: invalid '{args[0]}' — named: {WorldRenderScaleTiers.ValidNames}; numeric: 0.125..1 or 12.5%..100%]");
+                if (!settings.HasView(view: command.View)) {
+                    return CommandResult.Error(output: $"[world.render-scale: unknown view '{command.View}']");
                 }
+                if (command.Operation == WorldRenderScaleOperation.Echo) {
+                    return new CommandResult(Output: RenderScaleEcho(view: command.View));
+                }
+                if ((command.Operation == WorldRenderScaleOperation.Pin) && !settings.CanPin(command.View, command.Scale, out refusal)) {
+                    return CommandResult.Error(output: $"[{refusal}]");
+                }
+                var section = (((command.View == "*") && (command.Operation != WorldRenderScaleOperation.Floor))
+                    ? WorldSection.Render : WorldSection.Views);
 
-                return SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.RenderScale,
-                    a: scale,
-                    formatEcho: () => {
-                        var liveScale = settings.RenderScale;
-                        var pixelPercent = ((int)Math.Round(a: ((liveScale * liveScale) * 100f)));
-
-                        return new CommandResult(Output: $"[world.render-scale: {RenderScaleName(scale: liveScale)} — ~{pixelPercent}% of native internal pixels; measure GPU work with world.counters gpu]");
-                    }
-                );
+                link.SubmitSessionLever(lever: new WorldSessionLever(section, WorldSessionLevers.RenderScale,
+                    command.Scale, ((double)command.Operation), View: ((command.View == "*") ? null : command.View)), principal: context.Principal);
+                return new CommandResult(Output: RenderScaleEcho(view: command.View));
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -762,38 +709,8 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            name: "world.dynamic-resolution",
-            description: "Turns dynamic resolution of the world's own views on or off, or forces its grid, live: world.dynamic-resolution [on|off|native|three-quarter|half|quarter|eighth|0.125..1|12.5%..100%] — no argument echoes the state, the ceiling, the grid the latest frame chose, the floor (render.dynamicResolutionFloor), the march-step budget and the signal that moved it. On, each frame one controller moves every view's render grid between the floor and the render-scale ceiling by one load sample: the views' GPU frame time against the display period (it records the pass timestamps world.gpu-timing reads), a new present's interval against the period where the device times nothing, or, where neither is available, the views' counted march steps against the budget the committed floor-tier counters ceilings give per output pixel. A sample within 10% of its budget leaves the grid; outside that, the grid moves toward the budget by at most 1/16 of itself down or 1/32 up. The grid moves inside the allocation, so no frame rebuilds, reallocates or resets history; a native ceiling is lowered to three-quarter while it is on, which rebuilds each view once. A scale forces the grid there (bounded by the ceiling) and turns it on, for sweeps; on returns the grid to the controller. Camera and session views keep their own scale.",
-            handler: (context, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: DynamicResolutionEcho());
-                }
-
-                var on = 1.0;
-                var forced = 0.0;
-
-                if (ParseOnOff(token: args[0]) is { } state) {
-                    on = (state ? 1.0 : 0.0);
-                } else if (TryParseRenderScale(scale: out var scale, text: args[0])) {
-                    forced = scale;
-                } else {
-                    return CommandResult.Error(output: $"[world.dynamic-resolution: invalid '{args[0]}' — on|off, named: {WorldRenderScaleTiers.ValidNames}; numeric: 0.125..1 or 12.5%..100%]");
-                }
-
-                return SubmitLever(
-                    link: link,
-                    principal: context.Principal,
-                    name: WorldSessionLevers.DynamicResolution,
-                    a: on,
-                    b: forced,
-                    formatEcho: () => new CommandResult(Output: DynamicResolutionEcho())
-                );
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.dynamic-resolution/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
@@ -836,19 +753,22 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                 SubmitLever(
                     link: link,
                     principal: context.Principal,
-                    name: WorldSessionLevers.DynamicResolution,
-                    a: (preset.DynamicResolution
-                    ? 1.0
-                    : 0.0)
+                    name: WorldSessionLevers.RenderScale,
+                    b: ((double)(preset.DynamicResolution ? WorldRenderScaleOperation.Auto : WorldRenderScaleOperation.Off)),
+                    a: 0.0
                 );
 
-                // The echo formats INSIDE the LAST lever's completion — all four have applied (or the last was
+                SubmitLever(link, context.Principal, WorldSessionLevers.RenderScale,
+                    WorldRenderScaleTiers.Scale(tier: preset.RenderScaleFloor), b: ((double)WorldRenderScaleOperation.Floor),
+                    section: WorldSection.Views);
+                // The echo formats inside the last lever's completion — every setting has applied (or the last was
                 // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
                 return SubmitLever(
                     link: link,
                     principal: context.Principal,
                     name: WorldSessionLevers.RenderScale,
-                    a: WorldRenderScaleTiers.Scale(tier: preset.RenderScale),
+                    a: preset.RenderScale,
+                    b: ((double)WorldRenderScaleOperation.Ceiling),
                     formatEcho: () => new CommandResult(Output: DescribeQuality())
                 );
             }

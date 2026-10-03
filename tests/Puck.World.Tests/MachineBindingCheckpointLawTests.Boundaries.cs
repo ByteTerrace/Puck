@@ -1,8 +1,6 @@
-using System.Text.Json;
 using Puck.Commands;
 using Puck.Testing;
 using Puck.World.Protocol;
-using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -77,78 +75,5 @@ public sealed partial class MachineBindingCheckpointLawTests {
         Assert.Null(@object: server.MachineBindingState(binding: "send", machine: Machine));
         Assert.False(condition: harness.Tape.TryBeginRecording(name: "removed", refusal: out refusal));
         Assert.Contains(actualString: refusal, expectedSubstring: "binding memo");
-    }
-    [InlineData(WorldScreenMemoryDirection.Read)]
-    [InlineData(WorldScreenMemoryDirection.Write)]
-    [Theory]
-    public void ScreenMemoryOnANamedMachineClosesCaptureAndSeekBeforeEitherCanLoseItsMemo(WorldScreenMemoryDirection direction) {
-        using var directory = new TemporaryDirectory(prefix: "puck-binding-memo-screen-");
-        var image = new byte[0x8000];
-
-        image[0x100] = 0x18;
-        image[0x101] = 0xFE;
-        var rom = directory.WriteBytes(bytes: image, name: "program.gb");
-        var definition = Document(rom, Binding(address: 0xC040, name: "send", row: "send", update: "onChange"));
-        var screen = Fixtures.BuildDocument().Screens[0] with {
-            Source = new WorldScreenSource.Machine(Instance: Machine, Output: "video"),
-            Memory = null,
-        };
-
-        definition = definition with {
-            ScreensRaw = null,
-            MachinesRaw = [new WorldMachine(
-                Name: Machine,
-                Engine: "gaming-brick",
-                Configuration: JsonSerializer.SerializeToElement(new {
-                    schema = "puck.gaming-brick.configuration.v1",
-                    model = "cgb",
-                    boot = "fast",
-                    content = new { path = rom },
-                }),
-                Running: false
-            )],
-        };
-        using var harness = new WorldHistoryHarness(definition: definition, seats: 0);
-        var server = harness.Fixture.Server;
-
-        Assert.True(condition: harness.Tape.TryBeginRecording(name: "boot", refusal: out var refusal), userMessage: refusal);
-        harness.StepWithoutInput();
-        _ = harness.Tape.StopRecording();
-        var keyframe = harness.Tick;
-
-        Assert.True(condition: server.TryCaptureCheckpoint(
-            hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out _, reason: out var reason
-        ), userMessage: reason);
-        Assert.False(condition: server.AnyScreenOpEverApplied);
-        harness.Submit(mutation: new WorldMutation.UpsertScreen(
-            Principal: Principal.Console,
-            Screen: screen with { Memory = [new WorldScreenMemory(Address: 0xC040, Width: 1, Row: "send", Direction: direction)] }
-        ));
-        harness.StepWithoutInput();
-
-        Assert.True(condition: server.TryMachineMemoryObserved(screen: screen.Index, address: 0xC040, direction: direction, value: out _));
-        Assert.False(condition: server.AnyMachineEverPumped);
-        Assert.False(condition: server.TryCaptureCheckpoint(
-            hostRow: WorldAuthorityHostRowCheckpoint.Empty, checkpoint: out _, reason: out reason
-        ));
-        Assert.Contains(actualString: reason, expectedSubstring: "screen");
-        var before = server.Definition;
-        var tick = harness.Tick;
-        var runtime = Image(server: server);
-
-        Assert.False(condition: harness.History.TrySeek(
-            documentPath: null, refusal: out reason, report: out _, target: keyframe
-        ));
-        Assert.Contains(actualString: reason, expectedSubstring: "screen");
-        Assert.Same(expected: before, actual: server.Definition);
-        Assert.Equal(expected: tick, actual: harness.Tick);
-        Assert.Equal(expected: runtime, actual: Image(server: server));
-        Assert.False(condition: harness.Tape.TryBeginDrive(
-            documentPath: null, forkName: null, name: "boot", refusal: out reason, toTick: null
-        ));
-        Assert.Contains(actualString: reason, expectedSubstring: "screen");
-        Assert.Same(expected: before, actual: server.Definition);
-        Assert.Equal(expected: tick, actual: harness.Tick);
-        Assert.Equal(expected: runtime, actual: Image(server: server));
     }
 }

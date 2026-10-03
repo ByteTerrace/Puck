@@ -137,6 +137,8 @@ public sealed partial class SdfWorldTables {
         m_deviceContext.TryWaitIdle();
         m_pipelines.Exchange(reload: reload);
         m_pipelines.Commit(reload: reload);
+        // The environment map's kernels may be among them: the next upload whose fog reads the map renders it again.
+        m_skyEnvironment.Forget();
         // New kernels render new pixels: every view renders again.
         m_programRevision++;
         ReconfigureWork();
@@ -152,6 +154,7 @@ public sealed partial class SdfWorldTables {
         internal static readonly GpuPipelineLayoutDescription World = SdfWorldInterfaces.WorldLayout.PipelineLayout(stages: GpuShaderStage.Compute);
         internal static readonly GpuPipelineLayoutDescription Mesh = SdfWorldInterfaces.MeshLayout.PipelineLayout(stages: GpuShaderStage.Vertex | GpuShaderStage.Fragment);
         internal static readonly GpuPipelineLayoutDescription BrickBake = SdfWorldInterfaces.BrickBakeLayout.PipelineLayout(stages: GpuShaderStage.Compute);
+        internal static readonly GpuPipelineLayoutDescription Environment = SdfWorldInterfaces.EnvironmentParameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute);
         // One per kernel in SdfKernel order, with the layout and name from the same immutable kernel set.
         internal static readonly PipelineSpec[] Specs = [.. SdfKernelSet.Kernels.Select(selector: static kernel => Spec(kernel: kernel))];
         // Resolve joins the same slot table on demand through BuildResolve, so a set leases every other kernel up front.

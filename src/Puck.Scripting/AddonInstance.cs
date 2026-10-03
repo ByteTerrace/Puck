@@ -25,7 +25,8 @@ namespace Puck.Scripting;
 public sealed class AddonInstance : IDisposable {
     // A hard per-store linear-memory ceiling (256 wasm pages), enforced via the runtime store limiter the WS1
     // spike confirmed on Wasmtime 44.0.0. Trusted, path-declared authors; generous but bounded.
-    private const long MaxMemoryBytes = (256L * 65536L);
+    private const long MaxMemoryBytes = (256L * WasmPageBytes);
+    private const long WasmPageBytes = 65536L;
 
     private readonly AddonChannelBinding[] m_channelBindings;
     private readonly IAddonChannelResolver? m_channelResolver;
@@ -34,6 +35,7 @@ public sealed class AddonInstance : IDisposable {
     private readonly ScriptingEngine? m_engine;
     private readonly long m_fuelPerTick;
     private readonly AssetContentHash m_hash;
+    private readonly IReadOnlyList<WasmMemoryDeclaration> m_memories;
     private readonly Module? m_module;
     private readonly string m_name;
 
@@ -74,6 +76,7 @@ public sealed class AddonInstance : IDisposable {
         m_fault = AddonFault.None;
         m_fuelPerTick = (descriptor.FuelPerTick ?? AddonAbi.DefaultFuelPerTick);
         m_hash = moduleInfo.ContentHash;
+        m_memories = moduleInfo.Memories;
         m_module = moduleInfo.Module;
         m_name = descriptor.Name;
 
@@ -92,6 +95,7 @@ public sealed class AddonInstance : IDisposable {
         m_fault = fault;
         m_fuelPerTick = (descriptor.FuelPerTick ?? AddonAbi.DefaultFuelPerTick);
         m_hash = hash;
+        m_memories = [];
         m_module = null;
         m_name = descriptor.Name;
         m_state = AddonState.Faulted;
@@ -188,6 +192,18 @@ public sealed class AddonInstance : IDisposable {
                 reason: $"BadExport — {exportError}"
             );
             return;
+        }
+
+        // Every memory the binary declares, exported or not, was read before the module was compiled, so one past
+        // the store's ceiling is refused by name here and never handed to Wasmtime to allocate.
+        for (var index = 0; (index < m_memories.Count); index++) {
+            if (m_memories[index].MinimumBytes > MaxMemoryBytes) {
+                SetFault(
+                    kind: AddonFaultKind.MemoryLimit,
+                    reason: $"MemoryLimit — memory {index} declares {m_memories[index].MinimumPages} pages of 2^{m_memories[index].PageSizeLog2} bytes, past the {(MaxMemoryBytes / WasmPageBytes)}-page ceiling"
+                );
+                return;
+            }
         }
 
         Store? store = null;

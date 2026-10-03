@@ -549,11 +549,10 @@ public sealed class NamedMachineLifetimeLawTests {
             actual: before,
             expected: 0
         );
-        Assert.True(condition: host.TryPokeMessage(
+        Assert.Single(collection: engine.Created).PokeByte(
             address: 7,
-            index: 0,
             value: 42
-        ).Ok);
+        );
         Assert.True(condition: host.TryPeekMessage(
             address: 7,
             index: 0,

@@ -13,10 +13,20 @@ every determinism knob explicit (fuel on, threads/SIMD off, NaN canonicalization
 fixed optimization level), no floating point ever crosses the boundary, and a runaway module halts
 at a fuel-deterministic point rather than a wall-clock one.
 
+The engine also turns Wasmtime's signal-based traps off, so Wasmtime installs no signal handlers in
+the host process. Addons share the World process with its managed code. With Wasmtime's handlers
+installed, a hardware fault in that code on a thread that never ran a guest, such as an integer
+division fault, runs .NET's exception dispatch on the thread's small alternate signal stack, and
+the process aborts with "Stack overflow." With signal-based traps off, Wasmtime checks memory
+bounds, division and stack depth explicitly in the code it generates. Traps keep their kinds, and
+guest memory accesses each pay an explicit bounds check. The binding has no setter for the option,
+so `WasmtimeSignals` sets it on the native config, and `AddonGuestLawTests` holds it with a child
+test host that runs a guest and then raises a division fault on other threads.
+
 ```text
 namespace Puck.Scripting
 target     net10.0
-deps       Puck.Assets, Puck.Maths + Wasmtime [44.0.0] (exact pin)
+deps       Puck.Assets, Puck.Maths + Wasmtime [48.0.2] (exact pin)
 ```
 
 Deliberately **no** `Puck.Commands` or `Puck.Input` reference—this is the neutral core of
@@ -614,8 +624,15 @@ deliberately carries no span.
 - **One `Store`/`Instance` per addon, single sim-tick thread only** (Wasmtime store thread affinity,
   issue #331). `GC.KeepAlive(store)` follows every guest invoke (wasmtime-dotnet finalizer-hazard
   discipline).
-- **Memory cap:** each store gets a hard `SetLimits(memorySize: …)` ceiling (256 pages) plus a
-  load-time region-bounds pre-flight; `memory.grow` is fuel-charged.
+- **Memory cap:** each store gets a hard `SetLimits(memorySize: …)` ceiling of 256 pages for each
+  linear memory, plus a load-time region-bounds pre-flight; `memory.grow` is fuel-charged. A guest
+  that declares any memory past the ceiling, exported or not, is refused as `MemoryLimit` before a
+  store exists. The loader reads every defined and imported memory's limits from the binary
+  (`WasmModuleDeclarations` in `Puck.Assets`; WAT is converted to its binary first) before Wasmtime
+  compiles it, so a guest declaring four gibibytes allocates none of them. A malformed import,
+  memory or export section is refused by the loader with the section and entry named, and the
+  host reports it as `BadExport`. A `memory.grow` past the ceiling returns -1 to the guest, which
+  faults only if the guest traps on it.
 
 | `AddonFaultKind` | Raised by |
 |---|---|
@@ -625,6 +642,7 @@ deliberately carries no span.
 | `HashMismatch` | Module content does not match the descriptor's declared `moduleHash` pin. |
 | `OutOfFuel` | The tick exhausted its fuel budget and trapped deterministically. |
 | `StackOverflow` / `MemoryOutOfBounds` / `Unreachable` / `Trap` | Guest traps, classified in that order of specificity. |
+| `MemoryLimit` | One of the guest's memories, exported or not, declares more than the 256-page ceiling, read from the binary and refused before instantiation. |
 
 Every fault is loud and attributed. Detail lines are formatted for the console and keyed by the
 addon's **name**, so an operator reading a run log sees which addon failed, why, and what to do:
@@ -669,7 +687,7 @@ straight into a sticky `HashMismatch` fault naming the reason, at boot and re-pr
   byte length back rather than assuming `count * stride`. Every reserved-must-be-zero and shape guard
   is checked in order, and any failure is a deterministic refusal naming the cell index (or entry
   index, for the name table)—a stale guest can smuggle no meaning into a reserved field.
-- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[44.0.0]`. Nothing in the
+- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[48.0.2]`. Nothing in the
   build asserts the loaded assembly's major version, so the pin is held by review, not by a gate.
 - **Single-threaded, one store per addon.** Do not share a `Store` across threads or reuse one
   across addons; hot-swap a script by `Enable()` (dispose + re-instantiate), not by mutation.
@@ -689,7 +707,7 @@ dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj
 
 `ByteTerrace.Puck.Scripting` depends on `Puck.Assets` (module bytes through `IAssetSource`),
 `Puck.Maths` (`FixedQ4816` for every quantized payload lane), and the third-party `Wasmtime`
-`[44.0.0]` exact pin (a real, flowing runtime dependency—not a build-only generator). It carries
+`[48.0.2]` exact pin (a real, flowing runtime dependency—not a build-only generator). It carries
 no `Puck.Commands`, `Puck.Input`, or `Puck.World` dependency; `Puck.World.Addons` and `Puck.World`
 depend on it for the addon host and reference the wire vocabulary this file defines.
 

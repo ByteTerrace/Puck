@@ -11,9 +11,9 @@ using static Puck.DirectX.DirectXConstants;
 namespace Puck.DirectX;
 
 /// <summary>
-/// Implements <see cref="IGpuSurfaceTransferFactory"/> for Direct3D 12 by creating adapter wrappers over
+/// Implements <see cref="IGpuSurfaceTransferFactory"/> for Direct3D 12 by creating
 /// <see cref="DirectXSurfaceUpload"/> and the inline readback and import helpers, each bound to the factory's device
-/// context. Each wrapper converts <see cref="GpuPixelFormat"/> constants to <c>DXGI_FORMAT</c> values.
+/// context. Each implementation converts <see cref="GpuPixelFormat"/> constants to <c>DXGI_FORMAT</c> values.
 /// </summary>
 /// <param name="deviceContext">The device context every object the factory creates works on.</param>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -23,7 +23,7 @@ public sealed class DirectXGpuSurfaceTransferFactory(DirectXDeviceContext device
         new DirectXGpuSurfaceReadback(deviceContext: deviceContext);
     /// <inheritdoc/>
     public IGpuSurfaceUpload CreateUpload() =>
-        new DirectXGpuSurfaceUpload(upload: new DirectXSurfaceUpload(deviceContext: deviceContext));
+        new DirectXSurfaceUpload(deviceContext: deviceContext);
     /// <inheritdoc/>
     public IGpuSurfaceImport CreateImport() =>
         new DirectXGpuSurfaceImport(deviceContext: deviceContext);
@@ -317,62 +317,11 @@ file sealed unsafe class DirectXGpuSurfaceReadback(IDirectXDeviceContext deviceC
     }
 }
 [SupportedOSPlatform("windows10.0.10240")]
-file sealed class DirectXGpuSurfaceUpload(DirectXSurfaceUpload upload) : IGpuSurfaceUpload {
-    // The view of the upload's current texture, kept while an upload reuses the texture and replaced only when the
-    // upload rebuilds it for another extent, format or level count, so a steady upload allocates nothing.
-    private GCHandle m_currentToken;
-    private DirectXImageView? m_currentView;
-
-    public nint Upload(
-        ReadOnlyMemory<byte> pixels,
-        GpuPixelFormat format,
-        uint width,
-        uint height,
-        uint levels = 1U
-    ) {
-        upload.Upload(
-            format: format,
-            height: height,
-            levels: levels,
-            pixels: pixels.Span,
-            width: width
-        );
-
-        if (
-            (m_currentView is { } current) &&
-            (current.ResourceHandle == upload.TextureHandle) &&
-            (current.Format == upload.TextureFormat)
-        ) {
-            return GCHandle.ToIntPtr(value: m_currentToken);
-        }
-
-        if (m_currentToken.IsAllocated) {
-            m_currentToken.Free();
-        }
-
-        m_currentView = new DirectXImageView {
-            Format = upload.TextureFormat,
-            ResourceHandle = upload.TextureHandle,
-        };
-        m_currentToken = GCHandle.Alloc(value: m_currentView);
-
-        return GCHandle.ToIntPtr(value: m_currentToken);
-    }
-    public void Dispose() {
-        if (m_currentToken.IsAllocated) {
-            m_currentToken.Free();
-        }
-
-        m_currentView = null;
-        upload.Dispose();
-    }
-}
-[SupportedOSPlatform("windows10.0.10240")]
 file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceContext) : IGpuSurfaceImport {
-    // Cache the opened resource + view token by shared handle. A producer hands over the SAME handle every frame
+    // Cache the opened resource + view handle by shared handle. A producer hands over the SAME handle every frame
     // (the exportable texture is stable), so without this each call would OpenSharedHandle again and leak an
     // ID3D12Resource per frame. Mirrors VulkanSurfaceImport's idempotent caching.
-    private readonly Dictionary<nint, (nint Resource, GCHandle Token)> m_imports = [];
+    private readonly Dictionary<nint, (nint Resource, nint View)> m_imports = [];
 
     private bool m_disposed;
     // The device the opened resources live on, from the first import (DirectXDeviceOwnership).
@@ -405,7 +354,7 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
         )) {
             return new GpuImportedSurface(
                 ImageHandle: cached.Resource,
-                ImageViewHandle: GCHandle.ToIntPtr(value: cached.Token)
+                ImageViewHandle: cached.View
             );
         }
 
@@ -431,13 +380,13 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
             ResourceHandle = ((nint)resource),
         };
 
-        var token = GCHandle.Alloc(value: imageView);
+        var view = DirectXImageViews.Register(view: imageView);
 
-        m_imports[sharedHandle] = (((nint)resource), token);
+        m_imports[sharedHandle] = (((nint)resource), view);
 
         return new GpuImportedSurface(
             ImageHandle: ((nint)resource),
-            ImageViewHandle: GCHandle.ToIntPtr(value: token)
+            ImageViewHandle: view
         );
     }
     public void Dispose() {
@@ -456,7 +405,7 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
 
         m_disposed = true;
 
-        foreach (var (resource, token) in m_imports.Values) {
+        foreach (var (resource, view) in m_imports.Values) {
             if (0 != resource) {
                 DirectXDeviceMemory.CountReleased(
                     memory: deviceContext.Memory,
@@ -465,9 +414,7 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
                 _ = ((IUnknown*)resource)->Release();
             }
 
-            if (token.IsAllocated) {
-                token.Free();
-            }
+            DirectXImageViews.Release(handle: view);
         }
 
         m_imports.Clear();

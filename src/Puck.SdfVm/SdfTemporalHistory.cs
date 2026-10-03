@@ -32,9 +32,12 @@ public readonly record struct SdfReprojectionView(CameraSnapshot Camera, Vector2
 public sealed class SdfTemporalHistory {
     private SdfTemporalEpoch m_epoch;
     private bool m_prepared;
-    // The pose revisions the latest prepared render reads: its current tables' and its previous tables'.
+    // The pose revisions the latest prepared render reads: its current tables' and its previous tables'. A prepared
+    // render whose submission fails commits nothing, so history continues only from the current poses of the latest
+    // render that completed (Rendered), whatever the tables uploaded for the failed one.
     private long m_poses;
     private long m_previousPoses;
+    private long m_renderedPoses;
     // Whether a counted sample source drives the index, and that source's count at the epoch's first sample.
     private bool m_counted;
     private bool m_rebase = true;
@@ -134,6 +137,7 @@ public sealed class SdfTemporalHistory {
             PreviousView: PreviousView
         );
         m_rendered = true;
+        m_renderedPoses = m_poses;
         PreviousView = m_currentView;
         HasPreviousView = true;
         if (!m_counted && Sampling(epoch: m_epoch) && (Frames < uint.MaxValue)) {
@@ -181,7 +185,7 @@ public sealed class SdfTemporalHistory {
     private bool Continues(SdfTemporalEpoch epoch, long previousPoses) => (
         m_prepared &&
         (epoch == m_epoch) &&
-        (previousPoses == m_poses)
+        (previousPoses == m_renderedPoses)
     );
     private static bool Sampling(SdfTemporalEpoch epoch) => (epoch.Enabled && (epoch.Debug == 0));
     private static Vector2 JitterAt(SdfTemporalEpoch epoch, uint frames) => (Sampling(epoch: epoch) ? Sample(index: frames) : Vector2.Zero);

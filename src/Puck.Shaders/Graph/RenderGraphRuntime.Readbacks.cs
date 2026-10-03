@@ -43,15 +43,23 @@ public sealed partial class RenderGraphRuntime {
     /// over until it has none in flight, across any number of reconfigurations, a held one included; a render is handed
     /// over once, so an instance added again under the same name counts its new node's renders only through that
     /// node.</summary>
+    /// <param name="instance">One view's name, or null to take every accounted-for instance. Other views' entries remain.</param>
     /// <returns>The retired completions since the previous read.</returns>
-    public ShaderPipelineCompletions TakeRetiredCompletions() {
+    public ShaderPipelineCompletions TakeRetiredCompletions(string? instance = null) {
         var completions = default(ShaderPipelineCompletions);
+        var kept = 0;
 
-        foreach (var (_, retired) in m_retiredCompletions) {
-            completions = completions.Then(later: retired);
+        for (var index = 0; (index < m_retiredCompletions.Count); index++) {
+            var retired = m_retiredCompletions[index];
+
+            if ((instance is null) || (retired.Instance == instance)) {
+                completions = completions.Then(later: retired.Completions);
+            } else {
+                m_retiredCompletions[kept++] = retired;
+            }
         }
 
-        m_retiredCompletions.Clear();
+        m_retiredCompletions.RemoveRange(kept, (m_retiredCompletions.Count - kept));
 
         return completions;
     }

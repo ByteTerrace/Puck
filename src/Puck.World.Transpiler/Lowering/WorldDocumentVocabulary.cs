@@ -215,7 +215,7 @@ public sealed class WorldDocumentVocabulary(WorldConstructTable? constructs = nu
             return true;
         }
 
-        reason = $"Imported document '{name}' has neither a source at '{sourcePath}' nor a document at '{documentPath}'.";
+        reason = $"Imported document '{name}' has neither a source nor a document.";
 
         return false;
     }

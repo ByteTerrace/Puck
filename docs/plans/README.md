@@ -33,6 +33,10 @@ Durable GPU fixtures, per-pass work counters, general graphics attachments, shar
 
 The running World as the editor and debugger a builder needs, as one page of packages: build mode with the grid and snapping, selection and picking, undo and redo, debug views in every view, the inspector, answers to "why is this dark or invisible", gizmos, the editor camera, per-object cost and a GPU timing readout, live reload with before-and-after, saving edits back to source, the shape gallery as a world, and carving. Forcing artifact: a district of the forcing world laid out, lit and debugged in build mode without typing a coordinate.
 
+## [Milestone 1 acceptance laws](acceptance-laws.md)
+
+The six cross-system laws that prove the pipeline foundation holds together on the integration head: a rewind reaching an existing viewer, a crossing that replays to the same traveller, a restored machine under its bindings, a displayed source surviving the screen's changes, a federated commit that keeps private profile data at home, and an unsupported operation that refuses before changing anything. The page also names the gaps found while designing them, two of which make a law fail today.
+
 The current world architecture is owned by [Worlds and federation](../architecture/worlds.md). The [Reference game design](../game/design.md) defines the reference game requirements; its implementation work is in [Play](play.md).
 
 S7's engine and language substrate is present, including generation-aware

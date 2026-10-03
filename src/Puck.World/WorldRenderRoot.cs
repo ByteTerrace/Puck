@@ -290,7 +290,6 @@ internal static class WorldRenderRoot {
         probe.Residency = residency;
         probe.Root = root;
         probe.Settings = sp.GetService<WorldRenderSettings>();
-        probe.DynamicResolution = frameSource.DynamicResolution;
         // Dynamic resolution reads the views' GPU frame time, the presenter's present timing, resolved on the first frame
         // it reads it, the views' counted march steps, and their budget for the device's backend.
         frameSource.FrameLoad = new WorldFrameLoadSource(
@@ -298,6 +297,13 @@ internal static class WorldRenderRoot {
             presentTiming: () => (sp.GetService<ISurfacePresenter>() as IPresentTimingFeedback),
             probe: probe,
             timing: timing
+        );
+        frameSource.FrameLoadForView = name => new WorldFrameLoadSource(
+            backend: () => sp.GetService<IGpuWorkRegistry>()?.DeviceIdentity?.Backend,
+            presentTiming: () => (sp.GetService<ISurfacePresenter>() as IPresentTimingFeedback),
+            probe: probe,
+            timing: timing,
+            view: name
         );
         sp.GetRequiredService<WorldPostPasses>().Attach(
             graph: () => host.Synthesized,

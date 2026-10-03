@@ -523,6 +523,14 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             }
         }
 
+        // The sky's environment, which the World sets bind and the upload renders when the sky's field runs move.
+        // Its constructor joins each object it creates to the scope, which releases them should a later step throw.
+        m_skyEnvironment = new SkyEnvironmentPass(
+            gpu: gpu,
+            scope: scope,
+            tables: this
+        );
+
         // The "uploaded once" seam: the program (and its screen-surface table) is uploaded here and normally never
         // again — frames move entities by rewriting only the small dynamic-transform buffer. UploadProgram is the
         // single owner of per-program derived state (its capacity checks trivially pass for the construction program).
@@ -574,6 +582,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         }
 
         m_brickPoolBuffer.Dispose();
+        m_skyEnvironment.Dispose();
 
         foreach (var sampler in m_samplers) {
             m_bindings.DestroySampler(samplerHandle: sampler);

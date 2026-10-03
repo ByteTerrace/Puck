@@ -6,7 +6,11 @@ namespace Puck.Hosting;
 /// <param name="Instance">The instance name.</param>
 /// <param name="Width">The fraction of the display's width it covers.</param>
 /// <param name="Height">The fraction of the display's height it covers.</param>
-public readonly record struct RenderGraphRoot(string Instance, double Width, double Height);
+public readonly record struct RenderGraphRoot(string Instance, double Width, double Height) {
+    /// <summary>Gets how often the root asks for the instance, every frame unless set: an instance only roots show
+    /// renders no more often than the most frequent of its roots' refreshes, nor than its own.</summary>
+    public RenderGraphRefresh Refresh { get; init; } = RenderGraphRefresh.EveryFrame;
+}
 /// <summary>How much of one rendering instance's image another instance's output covers this frame, such as a screen
 /// showing a game camera. A footprint of zero on either axis, or no footprint at all, means the consumer does not show
 /// the producer this frame.</summary>

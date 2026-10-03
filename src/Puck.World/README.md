@@ -365,14 +365,17 @@ refuses until the renderer is ready, and with no argument it echoes the current
 extent. A windowed display keeps its document extent, which
 presentation scales to the window.
 
-Because its frames are its only output, the offscreen host holds its clock
-for them: it never steps past an armed capture's tick until that capture is
-served or refused. Whatever keeps the render chain from serving the capture
+Both rendered hosts, windowed and offscreen, hold their clock for captures:
+neither steps past an armed capture's tick, a scheduled row's or a
+`world.screenshot`'s, until that capture is served or refused. Whatever keeps the render chain from serving the capture
 (the engine's pipelines still building on a cold driver shader cache, the
 creation bakes still settling, or a device being rebuilt), the host keeps
 producing frames and answering the
 console but steps no further tick, and the time it waits is spent, not owed,
-so serving the capture releases no burst. The hold is bounded, and counts
+so serving the capture releases no burst. The offscreen host's own hold on a
+frame that has not rendered spends the same budget, so a capture armed during
+a long build is refused once it is spent, while that frame hold continues
+until the frame renders. The hold is bounded, and counts
 from readiness: while the engine's pipeline set builds (or rebuilds after a
 device loss), the run may hold its clock for 180 seconds in all
 (`WorldCaptureScheduler.BuildHoldBudgetSeconds`), and once the engine is ready
@@ -384,9 +387,9 @@ sdf-world-views)", and a later capture the chain still
 cannot serve is refused at once. `world.counters`
 reports the hold under `world.captures`: `world.captures.held` (engine ticks
 withheld) and `world.captures.ticks-while-armed` (ticks stepped while a
-capture waited, which stays 0 offscreen). A capture still waiting when the run
-ends is refused as `unserved` before the render chain is disposed. The windowed
-host paces to its display and never holds.
+capture waited, which stays 0 in both rendered hosts). A capture still waiting
+when the run ends is refused as `unserved` before the render chain is disposed.
+A headless host has no render chain and never holds.
 
 A capture row can set `converge` to 1–256 to render that many temporal samples
 at its armed tick before writing the last one; zero, the default, captures the
@@ -1903,13 +1906,13 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.temporal`, `world.dynamic-resolution`, `world.upscale-sharpness`,
+`world.temporal`, `world.upscale-sharpness`,
 `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
 shadow tier, an ambient-occlusion switch, a temporal-reconstruction switch and a
-render-scale tier; the names are
+render-scale ceiling and floor tier; the names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
@@ -1922,24 +1925,37 @@ native tier, where a view reconstructs nothing. `world.temporal on` reconstructs
 the world's own views over time at any render scale: each jitters its samples,
 resolves them over its history, and under `world.cadence on` stands once a still
 view has converged; `world.upscale-sharpness` then sharpens what it resolves.
-Camera and session views never reconstruct. The render section's `temporal`
+Camera and session views never reconstruct over time. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
-`world.dynamic-resolution on` moves the world's own views' render grid each
-frame between the floor (`render.dynamicResolutionFloor`, quarter by default)
-and the render-scale ceiling, inside the allocation, so no frame rebuilds or
-reallocates; a native tier is allocated at three-quarter while it is on. Its
-load is the views' GPU frame time against the display period (it turns on the
-pass timestamps `world.gpu-timing` reads), the present timing where the device
-times nothing, and, offscreen, the views' counted march steps against the
-budget the committed floor ceilings give per output pixel. A sample within 10%
-of its budget leaves the grid; outside it the grid moves by at most 1/16 of
-itself down or 1/32 up. `world.dynamic-resolution <tier|fraction>` forces a
-grid for sweeps, and the no-argument echo names the ceiling, the grid the
-views render, the lowest grid measured over the budget that it will not rise
-onto (`over=`), the floor, the budget and the signal. A sample counts only at
-the grid the views render now, and between two grids that bracket the budget
-the grid settles on the cheaper one. `render.dynamicResolution` sets it at boot,
-`world.save` folds it back, and every shipped preset leaves it off.
+`world.render-scale [view]` echoes the selected view's ceiling, saved quality
+floor, grid, budget and signal. With no target it echoes the primary view;
+ceiling and floor changes write the defaults that named rows inherit, while
+pin and automatic-mode changes apply to every player view (`world`, `world$2` on).
+A camera or session view keeps its native extent until a lever or a `views.quality`
+row names it.
+A named tier or numeric fraction/percentage sets the scalar allocation ceiling.
+`world.render-scale [view] floor <tier>` authors the floor through
+`views.quality`, whose rows name view instances; `*` supplies defaults.
+A row can select a `tier` from the world's quality presets or override its
+`renderScaleFloor` directly. Quarter is the default floor, and a preset's
+`renderScaleFloor` applies when `world.quality` selects that tier. Ceilings and
+floors survive `world.save` exactly; `renderScale` has only a scalar form.
+`world.render-scale [view] auto` releases a pin and enables adaptation;
+`auto off` stops it. Defaults and shipped presets leave adaptation off.
+`world.render-scale [view] pin <scale>` is bindable and holds a grid for a
+sweep. A pin outside the floor and ceiling is refused by name, and changes to
+the bounds clamp an existing pin. Pins enter neither saves nor replay. Auto
+continues from the pinned grid within one policy step.
+Each view uses the same resolution policy: fresh GPU frame time against the
+display period, then fresh present timing, then counted march steps against
+the budget from committed floor evidence per output pixel. A sample within
+10% of its budget holds the grid; otherwise it moves by at most 1/16 of itself
+down or 1/32 up. The grid moves inside its ceiling without allocating or
+resetting history. An adaptive native view allocates at three-quarter, since
+a native view reconstructs nothing. The scheduler supplies the only grid
+quantizer; readings from another grid do not move the policy. Between grids
+that bracket the budget the policy holds the cheaper one, reporting the
+measured dearer grid as `over=`.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and
@@ -2163,7 +2179,11 @@ the root because nothing is drawn over it. The root reads the frame the display 
 overlay that draws nothing this frame publishes the world's image in its place,
 and the capture reads that. Arming a second capture while one is still
 pending is REFUSED by name—the earlier path would never be written—and a
-request still outstanding when the run ends prints a `WARNING` naming it. A
+request still outstanding when the run ends is refused as `[capture] refused
+<path>: the run ended before any frame served it …` before the render root is
+disposed. A rendered host steps no tick past the one a capture was armed
+after until a frame serves it or its hold budget refuses it, so a
+`world.wait <ticks>` after it has the capture behind it. A
 scripted caller can therefore distinguish a reported write from an unserved
 request. In-process callers receive a `FrameCaptureRequest` from
 the render root (`RenderGraphRuntimeNode.RequestCapture`) and await its `Completion` for success or

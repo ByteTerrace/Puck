@@ -54,8 +54,11 @@ reads a drawn bake with `world.wait bakes <seconds>`, never a tick count. A
 script that takes several `world.screenshot` captures fences each one with
 `world.wait captures <seconds>` before arming the next, since a pending capture
 refuses the next arm and a tick count is a race under load.
-A capture still owed at the run's end is refused before the render root is
-disposed (`IFixedStepSimulation.SettleOwedFrames`). A host with no render chain
+A `world.screenshot` capture is held for the same way and from the same
+budgets (`WorldCaptureScheduler.ArmUnscheduled`), at the tick it was armed
+after, and refused through its request rather than in the manifest. A capture
+still owed at the run's end, scheduled or not, is refused before the render
+root is disposed (`IFixedStepSimulation.SettleOwedFrames`). A host with no render chain
 does not hold. `world.counters` shows the hold under `world.captures`
 (`world.captures.held`, and `world.captures.ticks-while-armed`, which stays 0
 in both rendered hosts); `WorldCaptureHoldLawTests` pins the budgets and

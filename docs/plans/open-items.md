@@ -43,6 +43,8 @@ These items belong to no single programme.
 
   `FederationOnwardRouteLawTests` drives the host's own claim publication across the onward hop, with the onward route observed before, during and after the claim. The portal follow-up work (presented-world probe hosts, remote destinations' screens, silo failover) reuses the same harness.
 
+- [ ] Implement the six [Milestone 1 acceptance laws](acceptance-laws.md) on the integration head once the projection, time-travel and portal-unification lanes have landed, each proved red by withholding the behavior it guards.
+
 ## [State and language](state-and-language.md)
 
 Every package below carries its own check on the programme page; tick it there and here in the same change.
@@ -131,7 +133,7 @@ Every package below carries its own check on the programme page; tick it there a
   - [ ] P6-GI G3: the light view, one depth-only camera view per residency cycling its shadow slots' regions, whose texel-wide acceptance never lights a shadowed hit.
   - [ ] P6-GI G4: bounce from lights and emission through the one light interface, the views apply with cached proofs and the primary march's launch, `render.indirect`, palette `bleed` and `receive`, `bounce` renamed `fill`, a light's `bounce`, parity's `indirect: on` rows, and indirect light on by default at `medium` and `high`.
   - [ ] P6-GI G5: hit-path, shadow-path, proof and radiance invalidation by P18-6's change classes, P18-7's slots and fades in the light view, and bodies that cast at `high`.
-  - [ ] P6-GI G6: the sky through the cache from `sky.environment`, in place of unoccluded harmonic ambient.
+  - [ ] P6-GI G6: the sky through the cache from the residency's environment map, in place of unoccluded harmonic ambient.
   - [ ] P6-GI G7: one GPU emission reduction per bound screen, portals onto other worlds as light sources in finite closure-wide iterations, per-world caches with nested budgets, and a lit crossing.
   - [ ] P6-GI G8: `world.explain`'s indirect line against the CPU reference, the echo, budget and inspector rows, and the freeze and reset levers.
   - [ ] P6-GI G9: the near field at `high`, short field rays that replace the cache's near interval, lit by explicit diffuse shading at their hits.
@@ -204,6 +206,7 @@ Every package below carries its own check on the programme page; tick it there a
   - [x] P18-3: keys on clocks for every bindable presentation value, blended by the field's type, with one resolver replacing `render.cycle` (the keys substrate, section keys, the resolver, the migrated worlds and remote presentation by anchored clocks and projection deltas).
   - [x] P18-4: the sky block and the lights table as regions with generated decoders, and the environment out of every pass block.
   - [x] P18-5: the sky evaluated once, only where a pixel or a neighbour is uncovered, and a composite pass for the sky, fog and bounded media; the pinned sky branch deleted and parity re-recorded (`SdfSkyEvaluationDeviceLawTests`, `SkyRunCompositionLawTests`, the `sky-coverage` canary).
+  - [ ] P18-5 environment (decision I): one environment map and its coefficients a residency renders in its upload only when its gradient changes, which the composite's fog reads with no sky evaluation; landed with its CPU and fake-device laws, while its device law, the `sky-environment` canary, parity's re-record and the counters ceilings wait for a GPU run.
   - [ ] P18-6: a cadence per pass, so a sky-only change runs only the sky and the composite (the generic retained-resource, signature, standing-counter and failure-recovery foundation has landed; SDF change classes, pass scheduling and temporal-history integration remain).
   - [ ] P18-7: celestial bodies with light binding and illumination, and up to four shadowed lights chosen by slot and tier, a slot changing hands by a counted crossfade.
   - [ ] P18-8: the open, ordered layer stack with one module per kind, the sky frame, per-layer tiers, one noise module and the `skies.puck` presets.

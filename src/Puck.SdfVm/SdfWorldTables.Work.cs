@@ -5,13 +5,15 @@ namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
     // The passes an upload counts, in recording order: the fillers' first transitions and clears, the brick pool's writes
-    // (a queued host-baked brick's staging and copy, and the carve bake's slices) and the regions' copies.
+    // (a queued host-baked brick's staging and copy, and the carve bake's slices), the regions' copies and the sky's
+    // environment (SdfWorldTables.SkyEnvironment.cs).
     private const int FillersPass = 0;
     private const int BricksPass = 1;
     private const int UploadPass = 2;
+    private const int EnvironmentPass = 3;
 
-    private static readonly string[] PassLabelTable = ["fillers", "bricks", "upload"];
-    private static readonly WorkClass[] PassClassTable = [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.PerBackendDeterministic];
+    private static readonly string[] PassLabelTable = ["fillers", "bricks", "upload", "environment"];
+    private static readonly WorkClass[] PassClassTable = [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic];
 
     // The ledger every wrapped GPU service counts into: the owner's (a residency that outlives device-loss rebuilds) or
     // the tables' own.
@@ -24,11 +26,13 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the labels of an upload's passes, in submission order: <c>fillers</c>, the fillers' first transitions
     /// and clears, on the first upload alone; <c>bricks</c>, the brick pool's writes (a queued host-baked brick's staging
     /// and copy, the carve bake's slices and the barriers around them), on an upload that writes the pool; and
-    /// <c>upload</c>, the region copies. An upload skips a pass it has no work for, which then reads skipped.</summary>
+    /// <c>upload</c>, the region copies; and <c>environment</c>, the sky's environment map and its coefficients, on an
+    /// upload whose sky's field runs moved while the fog reads them. An upload skips a pass it has no work for, which then
+    /// reads skipped.</summary>
     public static ReadOnlySpan<string> PassLabels => PassLabelTable;
     /// <summary>Gets what two runs of each pass may be held to agree on, in <see cref="PassLabels"/> order:
-    /// <c>fillers</c> is <see cref="WorkClass.Deterministic"/>; <c>bricks</c> and <c>upload</c> are
-    /// <see cref="WorkClass.PerBackendDeterministic"/>, because what they write and copy follows the residency policy
+    /// <c>fillers</c> and <c>environment</c> are <see cref="WorkClass.Deterministic"/>; <c>bricks</c> and <c>upload</c>
+    /// are <see cref="WorkClass.PerBackendDeterministic"/>, because what they write and copy follows the residency policy
     /// each device's memory profile selects.</summary>
     public static ReadOnlySpan<WorkClass> PassClasses => PassClassTable;
     /// <summary>Gets the GPU work the tables' uploads recorded, for the newest upload known to have completed.</summary>

@@ -1,0 +1,78 @@
+{
+  "id": "place-sharpen",
+  "title": "Place writes exact contrast-adaptive sharpen colors at equal extent",
+  "binding": "A paused authored pipeline in the real offscreen World seeds a 16x48 UNORM image, then runs the production place.comp.hlsl with sharpen enabled, full rect, equal source and output extents, and tonemap disabled. Capturing the pipeline output bypasses display scaling. In the softened edge, codes 64,96,160,192 yield four-neighbor sums 416 at x7 and 608 at x8. The live kernel weights each neighbor by -0.2 times strength times sqrt(min(lowest,2-highest)/highest), with colors normalized by 255: at strength 1 the results in code units are 87.8068 and 170.4198, encoded 88 and 170; strength 0.4 at x7 is 93.9701, encoded 94. Strength zero returns code 96 exactly. Flat code 64 and the saturated black/white edge stay exact. Exact imageRegion checks with zero tolerance pin the pass's written colors more strongly than texel counts, which cannot distinguish copy from sharpening. The discriminating leg disables only sharpen for the strength-1 capture: the named dark and bright sharpen observations turn red, and exact source codes 96 and 160 prove the copy path is the reason.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan","directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": ["seed.hlsl","sharpen.graph.json"],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/place-sharpen/fixture.puck",
+    "script": "positive.script.txt",
+    "commands": [
+      {"verb":"pipeline.wait","occurrence":1,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":2,"outcome":"accepted"},
+      {"verb":"pipeline.time","occurrence":1,"outcome":"accepted"},
+      {"verb":"pipeline.set","occurrence":1,"outcome":"accepted"},
+      {"verb":"pipeline.reset","occurrence":1,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":3,"outcome":"accepted"},
+      {"verb":"pipeline.capture","occurrence":1,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":4,"outcome":"accepted"},
+      {"verb":"pipeline.set","occurrence":2,"outcome":"accepted"},
+      {"verb":"pipeline.reset","occurrence":2,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":5,"outcome":"accepted"},
+      {"verb":"pipeline.capture","occurrence":2,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":6,"outcome":"accepted"},
+      {"verb":"pipeline.set","occurrence":3,"outcome":"accepted"},
+      {"verb":"pipeline.reset","occurrence":3,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":7,"outcome":"accepted"},
+      {"verb":"pipeline.capture","occurrence":3,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":8,"outcome":"accepted"}
+    ],
+    "expect": [
+      {"type":"imageRegion","name":"zero-strength-copies-code96","capture":"zero.png","extent":[16,48],"region":[0.4375,0.3333333333333333,0.5,0.3541666666666667],"reduce":"every","minimum":[0.3764705882352941,0.3764705882352941,0.3764705882352941,1],"maximum":[0.3764705882352941,0.3764705882352941,0.3764705882352941,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"partial-strength-writes-code94","capture":"partial.png","extent":[16,48],"region":[0.4375,0.3333333333333333,0.5,0.3541666666666667],"reduce":"every","minimum":[0.3686274509803922,0.3686274509803922,0.3686274509803922,1],"maximum":[0.3686274509803922,0.3686274509803922,0.3686274509803922,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"flat-color-stays-code64","capture":"sharp.png","extent":[16,48],"region":[0,0.3333333333333333,0.0625,0.3541666666666667],"reduce":"every","minimum":[0.25098039215686274,0.25098039215686274,0.25098039215686274,1],"maximum":[0.25098039215686274,0.25098039215686274,0.25098039215686274,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"black-edge-stays-zero","capture":"sharp.png","extent":[16,48],"region":[0.4375,0.8333333333333334,0.5,0.8541666666666666],"reduce":"every","minimum":[0,0,0,1],"maximum":[0,0,0,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"white-edge-stays-one","capture":"sharp.png","extent":[16,48],"region":[0.5,0.8333333333333334,0.5625,0.8541666666666666],"reduce":"every","minimum":[1,1,1,1],"maximum":[1,1,1,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"full-strength-dark-edge-writes-code88","capture":"sharp.png","extent":[16,48],"region":[0.4375,0.3333333333333333,0.5,0.3541666666666667],"reduce":"every","minimum":[0.34509803921568627,0.34509803921568627,0.34509803921568627,1],"maximum":[0.34509803921568627,0.34509803921568627,0.34509803921568627,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"full-strength-bright-edge-writes-code170","capture":"sharp.png","extent":[16,48],"region":[0.5,0.3333333333333333,0.5625,0.3541666666666667],"reduce":"every","minimum":[0.6666666666666666,0.6666666666666666,0.6666666666666666,1],"maximum":[0.6666666666666666,0.6666666666666666,0.6666666666666666,1],"toleranceCodes":0,"holds":true}
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/place-sharpen/fixture.puck",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {"verb":"pipeline.wait","occurrence":1,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":2,"outcome":"accepted"},
+      {"verb":"pipeline.time","occurrence":1,"outcome":"accepted"},
+      {"verb":"pipeline.set","occurrence":1,"outcome":"accepted"},
+      {"verb":"pipeline.reset","occurrence":1,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":3,"outcome":"accepted"},
+      {"verb":"pipeline.capture","occurrence":1,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":4,"outcome":"accepted"},
+      {"verb":"pipeline.set","occurrence":2,"outcome":"accepted"},
+      {"verb":"pipeline.reset","occurrence":2,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":5,"outcome":"accepted"},
+      {"verb":"pipeline.capture","occurrence":2,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":6,"outcome":"accepted"},
+      {"verb":"pipeline.set","occurrence":3,"outcome":"accepted"},
+      {"verb":"pipeline.reset","occurrence":3,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":7,"outcome":"accepted"},
+      {"verb":"pipeline.capture","occurrence":3,"outcome":"accepted"},
+      {"verb":"pipeline.wait","occurrence":8,"outcome":"accepted"}
+    ],
+    "expect": [
+      {"type":"imageRegion","name":"zero-strength-copies-code96","capture":"zero.png","extent":[16,48],"region":[0.4375,0.3333333333333333,0.5,0.3541666666666667],"reduce":"every","minimum":[0.3764705882352941,0.3764705882352941,0.3764705882352941,1],"maximum":[0.3764705882352941,0.3764705882352941,0.3764705882352941,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"partial-strength-writes-code94","capture":"partial.png","extent":[16,48],"region":[0.4375,0.3333333333333333,0.5,0.3541666666666667],"reduce":"every","minimum":[0.3686274509803922,0.3686274509803922,0.3686274509803922,1],"maximum":[0.3686274509803922,0.3686274509803922,0.3686274509803922,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"flat-color-stays-code64","capture":"sharp.png","extent":[16,48],"region":[0,0.3333333333333333,0.0625,0.3541666666666667],"reduce":"every","minimum":[0.25098039215686274,0.25098039215686274,0.25098039215686274,1],"maximum":[0.25098039215686274,0.25098039215686274,0.25098039215686274,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"black-edge-stays-zero","capture":"sharp.png","extent":[16,48],"region":[0.4375,0.8333333333333334,0.5,0.8541666666666666],"reduce":"every","minimum":[0,0,0,1],"maximum":[0,0,0,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"white-edge-stays-one","capture":"sharp.png","extent":[16,48],"region":[0.5,0.8333333333333334,0.5625,0.8541666666666666],"reduce":"every","minimum":[1,1,1,1],"maximum":[1,1,1,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"full-strength-dark-edge-writes-code88","capture":"sharp.png","extent":[16,48],"region":[0.4375,0.3333333333333333,0.5,0.3541666666666667],"reduce":"every","minimum":[0.34509803921568627,0.34509803921568627,0.34509803921568627,1],"maximum":[0.34509803921568627,0.34509803921568627,0.34509803921568627,1],"toleranceCodes":0,"holds":false},
+      {"type":"imageRegion","name":"full-strength-bright-edge-writes-code170","capture":"sharp.png","extent":[16,48],"region":[0.5,0.3333333333333333,0.5625,0.3541666666666667],"reduce":"every","minimum":[0.6666666666666666,0.6666666666666666,0.6666666666666666,1],"maximum":[0.6666666666666666,0.6666666666666666,0.6666666666666666,1],"toleranceCodes":0,"holds":false},
+      {"type":"imageRegion","name":"disabled-sharpen-copies-dark-code96","capture":"sharp.png","extent":[16,48],"region":[0.4375,0.3333333333333333,0.5,0.3541666666666667],"reduce":"every","minimum":[0.3764705882352941,0.3764705882352941,0.3764705882352941,1],"maximum":[0.3764705882352941,0.3764705882352941,0.3764705882352941,1],"toleranceCodes":0,"holds":true},
+      {"type":"imageRegion","name":"disabled-sharpen-copies-bright-code160","capture":"sharp.png","extent":[16,48],"region":[0.5,0.3333333333333333,0.5625,0.3541666666666667],"reduce":"every","minimum":[0.6274509803921569,0.6274509803921569,0.6274509803921569,1],"maximum":[0.6274509803921569,0.6274509803921569,0.6274509803921569,1],"toleranceCodes":0,"holds":true}
+    ]
+  }
+}
