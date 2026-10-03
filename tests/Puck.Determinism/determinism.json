@@ -79,7 +79,7 @@
         },
         {
             "name": "navigation",
-            "world": "../Puck.World.Canaries/dive-medium/fixture.world.json",
+            "world": "../Puck.World.Canaries/dive-medium/fixture.puck",
             "ticks": 40,
             "seats": [0],
             "intents": [],

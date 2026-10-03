@@ -7,7 +7,7 @@
   "timeoutSeconds": 20,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/dive-medium/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/dive-medium/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
@@ -28,7 +28,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/dive-medium/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/dive-medium/discriminating.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
