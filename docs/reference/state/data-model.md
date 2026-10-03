@@ -82,6 +82,11 @@ A row has a name, a kind, and zero or more cells. A **cell** is one value
 addressed by a key inside its row. In C#, a row is a `StateRow` and a cell is a
 `StateCell` whose `Value` is a `CellValue`.
 
+A row owns its cells, and an enum (`StateEnum`) its members: each copies the
+list you pass in as it is built (`StateLists.Freeze`), so changing that list
+afterwards changes nothing about the row or the enum. Build a new row, or use
+`with`, to change one.
+
 Every ordinary address has two parts, a row name and a cell key. The expression
 `pieceCell[king]` addresses the key `king` in the row `pieceCell`. The value
 stored there, `5`, means the king stands on board cell 5. The key says which
