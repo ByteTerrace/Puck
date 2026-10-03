@@ -281,12 +281,12 @@ These are one-line cautions; the owning pages hold the derivations.
   (`SdfBakeField` counts each evaluation); never add a second interpreter or
   march for baking. A program the evaluator refuses has no bake, and a creation
   bakes only its contact emission (`CreationStampEmitter.EmitFixed`).
-- **The version moves with the bytes.** `SdfBaker.Version` keys every bake and is
-  the `BAKE` chunk's version; any change to what the baker, `CreationBaker` or
-  `CreationBakeCodec` produces bumps it and re-records the product pin in
-  `CreationBakeLawTests`. A held bake is keyed by the version, never by the code that wrote it, so
-  two lanes that change the bytes must not share a number; a held bake this baker cannot
-  decode draws the field, counted and named (`sdf.bakes.undecodable`).
+- **The shape moves with the bytes.** `SdfBaker.Version` keys every bake and is
+  the `BAKE` chunk's version; a change to what the baker, `CreationBaker` or
+  `CreationBakeCodec` produces re-records the product pin in
+  `CreationBakeLawTests` and moves the shape `puck formats` records for the
+  format. A held bake this baker cannot decode draws the field, counted and named
+  (`sdf.bakes.undecodable`).
 - **Portable bytes.** A bake is content-addressed and one build's pack stands in
   for any device's bake, so its bytes must not depend on the machine: scalar
   IEEE arithmetic in a written order, no transcendental function, no `Vector3`

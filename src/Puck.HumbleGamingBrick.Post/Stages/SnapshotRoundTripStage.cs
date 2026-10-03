@@ -10,9 +10,9 @@ namespace Puck.HumbleGamingBrick.Post;
 /// <para>
 /// Also asserts the snapshot format: the section-name sequence a snapshot's table records (metadata riding
 /// alongside the bytes; see <see cref="SnapshotSection"/>) must match the exact, ordered <see cref="ExpectedSectionRoster"/>
-/// derived from <c>HumbleGamingBrickComponents</c>'s registration order — the increment-on-layout-change contract
-/// (<see cref="MachineIdentity.CurrentVersion"/>) has no other automatic guard, so a component silently added, removed,
-/// or reordered without a version bump now fails this stage loudly instead of just shifting bytes.
+/// derived from <c>HumbleGamingBrickComponents</c>'s registration order — a component silently added, removed, or
+/// reordered now fails this stage loudly instead of just shifting bytes, whatever the recorded shape of
+/// <see cref="MachineIdentity.CurrentVersion"/> says.
 /// </para>
 /// </summary>
 internal sealed class SnapshotRoundTripStage : IPostStage<PostContext> {
@@ -21,8 +21,7 @@ internal sealed class SnapshotRoundTripStage : IPostStage<PostContext> {
 
     // L-01: the exact section sequence a fresh Humble machine's snapshot must produce — "clock" first (Machine.Snapshot
     // writes it before walking the snapshotables), then every ISnapshotable in HumbleGamingBrickComponents.cs's
-    // registration order. Update this roster (and bump MachineIdentity.CurrentVersion) in the SAME change that adds,
-    // removes, or reorders a registration — that is exactly the discipline a stale version number silently broke once.
+    // registration order. Update this roster in the SAME change that adds, removes, or reorders a registration.
     private static readonly string[] ExpectedSectionRoster = [
         "clock", "ModelState", "DmgCompatibilityState", "SystemMemory", "InterruptController", "TimerComponent",
         "JoypadComponent", "Key1Component", "SerialComponent", "InfraredPort", "ApuComponent", "AudioOutputComponent",
