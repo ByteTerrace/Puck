@@ -15,7 +15,7 @@ namespace Puck.World.Tests;
 /// the law: a placement's <c>attach</c> facet can be driven live by an ordinary document rule — a body standing in a
 /// region while holding a channel gets a named placement upserted onto it (<see cref="WorldPlacementAttach"/>,
 /// <c>bodyIndex</c> literal, offset in the body's local frame); walking back out of the region upserts it back to its
-/// authored stand pose. Both edges reuse the exact idiom <c>modules/studio.world.json</c>'s own
+/// authored stand pose. Both edges reuse the exact idiom <c>modules/studio.puck</c>'s own
 /// <c>studio-look-cycle</c> rule already ships (<c>compareState</c> over <c>$region:</c>/<c>$channel:</c>, <c>Edge</c>
 /// mode) — no new engine primitive, no new schema member: the local-frame offset <see cref="WorldPlacementAttach.LocalOffset"/>
 /// already carries is the only body-relative anchor a rig with no joint transforms can honor (see this suite's own

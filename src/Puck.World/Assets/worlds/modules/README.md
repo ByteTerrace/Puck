@@ -23,7 +23,7 @@ count); it reads the island's.
 | `kart` | `kart.puck` | A track on a curve, a kart kit, gates, a lap counter |
 | `jump` | `jump.puck` | A platform course rising from the shard steps, a vaulter kit, a trophy |
 | `arena` | `arena.puck` | The hp/targeting/attack and elemental suites in a walled yard |
-| `studio` | `studio.world.json` | A flat stage for character work, look cycling, a mirror wall, a gate that opens once awakened |
+| `studio` | `studio.puck` | A flat stage for character work, look cycling, a mirror wall, a gate that opens once awakened |
 
 The island places the courts on its crown: `dive` north at (0, 0, -46), `kart` east at (48, 0, 0), `jump`
 south at (0, 0, 52), `studio` west at (-42, 0, 0), `arena` north-east at (46, 0, -46), `arcade` at (26, 0, 12),
@@ -363,7 +363,7 @@ course runs from the arrival deck at `z=+3` out to the trophy at `z=-10`—a cou
 around would need its `forward` sign flipped in any driving script, never the channel itself.
 ## The studio district
 
-`studio.world.json` is a flat stage for character work: a lit floor, a turntable a
+`studio.puck` is a flat stage for character work: a lit floor, a turntable a
 body stands on, a mirror wall that shows the stage's own camera, and a counter a
 seat cycles by pressing the jump channel while standing on the turntable. It carries
 no bodies of its own—a visiting seat brings its own avatar and kit.
@@ -425,7 +425,7 @@ the count or on the turntable's occupancy, advance the count, or bind it to a HU
 
 ## Import
 
-Import `modules/studio.world.json` under an alias (`{"document": "modules/studio",
+Import `modules/studio.puck` under an alias (`{"document": "modules/studio",
 "as": "studio"}`). The module's declarations are qualified by the alias: its rows (`look`), its rule
 (`studio-look-cycle`), and its placements and prototypes (`studioCourt`, `studioTurntable`, `studioMirror`,
 `studioGateClosed`), so a host reads the counter as `<alias>$look` (`world.state studio$look` under alias
