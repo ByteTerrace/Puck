@@ -42,6 +42,7 @@ using Puck.Cli.Transpiler;
 using Puck.Cli.Vocabulary;
 using Puck.Cli.WasmStdlib;
 using Puck.Cli.WorktreeBase;
+using Puck.Cli.WorktreeReport;
 
 namespace Puck.Cli;
 
@@ -163,6 +164,7 @@ internal static class PuckRootCommand {
             WasmBuildCommand.Create(),
             WasmStdlibCommand.Create(),
             WorktreeBaseCommand.Create(),
+            WorktreeReportCommand.Create(clock: clock),
             WorldCommand.Create(clock: clock),
         ];
         var root = new RootCommand(description: "The Puck developer CLI: every repository operation is a verb here.");

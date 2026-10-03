@@ -12,11 +12,13 @@ internal static class CliGit {
     /// <param name="repository">The directory git runs against, passed as <c>-C</c>.</param>
     /// <param name="arguments">The git arguments that follow <c>-C</c>.</param>
     /// <param name="cancellationToken">Cancels the run and kills git.</param>
+    /// <param name="input">Text to feed to git, or null to inherit standard input.</param>
     /// <returns>The exit code and both captured streams; a nonzero exit is an answer, not a failure.</returns>
-    public static Task<ChildProcessResult> RunAsync(string repository, IEnumerable<string> arguments, CancellationToken cancellationToken = default) =>
+    public static Task<ChildProcessResult> RunAsync(string repository, IEnumerable<string> arguments, CancellationToken cancellationToken = default, string? input = null) =>
         ChildProcess.RunAsync(
             arguments: ["-C", repository, .. arguments],
             cancellationToken: cancellationToken,
+            input: input,
             fileName: "git"
         );
     /// <summary>Runs git against <paramref name="repository"/>, waiting synchronously, and returns its exit code and

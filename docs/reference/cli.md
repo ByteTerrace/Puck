@@ -113,6 +113,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library: `FixedQ4816`'s Rust port and known-answer vectors, and the addon ABI's Rust mirror. |
 | [`puck worktree-base`](#puck-worktree-baseworktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
+| [`puck worktree-report`](#puck-worktree-reportremoval-report) | reports which local branches and worktrees have landed and are safe to remove. |
 | [`puck world`](#automation-commands) | prepare hosted world documents, prepare release manifests, inspect deployment-group state, or probe a QUIC endpoint. |
 
 The table follows the root listing: every verb once, in the same order.
@@ -3299,6 +3300,66 @@ the target worktree (default `--path`: the current directory) and shells out to
 prints the worktree's toplevel path it acted on, relative to the working
 directory when at or beneath it, and absolute otherwise. Shells out to `git`
 rather than adding a git library dependency.
+
+## `puck worktree-report`—removal report
+
+`puck worktree-report --into <branch>` helps a lead review accumulated local
+branches and worktrees before removing them. `--into` is the required
+integration branch's exact name, local or remote-tracking (`origin/main`), with
+no default. An exact local name takes precedence over a remote-tracking name.
+Tags, bare commits, revision expressions and paths are refused. The command is
+report-only: it never
+deletes, prunes, fetches, pushes, or writes refs, objects, configuration, or
+indexes, and it never contacts a remote. Removal remains a human or lead act.
+
+Stdout contains one indented JSON document with `into`, `entries`, and `errors`.
+Each local branch has an entry; a checked-out branch carries its worktree in
+that entry, and a detached worktree has its own entry with `branch: null`.
+If a branch is checked out in several worktrees, each worktree is retained.
+Entries sort ordinally by branch name, or by the full forward-slashed worktree
+path for a detached tree, then by worktree path. Member order is stable.
+
+The `landed` field checks the worktree or branch `head` in this order:
+
+- `ancestor`: the head is an ancestor of the integration branch.
+- `patch-equivalent`: `git cherry <into> <head>` contains no `+` commits and
+  `<into>..<head>` contains no merge commits;
+  individual commits have equivalent patches on the integration branch.
+  Cherry omits merges, so it cannot establish that merge-resolution work lands.
+- `squash-equivalent`: the stable patch id of `git diff <merge-base> <head>`
+  matches the patch id of one commit on `<merge-base>..<into>`. This recognizes
+  a branch whose multiple commits land together as one squash commit.
+- `no`: none of those checks establishes that the work has landed.
+
+`unlanded` counts the `+` commits from cherry, including for a squash-equivalent
+branch. `dirty` contains `modified` (tracked, staged, or conflicted paths) and
+`untracked` file counts; a rename counts once. It is null without a worktree
+or when status is unreadable. `lastCommit` is the head's committer date with
+its offset, and `ageDays` counts complete elapsed days, clamped to zero for a
+future commit. `upstream` contains the locally recorded `name` and `track`
+strings, or null when none is configured. No fetch refreshes those values.
+
+`locked` and `prunable` contain Git's reasons when present, including an empty
+string for a flag without a reason. Missing directories and Git read failures
+remain listed with an `unreadable` reason. Unknown history values are null
+and `landed` is `no`. Inventory warnings or a failed worktree inventory appear in
+`errors` and block removal of every branch because its checkout status is unknown.
+
+`removable` is true only for landed, clean, readable entries that are unlocked
+and protect neither the main worktree nor its branch nor the integration branch,
+which for a remote-tracking `--into` is its local counterpart: `origin/main`
+protects `main`, while a lane that only tracks `origin/main` is not protected.
+The counterpart comes from locally configured fetch mappings, including custom
+destinations and remote names containing slashes. A symbolic remote ref uses its
+target's mapping. Missing or ambiguous counterpart mappings appear in `errors`
+and block every removal because the integration branch's local name is unknown.
+`blockers` uses these stable spellings, in this order when applicable:
+`unlanded`, `dirty`, `locked`, `main-worktree`, `integration-branch`,
+`main-worktree-branch`, `unreadable`. A prunable flag alone does not grant removal.
+
+Exit **0** means the report is produced, even with no removable entries or with
+unreadable worktrees. Missing or unknown `--into`, or failure to read the local
+branch inventory, exits **2** with a reason on stderr.
 
 ## `puck branding`—maintained assets
 
