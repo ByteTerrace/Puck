@@ -82,8 +82,10 @@ and resource flags vary), and `DirectXTextures.CreateCommitted` (a single-mip,
 single-sample 2D texture on a default heap; extent, format, heap flags, initial
 state, resource flags and optimized clear value vary). `DirectXTextures.OfUsage`
 and `InitialStateOf` give an image the flags, clear value and initial state its
-declared `GpuImageUsage` needs: `DirectXGpuImage`, `DirectXGpuExportableImage`
-and the surface upload's texture all go through them. A depth attachment's
+declared `GpuImageUsage` needs, and `DirectXGpuImage` takes both from them.
+`DirectXGpuExportableImage` states its own flags (simultaneous access, and a
+render target or storage image by its access) and the surface upload its own copy-destination
+state to `CreateCommitted`. A depth attachment's
 texture is created from its attachment (`IGpuImageFactory.CreateDepth`) with
 that attachment's `GpuDepthAttachment.ClearDepth` as its optimized clear value,
 so a render pass clearing it takes the fast path and the debug layer reports no

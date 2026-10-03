@@ -35,7 +35,9 @@ compute shaders and must not rely on implicit pixel-shader derivatives.
 - Preserve the strict/reference march path when changing coverage behavior.
 - Prefer deterministic, precomputed mip chains for authored content.
 - Do not use stochastic jitter unless its seed, sequence, and accumulation
-  policy are part of the documented render contract.
+  policy are part of the documented render contract. A temporal view's
+  per-frame sample offset and history weighting are such a contract; see
+  [temporal reconstruction](../handbook/frame-rendering.md#temporal-reconstruction).
 
 Ray-differential CRT filtering remains an open quality feature. Nothing tracks
 it and nothing is sequenced to build it.

@@ -105,7 +105,7 @@ document families `Puck.World` embeds inline; the ROM forges live beside their m
 `Puck.HumbleGamingBrick.Forge` (SM83/CGB) and `Puck.AdvancedGamingBrick.Forge` (ARM7TDMI/AGB), each packable on
 its own. The audio/synth document families sit in `Puck.Assets` so a forge package never drags a world assembly.
 
-**Everything is v1.** `puck.world.definition.v1`, `puck.world.projection.v1`, `puck.world.counterpart.v1` — no
+**Everything is v1.** `puck.world.definition.v1`, `puck.world.projection.v1`, `puck.world.counterpart-attestation.v1` — no
 schema in this repository carries a v2, and none is planned. Supergreen holds: zero consumers, so a
 breaking change edits the v1 shape in place and updates every internal caller in the same change, never
 a parallel version or a compatibility shim.

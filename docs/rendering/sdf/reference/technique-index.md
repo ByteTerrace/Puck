@@ -32,6 +32,7 @@ It intentionally omits implementation chronology and review provenance.
 | Negative authored scale as a mirror | Not supported; refused at the creation document validator in favour of the symmetry domain op | [Rejected and conditional SDF techniques](negative-results-and-rejections.md) |
 | Closed-form copy counts before a domain fold expands | Required; an authored chain past the copy budget is refused in O(1) memory | [Level of detail and bounds](lod-and-bounds.md) |
 | Coverage AA | Shipped footprint-aware path | [Antialiasing and filtering](antialiasing-and-filtering.md) |
+| Temporal reconstruction | Shipped as a per-view quality: a jittered sample a frame, resolved over the view's own history | [Temporal reconstruction](../handbook/frame-rendering.md#temporal-reconstruction) |
 | Ray-differential CRT filtering | Open when minification is visible | [Antialiasing and filtering](antialiasing-and-filtering.md) |
 | Bound-preserving procedural noise | Shipped as `NoiseDisplace` (integer-hash lattice fBm, quintic-slope derivative bound folded into the step clamp) | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Sampled carve bricks | Shipped as an invalidatable render cache, not a core representation | [Level of detail and bounds](lod-and-bounds.md) |
