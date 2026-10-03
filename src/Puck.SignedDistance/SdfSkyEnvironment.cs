@@ -193,10 +193,11 @@ public static class SdfSkyEnvironment {
     /// <summary>Returns the sky's gradient in a direction, the lowest field run: the stops piecewise-linear in its
     /// elevation, clamped to the end stops (<c>sdfSkyGradient</c>).</summary>
     /// <param name="stops">The stops table.</param>
-    /// <param name="stopCount">The stops in use, at least one.</param>
+    /// <param name="stopCount">The stops in use; zero while the gradient is muted.</param>
     /// <param name="direction">The unit direction.</param>
     /// <returns>The colour.</returns>
     public static Vector3 Gradient(ReadOnlySpan<SdfSkyStop> stops, uint stopCount, Vector3 direction) {
+        if (stopCount == 0u) { return Vector3.Zero; }
         var previous = stops[0];
 
         if (direction.Y <= previous.Elevation) {

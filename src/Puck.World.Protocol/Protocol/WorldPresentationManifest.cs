@@ -84,7 +84,11 @@ public sealed class WorldPresentationManifest {
         m_bodyBindings = bodyBindings;
         m_clocks = clocks;
         m_templates = templates;
+        SimulationRateHz = (definition?.SimulationRateHz ?? WorldDefinition.UnauthoredSimulationRateHz);
     }
+
+    /// <summary>Gets the authored simulation rate used to map a clock preview's engine tick to a row read.</summary>
+    public int SimulationRateHz { get; }
 
     /// <summary>Returns whether the document authors a presentation scalar at a path bound to a state binding: the
     /// identity of a bound field, which lasts exactly as long as the document keeps authoring it.</summary>

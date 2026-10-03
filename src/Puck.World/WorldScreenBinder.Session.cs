@@ -124,7 +124,7 @@ internal sealed partial class WorldScreenBinder {
             domains: m_domains,
             mirror: feed.Mirror,
             effectiveCameraName: feed.EffectiveCamera
-        );
+        ) { SkyLayers = SkyLayers };
         var frameSource = new SdfCompositionFrameSource(
             dresser: emitter,
             emitters: [emitter]

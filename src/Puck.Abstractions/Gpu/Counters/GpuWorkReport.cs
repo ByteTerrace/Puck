@@ -165,9 +165,10 @@ public static class GpuWorkReport {
     /// line; or <c>work unavailable</c> when <paramref name="sample"/> holds no submission.</summary>
     /// <param name="builder">The text to append to.</param>
     /// <param name="sample">The sample to write.</param>
+    /// <param name="includePass">An optional pass selection; a selected report omits work outside passes.</param>
     /// <returns><paramref name="builder"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> or <paramref name="sample"/> is <see langword="null"/>.</exception>
-    public static StringBuilder AppendSample(StringBuilder builder, GpuWorkSample sample) {
+    public static StringBuilder AppendSample(StringBuilder builder, GpuWorkSample sample, Func<string, bool>? includePass = null) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(sample);
 
@@ -191,6 +192,7 @@ public static class GpuWorkReport {
         var kinds = GpuWork.SubmissionKinds;
 
         for (var pass = 0; (pass < sample.PassCount); pass++) {
+            if (includePass is not null && !includePass(labels[pass])) { continue; }
             var state = sample.GetPassState(pass: pass);
 
             _ = builder.Append(value: "work ").Append(value: labels[pass]).Append(value: ' ').Append(value: EnumWireName<GpuPassState>.Of(value: state));
@@ -230,6 +232,7 @@ public static class GpuWorkReport {
             }
         }
 
+        if (includePass is not null) { return builder; }
         _ = builder.Append(value: "work outside:");
 
         for (var column = 0; (column < kinds.Length); column++) {

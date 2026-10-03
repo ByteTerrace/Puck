@@ -1491,6 +1491,22 @@ from the C# type) or else its pass-block value (`SdfWorldPackage.Values`, writte
 by `SdfFrameBlock`), and its shader consumer in the same change. What a document field means belongs to
 `puck-world`.
 
+Clock auditions live in `WorldStateMirror`, never in simulation rows.
+`WorldClockReads` invalidates cached sky and theme values by the preview's
+phase, and by its unwrapped tick for integrated rates. A held state clock
+must not invalidate on later authoritative deliveries. Shadow ownership and
+handoff history follow delivered readings; previews change resolved light
+values without scrubbing that history.
+`WorldRenderSettings.SkyLayers` reaches the environment resolver in boot,
+routed and session-screen presentations through the existing lever sink;
+solo and mute never fold into source. A muted gradient has zero stops in
+both the CPU reference and shader. `DebugViewModes` and
+`frame/sdf-debug-modes.hlsli` share the sky-cost mode index. Sky field-run
+alphas carry evaluation and hash attribution for that view; the completed
+ledger still counts work only at the site that runs it. `world.cost sky`
+filters that ledger through `GpuWorkReport`, including skipped rows.
+The artist-facing syntax belongs to the [World reference](../../../src/Puck.World/README.md).
+
 Every state read reaches a program, a decal or a pass through the state
 mirror, never through the document. A color a build bakes (a palette's surface,
 bounce, weathering or inset color, a height field's color, a text screen's ink)

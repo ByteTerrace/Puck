@@ -26,7 +26,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float4 litColor = sdfSkyPassLit(int2(id.xy));
     float3 color = litColor.rgb;
 
-    if (passGroup.debugMode == 0u) {
+    if ((passGroup.debugMode == 0u) || (passGroup.debugMode == DebugViewModeSkyCost)) {
         ViewportData view = sdfSkyPassView();
         float3 direction = sdfSkyPassDirection(view, id.xy);
         float coverage = litColor.a;
@@ -55,6 +55,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float covered;
 
         color = shadeVolumes(surface, coverage, ((t > 0.0) ? t : far), sky, view.position.xyz, direction, worldRayDistanceAt(view, direction, worldNearDistance(view)), far, id.xy, covered);
+        if (passGroup.debugMode == DebugViewModeSkyCost) {
+            // RGB: layer evaluations / 4, procedural hashes / 64, texture loads / 16. Black costs no sky work.
+            color = saturate(sdfSkyCost / float3(4.0, 64.0, 16.0));
+        }
     }
 
     // The float working color; the display encode dithers and quantizes it.

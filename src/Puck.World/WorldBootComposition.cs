@@ -450,7 +450,7 @@ public static class WorldBootComposition {
                 alwaysFillsCaptures: sp.GetRequiredService<WorldHostSettings>().Offscreen,
                 // Image producers the host registers beside the four the engine ships.
                 producers: [.. sp.GetServices<IWorldImageProducer>()]
-            );
+            ) { SkyLayers = sp.GetRequiredService<WorldRenderSettings>().SkyLayers };
         });
         // The slice of the binder the frame presenter drives each frame.
         services.AddSingleton<IWorldScreenPresenter>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
@@ -536,7 +536,7 @@ public static class WorldBootComposition {
         // world.timeline reads the clocks off the authority and the keyed resolutions off the client's state mirror.
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldTimelineCommandModule(
             authority: sp.GetRequiredService<IWorldConsoleAuthority>(),
-            presentation: sp.GetRequiredService<WorldClient>().StateMirror
+            presentation: server => (ReferenceEquals(objA: server, objB: sp.GetRequiredService<WorldServer>()) ? sp.GetRequiredService<WorldClient>().StateMirror : null)
         ));
         // The inhabitation + creation-facet READ-BACK surface — world.inhabitants, world.faces,
         // world.attachments, world.portals. The facets themselves are authored through

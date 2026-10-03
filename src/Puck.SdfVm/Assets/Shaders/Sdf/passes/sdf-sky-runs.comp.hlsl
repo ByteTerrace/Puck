@@ -21,15 +21,15 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         }
     }
 
-    if (seen && (passGroup.debugMode == 0u)) {
+    if (seen && ((passGroup.debugMode == 0u) || (passGroup.debugMode == DebugViewModeSkyCost))) {
         float3 direction = sdfSkyPassDirection(sdfSkyPassView(), id.xy);
         float3 scale;
         float3 offset;
 
         sdfSkyCloudRun(direction, scale, offset);
         skyBaseRW[id.xy] = float4(sdfSkyGradient(direction), 1.0);
-        skyScaleRW[id.xy] = float4(scale, 1.0);
-        skyOffsetRW[id.xy] = float4(offset, 1.0);
+        skyScaleRW[id.xy] = float4(scale, sdfSkyCost.x);
+        skyOffsetRW[id.xy] = float4(offset, sdfSkyCost.y);
     } else {
         skyBaseRW[id.xy] = float4(0.0, 0.0, 0.0, 0.0);
     }

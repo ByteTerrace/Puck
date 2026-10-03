@@ -29,6 +29,8 @@ public enum AmbientOcclusionMode {
 /// identity: per-player preferences belong on the profile.
 /// </summary>
 public sealed partial class WorldRenderSettings {
+    /// <summary>The sky layer audition, never folded into a saved definition.</summary>
+    public Client.WorldSkyLayers SkyLayers { get; } = new();
     private bool m_ambientOcclusion;
     private AmbientOcclusionMode m_ambientOcclusionQuality;
     private volatile int m_bakes;
@@ -126,7 +128,7 @@ public sealed partial class WorldRenderSettings {
     public float RenderScale { get => m_renderScale; set { m_renderScale = value; m_revision++; } }
     /// <summary>A monotonic counter advanced by every lever write — the cheap watch the editor HUD keys its
     /// live-session-act tag and drift refresh on (no per-frame drift recompute).</summary>
-    public int Revision => m_revision;
+    public int Revision => unchecked(m_revision + SkyLayers.Revision);
     /// <summary>The soft-shadow crowd radius (world units): an avatar within this distance of any joined local seat casts
     /// soft shadows; beyond it, it is suppressed from the soft-shadow march only (still rendered, still self-lit). Boots
     /// at the definition's default; the <c>world.shadows</c> verb's optional second arg moves it live (it rides the

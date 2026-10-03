@@ -14,7 +14,7 @@ namespace Puck.SignedDistance;
 public record struct SdfSkyBlock {
     /// <summary>The exponential distance-fog density.</summary>
     [FieldOffset(0)] public float FogDensity;
-    /// <summary>The gradient stops the stops table holds, at least two and at most <see cref="SdfSky.MaxStops"/>.</summary>
+    /// <summary>The gradient stops the stops table holds, two to <see cref="SdfSky.MaxStops"/>, or zero while muted.</summary>
     [FieldOffset(4)] public uint StopCount;
     /// <summary>The studio-reflection softboxes the softbox table holds, at most <see cref="SdfSky.MaxSoftboxes"/>.</summary>
     [FieldOffset(8)] public uint SoftboxCount;
