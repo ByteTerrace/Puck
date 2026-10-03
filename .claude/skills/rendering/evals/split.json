@@ -1,7 +1,7 @@
 {
   "seed": 785178831,
   "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
-  "seed_note": "Drawn at random from 32 bits and redrawn (1 draws in all) until train held 5 or 6 of the 9 cases, on case counts only, before any case had been run. The first suite is split by the rule because an empty train side cannot drive a hill-climb; new cases go to test by hand until it holds about 10.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (1 draws in all) until train held 5 or 6 of the 9 cases, on case counts only, before any case had been run. The first suite is split by the rule because an empty train side cannot drive a hill-climb; new cases go to test by hand until it holds about 10. A fresh harder case was added to test.",
   "train": [
     "g03-framerate-after-placements",
     "g04-hand-written-isa-define",
@@ -17,6 +17,7 @@
     "g10-hard-op-in-one-kernel-only",
     "g11-hard-bake-bytes-differ-by-machine",
     "g12-hard-carve-reads-phantom-surfaces",
-    "g13-hard-wrap-each-primitive-in-a-scope"
+    "g13-hard-wrap-each-primitive-in-a-scope",
+    "g14-hard-two-lanes-both-added-an-op"
   ]
 }
