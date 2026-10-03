@@ -248,6 +248,9 @@ machines and identifies the first differing snapshot section and byte. Use
 - `--gen-rom` writes a hand-assembled diagnostic cartridge.
 - `--oracle` runs the self-contained cycle-probe set.
 - `--ags` and `--accuracy-suite` run their configured evidence cartridges.
+  `--accuracy-suite <rom> --suite-focus <text>` prints the failing-subtest
+  detail only for suites whose names contain the text, case-insensitively, and
+  prints it for every failing suite without the flag, at most 80 lines a suite.
 - `--dump-snapshot [--frames N] [--rom <path>] [--out <file>]` boots the
   synthetic cartridge (or `--rom`), runs `N` frames (default 300), and writes
   the raw snapshot image plus a `<file>.sections.txt` sidecar (name/offset/
