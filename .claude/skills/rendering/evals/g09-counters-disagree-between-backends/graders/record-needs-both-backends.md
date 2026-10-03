@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says the record needs a GPU on both backends and runs with the other GPU checks, never beside a build.
+both backends
