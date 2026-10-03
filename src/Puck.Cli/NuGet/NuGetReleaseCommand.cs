@@ -310,7 +310,7 @@ internal static class NuGetReleaseCommand {
             )
         );
         await CliProcess.RunCheckedAsync(
-            arguments: ["restore", Path.Combine(
+            arguments: ["restore", CliOptions.NoNodeReuse, Path.Combine(
                     path1: probe,
                     path2: "Probe.csproj"
                 ), "--disable-build-servers", "--configfile", Path.Combine(
@@ -321,7 +321,7 @@ internal static class NuGetReleaseCommand {
             workingDirectory: root
         );
         await CliProcess.RunCheckedAsync(
-            arguments: ["build", Path.Combine(
+            arguments: ["build", CliOptions.NoNodeReuse, Path.Combine(
                     path1: probe,
                     path2: "Probe.csproj"
                 ), "--disable-build-servers", "-c", "Release", "--no-restore"],

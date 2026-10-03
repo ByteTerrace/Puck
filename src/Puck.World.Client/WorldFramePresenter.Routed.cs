@@ -122,6 +122,7 @@ public sealed partial class WorldFramePresenter {
         }
         foreach (var scene in m_retiredScenes) {
             _ = m_routedScenes.Remove(key: scene.Endpoint);
+            scene.Dispose();
         }
 
         m_retiredScenes.Clear();
@@ -178,6 +179,7 @@ public sealed partial class WorldFramePresenter {
         ),
         domains: m_domains,
         endpoint: endpoint,
-        hostFrame: () => m_dressedFrame
+        hostFrame: () => m_dressedFrame,
+        shadowSettings: () => m_settings.ShadowSlots
     );
 }

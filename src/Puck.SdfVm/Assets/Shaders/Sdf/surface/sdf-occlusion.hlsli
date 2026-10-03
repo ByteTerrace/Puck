@@ -17,7 +17,7 @@
 // wall, but never through the wall itself: sdfMarchAdvance lands a stride that
 // reaches a wall just past it, within the occlusion test's own threshold, and the march samples the other side there
 // before striding on.
-// The march takes the shadow-march quality and the key light's penumbra sharpness; softShadowVisibility reads both
+// The march takes the shadow-march quality and its light's penumbra sharpness; softShadowVisibility reads both
 // from the view.
 float softShadowVisibilityMarch(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase, float stepScale, float reach,
     bool fastMarch, float sharpness) {
@@ -68,9 +68,9 @@ float softShadowVisibilityMarch(float3 surfacePoint, float3 surfaceNormal, float
 
     return ((visibility * visibility) * (3.0 - (2.0 * visibility)));
 }
-float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase, float stepScale, float reach) {
+float softShadowVisibility(float3 surfacePoint, float3 surfaceNormal, float3 lightDirection, uint instanceMaskBase, float stepScale, float reach, int lightIndex) {
     return softShadowVisibilityMarch(surfacePoint, surfaceNormal, lightDirection, instanceMaskBase, stepScale, reach,
-        worldUseFastSoftShadowMarch(), (1.0 / worldShadowPenumbraSlope()));
+        worldUseFastSoftShadowMarch(), (1.0 / worldShadowPenumbraSlope(lightIndex)));
 }
 // Normal-ladder ambient occlusion (calcAO): from the hit, step a short ladder of fixed rungs OUTWARD along
 // the surface normal; at each rung compare the distance expected to travel (h) against what the field actually reports

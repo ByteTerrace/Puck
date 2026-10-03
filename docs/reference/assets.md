@@ -27,14 +27,21 @@ validating the byte structure under explicit allocation ceilings.
 `ChunkContainer` is the one container Puck's binary products share: a format's
 magic and header, then content-hashed, 8-byte-aligned chunks, written with the
 same canonical primitives (`CanonicalBinaryWriterExtensions`,
-`CanonicalBinaryReader`) the automatic-sequence codec uses. Puck.Assets
-does not decode fonts, shaders, or documents, and it does not mount archives,
-layer sources, or normalize paths.
+`CanonicalBinaryReader`) the automatic-sequence codec uses. `WasmModuleDeclarations` reads a WebAssembly binary's exports, imports and
+linear-memory declarations from its sections without compiling it, so the
+scripting host and the world transpiler agree on one reader of a module's
+boundary ([scripting](scripting.md#loading-ticking-faulting)). `Documents/` holds the
+document value types the audio and synthesizer-patch families share (names,
+identifiers, spatial values, canonical JSON, the audio and patch records and
+their canonicalizers). Puck.Assets does not decode fonts or shaders, and it does
+not mount archives, layer sources, or normalize paths.
 
 `dotnet pack` produces `ByteTerrace.Puck.Assets`; the first NuGet.org release
 has not been published yet. The package targets .NET 10, depends on the
 `System.IO.Hashing` package (CRC-32 for the PNG codec), and references
-`Puck.Maths` (the QR encoder's Reed–Solomon error correction).
+`Puck.Maths` (the QR encoder's Reed–Solomon error correction) and
+`Puck.Abstractions` (the `GpuPixelFormat` vocabulary the texture codecs share
+with GPU uploads).
 
 This reference is the human entry point. The
 [generated API reference](../api/index.md) owns complete member signatures,
@@ -75,8 +82,9 @@ parameters, return values, and exceptions.
   8-byte-aligned chunks under a format's own magic and header. A compiled world
   and a `PBAK` bake are both one; a decode reads a container whole or refuses it.
 - *A small dependency surface:* the package depends on the .NET base class
-  library, `System.IO.Hashing`, and `Puck.Maths` (the QR encoder's field
-  arithmetic), and does not perform dependency-injection wiring.
+  library, `System.IO.Hashing`, `Puck.Maths` (the QR encoder's field
+  arithmetic) and `Puck.Abstractions` (the pixel-format vocabulary), and does
+  not perform dependency-injection wiring.
 
 ## How bytes move through the library
 
@@ -450,6 +458,7 @@ surface.
 | `QrMatrix` | The resolved module grid—placement, masking, and a B8G8R8A8 raster. |
 | `QrErrorCorrectionLevel` / `QrErrorCorrection` | The four EC levels and their one canonical letter spelling/parse. |
 | `QrCapacityTable` / `QrReedSolomon` | The version/level block-and-capacity tables and the standard's Reed–Solomon binding. |
+| `WasmBinaryFormat` / `WasmModuleDeclarations` / `WasmImport` / `WasmMemoryDeclaration` | The WebAssembly preamble, and a module's exports, imports and memories read from its binary without compiling it. |
 | `ChunkContainer` / `ContainerChunk` / `ChunkCode` / `ChunkInput` | The shared chunk container, one keyed and content-hashed chunk, its four-character code, and one input a chunk's derivation read. |
 | `CanonicalBinaryWriterExtensions` / `CanonicalBinaryReader` | Write and read the canonical binary primitives the automatic-sequence codec and the chunk container share. |
 

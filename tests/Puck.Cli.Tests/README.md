@@ -7,6 +7,10 @@ process handling, branding asset synchronization, and MCP behavior. Individual f
 and service or process setup; the suite is not a replacement for running a
 hardware-dependent CLI operation in its intended environment.
 
+`CountersDetailLawTests` holds detail identity through readings and report
+comparisons, including skipped rows, device-aware ceilings and required zeros.
+The report and ceilings require explicit detail keys and pass detail labels.
+
 `StartupBenchmarkTests` checks that incomplete or failed samples cannot produce
 a corpus average, pending or unrelated captures cannot prove rendered readiness,
 missing overlays fail rendered samples, and process output carries elapsed observation times.

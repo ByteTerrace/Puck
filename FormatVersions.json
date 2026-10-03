@@ -14,14 +14,14 @@
         },
         "AffectedCoverage.Schema": {
             "open": [
+                "M:Puck.Assets.AtomicFile.WriteAllBytes(System.String,System.ReadOnlySpan{System.Byte},System.Nullable{System.IO.UnixFileMode})",
                 "M:Puck.Cli.Architecture.ArchitectureModel.Load(System.String)",
                 "M:Puck.Cli.CliGit.Run(System.String,System.String[])",
-                "M:Puck.Cli.CliProcess.RunCaptured(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,System.TimeSpan,System.Func{Puck.Cli.CliProcessOutputLine,System.Boolean},System.String,System.TimeProvider,System.Threading.Tasks.Task,System.Threading.CancellationToken,System.String,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String})",
+                "M:Puck.Cli.CliPaths.ToDisplay(System.String)",
                 "M:System.IO.Stream.Dispose(System.Boolean)",
-                "M:System.IO.Stream.DisposeAsync",
-                "M:System.IO.TextWriter.WriteLine(System.String)"
+                "M:System.IO.Stream.DisposeAsync"
             ],
-            "shape": "49e5734f8eda2830",
+            "shape": "4397b4cc13c9d5af",
             "source": "src/Puck.Cli/Affected/AffectedCoverage.cs",
             "token": "puck.canary.coverage.v1"
         },
@@ -675,7 +675,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Shaders.ShaderToolchain.Identity"
             ],
-            "shape": "d38ccf63aeb317b9",
+            "shape": "34345b59a34c3390",
             "source": "src/Puck.Cli/Qualification/QualificationReport.cs",
             "token": "puck.qualification.report.v1"
         },
@@ -758,13 +758,14 @@
                 "M:Puck.World.WorldSchema.ToTypeScript(System.Text.Json.Nodes.JsonObject)",
                 "M:System.IO.TextWriter.WriteLine(System.String)"
             ],
-            "shape": "cc1167861be14b56",
+            "shape": "8e44bf5dc8dcd012",
             "source": "src/Puck.Cli/Qualification/ReleaseProfile.cs",
             "token": "puck.release.profile.v1"
         },
         "RenderGraphSchemas.Graph": {
             "open": [
                 "M:Puck.Abstractions.Presentation.QualityTiers.Name(Puck.Abstractions.Presentation.QualityTier)",
+                "M:Puck.Abstractions.Sources.ImageSourceConversion.ImagePassOf(Puck.Abstractions.Sources.ImagePixelFormat,Puck.Abstractions.Sources.ImageColorEncoding)",
                 "M:Puck.Abstractions.Sources.ImageSourceConversion.PassOf(Puck.Abstractions.Sources.ImagePixelFormat,Puck.Abstractions.Sources.ImageColorEncoding)",
                 "M:Puck.Abstractions.Sources.ImageSourceUploadLayout.ByteCount(Puck.Abstractions.Sources.ImageSourceUploadHeader@)",
                 "M:Puck.Abstractions.Sources.ImageSourceUploadLayout.HeaderOf(Puck.Abstractions.Sources.ImagePixelFormat,Puck.Abstractions.Sources.ImageColorEncoding,System.UInt32,System.UInt32)",
@@ -825,7 +826,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Hosting.RenderGraphRefresh.EveryFrame"
             ],
-            "shape": "cf9468d047e1f3bc",
+            "shape": "1c055d3c0e1c6233",
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },
@@ -961,7 +962,7 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "612b503053d91c92",
+            "shape": "e1faace45be14644",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "PCKP"
         },
@@ -999,7 +1000,7 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "612b503053d91c92",
+            "shape": "e1faace45be14644",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "1"
         },
@@ -1125,7 +1126,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "b60def7d0ad2e09f",
+            "shape": "c36fae949a4ac196",
             "source": "src/Puck.World.Schema/WorldCameraProgram.cs",
             "token": "puck.camera.program.v1"
         },
@@ -1151,7 +1152,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Abstractions.Sources.IImageSourceReference.Descriptor"
             ],
-            "shape": "21b25d488ef1f64e",
+            "shape": "dcb611da7bba1e44",
             "source": "src/Puck.World.Console/WorldCaptureScheduler.cs",
             "token": "puck.parity.manifest.v1"
         },
@@ -1204,7 +1205,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersCeilings"
             ],
-            "shape": "b7b1980538f0f0af",
+            "shape": "97910f486cfdf9aa",
             "source": "src/Puck.World.Schema/WorldCountersCeilings.cs",
             "token": "puck.counters.ceilings.v1"
         },
@@ -1223,7 +1224,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersReport"
             ],
-            "shape": "146fb3d8beac3fdf",
+            "shape": "eb5b7cf8c2a41e8a",
             "source": "src/Puck.World.Schema/WorldCountersReport.cs",
             "token": "puck.counters.report.v1"
         },
@@ -1537,7 +1538,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "a4ee12eac6ad8256",
+            "shape": "91d4fb8186caf875",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
@@ -1622,7 +1623,7 @@
                 "P:Puck.World.WorldDefinition.StateCatalog",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "b32fd79ffd556947",
+            "shape": "73d7e4dea791bc07",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
             "token": "PUCKFED1"
         },
@@ -1674,7 +1675,7 @@
                 "P:Puck.World.WorldDefinition.State",
                 "P:Puck.World.WorldJsonContext.WorldProjectionDocument"
             ],
-            "shape": "92cd6b4b1e75e637",
+            "shape": "a85bafbcd5eb9b80",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },
@@ -1803,7 +1804,7 @@
                 "P:Puck.World.Server.WorldServer.Definition",
                 "P:Puck.World.Server.WorldServer.NextInputTick"
             ],
-            "shape": "c73e8f3f6336cd0e",
+            "shape": "80875ca0e7880242",
             "source": "src/Puck.World.Protocol/Protocol/WorldProtocol.cs",
             "token": "PUCKWRL1"
         },
@@ -2004,7 +2005,7 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "f6bed7e6d18b0ae6",
+            "shape": "343edb5e580e9ca3",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
@@ -2042,7 +2043,7 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "f6bed7e6d18b0ae6",
+            "shape": "343edb5e580e9ca3",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "1"
         },

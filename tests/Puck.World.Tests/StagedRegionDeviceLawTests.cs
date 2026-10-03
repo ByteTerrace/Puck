@@ -25,6 +25,7 @@ namespace Puck.World.Tests;
 /// </summary>
 [Collection(name: DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class StagedRegionDeviceLawTests {
     private const uint Extent = 16;
     private const string Instance = "pattern";

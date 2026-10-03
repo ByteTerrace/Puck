@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-bricks' (sha256/96e7e2fdfdf5ee48f1632db250ce4802fbd3315eb7067f9f4e5635b4c8565014). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-bricks' (sha256/f9b2ea5a79eb743ff3ef4a188cee76fb24df80481e0d86f89d942cafa479ab43). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_BRICKS
 #define PUCK_SHADER_INTERFACE_SDF_BRICKS
 
@@ -28,8 +28,8 @@ struct SdfBricksFrame {
 struct SdfBricksPass {
     [[vk::offset(0)]] uint2 extent;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfBricksPass> passGroupIsa2245F7D2 : register(b0, space3);
-#define passGroup passGroupIsa2245F7D2
+[[vk::binding(0, 3)]] ConstantBuffer<SdfBricksPass> passGroupIsa506E1C21 : register(b0, space3);
+#define passGroup passGroupIsa506E1C21
 [[vk::binding(1, 3)]] StructuredBuffer<float4> bakeRequest : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<float> brickPool : register(u2, space3);
 
@@ -43,7 +43,9 @@ struct SdfBricksPushedIndex {
 // are declared empty, and a kernel written for a counting package compiles here unchanged.
 void puckCountWork(uint steps, uint texels) {
 }
-void puckCountSky(uint evaluations) {
+void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
+}
+void puckCountShadow(uint slot, uint steps) {
 }
 void puckCountFragmentWork(uint steps, uint texels) {
 }

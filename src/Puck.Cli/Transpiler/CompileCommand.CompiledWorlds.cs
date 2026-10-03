@@ -40,7 +40,7 @@ internal static partial class CompileCommand {
         try {
             document = File.ReadAllBytes(path: documentPath);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"error: Could not read document '{documentPath}': {exception.Message}");
+            Console.Error.WriteLine(value: $"error: Could not read document '{CliPaths.ToDisplay(fullPath: documentPath)}': {exception.Message}");
             return 2;
         }
 
@@ -75,7 +75,7 @@ internal static partial class CompileCommand {
 
             foreach (var key in pack.Keys) {
                 if (!pack.Store.TryGetHeld(key: key, outcome: out var outcome)) {
-                    Console.Error.WriteLine(value: $"error: no outcome for bake key {key.Hex} was derived in this run, so the bake pack '{pack.Path}' cannot hold it.");
+                    Console.Error.WriteLine(value: $"error: no outcome for bake key {key.Hex} was derived in this run, so the bake pack '{CliPaths.ToDisplay(fullPath: pack.Path)}' cannot hold it.");
                     return 2;
                 }
 
@@ -94,17 +94,34 @@ internal static partial class CompileCommand {
                 written[pack.Path] = owner;
             }
 
-            Console.WriteLine(value: $"Wrote bake pack '{pack.Path}' ({outcomes.Count:N0} outcomes, {bytes.Length:N0} bytes; its bake cache baked {pack.Store.Baked:N0} creations and refused {pack.Store.Refused:N0} in {pack.Store.FieldEvaluations:N0} field evaluations).");
+            Console.WriteLine(value: $"Wrote bake pack '{CliPaths.ToDisplay(fullPath: pack.Path)}' ({outcomes.Count:N0} outcomes, {bytes.Length:N0} bytes; its bake cache baked {pack.Store.Baked:N0} creations and refused {pack.Store.Refused:N0} in {pack.Store.FieldEvaluations:N0} field evaluations).");
             return 0;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"error: Could not write bake pack '{pack.Path}': {exception.Message}");
+            Console.Error.WriteLine(value: $"error: Could not write bake pack '{CliPaths.ToDisplay(fullPath: pack.Path)}': {exception.Message}");
             return 2;
         }
     }
+
     // Writes the compiled world of `document`, composed as the file `composeAt` (where its basis and imports resolve),
     // beside `besidePath`, naming its bakes in `pack`, or in a pack beside it written at once when there is no plan. A
     // document that does not draw as a world on its own, such as a module fragment, has no compiled world; that is
     // reported and is not a failure.
+    /// <summary>The line a document with no compiled world is reported by. The refusal comes from the world loader and
+    /// names the source it composed, which crosses the output boundary as its display path; a fragment's refusal can
+    /// quote the whole payload it could not parse, so only its head is kept.</summary>
+    /// <param name="besidePath">The document the compiled world would sit beside.</param>
+    /// <param name="composeAt">The source the loader composed, which its refusal may name.</param>
+    /// <param name="reason">The loader's refusal.</param>
+    /// <returns>The line.</returns>
+    public static string NoCompiledWorld(string besidePath, string composeAt, string reason) {
+        // The loader prefixes its refusal with the source exactly as supplied; later occurrences can be quoted data.
+        var cause = (reason.StartsWith(comparisonType: StringComparison.Ordinal, value: (composeAt + " "))
+            ? (CliPaths.ToDisplay(fullPath: composeAt) + reason[composeAt.Length..])
+            : reason).ReplaceLineEndings(replacementText: " ");
+
+        return $"No compiled world for '{CliPaths.ToDisplay(fullPath: besidePath)}': {((cause.Length > MaximumReasonLength) ? (cause[..MaximumReasonLength] + "...") : cause)}";
+    }
+
     private static int WriteCompiledWorld(string composeAt, byte[] document, string besidePath, IDictionary<string, string>? written, BakePackPlan? pack) {
         var (catalog, fingerprint) = CompiledWorldMachines.Value;
         var destination = CompiledWorld.Beside(documentPath: besidePath);
@@ -127,10 +144,7 @@ internal static partial class CompileCommand {
             path: composeAt,
             reason: out var reason
         )) {
-            // A fragment's refusal can quote the whole payload it could not parse; its head names the cause.
-            var cause = reason.ReplaceLineEndings(replacementText: " ");
-
-            Console.WriteLine(value: $"No compiled world for '{besidePath}': {((cause.Length > MaximumReasonLength) ? (cause[..MaximumReasonLength] + "...") : cause)}");
+            Console.WriteLine(value: NoCompiledWorld(besidePath: besidePath, composeAt: composeAt, reason: reason));
             return 0;
         }
 
@@ -141,7 +155,7 @@ internal static partial class CompileCommand {
                 path: destination
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"error: Could not write compiled world '{destination}': {exception.Message}");
+            Console.Error.WriteLine(value: $"error: Could not write compiled world '{CliPaths.ToDisplay(fullPath: destination)}': {exception.Message}");
             return 2;
         }
 
@@ -149,7 +163,7 @@ internal static partial class CompileCommand {
             written[destination] = composeAt;
         }
 
-        Console.WriteLine(value: $"Compiled world '{destination}' ({bytes.Length:N0} bytes).");
+        Console.WriteLine(value: $"Compiled world '{CliPaths.ToDisplay(fullPath: destination)}' ({bytes.Length:N0} bytes).");
 
         if (
             CompiledWorld.TryDecode(container: out var container, content: bytes, header: out _, reason: out _) &&

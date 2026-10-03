@@ -1,9 +1,10 @@
 # Humble Gaming Deck
 
 The Humble Gaming Deck (`Puck.HumbleGamingDeck`, short form HGD, type prefix
-`Hgd`) is a proposed third deterministic emulator core: the NES and Famicom,
+`Hgd`) is the third deterministic emulator core: the NES and Famicom,
 alongside the Humble Gaming Brick (Game Boy family) and the Advanced Gaming
-Brick (Game Boy Advance). "Brick" names the handheld line and "Deck" the home
+Brick (Game Boy Advance). Its NTSC machine runs NROM cartridges; the rest of
+the target below is planned. "Brick" names the handheld line and "Deck" the home
 line, after the name the console unit was sold under; the adjective names the
 generation, so the SNES would later be the Advanced Gaming Deck (AGD). The
 names are generic by design and carry no trademark.
@@ -52,7 +53,10 @@ of scope here.
 - **In progress:** NTSC accuracy. AccuracyCoin runs in the battery against a
   recorded outcome ledger, so no passing test can regress, and its recorded
   failures are the package's work list.
-- **Not started:** every package below NTSC accuracy.
+- **Not started:** every package below NTSC accuracy. In particular the
+  `humble-gaming-deck` engine is an `IMachineEngine` that no extension
+  registers and no World composition references, so a World cabinet cannot
+  host the Deck yet (package 8).
 
 ## What state of the art means here
 

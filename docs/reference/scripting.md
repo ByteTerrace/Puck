@@ -34,9 +34,9 @@ Deliberately **no** `Puck.Commands` or `Puck.Input` reference—this is the neut
 verdict, subject-kind, channel-kind, cell-kind, and channel-value-shape sets, and its own
 capability-mask bits, all defined independently of any consumer enum. A channel act carries no
 phase: it is per-tick and declarative, and the two low verb bits are required-zero. The World-lane vocabulary seam (`WorldAddonChannelResolver`'s world-document channel
-table) lives in `Puck.World`, which is also where authority decisions live; `Puck.World.Addons`'
-`AddonSimulationPump` still owns the vocabulary layer between the core's structural decode and the
-World's authority checks.
+table) lives in `Puck.World.Addons`, over `Puck.World.Schema`'s `WorldChannelTable`; authority
+decisions live in `Puck.World.Server`. `Puck.World.Addons`' `AddonSimulationPump` owns the
+vocabulary layer between the core's structural decode and the World's authority checks.
 
 The `Wasmtime` package version **is** the native engine version, and fuel accounting is
 Cranelift-codegen-dependent (basic-block granularity, upstream #4109). The pin is exact on purpose:
@@ -86,7 +86,7 @@ host.Add(descriptor: new AddonDescriptor(
 // below for the exact ordering.
 ```
 
-`channelResolver` is the caller's `IAddonChannelResolver`—in this repository, `Puck.World`'s
+`channelResolver` is the caller's `IAddonChannelResolver`—in this repository, `Puck.World.Addons`'
 `WorldAddonChannelResolver` constructed over the boot world document's compiled channel table.
 
 ---
@@ -99,8 +99,8 @@ host.Add(descriptor: new AddonDescriptor(
 | `AddonAbiRustPort` | `static class` | Emits the generated Rust mirror of every closed set and layout constant below, read from the live types by reflection (the `puck wasm-stdlib` verb). |
 | `ScriptingEngineOptions` | `readonly record struct` | The pinned deterministic config values (`Deterministic` preset). |
 | `ScriptingEngine` | `sealed class` | Owns the one configured `Wasmtime.Engine`; asserts the pinned version. |
-| `WasmModuleLoader` | `sealed class` | Path → bytes (`IAssetSource`) → `\0asm`/WAT → hash → LRU of compiled `Module`. |
-| `ScriptingModuleInfo` | `sealed record` | The immutable load result: path, content hash, byte length, compiled module. |
+| `WasmModuleLoader` | `sealed class` | Path → bytes (`IAssetSource`) → `\0asm`/WAT (converted to binary) → hash → declarations read from the binary → LRU of compiled `Module` beside its memory declarations. |
+| `ScriptingModuleInfo` | `sealed record` | The immutable load result: path, content hash, byte length, compiled module, and every linear memory the binary declares. |
 | `AddonModuleValidator` | `static class` | Static export-shape and zero-import check against the ABI before instantiation. |
 | `AddonDescriptor` | `readonly record struct` | A neutral mount request (keeps the consumer's document model out of the deps). |
 | `AddonChannelKind` | `enum : byte` | The channel kind wire values: `Input`/`Request`/`Response`. |
@@ -593,12 +593,12 @@ consumer-agnostic:
 |---|---|---|
 | Core | **Structure**—cell kinds, channel bounds, reserved-must-be-zero, descriptor shape, table pairing, channel-name table shape | `Puck.Scripting` (`AddonOutCellReader`, `AddonChannelTableReader`, `AddonChannelNameTableReader`) |
 | Adapter | **Vocabulary**—verb ranges, payload domains, `Ask` rules—through one sealed writer | `Puck.World.Addons` (`AddonSimulationPump`) |
-| World | **Authority and the channel table**—grants, wildcards, reservations, attenuation, quota, and what a channel name resolves to | `Puck.World` |
+| World | **Authority and the channel table**—grants, wildcards, reservations, attenuation, quota, and what a channel name resolves to | `Puck.World.Server` decides; `Puck.World.Schema` declares the grant vocabulary and `WorldChannelTable` |
 
-The wire enums live in the core. The `GrantVerdict`/`GrantSubjectKind`/`WorldCapability` mappings,
-and the channel-name table itself (`WorldAddonChannelResolver`, the ONE `IAddonChannelResolver`
-implementation), can only live where those types are visible, which is `Puck.World`—the adapter
-cannot name them. Unlike the source vocabulary this replaced, resolution failure here is never a
+The wire enums live in the core. The `GrantVerdict`/`GrantSubjectKind`/`WorldCapability` mappings
+(`WorldAddonWire`), and the channel-name table's resolver (`WorldAddonChannelResolver`, the ONE
+`IAddonChannelResolver` implementation), live in `Puck.World.Addons`, the one project that sees both
+the core's wire enums and the World types; the core cannot name them. Unlike the source vocabulary this replaced, resolution failure here is never a
 refusal the adapter or core has to enforce—it is host-reported data, decided entirely by which
 table `WorldAddonChannelResolver` is constructed over.
 
@@ -607,9 +607,10 @@ table `WorldAddonChannelResolver` is constructed over.
 ## Loading, ticking, faulting
 
 `WasmModuleLoader.Load` mirrors `ShaderModuleLoader`: read bytes through the `IAssetSource`, treat a
-leading `\0asm` as binary wasm else compile the WAT text via `Module.FromText`, compute the
-`AssetContentHash`, and cache the compiled `Module` in a content-addressed LRU so two documents
-naming the same bytes compile once.
+leading `\0asm` as binary wasm else convert the WAT text to binary with `Module.ConvertText`, compute
+the `AssetContentHash`, read the binary's declarations (`WasmModuleDeclarations`), and cache the
+compiled `Module` beside its memory declarations in a content-addressed LRU so two documents naming
+the same bytes compile once.
 
 `AddonInstance` never allocates per tick and never desyncs. It zeroes the output ring, writes the
 input batch, sets the per-tick fuel budget, calls `puck_on_tick` once with the batch length, derives
@@ -661,7 +662,7 @@ addon ghost: OutOfFuel — disabled; re-instantiate ghost to retry
 
 **Hot reload** is a consumer-level act: re-`Prepare` the same descriptor (a changed content hash
 misses the module cache; an unchanged one reuses it) and publish the fresh instance through `Adopt`
-—Puck.World drives this as an addon-row revision change through
+—the World server drives this as an addon-row revision change through
 `WorldAddonRuntime.TryPrepare`/`Commit` (see [Puck.World.Addons](../../src/Puck.World.Addons/README.md)).
 A declared `moduleHash` pin is enforced at every load: a content mismatch loads the instance
 straight into a sticky `HashMismatch` fault naming the reason, at boot and re-prepare alike.
@@ -675,11 +676,11 @@ straight into a sticky `HashMismatch` fault naming the reason, at boot and re-pr
   `i64` bits. Do not hand an `f32` across and re-derive fixed-point guest-side—that reintroduces
   the one non-determinism this ABI exists to remove.
 - **Puck.Scripting stays consumer-agnostic.** It stops at a structurally decoded cell. The adapter
-  owns vocabulary and `Puck.World` owns authority; this project never references `Puck.World` and
+  owns vocabulary and the World server owns authority; this project never references a `Puck.World.*` project and
   never maps a channel name to gameplay itself.
 - **The channel table is host-owned, and it enters through a seam.** The core validates and resolves
   declared names through the injected `IAddonChannelResolver`, but a resolution MISS is never something the core (or the adapter) refuses; it decodes to
-  a sentinel and crosses as data. `Puck.World`'s one implementation, `WorldAddonChannelResolver`, is
+  a sentinel and crosses as data. `Puck.World.Addons`' one implementation, `WorldAddonChannelResolver`, is
   constructed over the boot world document's compiled `WorldChannelTable`; a different world's
   channels section produces a different table through the SAME class, never a second
   `IAddonChannelResolver`.

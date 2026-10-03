@@ -51,6 +51,8 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The lights table: <see cref="SdfLights.MaxLights"/> <see cref="SdfLight"/> records, read by the shadow
     /// and views passes.</summary>
     public const string Lights = "sdfLights";
+    /// <summary>The active shadow handoffs, one generated 16-byte record per incoming march.</summary>
+    public const string ShadowHandoffs = "sdfShadowHandoffs";
     /// <summary>The sky block: one <see cref="SdfSkyBlock"/> record, read by the sky and composite passes and by the
     /// environment map's kernel (<see cref="EnvironmentParameters"/>).</summary>
     public const string Sky = "sdfSky";
@@ -81,6 +83,7 @@ public sealed class SdfKernelInterfaces {
             package: RenderGraphPackageCatalog.SdfWorld,
             members: [.. SdfWorldPackage.Members, .. LightAndSkyTables]
         ).Stamped(stamp: stamp);
+        WorldFadeParameters = [WorldParameters, ShadowParameters(capacity: 1), ShadowParameters(capacity: 2)];
         // The resolve pass binds the residency's World set, so its World group is the world interface's, the lights
         // and sky tables included.
         ResolveParameters = ShaderPipelineParameterLayout.ForPackage(
@@ -100,6 +103,7 @@ public sealed class SdfKernelInterfaces {
             config: null,
             members: [
                 ShaderWorkCounters.RowMember,
+                ShaderWorkCounters.DetailRowMember,
                 ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
                 ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: SkyStops, structure: ShaderInterfaceStructure.From<SdfSkyStop>()),
                 Written(element: ShaderValueType.Uint2, name: SkyEnvironmentWritten),
@@ -137,12 +141,20 @@ public sealed class SdfKernelInterfaces {
         MeshLayout = new(shaderInterface: Mesh);
         Includes = [
             (IncludePath(shaderInterface: World), World),
+            (IncludePath(shaderInterface: WorldFadeParameters[1].Interface), WorldFadeParameters[1].Interface),
+            (IncludePath(shaderInterface: WorldFadeParameters[2].Interface), WorldFadeParameters[2].Interface),
             (IncludePath(shaderInterface: BrickBake), BrickBake),
             (IncludePath(shaderInterface: Mesh), Mesh),
             (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface),
             (IncludePath(shaderInterface: SkyParameters.Interface), SkyParameters.Interface),
             (IncludePath(shaderInterface: EnvironmentParameters.Interface), EnvironmentParameters.Interface),
         ];
+
+        ShaderPipelineParameterLayout ShadowParameters(int capacity) => ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            package: $"sdf-world-fade{capacity}",
+            members: [.. SdfWorldPackage.MembersForShadows(fadeCapacity: capacity), .. LightAndSkyTables]
+        ).Stamped(stamp: stamp);
     }
 
     /// <summary>Gets the World-group tables <see cref="World"/> adds to the <c>sdf.world</c> package's members: the lights
@@ -154,6 +166,7 @@ public sealed class SdfKernelInterfaces {
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: SkyStops, structure: ShaderInterfaceStructure.From<SdfSkyStop>()),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Softboxes, structure: ShaderInterfaceStructure.From<SdfSoftbox>()),
+        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: ShadowHandoffs, structure: ShaderInterfaceStructure.From<SdfShadowHandoff>()),
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint2, group: ShaderInterfaceGroup.World, name: SkyEnvironment),
     ];
     /// <summary>Gets the instruction set's stamp the interfaces carry.</summary>
@@ -163,6 +176,8 @@ public sealed class SdfKernelInterfaces {
     /// the view's own resources. Its frame block is written through
     /// <see cref="ShaderPipelineParameterLayout.WriteFrame"/>.</summary>
     public ShaderPipelineParameterLayout WorldParameters { get; }
+    /// <summary>Gets each fade capacity's world interface, indexed by capacity from zero to two.</summary>
+    public IReadOnlyList<ShaderPipelineParameterLayout> WorldFadeParameters { get; }
     /// <summary>Gets the reconstruction pass's interface, with the same frame values as the traversal passes.</summary>
     public ShaderPipelineParameterLayout ResolveParameters { get; }
     /// <summary>Gets the interface the sky and composite passes read, with the same frame values as the traversal passes

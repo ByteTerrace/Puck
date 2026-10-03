@@ -18,6 +18,7 @@ namespace Puck.World.Tests;
 /// cases evaluate <c>map()</c> under every wallpaper group a program accepts and hold it to the CPU fold.</summary>
 [Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class SdfLogSphereMarchDeviceLawTests {
     private const string Kernel = "sdf-march-log-sphere.comp";
     private const float Footprint = (1f / 1024);

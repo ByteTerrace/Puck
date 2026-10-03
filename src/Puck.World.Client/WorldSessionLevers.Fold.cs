@@ -91,6 +91,10 @@ public static partial class WorldSessionLevers {
 
         var captured = (render with {
             Shadows = ShadowTiers.Tier(reach: settings.ShadowReach),
+            ShadowLights = settings.ShadowSlots.Slots,
+            ShadowFadeSlots = settings.ShadowSlots.FadeSlots,
+            ShadowFadeTicks = ((uint)settings.ShadowSlots.FadeTicks),
+            ShadowOverflow = settings.ShadowSlots.Overflow,
             ShadowCrowdRadius = settings.ShadowCrowdRadius,
             AmbientOcclusion = settings.AmbientOcclusion,
             RenderScale = settings.RenderScale,

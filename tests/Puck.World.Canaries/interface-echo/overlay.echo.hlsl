@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'overlay' (sha256/2bd811443489781f70d40ec74cc7343a47c6539be0a777b5e4edca377f5e715d), generated from the interface; never edit it.
+// The echo pass of shader interface 'overlay' (sha256/d4b4e8ccbb32b887292a9b0a675a04e994d7d133a0f573ac53742ec5628e2cb5), generated from the interface; never edit it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "overlay.interface.hlsli"
 
@@ -25,4 +25,5 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(15, 0)] = ((asuint(passGroup.misc.x) == 0x400093A5u) && (asuint(passGroup.misc.y) == 0x4000A3A5u) && (asuint(passGroup.misc.z) == 0x4000B3A5u) && (asuint(passGroup.misc.w) == 0x4000C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(16, 0)] = ((asuint(passGroup.sdf.x) == 0x4000D3A5u) && (asuint(passGroup.sdf.y) == 0x4000E3A5u) && (asuint(passGroup.sdf.z) == 0x4000F3A5u) && (asuint(passGroup.sdf.w) == 0x400103A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(17, 0)] = ((asuint(passGroup.workCounterRow) == 0x400113A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(18, 0)] = ((asuint(passGroup.workCounterRowDetail) == 0x400123A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

@@ -60,13 +60,13 @@ the window as a scrubber a pointer can drag.
 
 Several pieces exist with nothing using them:
 
-- `world.debug-view` selects one of twelve modes (`off`, `depth`, `normals`,
+- `world.debug-view` selects one of thirteen modes (`off`, `depth`, `normals`,
   `raydir`, `material-id`, `iteration-count`, `termination`, `slice`, `mask`,
-  `overshoot`, `evals`, `visibility`). It is unbindable and sets the mode on
-  the main world residency only, so a camera view or a session view never
-  shows it. The slice mode is locked to the camera through the origin:
-  `SdfFrame.DebugSliceAxis` and `DebugSliceOffset` reach the pass block, and
-  nothing sets them.
+  `overshoot`, `evals`, `visibility`, `motion`). It is unbindable and sets the
+  mode on the main world residency only: its camera views show it, but a
+  session screen's residency and a routed scene's never do. The slice mode is
+  locked to the camera through the origin: `SdfFrame.DebugSliceAxis` and
+  `DebugSliceOffset` reach the pass block, and nothing sets them.
 - Four shading levers reach the pass block with no producer:
   `DisableShadowCull`, `DisableScreenLights`, `EnableShadowProxy` and
   `UseFiniteDifferenceNormals`.
@@ -79,12 +79,34 @@ Several pieces exist with nothing using them:
   `SdfDebugRenderer.EmitCarve`. The brick pool itself is live: height fields
   upload their bricks into it (`WorldFieldEmitter`).
 
-GPU work remains counted for correctness and quality decisions. The optional
-`world.gpu-timing` readout records named pass timestamp pairs through
-`IGpuTimestampFactory` on both backends, after submission fences. Timing is off
-by default and never judges correctness. Its one rendering reader is dynamic
-resolution (rendering plan P15-6), off by default, which holds the views' GPU
-frame time to the display period and asks for the timestamps while it is on.
+The inspector (E5) is in place. `world.inspect on|off` is bindable and draws a
+panel on the `Editor` overlay channel (`InspectorWriter`); `world.inspect` alone
+prints the same text, because `WorldInspectorText` in `Puck.World.Client` is the
+one formatter both read and `WorldInspectionCommandModule` registers the verb.
+The text covers the placement under the seat's pointer (id, prototype, material
+and its name, point, normal, distance, march steps and queries), the camera, the
+simulation and presentation ticks, the render scale and quality levers, the
+active debug view, the frame's counted work, the `world.budget` words and
+instance headroom, the latest reload diagnostic, and the frame rate and GPU pass
+times while `world.gpu-timing` is on. Its `selection=` field reads the
+placement the seat last put down or moved, and `none` otherwise, until E2 gives
+a seat a selection. `WorldInspectorLawTests` holds its laws and the
+`editor-inspector` canary checks the panel's pixels and the surface it names.
+
+Cost per object and GPU pass timing (E9) are in place. `world.cost [<placement>]`
+and `world.cost top [<n>]` read a live placement's counted cost from the
+composed program (`WorldPlacementCostReport`; `WorldCostLawTests`), and
+append the pointer pixel's step and query counts when the pointer is on that
+placement. GPU work remains counted for correctness and quality decisions. The
+optional `world.gpu-timing` readout (bindable, off by default) records named
+pass timestamp pairs through `IGpuTimestampFactory` on both backends, after
+submission fences (`ShaderPipelineRenderNodeLawTests.Timing.cs`, the
+`gpu-pass-timing` canary). Timing never judges correctness. Its one rendering
+reader is dynamic resolution (`world.render-scale [view] auto`,
+`WorldDynamicResolution`; [rendering plan P15-6](rendering.md#p15--temporal-reconstruction)),
+off by default, which holds each view's GPU frame time to the display period and
+asks for the timestamps while it is on; `world.gpu-timing off` then stops only
+the readout.
 
 The building blocks the packages reuse are in place. The overlay draws rects,
 rings, wedges, panels, icons and text (`OverlayFrameBuilder`), and has no line
@@ -369,13 +391,31 @@ kinds, two static placements to two different ids; red legs: a background
 pixel reads 0, and with the ordinal forced to the old frame-slot source both
 static placements read `0x40000000` and the law fails.
 `WorldEditorSelectionLawTests` (box selection, removal drops the id, the
-read-back). Canary `editor-selection`: selecting the non-solid placement by
+read-back, and the selection surviving a reload through
+`WorldEditorReloadRetentionLawTests`). Canary `editor-selection`: selecting the non-solid placement by
 pointer puts accent pixels on it and around it in an offscreen capture, and
 clearing the selection removes them. With build mode off, `world.counters gpu`
 reads the same per-pass counts before and after the package, so the readback
 costs nothing outside the editor.
 
 **Depends on:** E1 for build mode's binding group.
+
+**Status:** open; items 2 and 3 are in place, items 1, 4, 5 and 6 are not.
+`WorldPickMapBuilder` maps the emitted SDF ordinals and mesh draws to their
+placement or stamped body (`WorldPickMapLawTests`, `WorldComposedPickMapLawTests`,
+the `sdf-picking` canary). The GPU path runs while a seat builds or has its
+inspector on (`WorldCursorFeed`), and the cursor label names the placement and
+the pixel it answered at (`WorldPickLabelLawTests`). The CPU path is the static
+field's `IWorldQuery.Raycast`, which E1's placement verbs use. Still to build:
+the overlay line primitive (`OverlayFrameBuilder` has none), the per-seat
+selection with `world.select` and `world.selection`, the highlight, and the
+editing verbs acting on the selection. The laws and canary named under Check for
+those items (`OverlaySegmentLawTests`, `WorldEditorPickLawTests`,
+`WorldEditorSelectionLawTests`, `editor-selection`) do not exist yet.
+The selection also joins the reload retention that
+`WorldEditorReloadRetentionLawTests` holds
+([E10](#e10--live-reload-and-before-and-after)), and fills the inspector's
+`selection=` field.
 
 ### E3 — Undo, redo, duplicate, delete and measure
 
@@ -430,16 +470,17 @@ fixture placements (red leg: one hit measures nothing).
 ### E4 — Debug views everywhere
 
 **Problem:** the debug views exist, but a builder must type them, they show
-only in the main view, and the slice cannot be moved.
+only in the main world residency, and the slice cannot be moved.
 
 **Delivers:**
 
 1. **Bindable views.** `world.debug-view` becomes bindable: a constant value
    selects a mode by index, and two reserved values step to the next and
    previous mode, following `view.override`'s convention.
-2. **Every residency.** The mode reaches the main world residency and every
-   camera and session residency the screen binder holds
-   (`WorldScreenBinder.TryResolveView`), including one created after the switch.
+2. **Every residency.** The mode reaches the main world residency (whose
+   camera views already show it) and every session and routed residency the
+   screen binder creates (`WorldScreenBinder.Views.cs`, `WorldScreenBinder.Routed.cs`),
+   including one created after the switch.
 3. **A movable slice.** `world.debug-view slice x|y|z|camera [<offset>]` sets
    `SdfFrame.DebugSliceAxis` and `DebugSliceOffset`, with a bindable offset step.
 4. **The four shading levers.** `world.shadow-cull`, `world.screen-lights`,
@@ -470,8 +511,12 @@ count; `WorldDebugViewResidencyLawTests` (the mode reaches every residency the
 binder holds and one it creates later; red leg: the main residency alone, as
 today); presenter laws that the slice and the four levers reach the frame.
 Canary `debug-views`: a screen showing a camera view changes to the `normals`
-colors when the mode is on. This package supplies the missing checks for the
-rendering plan's debug-view and shading-lever capability rows. The NaN marker
+colors when the mode is on. The rendering plan's capability rows for debug views and shading levers already
+hold frame-to-pass-block and pass-scheduling checks
+(`SdfFrameBlockLawTests.EachShadingLeverWritesItsOwnMemberAlone`,
+`SdfWorldResidencyReportLawTests.TheDebugViewModeReachesEveryPassBlockWhenSetBeforeTheTablesOrAfter`);
+this package adds the producers' side, a World setting reaching the frame, and
+the canary. The NaN marker
 and the gradient-magnitude mode join the mode-count sync law; a law over a
 program with a NaN-producing primitive holds the marker on that sample, and
 the selected-placement slice holds every other placement's field out.
@@ -528,7 +573,15 @@ come from the same visibility record. A passthrough pane supplies its own render
 residency and quality to the inspector, cost report and pass timings. Pass timing
 and FPS appear only while `world.gpu-timing` is enabled.
 
-**Depends on:** E2's shared GPU picking mechanism; selection tools remain E2 work.
+**Depends on:** the shared GPU picking mechanism, which is in place.
+
+**Status:** delivered. The laws are `WorldInspectorLawTests` (the real verb and
+panel share one text, a sky pointer prints `hit=none`, long diagnostics fit the
+reservation with their file and location first, a steady frame allocates
+nothing) and `OverlayLeaseTableFitsBackstopsLawTests` (the storage rule); the
+canary is `editor-inspector`. The summary of the selection reads the placement
+the seat last put down or moved, so it is `selection=none` on a fresh seat;
+[E2](#e2--selection-picking-and-highlight) owns feeding it a real selection.
 
 ### E6 — Why is this dark or invisible
 
@@ -626,8 +679,9 @@ fields), the editor command module.
 **Check:** `WorldEditorCameraLawTests` (an orbit input sequence puts the eye on
 the sphere around the pivot at the expected yaw and pitch, and the clamp holds;
 framing puts the selection's bounds inside the frustum; the server's state hash
-is equal before and after a flight; red leg: removing the clamp lets pitch pass
-the pole).
+is equal before and after a flight, and the camera's pose survives a reload
+through `WorldEditorReloadRetentionLawTests`; red leg: removing the clamp lets
+pitch pass the pole).
 
 **Depends on:** E1; E2 for framing.
 
@@ -655,8 +709,8 @@ the pole).
    inspector follows the same rule. The readout never judges: see
    [Decisions](#decisions).
 3. **Cost at the pointer.** The inspector reads the visibility record's step
-   and query counts at the pointer's pixel, once a one-pixel readback exists
-   (the same readback the rendering plan's GPU picking needs).
+   and query counts at the pointer's pixel, from the one-pixel readback that
+   GPU picking supplies.
 
 **Touches:** `Puck.World.Client` and `src/Puck.World` (`world.cost`),
 `Puck.Abstractions` (the timing query service), `Puck.Vulkan` and
@@ -690,21 +744,30 @@ is enabled anew, the operator's GPU faults move, or the device is lost. Each
 recorded pass gets one pair;
 readback waits for its submission fence, rejects a replaced graph or an earlier
 enable epoch, and averages at most 32 completed pairs. Disabling hides readings
-immediately and releases pools after their fences. Device loss releases all
+immediately and releases pools after their fences, unless dynamic resolution
+still asks for the timestamps. Device loss releases all
 query/readback ownership. GPU timestamp readback and retained CPU sample payloads
 are reported separately. Times and FPS never become correctness assertions;
 dynamic resolution is the one quality input that reads the timing.
 
-**Depends on:** nothing; E5 for the panel; the rendering plan's one-pixel
-readback for step 3.
+**Depends on:** nothing.
+
+**Status:** delivered. `world.cost` prints every figure of step 1 beside the
+share of the live program (`WorldCostLawTests`, including the bake
+representation law); step 2 is `world.gpu-timing` with
+`ShaderPipelineRenderNodeLawTests.Timing.cs` (demand, pairing, fences, release on
+loss, creation faults refusing by name) and the `gpu-pass-timing` canary; step 3
+is the `pixel=` line of `world.cost` and the inspector's `steps=` and
+`queries=`. [E13](#e13--carving-and-the-brick-bake) extends `world.cost` with a
+placement's carves.
 
 ### E10 — Live reload and before-and-after
 
-**Status:** the source watch uses the graph watch's shared debounce and the
+**Status:** delivered. The source watch uses the graph watch's shared debounce and the
 existing reload command. It covers compile and document-composition inputs,
 reads contents only for inputs whose file-system stamp moved, keeps the latest
-reload diagnostic for the inspector and toast, and reconciles selection ids
-after a rebuild. A seat can hold its displayed frame and compare it with the
+reload diagnostic for the inspector and toast, and reconciles the seat's
+current placement and snap reference against the rebuilt document. A seat can hold its displayed frame and compare it with the
 live view through the ordinary capture and `place` paths, under the overlay. Split,
 wipe, difference, cropped sampling and return to the live view are checked on
 both backends by `editor-compare`.
@@ -717,9 +780,11 @@ both backends by `editor-compare`.
    existing verb, recorded on the tape as always. A failed reload shows its
    diagnostic, with file and line, in the inspector and as a toast as well as
    on stderr.
-2. **Reload keeps your place.** Build mode, the grid, the snap state, the
-   editor camera and the selection (by id) survive a reload; an id the reload
-   removed leaves the selection.
+2. **Reload keeps your place.** Build mode, the grid, the snap state, the seat's
+   view angles, and its current placement and snap reference (by id) survive a
+   reload; an id the reload removed leaves them. The selection
+   ([E2](#e2--selection-picking-and-highlight)) and the editor camera
+   ([E8](#e8--editor-camera)) join that retention in their own packages.
 3. **Before and after.** `world.compare hold` keeps the seat's current frame;
    `world.compare wipe [position]|split|diff|off` shows it against the live view in a pane
    the `place` package draws. A bound `Axis1D` value controls the wipe position
@@ -743,7 +808,8 @@ both backends by `editor-compare`.
 **Check:** `WorldWatchLawTests` (touching a compile input submits exactly one
 reload; red leg: touching an unrelated file submits none; an unchanged tree
 reads no content per poll);
-`WorldEditorReloadRetentionLawTests` (selection and camera survive a reload, and
+`WorldEditorReloadRetentionLawTests` (build mode, the grid, the snap state, the
+view angles, and the current placement and snap reference survive a reload, and
 a removed id drops out). Canary `editor-compare`: hold a frame, move a render
 lever, and the split view's halves differ. `WorldFrameComparisonLawTests`
 checks crop rounding and authored root extents, owned pixels, the shared
@@ -752,7 +818,7 @@ paused metadata, the captured frame's own viewport across a layout change,
 the comparison composed under the overlay's instance with the scene as its
 capture target, and the existing axis binding contract.
 
-**Depends on:** E2 and E8 for what a reload keeps; the compare needs nothing.
+**Depends on:** nothing.
 
 ### E11 — Save edits back to source
 
@@ -857,8 +923,10 @@ field; planner laws over the fake device (a bin with enough settled carves
 requests one bake and emits one brick after `Ready`, a new carve in a baked
 bin re-emits it analytic in the same rebuild; red leg: a bin below the
 threshold never bakes). Canary `carve-bake`: a carved region's capture agrees
-before and after its bin bakes. This supplies the missing check for the
-rendering plan's brick-baking capability row.
+before and after its bin bakes. This supplies the check for the
+GPU carve bake, the half of the rendering plan's brick-baking capability row that
+has none (a height field's host-baked brick is held by
+`SdfWorldTablesUploadLawTests.AHostBakedBrickLandsInItsPoolSlotAndTheSlotTurnsReady`).
 
 **Depends on:** E1 and E2 for the pointer's surface hit, E3 for one step per
 stroke.

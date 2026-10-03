@@ -28,9 +28,10 @@ world.budget
   frame whose render inputs match the previous one keeps each view's retained
   output, so a still scene would read near zero.
 - **`world.counters gpu`** echoes what each render node counted for its newest
-  completed submission: per labeled pass (`fillers`, `bricks`, `upload`,
-  `environment`, `sky`, `mask`, `beam`, `cull-args`, `mesh`, `primary`, `surface`, `ambient`,
-  `shadow`, `views`) the dispatches, barriers, binds, push-constant bytes and
+  completed submission: per labeled pass (the residency's `fillers`, `bricks`, `upload` and
+  `environment`, then each view's `mask`, `beam`, `cull-args`, `mesh`, `primary`,
+  `surface`, `ambient`, `shadow`, `views`, `resolve` where the view reduces or
+  reconstructs, `sky` and `composite`) the dispatches, barriers, binds, push-constant bytes and
   uploads it recorded and the march steps and texels written its kernels
   counted, or `skipped` for a pass that did not run, and, for a render-graph
   instance's node, `owned-bytes`, the GPU memory the node holds now. The recorded counts are

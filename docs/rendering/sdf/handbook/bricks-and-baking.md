@@ -433,7 +433,8 @@ and `SdfImpostorLawTests` hold it to the field's sphere and box.
 ## Related resources
 
 - API contracts for bake requests, pool layout, and sampled-region packing:
-  `SdfBrickBake`, `SdfBrickPoolLayout`, and `SdfProgramBuilder.SampledRegion`
+  `BrickBakeRequest` and `BrickBakeStatus` (in `SdfBrickBake.cs`),
+  `SdfBrickPoolLayout`, and `SdfProgramBuilder.SampledRegion`
   in [`src/Puck.SignedDistance`](../../../../src/Puck.SignedDistance/); the
   interactive carve-pool planner, `SdfCarveBakePlanner`, stays in
   [`src/Puck.SdfVm`](../../../../src/Puck.SdfVm/) (an engine behavior, not

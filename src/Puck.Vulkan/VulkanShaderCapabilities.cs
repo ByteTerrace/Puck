@@ -13,6 +13,9 @@ namespace Puck.Vulkan;
 public static class VulkanShaderCapabilities {
     /// <summary>The SPIR-V <c>Shader</c> capability, which every graphics and compute module declares.</summary>
     public const uint Shader = 1u;
+    /// <summary>The SPIR-V storage-image formats beyond the core set, including R8 and R8G8 handoff visibility.
+    /// Requires the device's <c>shaderStorageImageExtendedFormats</c> feature.</summary>
+    public const uint StorageImageExtendedFormats = 49u;
     /// <summary>The SPIR-V <c>ImageQuery</c> capability, for an image's size and levels.</summary>
     public const uint ImageQuery = 50u;
     /// <summary>The SPIR-V <c>GroupNonUniform</c> capability, for the subgroup's lanes.</summary>
@@ -37,6 +40,7 @@ public static class VulkanShaderCapabilities {
     /// creates.</summary>
     public static IReadOnlyList<(uint Capability, string Name, string EnabledBy)> Enabled { get; } = [
         (Shader, "Shader", "Vulkan core"),
+        (StorageImageExtendedFormats, "StorageImageExtendedFormats", "the shaderStorageImageExtendedFormats feature every device is created with"),
         (ImageQuery, "ImageQuery", "Vulkan core"),
         (GroupNonUniform, "GroupNonUniform", "Vulkan 1.1 core"),
         (GroupNonUniformArithmetic, "GroupNonUniformArithmetic", "Vulkan 1.1 core"),

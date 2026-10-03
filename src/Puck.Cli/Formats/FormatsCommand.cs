@@ -27,13 +27,13 @@ public static class FormatsCommand {
         )).Order(comparer: StringComparer.Ordinal).ToArray();
     }
 
-    /// <summary>Reads every tracked source file the ledger is generated from.</summary>
+    /// <summary>Reads tracked and unignored new source files so staging cannot change the recorded shape.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
     /// <returns>Each file's text by repository-relative path with forward slashes.</returns>
     internal static Dictionary<string, string> ReadSources(string repositoryRoot) {
         var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
-        foreach (var relative in ListSources(repositoryRoot: repositoryRoot)) {
+        foreach (var relative in ListSources(repositoryRoot, "--cached", "--others", "--exclude-standard")) {
             var fullPath = Path.Combine(
                 path1: repositoryRoot,
                 path2: relative
@@ -308,8 +308,8 @@ public static class FormatsCommand {
             ? Explain(id: id)
             : Run(check: parseResult.GetValue(option: ((Option<bool>)command.Options.First(predicate: static option => (option.Name == "--check")))))));
         command.Detail(detail: """
-            Records every strictly versioned wire, persisted, or cache format in the tracked
-            source under src/: a static constant or read-only field whose initializer is a
+            Records every strictly versioned wire, persisted, or cache format in tracked and
+            unignored new source under src/: a static constant or read-only field whose initializer is a
             named document schema (a string like "puck.world.definition.v1"), or whose name is
             a recognized token member (WireKey, ProtocolKey, ShapeToken, SupportedVersion,
             CurrentVersion, FormatVersion, Magic, and kin) over exactly one literal. A numeric

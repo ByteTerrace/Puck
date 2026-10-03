@@ -6,5 +6,5 @@ namespace Puck.SdfVm;
 /// declarations.</summary>
 public static class SdfIsaFingerprint {
     /// <summary>The fingerprint.</summary>
-    public const uint Value = 0x2245F7D2u;
+    public const uint Value = 0x506E1C21u;
 }

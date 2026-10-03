@@ -104,7 +104,7 @@ public sealed class VulkanRenderer(
 
     /// <summary>The renderer's presentation counters, the <c>presentation.vulkan</c> work source: each
     /// <see cref="VulkanFramePresentationResult.Skipped"/> outcome counts one <c>presentation.skipped</c>. The
-    /// composition registers the counters on their own, so reading them never brings the renderer up.</summary>
+    /// composition owns the source and hands it in, so a counter readout never has to create the renderer.</summary>
     public PresentationWork Presentation { get; } = presentation;
 
     /// <summary>The window surface; valid after <see cref="Initialize"/>.</summary>

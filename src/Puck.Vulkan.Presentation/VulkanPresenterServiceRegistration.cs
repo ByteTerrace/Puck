@@ -24,6 +24,8 @@ namespace Puck.Vulkan.Presentation;
 public static class VulkanPresenterServiceRegistration {
     // The key the backend's GpuPipelineCacheWork and GpuDeviceMemoryWork are registered under, and the name their counts report.
     private const string PipelineCacheBackend = "vulkan";
+    private const string PresentationWorkKey = "vulkan";
+    private const string PresentationWorkName = "presentation.vulkan";
 
     // The host's one procedure resolver over the loader, and its resolutions as a counter source, registered once
     // however often the backend is added. Creating the resolver never loads the loader.
@@ -182,14 +184,12 @@ public static class VulkanPresenterServiceRegistration {
     /// (<see cref="AddVulkanPresenter"/>), the neutral <see cref="IGpuDeviceContext"/> alias (the backend
     /// publishes its device in DI as <see cref="IVulkanDeviceContext"/> only, with the neutral interface riding
     /// a <see cref="HostCapabilityContribution"/>, so backend-neutral consumers need this alias to resolve the
-    /// same device), the renderer's <c>presentation.vulkan</c> <see cref="IWorkCounterSource"/>, and the
+    /// same device), and the
     /// <c>"vulkan"</c> <see cref="SurfacePresenterDescriptor"/>.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanHostedPresentation(this IServiceCollection services) {
         services.AddVulkanPresenter();
         services.TryAddSingleton<IGpuDeviceContext>(implementationFactory: static sp => sp.GetRequiredService<VulkanRenderer>());
-        // The renderer's presentation counters (presentation.skipped), discovered by any counter readout.
-        services.AddSingleton<IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<PresentationWork>());
         services.AddSingleton(implementationFactory: static sp => new SurfacePresenterDescriptor(
             Name: "vulkan",
             Presenter: sp.GetRequiredService<VulkanSurfacePresenter>()
@@ -199,6 +199,7 @@ public static class VulkanPresenterServiceRegistration {
     }
     /// <summary>Registers one native API per Vulkan capability the renderer, compositor, and engine use.</summary>
     /// <param name="services">The service collection.</param>
+    [OpensGpuDevice]
     public static IServiceCollection AddVulkanNativeApis(this IServiceCollection services) {
         AddProcedures(services: services);
         services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);
@@ -231,7 +232,8 @@ public static class VulkanPresenterServiceRegistration {
         return services;
     }
     /// <summary>Registers the Vulkan backend: native APIs, factories, the renderer/compositor, the
-    /// <see cref="ISurfacePresenter"/>, and the Vulkan device capability contribution.</summary>
+    /// <see cref="ISurfacePresenter"/>, the Vulkan device capability contribution, and the renderer's
+    /// <c>presentation.vulkan</c> <see cref="IWorkCounterSource"/>.</summary>
     /// <param name="services">The service collection.</param>
     public static IServiceCollection AddVulkanPresenter(this IServiceCollection services) {
         services
@@ -249,8 +251,15 @@ public static class VulkanPresenterServiceRegistration {
         // Neutral presentation preferences (present mode + surface format); a consumer may register its own
         // before calling this to override the defaults (Vsync + R8G8B8A8).
         services.TryAddSingleton(instance: new PresentationOptions());
-        // The renderer's presentation counters, a source of their own: a counter readout resolves them without the renderer.
-        services.TryAddSingleton(implementationFactory: static _ => new PresentationWork(name: "presentation.vulkan"));
+        // The renderer's presentation counters live in the composition, keyed by backend, so the counter readout
+        // reads them without resolving the renderer (which creates the device).
+        if (!services.Any(predicate: static descriptor => (descriptor.IsKeyedService && (descriptor.ServiceType == typeof(PresentationWork)) && Equals(objA: descriptor.ServiceKey, objB: PresentationWorkKey)))) {
+            var presentation = new PresentationWork(name: PresentationWorkName);
+
+            services.AddKeyedSingleton(implementationInstance: presentation, serviceKey: PresentationWorkKey);
+            // The renderer's presentation counters (presentation.skipped), discovered by any counter readout.
+            services.AddSingleton<IWorkCounterSource>(implementationInstance: presentation);
+        }
         services.TryAddSingleton(implementationFactory: static sp => new VulkanRenderer(
             commandBufferRecorder: sp.GetRequiredService<IVulkanCommandBufferRecorder>(),
             commandResourcesFactory: sp.GetRequiredService<IVulkanCommandResourcesFactory>(),
@@ -263,7 +272,7 @@ public static class VulkanPresenterServiceRegistration {
             options: sp.GetRequiredService<VulkanRendererOptions>(),
             physicalDeviceApi: sp.GetRequiredService<IVulkanPhysicalDeviceApi>(),
             physicalDeviceSelector: sp.GetRequiredService<IVulkanPhysicalDeviceSelector>(),
-            presentation: sp.GetRequiredService<PresentationWork>(),
+            presentation: sp.GetRequiredKeyedService<PresentationWork>(serviceKey: PresentationWorkKey),
             presentationOptions: sp.GetRequiredService<PresentationOptions>(),
             renderPassFactory: sp.GetRequiredService<IVulkanRenderPassFactory>(),
             surfaceFactory: sp.GetRequiredService<IVulkanSurfaceFactory>(),

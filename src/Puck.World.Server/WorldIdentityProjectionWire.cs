@@ -21,6 +21,7 @@ public static class WorldIdentityProjectionWire {
     private static readonly ConditionalWeakTable<WorldStateSection, byte[]> RecordBytes = new();
     private static readonly ConditionalWeakTable<WorldStateRow, object> ValidatedFacts = new();
     private static readonly object Validated = new();
+
     /// <summary>Writes a projection.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="projection">The projection to write.</param>

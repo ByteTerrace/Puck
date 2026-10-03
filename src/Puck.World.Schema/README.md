@@ -254,7 +254,7 @@ path (operands, expressions, board queries, pattern words) is what allocates
 nothing on the tick.
 Transfers preserve keys and accept
 `Key`, `First`, `Last`, `Random`, or `Slice` selectors; random selection names a
-redrawable integer `streamDraw` site, and `count` (1..256) moves that many
+redrawable integer `streamDraw` site, and `count` (1..4096) moves that many
 tokens in one mutation, each selected afresh from what remains, so a deal is
 one journal entry; `Slice` moves the keyed token and every token after it as
 one run, in order (a solitaire column from a card to its top), and onto the
@@ -350,10 +350,10 @@ ranges in the pattern's `kind` (overlaps refine into letters; at most 32
 symbols, 64 letters) and `pattern` is the closed node vocabulary `symbol`,
 `any`, `except`, `empty` (the empty word), `none` (the empty language),
 `sequence`, `choice`, `all` (intersection), `not` (complement), `optional`,
-`star`, `plus`, `repeat` (`min`..`max`, at most 64), matched against the
+`star`, `plus`, `repeat` (`min`..`max`, at most 128), matched against the
 whole word. The machine's states are the pattern's
 Brzozowski derivatives, kept canonical by similarity, so stars, complements,
-and intersections are exact at any word length; `maxStates` (1..256, default
+and intersections are exact at any word length; `maxStates` (1..1024, default
 64) is the state budget the compile refuses past, by name, at validation. The
 word is a board ray from the operand key's origin (exclusive) in the named
 direction, an ordered zone's cells read through the pattern's `attribute` row
@@ -575,14 +575,15 @@ live beside the document model while every caller spells them
 
 `WorldDefinition.cs` is one aggregate record with a section record per concern;
 the section list is the `WorldSection` enum in `WorldGrant.cs` (kits,
-screens, cameras, spawns, motion, population, render, addons,
+screens, machines, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, grants, hud, state, input hold, rules,
 groups, properties, interactions, player defaults, probes,
 dynamics, curves, tables). Worlds live as data
-under `../Puck.World/Assets/worlds/`. There is one shipped world,
-`puck.world.json` (the island, the boot default), a `basis` delta over
-`standard.world.json`. Its districts—`dive`, `kart`, `jump`, `studio`,
+under `../Puck.World/Assets/worlds/`. The boot default is
+`puck.world.json` (the island), a `basis` delta over `standard.world.json`;
+`pipeline.world.json` and `moth-courtyard.puck` are diagnostic scenes a
+`--world` argument names. Its districts—`dive`, `kart`, `jump`, `studio`,
 `arena`, `arcade`, `granaries`—are imported `puck.world.definition.v1` module
 fragments under `worlds/modules/` (see `modules/README.md`); tabletop games
 live as imported fragments under `worlds/games/`. The corner shards
@@ -895,8 +896,10 @@ speaker radius the validator refuses in an authored section) never reaches the
 file. A top-level member the document does not author is left out rather than
 written as `null`. The session state a save folds in (`WorldSessionCapture`
 for what the server owns, `WorldSessionLevers.Fold` for the presentation
-levers) lands only in sections the document authors, and a section the session
-left alone is written as authored. `WorldSaveAuthoredDocumentLawTests` saves
+levers) lands in a section the document authors, and a section the session
+left alone is written as authored. Moved render ceilings, per-view quality
+(`views.quality`) and editor values create their valid section when the document
+omits it; session pins never fold. `WorldSaveAuthoredDocumentLawTests` saves
 every shipped world, every world document under `tests/Puck.World.Tests/Fixtures`,
 and every canary world that way and proves each one boots
 again to the definition it was loaded as. One value moves on an otherwise
@@ -1200,7 +1203,9 @@ than any other section, deliberately, since a `state` row is genre-authored
 game data an operator may want to hand out per-row (score to one addon,
 inventory to another) rather than all-or-nothing per section. That `Edit`
 row may additionally carry a `MutationKindMask` (`WorldGrant.KindMask`),
-narrowing further to WHICH of the five kinds it admits—the difference
+narrowing further to WHICH of the state section's mutation kinds it admits
+(`UpsertStateRow`, `RemoveStateRow`, `UpsertStateCell`, `RemoveStateCell`,
+`Generate`, `TransformState`, `Batch`)—the difference
 between bumping a row and redefining it, and (with `verbs:Generate`) between
 REDRAWING a draw site and re-authoring it.
 
@@ -1326,8 +1331,10 @@ renderer shows as a CPU-baked distance brick, coloured by `color`. Capacity
 eight-row primer fits the federation wire's 32 MiB frame), `MaxFields` 8,
 `MaxExtent` 1024 per axis, `MaxLayers` 128, `MaxSurfaceCells` 126 (a
 height-bearing row's XZ footprint, and the cross-layer sum where several
-layers raise), `MaxReactions` 64, `MaxTransformTerms` 64, `MaxPaint` 256. Read
-back with `world.fields`; the exact structural cost (cell count × compiled
+layers raise), `MaxReactions` 64, `MaxTransformTerms` 64, `MaxPaint` 256. The lattice's
+`cellSize` must quantize to a positive Q48.16 value that keeps the lattice solid's
+contact reach (`FieldLatticeSolid.ReachCells`, 2 cells) inside Q48.16, or the
+document is refused. Read back with `world.fields`; the exact structural cost (cell count × compiled
 full-cell passes, plus body capacity × body passes, at the authored cadence)
 folds into `world.budget`.
 
@@ -1395,8 +1402,7 @@ bit-identically with nothing to reconcile.
 `generate` refuses by name), `tickPeriod`, or `event`. The latter two both stay
 redrawable through the SAME `Generate` mutation (ordinal 49); the actual cadence
 or gate is spelled with the ordinary `rules` vocabulary (a `$tick`-scheduled Edge
-rule, an event-flag-gated one), so timing costs NO mutation ordinal—the catalog
-stays 64/64.
+rule, an event-flag-gated one), so timing costs NO mutation ordinal.
 
 **The seed ladder is four rungs** (`GeneratorEngine.ComputeSeedState`), each
 LENGTH-DELIMITED before its bytes so no two rung sequences can fold to one
@@ -1814,6 +1820,10 @@ hosted read. `TryLoadFileForAdmission` is the only door that admits a document f
 so the owned-world catalog, its cloud-sync gate and `puck creation stats` read through
 it too (an owned world drawn for its own id); `WorldDefinitionFileSource.TryReadContentPin`
 returns a file's content pin alone, for a caller comparing bytes against a recorded pin.
+A refusal about an imported or basis document names it by file name (`WorldDocumentLabel`)
+and a storage failure by its kind, never by the host's directory or an exception message
+that quotes one; `TryLoadFileForAdmission` takes a `displayName` for a host (the owned-world
+catalog) that must call the root document by something other than its path.
 A release publishes a definition undrawn, since draws are instance state:
 `WorldDefinitionLoader.TryReadPublishable` returns the parsed, undrawn document once a copy
 drawn for the boot instance admits, and `puck world prepare`, `puck world release`, the
@@ -1959,7 +1969,8 @@ read one as `$local:<name>` wherever a state name is accepted; an earlier local
 cannot, so the list is feed-forward by construction. The value lives on the
 evaluation alone—an effect that changed the cells it was computed from does
 not change it, which is what lets `min(damage, hp)` be dealt and then recoiled
-from in the same rule. At most 16 per rule; each expression prices into
+from in the same rule. At most 64 per rule (`RuleCapacity.MaxLocalsPerRule`,
+counting the implicit key locals); each expression prices into
 `world.budget` like an effect's. A local that cannot evaluate closes the gate
 for that evaluation and reports an `Arithmetic` refusal; so does a
 `compareValue` conjunct whose expression faults—the conjunct reads false and
@@ -3077,13 +3088,15 @@ model, a revision, and a dimension count) and no other, so the row hydrates as a
 vector row of that space. The projection's `timeline` carries the tick clocks and,
 for each state clock a carried value keys on, an anchored clock holding a
 `WorldClockAnchor` in place of the row; `WorldClockAnchorLedger` and
-`WorldProjectionFeed` keep one recipient's anchors and deltas, and
-`WorldProjectionHold` is the receiving half. The
+`WorldProjectionFeed` keep one recipient's anchors and deltas, dropping a held
+anchor that stands ahead of the authority's tick (a history seek or a restored
+checkpoint moved the authority back past it) and carrying what a fresh recipient
+would be sent, and `WorldProjectionHold` is the receiving half. The
 [worlds manual](../../docs/architecture/worlds.md#observation-and-display) states
 the anchor rule.
 
 `WorldCounterpartAttestation` is a neighbour's statement of its seam edges plus
-the five `WorldOverlapTerms` the overlap derivation reads from its side.
+the six `WorldOverlapTerms` the overlap derivation reads from its side.
 `WorldCounterpartAttestationProtocol.TryVerify` verifies a signed claim against
 the reading world's own `admission` keys and returns what it attests; it does
 not yet bind the verified subject to the document the attestation names.

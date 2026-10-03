@@ -663,8 +663,8 @@ it to carry rig data forward by name; it never writes to it directly.
 composition root or a test through `CreationSculptRegistry.Register`. Apply
 a registered sculpt live through `creation.sculpt <name>`
 (`Puck.World.Console`), or offline against a file through
-`puck creation sculpt <name> --world <path>` (`Puck.Cli`)—see that
-project's README.
+`puck creation sculpt <name> --world <path>` (`Puck.Cli`)—see the
+[CLI reference](../../docs/reference/cli.md#puck-creationcode-authored-sculpts).
 
 `SculptPatch.TouchedRows` groups a patch's results by row for a caller that
 resubmits whole rows: a `RemoveMember` is a modification of the row it

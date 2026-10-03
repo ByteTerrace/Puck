@@ -162,111 +162,10 @@ public static partial class WorldFederationCodec {
     public const int ProjectionDeltaHeaderBytes = (DocumentHeaderBytes + 16);
 
     private static bool Finish(ref WireReader reader, out WireFailure failure) => reader.TryFinish(failure: out failure);
-    private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader, int ordinal) {
+    private static WorldTransferCommitMember ReadCommitMember(ref WireReader reader) {
         var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
-        var mapped = reader.ReadBoolean();
-        var program = reader.ReadString(field: "commit body motion program");
-        var position = reader.ReadFixedVector();
-        var yaw = reader.ReadFixed();
-        var planar = reader.ReadFixedVector();
-        var vertical = reader.ReadFixed();
-        var travelTurn = WorldWireLeaves.ReadTravelTurn(
-            field: $"commit traveler {(ordinal + 1)} travel turn",
-            reader: ref reader
-        );
-        var channelCount = reader.ReadCount(
-            field: "commit channel count",
-            maximum: ChannelLimits.MaxChannels,
-            minimum: 0
-        );
-        var channels = new WorldTransferChannelEdge[(reader.Failed
-            ? 0
-            : channelCount)];
 
-        for (var index = 0; (index < channels.Length); index++) {
-            channels[index] = new WorldTransferChannelEdge(
-                Name: reader.ReadString(field: "commit channel name"),
-                PreviousBit: reader.ReadBoolean(),
-                HeldValue: reader.ReadFixed()
-            );
-        }
-
-        var registerCount = reader.ReadCount(
-            field: "commit action register count",
-            maximum: ChannelLimits.MaxChannels,
-            minimum: 0
-        );
-        var registers = new WorldTransferActionRegister[(reader.Failed
-            ? 0
-            : registerCount)];
-
-        for (var index = 0; (index < registers.Length); index++) {
-            var name = reader.ReadString(field: "commit action register name");
-            var kind = ((ActionStateKind)reader.ReadByte());
-
-            if (!Enum.IsDefined(value: kind)) {
-                reader.Fail(
-                    detail: $"commit action register kind {((byte)kind)} is not declared",
-                    refusal: WireRefusal.EnumValueUnknown
-                );
-            }
-
-            registers[index] = new WorldTransferActionRegister(
-                Name: name,
-                Kind: kind,
-                Value: reader.ReadFixed(),
-                TimerTicks: reader.ReadUInt64()
-            );
-        }
-
-        WorldContinuumTrajectory? continuum = null;
-
-        if (reader.ReadBoolean()) {
-            continuum = ReadContinuum(reader: ref reader);
-        }
-
-        return new WorldTransferCommitMember(
-            profile,
-            mapped,
-            program,
-            position,
-            yaw,
-            planar,
-            vertical,
-            new WorldTransferActionContinuity(
-                Channels: channels,
-                Registers: registers
-            ),
-            continuum,
-            travelTurn
-        );
-    }
-    private static WorldContinuumTrajectory ReadContinuum(ref WireReader reader) {
-        var previousPosition = reader.ReadFixedVector();
-        var sourceTick = reader.ReadUInt64();
-        var start = reader.ReadUInt64();
-        var end = reader.ReadUInt64();
-        var consumedThrough = reader.ReadUInt64();
-        var boundaryEvents = reader.ReadByte();
-
-        if (
-            !reader.Failed &&
-            ((end <= start) || (consumedThrough < end) || (boundaryEvents == 0) || (boundaryEvents > WorldContinuumTrajectory.MaxBoundaryEvents))
-        ) {
-            reader.Fail(
-                detail: $"continuum trajectory has invalid interval [{start},{end}), consumed-through {consumedThrough}, or boundary count {boundaryEvents}",
-                refusal: WireRefusal.PayloadMalformed
-            );
-        }
-
-        return new WorldContinuumTrajectory(
-            BoundaryEvents: boundaryEvents,
-            ConsumedThroughEngineTick: consumedThrough,
-            ContinuumEndEngineTick: end,
-            ContinuumStartEngineTick: start,
-            PreviousPosition: previousPosition,
-            SourceTick: sourceTick
-        );
+        return (WorldWireLeaves.ReadCommitMemberMotion(reader: ref reader) with { Profile = profile });
     }
     private static EntitySnapshot ReadEntity(ref WireReader reader, int ordinal) {
         var index = reader.ReadInt32();
@@ -404,46 +303,10 @@ public static partial class WorldFederationCodec {
             projection: member.Profile,
             writer: writer
         );
-        writer.WriteBoolean(value: member.HasMappedArrival);
-        writer.WriteString(value: member.BodyMotionProgramName);
-        writer.WriteFixedVector(value: member.Position);
-        writer.WriteFixed(value: member.YawRadians);
-        writer.WriteFixedVector(value: member.PlanarVelocity);
-        writer.WriteFixed(value: member.VerticalVelocity);
-        writer.WriteFixed(value: member.TravelTurn);
-
-        var continuity = (member.ActionContinuity ?? new WorldTransferActionContinuity(
-            Channels: [],
-            Registers: []
-        ));
-
-        writer.WriteInt32(value: continuity.Channels.Count);
-
-        foreach (var channel in continuity.Channels) {
-            writer.WriteString(value: channel.Name);
-            writer.WriteBoolean(value: channel.PreviousBit);
-            writer.WriteFixed(value: channel.HeldValue);
-        }
-
-        writer.WriteInt32(value: continuity.Registers.Count);
-
-        foreach (var register in continuity.Registers) {
-            writer.WriteString(value: register.Name);
-            writer.WriteByte(value: ((byte)register.Kind));
-            writer.WriteFixed(value: register.Value);
-            writer.WriteUInt64(value: register.TimerTicks);
-        }
-
-        writer.WriteBoolean(value: member.Continuum.HasValue);
-
-        if (member.Continuum is { } continuum) {
-            writer.WriteFixedVector(value: continuum.PreviousPosition);
-            writer.WriteUInt64(value: continuum.SourceTick);
-            writer.WriteUInt64(value: continuum.ContinuumStartEngineTick);
-            writer.WriteUInt64(value: continuum.ContinuumEndEngineTick);
-            writer.WriteUInt64(value: continuum.ConsumedThroughEngineTick);
-            writer.WriteByte(value: continuum.BoundaryEvents);
-        }
+        WorldWireLeaves.WriteCommitMemberMotion(
+            member: member,
+            writer: writer
+        );
     }
     private static void WriteIntentSource(WireWriter writer, IntentSource source) {
         if (!WorldWireCodec.TryWriteIntentSource(
@@ -1101,10 +964,7 @@ public static partial class WorldFederationCodec {
         members = new WorldTransferCommitMember[count];
 
         for (var index = 0; (index < count); index++) {
-            members[index] = ReadCommitMember(
-                ordinal: index,
-                reader: ref reader
-            );
+            members[index] = ReadCommitMember(reader: ref reader);
         }
 
         return Finish(

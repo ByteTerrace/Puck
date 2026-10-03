@@ -148,18 +148,17 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 
 ### Verify a change
 
-`puck gate` is how a change is verified, by agents and people alike. Run it
-from a copy of the candidate's own CLI outside the checkout. It builds the
-solution and stops on a failed build; copies the CLI that build wrote into a
-directory of its own; runs the suites, test worlds and catalog check the change
-reaches, read against the merge base with the target branch so the target's
-newer commits are not counted; and runs `format`, `lengths`, `comment-smells`,
-`docs links`, `schema`, `architecture`, `registry`, `vocabulary`, `shaders generate`,
-`branding`, `formats` and `canary-ceilings` in their check forms only. `puck gate --gpu` adds the
-affected canaries and parity, one after the other, on a machine with no
-competing build or GPU work. The suites and canaries come from
+`puck gate` is the batch qualification, run from a copy of the candidate's own
+CLI outside the checkout. It builds the solution, copies the CLI it built,
+runs the affected selection against the merge base, and checks the repository's
+ledgers and generated files. Its [ordered plan](../reference/cli.md#puck-gatethe-change-scoped-gate)
+is shared with help and held by laws. `--gpu` adds the affected canaries and
+parity, device suites, every recorded counters workload and docs citations,
+serially. `--record` requires `--gpu` and refreshes canary coverage only after
+every qualification step passes. Admission uses host load's defaults before
+heavy steps; the kept log and step timeline name each result. The affected selection comes from
 [`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs),
-chosen from the project graph and recorded canary coverage, and nothing wider.
+chosen from the project graph and recorded canary coverage.
 The full sets run only when the owner asks for them. See
 [`puck gate`](../reference/cli.md#puck-gatethe-change-scoped-gate) for the
 steps and the log the run keeps.
@@ -263,19 +262,19 @@ world instance.
 
 For changes under `src/Puck.Maths`, also run the maths law suite. A plain
 `dotnet test` runs the default tier (Smoke and Default), the everyday gate;
-`smoke`, `deep` and `exhaustive` are selected by their committed run settings:
+Deep and Exhaustive cases are explicit, so a run opts into them, and each tier
+is selected by its `tier` trait:
 
 ```powershell
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/smoke.runsettings
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/exhaustive.runsettings
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive
 ```
 
-Each tier is a filter on the `tier` trait. A `--filter` on the command line is
-combined with the default tier's filter rather than replacing it, so
-`--filter "tier=Exhaustive"` selects no test; select an opt-in tier with its
-`--settings` file.
+Without `--explicit on`, a `tier=Deep` or `tier=Exhaustive` filter selects no
+test; one law of a tier is selected by its id, the case's display name
+(`--explicit on --filter-display-name <law-id>`).
 
 ### Game changes
 
@@ -411,7 +410,7 @@ browser AppBundle, so it needs that AppBundle published first:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
-dotnet test tests/Puck.Cli.Tests -c Release --filter "FullyQualifiedName~OfficialBuildCommandTests"
+dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*OfficialBuildCommandTests"
 ```
 
 CI's `artifacts` workflow always publishes the browser before any test project

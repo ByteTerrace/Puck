@@ -172,10 +172,12 @@ Four layers, each one built from the layer below it:
                               │ per frame
  ┌───────────────────────────▼───────────────────────────────────┐
  │  PASSES                                                        │
- │  mask → beam → cull-args → views, once per view                │
+ │  mask → beam → cull-args → mesh → primary → surface → ambient  │
+ │  → shadow → views → sky → composite, once per view             │
  │  (which tiles touch which objects → coarse cone march per      │
- │  tile → pack the fine-march workload → per-pixel sphere trace  │
- │  + shade into that view's own image)                           │
+ │  tile → pack the fine-march workload → per-pixel sphere trace, │
+ │  surface, occlusion, shadow and shading → sky and fog into     │
+ │  that view's own image)                                        │
  └───────────────────────────┬───────────────────────────────────┘
                               │
                          ┌────▼────┐

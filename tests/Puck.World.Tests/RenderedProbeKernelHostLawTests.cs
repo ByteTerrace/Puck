@@ -22,6 +22,7 @@ namespace Puck.World.Tests;
 /// on its adapter made (<see cref="IGpuSurfaceTransferFactory.TryImportWritable"/>), as a Vulkan host's view export does.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed unsafe class RenderedProbeKernelHostLawTests {
     private const int Extent = 64;
     // ID3D12Fence::Signal's vtable slot: IUnknown's three, ID3D12Object's four, ID3D12DeviceChild's GetDevice, then

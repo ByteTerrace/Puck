@@ -15,6 +15,7 @@ namespace Puck.DirectX.Apis;
 /// The native implementation of <see cref="IDirectXDeviceApi"/>, marshaling to <c>D3D12CreateDevice</c> and the
 /// DXGI adapter entry points used to locate a target adapter.
 /// </summary>
+[OpensGpuDevice]
 [SupportedOSPlatform("windows8.1")]
 public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
     private static DirectXDevice CreateDevice(IUnknown* adapter, DirectXFeatureLevel minimumFeatureLevel) {
@@ -159,22 +160,6 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             deviceHandle: deviceHandle,
             read: &ReadMemoryProfile
         );
-    /// <summary>Fills a memory profile from the native structures Direct3D 12 and DXGI report: the architecture's
-    /// <c>UMA</c> and <c>CacheCoherentUMA</c>, the adapter's <c>DedicatedVideoMemory</c> and <c>SharedSystemMemory</c>,
-    /// and options 16's <c>GPUUploadHeapSupported</c>. A pure function of its arguments.</summary>
-    /// <param name="architecture">The device's <c>D3D12_FEATURE_DATA_ARCHITECTURE</c> for node zero.</param>
-    /// <param name="adapter">The adapter's <c>DXGI_ADAPTER_DESC1</c>.</param>
-    /// <param name="options16">The device's <c>D3D12_FEATURE_DATA_D3D12_OPTIONS16</c>, zeroed when the runtime does not
-    /// answer that query.</param>
-    /// <returns>The profile.</returns>
-    public static GpuMemoryProfile MemoryProfile(in D3D12_FEATURE_DATA_ARCHITECTURE architecture, in DXGI_ADAPTER_DESC1 adapter, in D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16) =>
-        GpuMemoryProfile.FromDirectX(
-            cacheCoherentUnifiedMemory: architecture.CacheCoherentUMA,
-            dedicatedVideoMemory: ((ulong)adapter.DedicatedVideoMemory),
-            gpuUploadHeapSupported: options16.GPUUploadHeapSupported,
-            sharedSystemMemory: ((ulong)adapter.SharedSystemMemory),
-            unifiedMemory: architecture.UMA
-        );
 
     // Opens the DXGI adapter the device was created on, found by the device's LUID, and runs read over it and the
     // device, releasing the adapter and its factory after.
@@ -245,47 +230,5 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             adapter: in description,
             support: new DirectXDeviceFeatureSupport(device: device)
         );
-    }
-
-    /// <inheritdoc/>
-    public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) {
-        var factory = DxgiInterop.CreateFactory();
-
-        try {
-            var adapter = FindAdapter(
-                adapterLuid: adapterLuid,
-                factory: factory
-            );
-
-            if (adapter is null) {
-                throw new ArgumentException(
-                    message: $"No DXGI adapter was found with LUID 0x{adapterLuid:X16}.",
-                    paramName: nameof(adapterLuid)
-                );
-            }
-
-            try {
-                // A null device pointer asks D3D12CreateDevice to test creation without realizing a device,
-                // returning success (S_FALSE) when the adapter meets the requested minimum feature level.
-                foreach (var level in DirectXFeatureReads.FeatureLevelsHighToLow) {
-                    var result = PInvoke.D3D12CreateDevice(
-                        MinimumFeatureLevel: ((D3D_FEATURE_LEVEL)level),
-                        pAdapter: ((IUnknown*)adapter),
-                        ppDevice: null,
-                        riid: ID3D12Device.IID_Guid
-                    );
-
-                    if (result.Succeeded) {
-                        return level;
-                    }
-                }
-
-                return null;
-            } finally {
-                _ = adapter->Release();
-            }
-        } finally {
-            _ = factory->Release();
-        }
     }
 }

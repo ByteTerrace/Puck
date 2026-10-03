@@ -9,7 +9,7 @@ namespace Puck.World;
 
 /// <summary>
 /// The overlap arithmetic's inputs from one side of a seam. Both sides derive the same depth from the pair, so a
-/// neighbour across a trust boundary proves its half by attesting these five numbers rather than by handing over the
+/// neighbour across a trust boundary proves its half by attesting these six numbers rather than by handing over the
 /// document they were computed from.
 /// </summary>
 /// <remarks>Every distance rides as raw Q48.16 bits rather than the document's decimal-string spelling: this payload

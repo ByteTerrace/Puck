@@ -20,7 +20,7 @@ It intentionally omits implementation chronology and review provenance.
 | Analytic forward-mode normals | Shipped default; four-tap comparison remains available | [Gradients and normals](gradients-and-normals.md) |
 | Normal-ladder AO | Shipped three-tap ambient-only path | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Cone AO and bent normals | Optional quality tier; open | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
-| World-space radiance cache traced through the field | Planned global illumination, shared by every view of a world | [Rendering plan](../../../plans/rendering.md#p6-gi-global-illumination-from-the-field) |
+| World-space radiance cache traced through the field | Partial: the CPU reference and the cache's transport model (`IrradianceLattice` and its siblings in `Puck.SignedDistance/Illumination`) have landed; the GPU cache, light views and lighting (G2 to G10) are planned | [Rendering plan](../../../plans/rendering.md#p6-gi-global-illumination-from-the-field) |
 | Penumbra soft shadows | Shipped with a workgroup grid gather | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Material blending at smooth seams | Shipped hit-only shading path | [Materials and primitives](materials-and-primitives.md) |
 | Non-orthogonal screen and text frames | Not supported; refused at every door that accepts a frame | [Materials and primitives](materials-and-primitives.md) |
@@ -32,6 +32,7 @@ It intentionally omits implementation chronology and review provenance.
 | Negative authored scale as a mirror | Not supported; refused at the creation document validator in favour of the symmetry domain op | [Rejected and conditional SDF techniques](negative-results-and-rejections.md) |
 | Closed-form copy counts before a domain fold expands | Required; an authored chain past the copy budget is refused in O(1) memory | [Level of detail and bounds](lod-and-bounds.md) |
 | Coverage AA | Shipped footprint-aware path | [Antialiasing and filtering](antialiasing-and-filtering.md) |
+| Temporal reconstruction | Shipped as a per-view quality: a jittered sample a frame, resolved over the view's own history | [Temporal reconstruction](../handbook/frame-rendering.md#temporal-reconstruction) |
 | Ray-differential CRT filtering | Open when minification is visible | [Antialiasing and filtering](antialiasing-and-filtering.md) |
 | Bound-preserving procedural noise | Shipped as `NoiseDisplace` (integer-hash lattice fBm, quintic-slope derivative bound folded into the step clamp) | [Lipschitz and field correctness](lipschitz-and-field-correctness.md) |
 | Sampled carve bricks | Shipped as an invalidatable render cache, not a core representation | [Level of detail and bounds](lod-and-bounds.md) |

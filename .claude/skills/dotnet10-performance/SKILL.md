@@ -83,8 +83,8 @@ outside this contract and takes the references as written.
 ## Review discipline
 
 - Start with a profile, benchmark, allocation trace, or demonstrated hot path.
-- **Three measurement harnesses exist: `Puck.Maths` kernels, the World server
-  tick path, and real-process startup.** `puck bench kernels` is the BenchmarkDotNet microscope for Maths —
+- **Three measurement harnesses exist: the kernels (Maths, SDF and state), the World server
+  tick path, and real-process startup.** `puck bench kernels` is the BenchmarkDotNet microscope for them —
   disassembly, allocation columns, percentiles — and `puck bench world` is a
   stopwatch lane over server construction, the idle tick, and a scripted
   Klondike deal. `puck bench startup` measures console readiness and rendered
