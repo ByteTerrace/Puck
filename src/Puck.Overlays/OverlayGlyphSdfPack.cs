@@ -37,7 +37,7 @@ public sealed class OverlayGlyphSdfPack {
 
     // 'P','O','G','P' + format version; the pack layout's shape is recorded in FormatVersions.json.
     private const uint PackMagic = 0x50474F50u;
-    private const uint PackVersion = 3u;
+    private const uint PackVersion = 1u;
 
     /// <summary>The number of glyphs in the ASCII block (printable ASCII 0x20-0x7E).</summary>
     public const int AsciiGlyphCount = (0x7F - 0x20);

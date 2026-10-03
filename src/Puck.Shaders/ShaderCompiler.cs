@@ -10,7 +10,7 @@ namespace Puck.Shaders;
 /// Compiles HLSL stages with DXC, producing SPIR-V and DXIL candidates for both graphics and compute.
 /// </summary>
 public sealed partial class ShaderCompiler {
-    private const string CompilerVersion = "puck-shader-compiler-4";
+    private const string CompilerVersion = "puck-shader-compiler-1";
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> m_gates = new(comparer: StringComparer.Ordinal);
     private readonly string m_cacheDirectory;
