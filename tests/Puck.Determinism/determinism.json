@@ -15,7 +15,7 @@
         },
         {
             "name": "traveller-kit",
-            "world": "../Puck.World.Canaries/traveller-kit/fixture.world.json",
+            "world": "../Puck.World.Canaries/traveller-kit/fixture.puck",
             "ticks": 120,
             "seats": [0],
             "intents": [
