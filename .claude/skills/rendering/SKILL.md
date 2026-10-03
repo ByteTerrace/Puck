@@ -2222,6 +2222,16 @@ backends with `--debug-layers` after changing the resolve, the fragment or the
 reprojection; `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`
 hold the plan and the convergence rule without a device.
 
+`temporal-standing` pins the absence of further temporal shading and resolve
+work after a still camera converges. The completed World submission stays the
+same across later frames while the root's submission advances; the counters
+retain the previous sample's counts, so those historical counts are not new
+work. Its camera-pan control resumes both passes. `place-sharpen` captures the
+production Place pass at equal extent and checks exact analytic UNORM colors
+at zero, full and partial strength, with flat and saturated edges. Its control
+disables `sharpen` while keeping full strength. Run both on Vulkan and Direct3D
+12 with `--debug-layers`; both require `gpu` and belong to the merge selection.
+
 ## Dynamic resolution
 
 `WorldDynamicResolution` (`src/Puck.World.Client`) is the one controller; the

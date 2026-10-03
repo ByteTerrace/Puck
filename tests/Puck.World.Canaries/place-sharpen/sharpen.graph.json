@@ -1,0 +1,130 @@
+{
+  "$schema": "puck.render.graph.v1",
+  "name": "sharpen",
+  "resources": [
+    {
+      "name": "step",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Absolute",
+        "width": 16,
+        "height": 48
+      }
+    },
+    {
+      "name": "base",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Absolute",
+        "width": 16,
+        "height": 48
+      },
+      "initialization": "Zero"
+    },
+    {
+      "name": "sharpened",
+      "kind": "Image",
+      "format": "R8G8B8A8Unorm",
+      "dimensions": {
+        "mode": "Absolute",
+        "width": 16,
+        "height": 48
+      }
+    }
+  ],
+  "passes": [
+    {
+      "name": "seed",
+      "source": "seed.hlsl",
+      "entryPoint": "main",
+      "kind": "Compute",
+      "outputs": [
+        {
+          "name": "step"
+        }
+      ]
+    },
+    {
+      "name": "place",
+      "source": "../../../src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl",
+      "entryPoint": "CSMain",
+      "kind": "Compute",
+      "inputs": [
+        {
+          "name": "base"
+        },
+        {
+          "name": "step",
+          "as": "source"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "sharpened",
+          "as": "destination"
+        }
+      ],
+      "config": {
+        "compareMode": {
+          "type": "uint",
+          "default": 0,
+          "min": 0,
+          "max": 3,
+          "description": "Placement comparison mode."
+        },
+        "letterbox": {
+          "type": "uint",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "description": "Fill outside the rect with the letterbox color."
+        },
+        "rect": {
+          "type": "float4",
+          "default": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "min": 0,
+          "max": 1,
+          "description": "Destination rect: left, top, width, height."
+        },
+        "sharpen": {
+          "type": "uint",
+          "default": 1,
+          "min": 0,
+          "max": 1,
+          "description": "Enable contrast-adaptive sharpening at equal extent."
+        },
+        "sharpness": {
+          "type": "float",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "description": "Equal-extent sharpen strength, or reconstruction blend at unequal extent."
+        },
+        "tonemap": {
+          "type": "uint",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "description": "Apply filmic tonemapping to the placed source."
+        },
+        "wipe": {
+          "type": "float",
+          "default": 0.5,
+          "min": 0,
+          "max": 1,
+          "description": "Held-source fraction in wipe comparison mode."
+        }
+      }
+    }
+  ],
+  "outputs": [
+    "sharpened"
+  ]
+}
