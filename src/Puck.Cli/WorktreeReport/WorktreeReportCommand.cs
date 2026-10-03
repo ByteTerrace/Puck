@@ -36,13 +36,47 @@ public static class WorktreeReportCommand {
         [JsonPropertyOrder(1)] public string? Worktree { get; init; }
     }
 
+    // Lazy fetch fills a partial clone's missing objects from its promisor remote, so a report could contact the
+    // network. Git 2.44 added --no-lazy-fetch to forbid it, and an older git rejects the option outright. Without it a
+    // repository with no promisor remote has nothing to fetch lazily, so the report runs there; a partial clone it
+    // refuses by name.
+    private static readonly Lazy<bool> AcceptsNoLazyFetch = new(valueFactory: static () => (CliGit.Run(".", "--no-lazy-fetch", "version").ExitCode == 0));
+    private static readonly string[] NoLazyFetch = ["--no-lazy-fetch"];
+
+    /// <summary>Gets whether this host's git accepts <c>--no-lazy-fetch</c>, which git 2.44 added; probed once per
+    /// process.</summary>
+    public static bool GitAcceptsNoLazyFetch => AcceptsNoLazyFetch.Value;
+
+    /// <summary>Decides whether a report may read a repository without risking a lazy fetch.</summary>
+    /// <param name="gitAcceptsNoLazyFetch">Whether git can forbid lazy fetches (<see cref="GitAcceptsNoLazyFetch"/>).</param>
+    /// <param name="partialClone">Whether the repository is a partial clone, with a promisor remote to fetch from.</param>
+    /// <returns>Null when the report may run; otherwise why it is refused.</returns>
+    public static string? LazyFetchRefusal(bool gitAcceptsNoLazyFetch, bool partialClone) => ((gitAcceptsNoLazyFetch || !partialClone)
+        ? null
+        : "the repository is a partial clone, and this git (before 2.44) has no --no-lazy-fetch to keep the report from fetching missing objects; run it with git 2.44 or later, or from a full clone.");
+
     // Optional locks refresh indexes; lazy fetch fills missing objects. Neither belongs in a report. Disable
     // fsmonitor too: even a status query can otherwise start a daemon or invoke a user-supplied hook.
     private static ChildProcessResult Git(string repository, string[] arguments, string? input = null) => CliGit.RunAsync(
         repository: repository,
-        arguments: ["--no-optional-locks", "--no-lazy-fetch", "-c", "core.fsmonitor=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0", .. arguments],
+        arguments: ["--no-optional-locks", .. (GitAcceptsNoLazyFetch ? NoLazyFetch : []), "-c", "core.fsmonitor=false", "-c", "maintenance.auto=false", "-c", "gc.auto=0", .. arguments],
         input: input
     ).GetAwaiter().GetResult();
+    // A partial clone records extensions.partialClone, and its promisor remote carries remote.<name>.promisor.
+    private static bool IsPartialClone(string repository) {
+        var result = Git(repository: repository, arguments: ["config", "--null", "--get-regexp", @"^(extensions\.partialclone|remote\..*\.promisor)$"]);
+
+        if ((result.ExitCode is not (0 or 1)) || !string.IsNullOrWhiteSpace(value: result.Stderr)) {
+            throw new InvalidOperationException(message: Failure(operation: "config", result: result));
+        }
+        return result.Stdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0').Any(predicate: static record => {
+            var newline = record.IndexOf(value: '\n');
+            var key = ((newline < 0) ? record : record[..newline]);
+            var value = ((newline < 0) ? string.Empty : record[(newline + 1)..]);
+
+            return (key.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "extensions.partialclone") || !value.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "false"));
+        });
+    }
     private static string Failure(string operation, ChildProcessResult result) =>
         $"git {operation} exited {result.ExitCode}: {result.Stderr.Trim().Replace(newChar: '/', oldChar: '\\')}";
     private static string Read(string repository, string[] arguments, string? input = null, List<string>? warnings = null) {
@@ -252,11 +286,18 @@ public static class WorktreeReportCommand {
     /// <param name="repositoryRoot">A directory in the repository to inspect.</param>
     /// <param name="into">The integration branch: a local branch name, or a remote-tracking one such as <c>origin/main</c>.</param>
     /// <param name="clock">The clock used to compute whole commit ages.</param>
-    /// <returns>Zero when a report is produced, including unreadable entries; two when <paramref name="into"/> names no local or remote-tracking branch, or the branch inventory is unreadable.</returns>
+    /// <returns>Zero when a report is produced, including unreadable entries; two when <paramref name="into"/> names no local or remote-tracking branch, the branch inventory is unreadable, or the repository is a partial clone this git cannot read without lazy fetching.</returns>
     public static int Execute(string repositoryRoot, string into, TimeProvider clock) {
         var errors = new List<string>();
         Branch[] branches;
 
+        try {
+            if (LazyFetchRefusal(gitAcceptsNoLazyFetch: GitAcceptsNoLazyFetch, partialClone: IsPartialClone(repository: repositoryRoot)) is { } refusal) {
+                return CliExit.Refuse(verb: Verb, what: "lazy fetch", why: refusal);
+            }
+        } catch (InvalidOperationException error) {
+            return CliExit.Refuse(verb: Verb, what: "partial clone", why: error.Message);
+        }
         try {
             branches = ReadBranches(repository: repositoryRoot, warnings: errors);
         } catch (InvalidOperationException error) {
