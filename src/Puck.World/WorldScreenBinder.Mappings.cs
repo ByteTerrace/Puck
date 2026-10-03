@@ -99,7 +99,7 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
             return (Ok: false, Message: $"screen {index} already shows its row's source");
         }
 
-        ReleaseSlotView(slot: slot);
+        Rebind(live: null, slot: slot);
         if (
             (slot.DeclaredSource is WorldScreenSource.View declared) &&
             (ResolveCamera(name: declared.CameraName) is not null) &&
@@ -113,6 +113,19 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
         ShowRow(index: index);
 
         return (Ok: true, Message: $"screen {index} showing its row's source");
+    }
+    // The one path a live retarget takes: the slot stops filming the camera view it held, releasing the registration
+    // when nothing else shows it, and the screen then shows the live source, or its row's when there is none.
+    private void Rebind(ScreenSlot slot, WorldScreenSource? live) {
+        ReleaseSlotView(slot: slot);
+        if (live is null) {
+            ShowRow(index: slot.Index);
+        } else {
+            ShowLive(
+                index: slot.Index,
+                source: live
+            );
+        }
     }
     // Gives a screen back its row's source.
     private void ShowRow(int index) {

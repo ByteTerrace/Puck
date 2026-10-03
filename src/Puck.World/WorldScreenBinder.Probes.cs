@@ -134,7 +134,10 @@ internal sealed partial class WorldScreenBinder {
     /// <param name="id">The <c>probes[].id</c>.</param>
     /// <returns>Whether the bind succeeded, and a message describing the outcome.</returns>
     public (bool Ok, string Message) TryProbe(int index, string id) {
-        if (!m_slots.ContainsKey(key: index)) {
+        if (!m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        )) {
             return (Ok: false, Message: $"no screen {index} declared");
         }
         if (
@@ -147,9 +150,9 @@ internal sealed partial class WorldScreenBinder {
             return (Ok: false, Message: $"probe '{id}' declares no texture output");
         }
 
-        ShowLive(
-            index: index,
-            source: new WorldScreenSource.Probe(Id: id)
+        Rebind(
+            live: new WorldScreenSource.Probe(Id: id),
+            slot: slot
         );
 
         return (Ok: true, Message: $"screen {index} showing probe '{id}'");

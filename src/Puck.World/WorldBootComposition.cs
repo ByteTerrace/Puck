@@ -454,6 +454,7 @@ public static class WorldBootComposition {
         });
         // The slice of the binder the frame presenter drives each frame.
         services.AddSingleton<IWorldScreenPresenter>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
+        services.AddSingleton<IWorldViewHost>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
 
         // The participant/census and authoritative-diagnostic surface — world.players/.devices/.population plus
         // world.navigation/.budget. Split out of WorldCommandModule (which stays presentation-only) because these
