@@ -3,6 +3,7 @@ using Puck.Hosting;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Shaders;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -31,6 +32,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.ReactivityWritten,
+        SdfWorldPackage.ShadowHistory,
+        SdfWorldPackage.ShadowHistoryWritten,
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
@@ -58,6 +61,15 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // view.
     private readonly SdfWorldTables?[] m_portTables;
     private readonly nint[][] m_screens;
+    private readonly (nint Read, nint Write)[] m_shadowPorts;
+
+    private readonly SdfShadowHistory m_shadowHistory = new();
+
+    private readonly SdfLights[] m_shadowFrames;
+    private readonly uint[] m_shadowRebuilt;
+
+    private int m_shadowRecordingSlot;
+
     // The mesh part's pool, its set per frame slot, and a framebuffer over each instance of its target and depth.
     private readonly nint m_meshPool;
 
@@ -108,9 +120,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         m_portTables = new SdfWorldTables?[slots];
         m_screens = new nint[slots][];
+        m_shadowPorts = new (nint, nint)[slots];
+        m_shadowFrames = new SdfLights[slots];
+        m_shadowRebuilt = new uint[slots];
 
         for (var slot = 0; (slot < slots); slot++) {
             m_screens[slot] = new nint[SdfWorldTables.MaxScreenSurfaces];
+            m_shadowFrames[slot] = new SdfLights();
         }
 
         if (!IsMesh) {
@@ -290,6 +306,16 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
+        if (m_part == SdfWorldPackage.Parts.Shadow) {
+            var enabled = (m_temporal && frame.Views[view].Quality.ShadowAmortize && (tables.PassValues.DebugMode == 0));
+            var ownership = m_shadowHistory.Ownership(lights: frame.Lights);
+            var lightMotion = m_shadowHistory.LightMotion(lights: frame.Lights);
+
+            SdfFrameBlock.WriteShadowHistory(recording.PassBlock, enabled, ownership, lightMotion);
+            m_shadowFrames[recording.Slot].CopyFrom(source: frame.Lights);
+            m_shadowRebuilt[recording.Slot] = ((enabled && temporal.HasPreviousView) ? ownership | lightMotion : 15u);
+            m_shadowRecordingSlot = recording.Slot;
+        }
 
         SdfFrameBlock.WriteWorkCounterRow(
             block: recording.PassBlock,
@@ -332,6 +358,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         return false;
     }
     public void Submitted(int slot, IGpuSubmissionFence fence) => m_pick?.Submitted(fence: fence, slot: slot);
+    public void Submitted() {
+        if (m_part == SdfWorldPackage.Parts.Shadow) {
+            m_shadowHistory.Submitted(lights: m_shadowFrames[m_shadowRecordingSlot], rebuilt: m_shadowRebuilt[m_shadowRecordingSlot]);
+        }
+    }
 
     private int InputIndexOf(string member) {
         for (var index = 0; (index < m_inputs.Length); index++) {
@@ -616,11 +647,19 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // the instance's for the recorder's life.
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
+        var shadowPorts = (Read: ((nint)0), Write: ((nint)0));
+
+        for (var port = 0; (port < m_inputs.Length); port++) {
+            if (m_inputs[port] == SdfWorldPackage.ShadowHistory) { shadowPorts.Read = recording.Inputs[port].Buffer!.BufferHandle; }
+        }
+        for (var port = 0; (port < m_outputs.Length); port++) {
+            if (m_outputs[port] == SdfWorldPackage.ShadowHistory) { shadowPorts.Write = recording.Outputs[port].Buffer!.BufferHandle; }
+        }
 
         if (ReferenceEquals(
             objA: m_portTables[slot],
             objB: tables
-        )) {
+        ) && (m_shadowPorts[slot] == shadowPorts)) {
             return;
         }
 
@@ -693,6 +732,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
         Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
+        m_shadowPorts[slot] = shadowPorts;
     }
     // Writes each screen's image into the slot's pass set: a host's image every frame, since its handle is unique only among
     // live objects, and the filler once while the screen shows nothing.
@@ -734,6 +774,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         (recording.WorkCounters ?? throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' counts its kernels' work, but its recording carries no work counters."));
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
     private static string? ReadMemberOf(string version) => version switch {
+        SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistory,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.Tiles,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,
@@ -742,6 +783,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     };
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
     private static string? WrittenMemberOf(string version) => version switch {
+        SdfWorldPackage.ShadowHistory => SdfWorldPackage.ShadowHistoryWritten,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasksWritten,
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.TilesWritten,
         SdfWorldPackage.Parts.Arguments => SdfWorldPackage.ViewsArgsWritten,

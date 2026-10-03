@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/f5e7f6f8b58cbd7e83e670d752359be76c68fdbda0c1d556953a43bfd2e41e37). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/a7a2a18ac979a36005dd54a6102289fdddfbf3589133cbb83886a4dd5b323ab1). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -179,30 +179,34 @@ struct SdfResolvePass {
     [[vk::offset(268)]] uint _pad268;
     [[vk::offset(272)]] float4 previousView[6];
     [[vk::offset(368)]] uint screenCount;
-    [[vk::offset(372)]] float shadowDistanceScale;
-    [[vk::offset(376)]] uint shadowFadeCount;
-    [[vk::offset(380)]] uint shadowSlotCount;
-    [[vk::offset(384)]] int4 shadowSlots;
-    [[vk::offset(400)]] float tanHalfFieldOfView;
-    [[vk::offset(404)]] uint temporal;
-    [[vk::offset(408)]] uint2 tileGrid;
-    [[vk::offset(416)]] float upscaleSharpness;
-    [[vk::offset(420)]] uint viewBase;
-    [[vk::offset(424)]] uint _pad424;
-    [[vk::offset(428)]] uint _pad428;
-    [[vk::offset(432)]] float3 viewForward;
+    [[vk::offset(372)]] uint shadowAmortize;
+    [[vk::offset(376)]] float shadowDistanceScale;
+    [[vk::offset(380)]] uint shadowFadeCount;
+    [[vk::offset(384)]] uint shadowLightReject;
+    [[vk::offset(388)]] uint shadowOwnershipReject;
+    [[vk::offset(392)]] uint shadowSlotCount;
+    [[vk::offset(396)]] uint _pad396;
+    [[vk::offset(400)]] int4 shadowSlots;
+    [[vk::offset(416)]] float tanHalfFieldOfView;
+    [[vk::offset(420)]] uint temporal;
+    [[vk::offset(424)]] uint2 tileGrid;
+    [[vk::offset(432)]] float upscaleSharpness;
+    [[vk::offset(436)]] uint viewBase;
+    [[vk::offset(440)]] uint _pad440;
     [[vk::offset(444)]] uint _pad444;
-    [[vk::offset(448)]] float3 viewPosition;
+    [[vk::offset(448)]] float3 viewForward;
     [[vk::offset(460)]] uint _pad460;
-    [[vk::offset(464)]] float3 viewRight;
+    [[vk::offset(464)]] float3 viewPosition;
     [[vk::offset(476)]] uint _pad476;
-    [[vk::offset(480)]] float3 viewUp;
-    [[vk::offset(492)]] uint viewportCount;
-    [[vk::offset(496)]] uint workCounterRow;
-    [[vk::offset(500)]] uint workCounterRowDetail;
+    [[vk::offset(480)]] float3 viewRight;
+    [[vk::offset(492)]] uint _pad492;
+    [[vk::offset(496)]] float3 viewUp;
+    [[vk::offset(508)]] uint viewportCount;
+    [[vk::offset(512)]] uint workCounterRow;
+    [[vk::offset(516)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa506E1C21 : register(b0, space3);
-#define passGroup passGroupIsa506E1C21
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa79E3A77C : register(b0, space3);
+#define passGroup passGroupIsa79E3A77C
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
@@ -220,7 +224,7 @@ struct SdfResolvePass {
 // sky texture loads, then six shadow-slot step counts, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 22u;
+static const uint PuckWorkRowWords = 24u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
@@ -228,6 +232,7 @@ static const uint PuckWorkSkyHashesWord = 6u;
 static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShadowWord = 10u;
 static const uint PuckWorkShadowSlots = 6u;
+static const uint PuckWorkShadowPixelsWord = 22u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -274,6 +279,17 @@ void puckCountShadow(uint slot, uint steps) {
 
     if ((slot < PuckWorkShadowSlots) && WaveIsFirstLane()) {
         puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), waveSteps);
+    }
+}
+// One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
+// while its pixel count exposes rejections and reuse even when a march takes zero field samples.
+void puckCountShadowDecision(uint detail, uint slot, uint steps) {
+    puckAddWork((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowPixelsWord, 1u);
+    if (passGroup.workCounterRowDetail != 0u) {
+        uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+        puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
+        puckAddWork(row + PuckWorkStepsWord, steps);
+        puckAddWork(row + PuckWorkShadowWord + (slot * 2u), steps);
     }
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper

@@ -37,6 +37,11 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     sdfEvalCount = s.queries;
 
     float3 color = sdfLightStage(p, s, coverage, reactivity);
+    if ((passGroup.temporal != 0u) && (passGroup.shadowAmortize != 0u) &&
+        !worldSoftShadowsDisabled() && (passGroup.shadowSlotCount > 1u)) {
+        uint word = (SDF_SHADOW_HISTORY_WORDS * (((p.viewIndex * passGroup.imageExtent.y + p.pixel.y) * passGroup.imageExtent.x) + p.pixel.x));
+        reactivity = max(reactivity, (float)shadowHistory[word + 4u]);
+    }
 
     if (p.viewMode != 0) {
         coverage = 1.0;

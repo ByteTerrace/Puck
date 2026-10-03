@@ -31,6 +31,15 @@
 #define SDF_OP_LANE_ERODE        34u
 #define SDF_OP_CELL_DISPLACE     35u
 
+// Puck.SdfVm.SdfShadowDecision.
+#define SDF_SHADOW_DECISION_INTERLEAVED     0u
+#define SDF_SHADOW_DECISION_OWNERSHIP       1u
+#define SDF_SHADOW_DECISION_LIGHT_MOTION    2u
+#define SDF_SHADOW_DECISION_OCCLUDER_MOTION 3u
+#define SDF_SHADOW_DECISION_RECEIVER        4u
+#define SDF_SHADOW_DECISION_REPROJECTED     5u
+#define SDF_SHADOW_HISTORY_WORDS            5u
+
 // Puck.SignedDistance.SdfShapeType.
 #define SDF_SHAPE_BOX                 0u
 #define SDF_SHAPE_CAPSULE             1u

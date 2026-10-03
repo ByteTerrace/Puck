@@ -127,6 +127,14 @@ public static partial class SdfWorldPackage {
                 .. ResolveFragment.Value.Resources,
                 Buffer(count: ReactivityCount, name: Parts.Reactivity, sizeBytes: null, strideBytes: sizeof(float)),
                 new ShaderPipelineResource(
+                    Count: [Term(ShadowHistoryWords, ShaderPipelineCountBasis.RenderExtent, ShaderPipelineCountBasis.Viewports)],
+                    History: true,
+                    Initialization: ShaderPipelineInitialization.Zero,
+                    Kind: ShaderPipelineResourceKind.Buffer,
+                    Name: ShadowHistory,
+                    StrideBytes: sizeof(uint)
+                ),
+                new ShaderPipelineResource(
                     Dimensions: ShaderPipelineDimensions.Relative(),
                     Format: RenderGraphPackageCatalog.WorkingFormat.ToString(),
                     History: true,
@@ -144,7 +152,15 @@ public static partial class SdfWorldPackage {
             ],
             Passes: [
                 .. ResolveFragment.Value.Passes.Select(selector: static pass => pass.Name switch {
+                    Parts.Shadow => pass with {
+                        Inputs = [.. pass.Inputs, new ResourceReference(Name: ShadowHistory, PreviousFrame: true)],
+                        InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
+                        Outputs = [.. pass.Outputs, new ResourceReference(Name: ShadowHistory)],
+                        OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
+                    },
                     Parts.Views => pass with {
+                        Inputs = [.. pass.Inputs, new ResourceReference(Name: ShadowHistory)],
+                        InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
                         OutputAccesses = [RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
                         Outputs = [new ResourceReference(Name: CurrentColor), new ResourceReference(Name: Parts.Reactivity)],
                     },

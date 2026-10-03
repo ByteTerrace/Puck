@@ -11,7 +11,7 @@ public sealed class SdfWorkDetailLawTests {
     public void SkyAndShadowRowLabelsAndPassBlockReachTheirKernelIndices() {
         Assert.Equal(expected: new[] { "gradient", "disc", "stars", "clouds" }, actual: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Sky));
         Assert.Equal(expected: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Sky), actual: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Composite));
-        Assert.Empty(collection: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Shadow));
+        Assert.Equal(expected: new[] { "interleaved", "ownership", "light-motion", "occluder-motion", "receiver", "reprojected" }, actual: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Shadow));
         var block = new byte[SdfFrameBlock.SizeBytes];
 
         SdfFrameBlock.WriteWorkCounterDetailRow(block: block, row: 37);

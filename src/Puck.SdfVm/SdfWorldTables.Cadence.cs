@@ -16,6 +16,7 @@ namespace Puck.SdfVm;
 //   - the pass block      : the view's camera basis, fov/aspect, off-axis offset, far distance and debug view mode, every
 //                          lever, the light count, the shadow slots and the curvature shading (SdfFrameBlock), less the
 //                          render extent, which the scheduler renders a view again for when it moves.
+//   - shadow owner names : exact names invalidate shadow history even when replacement lights pack identical values.
 //   - m_lightRegion, m_skyRegion, m_skyStopRegion, m_softboxRegion : the lights and the sky with their presented-tick
 //                          bakes (the twinkle phase, the cloud offsets).
 //   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
@@ -79,6 +80,17 @@ public sealed partial class SdfWorldTables {
         );
         hash.Add(values: tables);
         hash.Add(values: block);
+        Span<int> ownerLength = stackalloc int[1];
+
+        for (var slot = 0; (slot < SdfShadowSlots.MaxSlots); slot++) {
+            var owner = frame.Lights.ShadowSlots.Owner(slot: slot);
+
+            ownerLength[0] = (owner?.Length ?? -1);
+            hash.Add(values: MemoryMarshal.AsBytes(span: ownerLength));
+            if (owner is not null) {
+                hash.Add(values: MemoryMarshal.AsBytes(span: owner.AsSpan()));
+            }
+        }
 
         return hash.Value;
     }

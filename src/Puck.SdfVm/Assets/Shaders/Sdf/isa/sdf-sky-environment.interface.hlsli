@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky-environment' (sha256/5516fd81f67eca340d4fdbf0108ae9a0bf031f13b71d55485beafaff1d320285). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky-environment' (sha256/504b305981347d68a329f7bae9c9ce1aa8b83f211353bff8003f85d3d51cd8bd). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 #define PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 
@@ -68,8 +68,8 @@ struct SdfSkyEnvironmentPass {
     [[vk::offset(8)]] uint workCounterRow;
     [[vk::offset(12)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsa506E1C21 : register(b0, space3);
-#define passGroup passGroupIsa506E1C21
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsa79E3A77C : register(b0, space3);
+#define passGroup passGroupIsa79E3A77C
 [[vk::binding(1, 3)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6 : register(t1, space3);
 #define sdfSky sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6
 [[vk::binding(2, 3)]] StructuredBuffer<SdfSkyStop> sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224 : register(t2, space3);
@@ -83,7 +83,7 @@ struct SdfSkyEnvironmentPass {
 // sky texture loads, then six shadow-slot step counts, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 22u;
+static const uint PuckWorkRowWords = 24u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
@@ -91,6 +91,7 @@ static const uint PuckWorkSkyHashesWord = 6u;
 static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShadowWord = 10u;
 static const uint PuckWorkShadowSlots = 6u;
+static const uint PuckWorkShadowPixelsWord = 22u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -137,6 +138,17 @@ void puckCountShadow(uint slot, uint steps) {
 
     if ((slot < PuckWorkShadowSlots) && WaveIsFirstLane()) {
         puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), waveSteps);
+    }
+}
+// One secondary lit pixel belongs to one decision. Its march and slot counts are a partition of the pass,
+// while its pixel count exposes rejections and reuse even when a march takes zero field samples.
+void puckCountShadowDecision(uint detail, uint slot, uint steps) {
+    puckAddWork((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowPixelsWord, 1u);
+    if (passGroup.workCounterRowDetail != 0u) {
+        uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+        puckAddWork(row + PuckWorkShadowPixelsWord, 1u);
+        puckAddWork(row + PuckWorkStepsWord, steps);
+        puckAddWork(row + PuckWorkShadowWord + (slot * 2u), steps);
     }
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper

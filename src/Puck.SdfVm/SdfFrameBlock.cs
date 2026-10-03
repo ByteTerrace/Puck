@@ -58,6 +58,9 @@ public static class SdfFrameBlock {
     private static readonly int Jitter = Offset(member: SdfWorldPackage.Jitter);
     private static readonly int HistoryFrames = Offset(member: SdfWorldPackage.HistoryFrames);
     private static readonly int Temporal = Offset(member: SdfWorldPackage.Temporal);
+    private static readonly int ShadowAmortize = Offset(member: SdfWorldPackage.ShadowAmortize);
+    private static readonly int ShadowOwnershipReject = Offset(member: SdfWorldPackage.ShadowOwnershipReject);
+    private static readonly int ShadowLightReject = Offset(member: SdfWorldPackage.ShadowLightReject);
     private static readonly int ImageExtent = Offset(member: SdfWorldPackage.ImageExtent);
     private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
     private static readonly int InstanceMaskWordCount = Offset(member: SdfWorldPackage.InstanceMaskWordCount);
@@ -92,6 +95,16 @@ public static class SdfFrameBlock {
         WriteSingle(block: block, offset: (Jitter + sizeof(float)), value: jitter.Y);
         WriteUInt32(block: block, offset: HistoryFrames, value: historyFrames);
         WriteUInt32(block: block, offset: Temporal, value: (temporal ? 1u : 0u));
+    }
+    /// <summary>Writes the shadow history policy and the two frame-uniform rejection masks.</summary>
+    /// <param name="block">The common pass block.</param>
+    /// <param name="enabled">Whether temporal secondary shadows are enabled.</param>
+    /// <param name="ownership">Slots rejected by ownership.</param>
+    /// <param name="lightMotion">Slots rejected by light motion.</param>
+    public static void WriteShadowHistory(Span<byte> block, bool enabled, uint ownership, uint lightMotion) {
+        WriteFlag(block: block, offset: ShadowAmortize, value: enabled);
+        WriteUInt32(block: block, offset: ShadowOwnershipReject, value: ownership);
+        WriteUInt32(block: block, offset: ShadowLightReject, value: lightMotion);
     }
     /// <summary>Writes the preceding render's camera, lens and jitter for visibility reprojection: position and
     /// validity, right and tangent, up and aspect, forward, the render extent and the jitter in render pixels, then the
@@ -157,6 +170,7 @@ public static class SdfFrameBlock {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
         WriteTemporal(block: block, jitter: Vector2.Zero, historyFrames: 0, temporal: false);
+        WriteShadowHistory(block: block, enabled: false, lightMotion: 0, ownership: 0);
         WritePreviousView(block: block, valid: false, view: default);
 
         var snapshot = frame.Views[view];
@@ -221,6 +235,7 @@ public static class SdfFrameBlock {
         WriteFlag(block: block, offset: FiniteDifferenceNormals, value: frame.UseFiniteDifferenceNormals);
         WriteFlag(block: block, offset: DisableShadowCull, value: frame.DisableShadowCull);
         WriteFlag(block: block, offset: DisableSoftShadows, value: quality.DisableSoftShadows);
+        WriteFlag(block: block, offset: ShadowAmortize, value: quality.ShadowAmortize);
         WriteFlag(block: block, offset: DisableAmbientOcclusion, value: quality.DisableAmbientOcclusion);
         WriteSingle(block: block, offset: ShadowDistanceScale, value: quality.ShadowDistanceScale);
         WriteFlag(block: block, offset: DisableScreenLights, value: frame.DisableScreenLights);

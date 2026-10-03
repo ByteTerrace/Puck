@@ -41,7 +41,7 @@ public sealed partial class SdfWorldPassesLawTests {
         lights.ShadowSlots.Configure(fadeCapacity: 2, slots: 1);
         lights.ShadowSlots.SetSlot(light: 0, slot: 0);
         Assert.Equal(expected: 2, actual: view.Residency.Frame!.Lights.ShadowSlots.FadeCapacity);
-        using var block = gpu.Services.BufferFactory.CreateHostVisible(name: default, sizeBytes: 512, usage: GpuBufferUsage.Uniform);
+        using var block = gpu.Services.BufferFactory.CreateHostVisible(name: default, sizeBytes: ((uint)SdfFrameBlock.SizeBytes), usage: GpuBufferUsage.Uniform);
         using var scratch = gpu.Services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
         var pool = gpu.Services.Bindings.CreatePool(name: default,
             sizes: GpuDescriptorPoolSizes.ForGroups(groups: context.Parameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute).Groups));
@@ -54,7 +54,7 @@ public sealed partial class SdfWorldPassesLawTests {
             using var commands = gpu.Services.CommandPoolFactory.Create(name: default);
             var recording = new RenderGraphPackageRecording(CommandBuffer: commands.CommandBufferHandle, Recorder: gpu.Services.Recorder,
                 Slot: 0, Width: Extent, Height: Extent, Inputs: Resources(declarations: context.Inputs), Outputs: Resources(declarations: context.Outputs),
-                PassBlock: new byte[512], Leases: new LeaseRetireList(), Context: frame, MayStandIn: false, WorkCounters: counters.RowOf(row: 0, slot: 0));
+                PassBlock: new byte[SdfFrameBlock.SizeBytes], Leases: new LeaseRetireList(), Context: frame, MayStandIn: false, WorkCounters: counters.RowOf(row: 0, slot: 0));
 
             Assert.Equal(expected: RenderGraphPackageOutcome.Drew, actual: recorder.Record(recording: in recording));
             Assert.Equal(expected: SdfKernelSet.StemOf(kernel: ((part == SdfWorldPackage.Parts.Shadow) ? SdfKernel.ShadowFade1 : SdfKernel.ViewsCoreFade1)), actual: gpu.BoundPipelineName);
