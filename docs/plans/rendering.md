@@ -3010,7 +3010,8 @@ re-record explained in the same change.
      an epoch reset of the whole cache on every program upload, which
      G5 narrows; the `world.indirect off|medium|high` lever; and the debug
      views `indirect-probes` (each probe a small sphere coloured by its class)
-     and `indirect-cells` (each surface coloured by the component it proved).
+     and `indirect-cells` (each hit coloured by its stored cell partition: the
+     component of the cell corner nearest it, read with no field evaluation).
      Nothing is lit or applied.
      The lever defaults to `off`; G4 owns enabling tier defaults. Placement and
      partitioning are two ordered dispatches of the classify kernel. G1's

@@ -7,7 +7,7 @@ namespace Puck.World.Tests;
 
 internal static class SdfIndirectDeviceProbe {
     public static Vector4[] Run(GpuDeviceServices services, string extension, string kernel, int resultRows,
-        IReadOnlyList<SdfProgram> programs, Vector4[] rows) {
+        IReadOnlyList<SdfProgram> programs, Vector4[] rows, Vector4[]? transforms = null) {
         var world = new GpuGroupLayoutDescription(ordinal: 1, bindings: [
             new GpuGroupBinding(binding: 0, kind: GpuBindingKind.ReadOnlyBuffer),
             new GpuGroupBinding(binding: 1, kind: GpuBindingKind.ReadOnlyBuffer),
@@ -30,8 +30,9 @@ internal static class SdfIndirectDeviceProbe {
         using var inputs = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: rows.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         var cacheWords = new uint[128];
         using var cache = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: cacheWords.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
-        Vector4[] identity = [Vector4.Zero, new Vector4(w: 1, x: 0, y: 0, z: 0), Vector4.Zero];
-        using var transforms = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: identity.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
+        // Three rows per dynamic slot (position, orientation, lanes); slot zero is the identity unless the caller supplies a table.
+        Vector4[] slots = (transforms ?? [Vector4.Zero, new Vector4(w: 1, x: 0, y: 0, z: 0), Vector4.Zero]);
+        using var transformTable = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: slots.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         var buffers = new List<IGpuStorageBuffer>();
         var pool = services.Bindings.CreatePool(
             name: default,
@@ -62,7 +63,7 @@ internal static class SdfIndirectDeviceProbe {
                 var worldSet = services.Bindings.AllocateSet(descriptorSetLayoutHandle: pipeline.GroupLayoutHandles[1], name: default, poolHandle: pool);
 
                 services.Bindings.WriteBuffer(binding: 0, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes, descriptorSetHandle: worldSet, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
-                services.Bindings.WriteBuffer(binding: 1, bufferHandle: transforms.BufferHandle, bufferSize: transforms.SizeBytes, descriptorSetHandle: worldSet, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
+                services.Bindings.WriteBuffer(binding: 1, bufferHandle: transformTable.BufferHandle, bufferSize: transformTable.SizeBytes, descriptorSetHandle: worldSet, elementStride: 16, kind: GpuBindingKind.ReadOnlyBuffer);
                 recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, descriptorSetHandle: worldSet, group: 1, pipelineLayoutHandle: pipeline.LayoutHandle);
                 ReadOnlySpan<uint> pushed = [((uint)index)];
 

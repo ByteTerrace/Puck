@@ -44,27 +44,30 @@ float3 sdfIndirectDebugProbes(float3 origin, float3 direction, float maximum, fl
     return color;
 }
 
-float3 sdfIndirectDebugCells(float3 surface, float3 normal) {
+// The views kernel evaluates no field for this diagnostic: every field call site is a whole inlined interpreter in the
+// hottest kernel. It colors a hit by the stored partition of the finest resident cell holding it, the component label of
+// the cell corner nearest the hit, and leaves a hit no partitioned cell holds black.
+float3 sdfIndirectDebugCells(float3 surface) {
     if (passGroup.indirectTier == SdfIndirectTierOff) { return 0.0; }
-    uint budget = 32u;
-    uint before = sdfWorkSteps;
     float3 color = 0.0;
-    [loop] for (uint level = 0u; level < sdfIndirectLevelCount() && budget > 0u; level++) {
-        float3 position;
-        float clearance;
-        if (!sdfIndirectLaunch(surface, normal, sdfIndirectSpacing(passGroup.indirectTier, level), budget, position, clearance)) { break; }
-        uint mask = sdfIndirectProve(position, level, budget);
-        if (mask != 0u) {
-            uint first = (uint)firstbitlow(mask);
-            float hue = frac((first + level * 8u) * 0.61803399);
-            color = saturate(abs(frac(hue + float3(0.0, 0.333333, 0.666667)) * 6.0 - 3.0) - 1.0);
-            break;
-        }
+    uint loads = sdfIndirectLoads;
+    [loop] for (uint level = 0u; level < sdfIndirectLevelCount(); level++) {
+        float spacing = sdfIndirectSpacing(passGroup.indirectTier, level);
+        float3 scaled = surface / spacing;
+        int3 cell = int3(floor(scaled));
+        int index = sdfIndirectProbeIndex(cell, level);
+        if (index < 0) { continue; }
+        uint components = sdfIndirectLoad(sdfIndirectCellWordOffset(passGroup.indirectTier) + (uint)index * SdfIndirectCellWords);
+        if (components == 0xffffffffu) { continue; }
+        uint3 upper = uint3(frac(scaled) >= 0.5);
+        uint corner = upper.x | (upper.y << 1u) | (upper.z << 2u);
+        uint label = (components >> (4u * corner)) & 15u;
+        if (label == 15u) { color = float3(0.3, 0.0, 0.0); break; }
+        float hue = frac((label + level * 8u) * 0.61803399);
+        color = saturate(abs(frac(hue + float3(0.0, 0.333333, 0.666667)) * 6.0 - 3.0) - 1.0);
+        break;
     }
-    if (passGroup.workCounterRowDetail != 0u) {
-        puckCountDetail(0u, sdfWorkSteps - before, 0u, 0u, 0u, 0u);
-        sdfWorkSteps = before;
-    }
+    puckCountIndirect(0u, 0u, sdfIndirectLoads - loads, 0u);
     return color;
 }
 #endif

@@ -48,7 +48,7 @@ public sealed partial class SdfIndirectGatherLawTests {
             rows[((index * 2) + 1)] = new Vector4(value: item.Direction, w: item.Far);
         }
         var results = SdfIndirectDeviceProbe.Run(programs: cases.Select(selector: static item => item.Program).ToArray(), rows: rows,
-            extension: extension, kernel: Kernel, resultRows: ResultRows, services: services);
+            extension: extension, kernel: Kernel, resultRows: ResultRows, services: services, transforms: Transforms());
 
         for (var index = 0; (index < cases.Length); index++) {
             var item = cases[index];
@@ -82,10 +82,10 @@ public sealed partial class SdfIndirectGatherLawTests {
         }
     }
     private static GatherCase[] Cases() => [
-        new("the outer spacing remains gathered", Sphere(center: new Vector3(x: 3.6f, y: 0, z: 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 3.4f),
-        new("an instance just outside the reach remains visible", Sphere(center: new Vector3(x: 4.25f, y: 0, z: 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 4.05f),
-        new("an occluder after the reach remains visible", Sphere(center: new Vector3(x: 7, y: 0, z: 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 6.8f),
-        new("a clear ray exhausts the full interval", Sphere(center: new Vector3(x: 3, y: 2, z: 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10),
+        new("the outer spacing remains gathered", Sphere(slot: 0, radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 3.4f),
+        new("an instance just outside the reach remains visible", Sphere(slot: 1, radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 4.05f),
+        new("an occluder after the reach remains visible", Sphere(slot: 2, radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 6.8f),
+        new("a clear ray exhausts the full interval", Sphere(slot: 3, radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10),
         new("a subtractive composition keeps its operand", Carved(), Vector3.Zero, Vector3.UnitX, 4, 10, 3.25f),
         new("a smooth composition keeps its halo", Smooth(), Vector3.Zero, Vector3.UnitX, 4, 10),
         new("a wallpaper fold preserves cleared intervals", Wallpaper(), new Vector3(x: 6.9f, y: 0, z: 0), -Vector3.UnitX, 1, 5),
@@ -103,11 +103,18 @@ public sealed partial class SdfIndirectGatherLawTests {
         }
         return builder;
     }
-    private static SdfProgram Sphere(Vector3 center, float radius) {
+    // The sphere cases' centers, one dynamic slot each, so each sphere compiles to a part program the masked march can
+    // trace independently; a statically translated instance compiles no part and keeps the full field.
+    private static readonly Vector3[] SphereCenters = [new(x: 3.6f, y: 0, z: 0), new(x: 4.25f, y: 0, z: 0), new(x: 7, y: 0, z: 0), new(x: 3, y: 2, z: 0)];
+
+    private static Vector4[] Transforms() => [.. SphereCenters.SelectMany(selector: static center => new[] {
+        new Vector4(value: center, w: 0), new Vector4(w: 1, x: 0, y: 0, z: 0), Vector4.Zero,
+    })];
+    private static SdfProgram Sphere(int slot, float radius) {
         var builder = Builder();
 
-        _ = builder.BeginInstance(boundCenter: center, boundRadius: radius)
-            .ResetPoint().Translate(offset: center).Sphere(material: 0, radius: radius).EndInstance();
+        _ = builder.BeginInstanceDynamic(boundOffset: Vector3.Zero, boundRadius: radius, slot: slot)
+            .PushField().ResetPoint().TransformDynamic(slot: slot).Sphere(material: 0, radius: radius).PopField().EndInstance();
         return builder.Build();
     }
     private static SdfProgram Carved() {

@@ -5,6 +5,7 @@
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-cache.hlsli"
 
 // Each case binds its program and asks the production helpers for one ray, placement, cell, launch or finite proof.
+// Loops over field-evaluating helpers stay rolled: each unrolled call would inline another whole interpreter.
 [[vk::binding(60, 3)]] StructuredBuffer<float4> traceCases : register(t60, space3);
 [[vk::binding(61, 3)]] [[vk::image_format("rgba32f")]] RWTexture2D<float4> traceResults : register(u61, space3);
 struct TraceProbeIndex {
@@ -38,7 +39,7 @@ void CSMain(uint lane : SV_GroupIndex) {
         traceResults[uint2(index, 0u)] = float4(placement.position, (float)placement.classification);
     } else if (mode == 2u) {
         SdfIndirectPlacement corners[8];
-        [unroll] for (uint corner = 0u; corner < 8u; corner++) {
+        [loop] for (uint corner = 0u; corner < 8u; corner++) {
             float3 offset = float3(corner & 1u, (corner >> 1u) & 1u, (corner >> 2u) & 1u) * spacing;
             corners[corner] = sdfIndirectPlace(position.xyz + offset, spacing);
             traceResults[uint2(index, corner)] = float4(corners[corner].position, (float)corners[corner].classification);
@@ -117,7 +118,7 @@ void CSMain(uint lane : SV_GroupIndex) {
             value.components = 0xffffffffu;
         } else {
             SdfIndirectPlacement corners[8];
-            [unroll] for (uint corner = 0u; corner < 8u; corner++) {
+            [loop] for (uint corner = 0u; corner < 8u; corner++) {
                 corners[corner] = sdfIndirectPlace(position.xyz + float3(sdfIndirectCorner(corner)) * spacing, spacing);
             }
             value = sdfIndirectPartition(corners, spacing);

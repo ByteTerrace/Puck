@@ -226,7 +226,7 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
         }
         case DebugViewModeIndirectCells: {
             if (s.hit) {
-                viewColor = sdfIndirectDebugCells(p.rayOrigin + p.rayDirection * s.t, s.normal);
+                viewColor = sdfIndirectDebugCells(p.rayOrigin + p.rayDirection * s.t);
             }
             break;
         }

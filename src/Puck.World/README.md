@@ -1945,7 +1945,8 @@ and partitioned cache. It starts off. Enabled views of one residency share one
 cache, and a completed cache schedules no more rays until demand or geometry
 changes. It applies no light yet. `world.debug-view indirect-probes` shows probe
 classes across the whole view, including empty sky, with scene hits occluding
-the spheres. `world.debug-view indirect-cells` shows proved components at hits;
+the spheres. `world.debug-view indirect-cells` colours each hit by the stored partition
+component of its nearest cell corner;
 `world.counters sdf.indirect` reads its deterministic schedule and `world.budget`
 reports the allocated pools and regions.
 `world.render-scale [view]` echoes the selected view's ceiling, saved quality
