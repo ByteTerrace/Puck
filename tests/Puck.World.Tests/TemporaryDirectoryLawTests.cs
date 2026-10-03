@@ -127,8 +127,9 @@ public sealed class TemporaryDirectoryLawTests {
         Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "an open handle blocks a delete only where the file system refuses it.");
         var state = new TemporaryDirectory(prefix: "puck-fixture-never-delete-", teardownBound: TeardownBound);
         using var held = Hold(state: state);
-        // The directory reads each file alone before it deletes anything, so its last error is that read's refusal.
-        var expected = Assert.Throws<IOException>(testCode: () => new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: state.PathOf(name: Late), share: FileShare.None));
+        // The directory reads each file once no writer holds it before it deletes anything, so its last error is that
+        // read's refusal.
+        var expected = Assert.Throws<IOException>(testCode: () => new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: state.PathOf(name: Late), share: FileShare.Read));
         var teardown = Task.Factory.StartNew(
             function: () => Record.Exception(testCode: () => {
                 state.Dispose();
@@ -204,6 +205,31 @@ public sealed class TemporaryDirectoryLawTests {
         state.Conclude(passed: true);
 
         Assert.False(condition: Directory.Exists(path: state.RootPath));
+    }
+    [Fact]
+    public void AReaderThatSharesAFileDoesNotHoldUpThePassingDelete() {
+        // An observer outside the law, such as an indexer or a scanner, holds a file open to read it and shares it for
+        // reading, writing and deletion. It writes nothing, so the passing verdict reads the file beside it and deletes.
+        var state = new TemporaryDirectory(prefix: "puck-fixture-reader-", teardownBound: TeardownBound);
+        var path = state.WriteText(name: Late, text: "x");
+        using var reader = new FileStream(
+            access: FileAccess.Read,
+            mode: FileMode.Open,
+            path: path,
+            share: (FileShare.ReadWrite | FileShare.Delete)
+        );
+
+        try {
+            state.Dispose();
+            state.Conclude(passed: true);
+
+            Assert.False(condition: Directory.Exists(path: state.RootPath));
+        } finally {
+            reader.Dispose();
+            if (Directory.Exists(path: state.RootPath)) {
+                Directory.Delete(path: state.RootPath, recursive: true);
+            }
+        }
     }
     [Fact]
     public void ADirectoryNamesTheFileAnOwnersWorkerWroteAfterItsDisposeReturned() {
