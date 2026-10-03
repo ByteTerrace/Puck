@@ -142,9 +142,9 @@ public sealed class LedgerFixture : IDisposable {
         _ = builder.Append(value: "| tier | command |\n");
         _ = builder.Append(value: "| --- | --- |\n");
         _ = builder.Append(value: "| Default (Smoke+Default) | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release` |\n");
-        _ = builder.Append(value: "| Smoke | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/smoke.runsettings` |\n");
-        _ = builder.Append(value: "| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings` |\n");
-        _ = builder.Append(value: "| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/exhaustive.runsettings` |\n");
+        _ = builder.Append(value: "| Smoke | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke` |\n");
+        _ = builder.Append(value: "| Deep | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep` |\n");
+        _ = builder.Append(value: "| Exhaustive | `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive` |\n");
 
         return builder.ToString();
     }

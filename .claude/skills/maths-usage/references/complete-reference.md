@@ -290,16 +290,16 @@ records them into the checkout, which the manifest and leg checks require after 
 declaration change). Skipping it does not save time; it defers a failure that
 cannot heal itself once the manifest and the surface disagree.
 
-**The tier ladder.** Higher tiers are opt-in by runsettings and are *not* to be
+**The tier ladder.** Higher tiers are explicit, opted into per run, and are *not* to be
 fired on every change. Their cost is the point: they buy breadth you do not need
 in a change loop.
 
 | Tier | Command | Budget | When |
 |---|---|---|---|
-| Smoke | `--settings tests/Puck.Maths.Tests/smoke.runsettings` | < 2 s | tight inner loop while iterating one kernel; carries **no new evidence** — every row is a declared mirror |
-| **Default** | *(bound by default — no `--settings`)* | ~13 s | **every change**, unconditionally |
-| Deep | `--settings tests/Puck.Maths.Tests/deep.runsettings` | minutes | **before you commit**, and before any rounding change lands |
-| Exhaustive | `--settings tests/Puck.Maths.Tests/exhaustive.runsettings` | long | on demand or nightly; full-width sweeps over an entire carrier |
+| Smoke | `--filter-trait tier=Smoke` | < 2 s | tight inner loop while iterating one kernel; carries **no new evidence** — every row is a declared mirror |
+| **Default** | *(a plain run — no filter)* | ~13 s | **every change**, unconditionally |
+| Deep | `--explicit on --filter-trait tier=Deep` | minutes | **before you commit**, and before any rounding change lands |
+| Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-width sweeps over an entire carrier |
 
 **Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes
 and does not support running a subset. Run it only
@@ -312,7 +312,7 @@ at one of these**:
 
 | You touched | Also run |
 |---|---|
-| A rounding path, a value kernel, an exhaustive claim | the suite again with `--settings tests/Puck.Maths.Tests/deep.runsettings` — Deep is the tier that has to pass before a rounding change lands |
+| A rounding path, a value kernel, an exhaustive claim | the suite again with `--explicit on --filter-trait tier=Deep` — Deep is the tier that has to pass before a rounding change lands |
 | `FixedPosition` | the `position.*` law family (`laws/position.json`) — not `laws/world-coord.json`, which despite its name covers only `BinaryIntegerFunctions` |
 | `BinaryPolynomial` | the `polynomial.*` law family (`laws/polynomial.json`) |
 | `BinaryField` / `BinaryFields` | the `binary-field.*` law family (`laws/binary-field.json`) |

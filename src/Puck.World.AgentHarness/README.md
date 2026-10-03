@@ -145,7 +145,7 @@ body, provider, state, completed turns, and the last failure.
 
 ```powershell
 dotnet test tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj -c Release
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter "FullyQualifiedName~WorldSiloExtensionLawTests|FullyQualifiedName~ExtensionModelLawTests"
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --filter-class "*WorldSiloExtensionLawTests" --filter-class "*ExtensionModelLawTests"
 ```
 
 The focused tests drive the harness and the participant with scripted

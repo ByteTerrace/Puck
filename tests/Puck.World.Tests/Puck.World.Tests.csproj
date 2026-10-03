@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -19,9 +20,6 @@
         <PackageReference Include="FSharp.Core" Version="[10.*, )" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*, )" />
         <PackageReference Include="Resharp" Version="[1.*, )" />
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
         <!-- Reference the engine seams directly. -->

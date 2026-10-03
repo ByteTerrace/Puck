@@ -162,9 +162,9 @@ Operating rules every package and review follows, learned the expensive way:
   points and delete the links with `[System.IO.Directory]::Delete`.
 - Every `dotnet test` and every `puck` verb run is a background task with a
   timeout of at most ten minutes; `dotnet test` carries
-  `--blame-hang --blame-hang-timeout 3m --blame-hang-dump-type none`. The
-  World suite takes about 100 seconds; a run past five minutes is hung, and
-  the blame output names the law. Never wait on a shell that has stopped
+  `--hangdump --hangdump-timeout 3m --hangdump-type None`. The World suite
+  takes about 100 seconds; a run past five minutes is hung, and the hang dump's report names
+  the tests still running. Never wait on a shell that has stopped
   producing output.
 - Run `puck` from a copy of the CLI's Release build output: a running
   `puck` locks its own bin, and the `Puck.World` build copies into it.

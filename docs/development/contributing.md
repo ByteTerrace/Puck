@@ -262,19 +262,19 @@ world instance.
 
 For changes under `src/Puck.Maths`, also run the maths law suite. A plain
 `dotnet test` runs the default tier (Smoke and Default), the everyday gate;
-`smoke`, `deep` and `exhaustive` are selected by their committed run settings:
+Deep and Exhaustive cases are explicit, so a run opts into them, and each tier
+is selected by its `tier` trait:
 
 ```powershell
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/smoke.runsettings
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/exhaustive.runsettings
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive
 ```
 
-Each tier is a filter on the `tier` trait. A `--filter` on the command line is
-combined with the default tier's filter rather than replacing it, so
-`--filter "tier=Exhaustive"` selects no test; select an opt-in tier with its
-`--settings` file.
+Without `--explicit on`, a `tier=Deep` or `tier=Exhaustive` filter selects no
+test; one law of a tier is selected by its id, the case's display name
+(`--explicit on --filter-display-name <law-id>`).
 
 ### Game changes
 
@@ -410,7 +410,7 @@ browser AppBundle, so it needs that AppBundle published first:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
-dotnet test tests/Puck.Cli.Tests -c Release --filter "FullyQualifiedName~OfficialBuildCommandTests"
+dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*OfficialBuildCommandTests"
 ```
 
 CI's `artifacts` workflow always publishes the browser before any test project

@@ -366,7 +366,7 @@ must leave at least 4096 instances under that ceiling, and `MaxShapesPerStamp` i
 floor; the scene emitter alone under-counts by the adjacency and field reservations, so only the
 composed figure governs. `WorldRenderEnvelopeLawTests.ShippedWorldBootProbeInstancesFitTheEngineCeilingWithHeadroom`
 enforces the floor and prints the current figures on its `world.budget probe:` output line (run it
-with `--logger "console;verbosity=detailed"`).
+with `--output Detailed`).
 Verify capacity with `WorldRenderEnvelopeLawTests` plus a real rendered world.
 
 `WorldStampPool` keeps fixed dynamic-transform addresses but emits only live

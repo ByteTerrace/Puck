@@ -19,7 +19,8 @@ namespace Puck.Testing;
 /// the layer writes what it finds to the device's own writer (the instance's debug output), never to the process's
 /// standard error. Disposing the device destroys it and its instance, so the layer's teardown reports land too, then
 /// fails the law that owns it when the writer holds any <c>[vulkan-debug] validation</c> line, naming the first; that
-/// one check is how every Vulkan device law fails on a validation message.</summary>
+/// one check is how every Vulkan device law fails on a validation message. A test class that creates one on the host's driver carries
+/// <c>[Trait("Category", "Gpu")]</c>, so a run beside another GPU leg leaves it out with <c>--filter-not-trait Category=Gpu</c>.</summary>
 internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuDeviceContext, IDisposable {
     private const string ValidationPrefix = "[vulkan-debug] validation ";
 

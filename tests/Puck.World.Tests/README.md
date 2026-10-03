@@ -33,7 +33,9 @@ same three devices, uploaded and drawn through the display encode in SDR, and
 holds each RGBA8 channel within one code of the value's own code, headroom
 saturating to 255; it shares that collection for the same debug-layer leg.
 The device laws share `tests/Shared`'s
-`HeadlessVulkanDevice` and `DirectXTestDevices`. A Vulkan device law's
+`HeadlessVulkanDevice` and `DirectXTestDevices`. Every class that opens a
+hardware device carries `[Trait("Category", "Gpu")]`, so
+`--filter-not-trait Category=Gpu` runs the rest of the suite beside a GPU leg. A Vulkan device law's
 instance runs under `VK_LAYER_KHRONOS_validation` as the one switch
 `HeadlessVulkanDevice.Validation` says (on), unless the law passes
 `validation` itself; a host without the layer skips the law by name. An instance
@@ -197,7 +199,7 @@ Changing a fixture must preserve the condition that can make its law fail.
 Measure execution separately from restore and build:
 
 ```powershell
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-build --logger trx
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-build --report-xunit-trx
 ```
 
 Review slow TRX cases before reducing workloads. Do not make the default run

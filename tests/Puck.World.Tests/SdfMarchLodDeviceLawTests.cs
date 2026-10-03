@@ -23,6 +23,7 @@ namespace Puck.World.Tests;
 /// before the fold is a similarity.</summary>
 [Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class SdfMarchLodDeviceLawTests {
     private const string Kernel = "sdf-march-lod.comp";
     private const float FarDistance = 100;

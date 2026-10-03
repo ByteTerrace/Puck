@@ -10,7 +10,8 @@ namespace Puck.Testing;
 
 /// <summary>The Direct3D 12 devices device laws run on: the software (WARP) device and the default adapter without the
 /// debug layer, and the default adapter with it. Turning the debug layer on removes every device the process already
-/// holds, so only a law that runs alone takes <see cref="Debug"/>.</summary>
+/// holds, so only a law that runs alone takes <see cref="Debug"/>. A test class that takes <see cref="Hardware"/> or
+/// <see cref="Debug"/> opens the GPU and carries <c>[Trait("Category", "Gpu")]</c>; <see cref="Warp"/> runs on the CPU.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 internal static class DirectXTestDevices {
     /// <summary>Returns a context on the default adapter without the debug layer, its device created; skips the calling

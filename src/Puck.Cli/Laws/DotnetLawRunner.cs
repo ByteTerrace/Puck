@@ -45,7 +45,7 @@ internal sealed class DotnetLawRunner : ILawRunner {
     public LawRun Run(string tree, string project, string law, string results, CancellationToken cancellationToken) {
         var run = CliProcess.RunCaptured(
             cancellationToken: cancellationToken,
-            arguments: ["test", project, "-c", CliOptions.DefaultConfiguration, "--no-build", "-nologo", "--filter", $"FullyQualifiedName~{law}", "--logger", $"trx;LogFileName={ReportName}", "--results-directory", results],
+            arguments: ["test", "--project", project, "-c", CliOptions.DefaultConfiguration, "--no-build", .. CliTestRun.Containing(name: law), .. CliTestRun.Report(directory: results, fileName: ReportName)],
             fileName: "dotnet",
             input: string.Empty,
             timeout: TestTimeout,
@@ -68,7 +68,7 @@ internal sealed class DotnetLawRunner : ILawRunner {
         }
         var parsed = LawProof.ReadReport(report: report);
 
-        if ((run.ExitCode != 0) && ((run.ExitCode != 1) || (parsed.Failures.Count == 0))) {
+        if ((run.ExitCode != 0) && ((run.ExitCode != CliTestRun.TestsFailed) || (parsed.Failures.Count == 0))) {
             return parsed with { Error = $"dotnet test exited {run.ExitCode} without a matching test-failure verdict." };
         }
         if ((run.ExitCode == 0) && (parsed.Failures.Count > 0)) {

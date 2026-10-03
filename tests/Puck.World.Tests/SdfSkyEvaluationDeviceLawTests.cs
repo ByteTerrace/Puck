@@ -19,6 +19,7 @@ namespace Puck.World.Tests;
 /// read holds a filler of its kind.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class SdfSkyEvaluationDeviceLawTests {
     private const uint Width = 16;
     private const uint Height = 8;

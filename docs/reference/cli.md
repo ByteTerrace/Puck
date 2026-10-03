@@ -901,8 +901,8 @@ merge base, or a CLI running from the checkout it would rebuild).
 
 `puck laws prove <law>` shows that a law fails without its fix and passes
 with it, and prints the evidence for the commit that lands them. The law is a
-test name of dotted identifiers, `Class` or `Class.Method`, selected as
-`FullyQualifiedName~<law>`; its project is the test project whose sources
+test name of dotted identifiers, `Class` or `Class.Method`, matched anywhere in
+each test's fully qualified method name (`--filter-method "*<law>*"`); its project is the test project whose sources
 declare that class, or `--project`.
 
 The fix is one of:
@@ -922,7 +922,8 @@ builds and runs again, and the law must pass. Outcomes come from the test run's
 TRX report together with the process's completion verdict. A run that selects
 no test, skips a selected test, aborts or executes different tests between legs
 is refused. Both legs execute the same tests, and every selected test must
-finish with a passed or failed outcome. Caller Git hooks are disabled, and
+finish with a passed or failed outcome; an explicit test the run did not opt into
+was never selected. Caller Git hooks are disabled, and
 projects outside the proof tree and links in it are refused. Cancellation kills
 and waits for the active child process before cleanup. Cleanup attempts to remove
 the proof's worktree, its own registration and its temporary directory. Git

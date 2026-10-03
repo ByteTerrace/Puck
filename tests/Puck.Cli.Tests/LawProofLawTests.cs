@@ -283,9 +283,21 @@ public sealed class LawProofLawTests {
         Assert.NotNull(@object: run.Error);
         Assert.Contains(expectedSubstring: "Holds", actualString: run.Error);
     }
+    [Fact]
+    public void AnExplicitTestTheRunDidNotOptIntoIsNotSelected() {
+        var run = LawProof.ReadReport(report: """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results><UnitTestResult testName="Deep" outcome="NotRunnable" />
+              <UnitTestResult testName="Holds" outcome="Passed" /></Results>
+            </TestRun>
+            """);
+
+        Assert.Null(@object: run.Error);
+        Assert.Equal(actual: Assert.Single(collection: run.Tests), expected: "Holds");
+    }
     [InlineData(0, true, "Passed")]
-    [InlineData(1, false, "Passed")]
-    [InlineData(2, false, "Failed")]
+    [InlineData(1, false, "Failed")]
+    [InlineData(2, false, "Passed")]
     [InlineData(0, false, "Failed")]
     [Theory]
     public void AnAbortedOrInconsistentProcessCannotProveALaw(int exitCode, bool timedOut, string outcome) {
@@ -319,7 +331,7 @@ public sealed class LawProofLawTests {
     }
     [Fact]
     public void AHostCrashWithReportedFailuresIsNotARedLeg() {
-        var process = new CliProcessResult(ExitCode: 1, OutputLines: [], Stderr: "", Stdout: "", TimedOut: false);
+        var process = new CliProcessResult(ExitCode: CliTestRun.TestsFailed, OutputLines: [], Stderr: "", Stdout: "", TimedOut: false);
         var run = DotnetLawRunner.ReadRun(report: """
             <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
               <Results><UnitTestResult testName="Holds" outcome="Failed" /></Results>
@@ -332,13 +344,12 @@ public sealed class LawProofLawTests {
         Assert.NotNull(@object: run.Error);
     }
     [Fact]
-    public void AnXunitFailureEchoIsAVerdictNotAnInfrastructureFault() {
-        var process = new CliProcessResult(ExitCode: 1, OutputLines: [], Stderr: "", Stdout: "", TimedOut: false);
+    public void AFailedTestIsAVerdictNotAnInfrastructureFault() {
+        var process = new CliProcessResult(ExitCode: CliTestRun.TestsFailed, OutputLines: [], Stderr: "", Stdout: "", TimedOut: false);
         var run = DotnetLawRunner.ReadRun(report: """
             <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
               <Results><UnitTestResult testName="Holds" outcome="Failed"><Output><ErrorInfo><Message>broken</Message></ErrorInfo></Output></UnitTestResult></Results>
-              <ResultSummary outcome="Failed"><Counters total="1" executed="1" passed="0" failed="1" error="0" timeout="0" aborted="0" />
-                <RunInfos><RunInfo outcome="Error"><Text>[xUnit.net 00:00:01.37]     Lib.Holds [FAIL]</Text></RunInfo></RunInfos></ResultSummary>
+              <ResultSummary outcome="Failed"><Counters total="1" executed="1" passed="0" failed="1" error="0" timeout="0" aborted="0" /></ResultSummary>
             </TestRun>
             """, run: process);
 
@@ -347,7 +358,7 @@ public sealed class LawProofLawTests {
     }
     [Fact]
     public void AnAbortedCounterCannotProveALaw() {
-        var process = new CliProcessResult(ExitCode: 1, OutputLines: [], Stderr: "", Stdout: "", TimedOut: false);
+        var process = new CliProcessResult(ExitCode: CliTestRun.TestsFailed, OutputLines: [], Stderr: "", Stdout: "", TimedOut: false);
         var run = DotnetLawRunner.ReadRun(report: """
             <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
               <Results><UnitTestResult testName="Holds" outcome="Failed" /></Results>

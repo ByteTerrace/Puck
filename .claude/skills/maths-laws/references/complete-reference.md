@@ -164,23 +164,21 @@ is by construction the state the run's generator started from.
 
 ## 2. Tiers and budgets
 
-Tier selection is declarative — **no environment variables anywhere**. The
-project binds `default.runsettings` via `RunSettingsFilePath`
-(`TestCaseFilter` = `tier!=Deep&tier!=Exhaustive`), so plain `dotnet test` runs
-Smoke + Default.
+Tier selection is declarative — **no environment variables anywhere**. Every
+case carries its tier as the `tier` trait, and Deep and Exhaustive cases are
+explicit, so plain `dotnet test` runs Smoke + Default.
 
 | Tier | Selected by | Declared budget | When it runs |
 |---|---|---|---|
-| Smoke | `--settings tests/Puck.Maths.Tests/smoke.runsettings` | < 2 s | a tight inner loop; carries **no new evidence** by construction |
-| Default (Smoke + Default) | the bound default | ~13 s | **every change**, unconditionally |
-| Deep | `--settings …/deep.runsettings` | minutes | before you commit, and before any rounding change lands |
-| Exhaustive | `--settings …/exhaustive.runsettings` | long | on demand or nightly; full-width sweeps over an ENTIRE carrier |
+| Smoke | `--filter-trait tier=Smoke` | < 2 s | a tight inner loop; carries **no new evidence** by construction |
+| Default (Smoke + Default) | a plain run | ~13 s | **every change**, unconditionally |
+| Deep | `--explicit on --filter-trait tier=Deep` | minutes | before you commit, and before any rounding change lands |
+| Exhaustive | `--explicit on --filter-trait tier=Exhaustive` | long | on demand or nightly; full-width sweeps over an ENTIRE carrier |
 
-`default.runsettings` filters `tier!=Deep&tier!=Exhaustive`, so the
-two opt-in tiers never fire on a plain `dotnet test`. A CLI `--settings`
-replaces that filter; a CLI `--filter` is combined with it, so
-`--filter "tier=Exhaustive"` alone selects no test. Select an opt-in tier by
-its `--settings` file, and narrow it with a `--filter` on the law id. **Tier by COST, not by
+Explicit cases never fire on a plain `dotnet test`, and without
+`--explicit on` a `tier=Exhaustive` filter selects no test. Select an opt-in
+tier with `--explicit on` and its trait, and narrow it with
+`--filter-display-name <law-id>`. **Tier by COST, not by
 the word "exhaustive."** `Exhaustive` is for sweeping every value of a carrier —
 a 2³² word sweep qualifies; a 240×240 pair sweep is milliseconds and belongs at
 `Default` or `Deep`. Parking a cheap case in an opt-in tier silently costs it its
@@ -548,13 +546,13 @@ Commands (`maths-usage` owns the routing; these are the ones a probe needs):
 
 ```text
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/smoke.runsettings
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/exhaustive.runsettings
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive
 ```
 
-A CLI `--settings` overrides the bound default. For a fast single-case loop,
-filter on the display name — which *is* the law id. Confirm from the run output
+For a fast single-case loop, filter on the display name — which *is* the law
+id (`--filter-display-name <law-id>`, with `--explicit on` for an opt-in tier). Confirm from the run output
 what actually executed rather than assuming a filter composed with the tier
 gate the way you expected, and remember that a filtered run regenerates only
 the artifacts of the checks it ran; the run that produces what you commit is
