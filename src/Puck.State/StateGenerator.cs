@@ -44,7 +44,11 @@ public sealed record GeneratorAlternative(string Token, ulong Weight, CellName N
 /// <param name="Key">The stable context key, unique within the generator.</param>
 /// <param name="Alternatives">The weighted alternatives out of this context, or empty for a terminal context.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record GeneratorContext(CellName Key, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<GeneratorAlternative>? Alternatives = null);
+public sealed record GeneratorContext(CellName Key, IReadOnlyList<GeneratorAlternative>? Alternatives = null) {
+    /// <summary>The weighted alternatives out of this context, or empty for a terminal context.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<GeneratorAlternative>? Alternatives { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Alternatives);
+}
 /// <summary>The closed vocabulary of a <see cref="StateGenerator"/>'s draw shape — which of its fields are read, and
 /// what one emission produces: a Markov text walk, a multiset draw, a uniform range, a weighted numeric table, and a
 /// raw stream draw are sources of one family, never parallel primitives with their own seeding, cursoring, and
@@ -126,9 +130,18 @@ public sealed record GeneratorWeightedNumeric(long Value, ulong Weight, [propert
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record GeneratorExtended(
     int K,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<uint>? Table = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<long>? Script = null
-);
+    IReadOnlyList<uint>? Table = null,
+    IReadOnlyList<long>? Script = null
+) {
+    /// <summary>The whole extension table, exactly <see cref="K"/> words — or <see langword="null"/> when <see
+    /// cref="Script"/> authors it instead.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<uint>? Table { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Table);
+    /// <summary>Up to <see cref="K"/> values in the source's own output space, authoring the site's first draws
+    /// directly — or <see langword="null"/> when <see cref="Table"/> is authored instead.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<long>? Script { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Script);
+}
 /// <summary>
 /// An authored stochastic source — the vocabulary for every randomness declaration in the document: a name
 /// generator, a dialogue line, a loot roll, a flat weighted draw, a multiset sample, a random census, and a drawn
@@ -188,16 +201,55 @@ public sealed record StateGenerator(
     // than emitting a wall of nulls a reader has to discount.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellName? Start = null,
     int Bound = StateGenerator.DefaultBound,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<GeneratorContext>? Contexts = null,
+    IReadOnlyList<GeneratorContext>? Contexts = null,
     GeneratorMode Mode = GeneratorMode.WithReplacement,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? RangeMin = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? RangeMax = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<GeneratorWeightedNumeric>? Weighted = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Ring = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Node = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<int>? Word = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] GeneratorExtended? Extended = null
+    long? RangeMin = null,
+    long? RangeMax = null,
+    IReadOnlyList<GeneratorWeightedNumeric>? Weighted = null,
+    int? Ring = null,
+    int? Node = null,
+    IReadOnlyList<int>? Word = null,
+    GeneratorExtended? Extended = null
 ) {
+    /// <summary>Markov only: the declared contexts, at least one, uniquely keyed.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<GeneratorContext>? Contexts { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Contexts);
+    /// <summary>Markov, weighted numeric and symmetry orbit: how the entries are consumed (see <see
+    /// cref="GeneratorMode"/>).</summary>
+    public GeneratorMode Mode { get; init; } = Mode;
+    /// <summary><see cref="GeneratorSource.UniformRange"/> only: the closed range's inclusive lower bound — both bounds
+    /// present or neither. Raw-encoded per the destination site's <see cref="CellKind"/> (raw <c>FixedQ4816</c> bits
+    /// for a <c>fixed</c> site) — unlike a site row's own <c>min</c>/<c>max</c>, which a <c>fixed</c> row authors as
+    /// decimal text, since a source is not bound to one site and cannot know the kind it will write.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? RangeMin { get; init; } = RangeMin;
+    /// <summary><see cref="GeneratorSource.UniformRange"/> only: the inclusive upper bound, same encoding as <see
+    /// cref="RangeMin"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? RangeMax { get; init; } = RangeMax;
+    /// <summary><see cref="GeneratorSource.WeightedNumeric"/> only: the weighted numeric outcomes, at least one, at
+    /// least one carrying a non-zero weight; under an exhausting <see cref="Mode"/> each outcome contributes <see
+    /// cref="GeneratorWeightedNumeric.Multiplicity"/> units to the pass.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<GeneratorWeightedNumeric>? Weighted { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Weighted);
+    /// <summary><see cref="GeneratorSource.SymmetryOrbit"/> only: the ring, 0..7, whose thirty nodes are the units —
+    /// exactly one of <see cref="Ring"/> and <see cref="Node"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Ring { get; init; } = Ring;
+    /// <summary><see cref="GeneratorSource.SymmetryOrbit"/> only: the node, 0..239, whose orbit under <see
+    /// cref="Word"/> is the units.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Node { get; init; } = Node;
+    /// <summary><see cref="GeneratorSource.SymmetryOrbit"/> beside <see cref="Node"/> only: the word of reflections
+    /// (one to eight mirror nodes, applied first to last) the orbit is taken under, or <see langword="null"/> for the
+    /// lattice's own cycle — the same generator vocabulary a <see cref="StateCycle"/> authors.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<int>? Word { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Word);
+    /// <summary>The extended-generator facet (see <see cref="GeneratorExtended"/>), or <see langword="null"/> for the
+    /// ordinary <c>Pcg32XshRr</c> generator every other source draws through.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GeneratorExtended? Extended { get; init; } = Extended;
+
     /// <summary>The <see cref="Bound"/> an undeclared source carries — one emitted token. <see cref="Bound"/> is
     /// Markov-only and not nullable, so "left at its default" is the only reading of "not declared" available to it; a
     /// numeric source carrying anything else is refused against this constant rather than left to parse and then be
