@@ -53,11 +53,11 @@ check failed. Exit code 2 means infrastructure prevented a stage from running,
 or an accept was refused.
 
 Every run writes four files under the artifacts directory: by default,
-`artifacts/hgb-post/post-report.txt` (the table, with a duration column),
-`artifacts/hgb-post/summary.json` (per-stage verdict, duration, and case counts),
-`artifacts/hgb-post/results.junit.xml` (one test case per ledger row
+`artifacts/gb-post/post-report.txt` (the table, with a duration column),
+`artifacts/gb-post/summary.json` (per-stage verdict, duration, and case counts),
+`artifacts/gb-post/results.junit.xml` (one test case per ledger row
 or vector family, named `path[model]`, which any continuous-integration
-reporter reads), and `artifacts/hgb-post/Expectations.candidate.json` (what this run measured,
+reporter reads), and `artifacts/gb-post/Expectations.candidate.json` (what this run measured,
 merged over the rows it did not). A screenshot row that mismatches also leaves
 `<suite>/<path>[model].actual.png` and `.diff.png` beside them.
 
@@ -220,7 +220,7 @@ expected image) is caught exactly like a regression into `fail`.
 ## Accepting
 
 There is no recording run. Every run writes a candidate ledger, by default
-`artifacts/hgb-post/Expectations.candidate.json`:
+`artifacts/gb-post/Expectations.candidate.json`:
 the existing ledger with every row this run measured replaced, every row of a
 discovered suite whose ROM is no longer on disk removed, and every row of a
 suite this run did not discover (an unselected `--tier`/`--filter`/`--lane`,
@@ -443,14 +443,14 @@ not independent proof that their code ran.
 
 The trace is a stream of conceptual events, not raw internal state—raw
 fetcher-step equality would flag the documented object-fetcher oracle skew
-(`hardware-and-oracles.md` §4) as a false divergence. Each event carries the
+([hardware and oracles](../../.claude/skills/gaming-bricks/references/hardware-and-oracles.md), section 4) as a false divergence. Each event carries the
 master T-cycle count since reset and one of:
 
 - **cpu**: an instruction boundary—PC and every register, sampled before the
-  instruction runs (`Sm83.ICpuTraceSink.OnInstructionBoundary`).
+  instruction runs (`ICpuTraceSink.OnInstructionBoundary`).
 - **ppu**: a polled STAT mode transition (the LY register and the STAT mode
   bits, both as the CPU reads them) or a pixel pop (LY, X, the final packed
-  color) (`Ppu.IPpuTraceSink`). Selecting `ppu` also produces the
+  color) (`IPpuTraceSink`). Selecting `ppu` also produces the
   pixel-pop stream, which is large—keep `--frames` small for it.
 - **pcm**: a PCM12/PCM34 sample. `Puck.HumbleGamingBrick` carries a trace seam
   only in `Ppu.cs` and `Sm83.cs`, so PCM has none of its own; a `pcm`-kind run

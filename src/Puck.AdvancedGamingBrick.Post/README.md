@@ -45,9 +45,9 @@ except the throughput and zero-alloc measurements, which run alone.
 
 | Tier | Coverage | Assets |
 |---|---|---|
-| A | CPU and bus smoke vectors; bundled firmware services, reset, presentation and legacy sound; exhaustive BG/OBJ priority and transparency combinations with window/effect cases; text tile-row sampling; cycle-budget execution parity; determinism; state round trip; fork determinism; save round trip; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none; selected firmware and execution-parity fixtures additionally use a verified retail BIOS when available |
+| A | CPU and bus smoke vectors; bundled firmware services, reset, presentation and legacy sound; exhaustive BG/OBJ priority and transparency combinations with window/effect cases; text tile-row sampling; cycle-budget execution parity; determinism; state round trip; fork determinism; save round trip; solar-sensor device protocol; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none; selected firmware and execution-parity fixtures additionally use a verified retail BIOS when available |
 | B | firmware result oracle; conformance CPU/save/misc suites; ARM fuzz corpus; render hashes; accuracy suite; AGS aging cartridge | assets listed below; stages skip when absent |
-| C | normal serial clock ownership; native firmware download; deterministic multiplayer cable replay and a commercial link-game replay | synthetic replay and firmware download need none; commercial replay needs a retail BIOS and `--link-game` |
+| C | normal serial clock ownership; native firmware download; deterministic multiplayer cable replay, a commercial link-game replay and a commercial solar-sensor light-script replay | synthetic replay and firmware download need none; commercial replays need a retail BIOS and `--link-game` or `--solar-rom` |
 
 The asset-free `lifecycle` stage checks HALT/STOP cycle budgets, keypad wake
 and snapshot replay, DMA during HALT, the fourteen-bit DMA0–2 and sixteen-bit
