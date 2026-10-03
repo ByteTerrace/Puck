@@ -955,7 +955,11 @@ Before the solution build, affected run, each baseline check, selected canaries
 and parity, each device suite, each counters
 workload, citations and recording, admission uses
 [`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s default
-classification in-process. Capacity with an idle GPU admits immediately.
+classification in-process. A step that opens a device (the canaries, parity,
+each device suite, counters, citations and recording, the steps that run only
+with `--gpu`) waits for capacity and an idle GPU; the build, affected run and
+baseline checks run no `Gpu`-trait test and wait for CPU and memory capacity
+alone, whatever holds the GPU. A step with what it needs admits immediately.
 Otherwise the gate reports waiting on stderr, samples every ten seconds for
 at most thirty minutes, and reports when capacity returns. Expiry refuses the
 remaining run. Completed child processes do not hold admission; builds and
@@ -998,7 +1002,11 @@ CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
   `canary`, `parity` or `counters` verb, or a test host for
   `Puck.DirectX.Tests`, `Puck.Vulkan.Tests`, `Puck.World.Tests` or
   `Puck.Platform.Windows.Tests`, whose
-  device laws open the GPU. Builds, restores, MSBuild nodes, compilers and
+  device laws open the GPU, when its arguments can select a `Gpu`-trait test.
+  A run carrying affected's CPU selection, `--filter-not-trait Category=Gpu`,
+  opens no device whatever else it filters, so it counts no GPU work; a run
+  with no such exclusion, or one reading a response file (`@file`), counts.
+  Builds, restores, MSBuild nodes, compilers and
   shells never count, whatever project they name, and the verb never counts
   itself. The classifier uses the running executable or managed entry assembly;
   a `dotnet run` wrapper does not count; its World child counts once it starts.

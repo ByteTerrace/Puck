@@ -147,6 +147,19 @@ public sealed partial class GateRunLawTests {
         foreach (var name in heavy) { Assert.Equal(("run " + name), runner.Events[(runner.Events.IndexOf(item: ("admit " + name)) + 1)]); }
     }
     [Fact]
+    public void OnlyAStepThatOpensADeviceWaitsForAnIdleGpu() {
+        using var branches = new Branches();
+
+        Workload(branches, "a");
+        using var directory = new TemporaryDirectory(prefix: "puck-gate-admission-law-");
+        var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: ""));
+
+        Assert.Equal(CliExit.Success, Gate(branches, runner, directory, gpu: true, record: true).ExitCode);
+        Assert.Equal(expected: [("build", false), ("affected", false), ("Puck.World.Tests", true), ("Puck.DirectX.Tests", true), ("Puck.Vulkan.Tests", true), ("Puck.Platform.Windows.Tests", true), ("counters a", true), ("docs citations", true), ("affected record", true)], actual: runner.Admissions);
+        // The baselines and affected's suites run CPU tests alone: none of their classes carries the Gpu trait.
+        Assert.All(collection: GatePlan.Steps.Where(predicate: static step => ((step.Kind is GateStepKind.Build or GateStepKind.Baseline) || (step.Name == "affected"))), action: static step => Assert.False(condition: step.Gpu));
+    }
+    [Fact]
     public void AdmissionTimeoutRefusesBeforeStartingTheStep() {
         using var branches = new Branches();
         using var directory = new TemporaryDirectory(prefix: "puck-gate-admission-law-");

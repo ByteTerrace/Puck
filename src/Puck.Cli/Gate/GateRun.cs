@@ -14,7 +14,9 @@ internal interface IGateRunner {
     /// <summary>Runs one verb of the copied CLI against the checkout; <paramref name="progress"/>, when given, sees each
     /// line the verb writes as it writes it, so a long step can report while it runs.</summary>
     GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments, Action<string>? progress = null);
-    bool WaitForCapacity(string repositoryRoot, string step);
+    /// <summary>Waits for host capacity before a step; a step that opens a device (<see cref="GateStep.Gpu"/>) also waits
+    /// for an idle GPU.</summary>
+    bool WaitForCapacity(string repositoryRoot, string step, bool device);
 }
 /// <summary>Executes the batch plan serially, recording each step and withholding coverage on any failure.</summary>
 internal static class GateRun {
@@ -89,7 +91,7 @@ internal static class GateRun {
                     Console.Out.WriteLine(value: $"gate: {step.Name} skipped; qualification failed.");
                     continue;
                 }
-                if (step.Heavy && !runner.WaitForCapacity(repositoryRoot: repositoryRoot, step: step.Name)) {
+                if (step.Heavy && !runner.WaitForCapacity(device: step.Gpu, repositoryRoot: repositoryRoot, step: step.Name)) {
                     refused = true;
                     Console.Error.WriteLine(value: $"gate: {step.Name} refused; host capacity did not return.");
                     break;
