@@ -99,6 +99,117 @@ public sealed class WorldInstanceHostTwoRowTransferLawTests {
 
         Assert.Empty(collection: destinationRow.ForwardedBodies);
     }
+    // The peer call admits a replacement after reservation. Without the gated credential comparison both the
+    // commit and forced-rollback paths detach it, so the peer index appears in departures under the wrong offer.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void APeerReplacedAfterReservationIsNeverDetachedOrRestoredAsTheReservedTraveler(bool forceRollback) {
+        const int PeerSlot = WorldBodiesLimits.LocalSeatCount;
+        const string Upstream = "origin";
+        var document = Fixtures.PeerPopulationDocument(networkPlayers: 2);
+
+        document = document with { PopulationRaw = document.Population with { ReconnectGraceSeconds = 0f } };
+        var (host, root) = BuildHost(machineId: Guid.NewGuid());
+        using var disposeHost = host;
+        using var disposeRoot = root;
+        using var source = HostRow.Build(definition: document, name: "row-a");
+        using var destination = HostRow.Build(definition: document, name: "row-b");
+
+        host.Admit(row: source.Instance);
+        host.Admit(row: destination.Instance);
+        Assert.True(condition: source.Server.ApplySession(request: new SessionRequest.Join(
+            IdentityName: null, Principal: Principal.Seat(slot: 0), Slot: 0, WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+        var seatMobility = source.Server.Population.ReadMobility(authority: source.Server.AuthorityIdentity, index: 0);
+        var original = Arrive(transferId: 1);
+        var reserved = source.Server.Population.ReadMobility(authority: source.Server.AuthorityIdentity, index: PeerSlot);
+        WorldMobilityIdentity replacement = default;
+        var departures = new List<int>();
+        var narration = new RecordingNarrationSink();
+        using var narrationLease = host.AttachNarrationSink(sink: narration);
+        using var sourceNarrationLease = source.Server.AttachNarrationSink(sink: narration);
+
+        source.Server.DepartureTap = (_, slot, returned) => { if (!returned) { departures.Add(item: slot); } };
+        var fault = new FaultingPeerCall(destination: destination.Server) {
+            LoseFirstCommit = false,
+            AfterReserve = () => {
+                WorldSubmissionResult? answer = null;
+
+                Assert.True(condition: WorldLocalForwardedAuthority.TryApplySubmission(
+                    completion: result => answer = result,
+                    mobility: in original,
+                    operationId: Guid.NewGuid(),
+                    payload: new WorldSubmissionPayload.Session(Value: new SessionRequest.Leave(Principal: Principal.Console, Slot: PeerSlot)),
+                    reason: out var reason,
+                    server: source.Server,
+                    sourceAuthority: Upstream
+                ), userMessage: reason);
+                Assert.True(condition: Assert.IsType<WorldSubmissionResult.Session>(@object: answer).Reply.Accepted);
+                Assert.False(condition: source.Server.Population.IsActive(index: PeerSlot));
+                _ = Arrive(transferId: 2);
+                replacement = source.Server.Population.ReadMobility(authority: source.Server.AuthorityIdentity, index: PeerSlot);
+                Assert.NotEqual(expected: reserved.DepartedFrom.Generation, actual: replacement.DepartedFrom.Generation);
+            },
+        };
+
+        host.SetPeerCallFault(fault: fault, instanceName: "row-b");
+        var transferId = host.EnqueueTransfer(
+            actingPrincipal: Principal.Seat(slot: 0),
+            destination: WorldInstanceHost.TransferDestination.Existing(name: "row-b"),
+            frozenCohortSlots: [0, PeerSlot],
+            scope: WorldInstanceHost.TransferScope.Party,
+            sourceInstance: "row-a",
+            sourceSlot: 0,
+            testForceJoinRefusalOrdinal: (forceRollback ? 1 : null)
+        );
+
+        host.DrainPendingTransfers();
+
+        Assert.DoesNotContain(collection: departures, expected: PeerSlot);
+        Assert.Equal(actual: departures, expected: new[] { 0 });
+        Assert.True(condition: source.Server.Population.IsActive(index: PeerSlot));
+        Assert.Equal(expected: replacement, actual: source.Server.Population.ReadMobility(authority: source.Server.AuthorityIdentity, index: PeerSlot));
+        Assert.Equal(expected: seatMobility, actual: source.Server.Population.ReadMobility(authority: source.Server.AuthorityIdentity, index: 0));
+        Assert.Equal(expected: 0, actual: fault.CommitCalls);
+        Assert.Equal(expected: WorldTransferStatus.Missing, actual: destination.Server.TransferStatus(sourceAuthority: source.Server.AuthorityIdentity, transferId: transferId));
+        Assert.False(condition: destination.Server.Population.IsActive(index: PeerSlot));
+        Assert.False(condition: destination.Server.Population.IsActive(index: (PeerSlot + 1)));
+        Assert.Empty(collection: host.CaptureRow(row: source.Instance).ForwardedBodies);
+        Assert.Contains(collection: narration.Narrations, filter: static line => line.Text.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: "the reserved traveler is no longer live at this authority"
+        ));
+        Assert.Contains(collection: narration.Narrations, filter: static line => line.Text.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: "could not detach after reservation"
+        ));
+
+        WorldMobilityIdentity Arrive(ulong transferId) {
+            var address = new WorldEntityAddress(Authority: Upstream, Generation: ((int)transferId), Index: 0);
+            var mobility = new WorldMobilityIdentity(DepartedFrom: address, Epoch: 0, Incarnation: address);
+            var reservation = source.Server.ReserveTransfer(request: new WorldTransferReservationRequest(
+                Border: "seam", BorderCapacity: null, DeadlineSourceTick: 60,
+                Members: [new WorldTransferReservationMember(
+                    BodyColor: default, CatalogRig: 0, Identity: null, Mobility: mobility,
+                    PreferredSlot: PeerSlot, Principal: Principal.Console, Source: IntentSource.Live
+                )],
+                PartyAllOrNothing: true, PeerAdmission: true, SourceAuthority: Upstream,
+                SourceRateHz: 240, SourceTick: 0, TransferId: transferId
+            ));
+
+            Assert.True(condition: reservation.Accepted, userMessage: reservation.Reason);
+            Assert.Equal(expected: PeerSlot, actual: Assert.Single(collection: reservation.BodyIndices));
+            Assert.Equal(expected: WorldTransferStatus.Committed, actual: source.Server.CommitTransfer(
+                members: [new WorldTransferCommitMember(
+                    BodyMotionProgramName: "grounded", HasMappedArrival: false, PlanarVelocity: default,
+                    Position: default, Profile: null, VerticalVelocity: default, YawRadians: default
+                )],
+                reason: out _, sourceAuthority: Upstream, transferId: transferId
+            ));
+            return mobility;
+        }
+    }
     [Fact]
     public void LocalTransfer_ReachesReservedUncommitted_ThenInDoubtOnce_ThroughAFaultingPeerCall() {
         var (host, hostStateRoot) = BuildHost(machineId: Guid.NewGuid());
