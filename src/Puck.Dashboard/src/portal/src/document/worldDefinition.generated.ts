@@ -9613,10 +9613,6 @@ export type WorldScreen = {
    */
   magazine?: WorldScreenMagazine | null;
   /**
-   * The screen's live byte-window bindings between its booted machine's bus and ordinary state.world Int cells (see WorldScreenMemory), or null for a screen with none. Omitted from the wire when null.
-   */
-  memory?: (WorldScreenMemory | null)[] | null;
-  /**
    * How the face samples its source's image: Nearest, the default, keeps each source pixel crisp, as an emulator or a pixel-art source wants; Linear blends between source pixels, as a camera or a desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted from the wire when Nearest.
    */
   filter?: GpuSamplerFilter;
@@ -9636,31 +9632,6 @@ export type WorldScreenMagazine = {
    */
   wrap?: boolean;
 };
-
-export type WorldScreenMemory = {
-  /**
-   * The machine bus address the window starts at. Validated within 0..(MaxAddress - Width + 1) — outside the engine's addressable memory refuses by name at validation, never at runtime (a machine's own IMachineMemoryPeek silently reads/no-ops out of its own smaller readable/writable range instead, exactly as it does for any other peek/poke).
-   */
-  address: number;
-  /**
-   * How many bytes the window spans, little-endian (the low byte at Address): 1 or 2.
-   */
-  width: number;
-  /**
-   * The declared state.world row this binding mirrors to/from — must resolve to a kind=Int row.
-   */
-  row: string;
-  /**
-   * The cell inside Row, or null for its slot cell. Refused when Row is keyed and this is absent, or unkeyed and this is present — the same (row, key) pair rule every other named-cell reference in this document follows. Omitted from the wire when null.
-   */
-  key?: string | null;
-  /**
-   * Which way the binding moves a value.
-   */
-  direction?: WorldScreenMemoryDirection;
-};
-
-export type WorldScreenMemoryDirection = "Read" | "Write";
 
 /**
  * How a Session face's destination render projects onto the face — an ordinary head-on camera image, or a WINDOW whose image shears with the viewer's own eye so the destination scene parallaxes against the aperture the way a real opening would.

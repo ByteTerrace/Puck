@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text.Json.Nodes;
 
 namespace Puck.World;
@@ -47,15 +46,26 @@ public static partial class WorldSchema {
             identity["commit"] = ResolveCommit();
         }
     }
-    // The SDK's own git integration appends "+<revision>" to AssemblyInformationalVersion when the build tree sits
-    // inside a git repository; no explicit SourceLink package reference is needed for this suffix to appear.
-    private static string ResolveCommit() {
-        var informational = typeof(WorldSchema).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        var plusIndex = (informational?.IndexOf(value: '+') ?? -1);
+    private static string ResolveCommit() => (SourceRevision ?? "unknown");
+    // The project embeds the commit as its own resource (see Puck.World.Schema.csproj); no assembly carries it in its
+    // informational version, so a new commit recompiles this project alone.
+    private static string? ReadSourceRevision() {
+        using var stream = typeof(WorldSchema).Assembly.GetManifestResourceStream(name: "Puck.World.Schema.SourceRevision");
 
-        return ((plusIndex >= 0)
-            ? informational![(plusIndex + 1)..]
-            : "unknown"
+        if (stream is null) {
+            return null;
+        }
+
+        using var reader = new StreamReader(stream: stream);
+        var revision = reader.ReadToEnd().Trim();
+
+        return ((revision.Length == 0)
+            ? null
+            : revision
         );
     }
+
+    /// <summary>Gets the commit this build of the schema was made at, or <see langword="null"/> for a build outside a
+    /// git tree.</summary>
+    public static string? SourceRevision { get; } = ReadSourceRevision();
 }

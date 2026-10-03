@@ -394,9 +394,8 @@ and fed the recorded ticks, with local seat input masked at the loopback.
   reached host dispatch. The last gate includes host refusals because a
   failed `Select` can still move its selector; authority denials return
   before dispatch and do not latch it. Guest and machine accumulated state
-  and pre-arm screen operations are not in the record-start image. The
-  screen-operation latch also covers successful `screens[].memory` access to
-  named machines. A world with named machines must arm before its first world
+  and pre-arm screen operations are not in the record-start image. A world
+  with named machines must arm before its first world
   tick, because paused machines still synchronize bindings and replay starts
   with fresh hardware and an empty binding memo. The
   grant/revoke leaf carries the whole `WorldGrant` row on tape, `KindMask`

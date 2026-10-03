@@ -1229,18 +1229,6 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Key
         ),
         new(
-            typeof(WorldScreenMemory),
-            nameof(WorldScreenMemory.Row),
-            WorldNameKind.State,
-            WorldNameRole.Names
-        ),
-        new(
-            typeof(WorldScreenMemory),
-            nameof(WorldScreenMemory.Key),
-            WorldNameKind.State,
-            WorldNameRole.Key
-        ),
-        new(
             typeof(WorldNavigationDomain),
             nameof(WorldNavigationDomain.Medium),
             WorldNameKind.Field,

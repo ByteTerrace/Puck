@@ -28,9 +28,9 @@ same change. The user's current instruction outranks it.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
   or changed law, with `--fix <commit>` or with `--file-list` for an
   uncommitted fix, instead of the manual withholding below: it withholds the
-  fix in a detached worktree of its own, never in your tree or a shared one,
-  and refuses a proof when a build fails, a selected test is skipped or the two
-  legs ran different tests.
+  fix in a proof tree of its own (a persistent clone it builds incrementally,
+  never your tree or a shared one), and refuses a proof when a build fails, a
+  selected test is skipped or the two legs ran different tests.
 
 Run covered steps by hand only where a brief rules a verb out, for example a
 machine that must not build the solution. Complete checks the gate omits:

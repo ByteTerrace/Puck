@@ -96,8 +96,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.environment.horizon.high` | State | Binding | Binding | `WorldRenderHorizon.High` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
-| `screens[].memory[].row` | State | Names | Read | `WorldScreenMemory.Row` |
-| `screens[].memory[].key` | State | Key | Read | `WorldScreenMemory.Key` |
 | `cameras[].rig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
