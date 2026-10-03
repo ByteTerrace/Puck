@@ -21,8 +21,9 @@ internal sealed record AffectedKernel(string Path, IReadOnlyList<string> Closure
 internal sealed record AffectedPostPackage(string Id, string Source, IReadOnlyList<string> Files);
 /// <summary>
 /// Maps a changed file the coverage index cannot know, because no canary executes it, to the indexed C# sources it
-/// stands for, following an edge the build already states. A project's own build inputs (its project file, its restore
-/// lock, the method list its source generator reads) stand for every indexed source of that project. A shader source or
+/// stands for, following an edge the build already states. A project's own build inputs (its project file and the method
+/// list its source generator reads) stand for every indexed source of that project; its restore lock stands for
+/// nothing here, since it reaches its own suite alone (<see cref="AffectedSelection"/>). A shader source or
 /// include stands for the C# that loads each kernel whose include closure reaches it: the stage sources come from the
 /// projects' shader items and their closures from <see cref="ShaderSourceClosure"/>, and a loader names its kernel by
 /// a string literal in the kernel's project or any project its build references, such as a conversion pass named by a
@@ -35,7 +36,7 @@ internal sealed record AffectedPostPackage(string Id, string Source, IReadOnlyLi
 /// for what the base's own projects, shaders and index said.
 /// </summary>
 internal static partial class AffectedStandIns {
-    private static readonly string[] ProjectInputNames = ["packages.lock.json", "NativeMethods.txt", "NativeMethods.json"];
+    private static readonly string[] ProjectInputNames = ["NativeMethods.txt", "NativeMethods.json"];
     private static readonly string[] StageItems = ["VertexShaderSource", "FragmentShaderSource", "ComputeShaderSource", "Direct3D11KernelSource"];
     private static readonly string[] StageSuffixes = [".vert", ".frag", ".comp"];
 
@@ -48,7 +49,7 @@ internal static partial class AffectedStandIns {
 
     /// <summary>Returns whether a file is one of a project's own build inputs rather than a source it compiles.</summary>
     /// <param name="path">The file, repository-relative with forward slashes.</param>
-    /// <returns>Whether it is a project file, a restore lock, or a source generator's method list.</returns>
+    /// <returns>Whether it is a project file or a source generator's method list.</returns>
     internal static bool IsProjectInput(string path) => (
         path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".csproj") ||
         ProjectInputNames.Contains(value: Path.GetFileName(path: path), comparer: StringComparer.OrdinalIgnoreCase)

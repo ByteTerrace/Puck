@@ -49,7 +49,8 @@ public sealed class AffectedDeletedStandInsLawTests {
                 tree: Base
             ),
             standInsFor: static _ => throw new InvalidOperationException(message: "A deleted file stands for what the base said, never the working tree."),
-            worldClosure: new HashSet<string>(collection: ["Engine"], comparer: StringComparer.OrdinalIgnoreCase)
+            worldClosure: new HashSet<string>(collection: ["Engine"], comparer: StringComparer.OrdinalIgnoreCase),
+            worldInput: static _ => false
         );
     }
 

@@ -1,3 +1,5 @@
+using Puck.Cli.Affected;
+using Puck.Cli.Gate;
 using Puck.Cli.Host;
 using Xunit;
 
@@ -115,12 +117,41 @@ public sealed class HostLoadLawTests {
     [InlineData("VBCSCompiler", "VBCSCompiler.exe -pipename:x")]
     [InlineData("pwsh", "pwsh -c Get-Process Puck.World; puck canary x")]
     [InlineData("bash", "bash -c 'grep -E \"Puck.Cli.dll canary\"'")]
+    // A filter or follower whose arguments name a test assembly runs no test: a run is the process executing it.
+    [InlineData("grep", "grep.exe --line-buffered -E \"passed|Puck.World.Tests exit\"")]
+    [InlineData("tail", @"tail -f C:\scratch\Puck.World.Tests\gate.steps")]
+    [InlineData("node", "node watch.js tests/Puck.World.Tests/bin/Release/net10.0/Puck.World.Tests.dll")]
+    [InlineData("dotnet", "dotnet tool run report --assembly Puck.World.Tests.dll")]
     [InlineData("dotnet", "dotnet /tmp/cli/Puck.Cli.dll host load --watch")]
     [InlineData("Puck.Cli.Tests", @"C:\Puck\tests\Puck.Cli.Tests\bin\Release\net10.0\Puck.Cli.Tests.exe -class Puck.Cli.Tests.CanaryPlanLawTests")]
     [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.Cli.Tests\bin\Release\net10.0\Puck.Cli.Tests.dll")]
     [Theory]
     public void BuildsShellsAndOtherTestsAreNeverGpuWork(string name, string commandLine) =>
         Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
+    [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.exe --filter-not-trait Category=Gpu")]
+    [InlineData("dotnet", "dotnet exec tests/Puck.World.Tests/bin/Release/net10.0/Puck.World.Tests.dll --filter-class *CaptureLawTests --filter-not-trait Category=Gpu")]
+    [InlineData("Puck.Vulkan.Tests", "Puck.Vulkan.Tests.exe --filter-not-trait=Category=Gpu")]
+    [InlineData("dotnet", "dotnet\0/tmp/a path/Puck.DirectX.Tests.dll\0--filter-not-trait\0Category=Gpu\0")]
+    [Theory]
+    public void ADeviceTestRunCarryingTheCpuSelectionIsNotGpuWork(string name, string commandLine) =>
+        Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
+    [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-trait Category=Gpu")]
+    [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-class *WorldCaptureHoldLawTests")]
+    [InlineData("dotnet", "dotnet exec Puck.World.Tests.dll --filter-not-trait Category=Slow")]
+    [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-not-trait")]
+    [InlineData("Puck.World.Tests", "Puck.World.Tests.exe @run.rsp --filter-not-trait Category=Gpu")]
+    [Theory]
+    public void ADeviceTestRunThatCanSelectADeviceLawIsGpuWork(string name, string commandLine) =>
+        Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
+    [Fact]
+    public void EveryDeviceSuiteIsGpuWorkUnderItsGateSelectionAndNotUnderTheCpuSelection() {
+        foreach (var (suite, selection) in GatePlan.DeviceSuites) {
+            foreach (var (name, prefix) in new[] { (suite, $"{suite}.exe"), ("dotnet", $"dotnet exec {suite}.dll") }) {
+                Assert.True(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: selection)}", name: name));
+                Assert.False(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: AffectedCommand.CpuSelection)}", name: name));
+            }
+        }
+    }
     [Fact]
     public void AReuseNodeIsAnMsbuildNodeStartedForReuse() {
         Assert.True(condition: HostProcesses.IsReuseNode(commandLine: @"dotnet ""C:\Program Files\dotnet\sdk\10.0.401\MSBuild.dll"" /nodemode:1 /nodeReuse:true", name: "dotnet"));

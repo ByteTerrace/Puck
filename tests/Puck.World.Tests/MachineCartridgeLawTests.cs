@@ -102,7 +102,7 @@ public sealed class MachineCartridgeLawTests {
             hash *= 1099511628211UL;
         }
     }
-    private static string ModulePath() => RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/modules/arcade.world.json");
+    private static string ModulePath() => RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/modules/arcade.puck");
     /// <summary>A cartridge the GAME ships, for the one law that boots a shipped module and must therefore stage
     /// what that module names.</summary>
     /// <param name="file">The cartridge file name.</param>
@@ -353,7 +353,7 @@ public sealed class MachineCartridgeLawTests {
             name: Path.Combine(
                 path1: "worlds",
                 path2: "modules",
-                path3: "arcade.world.json"
+                path3: "arcade.puck"
             ),
             text: File.ReadAllText(path: ModulePath())
         );

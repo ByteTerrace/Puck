@@ -8,8 +8,8 @@ namespace Puck.World.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: the <c>world.boot</c> work source declares its kinds and counts a boot's work into the ledger
 /// a flow attributes, and a boot's work is pinned: the Parlot lineup source (a small <c>.puck</c> world over one
-/// basis) and the shipped island from its source tree (a JSON root that imports eight <c>.puck</c> games and proves
-/// four neighbours) each load, parse, validate and compile within the counts below, parse each neighbour once however
+/// basis) and the shipped island from its source tree (a JSON root that imports its <c>.puck</c> games and
+/// modules and proves four neighbours) each load, parse, validate and compile within the counts below, parse each neighbour once however
 /// many times its border is proved, and compile nothing on a second boot. The laws load exactly what the game's boot
 /// loads — the compile cache, then <see cref="WorldSourceLoader"/> for a source, and
 /// <see cref="WorldDefinitionLoader.TryResolve"/> for a document — and share the serialized composition collection
@@ -207,13 +207,14 @@ public sealed class WorldBootWorkLawTests {
         WorldDefinitionFileSource.ForgetComposedDocuments();
 
         // Twenty-five documents — the island, its basis, its games and modules, the shared quality presets, and the
-        // four shards its borders name — are read and merged once each; twelve of them are .puck sources. The island is
-        // parsed once and each shard once, though admission and its completion each prove all four borders.
+        // four shards its borders name — are read and merged once each; nineteen of them are .puck sources, each asked of
+        // the compile cache nine times a boot. The island is parsed once and each shard once, though admission and its
+        // completion each prove all four borders.
         var first = BootIsland(catalog: catalog);
 
         AssertPinned(
-            asks: 108L,
-            compileCeiling: 12L,
+            asks: 171L,
+            compileCeiling: 19L,
             counts: first,
             exact: [
                 ("world.boot.loads", 1L),
@@ -229,7 +230,7 @@ public sealed class WorldBootWorkLawTests {
         Assert.True(condition: (first["world.boot.curve-compiles"] <= 2L));
         // The second boot compiles nothing, merges nothing, and parses only the island itself.
         AssertPinned(
-            asks: 108L,
+            asks: 171L,
             compileCeiling: 0L,
             counts: BootIsland(catalog: catalog),
             exact: [
