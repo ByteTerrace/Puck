@@ -1,3 +1,4 @@
+using Puck.Abstractions.Counting;
 using Puck.Maths;
 
 namespace Puck.SignedDistance.Queries;
@@ -9,6 +10,17 @@ namespace Puck.SignedDistance.Queries;
 /// therefore stay unchanged. Storage is bounded and allocated once; replacement follows query order, never time.
 /// Concurrent callers are serialized, while deterministic work counts describe an ordered query stream.</remarks>
 public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
+    /// <summary>Gets the kind counting boxes requested from immutable fields.</summary>
+    public static WorkKind Queries { get; } = new(name: "sdf.bounds.queries", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting cache misses that evaluate the field.</summary>
+    public static WorkKind Evaluations { get; } = new(name: "sdf.bounds.evaluations", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting instructions visited after instance culling.</summary>
+    public static WorkKind Instructions { get; } = new(name: "sdf.bounds.instructions", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting full interval rotation expansions on a cache miss.</summary>
+    public static WorkKind Rotations { get; } = new(name: "sdf.bounds.rotation-expansions", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the process-wide immutable bounds work, including every authority's field.</summary>
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.bounds", kinds: [Queries, Evaluations, Instructions, Rotations]);
+
     private const int Sets = 64;
     private const int Ways = 4;
 
@@ -25,15 +37,19 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
     public long FieldEvaluations { get; private set; }
     /// <summary>Gets the instructions actually visited by those field evaluations, after instance culling.</summary>
     public long InstructionsWalked { get; private set; }
+    /// <summary>Gets the full interval rotation expansions performed by field evaluations.</summary>
+    public long RotationsExpanded { get; private set; }
 
     /// <inheritdoc/>
     public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance) {
         lock (m_gate) {
             BoundsQueries++;
+            ProcessWork.Count(kind: Queries);
 
             if (!lower.TryDelta(delta: out var low, origin: FixedPosition.Zero) ||
                 !upper.TryDelta(delta: out var high, origin: FixedPosition.Zero)) {
                 FieldEvaluations++;
+                ProcessWork.Count(kind: Evaluations);
                 return m_field.TryDistanceBounds(distance: out distance, lower: lower, upper: upper);
             }
 
@@ -58,9 +74,13 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
             }
 
             FieldEvaluations++;
-            var answered = m_field.TryDistanceBounds(distance: out distance, instructionsWalked: out var walked, lower: lower, upper: upper);
+            ProcessWork.Count(kind: Evaluations);
+            var answered = m_field.TryDistanceBounds(distance: out distance, instructionsWalked: out var walked, lower: lower, rotationsExpanded: out var rotations, upper: upper);
 
             InstructionsWalked += walked;
+            ProcessWork.Add(amount: walked, kind: Instructions);
+            RotationsExpanded += rotations;
+            ProcessWork.Add(amount: rotations, kind: Rotations);
 
             if (answered) {
                 m_entries[(first + m_next[set])] = new Entry(Distance: distance, Lower: low, Upper: high, Valid: true);
