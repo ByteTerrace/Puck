@@ -289,8 +289,10 @@ public sealed class CanaryLegSchedulingLawTests {
             Assert.Equal(expected: directories.Length, actual: directories.Distinct(comparer: StringComparer.OrdinalIgnoreCase).Count());
             Assert.All(collection: directories, action: static directory => Assert.True(condition: Directory.Exists(path: directory)));
         } finally {
-            foreach (var directory in directories.Where(predicate: static directory => (directory is not null))) {
-                Directory.Delete(path: directory, recursive: true);
+            foreach (var directory in directories.Where(predicate: static directory => (directory is not null)).Distinct(comparer: StringComparer.OrdinalIgnoreCase)) {
+                if (Directory.Exists(path: directory)) {
+                    Directory.Delete(path: directory, recursive: true);
+                }
             }
         }
     }
