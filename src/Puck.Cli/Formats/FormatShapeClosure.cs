@@ -28,8 +28,11 @@ internal sealed record FormatClosure(string Shape, IReadOnlyList<FormatShapeClos
 /// each code member (a method, constructor, operator, or property or event with a body) on its own.
 /// <para>
 /// The boundary is explicit, because a closure over every call reaches the whole engine (a world codec's reaches ten
-/// thousand units) and would move every fingerprint on any edit. The roots are every unit of the file that declares the
-/// token, of its partial siblings, and each unit anywhere that names the token. A unit covers:
+/// thousand units) and would move every fingerprint on any edit. The roots are where encoding is: the layouts of the file that
+/// declares the token and of its partial siblings, those files' members that touch bytes (a byte buffer, stream or binary
+/// reader or writer, a <c>u8</c> literal, a <c>[FormatLeaf]</c> member), and each unit anywhere that names the token. The
+/// rest of those files is neighbouring code, reached only when a covered member calls it: a method that drives the engine
+/// from decoded data is not the format's shape. A unit covers:
 /// </para>
 /// <list type="bullet">
 /// <item>an enum named anywhere in it, whole, and every constant it reads: the values are the wire;</item>
@@ -41,8 +44,8 @@ internal sealed record FormatClosure(string Shape, IReadOnlyList<FormatShapeClos
 /// <para>
 /// A call into a repository member that is none of those, nor marked <c>[FormatSeam("its behaviour sets no byte because
 /// …")]</c> with a reason, is <em>open</em>: the shape cannot see what it does. <c>puck formats</c> records each format's
-/// open calls and refuses a call that is not already recorded, so the boundary only tightens. Platform and package members
-/// are outside the repository and outside the digest.
+/// open calls, so one that joins or leaves is a reviewable ledger diff and <c>--check</c> reports it as drift. Platform and
+/// package members are outside the repository and outside the digest.
 /// </para>
 /// <para>
 /// Formatting, trivia and local renames never move a digest; operator grouping, argument binding, evaluation order and
@@ -77,6 +80,8 @@ internal sealed class FormatShapeClosure {
         public List<(Unit Unit, bool Expand)> DeepLayouts { get; } = [];
 
         public bool Deep { get; set; }
+        // Whether the unit touches bytes: a wire reader or writer, a byte buffer, a [FormatLeaf] member.
+        public bool Encodes { get; set; }
 
         public SortedSet<string> Refusals { get; } = new(comparer: StringComparer.Ordinal);
     }
@@ -158,7 +163,7 @@ internal sealed class FormatShapeClosure {
     private sealed record Analysis(IReadOnlyList<Unit> Units, IReadOnlyList<string> Open, IReadOnlyList<string> Refusals);
 
     private Analysis Analyze((string Source, string Owner, string Member) format) {
-        var roots = Roots(format: format).ToArray();
+        var (roots, candidates) = Roots(format: format);
         var seen = new HashSet<Unit>(collection: roots);
         var pending = new Queue<(Unit Unit, bool Expand)>(collection: roots.Select(selector: static root => (root, true)));
         var scanned = new HashSet<Unit>();
@@ -181,7 +186,7 @@ internal sealed class FormatShapeClosure {
                 foreach (var (layout, expandLayout) in reach.Layouts) { Follow(expand: expandLayout, unit: layout); }
                 foreach (var call in reach.Calls) {
                     if (call.Mark is Mark.Seam) { continue; }
-                    if ((call.Mark is Mark.Leaf) || call.Targets.Concat(second: call.Dispatch).Any(predicate: seen.Contains) || IsPlainAccessor(call: call)) {
+                    if ((call.Mark is Mark.Leaf) || call.Targets.Concat(second: call.Dispatch).Any(predicate: seen.Contains) || call.Targets.Any(predicate: candidates.Contains) || IsPlainAccessor(call: call)) {
                         foreach (var target in call.Targets.Concat(second: call.Dispatch)) { Follow(expand: false, unit: target); }
                     } else {
                         unfollowed.Add(item: call);
@@ -217,12 +222,13 @@ internal sealed class FormatShapeClosure {
 
         return Convert.ToHexString(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: builder.ToString())))[..16].ToLowerInvariant();
     }
-    // The units that start a closure: every unit of the declaring file and its partial siblings, and each unit anywhere
-    // that names the token.
-    private IEnumerable<Unit> Roots((string Source, string Owner, string Member) format) {
+    // The units that start a closure: the layouts of the declaring file and its partial siblings, their members that
+    // encode, and each unit anywhere that names the token. The rest of those files are candidates a covered call may reach.
+    private (IReadOnlyList<Unit> Roots, HashSet<Unit> Candidates) Roots((string Source, string Owner, string Member) format) {
         var directory = format.Source[..(format.Source.LastIndexOf(value: '/') + 1)];
         var name = format.Source[directory.Length..];
         var stem = name[..name.IndexOf(value: '.')];
+        var candidates = new HashSet<Unit>();
         var roots = new HashSet<Unit>();
 
         foreach (var path in m_files.Keys) {
@@ -233,14 +239,22 @@ internal sealed class FormatShapeClosure {
                     path[directory.Length..].StartsWith(comparisonType: StringComparison.Ordinal, value: $"{stem}.")
                 )
             ) {
-                foreach (var (key, kind) in Index(path: path).Nodes.Keys) { roots.Add(item: new Unit(Key: key, Kind: kind, Path: path)); }
+                foreach (var (key, kind) in Index(path: path).Nodes.Keys) {
+                    var unit = new Unit(Key: key, Kind: kind, Path: path);
+
+                    candidates.Add(item: unit);
+
+                    // The codec's read and write paths: its layouts and the members that touch bytes. A member that only drives
+                    // the engine from decoded data is the codec file's neighbour, not its shape; it joins when an encoding member calls it.
+                    if ((kind == UnitKind.Layout) || Reach(unit: unit).Encodes) { roots.Add(item: unit); }
+                }
             }
         }
         if (TokenKey(format: format) is { } token) {
             foreach (var unit in (Naming(member: format.Member, owner: format.Owner).GetValueOrDefault(key: token) ?? [])) { roots.Add(item: unit); }
         }
 
-        return roots;
+        return ([.. roots], candidates);
     }
     private string? TokenKey((string Source, string Owner, string Member) format) {
         var tree = m_trees[format.Source];
@@ -388,6 +402,8 @@ internal sealed class FormatShapeClosure {
             // value and is followed whole.
             reach.Deep = ((unit.Kind == UnitKind.Layout) && !InInitializer(node: node, root: root));
 
+            if (node is ArrayTypeSyntax { ElementType: PredefinedTypeSyntax { Keyword.RawKind: ((int)SyntaxKind.ByteKeyword) } } or LiteralExpressionSyntax { RawKind: ((int)SyntaxKind.Utf8StringLiteralExpression) }) { reach.Encodes = true; }
+
             switch (node) {
                 case IdentifierNameSyntax or GenericNameSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax
                     or ConstructorInitializerSyntax or BinaryExpressionSyntax or PrefixUnaryExpressionSyntax or PostfixUnaryExpressionSyntax
@@ -496,7 +512,26 @@ internal sealed class FormatShapeClosure {
             foreach (var member in current.GetMembers().Where(predicate: static item => (item is IMethodSymbol { Name: "Dispose" or "DisposeAsync" }))) { Resolve(reach: reach, symbol: member); }
         }
     }
+    // Bytes are what encoding touches: byte buffers and streams, the platform's binary readers and writers, and any member the
+    // codec's own boundary marks [FormatLeaf].
+    private bool IsEncoding(ISymbol symbol, Reached reach) {
+        static bool Bytes(ITypeSymbol? type) => (type switch {
+            IArrayTypeSymbol array => (array.ElementType.SpecialType == SpecialType.System_Byte),
+            INamedTypeSymbol { Name: "Span" or "ReadOnlySpan" or "Memory" or "ReadOnlyMemory" } named => ((named.TypeArguments.Length == 1) && (named.TypeArguments[0].SpecialType == SpecialType.System_Byte)),
+            INamedTypeSymbol { Name: "Stream" or "MemoryStream" or "BinaryReader" or "BinaryWriter" or "BinaryPrimitives" or "IBufferWriter" or "ArrayBufferWriter" or "Encoding" or "Utf8" } platform => (platform.ContainingNamespace.ToDisplayString().StartsWith(comparisonType: StringComparison.Ordinal, value: "System")),
+            _ => false,
+        });
+
+        return symbol switch {
+            ITypeSymbol type => (Bytes(type: type) || (MarkOf(reach: reach, symbol: symbol) is Mark.Leaf)),
+            IMethodSymbol method => (Bytes(type: method.ContainingType) || (MarkOf(reach: reach, symbol: symbol) is Mark.Leaf)),
+            IPropertySymbol or IFieldSymbol or IEventSymbol => (Bytes(type: symbol.ContainingType) || (MarkOf(reach: reach, symbol: symbol) is Mark.Leaf)),
+            _ => false,
+        };
+    }
     private void Resolve(ISymbol? symbol, Reached reach) {
+        if ((symbol is not null) && !reach.Encodes && IsEncoding(reach: reach, symbol: symbol)) { reach.Encodes = true; }
+
         switch (symbol) {
             case null:
                 return;

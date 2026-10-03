@@ -169,7 +169,6 @@ internal static class FormatsCommand {
 
         var sources = ReadSources(repositoryRoot: repositoryRoot);
         IReadOnlyList<FormatEntry> current;
-        var engine = FormatVersionsLedger.EngineOf(files: sources);
 
         try {
             current = FormatVersionsLedger.Discover(files: sources);
@@ -194,36 +193,10 @@ internal static class FormatsCommand {
         );
 
         if (!check) {
-            IReadOnlyList<FormatEntry> before = [];
-            var earlierEngine = string.Empty;
-
-            if (File.Exists(path: path) && FormatVersionsLedger.TryParse(
-                engine: out var recordedEarlier,
-                entries: out var earlier,
-                error: out _,
-                json: File.ReadAllText(path: path)
-            )) {
-                before = earlier;
-                earlierEngine = recordedEarlier;
-            }
-
-            var refusals = FormatVersionsLedger.GrowthRefusals(current: current, engine: engine, recorded: before, recordedEngine: earlierEngine);
-
-            if (refusals.Count != 0) {
-                foreach (var refusal in refusals) { Console.Error.WriteLine(value: $"{Verb}: {refusal}"); }
-
-                return CliExit.Failed;
-            }
-            if (!string.Equals(a: earlierEngine, b: engine, comparisonType: StringComparison.Ordinal)) {
-                var grown = FormatVersionsLedger.Refusals(current: current, recorded: before).Count;
-
-                Console.WriteLine(value: $"{Verb}: the closure engine changed ({((earlierEngine.Length == 0) ? "unrecorded" : earlierEngine)} -> {engine}); recording the {grown} open call(s) it newly sees.");
-            }
-
             var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
             File.WriteAllText(
-                contents: FormatVersionsLedger.Render(engine: engine, entries: current),
+                contents: FormatVersionsLedger.Render(entries: current),
                 encoding: utf8,
                 path: path
             );
@@ -260,7 +233,6 @@ internal static class FormatsCommand {
         var text = File.ReadAllText(path: path);
 
         if (!FormatVersionsLedger.TryParse(
-            engine: out var recordedEngine,
             entries: out var recorded,
             error: out var error,
             json: text
@@ -274,9 +246,7 @@ internal static class FormatsCommand {
 
         var problems = FormatVersionsLedger.Check(
             current: current,
-            engine: engine,
             recorded: recorded,
-            recordedEngine: recordedEngine,
             recordedText: text
         ).Concat(second: FormatShapesFiles.Check(
             existing: existing,
@@ -327,7 +297,7 @@ internal static class FormatsCommand {
             syntax of its closure: every unit of the declaring file, its partial siblings and each
             unit naming the token, the enums and constants they read, the types they name one
             level deep, and the members they call that are marked [FormatLeaf]. A call into any
-            other repository member is open: it is recorded in the entry, a new one is refused,
+            other repository member is open: it is recorded in the entry, and the check reports drift,
             and [FormatSeam("its behaviour sets no byte because ...")] declares one outside the
             wire. Two branches that bump one format to the same new token still conflict on the
             digest line. Formatting, comments and local renames preserve the digest. Operator

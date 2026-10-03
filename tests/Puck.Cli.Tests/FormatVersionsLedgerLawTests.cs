@@ -27,7 +27,7 @@ public sealed class FormatVersionsLedgerLawTests {
         [PartialPath] = $$"""
             namespace Puck.Demo;
             public static partial class DemoCodec {
-                public static int Encode() { {{body}} }
+                public static int Encode(byte[] bytes) { {{body}} }
             }
             """,
         ["src/Puck.Demo.Post/Stage.cs"] = """
@@ -282,7 +282,6 @@ public sealed class FormatVersionsLedgerLawTests {
 
         Assert.True(
             condition: FormatVersionsLedger.TryParse(
-                engine: out var recordedEngine,
                 entries: out var recorded,
                 error: out var error,
                 json: text
@@ -291,12 +290,9 @@ public sealed class FormatVersionsLedgerLawTests {
         );
         Assert.Empty(collection: FormatVersionsLedger.Check(
             current: current,
-            engine: FormatVersionsLedger.EngineOf(files: Shipped.Value.Sources),
             recorded: recorded,
-            recordedEngine: recordedEngine,
             recordedText: text
         ));
-        Assert.NotEqual(actual: recordedEngine, expected: FormatVersionsLedger.NoEngine);
 
         foreach (var id in new[] { "SdfBaker.Version", "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldFederationCodec.WireKey", "WorldProtocol.WireProtocolKey", "PeerWireProtocol.ProtocolKey", "WorldReplaySnapshot.ShapeToken", "LocalEndpointCapability.Revision", "RatchetLedger.Format" }) {
             Assert.Contains(
@@ -572,24 +568,27 @@ public sealed class FormatVersionsLedgerLawTests {
         Assert.Equal(expected: ShapeOf(sources: sources), actual: ShapeOf(sources: edited));
     }
     [Fact]
-    public void AnUnmarkedCallIsOpenNotCoveredAndRefusedUntilRecorded() {
+    public void AnUnmarkedCallIsOpenNotCoveredAndDriftUntilRecorded() {
         var sources = Boundary();
         var entry = Entry(entries: FormatVersionsLedger.Discover(files: sources), id: "Wire.FormatVersion");
 
         Assert.Equal(expected: ["M:Puck.Demo.Helper.Normalize"], actual: entry.Open);
         Assert.Equal(expected: entry.Shape, actual: ShapeOf(sources: Boundary(unmarked: "return 2;")));
 
-        var refusals = FormatVersionsLedger.Refusals(current: [entry], recorded: []);
+        var unrecorded = entry with { Open = [] };
+        var problems = FormatVersionsLedger.Check(current: [entry], recorded: [unrecorded], recordedText: FormatVersionsLedger.Render(entries: [unrecorded]));
 
-        Assert.Single(collection: refusals);
-        Assert.Contains(actualString: refusals[0], expectedSubstring: "M:Puck.Demo.Helper.Normalize");
-        Assert.Contains(actualString: refusals[0], expectedSubstring: "[FormatLeaf]");
-        Assert.Empty(collection: FormatVersionsLedger.Refusals(current: [entry], recorded: [entry]));
+        Assert.Single(collection: problems);
+        Assert.StartsWith(expectedStartString: "open: 'Wire.FormatVersion'", actualString: problems[0]);
+        Assert.Contains(actualString: problems[0], expectedSubstring: "M:Puck.Demo.Helper.Normalize");
+        Assert.Contains(actualString: problems[0], expectedSubstring: "[FormatLeaf]");
+        Assert.DoesNotContain(actualString: problems[0], expectedSubstring: "refused");
+        Assert.Empty(collection: FormatVersionsLedger.Check(current: [entry], recorded: [entry], recordedText: FormatVersionsLedger.Render(entries: [entry])));
 
-        var tighter = entry with { Open = [] };
-        var problems = FormatVersionsLedger.Check(current: [tighter], recorded: [entry], recordedText: FormatVersionsLedger.Render(entries: [entry]));
+        var tighter = FormatVersionsLedger.Check(current: [unrecorded], recorded: [entry], recordedText: FormatVersionsLedger.Render(entries: [entry]));
 
-        Assert.Contains(collection: problems, filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "stale: 'Wire.FormatVersion' no longer calls M:Puck.Demo.Helper.Normalize"));
+        Assert.Single(collection: tighter);
+        Assert.Contains(actualString: tighter[0], expectedSubstring: "no longer reaches 1 it records (M:Puck.Demo.Helper.Normalize)");
     }
     [Fact]
     public void AMarkedCalleeIsCoveredNotOpenAndASeamIsNeitherAndNeedsAReason() {
@@ -705,7 +704,7 @@ public sealed class FormatVersionsLedgerLawTests {
     [Theory]
     public void ADispatchThroughABodylessPropertyIsCoveredWhenMarkedAndOpenWhenNot(string mark) {
         var sources = Codec(
-            wire: "public static int Read(Slot slot) => slot.Width;",
+            wire: "public static int Read(byte[] bytes, Slot slot) => slot.Width;",
             ("Slot.cs", $"{mark} public abstract class Slot {{ public abstract int Width {{ get; }} }}"),
             ("Impl.cs", "public sealed class Impl : Slot { public override int Width => 1; }")
         );
@@ -733,7 +732,7 @@ public sealed class FormatVersionsLedgerLawTests {
     [Fact]
     public void AConstantChainBehindACastEnumMovesTheShapeWhereverItEnds() {
         var sources = Codec(
-            wire: "public static byte Write(Tag tag) => (byte)tag;",
+            wire: "public static byte Write(byte[] bytes, Tag tag) => (byte)tag;",
             ("Tag.cs", "public enum Tag : byte { Record = Sizes.Record }"),
             ("Sizes.cs", "public static class Sizes { public const int Record = Limits.Record; }"),
             ("Limits.cs", "public static class Limits { public const int Record = 1; }")
@@ -746,7 +745,7 @@ public sealed class FormatVersionsLedgerLawTests {
     [Theory]
     public void ADelegateAStaticInitializerBindsIsCoveredWhenMarkedAndOpenWhenNot(string mark) {
         var sources = Codec(
-            wire: "public static int Read() => Widths.Width();",
+            wire: "public static int Read(byte[] bytes) => Widths.Width();",
             ("Widths.cs", "public static class Widths { public static readonly System.Func<int> Width = Helpers.Width; }"),
             ("Helpers.cs", $"{mark} public static class Helpers {{ public static int Width() => 1; }}")
         );
@@ -783,57 +782,43 @@ public sealed class FormatVersionsLedgerLawTests {
     [Fact]
     public void AForeachOverAnUnmarkedCollectionLeavesItsEnumeratorOpen() {
         var sources = Codec(
-            wire: "public static int Sum(Bytes bytes) { var total = 0; foreach (var value in bytes) { total += value; } return total; }",
+            wire: "public static int Sum(byte[] raw, Bytes bytes) { var total = 0; foreach (var value in bytes) { total += value; } return total; }",
             ("Bytes.cs", "public sealed class Bytes { public Enumerator GetEnumerator() => new(); public struct Enumerator { public bool MoveNext() => false; public int Current => 0; } }")
         );
 
         Assert.Contains(collection: Format(sources: sources).Open, filter: static call => call.StartsWith(comparisonType: StringComparison.Ordinal, value: "M:Puck.Demo.Bytes.Enumerator.MoveNext"));
     }
     [Fact]
-    public void OpenGrowthWithTheEngineUnchangedRefusesAndWithTheEngineChangedRecords() {
-        var entry = Format(sources: Boundary());
-        var recorded = entry with { Open = [] };
-        var oldEngine = "1111111111111111";
-        var newEngine = "2222222222222222";
+    public void ACodecFilesEngineDrivingMembersAreNeitherItsShapeNorOpenUntilAnEncodingMemberCallsThem() {
+        var sources = Codec(
+            wire: """
+                public static int Encode(byte[] bytes) => Helper(bytes.Length);
+                private static int Helper(int length) => (length + 1);
+                public static void Apply(Engine engine) { engine.Advance(); }
+                """,
+            ("Engine.cs", "public sealed class Engine { public void Advance() { } }")
+        );
+        var entry = Format(sources: sources);
 
-        var refusals = FormatVersionsLedger.GrowthRefusals(current: [entry], engine: oldEngine, recorded: [recorded], recordedEngine: oldEngine);
-
-        Assert.Single(collection: refusals);
-        Assert.Contains(actualString: refusals[0], expectedSubstring: "M:Puck.Demo.Helper.Normalize");
-        Assert.Empty(collection: FormatVersionsLedger.GrowthRefusals(current: [entry], engine: newEngine, recorded: [recorded], recordedEngine: oldEngine));
-
-        var text = FormatVersionsLedger.Render(engine: oldEngine, entries: [recorded]);
-        var unchanged = FormatVersionsLedger.Check(current: [entry], engine: oldEngine, recorded: [recorded], recordedEngine: oldEngine, recordedText: text);
-        var changed = FormatVersionsLedger.Check(current: [entry], engine: newEngine, recorded: [recorded], recordedEngine: oldEngine, recordedText: text);
-
-        Assert.Contains(collection: unchanged, filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "refused:"));
-        Assert.DoesNotContain(collection: changed, filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "refused:"));
-        Assert.Contains(collection: changed, filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "stale: the closure engine is now 2222222222222222 and the ledger records 1111111111111111"));
+        Assert.Empty(collection: entry.Open);
+        // The same-file helper an encoding member calls is the codec's shape.
+        Assert.NotEqual(expected: entry.Shape, actual: Format(sources: Edited(from: "(length + 1)", path: "Wire.cs", sources: sources, to: "(length + 2)")).Shape);
+        // The member that only drives the engine is neither covered nor open.
+        Assert.Equal(expected: entry.Shape, actual: Format(sources: Edited(from: "engine.Advance();", path: "Wire.cs", sources: sources, to: "engine.Advance(); engine.Advance();")).Shape);
     }
     [Fact]
-    public void TheEngineFingerprintMovesWithTheEnginesCodeAndNotWithItsCommentsOrFormatting() {
-        const string Engine = "namespace Puck.Cli.Formats; internal sealed class FormatShapeClosure { public int Reach() { return 1; } }";
-        var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal) { [FormatVersionsLedger.EngineSource] = Engine };
-        var baseline = FormatVersionsLedger.EngineOf(files: files);
-
-        Assert.NotEqual(actual: baseline, expected: FormatVersionsLedger.NoEngine);
-        Assert.Equal(expected: FormatVersionsLedger.NoEngine, actual: FormatVersionsLedger.EngineOf(files: new Dictionary<string, string>(comparer: StringComparer.Ordinal)));
-
-        files[FormatVersionsLedger.EngineSource] = ("// a note\n" + Engine.Replace(newValue: "{ return 1; }", oldValue: "{\n    return 1; /* one */\n}"));
-        Assert.Equal(expected: baseline, actual: FormatVersionsLedger.EngineOf(files: files));
-
-        files[FormatVersionsLedger.EngineSource] = Engine.Replace(newValue: "return 2;", oldValue: "return 1;");
-        Assert.NotEqual(expected: baseline, actual: FormatVersionsLedger.EngineOf(files: files));
-    }
-    [Fact]
-    public void TheLedgerRecordsItsEngineAndRoundTripsIt() {
+    public void ADuplicateKeyLedgerIsRefusedAndTheWriterNeverWritesOne() {
         var entries = FormatVersionsLedger.Discover(files: Boundary());
-        var text = FormatVersionsLedger.Render(engine: "abcdef0123456789", entries: entries);
+        var text = FormatVersionsLedger.Render(entries: entries);
+        var open = "            \"open\": [\n                \"M:Puck.Demo.Helper.Normalize\"\n            ],\n";
 
-        Assert.Contains(actualString: text, expectedSubstring: "\"engine\": \"abcdef0123456789\",");
-        Assert.True(condition: FormatVersionsLedger.TryParse(engine: out var engine, entries: out var parsed, error: out var error, json: text), userMessage: error);
-        Assert.Equal(actual: engine, expected: "abcdef0123456789");
-        Assert.Equal(expected: text, actual: FormatVersionsLedger.Render(engine: engine, entries: parsed));
-        Assert.False(condition: FormatVersionsLedger.TryParse(entries: out _, error: out _, json: text.Replace(newValue: string.Empty, oldValue: "    \"engine\": \"abcdef0123456789\",\n")));
+        Assert.Equal(expected: 1, actual: (text.Split(separator: "\"open\"").Length - 1));
+        Assert.True(condition: FormatVersionsLedger.TryParse(entries: out _, error: out var error, json: text), userMessage: error);
+
+        var doubled = text.Replace(newValue: (open + open), oldValue: open);
+
+        Assert.NotEqual(actual: doubled, expected: text);
+        Assert.False(condition: FormatVersionsLedger.TryParse(entries: out _, error: out var refusal, json: doubled));
+        Assert.Contains(actualString: refusal, comparisonType: StringComparison.OrdinalIgnoreCase, expectedSubstring: "open");
     }
 }

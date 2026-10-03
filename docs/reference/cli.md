@@ -3071,9 +3071,12 @@ needs its member added to the recognized names in `FormatVersionsLedger`, which 
 An entry holds its id (`Type.Member`), the file declaring it, its token, a `shape` digest and, when the format's boundary
 has open calls, an `open` list, each on a line of its own. The digest covers canonical syntax of the format's *closure*,
 computed with the Roslyn semantic model over units: a type's layout (header and data members: fields, constants, enum
-members, auto-properties, static constructors) and each code member on its own. The roots are every unit of the
-declaring file and its partial siblings (`Stem.cs` and `Stem.*.cs` beside it) and each unit anywhere that names the
-token. A unit covers:
+members, auto-properties, static constructors) and each code member on its own. The roots are where encoding is: the
+layouts of the declaring file and its partial siblings (`Stem.cs` and `Stem.*.cs` beside it), those files' members that
+touch bytes (a byte buffer, stream or binary reader or writer, a `u8` literal, a `[FormatLeaf]` member), and each unit
+anywhere that names the token. The rest of those files is neighbouring code: a method that drives the engine from decoded
+data is not the format's shape and is not open, and a helper an encoding member calls joins the closure through that
+call. A unit covers:
 
 - every enum it names, whole, and every constant it reads, so a reordered or renumbered enum a codec casts moves the
   digest;
@@ -3094,13 +3097,9 @@ A closure over every call reaches the whole engine (a world codec's would hold t
 explicit. A call into any other repository member is *open*: the shape cannot see what it does. A member that is not part
 of any wire is marked `[FormatSeam("its behaviour sets no byte because …")]`, which is not followed and not open, and
 `puck formats` refuses a seam with an empty reason. Prefer moving the call out of the codec (decode to data, apply
-outside) to marking it. `puck formats` records each format's open calls in the ledger and refuses a call that is not
-already recorded, so the boundary only tightens, with one sanctioned exception: the ledger records the closure engine's
-fingerprint (`engine`, the trivia-free tokens of `FormatShapeClosure.cs` and the Roslyn version), and `puck formats` records
-new open calls only when that fingerprint has changed, naming the change, because a deliberate widening of reach finds calls
-no codec author added. The same engine finding more is a codec that grew an uncovered call and is refused, and no option
-skips this. `--check` reports a call that has left the list as `stale` until the ledger is re-recorded, and a changed
-engine as `stale` until `puck formats` records under it. `puck formats --explain <id>`
+outside) to marking it. `puck formats` records each format's open calls in the ledger, so a call that joins or leaves
+the list is a reviewable ledger diff, and `--check` reports the difference as `open` drift until the ledger is
+re-recorded. `puck formats --explain <id>`
 prints the units a format covers, by file, and the calls it leaves open. Platform and package members are outside the
 repository and outside the digest.
 
