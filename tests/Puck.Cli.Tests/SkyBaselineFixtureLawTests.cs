@@ -46,7 +46,7 @@ public sealed class SkyBaselineFixtureLawTests {
 
         if (name == "sky-cycle") {
             using var courtyard = JsonDocument.Parse(utf8Json: ShippedWorldDocuments.Read(path: PathOf(path: "src/Puck.World/Assets/worlds/moth-courtyard.puck")));
-            using var fixture = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: PathOf(path: "tests/Puck.World.Canaries/sky-cycle/fixture.world.json")));
+            using var fixture = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: PathOf(path: "tests/Puck.World.Canaries/sky-cycle/fixture.puck")));
 
             Assert.True(condition: JsonElement.DeepEquals(
                 element1: courtyard.RootElement.GetProperty(propertyName: "render"),
