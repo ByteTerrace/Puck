@@ -106,7 +106,12 @@ internal sealed class LawProofTree(string tree, string source, FileStream lease)
         return ((up.ExitCode == 0) && (up.Stdout.Trim().Length == 0));
     }
     private bool Refresh(string repository, string head, Func<string, string[], ChildProcessResult> git, out string reason) {
+        // A proof stages its mirrored and withheld state in this clone's index (a three-way reverse writes the index),
+        // and restoring the fix rewrites only the working files. Reset the index to the clone's own HEAD first, working
+        // files untouched, so the checkout below rewrites only files whose content differs; a stale index would make it
+        // rewrite unchanged files and recompile everything built from them.
         foreach (var arguments in new string[][] {
+            ["reset", "--quiet"],
             ["fetch", "--quiet", "--no-tags", "--no-auto-maintenance", "--", repository, head],
             ["checkout", "--detach", "--force", head],
             ["clean", "-f", "-d"],

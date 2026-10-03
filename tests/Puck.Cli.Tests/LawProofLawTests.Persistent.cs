@@ -306,4 +306,33 @@ public sealed partial class LawProofLawTests {
         ), userMessage: secondReason);
         Assert.True(condition: File.Exists(path: marker), userMessage: "the clone was rebuilt instead of reused");
     }
+    [Fact]
+    public void AProofLeavesTheCloneIndexAtItsHeadSoTheNextProofRewritesNothingUnchanged() {
+        using var checkout = Checkout(initial: "broken");
+        using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+
+        // One fix commit changes two sources; the first proof withholds both through a three-way reverse.
+        checkout.Write(name: FixPath, text: "fixed");
+        checkout.Write(name: "src/Lib/Other.cs", text: "other, fixed\n");
+        var fix = checkout.Commit(message: "lib: fix both");
+        var firstRunner = new FakeRunner();
+        var first = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: fix), runner: firstRunner, scratch: scratch);
+
+        Assert.True(condition: (first.ExitCode == CliExit.Success), userMessage: first.Error);
+
+        // Mark the restored file, then prove again withholding only the fix file: the other file's content is
+        // unchanged, so nothing may rewrite it (a rewrite gives it a fresh time, and everything built from it recompiles).
+        var other = Path.Combine(path1: firstRunner.Builds[0], path2: "src/Lib/Other.cs");
+        var marked = new DateTime(day: 1, hour: 0, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2001);
+
+        var content = File.ReadAllText(path: other);
+
+        File.SetLastWriteTimeUtc(lastWriteTimeUtc: marked, path: other);
+
+        var second = Prove(checkout: checkout, fix: new LawFix(Paths: [FixPath], Revision: fix), runner: new FakeRunner(), scratch: scratch);
+
+        Assert.True(condition: (second.ExitCode == CliExit.Success), userMessage: second.Error);
+        Assert.Equal(actual: File.ReadAllText(path: other), expected: content);
+        Assert.Equal(actual: File.GetLastWriteTimeUtc(path: other), expected: marked);
+    }
 }
