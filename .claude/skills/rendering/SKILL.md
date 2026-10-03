@@ -921,8 +921,10 @@ These are one-line cautions; the owning pages hold the derivations.
   bytes unchanged. `SdfWorldTables.PoseRevision` moves only on an upload that
   changes a pose, and `PreviousPoseRevision` names the poses the previous tables
   advanced from; `SdfTemporalHistory` continues an instance's history only
-  while they are the poses its preceding render held, and retains its preceding
-  completed camera even when temporal sampling is off; resets invalidate it.
+  while they are the poses its preceding completed render held (a render whose
+  submission failed commits no poses, though its tables uploaded), and retains
+  its preceding completed camera even when temporal sampling is off; resets
+  invalidate it.
   `frame/sdf-reprojection.hlsli` is the one visibility reprojection
   implementation, shared by motion diagnostics and reconstruction.
 - **Device identity is recorded, never branched on.** Each backend fills
