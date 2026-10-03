@@ -155,6 +155,14 @@ public sealed partial class WorldReplayTape {
 
     /// <summary>Gets the tape's current mode.</summary>
     public WorldReplayMode Mode => m_mode;
+
+    // Every mode change goes through here, so the catalog this tape reads knows while a recording is under way.
+    private void SetMode(WorldReplayMode mode) {
+        if ((m_mode == WorldReplayMode.Recording) != (mode == WorldReplayMode.Recording)) {
+            m_profiles.NoteRecording(recording: (mode == WorldReplayMode.Recording));
+        }
+        m_mode = mode;
+    }
     /// <summary>Gets the name the active recording will persist under.</summary>
     public string? Name => m_recordName;
     /// <summary>Gets the ticks captured so far in the active recording.</summary>
@@ -207,7 +215,7 @@ public sealed partial class WorldReplayTape {
     // state, back to Idle. m_mode always ends at Idle here — leaving it at Recording with no live recording behind
     // it is the zombie state this method exists to prevent.
     private void ResetRecordingState() {
-        m_mode = WorldReplayMode.Idle;
+        SetMode(mode: WorldReplayMode.Idle);
         m_recordName = null;
         m_definitionJson = null;
         m_forkedFrom = null;
@@ -628,8 +636,10 @@ public sealed partial class WorldReplayTape {
             return false;
         }
 
-        if ((m_liveServer.Definition.Machines.Count != 0) && (m_liveServer.NextInputTick > 1UL)) {
-            refusal = "a world with named machines has already stepped — even a paused machine synchronizes memory bindings, while replay starts with fresh hardware and an empty binding memo; record before the world's first tick";
+        // A tape re-establishes the definition and the seats, never state a step reached: bodies moved, rule-written
+        // cells, a named machine's synchronized bindings. A world that has stepped cannot be re-driven from them.
+        if (m_liveServer.NextInputTick > 1UL) {
+            refusal = $"{nameof(ReplayRefusal.ArmedAfterFirstStep)}: the world has already stepped, and a tape re-establishes only the definition and the seats, never the state a step reached (bodies moved, cells written, a named machine's synchronized bindings), so its re-drive would start from another state; record before the world's first tick";
             return false;
         }
 
@@ -661,7 +671,7 @@ public sealed partial class WorldReplayTape {
             m_recordPrefix.Add(item: new WorldReplayEntry.SessionEvent(Value: serverEvent));
         }
 
-        m_mode = WorldReplayMode.Recording;
+        SetMode(mode: WorldReplayMode.Recording);
         RefreshCapture();
 
         return true;

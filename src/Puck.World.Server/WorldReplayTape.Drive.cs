@@ -157,7 +157,7 @@ public sealed partial class WorldReplayTape {
             !completed ||
             (drive.ForkName is not { } forkName)
         ) {
-            m_mode = WorldReplayMode.Idle;
+            SetMode(mode: WorldReplayMode.Idle);
             RefreshCapture();
 
             return;
@@ -199,7 +199,7 @@ public sealed partial class WorldReplayTape {
             }
         }
 
-        m_mode = WorldReplayMode.Recording;
+        SetMode(mode: WorldReplayMode.Recording);
         RefreshCapture();
         if (m_liveServer.Output.HasNarrationSink) {
             m_liveServer.Output.Narrate(
@@ -547,7 +547,7 @@ public sealed partial class WorldReplayTape {
             Target = target,
         };
         m_transport.InputMasked = true;
-        m_mode = WorldReplayMode.Replaying;
+        SetMode(mode: WorldReplayMode.Replaying);
         RefreshCapture();
         TimelineRestored?.Invoke();
         refusal = "";

@@ -65,7 +65,7 @@ public sealed partial class MachineBindingCheckpointLawTests {
         harness.StepWithoutInput();
         Assert.Equal(expected: FirstValue, actual: server.Definition.State[0].Cells![0].Value.AsInt);
         Assert.False(condition: harness.Tape.TryBeginRecording(name: "observed", refusal: out refusal));
-        Assert.Contains(actualString: refusal, expectedSubstring: "binding memo");
+        Assert.StartsWith(expectedStartString: "ArmedAfterFirstStep:", actualString: refusal, comparisonType: StringComparison.Ordinal);
 
         harness.Submit(mutation: new WorldMutation.UpsertMachine(
             Principal: Principal.Console,
@@ -74,6 +74,6 @@ public sealed partial class MachineBindingCheckpointLawTests {
         harness.StepWithoutInput();
         Assert.Null(@object: server.MachineBindingState(binding: "send", machine: Machine));
         Assert.False(condition: harness.Tape.TryBeginRecording(name: "removed", refusal: out refusal));
-        Assert.Contains(actualString: refusal, expectedSubstring: "binding memo");
+        Assert.StartsWith(expectedStartString: "ArmedAfterFirstStep:", actualString: refusal, comparisonType: StringComparison.Ordinal);
     }
 }

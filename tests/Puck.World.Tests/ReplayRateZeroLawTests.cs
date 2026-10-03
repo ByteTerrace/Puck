@@ -519,19 +519,19 @@ public sealed class ReplayStopFailureLawTests {
             condition: (thrown is IOException or UnauthorizedAccessException),
             userMessage: $"expected a write failure (IOException/UnauthorizedAccessException), got: {thrown}"
         );
-        // Idle alone could be a flipped flag; arming a fresh recording proves the taps were detached.
+        // Idle alone could be a flipped flag; the server's taps and the catalog's recording mark show it detached.
         Assert.Equal(
             expected: WorldReplayMode.Idle,
             actual: tape.Mode
         );
-        Assert.True(
-            condition: tape.TryBeginRecording(
-                name: $"{name}-retry",
-                refusal: out var retryRefusal
-            ),
-            userMessage: $"tape stayed stuck after the write failure: {retryRefusal}"
-        );
-
-        tape.CancelRecording();
+        Assert.Null(@object: fixture.Server.MutationTap);
+        Assert.Null(@object: fixture.Server.MutationOutcomeTap);
+        Assert.Null(@object: fixture.Server.RebuildTap);
+        Assert.Null(@object: fixture.Server.ArrivalTap);
+        Assert.Null(@object: fixture.Server.DepartureTap);
+        Assert.False(condition: fixture.Server.Profiles.Recording);
+        // A re-arm now meets the stepped world's refusal, never "already recording".
+        Assert.False(condition: tape.TryBeginRecording(name: $"{name}-retry", refusal: out var retryRefusal));
+        Assert.StartsWith(expectedStartString: "ArmedAfterFirstStep:", actualString: retryRefusal, comparisonType: StringComparison.Ordinal);
     }
 }

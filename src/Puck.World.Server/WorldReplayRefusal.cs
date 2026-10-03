@@ -9,6 +9,11 @@ namespace Puck.World;
 /// seat slot) stay bare <see cref="InvalidDataException"/>s outside this catalog — see
 /// <see cref="ReplayRefusalExtensions"/>'s remarks for why this door's v1 scope stops here.</summary>
 internal enum ReplayRefusal {
+    /// <summary>A recording was armed after the world's first step. A tape re-establishes the definition and the seats,
+    /// never the state a step reached, so its re-drive could not start where the recording did.</summary>
+    [Refusal(door: "replay.record", condition: "the world has already stepped when a recording is armed", kind: RefusalKind.Verdict)]
+    ArmedAfterFirstStep,
+
     /// <summary>The leading magic or shape token does not match this build's pinned <c>.puckreplay</c> shape.</summary>
     [Refusal(door: "replay.tape", condition: "the leading magic or shape token does not match this build's pinned .puckreplay shape", kind: RefusalKind.ProtocolFault)]
     ShapeMismatch,

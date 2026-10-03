@@ -207,7 +207,10 @@ public sealed partial class WorldTransferEscrow {
     private WorldArrivalOutcome? m_relandOutcome;
     private bool m_relandRolledBack;
 
-    private readonly Dictionary<string, WorldIdentity> m_detachedHomeProfiles = new(comparer: StringComparer.Ordinal);
+    // A re-drive's one detached identity per owned id. Live, an id names one owned object, so every seat a recorded
+    // switch or home adoption binds under it shares that object; the re-drive binds them to one detached identity the
+    // same way, for the whole re-drive. Only Restore clears it.
+    private readonly Dictionary<string, WorldIdentity> m_detachedIdentities = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Initializes a new instance of the <see cref="WorldTransferEscrow"/> class for one authority.</summary>
     /// <param name="server">The authority the escrow lands travelers in.</param>
@@ -295,7 +298,7 @@ public sealed partial class WorldTransferEscrow {
         m_mobilityLeases.Clear();
         m_mobilityAdmissions.Clear();
         m_borderAdmissions.Clear();
-        m_detachedHomeProfiles.Clear();
+        m_detachedIdentities.Clear();
         m_crossingSequence = checkpoint.CrossingSequence;
 
         // Commit's own "definition moved after reservation" guard is a REFERENCE check against the live
@@ -993,6 +996,34 @@ public sealed partial class WorldTransferEscrow {
 
         return reply;
     }
+    /// <summary>Binds a re-drive's taped identity to the one detached identity its id names: built from the first
+    /// projection taped under the id, and adopting each later one, so every seat a recorded switch or home adoption
+    /// binds under one id shares it, as the live seats shared the one owned object.</summary>
+    /// <param name="taped">The projection the tape recorded for the binding.</param>
+    /// <param name="detached">The detached identity to bind.</param>
+    /// <param name="reason">Why the detached identity refused the taped projection, or empty.</param>
+    /// <returns><see langword="true"/> when the projection is bound.</returns>
+    internal bool TryBindDetached(in WorldIdentityProjection taped, out WorldIdentity detached, out string reason) {
+        var carried = WorldIdentity.FromProjection(
+            defaults: m_server.Definition.PlayerDefaults,
+            projection: in taped
+        );
+
+        if (!m_detachedIdentities.TryGetValue(
+            key: taped.Id,
+            value: out detached!
+        )) {
+            detached = carried;
+            m_detachedIdentities.Add(
+                key: taped.Id,
+                value: detached
+            );
+            reason = string.Empty;
+            return true;
+        }
+
+        return detached.TryAdopt(carried: carried, reason: out reason);
+    }
     // The identity traveler `index` lands as: the projection its commit carried, or its reservation's when the commit
     // carries none, rebuilt against this world's player defaults. Nothing of the owned document behind it ever arrives.
     // Home adoption waits until every landing succeeds and the arrival is durable.
@@ -1034,28 +1065,14 @@ public sealed partial class WorldTransferEscrow {
                     continue;
                 }
 
-                var adoptedProfile = WorldIdentity.FromProjection(
-                    defaults: m_server.Definition.PlayerDefaults,
-                    projection: in taped
-                );
-
-                if (!m_detachedHomeProfiles.TryGetValue(
-                    key: taped.Id,
-                    value: out var detached
-                )) {
-                    detached = adoptedProfile;
-                    m_detachedHomeProfiles.Add(
-                        key: taped.Id,
-                        value: detached
-                    );
-                } else if (!detached.TryAdopt(carried: adoptedProfile, reason: out var adoptionReason)) {
+                if (!TryBindDetached(detached: out var detached, reason: out var adoptionReason, taped: in taped)) {
                     throw ReplayRefusal.ArrivalRefused.Raise(message: $"home identity '{taped.Id}' could not reproduce its recorded adoption — {adoptionReason}");
                 }
                 if (owned is not null) {
                     WorldReplaySnapshot.ReportAdoptionDrift(
                         current: owned,
                         narrationHub: m_server.Profiles.NarrationHub,
-                        taped: adoptedProfile,
+                        taped: WorldIdentity.FromProjection(defaults: m_server.Definition.PlayerDefaults, projection: in taped),
                         used: WorldReplaySnapshot.HomeArrivalTapedUsed
                     );
                 }

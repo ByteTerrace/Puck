@@ -208,12 +208,14 @@ public sealed class CrossingIdentityPrivacyLawTests {
     [Fact]
     public void AColocatedCrossingInstallsTheProjectionAndWritesNoPrivateBytesAtRest() {
         using var directory = new TemporaryDirectory(prefix: "puck-privacy-colocated-");
-        using var world = CrossingWorld.Build();
-        var tape = Tape(directory: directory.RootPath, server: world.Destination.Server);
+        WorldReplayTape? tape = null;
+        using var world = CrossingWorld.Build(beforeFirstStep: built => {
+            tape = Tape(directory: directory.RootPath, server: built.Destination.Server);
+            Assert.True(condition: tape.TryBeginRecording(name: "arrivals", refusal: out var refusal), userMessage: refusal);
+        });
         var owned = Owned();
 
         world.Source.Server.Population.SetSeatProfile(profile: owned, slot: 0);
-        Assert.True(condition: tape.TryBeginRecording(name: "arrivals", refusal: out var refusal), userMessage: refusal);
         _ = world.Cross();
 
         AssertArrivedAsProjection(arrived: ArrivedAt(id: OwnerId, server: world.Destination.Server), departed: owned);
@@ -221,7 +223,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         foreach (var entry in world.SourceLog.Encoded.Concat(second: world.DestinationLog.Encoded)) {
             AssertNoPrivateBytes(bytes: entry, what: "a crossing log");
         }
-        AssertNoPrivateBytes(bytes: StopTape(tape: tape), what: "the destination's arrival tape");
+        AssertNoPrivateBytes(bytes: StopTape(tape: tape!), what: "the destination's arrival tape");
         world.CheckpointDestination();
         AssertNoPrivateBytes(bytes: world.DestinationImage, what: "the destination's checkpoint");
     }
@@ -1030,8 +1032,15 @@ public sealed class CrossingIdentityPrivacyLawTests {
     // arrival leaves replay seat 0 at score 1 while live seat 0 reads 2, failing Primary.Match at that tick.
     [Fact]
     public void SeparateHomeArrivalsUnderOneIdentityReplayTheirSharedBinding() => ProveSharedHomeBinding(separateArrivals: true);
+    // Acceptance law 2's identity sequence: a pull of the owned identity, under the same id, between the two home
+    // arrivals. A tape never carries an owned document, so while the recording runs the pull refuses by name and
+    // changes nothing: both seats keep the one identity the catalog owns, and the re-drive binds them to one detached
+    // identity. Outside a recording the pull adopts in place (OwnedWorldPullLawTests). The red leg is a pull that
+    // proceeds: it changes the identity the tape cannot carry.
+    [Fact]
+    public void APullBetweenHomeArrivalsRefusesWhileRecordingAndKeepsTheOneSharedBinding() => ProveSharedHomeBinding(pullBetween: true, separateArrivals: true);
 
-    private static void ProveSharedHomeBinding(bool separateArrivals) {
+    private static void ProveSharedHomeBinding(bool separateArrivals, bool pullBetween = false) {
         const int LaneCapacity = 16;
         using var directory = new TemporaryDirectory(prefix: "puck-privacy-shared-");
         var definition = Fixtures.BuildDocument() with {
@@ -1103,6 +1112,14 @@ public sealed class CrossingIdentityPrivacyLawTests {
             if (separateArrivals) {
                 fixture.Step();
                 tape.NoteTick();
+            }
+            if (pullBetween && (arrival.TransferId == 1UL)) {
+                var pulled = owned.Document! with { Identity = owned.Document.Identity! with { Name = "Pulled" } };
+
+                Assert.False(condition: server.Profiles.ReplaceFromSync(document: pulled, reason: out var syncReason));
+                Assert.StartsWith(expectedStartString: nameof(WorldOwnedWorldSyncRefusal.PullWhileRecording), actualString: syncReason, comparisonType: StringComparison.Ordinal);
+                Assert.Same(expected: owned, actual: server.Profiles.FindById(id: owned.Id));
+                Assert.NotEqual(expected: "Pulled", actual: owned.Name);
             }
         }
         Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
@@ -1423,5 +1440,59 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.Equal(7L, Fact(identity: owned, key: "score"));
         _ = tape.StopRecording();
         Assert.Equal(-1, tape.Verify(name: "branch").Primary.DivergedAt);
+    }
+    // Acceptance law 2's identity sequence: a fork's seat switch, then a later home arrival under the same identity id.
+    // Seat 0 drives the owned identity; the owner arms it and the tape is driven to its end as a fork, which switches
+    // seat 0 to that live identity. A traveller then comes home to seat 1 under the same id. Live, both seats bind the
+    // one owned identity, so the score the fork's rule writes through seat 0 is what seat 1 reads. The fork's own
+    // recording, re-driven through a fresh world, must bind them to one identity too. The red leg binds a switch and a
+    // home adoption to separate detached identities: seat 1 never reads the score and the re-drive diverges.
+    [Fact]
+    public void AForkSeatSwitchAndALaterHomeArrivalUnderOneIdentityShareIt() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-fork-home-");
+        using var fixture = Fixtures.FreshServer(definition: SharedIdentityDocument());
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+        var (tape, owned) = RecordOwnedSeat(directory: directory.RootPath, fixture: fixture);
+
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "armed"), reason: out var reason, value: 1), userMessage: reason);
+        Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: "branch", name: "arrivals", refusal: out reason, toTick: null), userMessage: reason);
+
+        while (tape.Mode == WorldReplayMode.Replaying) {
+            tape.InjectDriveTick();
+            fixture.Step();
+            tape.NoteTick();
+        }
+
+        var address = new WorldEntityAddress(Authority: server.AuthorityIdentity, Generation: 1, Index: 1);
+        var request = new WorldTransferReservationRequest(
+            TransferId: 1, SourceAuthority: "away", SourceRateHz: 240, SourceTick: 0,
+            DeadlineSourceTick: 60, Border: "", BorderCapacity: null, PartyAllOrNothing: true,
+            PeerAdmission: false, Members: [new WorldTransferReservationMember(
+                Principal: Principal.Console, PreferredSlot: 1, Identity: owned.Project(),
+                Source: IntentSource.Live, BodyColor: owned.Color, CatalogRig: 0,
+                Mobility: new WorldMobilityIdentity(DepartedFrom: address, Epoch: 1, Incarnation: address)
+            )]
+        );
+
+        Assert.True(condition: server.ReserveTransfer(request: request).Accepted);
+        Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: request.SourceAuthority,
+            transferId: request.TransferId, reason: out _, members: [.. request.Members.Select(selector: static member => new WorldTransferCommitMember(
+                Profile: member.Identity, HasMappedArrival: false, BodyMotionProgramName: "", Position: default, YawRadians: default,
+                PlanarVelocity: default, VerticalVelocity: default))]));
+        for (var tick = 0; (tick < 4); tick++) {
+            fixture.Step();
+            tape.NoteTick();
+        }
+
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 1)!.Profile);
+        Assert.Equal(7L, Fact(identity: owned, key: "score"));
+        Assert.Equal(1L, SeenSlot(fixture: fixture));
+        _ = tape.StopRecording();
+
+        var verdict = tape.Verify(name: "branch");
+
+        Assert.True(condition: verdict.Primary.Match, userMessage: verdict.Primary.Describe());
     }
 }

@@ -231,7 +231,9 @@ internal sealed class CrossingWorld : IDisposable {
 
     /// <summary>Builds both authorities with durable logs, seats the traveler on the source, and takes each
     /// authority's durable checkpoint before any crossing.</summary>
-    public static CrossingWorld Build() {
+    /// <param name="beforeFirstStep">Runs once both authorities stand, before their first step: where a tape that
+    /// records them arms.</param>
+    public static CrossingWorld Build(Action<CrossingWorld>? beforeFirstStep = null) {
         var machineId = Guid.NewGuid();
         var root = new TemporaryDirectory(prefix: "puck-crossing-durability-");
         var host = NewHost(
@@ -278,6 +280,7 @@ internal sealed class CrossingWorld : IDisposable {
             sourceWriter: sourceWriter
         );
 
+        beforeFirstStep?.Invoke(obj: world);
         world.Step(ticks: 5);
         world.Traveler = source.Server.Population.ResolveIncarnation(
             authority: source.Server.AuthorityIdentity,

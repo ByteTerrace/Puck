@@ -22,8 +22,8 @@ only on those lanes, and each is marked.
 
 Law 1 is implemented, in `tests/Puck.World.Tests/ProjectionAnchorLawTests.Seek.cs`;
 law 2's local walked crossing in
-`tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`, without its federated,
-rollback and shared-identity variants;
+`tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs` and its identity
+sequences, without its federated, rollback and shared-identity variants;
 law 3's write, read and collision legs in
 `tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; and law 5 in
 `tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. The rest are not
@@ -216,15 +216,28 @@ crossing with a profiled traveller, through both tapes.
 **Lives in** `tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`.
 **GPU:** none.
 
-**As implemented.** The recording starts at the rows' first tick, because a tape
+**As implemented.** The recording starts at the rows' first tick: a tape
 re-establishes the document and the seats, never a pose or other state a row
-reached before it was armed. So row A's document authors seat 0's spawn a short
-walk in front of its door. The isolated reland is the companion tape's own
+reached before it was armed, so arming after the world's first step refuses by
+name (`ArmedAfterFirstStep`, `ReplayArmingLawTests`). Row A's document therefore
+authors seat 0's spawn a short walk in front of its door. The isolated reland is the companion tape's own
 re-drive: at every recorded tick the replayed destination is read through
 `DriveTraces`' tick observer and compared with the live destination, field for
 field. A reservation that mints the credential is not red on this walk, because
 its reservation and detach run in one drain; G3's own laws witness it
 (`CrossingTapeOrderLawTests.Reservation.cs`).
+
+Two identity sequences join the law in `CrossingIdentityPrivacyLawTests`, both
+on the rule that an id names one live object:
+
+- A pull of the owned identity between two home arrivals. Outside a recording a
+  pull replaces the identity in place, so bound seats follow it
+  (`OwnedWorldPullLawTests`). While a tape records, the pull refuses by name
+  (`PullWhileRecording`), because a tape never carries an owned document, and
+  both seats keep the one identity the re-drive binds them to.
+- A fork's seat switch, then a home arrival under the same id. Every switch and
+  home adoption a re-drive binds under one id shares the escrow's one detached
+  identity for it, as the live seats share the owned object.
 
 **The contract it proves:** the reservation reads the mobility credential
 without minting it, and only the departure's detach mints it, which the replay's

@@ -84,7 +84,8 @@ surface.
   `Read` refuses a mismatch loudly (`ReplayRefusal.ShapeMismatch`, naming
   found vs expected) — there is NO tolerant reader, no version negotiation,
   no legacy branch. That is the contract: never write one.
-- The declared `replay.tape` refusal catalog has twelve members: shape
+- `ReplayRefusal` declares fourteen members. Thirteen are the `replay.tape`
+  door's: shape
   mismatch, rate mismatch, three addon-receipt mismatches, rebuild content
   mismatch, rebuild source unavailable, a rate-zero tape carrying recorded
   ticks, a tampered transfer content signature, a recorded mutation
@@ -92,7 +93,11 @@ surface.
   recorded arrival the shadow's own escrow does not reproduce: its body indices,
   each traveler's generation, or its rollback (`ArrivalRefused`), and a
   recorded departure or its rollback the shadow's own population does not
-  reproduce (`DepartureRefused`).
+  reproduce (`DepartureRefused`), and a recorded seat switch naming no active
+  local seat (`SeatSwitchRefused`). The fourteenth is `replay.record`'s
+  `ArmedAfterFirstStep`: a tape re-establishes the definition and the seats,
+  never state a step reached, so a recording arms only before the world's first
+  step.
   `ScreenOpContentMismatch`
   is emitted by `WorldMachineHost` as a named screen-op refusal, not a
   `ReplayRefusal` enum member.
@@ -157,9 +162,10 @@ actor)` (6), `Session(request)` (7), `Designation(designation, actor)` (8),
 `Arrival(sourceAuthority, transferId, encoded, outcome)` (19),
 `FederatedIntents(held)` (20), `Departure(transferId, slot, restored)` (21), and
 `SeatIdentity(slot, projection)` (22: a fork's switch of a rebound seat to the live owned identity, applied at the head
-of the tick it is recorded on). Entries of one tick naming the same identity id bind one
-shared detached identity, as the live rebind gave those seats the catalog's one object, and a slot the re-drive's population
-holds no active local seat at refuses by name (`SeatSwitchRefused`) when applied.
+of the tick it is recorded on). Every switch and every home adoption a re-drive binds under one identity id binds the
+escrow's one detached identity for that id (`WorldTransferEscrow.TryBindDetached`), for the whole re-drive and cleared
+only by a restore, as the live seats shared the catalog's one object; a slot the re-drive's population holds no active
+local seat at refuses by name (`SeatSwitchRefused`) when applied.
 `Departure` is one source body a crossing detached, or restored in a rollback,
 taped by `WorldServer.DepartureTap` inside the authority operation that did it,
 so it keeps the decision's own position however long the crossing then stays in
