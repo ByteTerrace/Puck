@@ -156,7 +156,9 @@ actor)` (6), `Session(request)` (7), `Designation(designation, actor)` (8),
 `Arrival(sourceAuthority, transferId, encoded, outcome)` (19),
 `FederatedIntents(held)` (20), `Departure(transferId, slot, restored)` (21), and
 `SeatIdentity(slot, projection)` (22: a fork's switch of a rebound seat to the live owned identity, applied at the head
-of the tick it is recorded on).
+of the tick it is recorded on). Entries of one tick naming the same identity id bind one
+shared detached identity, as the live rebind gave those seats the catalog's one object, and a slot the re-drive's population
+holds no active local seat at refuses by name (`SeatSwitchRefused`) when applied.
 `Departure` is one source body a crossing detached, or restored in a rollback,
 taped by `WorldServer.DepartureTap` inside the authority operation that did it,
 so it keeps the decision's own position however long the crossing then stays in

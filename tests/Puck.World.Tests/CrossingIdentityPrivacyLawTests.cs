@@ -1189,4 +1189,72 @@ public sealed class CrossingIdentityPrivacyLawTests {
         cells: WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "seen")!.Cells,
         key: WorldStateRow.SlotKey
     )!.Value.AsInt;
+    // Two seats driving the one owned identity, a rule writing seat 0's fact when its `armed` fact is 1, and a rule that
+    // reads seat 1's fact the write produced.
+    private static WorldDefinition SharedIdentityDocument() => Fixtures.BuildDocument() with {
+        StateRaw = new WorldStateSection(World: [
+            new WorldStateRow(Name: Name(value: WorldIdentityFactLane.RowName), Kind: CellKind.Int, Capacity: 16),
+            new WorldStateRow(Name: Name(value: "seen"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 0L))]),
+        ]),
+        Rules = [
+            new WorldRule(
+                Name: Name(value: "write"),
+                Effects: [new WorldEffect.SetIdentityFact(Key: "0", Fact: "score", Value: 7m)],
+                Gate: new ActionPredicate.CompareState(State: $"{WorldRuleFacts.IdentityPrefix}body:0:armed", Comparison: ExpressionOp.Equal, Value: 1m)
+            ),
+            new WorldRule(
+                Name: Name(value: "read"),
+                Effects: [new ActionEffect.SetState(State: "seen", Value: 1m)],
+                Gate: new ActionPredicate.CompareState(State: $"{WorldRuleFacts.IdentityPrefix}body:1:score", Comparison: ExpressionOp.Equal, Value: 7m)
+            ),
+        ],
+    };
+
+    // THE LAW: seats the live rebind gave the same owned identity share one identity on the fork's tape. Seats 0 and 1
+    // both drive the owned identity; the owner arms it, the tape is driven to its end as a fork, and the fork's rule
+    // writes seat 0's score, which the second rule reads through seat 1. The fork's own recording, re-driven through a
+    // fresh world, must reproduce it. The red leg gives each switch entry its own detached identity: seat 1 never sees
+    // the score and the re-drive diverges.
+    [Fact]
+    public void AForkKeepsSeatsOfOneIdentitySharingIt() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-fork-shared-");
+        using var fixture = Fixtures.FreshServer(definition: SharedIdentityDocument());
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+        var owned = catalog.BootProfile;
+
+        foreach (var slot in new[] { 0, 1 }) {
+            Assert.True(condition: server.ApplySession(request: new SessionRequest.Join(Principal: Principal.Seat(slot: slot), Slot: slot,
+                IdentityName: owned.Name, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        }
+
+        var tape = Tape(server: server, directory: directory.RootPath);
+
+        Assert.True(condition: tape.TryBeginRecording(name: "arrivals", refusal: out var reason), userMessage: reason);
+        fixture.Step();
+        tape.NoteTick();
+        _ = tape.StopRecording();
+
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "armed"), reason: out reason, value: 1), userMessage: reason);
+        Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: "branch", name: "arrivals", refusal: out reason, toTick: null), userMessage: reason);
+
+        while (tape.Mode == WorldReplayMode.Replaying) {
+            tape.InjectDriveTick();
+            fixture.Step();
+            tape.NoteTick();
+        }
+
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 1)!.Profile);
+
+        for (var tick = 0; (tick < 3); tick++) {
+            fixture.Step();
+            tape.NoteTick();
+        }
+
+        Assert.Equal(1L, SeenSlot(fixture: fixture));
+        Assert.Equal(7L, Fact(identity: owned, key: "score"));
+        _ = tape.StopRecording();
+        Assert.Equal(-1, tape.Verify(name: "branch").Primary.DivergedAt);
+    }
 }

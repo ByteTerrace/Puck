@@ -499,9 +499,10 @@ public sealed class WorldOwnedWorlds {
         var retained = new List<(string FileName, string Reason)>();
 
         foreach (var (path, reason) in candidates) {
-            var detail = Strip(
+            var detail = PathFreeReason(
                 path: path,
-                reason: reason
+                reason: reason,
+                root: m_directory
             );
 
             if (!IsTerminalDocumentShape(
@@ -736,12 +737,27 @@ public sealed class WorldOwnedWorlds {
 
         return rows;
     }
+
     // The result is a GROUPING KEY as well as a narration, so it must carry nothing that varies per file: the loader
     // spells the path at the head of some reasons ("{path} is not a valid …") and mid-sentence in others ("no file
     // at {path}", "cannot read {path}: …"), and the operating system's own message quotes it again. Every occurrence
     // becomes one file-independent placeholder so two files failing the same way share a key, a leading placeholder
     // then drops because the file name is already carried beside the reason, and no absolute path — the player's
     // state directory — reaches the console.
+    /// <summary>Returns a loader's refusal for <paramref name="path"/> with the document named as "the file" dropped and every
+    /// other path relative to <paramref name="root"/>, so it names no machine-local directory.</summary>
+    /// <param name="path">The document the loader was asked for.</param>
+    /// <param name="reason">The loader's refusal.</param>
+    /// <param name="root">The catalog's root directory.</param>
+    /// <returns>The path-free reason.</returns>
+    internal static string PathFreeReason(string path, string reason, string root) => WorldNarratedPaths.Relative(
+        root: root,
+        text: Strip(
+            path: path,
+            reason: reason
+        )
+    );
+
     private static string Strip(string path, string reason) {
         const string Placeholder = "the file";
 

@@ -1289,4 +1289,49 @@ public sealed class StorageCompositionLawTests {
             return accepted;
         }
     }
+
+    /// <summary>A pulled cloud document the local document gate refuses reports why without naming the local probe file
+    /// it was written to: the outcome's detail carries no rooted path.</summary>
+    [Fact]
+    public void RefusedCloudDocument_PullDetailCarriesNoAbsolutePath() {
+        using var dir = new TemporaryDirectory();
+        var worlds = new WorldOwnedWorlds(
+            directory: dir.RootPath,
+            machineId: Guid.NewGuid(),
+            template: Fixtures.BuildDocument()
+        );
+        var store = new FakeObjectBlobStore();
+
+        store.Seed(
+            bytes: Encoding.UTF8.GetBytes(s: "{}"),
+            key: TipKey(id: "amber"),
+            objectId: ContainerId
+        );
+
+        var sync = new WorldOwnedWorldSync(
+            containerId: ContainerId,
+            stateFilePath: Path.Combine(
+                path1: dir.RootPath,
+                path2: "sync-state.json"
+            ),
+            store: store,
+            target: Target,
+            worlds: worlds
+        );
+
+        var outcome = Assert.Single(collection: sync.Pull(id: "amber"));
+
+        Assert.False(
+            condition: outcome.Ok,
+            userMessage: outcome.Detail
+        );
+        Assert.Contains(
+            expectedSubstring: "refused by the document gate",
+            actualString: outcome.Detail
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: outcome.Detail
+        );
+    }
 }

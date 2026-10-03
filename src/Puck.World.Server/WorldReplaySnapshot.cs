@@ -401,6 +401,10 @@ public sealed partial class WorldReplaySnapshot {
     /// out of the running session's step and narrates the disagreement itself instead.</param>
     /// <exception cref="WorldReplayCodecException">An authority-entry kind this apply does not handle.</exception>
     internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, (WorldDefinition? Verified, string? Pin)> rebuildSource) {
+        // Seats a tick's switches hand the same identity id share one detached identity, as the live rebind gave them the
+        // catalog's one object: a write through either seat is then read through the other.
+        Dictionary<string, WorldIdentity>? switched = null;
+
         foreach (var entry in input.Authority) {
             switch (entry) {
                 case WorldReplayEntry.Command command:
@@ -533,12 +537,11 @@ public sealed partial class WorldReplaySnapshot {
 
                     break;
                 case WorldReplayEntry.SeatIdentity seatIdentity:
-                    population.SetSeatProfile(
-                        profile: WorldIdentity.FromProjection(
-                            defaults: server.Definition.PlayerDefaults,
-                            projection: seatIdentity.Profile
-                        ),
-                        slot: seatIdentity.Slot
+                    ApplySeatIdentity(
+                        entry: seatIdentity,
+                        population: population,
+                        server: server,
+                        switched: ref switched
                     );
 
                     break;
@@ -575,6 +578,38 @@ public sealed partial class WorldReplaySnapshot {
             server.EnqueueIntent(submission: in submission);
         }
     }
+
+    // Seats the one seat of a recorded switch at the population this tick holds, refusing by name a slot the re-drive has no
+    // active local seat at (an authored seat count that shrank, a seat that left, a peer slot): the tape names slots, and a slot
+    // the population does not hold would index past its entries.
+    private static void ApplySeatIdentity(WorldReplayEntry.SeatIdentity entry, WorldPopulation population, WorldServer server, ref Dictionary<string, WorldIdentity>? switched) {
+        if (
+            (((uint)entry.Slot) >= ((uint)population.LocalSeatCount)) ||
+            !population.IsActive(index: entry.Slot) ||
+            (population.EntryBody(index: entry.Slot) is null)
+        ) {
+            throw ReplayRefusal.SeatSwitchRefused.Raise(message: $"the recorded identity switch names body:{entry.Slot}, which is not an active local seat in this re-drive (it holds {population.LocalSeatCount} local seat(s))");
+        }
+
+        switched ??= new Dictionary<string, WorldIdentity>(comparer: StringComparer.Ordinal);
+
+        if (!switched.TryGetValue(
+            key: entry.Profile.Id,
+            value: out var identity
+        )) {
+            identity = WorldIdentity.FromProjection(
+                defaults: server.Definition.PlayerDefaults,
+                projection: entry.Profile
+            );
+            switched[entry.Profile.Id] = identity;
+        }
+
+        population.SetSeatProfile(
+            profile: identity,
+            slot: entry.Slot
+        );
+    }
+
     // The mount pin compares index-by-index: mount order is document order, and the recording pins the whole receipt
     // sequence — name, hash, and fuel, at each position — never merely the set of names. Position is load-bearing
     // simulation state (the order guests are pumped, disclosed, and fold their contributions), not a cosmetic

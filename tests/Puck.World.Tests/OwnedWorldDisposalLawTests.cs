@@ -749,4 +749,44 @@ public sealed class OwnedWorldDisposalLawTests {
             );
         }
     }
+    /// <summary>A refusal that names a file the loader composed beyond the document itself — here the basis the document
+    /// links to, which does not exist — names it relative to the catalog or not at all, on the read-back and on
+    /// stderr.</summary>
+    [Fact]
+    public void MissingBasisRefusal_CarriesNoAbsolutePath() {
+        using var dir = new TemporaryDirectory();
+        var files = Populate(dir: dir);
+        var originalError = Console.Error;
+        using var captured = new StringWriter();
+
+        File.WriteAllText(
+            contents: /*lang=json*/ """{ "basis": "basis/shared" }""",
+            path: files[0]
+        );
+
+        WorldOwnedWorlds opened;
+
+        try {
+            Console.SetError(newError: captured);
+
+            opened = Open(dir: dir);
+        } finally {
+            Console.SetError(newError: originalError);
+        }
+
+        var refused = Assert.Single(collection: opened.Refused);
+
+        Assert.Equal(
+            expected: Path.GetFileName(path: files[0]),
+            actual: refused.FileName
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: refused.Reason
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: captured.ToString()
+        );
+    }
 }

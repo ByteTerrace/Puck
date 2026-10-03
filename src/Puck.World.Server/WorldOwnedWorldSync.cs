@@ -481,7 +481,7 @@ public sealed class WorldOwnedWorldSync {
                 (document is null)
             ) {
                 return new WorldSyncOutcome(
-                    Detail: $"cloud copy refused by the document gate — {reason}",
+                    Detail: $"cloud copy refused by the document gate — {WorldOwnedWorlds.PathFreeReason(path: probePath, reason: reason, root: m_worlds.FilePath)}",
                     Id: id,
                     Ok: false
                 );
