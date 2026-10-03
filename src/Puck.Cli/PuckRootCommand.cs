@@ -33,6 +33,7 @@ using Puck.Cli.PublishRelease;
 using Puck.Cli.PullRequest;
 using Puck.Cli.Qualification;
 using Puck.Cli.Ratchets;
+using Puck.Cli.Refusals;
 using Puck.Cli.Registry;
 using Puck.Cli.Scan;
 using Puck.Cli.Schema;
@@ -156,6 +157,7 @@ internal static class PuckRootCommand {
             PullRequestCommand.Create(),
             QualifyCommand.Create(),
             ReferencesCommand.Create(),
+            RefusalsCommand.Create(),
             RegistryCommand.Create(),
             ScanCommand.Create(),
             SchemaCommand.Create(),

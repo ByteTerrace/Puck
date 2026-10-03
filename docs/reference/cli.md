@@ -119,6 +119,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck pull-request`](#puck-pull-requestautomatic-pr-formatting) | the formatting bot's two halves: `format` prepares a pull request's formatting artifact, and `submit-format` is CI's trusted applier. |
 | [`puck qualify`](#puck-qualifypackage-qualification) | qualifies a producer-built `Puck.World` package against the release profile: the functional canaries on the package's own World, then the stability matrix offscreen, each cell judged pass, fail or blocked. |
 | [`puck references`](#puck-referencessemantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
+| [`puck refusals`](#puck-refusalsrefusal-census) | the source census of the refusals `world.refusals` lists, which the refusal-catalog-census canary holds the running World's scan to. |
 | [`puck registry`](#puck-registryworld-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
 | [`puck scan`](#puck-scansource-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schemaworlddef-json-schema) | the generated JSON Schema for `puck.world.definition.v1` and the dashboard portal's TypeScript types derived from it, checked and regenerated. |
@@ -2459,6 +2460,27 @@ separately and label it explicitly. Use a quiet machine and repeat discrepant
 measurements before treating a difference as an improvement.
 
 ---
+
+## `puck refusals`—refusal census
+
+Counts every enum member tagged `[Refusal(...)]`, and the distinct doors they
+name, in the projects whose assemblies the World's refusal catalog anchors, by
+reading their sources with Roslyn rather than loading the World. It prints the
+count as the header `world.refusals` prints over the whole catalog, then the
+projects it counted.
+
+```text
+puck refusals               print the census and the projects counted
+puck refusals -h / --help   this text
+```
+
+The `refusal-catalog-census` canary spells the token `{refusal-census}` in a
+line expectation, and the runner replaces it with this census, so the running
+World's reflective scan is held to an independent count rather than to a number
+written into the manifest. Two laws hold both sides to the projects whose
+sources tag a refusal: `RefusalCensusLawTests` for this verb's project list and
+`RefusalCatalogAnchorLawTests` for the catalog's anchors. Exit codes: **0**
+counted, **2** missing repository root.
 
 ## `puck registry`—world name registry
 

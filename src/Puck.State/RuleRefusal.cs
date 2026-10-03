@@ -30,6 +30,12 @@ public sealed class RefusalAttribute(string door, string condition, RefusalKind 
     public string Condition { get; } = condition;
     /// <summary>Gets a value indicating whether this is a protocol fault or a verdict.</summary>
     public RefusalKind Kind { get; } = kind;
+    /// <summary>Gets or sets a value indicating whether this refusal declines an intentionally unsupported operation:
+    /// an operation the engine deliberately does not perform, which refuses before it changes any state. Acceptance
+    /// law 6 enumerates every refusal so declared and proves that promise for each, so a new one joins the law by being
+    /// declared. Leave it unset for a refusal of malformed or out-of-range input, and for a delivered effect arm, which
+    /// fires after its commit and undoes nothing.</summary>
+    public bool Unsupported { get; set; }
 }
 /// <summary>One cataloged refusal row: a door, the stable id (the enum member's own name — never a second string kept
 /// in sync with it by hand), the kind, and the one-line triggering condition.</summary>
@@ -37,7 +43,9 @@ public sealed class RefusalAttribute(string door, string condition, RefusalKind 
 /// <param name="Id">The refusal's stable id — the tagged enum member's own name.</param>
 /// <param name="Kind">Whether this is a protocol fault or a verdict.</param>
 /// <param name="Condition">The one-line triggering condition.</param>
-public readonly record struct RefusalCatalogEntry(string Door, string Id, RefusalKind Kind, string Condition);
+/// <param name="Unsupported">Whether the refusal declines an intentionally unsupported operation
+/// (<see cref="RefusalAttribute.Unsupported"/>).</param>
+public readonly record struct RefusalCatalogEntry(string Door, string Id, RefusalKind Kind, string Condition, bool Unsupported);
 /// <summary>Names why a rule was refused during compilation, for every refusal the state-neutral compiler raises
 /// itself. Every member is tagged <see cref="RefusalAttribute"/> under the <c>state.rule.compile</c> door, so a
 /// refusal catalog lists the whole family beside the categories a document project's own families add (each declares
