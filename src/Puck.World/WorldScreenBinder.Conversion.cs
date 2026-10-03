@@ -17,7 +17,9 @@ internal sealed partial class WorldScreenBinder {
     };
 
     // A CPU tier's pixels — a camera's or a desktop capture's, or a capture fill (WorldCaptureFills) — converted through the
-    // image source conversion their format names (RenderGraphRuntime.CreateConverter) into the image a frame samples. A
+    // image source conversion their format names (RenderGraphRuntime.CreateConverter) into the image a frame samples, or an
+    // image a producer writes on the render device (a desktop capture of an HDR display copied into shared targets),
+    // converted on the device through the image conversion its format names (RenderGraphRuntime.CreateImageConverter). A
     // frame acquires the image under a counted lease, so a converter the pixels' new extent or format replaced, or one
     // retired with its owner, is disposed only once no submitted frame samples it; a replaced converter's image is shown
     // until its replacement has converted.
@@ -224,6 +226,43 @@ internal sealed partial class WorldScreenBinder {
 
             return converted;
         }
+        // Converts one imported image on the device, held by its producer's lease, making a converter for it when the image
+        // changes shape. The lease is retired whether or not the conversion submits: by the frame that records it, at
+        // once otherwise.
+        public bool TryConvert(RenderGraphRuntime? runtime, in FrameContext context, ShaderPipelineExternalImage image, GpuImageLease lease, ImageColorEncoding color) {
+            if (
+                m_retired ||
+                (runtime is null) ||
+                (PixelFormatOf(format: image.Format) is not { } format)
+            ) {
+                if (!m_retired && (runtime is not null)) {
+                    m_unconvertible ??= $"{m_name} hands over an imported {image.Format} image no conversion reads";
+                }
+
+                lease.Retire();
+
+                return false;
+            }
+
+            m_unconvertible = null;
+            m_pendingConversion = false;
+            m_pendingSurface = default;
+
+            var current = Ensure(
+                color: color,
+                format: format,
+                height: image.Height,
+                imported: true,
+                runtime: runtime,
+                width: image.Width
+            );
+
+            return (current.Converter.TryConvert(
+                context: in context,
+                image: image,
+                lease: lease
+            ) && Show(current: current));
+        }
         // Converts one image of the given format, color encoding and extent, making a converter for it when the pixels
         // change shape.
         public bool TryConvert(RenderGraphRuntime runtime, in FrameContext context, ImagePixelFormat format, ImageColorEncoding color, uint width, uint height, ReadOnlySpan<byte> planes) {
@@ -231,8 +270,25 @@ internal sealed partial class WorldScreenBinder {
                 return false;
             }
 
+            var current = Ensure(
+                color: color,
+                format: format,
+                height: height,
+                imported: false,
+                runtime: runtime,
+                width: width
+            );
+
+            return (current.Converter.TryConvert(
+                context: in context,
+                planes: planes
+            ) && Show(current: current));
+        }
+        // The converter for an image of the given shape, made when the images change shape.
+        private Entry Ensure(RenderGraphRuntime runtime, ImagePixelFormat format, ImageColorEncoding color, uint width, uint height, bool imported) {
             if (
                 (m_current is not { } current) ||
+                (current.Imported != imported) ||
                 (current.Format != format) ||
                 (current.Color != color) ||
                 (current.Width != width) ||
@@ -249,36 +305,35 @@ internal sealed partial class WorldScreenBinder {
                     Retire(entry: unshown);
                 }
 
+                var descriptor = new ImageSourceDescriptor(
+                    Cadence: ImageSourceCadence.Tick,
+                    Color: color,
+                    Content: m_content,
+                    Format: format,
+                    Height: height,
+                    Producer: m_producer,
+                    Transport: ImageSourceTransport.Imported,
+                    Width: width
+                );
+
                 current = new Entry(
-                    converter: runtime.CreateConverter(
-                        descriptor: new ImageSourceDescriptor(
-                            Cadence: ImageSourceCadence.Tick,
-                            Color: color,
-                            Content: m_content,
-                            Format: format,
-                            Height: height,
-                            Producer: m_producer,
-                            Transport: ImageSourceTransport.Imported,
-                            Width: width
-                        ),
-                        name: m_name
-                    ),
+                    converter: (imported
+                        ? runtime.CreateImageConverter(descriptor: descriptor, name: m_name)
+                        : runtime.CreateConverter(descriptor: descriptor, name: m_name)),
                     color: color,
                     format: format,
                     height: height,
+                    imported: imported,
                     token: m_nextToken++,
                     width: width
                 );
                 m_current = current;
             }
 
-            if (!current.Converter.TryConvert(
-                context: in context,
-                planes: planes
-            )) {
-                return false;
-            }
-
+            return current;
+        }
+        // Shows a converter that has converted, retiring the one shown before it.
+        private bool Show(Entry current) {
             if (!ReferenceEquals(
                 objA: m_shown,
                 objB: current
@@ -296,11 +351,13 @@ internal sealed partial class WorldScreenBinder {
         }
 
         // One converter and the frames still holding its image.
-        private sealed class Entry(RenderGraphSourceConverter converter, ImagePixelFormat format, ImageColorEncoding color, uint width, uint height, int token) {
+        private sealed class Entry(RenderGraphSourceConverter converter, ImagePixelFormat format, ImageColorEncoding color, uint width, uint height, bool imported, int token) {
             public ImageColorEncoding Color { get; } = color;
             public RenderGraphSourceConverter Converter { get; } = converter;
             public ImagePixelFormat Format { get; } = format;
             public uint Height { get; } = height;
+            // Whether the converter reads an imported image on the device rather than CPU pixels.
+            public bool Imported { get; } = imported;
 
             public int Outstanding { get; set; }
             public bool Retired { get; set; }

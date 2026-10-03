@@ -105,6 +105,125 @@ public sealed partial class RenderGraphRuntime {
         );
     }
 
+    // Makes the one-pass graph that converts an imported image of a descriptor's format, encoding and extent on the
+    // device, or returns why none can be made: the image bound to the graph's external input for each conversion, read
+    // whole by the conversion ImageSourceConversion.ImagePassOf names.
+    private static RenderGraphRuntimeGraph? ImageGraphOf(ImageSourceDescriptor descriptor, out string? fault) {
+        string pass;
+
+        try {
+            pass = ImageSourceConversion.ImagePassOf(
+                color: descriptor.Color,
+                format: descriptor.Format
+            );
+        } catch (ArgumentOutOfRangeException exception) {
+            fault = $"image producer '{descriptor.Producer}' imports {descriptor.Format} at {descriptor.Width}x{descriptor.Height}, which no conversion reads on the device: {exception.Message}";
+
+            return null;
+        }
+
+        if ((descriptor.Width == 0U) || (descriptor.Height == 0U)) {
+            fault = $"image producer '{descriptor.Producer}' imports an empty {descriptor.Width}x{descriptor.Height} image";
+
+            return null;
+        }
+
+        var definition = new RenderGraphDefinition(
+            Name: pass,
+            Outputs: [RenderGraphPackageCatalog.SourceImage],
+            Packages: [
+                new RenderGraphPackagePass(
+                    Inputs: [new ResourceReference(Name: RenderGraphPackageCatalog.SourceInput)],
+                    Name: SourceConversionPass,
+                    Outputs: [new ResourceReference(Name: RenderGraphPackageCatalog.SourceImage)],
+                    Package: pass
+                ),
+            ],
+            Resources: [
+                new ShaderPipelineResource(
+                    Dimensions: ShaderPipelineDimensions.Absolute(
+                        height: descriptor.Height,
+                        width: descriptor.Width
+                    ),
+                    Format: GpuPixelFormat.R16G16B16A16Float.ToString(),
+                    Initialization: ShaderPipelineInitialization.External,
+                    Name: RenderGraphPackageCatalog.SourceInput
+                ),
+                new ShaderPipelineResource(
+                    Dimensions: ShaderPipelineDimensions.Absolute(
+                        height: descriptor.Height,
+                        width: descriptor.Width
+                    ),
+                    Format: RenderGraphPackageCatalog.SourceFormatOf(package: pass).ToString(),
+                    Name: RenderGraphPackageCatalog.SourceImage
+                ),
+            ],
+            Schema: RenderGraphSchemas.Graph
+        );
+
+        if (!new RenderGraphCompiler(packages: RenderGraphPackageCatalog.Engine).TryCompile(
+            definition: definition,
+            diagnostics: out var diagnostics,
+            plan: out var plan
+        )) {
+            fault = $"image producer '{descriptor.Producer}''s image conversion graph was refused: {string.Join(separator: "; ", values: diagnostics.Select(selector: static diagnostic => $"{diagnostic.Code}: {diagnostic.Message}"))}";
+
+            return null;
+        }
+
+        fault = null;
+
+        return new RenderGraphRuntimeGraph(
+            Inputs: [],
+            Pipeline: new CompiledShaderPipeline(
+                plan: plan.Pipeline,
+                shaders: new Dictionary<string, CompiledShader>(comparer: StringComparer.Ordinal)
+            )
+        );
+    }
+
+    /// <summary>Creates a converter of an imported image a producer writes on the device outside the set (a desktop
+    /// capture of an HDR display, copied into shared targets on the GPU), on the runtime's device, packages and pipeline
+    /// cache: a node of its own running the one-pass graph whose conversion
+    /// (<see cref="ImageSourceConversion.ImagePassOf"/>) reads the image bound to it for each conversion
+    /// (<see cref="RenderGraphSourceConverter.TryConvert(in FrameContext, ShaderPipelineExternalImage, GpuImageLease)"/>),
+    /// so the image converts on the GPU and is never read back. The caller owns the converter and disposes it before the
+    /// device goes.</summary>
+    /// <param name="name">The converter's name, which names its node and its GPU objects.</param>
+    /// <param name="descriptor">What the image is: its format, color encoding and extent.</param>
+    /// <returns>The converter, whose <see cref="RenderGraphSourceConverter.Fault"/> names a descriptor no image conversion
+    /// reads.</returns>
+    /// <exception cref="ObjectDisposedException">The runtime is disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="descriptor"/> is
+    /// <see langword="null"/>.</exception>
+    public RenderGraphSourceConverter CreateImageConverter(string name, ImageSourceDescriptor descriptor) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+        ArgumentNullException.ThrowIfNull(argument: name);
+        ArgumentNullException.ThrowIfNull(argument: descriptor);
+
+        var graph = ImageGraphOf(
+            descriptor: descriptor,
+            fault: out var fault
+        );
+
+        return new RenderGraphSourceConverter(
+            descriptor: descriptor,
+            fault: fault,
+            graph: graph,
+            node: CreateNode(
+                deviceContext: m_device,
+                hostsOnDirectX: m_hostsOnDirectX,
+                images: m_images,
+                inFlightFrames: m_inFlightFrames,
+                name: name,
+                packages: m_packages,
+                pipelines: m_pipelines
+            )
+        );
+    }
     /// <summary>Creates a converter of CPU pixels a producer holds outside the set, on the runtime's device, packages and
     /// pipeline cache: a node of its own running the one-pass graph the descriptor names, the conversion an uploaded
     /// source instance renders through. The caller owns the converter and disposes it before the device goes.</summary>

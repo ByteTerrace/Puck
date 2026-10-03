@@ -1459,10 +1459,11 @@ ends the feed, which the consumer reopens with fresh metadata; unknown discovery
 refuses the open. An SDR
 display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
 shared targets the screen samples and a Vulkan host converts through
-`source-rgba`. An HDR display is captured in half-float scRGB on either host
-and converts on its CPU tier through `source-transfer` into working values at
-the host section's `paperWhiteNits`, so its highlights keep their luminance
-above SDR white. On an SDR output those highlights clip at the display encode,
+`source-rgba`. An HDR display is captured in half-float scRGB, which a
+Direct3D 12 host copies into half-float shared targets and converts on the GPU
+through `source-scrgb`, and a Vulkan host converts on its CPU tier through
+`source-transfer`, both into working values at the host section's
+`paperWhiteNits`, so its highlights keep their luminance above SDR white. On an SDR output those highlights clip at the display encode,
 as any working value above 1 does.
 
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),

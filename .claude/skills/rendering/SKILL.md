@@ -568,8 +568,18 @@ These are one-line cautions; the owning pages hold the derivations.
   working values; `source-transfer` writes them relative to the host's paper
   white, the pass-block value `SourceConversionPackage` writes each frame, so
   an HDR sample shows at its own luminance. A desktop capture of an HDR display
-  hands over half-float scRGB (`INativeImageCaptureFeed.Output`), which
-  converts on its CPU tier, never the B8G8R8A8 GPU route.
+  hands over half-float scRGB (`INativeImageCaptureFeed.Output`). On the
+  Direct3D 12 host the platform copies it GPU-side into half-float shared
+  targets (`NativeImageGpuCaptureTargets.Format`, the capture's own format), and
+  an image converter (`RenderGraphRuntime.CreateImageConverter`, the
+  `source-scrgb` package, `RenderGraphPackageCatalog.ImageConversions`) binds the
+  latest slot to its graph's external input under the slot's lease, waits on the
+  copy's shared fence in its submission, and converts it on the device, so
+  nothing is read back; a frame samples the converted image
+  (`WorldCapturePixels.Convert`, `CaptureFeed.SamplesRing` for the SDR copy
+  sampled directly). Elsewhere the CPU tier converts it through
+  `source-transfer`. `source-scrgb` is `source-transfer`'s arithmetic for the
+  same pixels (`ImportedImageConversionDeviceLawTests`).
   An HDR toggle, a move to a display that differs in it, or unavailable display
   discovery ends the native feed; its consumer reopens it with fresh metadata.
   Frame callbacks and background checks queued by consumer liveness polls check

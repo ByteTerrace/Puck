@@ -1280,11 +1280,19 @@ at binding 2), one thread a pixel in 8×8 groups. A graph names its ports
 | `source-rgba.comp.hlsl` | RGBA8 or BGRA8 | RGBA8 |
 | `source-transfer.comp.hlsl` | RGBA8, R10G10B10A2 or half-float RGBA under an sRGB, linear (scRGB) or PQ transfer function, with BT.709 or BT.2020 primaries | half-float working values: linear light relative to the paper white, in BT.709, on the extended sRGB curve, so 1 is SDR white and nothing above it is clipped |
 
+`source-scrgb.comp.hlsl` converts an imported half-float scRGB image on the
+device rather than an uploaded region: it reads the image at binding 1 as a
+`Texture2D` named `source`, texel by texel at the extent it writes, and writes
+what `source-transfer` writes for the same pixels. It is the Direct3D 12 host's
+conversion of an HDR desktop capture's GPU copies, which an image converter
+(`RenderGraphRuntime.CreateImageConverter`) binds to its graph's external input
+one slot at a time (`ImageSourceConversion.ImagePassOf`).
+
 `ImageSourceConversion` is their CPU reference and names the kernel a format
-needs (`PassOf`). The build compiles all four for both backends. The graph
+needs (`PassOf`, `ImagePassOf`). The build compiles all five for both backends. The graph
 runtime dispatches them as catalog packages (`SourceConversionPackage`, which
 the World registers) when it renders an uploaded source instance. The
-`source-conversion` canary runs all four kernels as passes of an offscreen
+`source-conversion` canary runs the four upload kernels as passes of an offscreen
 pipeline on both backends, `source-transfer` over an sRGB region and a
 half-float scRGB one, and holds their output to the CPU reference.
 

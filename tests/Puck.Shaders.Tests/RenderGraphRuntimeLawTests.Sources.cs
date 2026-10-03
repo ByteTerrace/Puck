@@ -545,6 +545,146 @@ public sealed partial class RenderGraphRuntimeLawTests {
             planes: pixels
         ));
     }
+    /// <summary>A converter of an imported image (a desktop capture of an HDR display, copied into shared targets on the
+    /// GPU) converts it on the device, never reading it back: each conversion binds the image to the scRGB conversion's
+    /// input, moves it from the layout its producer leaves it in to a sampled read and back, dispatches the conversion
+    /// over its extent writing its output, and holds the producer's lease until that submission retires; the output is
+    /// what the converter hands out. An image of another extent is refused and its lease retired at once, a descriptor no
+    /// image conversion reads is refused by name, and a converter of CPU pixels takes no image.</summary>
+    [Fact]
+    public void AnImageConverterConvertsAnImportedImageOnTheDeviceUnderItsLease() {
+        const uint Extent = 8;
+        var gpu = new FakePipelineGpu {
+            Recording = true,
+        };
+        var recorders = new Recorders();
+
+        SourceConversionPackage.RegisterAll(packages: recorders.Registry);
+        recorders.Registry.RegisterSource(
+            factory: _ => new FakeUpload(format: ImagePixelFormat.B8G8R8A8Unorm),
+            package: Upload
+        );
+
+        using var runtime = Runtime(gpu, recorders, Set(RenderGraphInstance.Source(name: "pattern", producer: "test")), "pattern", new RenderGraphRuntimeGraph[1]);
+
+        var descriptor = new ImageSourceDescriptor(
+            Cadence: ImageSourceCadence.Tick,
+            Color: ImageColorEncoding.Of(colorSpace: DisplayColorSpace.ScRgb),
+            Content: ImageContentClass.External,
+            Format: ImagePixelFormat.R16G16B16A16Float,
+            Height: Extent,
+            Producer: "capture",
+            Transport: ImageSourceTransport.Imported,
+            Width: Extent
+        );
+        var image = new ShaderPipelineExternalImage(
+            Format: GpuPixelFormat.R16G16B16A16Float,
+            Height: Extent,
+            ImageHandle: 0x7100,
+            ImageViewHandle: 0x7101,
+            Layout: GpuImageLayout.External,
+            Width: Extent
+        );
+        var acquired = 0;
+        var released = 0;
+
+        GpuImageLease Acquire() {
+            acquired++;
+
+            return new GpuImageLease(
+                ImageViewHandle: image.ImageViewHandle,
+                Release: _ => released++
+            );
+        }
+
+        var converter = runtime.CreateImageConverter(
+            descriptor: descriptor,
+            name: "capture:monitor 0"
+        );
+
+        Assert.Null(@object: converter.Fault);
+        Assert.Equal(expected: ImagePixelFormat.R16G16B16A16Float, actual: converter.Format);
+        TestLiveness.Until(
+            reason: () => "The image converter's conversion never built.",
+            step: () => converter.TryConvert(
+                context: default,
+                image: image,
+                lease: Acquire()
+            )
+        );
+        Assert.NotEqual(expected: 0, actual: converter.ImageViewHandle);
+        Assert.Equal(expected: FrameCompletion.Rendered, actual: converter.Render.Completion);
+        // The conversion read the imported image at its input binding and dispatched once over its 8x8 extent.
+        Assert.Contains(
+            collection: gpu.DescriptorWrites,
+            filter: write => (write.Handle == image.ImageViewHandle)
+        );
+        Assert.Equal(expected: (1U, 1U, 1U), actual: gpu.Dispatches[^1]);
+        // It moved the image from its producer's layout to a sampled read, and handed it back in that layout.
+        var transitions = gpu.Barriers
+            .Where(predicate: barrier => (barrier.Handle == image.ImageHandle))
+            .Select(selector: static barrier => (barrier.Barrier.OldLayout, barrier.Barrier.NewLayout))
+            .ToArray();
+
+        Assert.Contains(expected: (GpuImageLayout.External, GpuImageLayout.ShaderReadOnly), collection: transitions);
+        Assert.Equal(expected: GpuImageLayout.External, actual: transitions[^1].NewLayout);
+        // Every lease the converter was handed is held by a submission or retired; disposing the converter retires the rest.
+        Assert.True(condition: (released <= acquired));
+        converter.Dispose();
+        Assert.Equal(expected: acquired, actual: released);
+
+        // An image of another extent is refused, its lease retired at once.
+        using var other = runtime.CreateImageConverter(
+            descriptor: descriptor,
+            name: "capture:monitor 1"
+        );
+
+        Assert.False(condition: other.TryConvert(
+            context: default,
+            image: (image with { Width = (Extent * 2U) }),
+            lease: Acquire()
+        ));
+        Assert.Equal(expected: acquired, actual: released);
+        Assert.Equal(expected: FrameCompletion.Refused, actual: other.Render.Completion);
+        Assert.Throws<InvalidOperationException>(testCode: () => other.TryConvert(
+            context: default,
+            planes: new byte[(Extent * Extent * 8U)]
+        ));
+
+        // No image conversion reads an 8-bit sRGB import; the descriptor is refused by name and converts nothing.
+        using var refused = runtime.CreateImageConverter(
+            descriptor: (descriptor with {
+                Color = ImageColorEncoding.Srgb,
+                Format = ImagePixelFormat.B8G8R8A8Unorm,
+            }),
+            name: "refused"
+        );
+
+        Assert.Contains(
+            actualString: refused.Fault,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "which no conversion reads on the device"
+        );
+        Assert.False(condition: refused.TryConvert(
+            context: default,
+            image: image,
+            lease: Acquire()
+        ));
+        Assert.Equal(expected: acquired, actual: released);
+
+        // A converter of CPU pixels takes no imported image, and retires its lease.
+        using var pixels = runtime.CreateConverter(
+            descriptor: (descriptor with { Transport = ImageSourceTransport.Imported }),
+            name: "pixels"
+        );
+
+        Assert.False(condition: pixels.TryConvert(
+            context: default,
+            image: image,
+            lease: Acquire()
+        ));
+        Assert.Equal(expected: acquired, actual: released);
+    }
     [Fact]
     public void ARefusedUploadRendersNothingAndNamesItsFault() {
         var gpu = new FakePipelineGpu();
