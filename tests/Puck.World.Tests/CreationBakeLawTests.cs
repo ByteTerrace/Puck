@@ -581,7 +581,7 @@ public sealed class CreationBakeLawTests {
         var pack = CompileWithPack(path: path);
         // The pack opens with the magic, the version byte and the shape fingerprint of its format; the pin covers every
         // other byte, so it moves with the bakes and never with the fingerprint.
-        var product = AssetContentHash.Compute(content: [.. pack.AsSpan(length: (ChunkContainer.MagicLength + 1), start: 0), .. pack.AsSpan(start: (ChunkContainer.MagicLength + 1 + 16))]);
+        var product = AssetContentHash.Compute(content: [.. pack.AsSpan(length: (ChunkContainer.MagicLength + 1), start: 0), .. pack.AsSpan(start: ((ChunkContainer.MagicLength + 1) + 16))]);
 
         Assert.Equal(expected: DerivationFingerprint.BakeChunkVersion, actual: chunk.Version);
         Assert.False(condition: chunk.DerivesOnBoot);
