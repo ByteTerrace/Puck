@@ -18,13 +18,15 @@ on it and put the best-fit partner there. Busy is not progress: never queue
 filler to make a partner look busy, and meet an owner's remark that partners
 look idle by checking the path, not by inventing work.
 
-## Write and track assignments
+## Own tracks, not tasks
 
 Partners own tracks and outcomes. A brief gives the outcome and the
 constraints, never the method, the design or the order of the edits. A partner
 picks its next work from its track or a shared ready queue and announces it. The
 lead keeps cross-track conflicts, merges, owner-level calls, and scope and
 order.
+
+## Write and track assignments
 
 [AGENTS.md](../../../AGENTS.md#delegated-work) owns what a brief holds and how
 shared-file edits are sequenced; its report shape is the three headings that
