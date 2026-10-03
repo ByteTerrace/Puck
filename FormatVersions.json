@@ -52,13 +52,16 @@
                 "M:Puck.Assets.CanonicalBinaryWriterExtensions.WriteVarUInt(System.Buffers.IBufferWriter{System.Byte},System.UInt32)",
                 "M:Puck.Assets.ChunkCode.Parse(System.String)",
                 "M:Puck.World.WorldAssetRowLoader.Rows(Puck.World.WorldDefinition)",
+                "M:Puck.World.WorldBakeChunk.TryRead(System.ReadOnlySpan{System.Byte},System.String@,System.Collections.Generic.IReadOnlyList{Puck.Assets.ContentPin}@,System.String@)",
+                "M:Puck.World.WorldBakePack.Resolve(System.String,System.String)",
+                "M:Puck.World.WorldBakeStore.HoldFromPack(System.String,System.Collections.Generic.IEnumerable{Puck.Assets.ContentPin},Puck.World.WorldDefinition)",
                 "M:Puck.World.WorldDefinitionFileSource.TryParseCompiledDocument(System.String,System.String,Puck.World.WorldDefinition@,System.String@)",
                 "M:Puck.World.WorldDefinitionLoader.TryDraw(Puck.World.WorldDefinition,System.String,System.String,Puck.World.WorldDefinition@,System.String@)",
                 "M:Puck.World.WorldDefinitionSerialization.SerializeCompact(Puck.World.WorldDefinition)",
                 "M:Puck.World.WorldDocumentPaths.TryResolve(System.String,System.String,System.String@,System.String@)",
                 "M:Puck.World.WorldStateDocumentValues.TryResolve(Puck.World.WorldDefinition,System.String@,System.Boolean)"
             ],
-            "shape": "9f572b1bbe9d74e8",
+            "shape": "962bda5aad6c3435",
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
             "token": "1"
         },
@@ -412,13 +415,16 @@
                 "M:Puck.Assets.CanonicalBinaryWriterExtensions.WriteVarUInt(System.Buffers.IBufferWriter{System.Byte},System.UInt32)",
                 "M:Puck.Assets.ChunkCode.Parse(System.String)",
                 "M:Puck.World.WorldAssetRowLoader.Rows(Puck.World.WorldDefinition)",
+                "M:Puck.World.WorldBakeChunk.TryRead(System.ReadOnlySpan{System.Byte},System.String@,System.Collections.Generic.IReadOnlyList{Puck.Assets.ContentPin}@,System.String@)",
+                "M:Puck.World.WorldBakePack.Resolve(System.String,System.String)",
+                "M:Puck.World.WorldBakeStore.HoldFromPack(System.String,System.Collections.Generic.IEnumerable{Puck.Assets.ContentPin},Puck.World.WorldDefinition)",
                 "M:Puck.World.WorldDefinitionFileSource.TryParseCompiledDocument(System.String,System.String,Puck.World.WorldDefinition@,System.String@)",
                 "M:Puck.World.WorldDefinitionLoader.TryDraw(Puck.World.WorldDefinition,System.String,System.String,Puck.World.WorldDefinition@,System.String@)",
                 "M:Puck.World.WorldDefinitionSerialization.SerializeCompact(Puck.World.WorldDefinition)",
                 "M:Puck.World.WorldDocumentPaths.TryResolve(System.String,System.String,System.String@,System.String@)",
                 "M:Puck.World.WorldStateDocumentValues.TryResolve(Puck.World.WorldDefinition,System.String@,System.Boolean)"
             ],
-            "shape": "9f572b1bbe9d74e8",
+            "shape": "962bda5aad6c3435",
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
             "token": "2"
         },
@@ -1029,7 +1035,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "51811c41abf60ce0",
+            "shape": "7ae099e8fb55e40b",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "1"
         },
@@ -1048,7 +1054,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "51811c41abf60ce0",
+            "shape": "7ae099e8fb55e40b",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "PWBK"
         },

@@ -15,6 +15,12 @@ internal sealed class FormatBoundaryException(IReadOnlyList<string> problems) : 
     /// <summary>Every refusal, each naming its fix.</summary>
     public IReadOnlyList<string> Problems { get; } = problems;
 }
+/// <summary>A format as a closure sees it.</summary>
+/// <param name="Source">The declaring file.</param>
+/// <param name="Owner">The declaring type's name.</param>
+/// <param name="Member">The token member's name.</param>
+/// <param name="Id">The ledger id, with the <c>@path</c> that tells two files' identical <c>Type.Member</c> apart.</param>
+internal readonly record struct FormatRef(string Source, string Owner, string Member, string Id);
 /// <summary>What the closure of one format holds.</summary>
 /// <param name="Shape">Sixteen lowercase hexadecimal digits of a SHA-256 of the closure's canonical syntax.</param>
 /// <param name="Units">Every unit the shape covers.</param>
@@ -142,10 +148,18 @@ internal sealed class FormatShapeClosure {
     }
 
     /// <summary>Closes each format over its boundary and digests what the closure covers.</summary>
-    /// <param name="formats">Each format's declaring file, declaring type and token member.</param>
+    /// <param name="formats">Each format's declaring file, declaring type, token member and ledger id.</param>
+    /// <param name="allIds">The ledger ids of every format, when <paramref name="formats"/> holds only some, so a [FormatPart] naming another is not mistaken for naming none.</param>
     /// <returns>One closure per format, in order.</returns>
     /// <exception cref="FormatBoundaryException">A seam gives no reason.</exception>
-    public FormatClosure[] Of(IReadOnlyList<(string Source, string Owner, string Member)> formats) {
+    public FormatClosure[] Of(IReadOnlyList<FormatRef> formats, IReadOnlyCollection<string>? allIds = null) {
+        var known = (allIds ?? formats.Select(selector: static format => format.Id).ToArray()).ToHashSet(comparer: StringComparer.Ordinal);
+        var misnamed = PartDeclarations().Where(predicate: part => ((part.Id is null) || !known.Contains(item: part.Id))).Select(selector: part => ((part.Id is null)
+            ? $"part without a format: {KeyOf(symbol: part.Symbol)} carries [FormatPart] with an argument that is not a constant string; name the format's ledger id"
+            : $"part of no format: {KeyOf(symbol: part.Symbol)} carries [FormatPart(\"{part.Id}\")], which is no format in the ledger; spell its id as FormatVersions.json does, with the @path when two files share a Type.Member")).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
+
+        if (misnamed.Length != 0) { throw new FormatBoundaryException(problems: misnamed); }
+
         var analyses = formats.Select(selector: format => Analyze(format: format)).ToArray();
         var refusals = analyses.SelectMany(selector: static analysis => analysis.Refusals).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
 
@@ -162,7 +176,7 @@ internal sealed class FormatShapeClosure {
 
     private sealed record Analysis(IReadOnlyList<Unit> Units, IReadOnlyList<string> Open, IReadOnlyList<string> Refusals);
 
-    private Analysis Analyze((string Source, string Owner, string Member) format) {
+    private Analysis Analyze(FormatRef format) {
         var (roots, candidates) = Roots(format: format);
         var seen = new HashSet<Unit>(collection: roots);
         var pending = new Queue<(Unit Unit, bool Expand)>(collection: roots.Select(selector: static root => (root, true)));
@@ -224,7 +238,7 @@ internal sealed class FormatShapeClosure {
     }
     // The units that start a closure: the layouts of the declaring file and its partial siblings, their members that
     // encode, and each unit anywhere that names the token. The rest of those files are candidates a covered call may reach.
-    private (IReadOnlyList<Unit> Roots, HashSet<Unit> Candidates) Roots((string Source, string Owner, string Member) format) {
+    private (IReadOnlyList<Unit> Roots, HashSet<Unit> Candidates) Roots(FormatRef format) {
         var directory = format.Source[..(format.Source.LastIndexOf(value: '/') + 1)];
         var name = format.Source[directory.Length..];
         var stem = name[..name.IndexOf(value: '.')];
@@ -250,55 +264,121 @@ internal sealed class FormatShapeClosure {
                 }
             }
         }
-        foreach (var unit in Parts(id: $"{format.Owner}.{format.Member}")) { roots.Add(item: unit); }
+        foreach (var unit in Parts(id: format.Id)) { roots.Add(item: unit); }
 
         if (TokenKey(format: format) is { } token) {
             foreach (var unit in (Naming(member: format.Member, owner: format.Owner).GetValueOrDefault(key: token) ?? [])) { roots.Add(item: unit); }
         }
 
+        foreach (var unit in Implementations(roots: roots).ToArray()) { roots.Add(item: unit); }
+
         return ([.. roots], candidates);
     }
-    // The units of every declaration marked [FormatPart("<id>")]: the codecs a format governs that none of its own code calls.
-    private IEnumerable<Unit> Parts(string id) {
-        var quoted = $"\"{id}\"";
+
+    private sealed record PartDeclaration(string Path, SemanticModel Model, MemberDeclarationSyntax Declaration, ISymbol Symbol, string? Id, AttributeSyntax Attribute);
+
+    private List<PartDeclaration>? m_parts;
+
+    // Every [FormatPart(...)] in the repository, with the format id its argument evaluates to as a constant string, or null
+    // when it does not: an escaped or verbatim literal and a named constant all name a format, so none is read as text.
+    private List<PartDeclaration> PartDeclarations() {
+        if (m_parts is not null) { return m_parts; }
+
+        var found = new List<PartDeclaration>();
 
         foreach (var (path, text) in m_files) {
-            if (!text.Contains(comparisonType: StringComparison.Ordinal, value: "FormatPart") || !text.Contains(comparisonType: StringComparison.Ordinal, value: quoted)) { continue; }
+            if (!text.Contains(comparisonType: StringComparison.Ordinal, value: "FormatPart")) { continue; }
 
             var tree = m_trees[path];
             var model = Model(tree: tree);
 
             foreach (var declaration in tree.GetRoot().DescendantNodes().OfType<MemberDeclarationSyntax>()) {
-                var marked = declaration.AttributeLists.SelectMany(selector: static list => list.Attributes).Any(predicate: attribute => (
-                    (attribute.Name.ToString() is "FormatPart" or "FormatPartAttribute" or "Puck.FormatPart" or "Puck.FormatPartAttribute") &&
-                    (attribute.ArgumentList?.Arguments.FirstOrDefault()?.Expression is LiteralExpressionSyntax { RawKind: ((int)SyntaxKind.StringLiteralExpression) } literal) &&
-                    (literal.Token.ValueText == id)
-                ));
+                foreach (var attribute in declaration.AttributeLists.SelectMany(selector: static list => list.Attributes)) {
+                    var name = ((attribute.Name is QualifiedNameSyntax qualified) ? qualified.Right : attribute.Name).ToString();
 
-                if (!marked || (model.GetDeclaredSymbol(declaration) is not { } symbol)) { continue; }
+                    if (name is not ("FormatPart" or "FormatPartAttribute")) { continue; }
+                    if (declaration is BaseFieldDeclarationSyntax field) {
+                        foreach (var variable in field.Declaration.Variables) {
+                            if (model.GetDeclaredSymbol(variable) is { } fieldSymbol) { found.Add(item: new PartDeclaration(Path: path, Model: model, Declaration: declaration, Symbol: fieldSymbol, Id: PartId(attribute: attribute, model: model), Attribute: attribute)); }
+                        }
 
-                var key = KeyOf(symbol: symbol);
+                        continue;
+                    }
+                    if (model.GetDeclaredSymbol(declaration) is { } symbol) { found.Add(item: new PartDeclaration(Path: path, Model: model, Declaration: declaration, Symbol: symbol, Id: PartId(attribute: attribute, model: model), Attribute: attribute)); }
+                }
+            }
+        }
 
-                if (declaration is BaseTypeDeclarationSyntax) {
-                    // Every unit of the type, in whichever partial file it sits, and of its nested types.
-                    var name = key[2..];
+        m_parts = found;
 
-                    foreach (var file in m_files.Keys) {
-                        if (!m_files[file].Contains(comparisonType: StringComparison.Ordinal, value: symbol.Name)) { continue; }
+        return found;
+    }
+    private static string? PartId(AttributeSyntax attribute, SemanticModel model) => (((attribute.ArgumentList?.Arguments.FirstOrDefault()?.Expression is { } expression) && (model.GetConstantValue(expression) is { HasValue: true, Value: string id }))
+        ? id
+        : null);
+    // The units of every declaration marked [FormatPart("<id>")]: the codecs a format governs that none of its own code
+    // calls. A type roots all its units, in every partial file; a member with a body roots its body, with a partial method's
+    // implementation and every override or implementation of a slot; a data member roots its type's layout.
+    private IEnumerable<Unit> Parts(string id) {
+        foreach (var part in PartDeclarations().Where(predicate: part => (part.Id == id))) {
+            var symbol = part.Symbol;
 
-                        foreach (var (unitKey, kind) in Index(path: file).Nodes.Keys) {
-                            if ((unitKey.Length > 2) && ((unitKey[2..] == name) || unitKey[2..].StartsWith(comparisonType: StringComparison.Ordinal, value: $"{name}.") || unitKey[2..].StartsWith(comparisonType: StringComparison.Ordinal, value: $"{name}+"))) {
-                                yield return new Unit(Key: unitKey, Kind: kind, Path: file);
-                            }
+            if (symbol is INamedTypeSymbol type) {
+                var name = KeyOf(symbol: type)[2..];
+
+                foreach (var file in m_files.Keys) {
+                    if (!m_files[file].Contains(comparisonType: StringComparison.Ordinal, value: type.Name)) { continue; }
+
+                    foreach (var (unitKey, kind) in Index(path: file).Nodes.Keys) {
+                        if ((unitKey.Length > 2) && ((unitKey[2..] == name) || unitKey[2..].StartsWith(comparisonType: StringComparison.Ordinal, value: $"{name}.") || unitKey[2..].StartsWith(comparisonType: StringComparison.Ordinal, value: $"{name}+"))) {
+                            yield return new Unit(Key: unitKey, Kind: kind, Path: file);
                         }
                     }
-                } else if (Index(path: path).Nodes.ContainsKey(key: (key, UnitKind.Code))) {
-                    yield return new Unit(Key: key, Kind: UnitKind.Code, Path: path);
+                }
+
+                continue;
+            }
+
+            var found = false;
+
+            foreach (var variant in new[] { symbol, (symbol as IMethodSymbol)?.PartialImplementationPart, (symbol as IMethodSymbol)?.PartialDefinitionPart }.OfType<ISymbol>()) {
+                var key = KeyOf(symbol: variant);
+
+                foreach (var path in Paths(symbol: variant)) {
+                    if (Index(path: path).Nodes.ContainsKey(key: (key, UnitKind.Code))) {
+                        found = true;
+
+                        yield return new Unit(Key: key, Kind: UnitKind.Code, Path: path);
+                    }
+                }
+            }
+            if (!found && (symbol.ContainingType is { } owner)) {
+                var ownerKey = KeyOf(symbol: owner);
+
+                foreach (var path in Paths(symbol: owner)) {
+                    if (Index(path: path).Nodes.ContainsKey(key: (ownerKey, UnitKind.Layout))) { yield return new Unit(Key: ownerKey, Kind: UnitKind.Layout, Path: path); }
                 }
             }
         }
     }
-    private string? TokenKey((string Source, string Owner, string Member) format) {
+    // A rooted slot dispatches: every override and implementation of a rooted virtual, abstract or interface member is rooted.
+    private IEnumerable<Unit> Implementations(IEnumerable<Unit> roots) {
+        foreach (var root in roots.Where(predicate: static root => (root.Kind == UnitKind.Code)).ToArray()) {
+            foreach (var slot in DocumentationCommentId.GetSymbolsForDeclarationId(compilation: m_compilation, id: root.Key)) {
+                if (!(slot.IsVirtual || slot.IsAbstract || slot.IsOverride || (slot.ContainingType?.TypeKind == TypeKind.Interface))) { continue; }
+                if (!Implementers().TryGetValue(key: root.Key, value: out var implementers)) { continue; }
+
+                foreach (var implementer in implementers) {
+                    var key = KeyOf(symbol: implementer.OriginalDefinition);
+
+                    foreach (var path in Paths(symbol: implementer.OriginalDefinition)) {
+                        if (Index(path: path).Nodes.ContainsKey(key: (key, UnitKind.Code))) { yield return new Unit(Key: key, Kind: UnitKind.Code, Path: path); }
+                    }
+                }
+            }
+        }
+    }
+    private string? TokenKey(FormatRef format) {
         var tree = m_trees[format.Source];
         var model = Model(tree: tree);
 

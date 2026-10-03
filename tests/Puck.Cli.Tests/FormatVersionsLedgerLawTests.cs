@@ -827,6 +827,7 @@ public sealed class FormatVersionsLedgerLawTests {
     public void ACodecDeclaredPartOfAFormatMovesItsShapeThoughNoCodeOfTheFormatCallsIt(string format, bool moves) {
         var sources = Codec(
             wire: "public static int Version() => 3;",
+            ("Other.cs", "public static class Other { public const int FormatVersion = 4; }"),
             ("Payload.cs", $$"""
                 [FormatPart("{{format}}")]
                 public static class Payload {
@@ -838,5 +839,76 @@ public sealed class FormatVersionsLedgerLawTests {
         var edited = Format(sources: Edited(from: "+ 1", path: "Payload.cs", sources: sources, to: "+ 2")).Shape;
 
         Assert.Equal(actual: (shape != edited), expected: moves);
+    }
+    // [FormatPart] roots whatever it annotates; each form below once rooted nothing, or only part of what it names.
+    [Fact]
+    public void ADataMemberDeclaredPartOfAFormatRootsItsTypesLayout() {
+        var sources = Codec(
+            wire: "public static int Version() => 3;",
+            ("Payload.cs", "public static class Payload { [FormatPart(\"Wire.FormatVersion\")] public const int Tag = 1; public const int Other = 2; }")
+        );
+
+        Assert.NotEqual(expected: Format(sources: sources).Shape, actual: Format(sources: Edited(from: "Other = 2", path: "Payload.cs", sources: sources, to: "Other = 3")).Shape);
+    }
+    [Fact]
+    public void AMarkedPartialMethodRootsItsImplementationBody() {
+        var sources = Codec(
+            wire: "public static int Version() => 3;",
+            ("Payload.cs", "public static partial class Payload { [FormatPart(\"Wire.FormatVersion\")] private static partial int Width(); }"),
+            ("Payload.Impl.cs", "public static partial class Payload { private static partial int Width() => 1; }")
+        );
+
+        Assert.NotEqual(expected: Format(sources: sources).Shape, actual: Format(sources: Edited(from: "=> 1", path: "Payload.Impl.cs", sources: sources, to: "=> 2")).Shape);
+    }
+    [InlineData("[FormatPart(\"Wire.FormatVersion\")] public abstract class Slot { public abstract int Width(); }")]
+    [InlineData("public abstract class Slot { [FormatPart(\"Wire.FormatVersion\")] public abstract int Width(); }")]
+    [Theory]
+    public void ARootedDispatchSlotRootsItsOverrides(string slot) {
+        var sources = Codec(
+            wire: "public static int Version() => 3;",
+            ("Slot.cs", slot),
+            ("Impl.cs", "public sealed class Impl : Slot { public override int Width() => 1; }")
+        );
+
+        Assert.NotEqual(expected: Format(sources: sources).Shape, actual: Format(sources: Edited(from: "=> 1", path: "Impl.cs", sources: sources, to: "=> 2")).Shape);
+    }
+    [Fact]
+    public void APartNamesTheDisambiguatedIdOfTheFormatItBelongsTo() {
+        var sources = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+            ["src/Puck.Demo/A.cs"] = "namespace Puck.Demo.A;\npublic static class Codec { public const int FormatVersion = 1; }",
+            ["src/Puck.Demo/B.cs"] = "namespace Puck.Demo.B;\npublic static class Codec { public const int FormatVersion = 2; }",
+            ["src/Puck.Demo/Payload.cs"] = "namespace Puck.Demo;\n[FormatPart(\"Codec.FormatVersion@src/Puck.Demo/A.cs\")] public static class Payload { public static int Write(byte[] bytes) => (bytes.Length + 1); }",
+        };
+        var edited = new Dictionary<string, string>(sources, StringComparer.Ordinal) { ["src/Puck.Demo/Payload.cs"] = sources["src/Puck.Demo/Payload.cs"].Replace(newValue: "+ 2", oldValue: "+ 1") };
+        var was = FormatVersionsLedger.Discover(files: sources);
+        var now = FormatVersionsLedger.Discover(files: edited);
+
+        Assert.NotEqual(expected: Entry(entries: was, id: "Codec.FormatVersion@src/Puck.Demo/A.cs").Shape, actual: Entry(entries: now, id: "Codec.FormatVersion@src/Puck.Demo/A.cs").Shape);
+        Assert.Equal(expected: Entry(entries: was, id: "Codec.FormatVersion@src/Puck.Demo/B.cs").Shape, actual: Entry(entries: now, id: "Codec.FormatVersion@src/Puck.Demo/B.cs").Shape);
+    }
+    [InlineData("[FormatPart(\"Wire\\u002EFormatVersion\")]")]
+    [InlineData("[FormatPart(@\"Wire.FormatVersion\")]")]
+    [InlineData("[FormatPart(Names.Wire)]")]
+    [Theory]
+    public void APartNamedByAnEscapedVerbatimOrConstantStringStillRoots(string attribute) {
+        var sources = Codec(
+            wire: "public static int Version() => 3;",
+            ("Names.cs", "public static class Names { public const string Wire = \"Wire.FormatVersion\"; }"),
+            ("Payload.cs", $"{attribute} public static class Payload {{ public static int Write(byte[] bytes) => (bytes.Length + 1); }}")
+        );
+
+        Assert.NotEqual(expected: Format(sources: sources).Shape, actual: Format(sources: Edited(from: "+ 1", path: "Payload.cs", sources: sources, to: "+ 2")).Shape);
+    }
+    [InlineData("[FormatPart(\"Nowhere.FormatVersion\")]", "part of no format")]
+    [InlineData("[FormatPart(Names.Computed)]", "part without a format")]
+    [Theory]
+    public void APartThatNamesNoFormatIsRefusedByName(string attribute, string refusal) {
+        var sources = Codec(
+            wire: "public static int Version() => 3;",
+            ("Names.cs", "public static class Names { public static readonly string Computed = \"Wire.FormatVersion\"; }"),
+            ("Payload.cs", $"{attribute} public static class Payload {{ public static int Write(byte[] bytes) => 1; }}")
+        );
+
+        Assert.Contains(actualString: Assert.Throws<FormatBoundaryException>(testCode: () => FormatVersionsLedger.Discover(files: sources)).Message, expectedSubstring: refusal);
     }
 }
