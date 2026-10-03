@@ -57,6 +57,18 @@ public sealed class WorldSessionViewLawTests {
         }
     }
     [Fact]
+    public void ASessionViewIsDressedAtItsAuthoredExtentWhateverIsRequested() {
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(), effectiveCameraName: null,
+            mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: SessionWorld)));
+        var dressed = new List<(uint Width, uint Height)>();
+        var source = new WorldSessionFrameSource(inner: new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]),
+            captureHostFirst: static () => { }, resolution: new WorldScreenResolution(Height: 144, Width: 160),
+            resolveResolution: (view, width, height) => { dressed.Add(item: (width, height)); return view; });
+
+        _ = source.CaptureFrame(deltaSeconds: 0f, height: 4096u, interpolationAlpha: 0f, width: 2048u);
+        Assert.Equal(actual: dressed, expected: [(160u, 144u)]);
+    }
+    [Fact]
     public void ASessionViewOfAnAnimatedCreationIncludesItsInstance() {
         var definition = AuthoredGameFixtures.Load(relativePath: SessionWorld);
         var ball = Assert.Single(collection: definition.Creations);

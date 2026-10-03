@@ -4,7 +4,8 @@ namespace Puck.World.Client;
 
 public static partial class WorldSessionLevers {
     /// <summary>Folds the live presentation levers into their document homes for a <c>world.save</c> snapshot: the
-    /// render levers into <c>render</c>, the master volume into <c>audio</c>, the present target into <c>host</c>, the
+    /// render levers into <c>render</c>, view ceilings and floors into <c>views.quality</c>, the master volume into
+    /// <c>audio</c>, the present target into <c>host</c>, the
     /// primary seat's forced binding-bar visibility into the first <c>bindingOverlays</c> row, and the primary seat's
     /// moved grid and snapping into <c>editor</c>. The authority half (<c>Puck.World.Server.WorldSessionCapture</c>)
     /// folds first.
@@ -12,8 +13,8 @@ public static partial class WorldSessionLevers {
     /// back as the same instance, so an absent section stays absent and an authored one keeps exactly the members its
     /// author wrote. An absent section resolves to the engine's inert value, which is not a section a saved document
     /// may claim: an absent <c>audio</c> section, for one, resolves to a zero speaker radius the validator refuses in
-    /// an authored one. The <c>editor</c> section is the one exception: its defaults are a valid section, so a moved
-    /// value folds into an absent one too, and an unmoved seat leaves it as authored.</para></summary>
+    /// an authored one. Moved render ceilings, view quality and editor values create their valid section when absent;
+    /// unchanged defaults leave absent sections absent. Pins never fold.</para></summary>
     /// <param name="definition">The definition to fold into, normally the authority half's snapshot.</param>
     /// <param name="settings">The live render-lever settings.</param>
     /// <param name="pacing">The live present-rate control.</param>
@@ -35,6 +36,7 @@ public static partial class WorldSessionLevers {
                 render: definition.RenderRaw,
                 settings: settings
             ),
+            ViewsRaw = settings.FoldQuality(views: definition.ViewsRaw),
             AudioRaw = FoldAudio(
                 audio: audio,
                 authored: definition.AudioRaw
@@ -79,18 +81,19 @@ public static partial class WorldSessionLevers {
         ? (host with { TargetHertz = pacing.TargetHertz })
         : host
     );
-    // The continuous shadow reach and render scale quantize back to their tiered document homes, so a lever that
-    // still sits on the authored tier folds to an equal section and the authored instance stands.
+    // Shadow reach folds to its tier; scalar ceilings survive without quantization.
     private static WorldRenderDefaults? FoldRender(WorldRenderDefaults? render, WorldRenderSettings settings) {
-        if (render is null) {
+        if ((render is null) && (settings.RenderScale == WorldRenderDefaults.Absent.RenderScale)) {
             return null;
         }
+
+        render ??= WorldRenderDefaults.Absent;
 
         var captured = (render with {
             Shadows = ShadowTiers.Tier(reach: settings.ShadowReach),
             ShadowCrowdRadius = settings.ShadowCrowdRadius,
             AmbientOcclusion = settings.AmbientOcclusion,
-            RenderScale = WorldRenderScaleTiers.Nearest(scale: settings.RenderScale),
+            RenderScale = settings.RenderScale,
             UpscaleSharpness = settings.UpscaleSharpness,
             Temporal = settings.Temporal,
             DynamicResolution = settings.DynamicResolution,

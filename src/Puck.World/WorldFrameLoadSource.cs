@@ -23,7 +23,8 @@ namespace Puck.World;
 /// a device is up.</param>
 /// <param name="timing">The timestamp demand the views' GPU frame time is recorded under.</param>
 /// <param name="probe">The render probe, whose root runtime holds the views' work.</param>
-internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> presentTiming, Func<string?> backend, WorldGpuTiming timing, WorldRenderProbe probe) : IWorldFrameLoadSource {
+/// <param name="view">The view whose fresh submissions this source reads.</param>
+internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> presentTiming, Func<string?> backend, WorldGpuTiming timing, WorldRenderProbe probe, string view = WorldViewGraphs.WorldInstance) : IWorldFrameLoadSource {
     /// <summary>The name the committed counters ceilings are compiled into the World under.</summary>
     public const string CeilingsResource = "counters.ceilings.json";
 
@@ -44,6 +45,8 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
     private ShaderPipelineRenderNode?[] m_nodes = [];
 
     private bool m_accounting;
+
+    private int m_accountedViews = -1;
 
     /// <inheritdoc/>
     public PresentTimingSample LastPresentTiming {
@@ -77,7 +80,13 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
     /// (<see cref="RenderGraphRuntime.AccountFor"/>), declared again whenever that set changes; once not, it accounts for
     /// none.</remarks>
     public void RequireCompletions(bool required) {
+        if (view != WorldViewGraphs.WorldInstance) {
+            return;
+        }
         if (required == m_accounting) {
+            if (required && (probe.Root?.Runtime is { } runtime)) {
+                FindViews(runtime: runtime);
+            }
             return;
         }
 
@@ -86,6 +95,9 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         if (required) {
             // The next read finds the views again and declares them.
             m_set = null;
+            if (probe.Root?.Runtime is { } runtime) {
+                FindViews(runtime: runtime);
+            }
         } else {
             probe.Root?.Runtime?.AccountFor(instances: []);
         }
@@ -177,7 +189,7 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         }
 
         FindViews(runtime: runtime);
-        completions = runtime.TakeRetiredCompletions();
+        completions = runtime.TakeRetiredCompletions(instance: view);
 
         foreach (var node in m_nodes) {
             if (node is not null) {
@@ -194,7 +206,9 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
     private void FindViews(RenderGraphRuntime runtime) {
         var set = runtime.Instances;
 
-        if (ReferenceEquals(objA: set, objB: m_set) && NodesHold(runtime: runtime)) {
+        var viewCount = (probe.Settings?.ResolutionViewCount ?? 0);
+
+        if (ReferenceEquals(objA: set, objB: m_set) && NodesHold(runtime: runtime) && (!m_accounting || (m_accountedViews == viewCount))) {
             return;
         }
 
@@ -205,7 +219,7 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         for (var index = 0; (index < instances.Count); index++) {
             var name = instances[index].Name;
 
-            nodes[index] = ((IsView(instance: name) && (runtime.Producer(instance: index) is null)) ? runtime.Node(instance: index) : null);
+            nodes[index] = (((name == view) && (runtime.Producer(instance: index) is null)) ? runtime.Node(instance: index) : null);
             survivors[index] = ((nodes[index] is { } node) ? Array.FindIndex(array: m_nodes, match: previous => ReferenceEquals(objA: previous, objB: node)) : -1);
         }
 
@@ -215,7 +229,9 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         m_steps.Reset(survivors: survivors);
 
         if (m_accounting) {
-            runtime.AccountFor(instances: instances.Select(selector: static instance => instance.Name).Where(predicate: IsView));
+            m_accountedViews = viewCount;
+            runtime.AccountFor(instances: instances.Select(selector: static instance => instance.Name)
+                .Where(predicate: name => (IsView(instance: name) || (probe.Settings?.HasView(view: name) ?? false))));
         }
     }
     // Whether an instance is one of the world's own views: world, or world$2 on.
@@ -223,7 +239,10 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         (string.Equals(a: instance, b: WorldViewGraphs.WorldInstance, comparisonType: StringComparison.Ordinal) || (WorldViewNames.ViewOf(instance: instance) is not null));
     private bool NodesHold(RenderGraphRuntime runtime) {
         for (var index = 0; (index < m_nodes.Length); index++) {
-            if ((m_nodes[index] is { } node) && !ReferenceEquals(objA: node, objB: runtime.Node(instance: index))) {
+            var current = (((runtime.Instances.Instances[index].Name == view) && (runtime.Producer(instance: index) is null))
+                ? runtime.Node(instance: index) : null);
+
+            if (!ReferenceEquals(objA: m_nodes[index], objB: current)) {
                 return false;
             }
         }

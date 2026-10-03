@@ -625,6 +625,8 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
                 Quality = quality,
             });
 
+            views[^1] = ResolveResolution(views[^1], name, registration.Row.RenderWidth, registration.Row.RenderHeight);
+
             if (Runtime?.NodeOf(instance: name) is { } node) {
                 node.Export = registration.Export;
             }

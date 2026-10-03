@@ -1903,13 +1903,13 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.temporal`, `world.dynamic-resolution`, `world.upscale-sharpness`,
+`world.temporal`, `world.upscale-sharpness`,
 `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
 shadow tier, an ambient-occlusion switch, a temporal-reconstruction switch and a
-render-scale tier; the names are
+render-scale ceiling and floor tier; the names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
@@ -1922,24 +1922,37 @@ native tier, where a view reconstructs nothing. `world.temporal on` reconstructs
 the world's own views over time at any render scale: each jitters its samples,
 resolves them over its history, and under `world.cadence on` stands once a still
 view has converged; `world.upscale-sharpness` then sharpens what it resolves.
-Camera and session views never reconstruct. The render section's `temporal`
+Camera and session views never reconstruct over time. The render section's `temporal`
 member sets it at boot, and `world.save` folds it back.
-`world.dynamic-resolution on` moves the world's own views' render grid each
-frame between the floor (`render.dynamicResolutionFloor`, quarter by default)
-and the render-scale ceiling, inside the allocation, so no frame rebuilds or
-reallocates; a native tier is allocated at three-quarter while it is on. Its
-load is the views' GPU frame time against the display period (it turns on the
-pass timestamps `world.gpu-timing` reads), the present timing where the device
-times nothing, and, offscreen, the views' counted march steps against the
-budget the committed floor ceilings give per output pixel. A sample within 10%
-of its budget leaves the grid; outside it the grid moves by at most 1/16 of
-itself down or 1/32 up. `world.dynamic-resolution <tier|fraction>` forces a
-grid for sweeps, and the no-argument echo names the ceiling, the grid the
-views render, the lowest grid measured over the budget that it will not rise
-onto (`over=`), the floor, the budget and the signal. A sample counts only at
-the grid the views render now, and between two grids that bracket the budget
-the grid settles on the cheaper one. `render.dynamicResolution` sets it at boot,
-`world.save` folds it back, and every shipped preset leaves it off.
+`world.render-scale [view]` echoes the selected view's ceiling, saved quality
+floor, grid, budget and signal. With no target it echoes the primary view;
+ceiling and floor changes write the defaults that named rows inherit, while
+pin and automatic-mode changes apply to every player view (`world`, `world$2` on).
+A camera or session view keeps its native extent until a lever or a `views.quality`
+row names it.
+A named tier or numeric fraction/percentage sets the scalar allocation ceiling.
+`world.render-scale [view] floor <tier>` authors the floor through
+`views.quality`, whose rows name view instances; `*` supplies defaults.
+A row can select a `tier` from the world's quality presets or override its
+`renderScaleFloor` directly. Quarter is the default floor, and a preset's
+`renderScaleFloor` applies when `world.quality` selects that tier. Ceilings and
+floors survive `world.save` exactly; `renderScale` has only a scalar form.
+`world.render-scale [view] auto` releases a pin and enables adaptation;
+`auto off` stops it. Defaults and shipped presets leave adaptation off.
+`world.render-scale [view] pin <scale>` is bindable and holds a grid for a
+sweep. A pin outside the floor and ceiling is refused by name, and changes to
+the bounds clamp an existing pin. Pins enter neither saves nor replay. Auto
+continues from the pinned grid within one policy step.
+Each view uses the same resolution policy: fresh GPU frame time against the
+display period, then fresh present timing, then counted march steps against
+the budget from committed floor evidence per output pixel. A sample within
+10% of its budget holds the grid; otherwise it moves by at most 1/16 of itself
+down or 1/32 up. The grid moves inside its ceiling without allocating or
+resetting history. An adaptive native view allocates at three-quarter, since
+a native view reconstructs nothing. The scheduler supplies the only grid
+quantizer; readings from another grid do not move the policy. Between grids
+that bracket the budget the policy holds the cheaper one, reporting the
+measured dearer grid as `over=`.
 Named tiers are
 facades over continuous values. Do not assume a lower render scale is
 monotonic for a large instance field—read both `world.counters gpu` and

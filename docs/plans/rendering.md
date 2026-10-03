@@ -5708,7 +5708,7 @@ resolution, and stay there.
   presentation, jitter indices 0 to N-1, on both backends and at any speed, and
   the tick verdict still reads the armed tick.
 - **Every costed stage has an off-switch at the floor tier.** Reconstruction
-  (`world.temporal`), dynamic resolution (`world.dynamic-resolution`) and
+  (`world.temporal`), dynamic resolution (`world.render-scale auto`) and
   sharpening (`world.upscale-sharpness 0`) are session levers
   (`WorldSessionLevers`), and the quality presets in `quality.puck` gain a row
   for each of the first two. Which of them `low`
@@ -6014,52 +6014,37 @@ counted rows recorded in the same change.
    - Counted-cost gate: with reconstruction on, the resolve's dispatch, its
      texels, the history's barriers and its device-local bytes; a still view's
      rendered frames stop after one period (`world.cadence on`).
-6. **P15-6, dynamic resolution.** Landed. The render extent moves inside its
-   ceiling each frame. `world.dynamic-resolution on|off|<tier>|<fraction>`
-   turns it on, or forces a grid for a sweep; `render.dynamicResolution` and
-   `render.dynamicResolutionFloor` set it at boot, and every shipped preset
-   leaves it off. A step moves the grid by a share of itself, so "1/16" and
-   "1/32" below are relative bounds (`WorldDynamicResolution.MaximumFall`,
-   `MaximumRise`). The step budget is the floor run's `world` node march-step
-   ceilings over its output pixels, read from the committed ceilings file,
-   which the World compiles in; it is one budget for every tier, scaled by the
-   output's pixels. A native tier's ceiling while the lever is on is
-   three-quarter (`WorldRenderSettings.RenderCeiling`). A reading is the
-   frame's cost across views: the sum over each view's newest timed or
-   completed render not read before. A standing view's latest reading is
-   stale, a render an earlier reading already counted, so it adds no load, does
-   not make the reading fresh and does not name its grid; a reading is fresh
-   whenever any view rendered anew. The controller settles on the cheaper of
-   two adjacent quantized grids that bracket the budget instead of
-   oscillating between them, and `world.dynamic-resolution` echoes the grid
-   it holds above as `over=`.
-   - Delivers: one controller that sets each view's per-frame render extent
-     between a floor and the tier's ceiling, never reallocating, and resets no
-     history (the resolve reads the extent each frame). It writes
-     `SdfViewSnapshot.ResolvedRenderScale`, the grid a layout transition's dip
-     already moves, composing with that dip rather than adding a second grid.
-     A view at a native ceiling reconstructs nothing and ignores that grid, so
-     dynamic resolution on a native tier gives its views a ceiling below
-     native for as long as it is on (one rebuild when the lever moves), never a
-     per-frame choice of fragment; its one load signal through an injectable
-     source, the GPU's frame time first, present timing where the device times
-     nothing, and the counted march-step budget where neither is available; the
-     lever with its presets.
-   - Touches: `WorldFramePresenter`, `WorldRenderSettings`, `SdfFrameBlock`, the
-     controller in `src/Puck.World.Client`, `WorldSessionLevers`,
-     `quality.puck`.
-   - Done when: a law drives the controller through a fake timing source over a
-     scripted signal and holds its extents, and a second law makes the fake
-     unavailable and holds the controller to the step budget; a law raises the
-     grid again under a present-paced display when the GPU's time drops, and
-     one holds the fallback order; a `dynamic-resolution` canary forces a sweep of extents through the
-     lever and reads no `gpu.created.*` rise and no rebuild across it, each
-     forced extent's capture within tolerance of its reference. Held by
-     `WorldDynamicResolutionLawTests`, `WorldFrameLoadAggregateLawTests` and the
-     `dynamic-resolution` canary, whose
-     grid captures equal their tiers' captures exactly on both backends.
-   - Counted-cost gate: zero created objects across the sweep; per-frame counts
-     scale with the render extent the frame chose.
+6. **P15-6, dynamic resolution.** The decision is A: `renderScale` is a
+   scalar ceiling, with no object form. Per-view `views.quality` rows author
+   the floor through `renderScaleFloor` or an authored quality `tier`;
+   Quarter is the default. `quality.puck` supplies each preset's floor.
+   Ceilings and floors are saved. One parser owns
+   `world.render-scale [view] [<scale>|floor <tier>|pin <scale>|auto [on|off]]`
+   and the bare echo. A pin is bindable, bounded by the floor and ceiling,
+   excluded from save and replay, and released by auto within one policy step.
+   A sweep at an unchanged ceiling allocates nothing and resets no history.
+   - Policy: `WorldDynamicResolution` owns the response for every view.
+     Fresh GPU frame time is the first signal, fresh present timing the second,
+     and fresh counted march steps the fallback. Committed floor evidence
+     supplies the budget per output pixel. The ±10% hold and relative steps
+     of at most 1/16 down and 1/32 up remain. `RenderGraphExtent.Quantize` is
+     the only quantizer. A native ceiling becomes three-quarter while the view
+     adapts, because a native view reconstructs nothing. Defaults are off.
+   - State: the policy belongs to the view. Its grid is
+     `SdfViewSnapshot.ResolvedRenderScale`, multiplied by the layout transition
+     dip. The world-wide ceiling, automatic mode and default pin
+     govern the player views (`world`, `world$N`); a camera or session view
+     renders native until a lever or a `views.quality` row names it. The allocation remains `RenderScale`; a reading at another grid
+     moves nothing. The cheaper of two grids bracketing the budget holds until
+     fresh evidence permits a rise. The echo reports ceiling, floor, grid,
+     `over=`, budget and signal.
+   - Held by: `WorldRenderScaleGrammarLawTests`,
+     `WorldDynamicResolutionLawTests`, `WorldFrameLoadAggregateLawTests`, and
+     the `dynamic-resolution` canary. The canary sweeps pins through the
+     unified lever and compares each capture with its tier allocated alone,
+     holding `gpu.created.*` and graph revision unchanged across the sweep.
+   - GPU evidence: the dynamic-resolution canary on both backends with debug
+     layers and parity judge the rendered grid and its counted work.
 7. **P15-7, march seeding.** Investigated and not pursued; the engine has no
    march seeding ([rendering decisions](../decisions/rendering.md)).
    - What was measured: primary took a candidate start from the history
