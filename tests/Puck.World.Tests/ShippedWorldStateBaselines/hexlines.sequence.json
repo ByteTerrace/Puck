@@ -3,7 +3,7 @@
   "world": "games/hexlines.puck",
   "host": {
     "kind": "fixture",
-    "path": "tests/Puck.World.Tests/Fixtures/minimal-hexlines-host.world.json"
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-hexlines-host.puck"
   },
   "expectsStateChange": true,
   "steps": [

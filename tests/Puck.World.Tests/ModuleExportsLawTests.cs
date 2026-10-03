@@ -200,7 +200,7 @@ public sealed class ModuleExportsLawTests {
         var fixtures = RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Tests/Fixtures");
         var host = ((JsonObject)JsonNode.Parse(json: File.ReadAllText(path: Path.Combine(
             path1: fixtures,
-            path2: "minimal-hexlines-host.world.json"
+            path2: "minimal-hexlines-host.puck"
         )))!);
 
         host[propertyName: "basis"] = Path.GetFullPath(path: Path.Combine(

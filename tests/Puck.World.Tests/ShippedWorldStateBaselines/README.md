@@ -107,7 +107,7 @@ with — optionally adding rows a sibling district would have supplied
 | dominoes | `games/dominoes.puck` | spliced | 600 | no |
 | freecell | `games/freecell.puck` | spliced | 610 | yes |
 | go | `games/go.puck` | document | 168 | yes |
-| hexlines | `games/hexlines.puck` | fixture `minimal-hexlines-host.world.json` | 600 | yes |
+| hexlines | `games/hexlines.puck` | fixture `minimal-hexlines-host.puck` | 600 | yes |
 | hiddenranks | `games/hiddenranks.puck` | fixture `minimal-hiddenranks-host.world.json` | 190 | yes |
 | klondike | `games/klondike.puck` | spliced | 680 | yes |
 | lineup | `worlds/parlor/lineup.puck` | source | 135 | yes |
