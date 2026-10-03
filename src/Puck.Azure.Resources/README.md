@@ -135,7 +135,7 @@ The root exposes delegated `user_impersonation` on the existing Entra applicatio
 supplies the World managed identity's federated credential. The existing Function
 onboarding endpoint and ARM delegation still require user consent.
 
-The existing load balancer maps public TCP 443 to Caddy 2.11.4 on 8443. Caddy uses
+The existing load balancer maps public TCP 443 to Caddy 2.11.6 on 8443. Caddy uses
 ACME TLS-ALPN-01 to issue, renew and hot-swap the certificate, forwarding only to
 the loopback MCP listener. No DNS plugin, stored Azure credential, PFX secret,
 port 80 listener or renewal restart is needed. Certificate/account state persists
