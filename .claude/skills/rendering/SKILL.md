@@ -863,8 +863,9 @@ These are one-line cautions; the owning pages hold the derivations.
   (`SdfWorldTables.Regions.cs`, created by `CreateRegion` under
   `GpuResidency.Select` with a reader in flight), and brick staging is a staged
   region whose destination is the brick pool (`Target` names the brick's slot).
-  Each region, brick staging included,
-  writes copy sets the tables reserved for it at construction, its
+  Each staged region, brick staging included, writes a slot's copy set at its
+  first recorded copy and again only after another region writes that set. The
+  tables reserve the copy sets at construction, each region taking its
   `GpuRegionCopySets` slice of the tables' one `GpuRegionCopyPool` (whatever
   policy the device selects), so the tables create and admit two pools, their
   own and the copy pool, and no region the frame thread creates or grows takes
