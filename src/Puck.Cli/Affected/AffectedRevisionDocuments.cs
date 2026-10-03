@@ -50,7 +50,6 @@ internal sealed class AffectedRevisionDocuments(string root, string revision) : 
 
         return directory;
     }
-
     private string Cross(string path, string from, string to) {
         if (!Path.IsPathRooted(path: path)) {
             return path;

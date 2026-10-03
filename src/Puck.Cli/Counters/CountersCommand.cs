@@ -230,7 +230,7 @@ internal static class CountersCommand {
         try {
             script = File.ReadAllText(path: workloadScriptPath).ReplaceLineEndings(replacementText: "\n");
 
-            if (!Puck.Cli.Determinism.DeterminismRecorder.TryLoadWorld(path: worldPath, authored: out var authored, definition: out _, error: out var worldError)) {
+            if (!Puck.Cli.Determinism.DeterminismRecorder.TryLoadWorld(authored: out var authored, definition: out _, error: out var worldError, path: worldPath)) {
                 return CliExit.Refuse(verb: Verb, what: "the counters workload", why: worldError.ReplaceLineEndings(replacementText: " "));
             }
 

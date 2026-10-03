@@ -115,6 +115,7 @@ internal sealed class AffectedRevisionTree(string root, string revision) : IAffe
 
     /// <inheritdoc/>
     public IWorldDocumentSource Documents => m_documents;
+
     /// <inheritdoc/>
     public string Root { get; } = Path.GetFullPath(path: root);
 
@@ -139,7 +140,6 @@ internal sealed class AffectedRevisionTree(string root, string revision) : IAffe
 
         return text;
     }
-
     /// <summary>Deletes the export of the revision, when its documents were read.</summary>
     public void Dispose() => m_documents.Dispose();
 }

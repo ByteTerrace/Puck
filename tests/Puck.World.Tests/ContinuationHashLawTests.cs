@@ -35,8 +35,8 @@ public sealed class ContinuationHashLawTests {
             entries: [.. entries.Select(selector: static entry => ((entry.Profile is { } profile)
                 ? (entry with {
                     Profile = profile with {
-                        Facts = (profile.Facts is { } facts) ? (facts with { Cells = [.. (facts.Cells ?? [])] }) : null,
-                        Records = (profile.Records is { } records) ? (records with { }) : null,
+                        Facts = ((profile.Facts is { } facts) ? (facts with { Cells = [.. (facts.Cells ?? [])] }) : null),
+                        Records = ((profile.Records is { } records) ? (records with { }) : null),
                     },
                 })
                 : entry))],
@@ -166,11 +166,11 @@ public sealed class ContinuationHashLawTests {
         Assert.True(condition: owned.TrySetFact(changed: out _, key: CellName.Parse(candidate: "laterFact"), reason: out var reason, value: 9), userMessage: reason);
         var afterFact = AssertStreamedFoldsTheCapturedEntries(context: "after a fact write", population: population);
 
-        Assert.NotEqual(expected: steady, actual: afterFact);
+        Assert.NotEqual(actual: afterFact, expected: steady);
         Assert.True(condition: owned.TryWriteRecord(field: CellName.Parse(candidate: "score"), reason: out reason, record: CellName.Parse(candidate: "stats"), value: CellValue.Int(value: 42)), userMessage: reason);
         var afterRecord = AssertStreamedFoldsTheCapturedEntries(context: "after a record write", population: population);
 
-        Assert.NotEqual(expected: afterFact, actual: afterRecord);
+        Assert.NotEqual(actual: afterRecord, expected: afterFact);
         for (var step = 0; (step < 10); step++) {
             fixture.Step();
             _ = AssertStreamedFoldsTheCapturedEntries(context: $"profiled step {step}", population: population);
