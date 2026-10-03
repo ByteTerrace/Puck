@@ -24,7 +24,10 @@ Partners own tracks and outcomes. A brief gives the outcome and the
 constraints, never the method, the design or the order of the edits. A partner
 picks its next work from its track or a shared ready queue and announces it. The
 lead keeps cross-track conflicts, merges, owner-level calls, and scope and
-order.
+order. Every brief ends with the partner's own next one or two items, and the
+partner works its queue without waiting for the lead between items. A queue the
+partners cannot read is no queue: keep the lead's queue where partners can reach
+it, or delegate it to them.
 
 ## Write and track assignments
 
