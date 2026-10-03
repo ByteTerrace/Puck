@@ -1,0 +1,134 @@
+{
+  "id": "shadow-slots",
+  "title": "Two named auto suns march two shadow slots at high and exactly one at medium",
+  "binding": "The fixed offscreen court has two named directional auto lights shining from opposite sides over a floor and two pillars. High and medium retain K = 2 and K = 1 with identical High march quality, F = 0, native scale, no AO and no temporal reconstruction. With cadence disabled, the positive leg reads two nonzero per-slot march counts at high and one at medium, with every other row zero. An unshadowed capture after world.shadows off preserves the lights and slot policy. The creation author frame flips X and Z into engine space, placing the tall pillar at (1.2, 1, 0). Two disjoint floor regions near (-0.15, 0, 0) and (2.25, 0, 0), on opposite sides of that pillar in engine space, compare against that capture: east-sun darkens the first at both tiers; west-sun darkens the second only at high. The bounds test exact equality or inequality, with no calibrated pixel ceiling. Marching slot 0's light twice leaves the west region unshadowed and fails high-west-sun-shadow. The discriminating leg changes only the first preset to medium: high-marches-slot1 and high-west-sun-shadow fail because slot 1 does not march and its distinct shadow is absent. Its opposite assertions require those exact observations; missing work, skipped passes, absent captures or wrong extents cannot satisfy them.",
+  "bootShape": "offscreen",
+  "backends": ["vulkan", "directx"],
+  "requirements": ["gpu"],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/shadow-slots/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.quality", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.quality", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" },
+      {"verb":"world.shadows","outcome":"accepted","occurrence":1},
+      {"verb":"world.wait","outcome":"accepted","occurrence":6},
+      {"verb":"world.screenshot","outcome":"accepted","occurrence":3},
+      {"verb":"world.wait","outcome":"accepted","occurrence":7}
+    ],
+    "expect": [
+      {
+        "type": "response", "name": "high-shadow-work", "stream": "stdout", "verb": "world.counters", "occurrence": 1, "count": 2,
+        "extract": [
+          { "name": "high-slot0", "field": "shadow.slot0.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "high-slot1", "field": "shadow.slot1.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "high-slot2", "field": "shadow.slot2.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "high-slot3", "field": "shadow.slot3.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "high-slot4", "field": "shadow.slot4.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "high-slot5", "field": "shadow.slot5.steps", "line": "work sdf.world$shadow executed:" }
+        ]
+      },
+      {
+        "type": "response", "name": "medium-shadow-work", "stream": "stdout", "verb": "world.counters", "occurrence": 2, "count": 2,
+        "extract": [
+          { "name": "medium-slot0", "field": "shadow.slot0.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "medium-slot1", "field": "shadow.slot1.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "medium-slot2", "field": "shadow.slot2.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "medium-slot3", "field": "shadow.slot3.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "medium-slot4", "field": "shadow.slot4.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "medium-slot5", "field": "shadow.slot5.steps", "line": "work sdf.world$shadow executed:" }
+        ]
+      },
+      { "type": "relation", "name": "high-marches-slot0", "operator": "greater", "left": { "value": "high-slot0" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "high-marches-slot1", "operator": "greater", "left": { "value": "high-slot1" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "high-slot2-is-zero", "operator": "equal", "left": { "value": "high-slot2" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "high-slot3-is-zero", "operator": "equal", "left": { "value": "high-slot3" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "high-slot4-is-zero", "operator": "equal", "left": { "value": "high-slot4" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "high-slot5-is-zero", "operator": "equal", "left": { "value": "high-slot5" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-marches-slot0", "operator": "greater", "left": { "value": "medium-slot0" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-slot1-is-zero", "operator": "equal", "left": { "value": "medium-slot1" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-slot2-is-zero", "operator": "equal", "left": { "value": "medium-slot2" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-slot3-is-zero", "operator": "equal", "left": { "value": "medium-slot3" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-slot4-is-zero", "operator": "equal", "left": { "value": "medium-slot4" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-slot5-is-zero", "operator": "equal", "left": { "value": "medium-slot5" }, "right": { "literal": 0 } },
+      {"type":"imageDifference","name":"high-east-sun-shadow","capture":"high.png","reference":"unshadowed.png","extent":[128,128],"region":[0.477,0.54,0.49,0.556],"maximumMeanCodes":0,"holds":false},
+      {"type":"imageDifference","name":"high-west-sun-shadow","capture":"high.png","reference":"unshadowed.png","extent":[128,128],"region":[0.735,0.54,0.755,0.556],"maximumMeanCodes":0,"holds":false},
+      {"type":"imageDifference","name":"medium-east-sun-shadow","capture":"medium.png","reference":"unshadowed.png","extent":[128,128],"region":[0.477,0.54,0.49,0.556],"maximumMeanCodes":0,"holds":false},
+      {"type":"imageDifference","name":"medium-west-sun-unshadowed","capture":"medium.png","reference":"unshadowed.png","extent":[128,128],"region":[0.735,0.54,0.755,0.556],"maximumMeanCodes":0,"holds":true}
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/shadow-slots/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.quality", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.quality", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 4, "outcome": "accepted" },
+      { "verb": "world.screenshot", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 5, "outcome": "accepted" },
+      { "verb": "world.counters", "occurrence": 2, "outcome": "accepted" },
+      {"verb":"world.shadows","outcome":"accepted","occurrence":1},
+      {"verb":"world.wait","outcome":"accepted","occurrence":6},
+      {"verb":"world.screenshot","outcome":"accepted","occurrence":3},
+      {"verb":"world.wait","outcome":"accepted","occurrence":7}
+    ],
+    "expect": [
+      {
+        "type": "response", "name": "high-sample-has-only-one-marched-slot", "stream": "stdout", "verb": "world.counters", "occurrence": 1, "count": 2,
+        "extract": [
+          { "name": "high-slot0", "field": "shadow.slot0.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "high-slot1", "field": "shadow.slot1.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "high-slot2", "field": "shadow.slot2.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "high-slot3", "field": "shadow.slot3.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "high-slot4", "field": "shadow.slot4.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "high-slot5", "field": "shadow.slot5.steps", "line": "work sdf.world$shadow executed:" }
+        ]
+      },
+      {
+        "type": "response", "name": "medium-shadow-work", "stream": "stdout", "verb": "world.counters", "occurrence": 2, "count": 2,
+        "extract": [
+          { "name": "medium-slot0", "field": "shadow.slot0.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "medium-slot1", "field": "shadow.slot1.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "medium-slot2", "field": "shadow.slot2.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "medium-slot3", "field": "shadow.slot3.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "medium-slot4", "field": "shadow.slot4.steps", "line": "work sdf.world$shadow executed:" },
+          { "name": "medium-slot5", "field": "shadow.slot5.steps", "line": "work sdf.world$shadow executed:" }
+        ]
+      },
+      { "type": "relation", "name": "high-marches-slot0", "operator": "greater", "left": { "value": "high-slot0" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "high-marching-only-one-slot-turns-the-slot1-predicate-red", "operator": "equal", "left": { "value": "high-slot1" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "high-slot2-is-zero", "operator": "equal", "left": { "value": "high-slot2" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "high-slot3-is-zero", "operator": "equal", "left": { "value": "high-slot3" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "high-slot4-is-zero", "operator": "equal", "left": { "value": "high-slot4" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "high-slot5-is-zero", "operator": "equal", "left": { "value": "high-slot5" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-marches-slot0", "operator": "greater", "left": { "value": "medium-slot0" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-slot1-is-zero", "operator": "equal", "left": { "value": "medium-slot1" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-slot2-is-zero", "operator": "equal", "left": { "value": "medium-slot2" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-slot3-is-zero", "operator": "equal", "left": { "value": "medium-slot3" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-slot4-is-zero", "operator": "equal", "left": { "value": "medium-slot4" }, "right": { "literal": 0 } },
+      { "type": "relation", "name": "medium-slot5-is-zero", "operator": "equal", "left": { "value": "medium-slot5" }, "right": { "literal": 0 } },
+      {"type":"imageDifference","name":"high-east-sun-shadow","capture":"high.png","reference":"unshadowed.png","extent":[128,128],"region":[0.477,0.54,0.49,0.556],"maximumMeanCodes":0,"holds":false},
+      {"type":"imageDifference","name":"high-west-sun-shadow-is-absent","capture":"high.png","reference":"unshadowed.png","extent":[128,128],"region":[0.735,0.54,0.755,0.556],"maximumMeanCodes":0,"holds":true},
+      {"type":"imageDifference","name":"medium-east-sun-shadow","capture":"medium.png","reference":"unshadowed.png","extent":[128,128],"region":[0.477,0.54,0.49,0.556],"maximumMeanCodes":0,"holds":false},
+      {"type":"imageDifference","name":"medium-west-sun-unshadowed","capture":"medium.png","reference":"unshadowed.png","extent":[128,128],"region":[0.735,0.54,0.755,0.556],"maximumMeanCodes":0,"holds":true}
+    ]
+  }
+}

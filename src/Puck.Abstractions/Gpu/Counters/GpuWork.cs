@@ -14,7 +14,7 @@ namespace Puck.Abstractions.Gpu;
 /// counter buffers (<see cref="GpuKernelCounters"/>), and reach the pass's row once its submission completes.
 /// </para>
 /// </summary>
-public static class GpuWork {
+public static partial class GpuWork {
     internal const int BufferBarriersColumn = 7;
     internal const int BufferCopyBytesColumn = 17;
     internal const int BuffersCreatedIndex = 3;
@@ -40,7 +40,7 @@ public static class GpuWork {
     internal const int RenderPassesColumn = 3;
     internal const int ShaderModulesCreatedIndex = 1;
     internal const int SkyEvaluationsColumn = 18;
-    internal const int SubmissionColumnCount = 19;
+    internal const int SubmissionColumnCount = (ShadowStepsFirstColumn + ShadowSlotCount);
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
 
@@ -119,7 +119,7 @@ public static class GpuWork {
 
     /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
     /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, <see cref="TexelsWritten"/>, then
-    /// <see cref="SkyEvaluations"/>.</summary>
+    /// <see cref="SkyEvaluations"/>, then <see cref="ShadowSteps"/> in slot order.</summary>
     public static ReadOnlySpan<WorkKind> KernelKinds =>
         Order.Kernel;
     /// <summary>Gets the lifetime kinds, in the order a report lists them.</summary>
@@ -133,7 +133,7 @@ public static class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
-        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations];
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, .. ShadowSteps];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -172,6 +172,9 @@ public static class GpuWork {
             kinds[TexelsWrittenColumn] = TexelsWritten;
             kinds[BufferCopyBytesColumn] = BufferCopyBytes;
             kinds[SkyEvaluationsColumn] = SkyEvaluations;
+            for (var slot = 0; (slot < ShadowSlotCount); slot++) {
+                kinds[(ShadowStepsFirstColumn + slot)] = ShadowSteps[slot];
+            }
 
             return kinds;
         }

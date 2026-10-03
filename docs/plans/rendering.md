@@ -2253,11 +2253,12 @@ the alternatives it was chosen over, are in
   every surface as if nothing stood between it and the sky. The only occlusion
   on it is `calcAO`'s normal ladder (`surface/sdf-occlusion.hlsli`): three field
   evaluations along the normal out to 0.13 world units, one at the fleet tier,
-  paid by the `ambient` pass for every lit pixel and applied to the ambient fill
-  only. A room with one window reads as bright as a terrace.
+  paid by the `ambient` pass for every lit pixel and applied to the ambient fill,
+  unslotted directionals and point lights. A room with one window reads as bright
+  as a terrace.
 - **No light reaches one surface from another.** A directional light lights
-  what faces it, under the shadow stage's visibility for the one shadow light
-  and under ambient occlusion for every other light; a point light is never
+  what faces it, under its own shadow-slot visibility when selected and
+  scaled by ambient occlusion outside the slots; a point light is never
   occluded. Nothing a light reaches passes any of it on.
 - **The bounce is painted.** A palette's `bounce` colour
   (`SdfMaterial.Bounce`) adds `albedo × bounce × (1 − n·key) × ao` on the side
@@ -3183,7 +3184,7 @@ re-record explained in the same change.
   none of P18's records, declarations or laws. G2 extends P18-4's World-group
   tables and P18-5's package layout, which are on the features head, because it adds
   to the same declarations. G4 reads the light record P18-4 generates and walks
-  today's one shadow light; P18-7's slots and fades reach the light view in G5,
+  slot 0's shadow light; P18-7's additional slots and fades reach the light view in G5,
   which also needs P18-6's change classes and signatures. G6 needs P18-9's
   harmonic ambient and the map's lighting-visible layers; until then the sky source is absent, a view keeps its
   ambient as its own term, and ambient is never a bounce source. G7's infinity
@@ -5362,12 +5363,12 @@ item 2 landed.
        kind has a response.
     c. Landed, the shadow stage. A `shadow` pass between ambient and views
        (`sdf-world-shadow.comp`, `surface/sdf-shadow.hlsli`) gathers each
-       workgroup's shadow candidates and marches the key light's soft shadow
-       into the record's K row, which grows it to sixteen words (64 bytes a
+       workgroup's shadow candidates and marches each selected light's soft shadow
+       into the record's K row, four 8-bit visibilities within sixteen words (64 bytes a
        pixel); views reads the row and marches nothing, and holds no
        groupshared mask. Each costed stage is off for a frame whose quality
        levers turn it off: the shadow pass skips a frame whose soft shadows
-       are off or that has no shadow light, and the ambient pass a frame whose
+       are off or that has no marched slot light, and the ambient pass a frame whose
        ambient occlusion is off, whose neutral occlusion the surface pass
        already wrote (`IRenderGraphPackageRecorder.Skips`). Which levers a
        tier sets is the world's quality settings'; the counters workload's
@@ -6401,8 +6402,9 @@ clocks and its duplicates.
 - **Separate records.** `SdfLights` and `SdfSky` (`src/Puck.SignedDistance`)
   pack the lights, sky block, gradient stops and studio softboxes into four
   World-group regions. Their HLSL structures are generated from the C#
-  records. The 496-byte pass block holds the light count, shadow-light index
-  and curvature shading; the sky and light records are read only by the
+  records. Active shadow handoff controls occupy a fifth region. The 512-byte
+  pass block holds the light count, `shadowSlots` int4, configured stable
+  count, active fade count and curvature shading; the sky and light records are read only by the
   kernels that use them, as P18-4 specifies.
 - **The sky once, where it is seen** (P18-5). `shade/sdf-sky.hlsli` holds the
   stars, a private 2D lattice noise, the clouds and the gradient, grouped into
@@ -6422,13 +6424,14 @@ clocks and its duplicates.
   reads as the default look's two (P18-5 removed the pinned HLSL gradient and its
   `SkyEnabled` branch); the studio reflection horizon; and the hemisphere
   ambient light.
-- **Five spellings of the sun:** `SdfEnvironment.DefaultSunDirection`, the HLSL
-  `SdfSunDirection`, `worldSunDirection` (whichever light shadows),
-  `SunDiscLightIndex` (the light the disc is drawn about) and the unused
-  `KeyLightDirection`. The disc is always white; the clouds are lit by the
-  shadow light, which need not be the light the disc marks. One light may
-  shadow: the visibility record's K row holds one key visibility, and the
-  shadow stage marches one direction.
+- **The sun's remaining special cases:** `SdfLights.DefaultSunDirection`, the HLSL
+  `SdfSunDirection`, `worldSunDirection` (slot 0's light), and
+  `SdfSkyBlock.DiscLight` (the light the disc is drawn about). The disc is always
+  white; the clouds are lit by slot 0, which need not be the light the disc
+  marks. The host allocator
+  selects up to four named lights, each with its own shadow march and 8-bit
+  visibility in the K row. Active handoffs add at most F incoming marches;
+  S60b supplies the packed K row and counted K + F loop.
 - **Two cloud systems.** The sky's cloud layer and the bounded `SdfVolume`
   `Cloud` kind use different noise (`sdfLatticeNoise` in the sky file,
   `sdfLatticeNoise3` in `field/sdf-noise.hlsli`) on different clocks.
@@ -6543,7 +6546,7 @@ lanes a key must address by slot and index:
 render {
   lighting {
     lights [
-      directional(direction: [0.51, 0.79, 0.33], color: "#FFF1D6", weight: 0.85, shadows: true)
+      directional(name: "sun", direction: [0.51, 0.79, 0.33], color: "#FFF1D6", weight: 0.85, shadow: always)
       hemisphere(color: "#B7C8DA", base: 0.25, gradient: 0.25)
     ]
   }
@@ -6574,6 +6577,12 @@ timeline {
   clock day { periodSeconds: 20min, spanSeconds: 24h, startSeconds: 7h }
 }
 render {
+  lighting {
+    lights [
+      directional(name: "sunLight", weight: 3, shadow: always)
+      directional(name: "moonLight", weight: 0.06, shadow: auto)
+    ]
+  }
   sky {
     bodies [
       {
@@ -6582,7 +6591,7 @@ render {
         shape: disc(size: 0.53deg)
         color: "#FFF1D6"
         intensity: 40
-        light { intensity: 3, shadows: always }        // the penumbra follows the disc's size
+        light: "sunLight"                              // binds a named directional light
       }
       {
         name: "moon"
@@ -6591,7 +6600,7 @@ render {
         litBy ["sun"]
         color: "#DDE4F0"
         intensity: 0.8
-        light { intensity: 0.06 }
+        light: "moonLight"
       }
     ]
     layers [
@@ -6621,12 +6630,18 @@ timeline {
   clock pale  { periodSeconds: 14min, startSeconds: 5min }
 }
 render {
+  lighting {
+    lights [
+      directional(name: "emberLight", weight: 2.2, shadow: always)
+      directional(name: "paleLight", weight: 1.4, shadow: auto)
+    ]
+  }
   sky {
     bodies [
       { name: "ember", motion: orbit(clock: ember, rise: 80deg, tilt: 20deg), shape: disc(size: 1.4deg),
-        color: "#FF8A3D", intensity: 30, light { intensity: 2.2, shadows: always } }
+        color: "#FF8A3D", intensity: 30, light: "emberLight" }
       { name: "pale", motion: orbit(clock: pale, rise: 110deg, tilt: 35deg), shape: disc(size: 0.4deg),
-        color: "#CFE3FF", intensity: 60, light { intensity: 1.4, shadows: auto } }
+        color: "#CFE3FF", intensity: 60, light: "paleLight" }
     ]
     layers [
       gradient(name: "dust", stops [ { elevation: -90deg, color: "#5A3A22" } { elevation: 0deg, color: "#E8B37A" } { elevation: 90deg, color: "#9C6B4E" } ])
@@ -6644,11 +6659,14 @@ world:
 ```puck
 timeline { clock pulse { periodSeconds: 6s } }
 render {
+  lighting {
+    lights [directional(name: "starLight", weight: 1.8, shadow: always)]
+  }
   sky {
     frame { up: [0.2, 0.95, 0.1] }
     bodies [
       { name: "star", direction { azimuth: 200deg, elevation: 35deg }, shape: disc(size: 2deg),
-        color: "#B9A8FF", intensity: 20, light { intensity: 1.8, shadows: always } }
+        color: "#B9A8FF", intensity: 20, light: "starLight" }
       { name: "giant", direction { azimuth: 40deg, elevation: 25deg }, shape: far(prototype: "gasGiant", size: 18deg),
         rings { inner: 1.4, outer: 2.3, tilt: 12deg, color: "#E8D2A8", opacity: 0.7 }, litBy ["star"] }
     ]
@@ -6672,53 +6690,85 @@ target; each step settles its own vocabulary rows in
 **Decisions.**
 
 - **No privileged sun.** Bodies are a list of any length up to a capacity, and
-  nothing in the pipeline assumes one key light. A body casts light only
-  through its `light`, a directional whose direction is the body's, whose
-  colour defaults to the body's colour, and whose penumbra defaults to the
+  nothing in the target pipeline assumes one key light. A body casts light only
+  through its `light` binding to a named directional whose direction is the
+  body's, whose colour defaults to the body's colour, and whose penumbra defaults to the
   body's angular radius. The disc is tinted by that colour. A body with no light
-  is scenery. A world with no light-casting body has no directional light; its
-  surfaces are lit by the sky's ambient and any point lights. The fallback sun
+  is scenery. Directionals remain independently authored lights; a body only
+  binds one. A world with no directional lights has surfaces lit by the sky's
+  ambient and any point lights. The fallback sun
   (`DefaultSunDirection`, `SdfSunDirection`, the pinned directional) is
   deleted. Every kernel read of "the sun" (the clouds' lighting, the unbound
   screen glass's tint, `sdfMaterialShade`'s light direction) walks the lights
   through `sdfLightResponse` instead, or reads the sky's ambient.
-- **Many shadowed lights, shadowed by slot.** Every light-casting body has
-  `shadows: always`, `auto` (the default) or `never`. At each delivered engine
+- **Many shadowed lights, shadowed by slot.** A directional light has
+  `shadow: always`, `auto` or `never` (the default); `always` and `auto`
+  require a unique `name`. The allocator's identity is that name, never the
+  list index or a body's name. A future body binds a light and becomes a
+  candidate through that light. At each delivered engine
   tick (the mirror's integer tick, never a frame and never the presented
-  fraction) the host fills up to K shadow slots: `always` bodies first, in list
-  order, then `auto` bodies by their luminance resolved at that tick, with ties
-  broken by list order.
+  fraction) the host fills up to K shadow slots: `always` lights first, then
+  `auto` lights by their luminance resolved from tick-state colour and weight.
+  At equal priority (the same mode and, for auto, luminance), a current slot
+  holder precedes a non-holder. List order breaks ties among non-holders and
+  on a fresh selection. A pure reorder keeps the holder; selected names retain
+  their existing slots when ranking or authored order changes.
   The rest light unshadowed, scaled by ambient occlusion as an unshadowed
   directional is today. K comes from the tier: `low` 0 (today's floor already
-  turns shadows off), `medium` 1, `high` 2, and the lever allows up to 4. The
-  validator refuses more `always` bodies than 4. The shadow stage loops over the
-  slots, one gather and one march per slot, so its march steps scale with K and
-  are counted per slot. The visibility record's K row packs four 8-bit
-  visibilities into its one word, so the record keeps sixteen words.
+  turns shadows off), `medium` 1, `high` 2, with a maximum of 4. These current
+  preset rows do not settle P18-14. The boot row defaults to K = 1, F = 0,
+  zero fade ticks and instant overflow, with the named pinned sun as an
+  `always` candidate when lights are unauthored. Applying a preset changes its
+  four shadow-policy fields together. The host computes and reports the full
+  selection in `SdfLights.ShadowSlots`. The shadow stage performs one gather
+  and one march per occupied stable slot and active incoming slot, counted
+  per slot. Four 8-bit stable visibilities pack into the K row's one word,
+  keeping the record at sixteen words.
 - **A shadow slot changes hands by a crossfade on the tick.** A crossing is
   detected at a tick boundary: the slot assignment computed at a delivered tick
   differs from the one at the tick before it, both from tick-state luminance.
-  The body losing a slot keeps it while the body gaining it marches in a fade
-  slot, and the two visibilities blend by the fade weight
-  `(presented tick − crossing tick) / fade ticks`, clamped to one. The weight is
+  The light losing a slot keeps it while the light gaining it occupies a fade
+  slot. Progress is `(presented tick − crossing tick) / fade ticks`, clamped
+  to [0, 1]. Each light keeps its own radiance and shadow visibility: the
+  outgoing light's occlusion deficit (`1 − visibility`) scales by
+  `1 − progress`, and the incoming light's deficit scales by `progress`.
+  Neither radiance nor the two visibilities are blended together. Progress is
   a function of the presented tick alone, never of frames rendered, so the N
   frames a `converge` capture composes at one frozen tick carry identical
   weights, and a replay that delivers the same ticks detects the same crossings
-  at the same ticks. A discontinuity in delivered ticks (a seek, a clock
-  scrubbed by a lever, a reload) completes every fade at once. The fade length
-  is a tier value in engine ticks, which a tier may set to `instant`. An
-  `always` body still pins its slot and never fades out. The reason is that an
+  at the same ticks. A seek, reload, structural revision, backward delivery or
+  policy change installs without fades. Selected names keep the slots they
+  held; new names fill freed slots in rank order. The fade length
+  is the tier's `shadowFadeTicks` value in engine ticks; zero means instant. An
+  `always` light still pins its slot while selected. The reason is that an
   artist sees a pop as a bug in their sky, and a fade slot's march is a small,
   counted price.
-- **Fades are bounded.** At most F fades run at once, a tier value: `low` has
-  K = 0 and F = 0, `medium` K = 1 and F = 1, `high` K = 2 and F = 1, and the
-  lever allows K up to 4 and F up to 2. A crossing detected while F fades run
-  waits in a queue, and starts when a fade ends if the assignment it would make
-  still differs from the current one; a tier may instead resolve an overflowing
-  crossing instantly (`fadeOverflow: queue | instant`, `queue` by default). The
-  shadow stage therefore marches at most K + F slots on any frame, and the
-  ceilings file records K + F per tier: 0 at `low`, 2 at `medium`, 3 at
-  `high`.
+- **Fades are bounded.** `shadowLights` gives K, up to 4, and
+  `shadowFadeSlots` gives F, up to 2. With `shadowOverflow: queue`, a crossing
+  waits while its slot has a handoff (`SlotInHandoff`), its desired identity
+  participates in another handoff (`IdentityInUse`), or all fade entries are
+  busy (`FadeCapacity`). The allocator recomputes current targets only at
+  delivered tick boundaries and starts a still-needed crossing at the first
+  delivered tick when its blocker clears. Matching targets queued at the
+  previous delivery take free fade capacity before fresh crossings, oldest
+  first, with slot index breaking equal-age ties. With `shadowOverflow: instant`,
+  overlap or exhausted capacity releases all old participants and installs
+  the desired owner atomically in the same tick. F = 0 or zero fade duration
+  also makes a crossing instant. No presented frame of an instant crossing
+  holds both owners or neither. A seek, reload,
+  structural revision, backward delivery or policy change installs without
+  fading and keeps surviving selected names in their held slots. CPU handoffs
+  use fixed current and prior records, each
+  32 bytes per fade slot, with integer crossing ticks and durations. Reading
+  computes progress from the presented tick without advancing the allocator
+  or allocating. `MarchSlots` is the stable count plus the active handoff
+  count, at most K + F. The shadow-stage loop counts every active march and applies the per-light
+  deficits above. Shipped tiers use F = 0, zero `shadowFadeTicks` and
+  `shadowOverflow: instant`; P18-14 chooses the final rows from counted work.
+  Loading checks every reachable policy, including `auto`, and refuses K > 0
+  with F = 0 and positive fade ticks, positive F with zero fade ticks, and a
+  queue policy that cannot progress. K = F = 0, fade ticks 0 and instant is
+  valid.
 - **An open, ordered layer stack.** Layers composite in the order they are
   authored, each by its blend mode (`over`, `add`, `multiply`, `screen`), and a
   kind may appear more than once. Kinds are an extensible set: a kind is a
@@ -7124,8 +7174,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `puck shaders generate` writes from the C# types; `SdfLights` and `SdfSky`
      hold the authored values and pack the records with their host bakes (the
      disc's direction and exponent, the light the clouds are lit by). The pass
-     block keeps the light count, the shadow light and the curvature shading,
-     which the surface pass reads, and is 496 bytes. The lights table is
+     block keeps the light count, shadow slot table and counts, and curvature
+     shading, which the surface pass reads, and is 512 bytes with S60b's slot
+     fields. The lights table is
      referenced by the shadow and views kernels, the sky block and stops by sky
      and views, and the softboxes by views alone; `composite` joins the sky's
      readers when P18-5 lands it. A star or cloud seed is exact now: the old
@@ -7155,9 +7206,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      byte; `puck shaders generate --check` passes.
    - Counted-cost gate: the win is block size and binding, not upload bytes.
      Every region already writes only the words that changed, so the new
-     tables upload what changed, as the rest do. The generated pass block
-     shrinks from 1,296 bytes to 496, so the constant data the host writes into
-     the ten pass blocks of a view each frame falls from 12,960 bytes to 4,960.
+     tables upload what changed, as the rest do. The generated world pass block
+     is 512 bytes with S60b's slot fields, instead of embedding the environment
+     in the former 1,296-byte block. Sky and resolve use their own interfaces.
      The sky block and stops are read by 2 of the 10 passes (`views`, `sky`),
      the softboxes by `views` alone, and the lights by 2 (`shadow`, `views`).
      `composite` joins the sky's readers in P18-5. A law holds the block size
@@ -7356,40 +7407,147 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      records required zeros for the march group, and the visual-only and
      lighting-visible classes for `shadow`.
 7. **P18-7, celestial bodies and many shadowed lights.**
-   - Delivers: `render.sky.bodies` with shapes `disc`, `crescent` and rings,
-     motions (direction, orbit, keys, a state row), light binding,
-     illumination by other bodies, the shadow slots and their tier policy,
-     four packed visibilities in the K row, the shadow stage's loop over
-     slots, the crossfade when a slot changes hands (crossings detected at tick
-     boundaries, weights from the presented tick, at most F fades with the
-     queue or instant overflow, a tier's fade length in ticks, `instant` among
-     them), and `world.lighting`'s slot report (which body holds which slot at
-     this tick, why, and any fade or queued crossing).
-   - Deletes: `WorldRenderSkyLayer.SunDisc`, directional lights authored apart
-     from a body, `worldSunDirection`, `worldSunColor`,
-     `worldShadowPenumbraSlope`, `SdfSunDirection`, `DefaultSunDirection`, the
-     pinned directional and the `ShadowLightIndex` and `SunDiscLightIndex`
-     lanes.
+   - Delivers: S60 supplies `WorldShadowMode` (`shadow: always | auto | never`), named
+     light identities, `WorldShadowAllocator`'s deterministic selection and
+     stable slots, and `WorldQualityPreset`'s `shadowLights`,
+     `shadowFadeSlots`, `shadowFadeTicks` and `shadowOverflow` rows. The same
+     fields seed the boot settings, whose default is K = 1, F = 0, zero fade
+     ticks and instant overflow. With unauthored lights, the named pinned sun
+     is an `always` candidate in slot 0. The low/medium/high rows in
+     `quality.puck` remain K = 0/1/2. A preset applies its four shadow fields
+     as one settings change, never through an invalid intermediate policy.
+     `world.lighting` reports each slot's
+     light and reason (`always`, or `auto` with its rank), active handoffs and
+     queued crossings with their capacity, identity or slot reason. The CPU
+     computes the full K selection and up to F active handoffs; S60b carries
+     that selection unchanged through `SdfLights.ShadowSlots` into the GPU.
+     The frame block carries `shadowSlots`, `shadowSlotCount` and
+     `shadowFadeCount`; the sun disc's implicit binding follows slot 0.
+     Light-table reordering preserves named identities. `always` precedes `auto`; auto ranks by
+     tick-state luminance. At equal priority, current holders beat non-holders,
+     with authored order deciding among non-holders and on a fresh selection.
+     A boot `DeliverDefinition` carries its new definition and revision with
+     the delivery, so reorder detection runs before the install decision.
+     Entries follow names alone: a removed name and a new name at its former
+     table index cross through the normal policy. The retired boolean `shadows`
+     field and
+     one-shadow-light authoring refusal are gone.
+   - CPU fade storage: fixed current and prior handoff records, each 32 bytes
+     per fade slot for F <= 2 (at most 128 bytes of record payload). A record
+     holds outgoing and incoming indices and the stable slot as three
+     32-bit integers, 32-bit state flags, a 64-bit crossing tick and a 64-bit
+     duration. The indices address the interval's bounded CPU table of names;
+     they are never identity or GPU table indices. That table has room for the
+     eight current candidates and up to four held names plus two incoming
+     names that have left the candidates. Its storage is separate from the
+     32-byte handoff payload. Readouts map names to the current light table,
+     using index -1 for a departed name, never inheriting a replacement name's
+     reused index. No unbounded history is retained. Each active readout identifies its
+     outgoing light index, incoming light index, stable slot and progress.
+     Progress is derived only from the presented tick, so reading never
+     advances a handoff and steady reads allocate nothing. At most two active
+     fades require tick subtraction, division and clamping, plus bounded
+     copies across K + F entries. `MarchSlots` is
+     the stable count plus active handoff count, bounded by K + F. Queue
+     targets are recomputed only on tick deliveries. A seek, reload, structural
+     revision, backward delivery or policy change installs with no fades.
+     Names still selected keep their prior held slots; new names take freed
+     slots in rank order. A forward delivered gap alone preserves continuity:
+     a semantic seek must supply an install or revision signal. Session
+     snapshots with neither signal cannot distinguish a seek from a gap.
+   - Overflow policy: `queue` waits for an active handoff in the target slot
+     (`SlotInHandoff`), a desired identity participating in another slot's
+     handoff (`IdentityInUse`), or occupied fade capacity (`FadeCapacity`).
+     The allocator reconsiders only current desired targets at delivered
+     boundaries and starts a still-needed crossing at the first delivered
+     tick its blocker clears. A crossing already queued at the previous
+     delivery, matching both slot and incoming name, gets free fade capacity
+     before a fresh crossing. Older waiting crossings go first; equal ages use
+     slot index. A target that is no longer desired loses its place. This
+     includes an outgoing identity waiting until its existing handoff releases
+     it. `instant` resolves overlapping
+     and capacity-blocked crossings atomically, releasing all old participants
+     before publishing the desired owner. F = 0 or zero duration also chooses
+     instant behavior.
+   - Fade meaning: each light retains its radiance. The shade scales the
+     outgoing light's own occlusion deficit by `1 − progress` and the
+     incoming light's own deficit by `progress`; it never takes a weighted
+     sum of the two visibilities. The CPU publishes these controls and S60b
+     applies them to each light's own visibility in `shade/sdf-light.hlsli`.
+     A directional outside every stable and active incoming slot is unshadowed,
+     scaled by ambient occlusion.
+   - GPU storage: incoming fade visibility uses an R8 texture at
+     F = 1 (1 byte per pixel), an R8G8 texture at F = 2 (2 bytes per pixel),
+     and no texture, bytes or read binding at F = 0. Its memory is counted in
+     `GpuWorkReport` as transient-aliased storage, provisioned by the policy
+     before a handoff and never allocated mid-handoff. Each active handoff's
+     16-byte `SdfShadowHandoff` control record uploads through the counted
+     region path: outgoing light index, incoming light index and stable slot
+     as three 32-bit integers, then the float weight. Its HLSL structure is
+     generated from the C# record. The shadow stage loops over K stable slots
+     and the active incoming slots, with one gather and one march per slot.
+     Stable visibility occupies four 8-bit lanes in the existing K word;
+     neither the record size nor the allocator's decisions change.
+   - GPU pipelines: the boot policy and every authored quality row declare
+     the reachable fade capacities. Each nonzero capacity adds four pipelines:
+     shadow and the full, core and folds shading variants. Worlds whose rows
+     use F = 0 create none of these. A definition edit, a session shadow-policy
+     lever or following another world requests a newly reachable capacity
+     through the background pipeline cache. Readiness holds the previous frame
+     until that policy's shadow and shading pipelines are usable, before the
+     new F replans the graph and its incoming visibility image. Handoffs create
+     no pipelines. Requested variants remain leased for the residency's lifetime.
+   - Remaining: `render.sky.bodies` with shapes `disc`, `crescent` and rings,
+     motions (direction, orbit, keys, a state row), binding to a named light,
+     and illumination by other bodies. Candidates remain light-keyed: a body
+     becomes a candidate through the light it binds. Body appearance and
+     illumination remain separate from the delivered GPU shadow-slot path.
+   - Deletes in the remaining body step: `WorldRenderSkyLayer.SunDisc`,
+     `worldSunDirection`, `SdfSunDirection`, `DefaultSunDirection`, the pinned
+     directional and the `SdfSkyBlock.DiscLight` lane. Per-light penumbra
+     remains a property of each shadow-casting directional.
    - Touches: the sky records, `frame/sdf-visibility.hlsli` and
      `SdfWorldPackage` (the K row), `surface/sdf-shadow.hlsli`,
      `surface/sdf-shadow-gather.hlsli`, `shade/sdf-light.hlsli`, the sky's
      point-kind modules, `quality.puck`, `WorldSessionLevers`.
    - Done when: `ShadowSlotLawTests` hold the slot order (red leg: an `auto`
-     body brighter than an `always` one does not take its slot); a crossing of
-     two `auto` bodies to a fade whose weights are a function of the presented
+     light brighter than an `always` one does not take its slot), name identity
+     through a reorder, holder-first ties, surviving slots across resets,
+     ordinary crossings on table-index reuse, instant atomic handoffs, and zero
+     allocations on steady reads. Document-load laws refuse invalid policy
+     combinations, unnamed candidates and the retired boolean field by name.
+     CPU fade laws take a crossing of two `auto` lights to a fade whose
+     weights are a function of the presented
      tick alone, identical on a replay and across the N frames of a `converge`
      capture at one frozen tick (red leg: weights advanced per rendered frame
      differ between two frame rates); a second crossing during a fade at F = 1
-     to the queue, and to an instant swap under `fadeOverflow: instant`; a
-     seek to complete every fade; a device law
-     packs and unpacks four visibilities exactly to 8 bits; a `sky-bodies`
-     canary's binary suns cast two shadows at `high` and one at `medium`,
-     each disc tinted by its light, and a moon lit by two suns shows two lit
-     limbs.
-   - Counted-cost gate: `shadow`'s march steps per slot, at most K + F slots
-     marched on any frame (0 at `low`, 2 at `medium`, 3 at `high`), fade slots'
-     steps only while a fade runs, and required zeros past K + F; at `low`
-     every shadow row is zero, as today.
+     to the queue, and to an instant swap under `shadowOverflow: instant`; a
+     waiting outgoing identity to its crossing at the first delivered tick
+     its handoff releases it; older queued crossings before fresh crossings;
+     a seek to install the current selection without fades while preserving
+     surviving slots. Boot laws exercise definition installation with the real
+     revision flow and the default pinned sun. Preset laws observe one shadow
+     settings change without an invalid intermediate. GPU integration has a
+     CPU packing law and a device law that pack and unpack four visibilities
+     exactly to 8 bits, layout laws for the control upload, and laws for
+     slot-table readers, absent F = 0 storage and per-slot counting. The
+     `shadow-slots` canary observes two marched slots at `high` and one at
+     `medium` over two suns and distinct-shadow geometry. Two disjoint floor
+     regions compare against a shadows-off reference: both suns cast at high,
+     and only the east sun casts at medium. Its discriminating leg selects
+     medium for the first sample, so the high slot 1 and west-sun shadow
+     predicates turn red. The remaining `sky-bodies` canary adds each disc
+     tinted by its light and a moon lit by two suns showing two lit limbs.
+   - Counted-cost gate: the `shadow` pass exposes six slot columns through
+     the existing kernel-counter kind dimension,
+     `gpu.shadow.slot0.steps` through `gpu.shadow.slot5.steps`. Their sum
+     partitions that pass's shadow march steps. At most K + F slots march
+     on any frame, with fade slots' steps only while a fade runs, and required
+     zeros past K + F. The incoming texture's
+     bytes and the 16-byte active controls are counted as specified above;
+     F = 0 has zero incoming-visibility bytes, control uploads and image read
+     bindings. At the current `low`
+     preset every shadow row is zero. Final tier counts remain P18-14's call.
 8. **P18-8, the open layer stack.**
    - Delivers: the layer record (kind, blend, mask, transform, clock, opacity,
      visibility, tier), the generated kind table and one module per kind for
@@ -7511,9 +7669,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       and depth, P15's test, are necessary but not enough, because a shadow
       also moves with its light and its occluders. A history sample is
       therefore rejected, and its pixel marched, when any of these holds:
-      - **Ownership:** the slot's body at the history's tick is not its body
-        now. The history stores each slot's owner, and a slot reassigned or
-        fading marches all its pixels until its history is rebuilt.
+      - **Ownership:** the slot's light name at the history's tick is not its
+        light name now. The history stores each slot's owner, and a slot
+        reassigned or fading marches all its pixels until its history is rebuilt.
       - **Light motion:** the slot's light direction has turned since the
         history's tick by more than a stated fraction of its penumbra angle.
       - **Occluder motion:** the group's gathered occluder set (the shadow
@@ -7541,8 +7699,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
 14. **P18-14, the floor tier's sky defaults.** The lead's call from the
     counted rows.
     - Delivers: the sky leg recorded at each tier and field scale in the
-      configurations the first open decision lists, and `quality.puck`'s
-      `sky`, `shadowLights`, `shadowAmortize` and shadow-fade rows as the lead
+      configurations the floor-tier open decision lists, and `quality.puck`'s
+      `sky`, `shadowLights`, `shadowAmortize`, `shadowFadeSlots`,
+      `shadowFadeTicks` and `shadowOverflow` rows as the lead
       decides beside P15-8.
     - Done when: the chosen defaults' ceilings are recorded and
       `puck counters --check` passes on the RTX 2060.
@@ -7574,8 +7733,8 @@ fraction in live tiles, at least h.
 - **Pass-block size and binding.** With P15-5's temporal values the pass block
   was 1,296 bytes, 848 of them the environment, written into each of the
   view's pass blocks, every dispatch binding the whole block. With P18-4 it is
-  496 bytes, of which 40 are the light count, the shadow light and the
-  curvature shading, and the lights and sky tables are referenced only by the
+  512 bytes including S60b's light count, shadow slot table, stable and active
+  fade counts, and curvature shading, and the lights and sky tables are referenced only by the
   kernels that read them. This is not an upload win: every region already
   uploads only the words that changed, and the new tables do the same.
 - **Clouds.** Today 128 hash evaluations per covered pixel (four thickness taps,
@@ -7585,16 +7744,23 @@ fraction in live tiles, at least h.
   every upper-hemisphere pixel even at zero brightness, and the disc pays a
   `pow` at zero intensity. After P18-8 an absent, zero-opacity or zero-brightness
   layer counts zero.
-- **Shadows.** One slot costs what the one shadow light costs today, each more
-  slot about as much again; the floor tier stays at zero. With P18-13 each
-  secondary slot falls to about a quarter plus its rejections.
+- **Shadows.** Each occupied stable slot has one gather and one march; adding
+  a slot adds roughly another slot's work. The six per-slot counter columns
+  expose that cost, while the current floor preset stays at zero. P18-13
+  reduces each secondary slot to about a quarter plus its rejections.
 - **Environment lighting.** 4,096 texel evaluations and one reduction per
-  lighting-visible change (from P18-9, one larger than a display code), zero on
-  a still sky or a visual-only change; one harmonic evaluation per lit pixel in
-  place of the hemisphere term.
-- **Shadow fades.** At most F fade slots beside the K held ones, and fade slots
-  march only while a fade runs: at most 2 slots at `medium` and 3 at `high` on
-  any frame.
+  lighting-visible change larger than a display code, zero on a still sky or a
+  visual-only change; one harmonic evaluation per lit pixel in place of the
+  hemisphere term.
+- **Shadow fades.** CPU reads inspect at most F active handoffs, deriving one
+  progress value for each without allocating or advancing state. The
+  GPU loop adds a march only while a handoff runs, bounded by K + F, and
+  scales each light's own occlusion deficit. Its incoming texture uses 0, 1
+  or 2 bytes per pixel at F = 0, 1 or 2, with counted 16-byte controls for
+  active handoffs. This is transient-aliased storage allocated with the policy,
+  so starting a handoff allocates nothing. Every visibility write counts.
+  P18-14 chooses the tier values and their counted ceilings; floor-device
+  measurement re-records moved ceilings for the delivered loop and counters.
 - **Many views of one world.** Every camera view of a world reads that world's
   one environment map, so its sky lighting costs it nothing of its own.
 
@@ -7641,9 +7807,14 @@ fraction in live tiles, at least h.
   those sections owns them. The section is optional, as every top-level
   section is, so a world names clocks only when it keys something on one.
 - **A shadow slot changes hands by a counted crossfade**, as the decision
-  above states. Artists should not see a pop when two `auto` bodies cross.
+  above states. Artists should not see a pop when two `auto` lights cross.
   The extra slot's march during the fade is counted, a tier may choose
-  `instant`, and `always` still pins a slot.
+  zero fade ticks, and `always` still pins a selected slot. CPU handoffs use
+  fixed current and prior 32-byte records per fade slot; presented-tick reads
+  produce progress without advancing them. Each light's own occlusion deficit
+  scales out or in while its radiance stays unchanged. P18-7 specifies the
+  accepted storage and counted GPU binding contract; the K + F GPU loop and
+  shade integration remain later work.
 - **Specular has one spelling.** A light-casting body's glint lives only in its
   light's lobe, and the reflection path leaves every light-casting body out, so
   no body's highlight is counted twice. Crescents and rings are therefore not
@@ -7656,14 +7827,15 @@ fraction in live tiles, at least h.
   name at validation and at a live edit. The RTX 2060's host-visible heap is
   already near full, so the fix and the cap land together.
 
-**Open decision for the lead.**
+**Open decisions for the lead.**
 
 - **The floor tier's sky defaults (P18-14).** Gather, at 1920 by 1080 on the
   RTX 2060's floor tier, each sky and shadow row for: the sky leg's drift,
   twinkle and keyed frames at field scale 1 and 0.5; clouds at each reduced
   form; shadow slots 0, 1 and 2 over the binary-star leg, each with P18-13's
   amortization off and on where P15-5 has landed. Choose `low`, `medium` and
-  `high`'s `sky`, `shadowLights`, `shadowAmortize` and shadow-fade length. This
+  `high`'s `sky`, `shadowLights`, `shadowAmortize`, `shadowFadeSlots`,
+  `shadowFadeTicks` and `shadowOverflow`. This
   is decided beside P15-8, from the counted rows of both packages.
 
 **Check:** every step's own check above, and together: an artist can author,

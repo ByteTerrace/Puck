@@ -19,8 +19,11 @@ public sealed class SdfKernelSetLawTests {
     private static readonly string[] Stems = [
         "sdf-world-ambient", "sdf-beam", "sdf-brick-bake", "sdf-cull-args",
         "sdf-instance-cull", "sdf-world-primary", "sdf-world-shadow", "sdf-sky-runs", "sdf-world-surface", "sdf-world-views",
-        "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve", "sdf-composite", "sdf-sky-environment",
-        "sdf-sky-environment-reduce",
+        "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve", "sdf-composite",
+        "sdf-world-shadow-fade1", "sdf-world-shadow-fade2",
+        "sdf-world-views-fade1", "sdf-world-views-core-fade1", "sdf-world-views-folds-fade1",
+        "sdf-world-views-fade2", "sdf-world-views-core-fade2", "sdf-world-views-folds-fade2",
+        "sdf-sky-environment", "sdf-sky-environment-reduce",
     ];
 
     private static WorkCounterSet Work() =>

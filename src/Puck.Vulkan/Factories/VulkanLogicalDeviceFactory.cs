@@ -83,11 +83,14 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // atomically add to storage buffers, as the SDF mesh pass's fragments count the texels they write, so a device without
     // it is refused.
     private const uint FragmentStoresAndAtomicsFeatureIndex = 26u;
+    // R8 and R8G8 storage images hold the policy-sized incoming shadow visibilities.
+    private const uint StorageImageExtendedFormatsFeatureIndex = 29u;
 
     // The base features every device is created with, in index order, the order they are enabled in, each with its name and what needs
     // it; a device reporting any of them absent is refused naming it.
     private static readonly (uint Index, string Feature, string Need)[] RequiredBaseFeatures = [
         (FragmentStoresAndAtomicsFeatureIndex, "fragmentStoresAndAtomics", "the SDF mesh pass's fragments need to count the texels they write"),
+        (StorageImageExtendedFormatsFeatureIndex, "shaderStorageImageExtendedFormats", "the shadow handoff texture needs R8 and R8G8 storage images"),
         (SampledImageArrayDynamicIndexingFeatureIndex, "shaderSampledImageArrayDynamicIndexing", "the SDF screen shading needs to index its screen sources and samplers"),
     ];
     // The feature structures every device is created with, each through the single-flag chain (its first VkBool32 is the

@@ -1,0 +1,70 @@
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Puck.Abstractions.Gpu;
+using Puck.Hosting;
+using Puck.SdfVm;
+using Puck.Testing;
+using Puck.World.Client;
+using Xunit;
+
+namespace Puck.World.Tests;
+
+/// <summary>The canary's CPU-recorded pass states and upload bytes follow its real boot frame. The boot's device seal
+/// rejects every physical device activation, and the render graph records over the upload model.</summary>
+public sealed class WorldCounterUploadLawTests {
+    [Fact]
+    public void CanaryPassUploadsMatchItsDeviceSealedFirstFrame() {
+        const string Canary = "tests/Puck.World.Canaries/world-counters";
+        using var directory = new TemporaryDirectory(prefix: "s60b-resources-world-counters-");
+        using var host = WorldBootHarness.Compose(stateDirectory: directory,
+            presentation: WorldHostPresentation.Offscreen, world: $"{Canary}/fixture.world.json").Build();
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        var gpu = new UploadModelGpu();
+        var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
+        using var view = new SdfTestView(device: gpu, extent: 64, pipelines: pipelines,
+            residency: new SdfWorldResidency(brickPoolVoxelCapacity: 0,
+                frameSource: presenter, height: 64,
+                kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance, pipelines: pipelines, width: 64));
+        var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
+            Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
+            StepTicks: 0, TargetHeight: 64, TargetWidth: 64);
+
+        TestLiveness.Until(step: () => view.Produce(context: in context), reason: () => view.NotReadyReason,
+            wait: view.Residency.WaitPipelineBuilds);
+        for (var index = 0; (index < 3); index++) {
+            _ = view.Produce(context: in context);
+        }
+        var sample = new GpuWorkSample();
+
+        Assert.True(condition: view.Runtime.Work(instance: 0).TryReadCompleted(sample: sample));
+        Assert.Equal(expected: 1L, actual: sample.Submission);
+        using var manifest = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(
+            path1: AuthoredGameFixtures.Root, path2: $"{Canary}/canary.json")));
+        var lines = manifest.RootElement.GetProperty(propertyName: "positive").GetProperty(propertyName: "expect")
+            .EnumerateArray().Single(predicate: observation => (observation.GetProperty(propertyName: "name").GetString() == "the-view-passes-are-exact"))
+            .GetProperty(propertyName: "lines").EnumerateArray();
+        var expected = new List<string>();
+        var actual = new List<string>();
+        var uploads = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.HostVisibleUploadBytes);
+
+        foreach (var line in lines) {
+            var fields = line.GetString()!.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ');
+            var pass = sample.PassLabels.IndexOf(value: fields[1]);
+
+            Assert.True(condition: (pass >= 0), userMessage: $"No recorded pass {fields[1]}.");
+            expected.Add(item: $"{fields[1]} {fields[2].TrimEnd(trimChar: ':')} {fields.SingleOrDefault(predicate: static field => field.StartsWith(comparisonType: StringComparison.Ordinal, value: "uploads.host-visible="))}".TrimEnd());
+            var state = sample.GetPassState(pass: pass);
+
+            if (state == GpuPassState.Skipped) {
+                actual.Add(item: $"{fields[1]} skipped");
+            } else {
+                Assert.Equal(actual: state, expected: GpuPassState.Executed);
+                Assert.True(condition: sample.TryGetPassCount(column: uploads, pass: pass, value: out var bytes));
+                actual.Add(item: $"{fields[1]} executed uploads.host-visible={bytes}");
+            }
+        }
+        Assert.True(condition: expected.SequenceEqual(second: actual), userMessage:
+            $"Expected:\n{string.Join(separator: '\n', values: expected)}\nActual:\n{string.Join(separator: '\n', values: actual)}");
+        Assert.Empty(collection: gpu.StateConflicts);
+    }
+}

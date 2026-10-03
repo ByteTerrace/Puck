@@ -363,6 +363,8 @@ public static partial class WorldSubmissionCodec {
         var name = reader.ReadString(field: "SessionLever.Name");
         var a = reader.ReadDouble();
         var b = reader.ReadDouble();
+        var c = reader.ReadDouble();
+        var d = reader.ReadDouble();
         var seat = reader.ReadInt32();
         var view = reader.ReadString(field: "SessionLever.View");
 
@@ -379,6 +381,8 @@ public static partial class WorldSubmissionCodec {
         return new WorldSessionLever(
             A: a,
             B: b,
+            C: c,
+            D: d,
             Name: name,
             Seat: seat,
             View: ((view.Length == 0) ? null : view),
@@ -1846,6 +1850,8 @@ public static partial class WorldSubmissionCodec {
                 writer.WriteString(value: lever.Name);
                 writer.WriteDouble(value: lever.A);
                 writer.WriteDouble(value: lever.B);
+                writer.WriteDouble(value: lever.C);
+                writer.WriteDouble(value: lever.D);
                 writer.WriteInt32(value: lever.Seat);
                 writer.WriteString(value: (lever.View ?? string.Empty));
             },

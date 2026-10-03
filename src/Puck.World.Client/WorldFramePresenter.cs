@@ -37,7 +37,7 @@ namespace Puck.World.Client;
 /// binder, the seat rigs, and the shimmer baseline whenever the definition revision moves, before the host captures.
 /// </para>
 /// </remarks>
-public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
+public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser, IDisposable {
     // The adjacency render half — neighbour solids and delivered bodies composed through the same isometry contact
     // and handoff use, with remote avatar transforms in its own frozen slot range.
     private readonly WorldAdjacencySceneEmitter m_adjacencies;
@@ -1641,7 +1641,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             definition: m_client.Definition,
             revision: m_client.DefinitionRevision,
             mirror: m_client.StateMirror,
-            resolveLightAnchor: ResolveLightAnchor
+            resolveLightAnchor: ResolveLightAnchor,
+            shadows: m_settings.ShadowSlots,
+            shadowSelection: m_deliveredShadows
         );
 
         m_volumes.Clear();
@@ -1679,6 +1681,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
             // clock's presented phase (a world.row.set render lands on the next frame).
             Lights = lighting.Lights,
+            ShadowFadeVariants = WorldShadowSettings.FadeVariants(render: m_client.Definition.Render),
             Sky = lighting.Sky,
             // The sky's and the media's clock: the engine tick the state mirror presented this frame's bound state at,
             // never m_elapsedSeconds, so a frame at a given tick and fraction draws the same sky on every run.
@@ -1904,6 +1907,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         // A sentinel outside the revision's real range (which only ever counts up from 0) guarantees the first
         // ReconcileDelivery call always reconciles once, exactly like every later delivery.
         m_builtDefinitionRevision = int.MinValue;
+        ObserveShadows();
     }
 
     // One authored `markers` row instance's resolved look, cached once per Dress call (every seat's cull reads the

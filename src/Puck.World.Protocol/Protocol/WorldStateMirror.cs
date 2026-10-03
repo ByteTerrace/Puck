@@ -46,7 +46,7 @@ public enum WorldStateConversion : byte {
 /// <c>presentation.mirror.keyed</c>.
 /// </para>
 /// </summary>
-public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
+public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
     /// <summary>The stable counter-source name.</summary>
     public const string SourceName = "presentation.mirror";
 
@@ -118,6 +118,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
         ArgumentNullException.ThrowIfNull(argument: view);
 
         m_view = view;
+        m_deliveredClock = new DeliveredClock(mirror: this);
     }
 
     /// <inheritdoc/>
@@ -150,6 +151,8 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
     /// <summary>Gets the engine tick the slots were read as of at the refresh before the latest one, which a moving
     /// slot's previous sample holds; it equals <see cref="EngineTick"/> after an install and before any refresh.</summary>
     public ulong PreviousEngineTick => m_previousEngineTick;
+    /// <summary>Gets the clamped fraction used by the latest presentation, or one before the first presentation.</summary>
+    public float PresentationFraction => m_appliedFraction;
     /// <summary>Gets the engine tick the slots present at: <see cref="PreviousEngineTick"/> and <see cref="EngineTick"/>
     /// at the fraction the latest <see cref="Apply"/> presented them at (one before any), so the sky, the bounded
     /// media and every other time-driven look of a frame animate on the one presentation clock its bound state
@@ -310,7 +313,10 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
     /// record keeps its slot's index.</summary>
     /// <param name="tick">The tick the installed document's values hold as of.</param>
     /// <param name="engineTick">The engine tick the installed document's values hold as of.</param>
-    public void Install(ulong tick, ulong engineTick) {
+    /// <param name="completingDelivery">Whether this repeats an installation to include the same tick's completed
+    /// snapshot fields, preserving a consumer's identity across the completed delivery.</param>
+    public void Install(ulong tick, ulong engineTick, bool completingDelivery = false) {
+        LastInstallCompletedDelivery = completingDelivery;
         m_installs++;
         m_tick = tick;
         m_engineTick = engineTick;
@@ -350,17 +356,20 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
         }
 
         RefreshSlots(everything: true, moved: default);
+        Delivered?.Invoke();
     }
     /// <summary>Refreshes the slots a state delivery moved, at the tick boundary: the slots bound to a row the stamp
     /// names, and every slot whose trait-bearing cell has not come to rest.</summary>
     /// <param name="stamp">The delivery's stamp.</param>
-    public void Refresh(in WorldStateStamp stamp) {
+    /// <param name="notifyDelivery">Whether this refresh completes the delivery; a client receiving field cells in the following snapshot defers it.</param>
+    public void Refresh(in WorldStateStamp stamp, bool notifyDelivery = true) {
         m_tick = stamp.Tick;
         MoveEngineTick(engineTick: stamp.EngineTick);
         RefreshSlots(
             everything: stamp.Everything,
             moved: stamp.MovedRows.Span
         );
+        if (notifyDelivery) { Delivered?.Invoke(); }
     }
     /// <summary>Re-reads the slots bound to rows whose values arrive beside the document rather than in it, at the
     /// mirror's current tick: a field row, whose cells a snapshot carries
@@ -387,12 +396,14 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
             m_ticked &&
             (tick <= m_tick)
         ) {
+            Delivered?.Invoke();
             return;
         }
 
         m_tick = tick;
         MoveEngineTick(engineTick: engineTick);
         RefreshSlots(everything: false, moved: default);
+        Delivered?.Invoke();
     }
     /// <summary>Presents every moving slot at the frame's position between the previous tick and the current one.</summary>
     /// <param name="fraction">The frame's interpolation fraction in <c>[0, 1]</c>; an offscreen capture passes 1.</param>
@@ -518,7 +529,9 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
         : default
     );
     /// <inheritdoc/>
-    public bool TryClockPhase(WorldClock clock, out double phase) {
+    public bool TryClockPhase(WorldClock clock, out double phase) => TryClockPhase(clock: clock, delivered: false, phase: out phase);
+
+    private bool TryClockPhase(WorldClock clock, out double phase, bool delivered) {
         var slot = SlotOf(
             binding: WorldPresentationManifest.ClockBinding(clock: clock),
             conversion: WorldStateConversion.Number
@@ -535,7 +548,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
 
         phase = WorldClockAnchor.ToTurn(phase: WorldClockAnchor.PhaseOf(kind: current.Kind, raw: current.Raw));
 
-        if (!entry.Interpolates || (m_appliedFraction >= 1f)) {
+        if (delivered || !entry.Interpolates || (m_appliedFraction >= 1f)) {
             return true;
         }
 
@@ -548,13 +561,15 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
 
         return true;
     }
+
     /// <summary>Returns the clock a keyed value reads and its phase as the mirror presents it: a tick clock's at the
     /// presented tick, a state clock's from its row's presented value (<see cref="WorldKeyResolver.TryPhase"/>).</summary>
     /// <param name="name">The clock's name.</param>
     /// <param name="clock">The clock, or <see langword="null"/> when the installed document names none.</param>
     /// <param name="phase">The phase, in <c>[0, 1)</c>, or zero when it reads none.</param>
+    /// <param name="delivered">Read the delivered tick and current samples.</param>
     /// <returns><see langword="true"/> when the clock is named and its phase reads.</returns>
-    public bool TryPhase(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldClock? clock, out double phase) {
+    public bool TryPhase(string name, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldClock? clock, out double phase, bool delivered = false) {
         phase = 0d;
         m_keyed.Increment();
 
@@ -566,7 +581,7 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
             WorldKeyResolver.TryPhase(
             clock: clock,
             phase: out phase,
-            source: this
+            source: (delivered ? m_deliveredClock : this)
         )
         );
     }
@@ -600,13 +615,15 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
     /// <param name="scalar">The authored scalar.</param>
     /// <param name="fallback">The value when the literal is not finite, no registration records the binding, it reads
     /// no number, or the keys' clock reads no phase.</param>
-    /// <returns>The scalar's presented value.</returns>
-    public float Scalar(in BindableScalar scalar, float fallback) {
+    /// <param name="delivered">Read keys and bindings at the delivered tick.</param>
+    /// <returns>The resolved scalar.</returns>
+    public float Scalar(in BindableScalar scalar, float fallback, bool delivered = false) {
         if (scalar.Keys is { } keys) {
             return (TryPhase(
                 clock: out var clock,
                 name: keys.Clock,
-                phase: out var phase
+                phase: out var phase,
+                delivered: delivered
             )
                 ? WorldKeyResolver.Scalar(
                     phase: phase,
@@ -618,12 +635,13 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
         }
 
         if (scalar.State is { } binding) {
-            return (TryNumber(
+            return (TryScalarNumber(
                 slot: SlotOf(
                     binding: in binding,
                     conversion: WorldStateConversion.Number
                 ),
-                value: out var bound
+                value: out var bound,
+                delivered: delivered
             )
                 ? bound
                 : fallback
@@ -668,13 +686,15 @@ public sealed class WorldStateMirror : IWorkCounterSource, IWorldClockSource {
     /// <param name="color">The authored color.</param>
     /// <param name="fallback">The color when the token is malformed, no registration records the binding, it holds
     /// no color, or the keys' clock reads no phase.</param>
+    /// <param name="delivered">Read keys at the delivered tick; bound colors already hold delivered samples.</param>
     /// <returns>The color.</returns>
-    public Vector4 Color(in BindableColor color, Vector4 fallback) {
+    public Vector4 Color(in BindableColor color, Vector4 fallback, bool delivered = false) {
         if (color.Keys is { } keys) {
             return (TryPhase(
                 clock: out var clock,
                 name: keys.Clock,
-                phase: out var phase
+                phase: out var phase,
+                delivered: delivered
             )
                 ? WorldKeyResolver.Color(
                     fallback: fallback,

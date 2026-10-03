@@ -97,6 +97,9 @@ public sealed class SdfFrameBlockLawTests {
         var lights = SdfLights.Default();
 
         lights.Set(index: 1, light: (lights[0] with { Shadows = 1u }));
+        lights.ShadowSlots.Configure(fadeCapacity: 1, slots: 1);
+        lights.ShadowSlots.SetSlot(light: 1, slot: 0);
+        lights.ShadowSlots.SetHandoffs(handoffs: [new SdfShadowHandoff(Incoming: 0, Outgoing: 1, Slot: 0, Weight: 0.5f)]);
         lights.Curvature = new SdfCurvature(
             Cavity: 0.25f,
             Ink: 0.5f,
@@ -109,6 +112,28 @@ public sealed class SdfFrameBlockLawTests {
         return lights;
     }
 
+    [Fact]
+    public void EveryStableSlotAndBothActiveCountsReachTheFrameBlock() {
+        var frame = Frame();
+        var slots = frame.Lights.ShadowSlots;
+
+        slots.Configure(fadeCapacity: 2, slots: 4);
+        int[] owners = [7, 5, 3, 1];
+
+        for (var slot = 0; (slot < owners.Length); slot++) {
+            slots.SetSlot(slot: slot, light: owners[slot]);
+        }
+        slots.SetHandoffs(handoffs: [new(Incoming: 0, Outgoing: 7, Slot: 0, Weight: 0.25f), new(Incoming: 2, Outgoing: 3, Slot: 2, Weight: 0.75f)]);
+        var block = new byte[SdfFrameBlock.SizeBytes];
+
+        SdfFrameBlock.Write(block: block, frame: frame, height: 16, tables: default, view: 0, width: 16);
+        var parameters = SdfWorldInterfaces.WorldParameters;
+        var start = ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlots));
+
+        Assert.Equal(expected: owners, actual: Enumerable.Range(count: 4, start: 0).Select(selector: slot => BitConverter.ToInt32(startIndex: (start + (slot * sizeof(int))), value: block)));
+        Assert.Equal(expected: 4u, actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlotCount))));
+        Assert.Equal(expected: 2u, actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowFadeCount))));
+    }
     [Fact]
     public void EveryDeclaredValueIsWrittenWhereItsDeclarationReadsIt() {
         var frame = Frame();
@@ -171,7 +196,7 @@ public sealed class SdfFrameBlockLawTests {
             expected: ((300u + (SdfWorldPackage.TileSize - 1u)) / SdfWorldPackage.TileSize)
         );
         Assert.Equal(
-            actual: (BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightCount))), BitConverter.ToInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowLight)))),
+            actual: (BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightCount))), BitConverter.ToInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlots)))),
             expected: (2u, 1)
         );
     }

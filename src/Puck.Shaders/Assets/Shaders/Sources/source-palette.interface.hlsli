@@ -36,13 +36,16 @@ struct SourcePalettePass {
 [[vk::binding(3, 3)]] RWStructuredBuffer<uint> workCounters : register(u3, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, then sky evaluations, as a
+// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, then
+// six shadow-slot step counts, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 6u;
+static const uint PuckWorkRowWords = 18u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
+static const uint PuckWorkShadowWord = 6u;
+static const uint PuckWorkShadowSlots = 6u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -76,6 +79,14 @@ void puckCountSky(uint evaluations) {
 
     if (WaveIsFirstLane()) {
         puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
+    }
+}
+// The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
+void puckCountShadow(uint slot, uint steps) {
+    uint waveSteps = WaveActiveSum(steps);
+
+    if ((slot < PuckWorkShadowSlots) && WaveIsFirstLane()) {
+        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), waveSteps);
     }
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper

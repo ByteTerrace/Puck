@@ -60,7 +60,7 @@ public static class ShaderWorkCounters {
     }
 
     // The counting functions every generated interface declares, after its declarations: an interface declaring the work
-    // counters adds to them, and any other, a document pass's among them, declares the same two functions empty. A kernel
+    // counters adds to them, and any other, a document pass's among them, declares the same functions empty. A kernel
     // therefore counts unguarded, and compiles alike as its package's pass and as a document pass naming its source.
     internal static void AppendHlsl(StringBuilder text, bool counts) {
         if (!counts) {
@@ -71,6 +71,8 @@ public static class ShaderWorkCounters {
                 void puckCountWork(uint steps, uint texels) {
                 }
                 void puckCountSky(uint evaluations) {
+                }
+                void puckCountShadow(uint slot, uint steps) {
                 }
                 void puckCountFragmentWork(uint steps, uint texels) {
                 }
@@ -85,13 +87,16 @@ public static class ShaderWorkCounters {
         _ = text.Append(value: $$"""
 
             // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-            // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, then sky evaluations, as a
+            // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, then
+            // six shadow-slot step counts, as a
             // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
             // empty.
             static const uint PuckWorkRowWords = {{number(GpuKernelCounters.RowWords)}}u;
             static const uint PuckWorkStepsWord = 0u;
             static const uint PuckWorkTexelsWord = {{number(GpuKernelCounters.CountWords)}}u;
             static const uint PuckWorkSkyWord = {{number((2 * GpuKernelCounters.CountWords))}}u;
+            static const uint PuckWorkShadowWord = {{number((GpuWork.ShadowStepsFirstKind * GpuKernelCounters.CountWords))}}u;
+            static const uint PuckWorkShadowSlots = {{number(GpuWork.ShadowSlotCount)}}u;
             // Adds to one count: the low word atomically, then the high word by one when that addition carries.
             void puckAddWork(uint word, uint amount) {
                 if (amount == 0u) {
@@ -125,6 +130,14 @@ public static class ShaderWorkCounters {
 
                 if (WaveIsFirstLane()) {
                     puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
+                }
+            }
+            // The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
+            void puckCountShadow(uint slot, uint steps) {
+                uint waveSteps = WaveActiveSum(steps);
+
+                if ((slot < PuckWorkShadowSlots) && WaveIsFirstLane()) {
+                    puckAddWork(((passGroup.{{Row}} * PuckWorkRowWords) + PuckWorkShadowWord + (slot * {{number(GpuKernelCounters.CountWords)}}u)), waveSteps);
                 }
             }
             // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper

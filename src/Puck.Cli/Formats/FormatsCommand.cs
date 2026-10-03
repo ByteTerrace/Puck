@@ -27,13 +27,13 @@ public static class FormatsCommand {
         )).Order(comparer: StringComparer.Ordinal).ToArray();
     }
 
-    /// <summary>Reads every tracked source file the ledger is generated from.</summary>
+    /// <summary>Reads tracked and unignored new source files so staging cannot change the recorded shape.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
     /// <returns>Each file's text by repository-relative path with forward slashes.</returns>
     internal static Dictionary<string, string> ReadSources(string repositoryRoot) {
         var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
-        foreach (var relative in ListSources(repositoryRoot: repositoryRoot)) {
+        foreach (var relative in ListSources(repositoryRoot, "--cached", "--others", "--exclude-standard")) {
             var fullPath = Path.Combine(
                 path1: repositoryRoot,
                 path2: relative
@@ -146,8 +146,8 @@ public static class FormatsCommand {
         );
 
         command.Detail(detail: """
-            Records every strictly versioned wire, persisted, or cache format in the tracked
-            source under src/: a static constant or read-only field whose initializer is a
+            Records every strictly versioned wire, persisted, or cache format in tracked and
+            unignored new source under src/: a static constant or read-only field whose initializer is a
             named document schema (a string like "puck.world.definition.v1"), or whose name is
             a recognized token member (WireKey, ProtocolKey, ShapeToken, SupportedVersion,
             CurrentVersion, FormatVersion, Magic, and kin) over exactly one literal. A numeric
@@ -156,9 +156,9 @@ public static class FormatsCommand {
 
             Each entry carries its token, the file declaring it and a digest of canonical
             syntax of that file, its partial siblings and its data and codec dependencies, so
-            two branches that bump one format to the same new token still conflict on the
-            digest line, and a codec edited without a bump fails the check until its author
-            records the new digest and decides whether the token should move.
+            two branches that change one format still conflict on the digest line even
+            when its token stays fixed. A codec edit fails the check until its author
+            records the new digest. Tokens stay fixed until release.
             Formatting, comments and local renames preserve the digest. Operator grouping,
             argument binding, evaluation order and serialized member names remain significant.
 
@@ -169,7 +169,8 @@ public static class FormatsCommand {
 
             --check writes nothing and exits 1 for an unrecorded, stale, bumped, reshaped, or
             moved format, or a ledger whose bytes differ from what the verb writes. The
-            constants stay the source of truth: bump one, then run `puck formats`.
+            constants stay the source of truth: record deliberate shape changes with
+            `puck formats`, keeping tokens fixed until release.
 
             Exit codes: 0 written, or the ledger holds; 1 drift under --check; 2 an unusable
             or missing ledger, or untracked sources.

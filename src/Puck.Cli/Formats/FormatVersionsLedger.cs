@@ -27,8 +27,8 @@ internal sealed record FormatEntry(string Id, string Source, string Shape, strin
 /// its own line, and every format carries a digest of its canonical source on a line of its own. Two
 /// branches that bump to the same new token merge their token lines cleanly, but they changed the codec differently,
 /// so their digest lines differ and conflict. A branch that changes the codec without a bump moves the digest and
-/// fails <c>puck formats --check</c> until the author re-records it, which is the moment to ask whether the encoding
-/// changed and the token should too.
+/// fails <c>puck formats --check</c> until the author re-records it. Tokens stay fixed until release; deliberate
+/// encoding changes record their new shape in the same change.
 /// </para>
 /// </summary>
 internal static partial class FormatVersionsLedger {
@@ -556,7 +556,7 @@ internal static partial class FormatVersionsLedger {
                 b: entry.Shape,
                 comparisonType: StringComparison.Ordinal
             )) {
-                problems.Add(item: $"reshaped: the source of '{entry.Id}' ({entry.Source}) changed while its token stayed {entry.Token}; if the encoding changed, bump the token, then record the new digest");
+                problems.Add(item: $"reshaped: the source of '{entry.Id}' ({entry.Source}) changed while its token stayed {entry.Token}; record the new digest with `puck formats`; tokens stay fixed until release");
             } else if (!string.Equals(
                 a: was.Source,
                 b: entry.Source,
