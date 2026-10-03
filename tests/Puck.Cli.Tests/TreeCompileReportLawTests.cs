@@ -80,10 +80,11 @@ public sealed class TreeCompileReportLawTests {
     }
     [Fact]
     public void ADocumentWithNoCompiledWorldIsReportedWithForwardSlashedPaths() {
-        using var directory = new TemporaryDirectory();
-        var composed = Path.GetFullPath(path: Path.Combine(path1: directory.RootPath, path2: "worlds", path3: "rooms", path4: "fragment.world.json"));
+        // Paths beneath the working directory display relative, so the line stays short wherever the law runs and the
+        // refusal's head is never clipped; the refusal still names the source by its full, platform-spelled path.
+        var composed = Path.GetFullPath(path: Path.Combine(path1: Environment.CurrentDirectory, path2: "worlds", path3: "rooms", path4: "fragment.world.json"));
         var line = Transpiler.CompileCommand.NoCompiledWorld(
-            besidePath: Path.Combine(path1: directory.RootPath, path2: "output", path3: "rooms", path4: "fragment.world.json"),
+            besidePath: Path.Combine(path1: Environment.CurrentDirectory, path2: "output", path3: "rooms", path4: "fragment.world.json"),
             composeAt: composed,
             reason: $"{composed} is not a valid puck.world.definition.v1 document: definition.creationsRaw[0] names no state.\n\"payload\\n quoted\""
         );

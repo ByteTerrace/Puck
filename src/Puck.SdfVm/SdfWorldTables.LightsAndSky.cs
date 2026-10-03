@@ -4,24 +4,27 @@ using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-// The lights and sky's four record tables owe only changed words. Active handoff controls reserve their own staged
+// The lights and sky's four record tables (the lights, the sky block, its layer table and its softboxes) owe only changed
+// words. Active handoff controls reserve their own staged
 // region and upload whole records. The World set binds each generated record table, and a kernel references only
 // the tables its pass reads.
 public sealed partial class SdfWorldTables {
     private const int LightRegionIndex = 9;
     private const int SkyRegionIndex = 10;
-    private const int SkyStopRegionIndex = 11;
+    private const int SkyLayerRegionIndex = 11;
     private const int SoftboxRegionIndex = 12;
     private const int ShadowHandoffRegionIndex = 13;
 
     private readonly SdfLight[] m_lightRecords = new SdfLight[SdfLights.MaxLights];
     private readonly SdfSkyBlock[] m_skyRecord = new SdfSkyBlock[1];
-    private readonly SdfSkyStop[] m_skyStopRecords = new SdfSkyStop[SdfSky.MaxStops];
+    private readonly SdfSkyLayer[] m_skyLayerRecords = new SdfSkyLayer[SdfSky.MaxLayers];
     private readonly SdfSoftbox[] m_softboxRecords = new SdfSoftbox[SdfSky.MaxSoftboxes];
 
     private readonly GpuRegion m_lightRegion;
     private readonly GpuRegion m_skyRegion;
-    private readonly GpuRegion m_skyStopRegion;
+    private readonly GpuRegion m_skyLayerRegion;
+    // The detail rows the sky's layers count in, shared across the composition's residencies.
+    private readonly SdfSkyDetails m_skyDetails;
     private readonly GpuRegion m_softboxRegion;
 
     private readonly SdfShadowHandoff[] m_shadowHandoffs = new SdfShadowHandoff[SdfShadowSlots.MaxFadeSlots];
@@ -32,6 +35,10 @@ public sealed partial class SdfWorldTables {
     private int m_shadowHandoffCount;
     private int m_shadowFadeCapacity;
 
+    /// <summary>Gets the detail rows the sky, composite and environment passes count the sky's runs and layers in, in row
+    /// order.</summary>
+    public SdfSkyDetails SkyDetails => m_skyDetails;
+
     // Packs a frame's lights and sky and retains its active controls until the counted upload.
     private void PackLightsAndSky(SdfFrame frame) {
         m_shadowHandoffCount = frame.Lights.ShadowSlots.FadeCount;
@@ -40,21 +47,22 @@ public sealed partial class SdfWorldTables {
         frame.Lights.Pack(records: m_lightRecords);
         frame.Sky.Pack(
             block: out m_skyRecord[0],
+            details: m_skyDetails,
             farDistance: frame.FarDistance,
+            layers: m_skyLayerRecords,
             lights: frame.Lights,
-            softboxes: m_softboxRecords,
-            stops: m_skyStopRecords
+            softboxes: m_softboxRecords
         );
         _ = m_lightRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_lightRecords.AsSpan()), offset: 0);
         _ = m_skyRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyRecord.AsSpan()), offset: 0);
-        _ = m_skyStopRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyStopRecords.AsSpan()), offset: 0);
+        _ = m_skyLayerRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyLayerRecords.AsSpan()), offset: 0);
         _ = m_softboxRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_softboxRecords.AsSpan()), offset: 0);
     }
     // Writes the generated record buffers and the shared sky environment map into a ring slot's World set.
     private void WriteLightAndSkySet(nint set, int slot) {
         WriteWorldBuffer(buffer: m_lightRegion.Buffer(slot: slot), member: SdfKernelInterfaces.Lights, set: set);
         WriteWorldBuffer(buffer: m_skyRegion.Buffer(slot: slot), member: SdfKernelInterfaces.Sky, set: set);
-        WriteWorldBuffer(buffer: m_skyStopRegion.Buffer(slot: slot), member: SdfKernelInterfaces.SkyStops, set: set);
+        WriteWorldBuffer(buffer: m_skyLayerRegion.Buffer(slot: slot), member: SdfKernelInterfaces.SkyLayers, set: set);
         WriteWorldBuffer(buffer: m_softboxRegion.Buffer(slot: slot), member: SdfKernelInterfaces.Softboxes, set: set);
         WriteWorldBuffer(buffer: m_skyEnvironment.Map, member: SdfKernelInterfaces.SkyEnvironment, set: set);
         WriteWorldBuffer(buffer: m_shadowHandoffBuffer, member: SdfKernelInterfaces.ShadowHandoffs, set: set);

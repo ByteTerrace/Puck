@@ -397,7 +397,7 @@
                 "P:Puck.Assets.Documents.DocumentVector3.Z",
                 "P:Puck.SignedDistance.SdfAtmosphere.Default"
             ],
-            "shape": "ec5c9fe2da2bb391",
+            "shape": "ccfc447e0e49c591",
             "source": "src/Puck.World.Authoring/Authoring/CreationDocument.cs",
             "token": "puck.creation.v1"
         },
@@ -1037,7 +1037,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "af7111cd1cc18b53",
+            "shape": "b1c9d4f1ce5ceb49",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "1"
         },
@@ -1056,7 +1056,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "af7111cd1cc18b53",
+            "shape": "b1c9d4f1ce5ceb49",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "PWBK"
         },
@@ -1086,7 +1086,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "be1a845cbeca4b2c",
+            "shape": "232b3ccd55bbcf54",
             "source": "src/Puck.World.Schema/WorldCameraProgram.cs",
             "token": "puck.camera.program.v1"
         },
@@ -1498,7 +1498,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "f8501048c134a1a7",
+            "shape": "61dfa8e3f66df252",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
@@ -1634,7 +1634,7 @@
                 "P:Puck.World.WorldDefinition.State",
                 "P:Puck.World.WorldJsonContext.WorldProjectionDocument"
             ],
-            "shape": "75b5a7873659fe88",
+            "shape": "e6c7ef9997b72a64",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },

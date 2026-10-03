@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Puck.Commands;
+using Puck.SignedDistance;
 using Puck.World.Client;
 
 using Xunit;
@@ -167,7 +168,7 @@ public sealed class PresentationReadsStateLawTests {
                 y: (0x23 / 255f),
                 z: (0x50 / 255f)
             ),
-            actual: settings.Sky.Stops[1].Color
+            actual: settings.Sky.First<SdfSkyGradient>().Stop(index: 1).Color
         );
     }
     // --- The sky reads a cell ---
@@ -203,7 +204,7 @@ public sealed class PresentationReadsStateLawTests {
                 y: (0x22 / 255f),
                 z: (0x33 / 255f)
             ),
-            actual: first.Sky.Stops[1].Color
+            actual: first.Sky.First<SdfSkyGradient>().Stop(index: 1).Color
         );
 
         var moved = new WorldStateRow(
@@ -228,7 +229,7 @@ public sealed class PresentationReadsStateLawTests {
                 y: (0xBB / 255f),
                 z: (0xCC / 255f)
             ),
-            actual: second.Sky.Stops[1].Color
+            actual: second.Sky.First<SdfSkyGradient>().Stop(index: 1).Color
         );
     }
 }

@@ -281,8 +281,27 @@ public static class WorldRenderKeys {
             value: out var part
         ))
             ? part
-            : null)));
+            : null))).ToArray();
+        var expanded = ExpandKind(clock: clock, layer: layer, stated: stated);
+        // What every layer carries, keyed by parts of the layer's own kind.
+        var common = Parts(
+            keys: stated,
+            select: part => ((part.GetType() == layer.GetType()) ? part : null)
+        );
 
+        if (common.Length == 0) {
+            return expanded;
+        }
+
+        var turn = Angle(authored: layer.Transform?.Turn, clock: clock, field: static part => part.Transform?.Turn, parts: common);
+        var tilt = Angle(authored: layer.Transform?.Tilt, clock: clock, field: static part => part.Transform?.Tilt, parts: common);
+
+        return expanded with {
+            Opacity = Scalar(authored: layer.Opacity, clock: clock, field: static part => part.Opacity, parts: common),
+            Transform = (((turn is null) && (tilt is null)) ? layer.Transform : new WorldRenderSkyTransform(Tilt: tilt, Turn: turn)),
+        };
+    }
+    private static WorldRenderSkyLayer ExpandKind(string clock, (double At, WorldEase? Ease, WorldRenderSkyLayer? Part)[] stated, WorldRenderSkyLayer layer) {
         switch (layer) {
             case WorldRenderSkyLayer.Gradient gradient: {
                     var parts = Parts(
@@ -324,27 +343,6 @@ public static class WorldRenderKeys {
                     }
 
                     return gradient with { Stops = expanded };
-                }
-            case WorldRenderSkyLayer.SunDisc disc: {
-                    var parts = Parts(
-                        keys: stated,
-                        select: static part => (part as WorldRenderSkyLayer.SunDisc)
-                    );
-
-                    return disc with {
-                        Intensity = Scalar(
-                            authored: disc.Intensity,
-                            clock: clock,
-                            field: static part => part.Intensity,
-                            parts: parts
-                        ),
-                        Radius = Angle(
-                            authored: disc.Radius,
-                            clock: clock,
-                            field: static part => part.Radius,
-                            parts: parts
-                        ),
-                    };
                 }
             case WorldRenderSkyLayer.Stars stars: {
                     var parts = Parts(
@@ -444,6 +442,64 @@ public static class WorldRenderKeys {
                             field: static part => part.Spin,
                             parts: parts
                         ),
+                    };
+                }
+            case WorldRenderSkyLayer.SunDisc disc: {
+                    var parts = Parts(keys: stated, select: static part => (part as WorldRenderSkyLayer.SunDisc));
+
+                    return disc with {
+                        Color = Color(authored: disc.Color, clock: clock, field: static part => part.Color, parts: parts),
+                        Intensity = Scalar(authored: disc.Intensity, clock: clock, field: static part => part.Intensity, parts: parts),
+                        Radius = Angle(authored: disc.Radius, clock: clock, field: static part => part.Radius, parts: parts),
+                    };
+                }
+            case WorldRenderSkyLayer.Aurora aurora: {
+                    var parts = Parts(keys: stated, select: static part => (part as WorldRenderSkyLayer.Aurora));
+
+                    return aurora with {
+                        Base = Angle(authored: aurora.Base, clock: clock, field: static part => part.Base, parts: parts),
+                        Color = Color(authored: aurora.Color, clock: clock, field: static part => part.Color, parts: parts),
+                        Fold = Angle(authored: aurora.Fold, clock: clock, field: static part => part.Fold, parts: parts),
+                        Height = Angle(authored: aurora.Height, clock: clock, field: static part => part.Height, parts: parts),
+                        Intensity = Scalar(authored: aurora.Intensity, clock: clock, field: static part => part.Intensity, parts: parts),
+                        Top = Color(authored: aurora.Top, clock: clock, field: static part => part.Top, parts: parts),
+                    };
+                }
+            case WorldRenderSkyLayer.Noise noise: {
+                    var parts = Parts(keys: stated, select: static part => (part as WorldRenderSkyLayer.Noise));
+
+                    return noise with {
+                        Coverage = Scalar(authored: noise.Coverage, clock: clock, field: static part => part.Coverage, parts: parts),
+                        High = Color(authored: noise.High, clock: clock, field: static part => part.High, parts: parts),
+                        Low = Color(authored: noise.Low, clock: clock, field: static part => part.Low, parts: parts),
+                    };
+                }
+            case WorldRenderSkyLayer.Pattern pattern: {
+                    var parts = Parts(keys: stated, select: static part => (part as WorldRenderSkyLayer.Pattern));
+
+                    if ((parts.Length == 0) || (pattern.Colors is not { } colors)) {
+                        return pattern;
+                    }
+
+                    var expanded = new BindableColor[colors.Count];
+
+                    for (var index = 0; (index < colors.Count); index++) {
+                        var colorIndex = index;
+                        var colorParts = parts
+                            .Where(predicate: part => ((part.Part.Colors is { } partColors) && (colorIndex < partColors.Count)))
+                            .Select(selector: part => (part.At, part.Ease, Part: new WorldRenderSkyStop(Color: part.Part.Colors![colorIndex])))
+                            .ToArray();
+
+                        expanded[index] = (Color(authored: colors[index], clock: clock, field: static part => part.Color, parts: colorParts) ?? colors[index]);
+                    }
+
+                    return pattern with { Colors = expanded };
+                }
+            case WorldRenderSkyLayer.Panorama panorama: {
+                    var parts = Parts(keys: stated, select: static part => (part as WorldRenderSkyLayer.Panorama));
+
+                    return panorama with {
+                        Intensity = Scalar(authored: panorama.Intensity, clock: clock, field: static part => part.Intensity, parts: parts),
                     };
                 }
             default:

@@ -275,36 +275,46 @@ read it as uncovered; in a reduced or temporal view the resolve reconstructs the
 lit image, coverage with color, and each pixel's surface transport at the output
 extent.
 
-The sky's layers compose in their authored order, and the sky is cut into
-**runs** without reordering it: the gradient is a field run, the sun disc and the
-stars a point run, and the clouds a field run over them. Every blend is affine in
-the color beneath it, so a field run is summarized exactly as one per-channel
-scale and offset, and the runs compose as the stack does
-(`SdfSkyRuns`, held by `SkyRunCompositionLawTests`).
+The sky is an open stack of up to eight layers that compose in their authored
+order, each by its blend (`over`, `add`, `multiply`, `screen`), a kind as often
+as authored. A kind is a parameter record and one module under `Sdf/sky/kinds/`,
+registered in the generated kind table the kernels switch on, so adding one
+touches no pass. The stack is cut into **runs** without reordering it: a maximal
+sequence of consecutive **field** layers (gradient, clouds, aurora, noise,
+pattern, panorama) is one field run, and the **point** layers between them
+(stars, a body's disc) are evaluated one by one. Every blend is affine in the
+color beneath it, so a field run is summarized exactly as one per-channel scale
+and offset, and the runs compose as the stack does (`SdfSkyRuns`, held by
+`SkyRunCompositionLawTests`). Each layer carries its own opacity, mask (an
+elevation band or a cone), transform, clock, visibility (the camera, the lighting
+or both) and the lowest quality tier it draws at; the sky frame turns every layer
+but a disc.
 
 - The `sky` pass (`passes/sdf-sky-runs.comp.hlsl`) evaluates the field runs on
   the render grid, and only where the pixel or one of its eight neighbours is not
-  wholly covered by the color views wrote: the gradient's offset, then the clouds'
-  scale and offset, each a half-float image, the base's alpha marking the texels
-  it evaluated. A pixel covered with all its neighbours evaluates no field runs,
-  and each pixel evaluated counts one `gpu.sky.evaluations`. A reduced view's sky therefore costs its render
-  grid's uncovered pixels, not its output's.
+  wholly covered by the color views wrote: the lowest field run's offset, then at
+  most two upper field runs' scales and offsets packed six half floats a run,
+  the base's alpha marking the texels it evaluated. A pixel covered with all its
+  neighbours evaluates no field runs, and each layer evaluated counts one
+  `gpu.sky.evaluations` in its own detail row. A reduced view's sky therefore
+  costs its render grid's uncovered pixels, not its output's.
 - The `composite` pass (`passes/sdf-composite.comp.hlsl`) writes the view's
   color. It adds each [atmosphere](#the-atmosphere) kind's glow, its in-scatter
   colour scaled by the surface transport's weight for it, reading the sky the
-  fog and the haze in-scatter from the residency's
+  fog and the haze in-scatter, the sky the lighting sees, from the residency's
   [environment map](#the-environment-map) rather than evaluating it, so the
   atmosphere counts no sky layer's evaluation; each kind it evaluates at a pixel
-  counts one `gpu.sky.evaluations` in the composite's `atmosphere` detail row,
-  and a zero weight evaluates nothing. Where the coverage is below one it
-  composes the runs beneath the lit image, filtered from the texels the sky
-  evaluated (or evaluated in place, and counted, where it evaluated none beside
-  the pixel), the disc and the stars evaluated at the pixel so they stay sharp,
-  passes them through the haze and the medium to the far distance, and puts the
-  lit image over them by its coverage, so a silhouette blends toward the full
-  sky at its pixel. The bounded media integrate last, over each share of the
-  pixel separately: the surface share up to the surface transport's distance,
-  and the sky share up to the far distance.
+  counts one `gpu.sky.evaluations` in the `atmosphere` detail row, and a zero
+  weight evaluates nothing. Where the coverage is below one it composes the
+  stack beneath the lit image in its authored order: each field run's summary
+  filtered from the texels the sky evaluated (or every field layer evaluated in
+  place, and counted, where it evaluated none beside the pixel), and each point
+  layer evaluated at the pixel so it stays sharp, passes them through the haze
+  and the medium to the far distance, then puts the lit image over them by its
+  coverage, so a silhouette blends toward the full sky at its pixel. The bounded
+  media integrate last, over each share of the pixel separately: the surface
+  share up to the surface transport's distance, and the sky share up to the far
+  distance.
 
 An unauthored world renders the default look: the two-stop gradient `SdfSky`
 starts from and the default atmosphere's fog (`SdfAtmosphere.Default`), read like
@@ -355,10 +365,11 @@ kind.
 A residency keeps one environment map and its coefficients for its sky, however
 many views read it (`SdfWorldTables.SkyEnvironment.cs`, CPU reference
 `SdfSkyEnvironment`). The map is 64 by 64 texels over the octahedral projection
-the radiance cache uses, the pole at +y, each texel the gradient at its centre's
-direction as four half floats: the layer the fog and the haze in-scatter. No
-body enters it, so a bright sun disc never smears into the fog in front of it;
-the haze adds the bodies' light analytically by its phase. The coefficients
+the radiance cache uses, the pole at +y, each texel the layers the lighting sees
+(a gradient's by default) composed at its centre's direction as four half floats:
+the sky the fog and the haze in-scatter. No body enters it, so a bright sun disc
+never smears into the fog in front of it; the haze adds the bodies' light
+analytically by its phase. The coefficients
 are the map's nine second-order spherical harmonics per colour channel, each
 texel weighted by its solid angle and the sums scaled so the weights total 4π.
 
@@ -366,12 +377,13 @@ The residency's upload, the one submission a frame that every view of the
 residency follows, renders both in its `environment` pass
 (`passes/sdf-sky-environment.comp.hlsl`, one invocation a texel, then
 `passes/sdf-sky-environment-reduce.comp.hlsl`, one group summing in a fixed
-order), and only when the frame's gradient differs from the one the map holds
-while the atmosphere reads it (a fog in-scattering the sky, or a haze). A still
-sky renders the map once; every later upload records the pass as skipped, with
-no evaluation and no dispatch. A body, the stars, the twinkle, the clouds and
-the atmosphere's densities leave the map as it is. A
-refresh counts 4,096 `gpu.sky.evaluations` under the residency's
+order), and only when the frame's lit layers, sky frame or tier differ from
+the ones the map holds while the atmosphere reads it (a fog in-scattering the
+sky, or a haze). A still sky renders the map once; every later upload records
+the pass as skipped, with no evaluation and no dispatch. A body, every layer
+only the camera sees (the stars, the twinkle and the clouds by default) and the
+atmosphere's densities leave the map as it is. A
+refresh counts 4,096 `gpu.sky.evaluations` a lit layer under the residency's
 `environment` pass. One copy serves every frame in flight, because the views
 that read it are queued before the upload that rewrites it, and that upload's
 first barrier orders their reads before its writes.

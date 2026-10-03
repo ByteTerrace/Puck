@@ -86,14 +86,21 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
             : value.ToString())
         : "default"
     );
+    // A layer's fields, then what every layer of the stack carries as the engine resolves it: its blend, opacity,
+    // visibility, lowest tier, clock, mask and transform.
     private static CommandEcho DescribeLayer(CommandEcho echo, int index, WorldRenderSkyLayer layer) {
-        echo = echo
-            .Head(head: $"sky[{index}]")
-            .Field(
-            key: "name",
-            value: (layer.LayerName ?? "none")
-        );
+        echo = DescribeKind(echo: echo.Head(head: $"sky[{index}]").Field(key: "name", value: (layer.LayerName ?? "none")), layer: layer);
 
+        return echo
+            .Field(key: "blend", value: WorldSkyLayers.BlendOf(layer: layer).ToString().ToLowerInvariant())
+            .Field(key: "opacity", value: ((layer.Opacity is null) ? "1" : Describe(value: layer.Opacity)))
+            .Field(key: "visibility", value: WorldSkyLayers.VisibilityOf(layer: layer).ToString().ToLowerInvariant())
+            .Field(key: "tier", value: WorldSkyLayers.TierOf(layer: layer).ToString().ToLowerInvariant())
+            .Field(key: "clock", value: (layer.Clock ?? "none"))
+            .Field(key: "mask", value: ((layer.Mask?.Band is not null) ? "band" : ((layer.Mask?.Cone is not null) ? "cone" : "none")))
+            .Field(key: "transform", value: ((layer.Transform is { } transform) ? $"{Describe(value: transform.Turn)}/{Describe(value: transform.Tilt)}" : "none"));
+    }
+    private static CommandEcho DescribeKind(CommandEcho echo, WorldRenderSkyLayer layer) {
         switch (layer) {
             case WorldRenderSkyLayer.Gradient gradient: {
                     echo = echo.Field(
@@ -129,7 +136,8 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                         .Field(
                         key: "intensity",
                         value: Describe(value: disc.Intensity)
-                    );
+                    )
+                        .Field(key: "texture", value: ((disc.Texture is { } texture) ? Describe(value: texture.Screen) : "none"));
                 }
             case WorldRenderSkyLayer.Stars stars: {
                     return echo
@@ -198,6 +206,38 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                         key: "shear",
                         value: Describe(vector: clouds.Shear)
                     );
+                }
+            case WorldRenderSkyLayer.Aurora aurora: {
+                    return echo
+                        .Field(key: "type", value: "aurora")
+                        .Field(key: "intensity", value: Describe(value: aurora.Intensity))
+                        .Field(key: "color", value: Describe(color: aurora.Color))
+                        .Field(key: "top", value: Describe(color: aurora.Top))
+                        .Field(key: "base", value: Describe(value: aurora.Base))
+                        .Field(key: "height", value: Describe(value: aurora.Height))
+                        .Field(key: "fold", value: Describe(value: aurora.Fold));
+                }
+            case WorldRenderSkyLayer.Noise noise: {
+                    return echo
+                        .Field(key: "type", value: "noise")
+                        .Field(key: "low", value: Describe(color: noise.Low))
+                        .Field(key: "high", value: Describe(color: noise.High))
+                        .Field(key: "coverage", value: Describe(value: noise.Coverage))
+                        .Field(key: "scale", value: Describe(value: noise.Scale))
+                        .Field(key: "octaves", value: Describe(value: noise.Octaves));
+                }
+            case WorldRenderSkyLayer.Pattern pattern: {
+                    return echo
+                        .Field(key: "type", value: "pattern")
+                        .Field(key: "shape", value: (pattern.Shape ?? WorldSkyPatternShape.Checker).ToString().ToLowerInvariant())
+                        .Field(key: "cells", value: Describe(value: pattern.Cells));
+                }
+            case WorldRenderSkyLayer.Panorama panorama: {
+                    return echo
+                        .Field(key: "type", value: "panorama")
+                        .Field(key: "screen", value: Describe(value: panorama.Screen))
+                        .Field(key: "projection", value: (panorama.Projection ?? WorldSkyProjection.Equirect).ToString().ToLowerInvariant())
+                        .Field(key: "intensity", value: Describe(value: panorama.Intensity));
                 }
             default: {
                     return echo.Field(

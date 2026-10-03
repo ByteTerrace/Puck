@@ -69,16 +69,24 @@ public sealed class WorldValueDomainLawTests {
             Controls: [-1f, 0f],
             Path: "render.sky.layers[0].stops[0].elevation"
         ),
-        [WorldValueFields.SunDiscRadius] = Sky(author: s => new WorldRenderSkyLayer.SunDisc(Radius: s), present: static e => e.Sky.SunDiscRadians, member: "radius"),
-        [WorldValueFields.SunDiscIntensity] = Sky(author: s => new WorldRenderSkyLayer.SunDisc(Intensity: s), present: static e => e.Sky.Block.DiscIntensity, member: "intensity"),
-        [WorldValueFields.StarBrightness] = Sky(author: s => new WorldRenderSkyLayer.Stars(Brightness: s), present: static e => e.Sky.Block.StarBrightness, member: "brightness"),
-        [WorldValueFields.TwinkleShare] = Sky(author: s => new WorldRenderSkyLayer.Stars(Twinkle: new WorldRenderSkyTwinkle(Share: s)), present: static e => e.Sky.Block.TwinkleShare, member: "twinkle.share"),
-        [WorldValueFields.TwinkleDepth] = Sky(author: s => new WorldRenderSkyLayer.Stars(Twinkle: new WorldRenderSkyTwinkle(Depth: s)), present: static e => e.Sky.Block.TwinkleDepth, member: "twinkle.depth"),
+        [WorldValueFields.SunDiscRadius] = Sky(author: s => new WorldRenderSkyLayer.SunDisc(Radius: s), present: static e => e.Sky.First<SdfSkyDisc>().Radius, member: "radius"),
+        [WorldValueFields.SunDiscIntensity] = Sky(author: s => new WorldRenderSkyLayer.SunDisc(Intensity: s), present: static e => e.Sky.First<SdfSkyDisc>().Intensity, member: "intensity"),
+        [WorldValueFields.StarBrightness] = Sky(author: s => new WorldRenderSkyLayer.Stars(Brightness: s), present: static e => e.Sky.First<SdfSkyStars>().Brightness, member: "brightness"),
+        [WorldValueFields.TwinkleShare] = Sky(author: s => new WorldRenderSkyLayer.Stars(Twinkle: new WorldRenderSkyTwinkle(Share: s)), present: static e => e.Sky.First<SdfSkyStars>().TwinkleShare, member: "twinkle.share"),
+        [WorldValueFields.TwinkleDepth] = Sky(author: s => new WorldRenderSkyLayer.Stars(Twinkle: new WorldRenderSkyTwinkle(Depth: s)), present: static e => e.Sky.First<SdfSkyStars>().TwinkleDepth, member: "twinkle.depth"),
         // A rate the tick integrates may not bind a state row.
         [WorldValueFields.TwinkleRate] = Sky(author: s => new WorldRenderSkyLayer.Stars(Twinkle: new WorldRenderSkyTwinkle(Rate: s)), present: null, member: "twinkle.rate"),
-        [WorldValueFields.CloudCoverage] = Sky(author: s => new WorldRenderSkyLayer.Clouds(Coverage: s), present: static e => e.Sky.Block.CloudCoverage, member: "coverage"),
-        [WorldValueFields.CloudSoftness] = Sky(author: s => new WorldRenderSkyLayer.Clouds(Softness: s), present: static e => e.Sky.Block.CloudSoftness, member: "softness"),
-        [WorldValueFields.CloudScale] = Sky(author: s => new WorldRenderSkyLayer.Clouds(Scale: s), present: static e => e.Sky.Block.CloudScale, member: "scale"),
+        [WorldValueFields.CloudCoverage] = Sky(author: s => new WorldRenderSkyLayer.Clouds(Coverage: s), present: static e => e.Sky.First<SdfSkyClouds>().Coverage, member: "coverage"),
+        [WorldValueFields.CloudSoftness] = Sky(author: s => new WorldRenderSkyLayer.Clouds(Softness: s), present: static e => e.Sky.First<SdfSkyClouds>().Softness, member: "softness"),
+        [WorldValueFields.CloudScale] = Sky(author: s => new WorldRenderSkyLayer.Clouds(Scale: s), present: static e => e.Sky.First<SdfSkyClouds>().Scale, member: "scale"),
+        [WorldValueFields.SkyLayerOpacity] = Sky(author: s => new WorldRenderSkyLayer.Clouds(Coverage: new BindableScalar(literal: 0.5f)) { Opacity = s }, present: static e => e.Sky.LayerAt(index: e.Sky.IndexOf(kind: SdfSkyLayerKind.Clouds)).Opacity, member: "opacity"),
+        [WorldValueFields.AuroraIntensity] = Sky(author: s => new WorldRenderSkyLayer.Aurora(Intensity: s), present: static e => e.Sky.First<SdfSkyAurora>().Intensity, member: "intensity"),
+        // An aurora's angles reach the kernel as heights (their sines), so the presentation reads no angle back.
+        [WorldValueFields.AuroraBase] = Sky(author: s => new WorldRenderSkyLayer.Aurora(Base: s), present: null, member: "base"),
+        [WorldValueFields.AuroraHeight] = Sky(author: s => new WorldRenderSkyLayer.Aurora(Height: s), present: null, member: "height"),
+        [WorldValueFields.AuroraFold] = Sky(author: s => new WorldRenderSkyLayer.Aurora(Fold: s), present: null, member: "fold"),
+        [WorldValueFields.NoiseCoverage] = Sky(author: s => new WorldRenderSkyLayer.Noise(Coverage: s), present: static e => e.Sky.First<SdfSkyNoise>().Coverage, member: "coverage"),
+        [WorldValueFields.PanoramaIntensity] = Sky(author: s => new WorldRenderSkyLayer.Panorama(Intensity: s, Screen: Fixtures.TestPatternScreenIndex), present: static e => e.Sky.First<SdfSkyPanorama>().Intensity, member: "intensity"),
         [WorldValueFields.FogDensity] = Air(author: s => new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: s)), present: static e => e.Sky.Atmosphere.FogDensity, member: "fog.density"),
         [WorldValueFields.AirFalloff] = Air(author: s => new WorldRenderAtmosphere(Fog: new WorldRenderFog(Height: new WorldRenderAirHeight(Falloff: s))), present: static e => e.Sky.Atmosphere.FogFalloff, member: "fog.height.falloff"),
         [WorldValueFields.HazeAmount] = Air(author: s => new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Amount: s)), present: static e => e.Sky.Atmosphere.HazeAmount, member: "haze.amount"),
@@ -521,7 +529,7 @@ public sealed class WorldValueDomainLawTests {
         // An unvalidated literal below the floor still presents the floor; a literal is no binding and reports nothing.
         Assert.Equal(
             expected: SdfSky.MinCloudSoftness,
-            actual: resolve.Resolve(definition: literal, mirror: ClientFixtures.StateMirror(definition: literal), revision: 0).Sky.Block.CloudSoftness
+            actual: resolve.Resolve(definition: literal, mirror: ClientFixtures.StateMirror(definition: literal), revision: 0).Sky.First<SdfSkyClouds>().Softness
         );
         Assert.Empty(collection: reports);
 
@@ -537,7 +545,7 @@ public sealed class WorldValueDomainLawTests {
 
             Assert.Equal(
                 expected: SdfSky.MinCloudSoftness,
-                actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 0).Sky.Block.CloudSoftness
+                actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 0).Sky.First<SdfSkyClouds>().Softness
             );
         }
 
@@ -671,7 +679,7 @@ public sealed class WorldValueDomainLawTests {
         var before = domains.Checks;
 
         for (var frame = 0; (frame < 50); frame++) {
-            Assert.Equal(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: frame).Sky.Block.CloudSoftness);
+            Assert.Equal(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: frame).Sky.First<SdfSkyClouds>().Softness);
         }
 
         Assert.Equal(expected: (before + 1L), actual: domains.Checks);
@@ -706,7 +714,7 @@ public sealed class WorldValueDomainLawTests {
         domains.Report = reports.Add;
 
         foreach (var world in new[] { first, second }) {
-            Assert.Equal(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 0).Sky.Block.CloudSoftness);
+            Assert.Equal(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 0).Sky.First<SdfSkyClouds>().Softness);
         }
 
         foreach (var world in new[] { first, second }) {

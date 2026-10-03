@@ -13,7 +13,7 @@ namespace Puck.World.Tests;
 /// absence resolves to the pinned lights and sky bit-exactly, an authored list is exactly the lights it names, every
 /// authored field threads through untouched, a state-bound colour reads its cell live, and the validator refuses the
 /// shapes the lights table and the sky's tables cannot carry.</summary>
-public sealed class WorldRenderLightingSkyLawTests {
+public sealed partial class WorldRenderLightingSkyLawTests {
     private static WorldRenderDefaults BaseDefaults() => WorldRenderDefaults.Absent with { ShadowLights = 1 };
     private static WorldStateRow ColorsRow(string hex) => new(
         Name: CellName.Parse(candidate: "colors"),
@@ -110,7 +110,7 @@ public sealed class WorldRenderLightingSkyLawTests {
 
         Assert.True(condition: pinned.Records.SequenceEqual(other: resolved.Lights.Records));
         Assert.Equal(expected: unauthored.Block, actual: resolved.Sky.Block);
-        Assert.True(condition: unauthored.Stops.SequenceEqual(other: resolved.Sky.Stops));
+        Assert.True(condition: unauthored.Layers.SequenceEqual(other: resolved.Sky.Layers));
         Assert.Equal(
             expected: 2,
             actual: resolved.Lights.Count
@@ -131,7 +131,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             expected: SdfLights.DefaultAmbientBase,
             actual: resolved.Lights[1].Weight
         );
-        Assert.Equal(expected: 2u, actual: resolved.Sky.Block.StopCount);
+        Assert.Equal(expected: 2u, actual: resolved.Sky.First<SdfSkyGradient>().Count);
         Assert.Equal(
             expected: SdfSky.DefaultFogDensity,
             actual: resolved.Sky.Atmosphere.FogDensity
@@ -393,16 +393,16 @@ public sealed class WorldRenderLightingSkyLawTests {
         var resolved = Resolve(defaults: BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.02f)), Lighting = SunAndSky(), Sky = sky });
 
         Assert.Equal(
-            expected: 3,
-            actual: resolved.Sky.StopCount
+            expected: 3u,
+            actual: resolved.Sky.First<SdfSkyGradient>().Count
         );
         Assert.Equal(
-            expected: new SdfSkyStop(Color: new Vector3(
+            expected: (Color: new Vector3(
                 x: (0xE0 / 255f),
                 y: (0x8F / 255f),
                 z: (0x6B / 255f)
             ), Elevation: 0f),
-            actual: resolved.Sky.Stops[1]
+            actual: resolved.Sky.First<SdfSkyGradient>().Stop(index: 1)
         );
         Assert.Equal(
             expected: 0.02f,
@@ -410,34 +410,34 @@ public sealed class WorldRenderLightingSkyLawTests {
         );
         Assert.Equal(
             expected: 0,
-            actual: resolved.Sky.Block.DiscLight
+            actual: resolved.Sky.First<SdfSkyDisc>().Light
         );
         Assert.Equal(
             expected: 0.045f,
-            actual: resolved.Sky.SunDiscRadians
+            actual: resolved.Sky.First<SdfSkyDisc>().Radius
         );
         Assert.Equal(
             expected: 6f,
-            actual: resolved.Sky.Block.DiscIntensity
+            actual: resolved.Sky.First<SdfSkyDisc>().Intensity
         );
         Assert.Equal(
             expected: 64f,
-            actual: resolved.Sky.Block.StarDensity
+            actual: resolved.Sky.First<SdfSkyStars>().Density
         );
         Assert.Equal(
             expected: 0.85f,
-            actual: resolved.Sky.Block.StarBrightness
+            actual: resolved.Sky.First<SdfSkyStars>().Brightness
         );
         Assert.Equal(
             expected: 1337u,
-            actual: resolved.Sky.Block.StarSeed
+            actual: resolved.Sky.First<SdfSkyStars>().Seed
         );
     }
     [Fact]
     public void AuthoredAtmosphere_FogAlone_KeepsTheDefaultGradient() {
         var resolved = Resolve(defaults: BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.05f)) });
 
-        Assert.Equal(expected: 2u, actual: resolved.Sky.Block.StopCount);
+        Assert.Equal(expected: 2u, actual: resolved.Sky.First<SdfSkyGradient>().Count);
         Assert.Equal(
             expected: 0.05f,
             actual: resolved.Sky.Atmosphere.FogDensity
@@ -449,22 +449,22 @@ public sealed class WorldRenderLightingSkyLawTests {
         // environment, not a zeroed stop table.
         var resolved = Resolve(defaults: BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(Brightness: 1f)]) });
 
-        Assert.Equal(expected: 2u, actual: resolved.Sky.Block.StopCount);
+        Assert.Equal(expected: 2u, actual: resolved.Sky.First<SdfSkyGradient>().Count);
         Assert.Equal(
             expected: 1f,
-            actual: resolved.Sky.Block.StarBrightness
+            actual: resolved.Sky.First<SdfSkyStars>().Brightness
         );
         Assert.Equal(
-            expected: 2,
-            actual: resolved.Sky.StopCount
+            expected: 1,
+            actual: resolved.Sky.IndexOf(kind: SdfSkyLayerKind.Stars)
         );
         Assert.Equal(
-            expected: new SdfSkyStop(Color: SdfSky.DefaultGroundColor, Elevation: -1f),
-            actual: resolved.Sky.Stops[0]
+            expected: (Color: SdfSky.DefaultGroundColor, Elevation: -1f),
+            actual: resolved.Sky.First<SdfSkyGradient>().Stop(index: 0)
         );
         Assert.Equal(
-            expected: new SdfSkyStop(Color: SdfSky.DefaultZenithColor, Elevation: 1f),
-            actual: resolved.Sky.Stops[1]
+            expected: (Color: SdfSky.DefaultZenithColor, Elevation: 1f),
+            actual: resolved.Sky.First<SdfSkyGradient>().Stop(index: 1)
         );
     }
     [Fact]
@@ -937,17 +937,19 @@ public sealed class WorldRenderLightingSkyLawTests {
         Assert.Equal(expected: SdfAtmosphere.DefaultMediumExtinction, actual: water.Sky.Atmosphere.MediumExtinction);
         Assert.Equal(expected: SdfAtmosphere.DefaultMediumColor, actual: water.Sky.Atmosphere.MediumColor);
     }
+    // The stack is open: a kind may appear as often as authored, each layer counting under its own label.
     [Fact]
-    public void SkyLayerKind_Repeated_RefusesByName_ControlOnceClean() {
-        Laws.RefusalWithControl(
-            lawId: "render.sky.layer-once",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(Brightness: 0.5f), new WorldRenderSkyLayer.Stars(Brightness: 0.7f)]) },
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(Brightness: 0.5f)]) },
-            }))
-        );
+    public void SkyLayerKind_Repeated_IsAdmittedAndLabelledApart() {
+        WorldRenderSkyLayer[] layers = [
+            new WorldRenderSkyLayer.Clouds(Coverage: 0.3f),
+            new WorldRenderSkyLayer.Clouds(Coverage: 0.6f),
+            new WorldRenderSkyLayer.Clouds(Coverage: 0.1f, Name: "high"),
+        ];
+
+        Assert.True(condition: TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+            RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: layers) },
+        })));
+        Assert.Equal(expected: new[] { "clouds", "clouds#2", "high" }, actual: WorldSkyLayers.LabelsOf(layers: layers));
     }
     [Fact]
     public void SkyStarsDensity_NonPositive_RefusesByName_ControlPositiveClean() {

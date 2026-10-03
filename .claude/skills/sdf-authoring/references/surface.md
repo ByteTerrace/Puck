@@ -228,11 +228,20 @@ its footprint is isotropic. Unequal size axes do not produce a strip highlight.
 
 ### Sky
 
-`render.sky` layers, each kind at most once, composited gradient, then
-sun disc and stars, then clouds, with fog read on its own. A `gradient` needs 2 to 4 stops with `elevation` in [-1, 1]
-strictly ascending. `fog` carries `density` per world unit. `sunDisc` indexes a
-directional light slot. `stars` and `clouds` carry their own density, seed, and
-motion terms.
+`render.sky` is an open stack of at most eight layers composited in their
+authored order, each by its `blend` (`over`, `add`, `multiply`, `screen`), a kind
+as often as authored; the air before it (fog, haze, a medium) is `render.atmosphere`'s,
+never a layer. The kinds
+are `gradient` (2 to 4 stops with `elevation` in [-1, 1] strictly ascending),
+`stars`, `clouds`, `aurora`, `noise`, `pattern`, `panorama` (a declared screen's
+image by direction) and `sunDisc` (a directional light slot, a glow or a
+`texture { screen }`). Every layer also takes `opacity`, a `mask` (an
+elevation `band` or a `cone`, with a `feather`), a `transform` (`turn`, `tilt`), a
+`clock`, a `visibility` (`camera`, `lighting`, `both`) and the lowest `tier` it
+draws at; `frame { up }` turns the whole sky. The layers the camera sees cut into
+at most two field runs above their lowest run. `skies.puck` holds preset
+templates (`clearDay`, `starryNight`, `polarNight`, `overcast`) and their air
+(`clearDayAir`, `overcastAir`, expanded inside `atmosphere`).
 
 ### Everything else
 

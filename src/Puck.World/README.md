@@ -1917,15 +1917,19 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.temporal`, `world.upscale-sharpness`,
+`world.temporal`, `world.upscale-sharpness`, `world.sky-quality`,
 `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
 shadow tier, a shadow-slot policy, an ambient-occlusion switch, a
-temporal-reconstruction switch, a dynamic-resolution switch and render-scale
-ceiling and floor tiers. Its four shadow-policy fields apply together as one
-settings change. The names are
+temporal-reconstruction switch, a dynamic-resolution switch, render-scale
+ceiling and floor tiers and a sky tier. Its four shadow-policy fields apply together as one
+settings change. `world.sky-quality low|medium|high` sets the sky's tier: a sky
+layer whose `tier` lies above it writes no entry and counts no work, and below
+`high` each kind draws its reduced form (clouds take one thickness tap and three
+octaves at `low`, shaded flat; stars stop twinkling at `low`). The render
+section's `skyQuality` sets it at boot, and `world.save` folds it back. The names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
@@ -2064,14 +2068,15 @@ on every definition revision (a live edit lands on the next frame).
 the material shade); absent, the pinned sun and hemisphere render.
 `render.lighting.curvature` adds cavity darkening, ridge light and an ink outline
 read through the `inkLow`/`inkHigh` curvature band (1 / fillet radius).
-`render.sky.layers[]` is a stack of `$type` `gradient` (two to four `stops` of
-`elevation`/`color`), `sunDisc` (bound to a light slot), `stars` (each
-star hash-dealt its own blackbody colour and apparent luminosity;
-`twinkle { share, depth, rate }` scintillates a share of them on the tick clock)
-and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
-—a hashed, warped noise layer over everything above it, all on the tick clock),
-composited in that order whatever order they are authored in. Every field is
-optional individually, and a layer may carry a `name`. `render.atmosphere` is the
+`render.sky.layers[]` is an open stack of at most eight layers of `$type`
+`gradient` (two to four `stops` of `elevation`/`color`), `sunDisc` (bound to a
+light slot), `stars` (each star hash-dealt its own blackbody colour and apparent
+luminosity; `twinkle { share, depth, rate }` scintillates a share of them on the
+tick clock), `clouds` (`coverage, softness, scale, seed, color, drift, spin,
+curl, shear`—a hashed, warped noise layer, all on the tick clock), `aurora`,
+`noise`, `pattern` or `panorama`, composited in the order they are authored,
+each by its `blend`; a kind may appear more than once. Every field is optional
+individually, and a layer may carry a `name`. `render.atmosphere` is the
 air before them: a `fog { density, color, height { base, falloff } }` that
 in-scatters the sky (or its `color`) and thins above its base when it has a
 height, a `haze { amount, anisotropy, height }` that takes `amount` of the light

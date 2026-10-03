@@ -71,6 +71,7 @@ public sealed class ShippedWorldQualityLawTests(ShippedWorldQualityLawTests.Stag
                 AmbientOcclusion: false,
                 RenderScale: WorldRenderScaleTiers.Scale(tier: WorldRenderScaleTier.Half),
                 Shadows: ShadowTier.Off,
+                Sky: WorldSkyTier.Low,
                 Temporal: false
             )
         );

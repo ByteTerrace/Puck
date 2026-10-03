@@ -717,7 +717,7 @@ pass to record submits the residency's one upload ahead of the view's
 submission, and every pass of the view reads the tables that upload wrote. The
 upload also renders the sky's environment map and its coefficients, one pair
 for the residency however many views read it (its `environment` pass,
-`SdfWorldTables.SkyEnvironment.cs`), only when the sky draws another gradient
+`SdfWorldTables.SkyEnvironment.cs`), only when the sky draws other lit layers
 than the map holds and the atmosphere reads the map (a fog in-scattering the
 sky, or a haze); the composite's atmosphere reads the map instead of evaluating
 the sky. At

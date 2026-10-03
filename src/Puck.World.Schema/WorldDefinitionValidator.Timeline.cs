@@ -505,6 +505,14 @@ public static partial class WorldDefinitionValidator {
             path: $"{path}.name",
             stated: (part.LayerName is not null)
         );
+        RefuseStructure(errors: errors, path: $"{path}.blend", stated: (part.Blend is not null));
+        RefuseStructure(errors: errors, path: $"{path}.mask", stated: (part.Mask is not null));
+        RefuseStructure(errors: errors, path: $"{path}.clock", stated: (part.Clock is not null));
+        RefuseStructure(errors: errors, path: $"{path}.visibility", stated: (part.Visibility is not null));
+        RefuseStructure(errors: errors, path: $"{path}.tier", stated: (part.Tier is not null));
+        RequireKeyScalar(errors: errors, own: target.Opacity, path: $"{path}.opacity", value: part.Opacity);
+        RequireKeyScalar(errors: errors, own: target.Transform?.Turn?.Value, path: $"{path}.transform.turn", value: part.Transform?.Turn?.Value);
+        RequireKeyScalar(errors: errors, own: target.Transform?.Tilt?.Value, path: $"{path}.transform.tilt", value: part.Transform?.Tilt?.Value);
 
         switch (part) {
             case WorldRenderSkyLayer.Gradient gradient: {
@@ -564,6 +572,8 @@ public static partial class WorldDefinitionValidator {
                         path: $"{path}.intensity",
                         value: disc.Intensity
                     );
+                    RequireKeyColor(errors: errors, own: own.Color, path: $"{path}.color", value: disc.Color);
+                    RefuseStructure(errors: errors, path: $"{path}.texture", stated: (disc.Texture is not null));
 
                     break;
                 }
@@ -580,6 +590,8 @@ public static partial class WorldDefinitionValidator {
                         path: $"{path}.seed",
                         stated: (stars.Seed is not null)
                     );
+                    RefuseStructure(errors: errors, path: $"{path}.sparsity", stated: (stars.Sparsity is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.size", stated: (stars.Size is not null));
                     RequireKeyScalar(
                         errors: errors,
                         own: own.Brightness,
@@ -615,6 +627,10 @@ public static partial class WorldDefinitionValidator {
                         path: $"{path}.seed",
                         stated: (clouds.Seed is not null)
                     );
+                    RefuseStructure(errors: errors, path: $"{path}.octaves", stated: (clouds.Octaves is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.warp", stated: (clouds.Warp is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.relief", stated: (clouds.Relief is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.extinction", stated: (clouds.Extinction is not null));
                     RequireKeyScalar(
                         errors: errors,
                         own: own.Coverage,
@@ -663,6 +679,62 @@ public static partial class WorldDefinitionValidator {
                         path: $"{path}.shear",
                         value: clouds.Shear
                     );
+
+                    break;
+                }
+            case WorldRenderSkyLayer.Aurora aurora: {
+                    var own = ((WorldRenderSkyLayer.Aurora)target);
+
+                    RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: aurora.Intensity);
+                    RequireKeyColor(errors: errors, own: own.Color, path: $"{path}.color", value: aurora.Color);
+                    RequireKeyColor(errors: errors, own: own.Top, path: $"{path}.top", value: aurora.Top);
+                    RequireKeyScalar(errors: errors, own: own.Base?.Value, path: $"{path}.base", value: aurora.Base?.Value);
+                    RequireKeyScalar(errors: errors, own: own.Height?.Value, path: $"{path}.height", value: aurora.Height?.Value);
+                    RequireKeyScalar(errors: errors, own: own.Fold?.Value, path: $"{path}.fold", value: aurora.Fold?.Value);
+                    RefuseStructure(errors: errors, path: $"{path}.rays", stated: (aurora.Rays is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.waves", stated: (aurora.Waves is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.seed", stated: (aurora.Seed is not null));
+
+                    break;
+                }
+            case WorldRenderSkyLayer.Noise noise: {
+                    var own = ((WorldRenderSkyLayer.Noise)target);
+
+                    RequireKeyColor(errors: errors, own: own.Low, path: $"{path}.low", value: noise.Low);
+                    RequireKeyColor(errors: errors, own: own.High, path: $"{path}.high", value: noise.High);
+                    RequireKeyScalar(errors: errors, own: own.Coverage, path: $"{path}.coverage", value: noise.Coverage);
+                    RefuseStructure(errors: errors, path: $"{path}.softness", stated: (noise.Softness is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.scale", stated: (noise.Scale is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.octaves", stated: (noise.Octaves is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.gain", stated: (noise.Gain is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.seed", stated: (noise.Seed is not null));
+
+                    break;
+                }
+            case WorldRenderSkyLayer.Pattern pattern: {
+                    var own = ((WorldRenderSkyLayer.Pattern)target);
+
+                    RefuseStructure(errors: errors, path: $"{path}.shape", stated: (pattern.Shape is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.cells", stated: (pattern.Cells is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.line", stated: (pattern.Line is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.softness", stated: (pattern.Softness is not null));
+                    if (pattern.Colors is { } colors) {
+                        if (colors.Count != (own.Colors?.Count ?? 2)) {
+                            errors.Add(item: $"{path}.colors carries {colors.Count} colours; a key moves a pattern's two colours and never adds or removes one.");
+                        }
+                        for (var index = 0; (index < colors.Count); index++) {
+                            RequireKeyColor(errors: errors, own: (((own.Colors is { } ownColors) && (index < ownColors.Count)) ? ownColors[index] : null), path: $"{path}.colors[{index}]", value: colors[index]);
+                        }
+                    }
+
+                    break;
+                }
+            case WorldRenderSkyLayer.Panorama panorama: {
+                    var own = ((WorldRenderSkyLayer.Panorama)target);
+
+                    RefuseStructure(errors: errors, path: $"{path}.screen", stated: (panorama.Screen is not null));
+                    RefuseStructure(errors: errors, path: $"{path}.projection", stated: (panorama.Projection is not null));
+                    RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: panorama.Intensity);
 
                     break;
                 }

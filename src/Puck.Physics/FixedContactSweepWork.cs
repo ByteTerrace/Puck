@@ -6,7 +6,7 @@ namespace Puck.Physics;
 /// The deterministic work <see cref="FixedFieldContactSolver.ResolveSweep"/> spends proving how far a body may move,
 /// counted in a <see cref="WorkCounterSet"/> and read through <see cref="IWorkCounterSource"/> under the source name
 /// <see cref="SourceName"/>: the certified sweeps it runs, one per core sphere of each collider volume, the bounds
-/// queries they spend, each one walk of the field over one box, and how many of them stopped at a possible contact or
+/// queries they charge to their budget, and how many of them stopped at a possible contact or
 /// ended undecided.
 /// </summary>
 /// <remarks>Each count is a monotonic total over the ledger's life, never reset; a reader takes a window by reading
@@ -26,8 +26,8 @@ public sealed class FixedContactSweepWork : IWorkCounterSource {
     /// <summary>Gets the kind counting certified sweeps: one per core sphere of each collider volume a moving body
     /// sweeps.</summary>
     public static WorkKind Sweeps { get; } = new(name: "physics.sweep.sweeps", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting the bounds queries those sweeps spend, each one walk of the field over one
-    /// box.</summary>
+    /// <summary>Gets the kind counting logical bounds queries charged to the sweep budget. An immutable field may
+    /// reuse an identical box's answer without walking its program again.</summary>
     public static WorkKind BoundsQueries { get; } = new(name: "physics.sweep.bounds-queries", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the sweeps that stopped where a surface may lie within one more step.</summary>
     public static WorkKind Contacts { get; } = new(name: "physics.sweep.contacts", unit: "count", workClass: WorkClass.Deterministic);

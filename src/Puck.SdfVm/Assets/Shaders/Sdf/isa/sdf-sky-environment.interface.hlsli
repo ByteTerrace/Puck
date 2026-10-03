@@ -1,71 +1,67 @@
-// Generated from shader interface 'sdf-sky-environment' (sha256/b8859fca70024dac7ef4329377a56eb4c0171b21a1abcb93d0c30ad10880c60c). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky-environment' (sha256/f0ed0ffa9abfc5636c708d381ccf88ec9ce30bf788c7dcb1468de5a791de24be). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 #define PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 
 struct SdfSkyBlock {
     [[vk::offset(0)]] uint AirFlags;
-    [[vk::offset(4)]] uint StopCount;
+    [[vk::offset(4)]] uint LayerCount;
     [[vk::offset(8)]] uint SoftboxCount;
-    [[vk::offset(12)]] int DiscLight;
-    [[vk::offset(16)]] float3 DiscDirection;
-    [[vk::offset(28)]] float DiscIntensity;
-    [[vk::offset(32)]] float DiscExponent;
-    [[vk::offset(36)]] uint AirLightCount;
-    [[vk::offset(40)]] float StarDensity;
-    [[vk::offset(44)]] float StarBrightness;
-    [[vk::offset(48)]] uint StarSeed;
-    [[vk::offset(52)]] float TwinkleShare;
-    [[vk::offset(56)]] float TwinkleDepth;
-    [[vk::offset(60)]] float TwinklePhase;
-    [[vk::offset(64)]] float3 CloudColor;
-    [[vk::offset(76)]] float CloudCoverage;
-    [[vk::offset(80)]] float CloudSoftness;
-    [[vk::offset(84)]] float CloudScale;
-    [[vk::offset(88)]] uint CloudSeed;
-    [[vk::offset(92)]] float CloudCurl;
-    [[vk::offset(96)]] float2 CloudDriftOffset;
-    [[vk::offset(104)]] float2 CloudShearOffset;
-    [[vk::offset(112)]] float3 CloudLightDirection;
-    [[vk::offset(124)]] float CloudSpinAngle;
-    [[vk::offset(128)]] float3 CloudLightColor;
-    [[vk::offset(140)]] uint _pad140;
-    [[vk::offset(144)]] float3 HorizonLow;
-    [[vk::offset(156)]] uint _pad156;
-    [[vk::offset(160)]] float3 HorizonHigh;
-    [[vk::offset(172)]] float FogExtinction;
-    [[vk::offset(176)]] float3 FogColor;
-    [[vk::offset(188)]] float FogBase;
-    [[vk::offset(192)]] float FogFalloff;
-    [[vk::offset(196)]] float HazeExtinction;
-    [[vk::offset(200)]] float HazeBase;
-    [[vk::offset(204)]] float HazeFalloff;
-    [[vk::offset(208)]] float3 MediumColor;
-    [[vk::offset(220)]] float MediumExtinction;
-    [[vk::offset(224)]] float MediumSurface;
-    [[vk::offset(228)]] float HazeAnisotropy;
-    [[vk::offset(232)]] uint _pad232;
+    [[vk::offset(12)]] uint Quality;
+    [[vk::offset(16)]] float3 FrameRight;
+    [[vk::offset(28)]] uint BaseRun;
+    [[vk::offset(32)]] float3 FrameUp;
+    [[vk::offset(44)]] uint UpperRuns;
+    [[vk::offset(48)]] float3 FrameForward;
+    [[vk::offset(60)]] uint AirLightCount;
+    [[vk::offset(64)]] float3 HorizonLow;
+    [[vk::offset(76)]] float FogExtinction;
+    [[vk::offset(80)]] float3 HorizonHigh;
+    [[vk::offset(92)]] float FogBase;
+    [[vk::offset(96)]] float3 FogColor;
+    [[vk::offset(108)]] float FogFalloff;
+    [[vk::offset(112)]] float3 MediumColor;
+    [[vk::offset(124)]] float MediumExtinction;
+    [[vk::offset(128)]] float HazeExtinction;
+    [[vk::offset(132)]] float HazeBase;
+    [[vk::offset(136)]] float HazeFalloff;
+    [[vk::offset(140)]] float HazeAnisotropy;
+    [[vk::offset(144)]] float3 AirLight0Direction;
+    [[vk::offset(156)]] float MediumSurface;
+    [[vk::offset(160)]] float3 AirLight0Radiance;
+    [[vk::offset(172)]] uint _pad172;
+    [[vk::offset(176)]] float3 AirLight1Direction;
+    [[vk::offset(188)]] uint _pad188;
+    [[vk::offset(192)]] float3 AirLight1Radiance;
+    [[vk::offset(204)]] uint _pad204;
+    [[vk::offset(208)]] float3 AirLight2Direction;
+    [[vk::offset(220)]] uint _pad220;
+    [[vk::offset(224)]] float3 AirLight2Radiance;
     [[vk::offset(236)]] uint _pad236;
-    [[vk::offset(240)]] float3 AirLight0Direction;
+    [[vk::offset(240)]] float3 AirLight3Direction;
     [[vk::offset(252)]] uint _pad252;
-    [[vk::offset(256)]] float3 AirLight0Radiance;
+    [[vk::offset(256)]] float3 AirLight3Radiance;
     [[vk::offset(268)]] uint _pad268;
-    [[vk::offset(272)]] float3 AirLight1Direction;
-    [[vk::offset(284)]] uint _pad284;
-    [[vk::offset(288)]] float3 AirLight1Radiance;
-    [[vk::offset(300)]] uint _pad300;
-    [[vk::offset(304)]] float3 AirLight2Direction;
-    [[vk::offset(316)]] uint _pad316;
-    [[vk::offset(320)]] float3 AirLight2Radiance;
-    [[vk::offset(332)]] uint _pad332;
-    [[vk::offset(336)]] float3 AirLight3Direction;
-    [[vk::offset(348)]] uint _pad348;
-    [[vk::offset(352)]] float3 AirLight3Radiance;
-    [[vk::offset(364)]] uint _pad364;
 };
 
-struct SdfSkyStop {
-    [[vk::offset(0)]] float3 Color;
-    [[vk::offset(12)]] float Elevation;
+struct SdfSkyLayer {
+    [[vk::offset(0)]] uint Kind;
+    [[vk::offset(4)]] uint Blend;
+    [[vk::offset(8)]] uint Detail;
+    [[vk::offset(12)]] uint Visibility;
+    [[vk::offset(16)]] float Opacity;
+    [[vk::offset(20)]] uint Mask;
+    [[vk::offset(24)]] float MaskSoftness;
+    [[vk::offset(28)]] float Phase;
+    [[vk::offset(32)]] float4 MaskBand;
+    [[vk::offset(48)]] float4 Rotation;
+    [[vk::offset(64)]] float4 P0;
+    [[vk::offset(80)]] float4 P1;
+    [[vk::offset(96)]] float4 P2;
+    [[vk::offset(112)]] float4 P3;
+    [[vk::offset(128)]] float4 P4;
+    [[vk::offset(144)]] float4 P5;
+    [[vk::offset(160)]] float4 P6;
+    [[vk::offset(176)]] float4 P7;
 };
 
 // The Frame group: descriptor set 0, register space 0.
@@ -96,12 +92,12 @@ struct SdfSkyEnvironmentPass {
     [[vk::offset(8)]] uint workCounterRow;
     [[vk::offset(12)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsa506E1C21 : register(b0, space3);
-#define passGroup passGroupIsa506E1C21
-[[vk::binding(1, 3)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayout700384204459cafc8ea769a9caa5c1b1600eed679e2b1f6a1a2cb1d3c9bbd3e5 : register(t1, space3);
-#define sdfSky sdfSkyLayout700384204459cafc8ea769a9caa5c1b1600eed679e2b1f6a1a2cb1d3c9bbd3e5
-[[vk::binding(2, 3)]] StructuredBuffer<SdfSkyStop> sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224 : register(t2, space3);
-#define sdfSkyStops sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsaBD70F814 : register(b0, space3);
+#define passGroup passGroupIsaBD70F814
+[[vk::binding(1, 3)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayouta0537687dc1d61225504ea87feb0433431eda2382614d7759c9e1ea7767d73d4 : register(t1, space3);
+#define sdfSky sdfSkyLayouta0537687dc1d61225504ea87feb0433431eda2382614d7759c9e1ea7767d73d4
+[[vk::binding(2, 3)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t2, space3);
+#define sdfSkyLayers sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8
 [[vk::binding(3, 3)]] RWStructuredBuffer<uint2> sdfSkyEnvironmentRW : register(u3, space3);
 [[vk::binding(4, 3)]] RWStructuredBuffer<float4> sdfSkyCoefficientsRW : register(u4, space3);
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint> workCounters : register(u5, space3);

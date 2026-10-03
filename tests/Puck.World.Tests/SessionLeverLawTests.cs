@@ -289,6 +289,7 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.ShadowMask,
             WorldSessionLevers.ShadowSlots,
             WorldSessionLevers.Shadows,
+            WorldSessionLevers.SkyQuality,
             WorldSessionLevers.TargetHertz,
             WorldSessionLevers.Temporal,
             WorldSessionLevers.UpscaleSharpness,

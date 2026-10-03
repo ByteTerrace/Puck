@@ -7,9 +7,9 @@ namespace Puck.SdfVm;
 
 // The sky's environment: one map and its coefficients a residency keeps for its sky (SdfSkyEnvironment), rendered by the
 // residency's upload, the one submission a frame every view of the residency follows, and read by every view's composite
-// through the World set. The upload renders them only when the sky it packed draws another gradient than the map holds
-// (SdfSkyEnvironment.SameMap) and the fog reads the map (a positive density), so a still sky renders them once and then
-// records nothing: the pass reads skipped. One copy serves every frame in flight: the views that read the map are
+// through the World set. The upload renders them only when the sky it packed draws other lit layers than the map holds
+// (SdfSkyEnvironment.SameMap) and the atmosphere reads the map (a fog in-scattering the sky, or a haze), so a still sky
+// renders them once and then records nothing: the pass reads skipped. One copy serves every frame in flight: the views that read the map are
 // submitted on the same queue before the upload that rewrites it, whose first barrier orders their reads before its writes,
 // as the brick pool's is. A refresh is the map's dispatch, one invocation a texel, then the reduction's, one group, between
 // the barriers that hand each buffer from its readers to its writer and back, with the kernel counters cleared before them
@@ -20,16 +20,16 @@ public sealed partial class SdfWorldTables {
 
     private readonly SkyEnvironmentPass m_skyEnvironment;
 
-    // The environment pass's named rows follow the pass rows: its plain row, then the gradient the map's kernel evaluates
-    // through the shared sky function, which counts its own evaluation under the first named row.
-    private const int EnvironmentDetailRows = 2;
+    // The environment pass's named rows follow the pass rows: its plain row, then one row each of the sky's detail rows
+    // (SdfSkyDetails), at most its capacity, which the counters hold from the start, so a new label never grows them.
+    private const int EnvironmentDetailRows = (1 + SdfSkyDetails.Capacity);
     private const uint EnvironmentDetailRow = (EnvironmentPass + 2);
 
     /// <summary>Gets the bytes the sky's environment keeps on the device: the map and its coefficients
     /// (<see cref="SdfSkyEnvironment.PayloadBytes"/>), one pair however many views read it.</summary>
     public static int SkyEnvironmentBytes => SdfSkyEnvironment.PayloadBytes;
-    /// <summary>Gets how many times the upload has rendered the sky's environment: once for each change of the gradient
-    /// the fog reads, and never on an upload whose sky draws the gradient the map holds.</summary>
+    /// <summary>Gets how many times the upload has rendered the sky's environment: once for each change of the lit layers
+    /// the atmosphere reads, and never on an upload whose sky draws the lit layers the map holds.</summary>
     public long SkyEnvironmentRenders => m_skyEnvironment.Renders;
 
     // The descriptor pool the environment's sets take from the tables' own: its frame set and a pass set per ring slot.
@@ -44,9 +44,9 @@ public sealed partial class SdfWorldTables {
 
         return sizes;
     }
-    // Whether this upload renders the environment, which the fog reads and whose gradient moved; records it if so.
+    // Whether this upload renders the environment, which the atmosphere reads and whose lit layers moved; records it if so.
     private void RecordSkyEnvironment(nint commandBuffer, int slot) {
-        if (!m_skyEnvironment.Owes(block: in m_skyRecord[0], stops: m_skyStopRecords)) {
+        if (!m_skyEnvironment.Owes(block: in m_skyRecord[0], layers: m_skyLayerRecords)) {
             m_work.SkipPass(pass: EnvironmentPass);
 
             return;
@@ -61,10 +61,10 @@ public sealed partial class SdfWorldTables {
         );
         m_work.LeavePass();
         m_work.ReadOnCompletion(readback: m_skyEnvironment.Counters, slot: slot);
-        m_skyEnvironment.Rendered(block: in m_skyRecord[0], stops: m_skyStopRecords);
+        m_skyEnvironment.Rendered(block: in m_skyRecord[0], layers: m_skyLayerRecords);
     }
 
-    // The environment's objects and the gradient its map holds.
+    // The environment's objects and the lit layers its map holds.
     private sealed class SkyEnvironmentPass : IDisposable {
         private readonly IGpuBuffer m_map;
         private readonly IGpuBuffer m_coefficients;
@@ -76,7 +76,7 @@ public sealed partial class SdfWorldTables {
 
         private readonly GpuKernelCounters m_counters;
 
-        private readonly SdfSkyStop[] m_renderedStops = new SdfSkyStop[SdfSky.MaxStops];
+        private readonly SdfSkyLayer[] m_renderedLayers = new SdfSkyLayer[SdfSky.MaxLayers];
 
         private readonly SdfWorldTables m_tables;
         private readonly IGpuBindings m_bindings;
@@ -143,12 +143,12 @@ public sealed partial class SdfWorldTables {
         public long Renders { get; private set; }
 
         // Whether an upload of a sky owes the map: the atmosphere reads it (a fog in-scattering the sky, or a haze), and it
-        // holds no sky or other field runs.
-        public bool Owes(in SdfSkyBlock block, ReadOnlySpan<SdfSkyStop> stops) => (
+        // holds no sky or other lit layers.
+        public bool Owes(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers) => (
             ReadsMap(block: in block) &&
             (
                 !m_holdsSky ||
-                !SdfSkyEnvironment.SameMap(block: in block, otherBlock: in m_renderedBlock, otherStops: m_renderedStops, stops: stops)
+                !SdfSkyEnvironment.SameMap(block: in block, layers: layers, otherBlock: in m_renderedBlock, otherLayers: m_renderedLayers)
             )
         );
         // Whether a packed sky's atmosphere reads the map: its fog in-scatters the sky, or its haze does.
@@ -156,14 +156,14 @@ public sealed partial class SdfWorldTables {
             ((block.FogExtinction > 0f) && ((block.AirFlags & SdfAir.FogColorAuthored) == 0u)) ||
             (block.HazeExtinction > 0f)
         );
-        // Records that the map holds a sky's gradient.
-        public void Rendered(in SdfSkyBlock block, ReadOnlySpan<SdfSkyStop> stops) {
+        // Records that the map holds a sky's lit layers.
+        public void Rendered(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers) {
             m_renderedBlock = block;
-            stops.CopyTo(destination: m_renderedStops);
+            layers.CopyTo(destination: m_renderedLayers);
             m_holdsSky = true;
             Renders++;
         }
-        // Forgets the sky the map holds, so the next upload whose fog reads it renders it: a kernel reload's.
+        // Forgets the sky the map holds, so the next upload whose atmosphere reads it renders it: a kernel reload's.
         public void Forget() =>
             m_holdsSky = false;
         // Records a refresh: on the first, the blocks' and sets' writes (WriteOnce); then the counters' clear, the map's readers before its writes, the map, its writes before the
@@ -185,8 +185,8 @@ public sealed partial class SdfWorldTables {
         }
 
         // Writes the blocks and the sets once, inside the first refresh's pass: the frame block, the block holding the map's
-        // extent and the environment pass's counter row, the frame set, and a pass set per ring slot binding the slot's sky
-        // block and stops, which the upload has copied before it renders, the map, the coefficients and the counters.
+        // extent and the environment pass's counter rows, the frame set, and a pass set per ring slot binding the slot's sky
+        // block and layer table, which the upload has copied before it renders, the map, the coefficients and the counters.
         private void WriteOnce() {
             if (m_written) {
                 return;
@@ -208,7 +208,7 @@ public sealed partial class SdfWorldTables {
 
                 m_bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: m_block.BufferHandle, bufferSize: m_block.SizeBytes, descriptorSetHandle: set);
                 m_tables.WriteInterfaceBuffer(buffer: m_tables.m_skyRegion.Buffer(slot: slot), layout: layout.Layout, member: SdfKernelInterfaces.Sky, set: set);
-                m_tables.WriteInterfaceBuffer(buffer: m_tables.m_skyStopRegion.Buffer(slot: slot), layout: layout.Layout, member: SdfKernelInterfaces.SkyStops, set: set);
+                m_tables.WriteInterfaceBuffer(buffer: m_tables.m_skyLayerRegion.Buffer(slot: slot), layout: layout.Layout, member: SdfKernelInterfaces.SkyLayers, set: set);
                 m_tables.WriteInterfaceBuffer(buffer: m_map, layout: layout.Layout, member: SdfKernelInterfaces.SkyEnvironmentWritten, set: set);
                 m_tables.WriteInterfaceBuffer(buffer: m_coefficients, layout: layout.Layout, member: SdfKernelInterfaces.SkyCoefficientsWritten, set: set);
                 m_tables.WriteInterfaceBuffer(buffer: m_counters.RowOf(row: EnvironmentPass, slot: slot).Buffer, layout: layout.Layout, member: ShaderWorkCounters.Buffer, set: set);

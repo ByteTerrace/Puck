@@ -280,7 +280,8 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        var seen = new HashSet<Type>();
+        var drawn = 0;
+        var runs = new SdfSkyRunCount();
 
         for (var index = 0; (index < layers.Count); index++) {
             var layer = layers[index];
@@ -291,9 +292,22 @@ public static partial class WorldDefinitionValidator {
 
                 continue;
             }
+            if (++drawn == (SdfSky.MaxLayers + 1)) {
+                errors.Add(item: $"{layerPath} is layer {drawn} of the stack; a sky draws at most {SdfSky.MaxLayers} layers.");
+            }
+            if ((layer.LayerName is { } name) && SdfSkyDetails.IsFixed(label: name)) {
+                errors.Add(item: $"{layerPath}.name '{name}' is a fixed work-counter row's label (a field run's or the atmosphere's); name the layer otherwise.");
+            }
 
-            if (!seen.Add(item: layer.GetType())) {
-                errors.Add(item: $"{layerPath} repeats a layer kind; each kind appears at most once.");
+            ValidateSkyLayerCommon(definition: definition, errors: errors, layer: layer, path: layerPath);
+
+            var visibility = WorldSkyLayers.VisibilityOf(layer: layer);
+
+            if (
+                ((visibility & SdfSkyVisibility.Camera) != 0) &&
+                !runs.TryAdd(layerClass: WorldSkyLayers.ClassOf(layer: layer))
+            ) {
+                errors.Add(item: $"{layerPath} opens a field run past the {SdfSky.MaxUpperFieldRuns} the sky composes above its lowest run; move it beside another field layer, or put fewer point layers between field layers.");
             }
 
             switch (layer) {
@@ -323,6 +337,11 @@ public static partial class WorldDefinitionValidator {
                             scalar: disc.Intensity
                         );
 
+                        JudgeColor(color: disc.Color, definition: definition, errors: errors, path: $"{layerPath}.color");
+                        if (disc.Texture is { } texture) {
+                            RequireDeclaredScreen(definition: definition, errors: errors, path: $"{layerPath}.texture.screen", screen: texture.Screen);
+                        }
+
                         if (disc.Light is { } lightIndex) {
                             var lights = lighting?.Lights;
 
@@ -340,6 +359,13 @@ public static partial class WorldDefinitionValidator {
                                 name: $"{layerPath}.density",
                                 value: density
                             );
+                        }
+
+                        if ((stars.Sparsity is { } sparsity) && !((sparsity > 0f) && (sparsity <= 1f))) {
+                            errors.Add(item: $"{layerPath}.sparsity {sparsity} lies outside (0, 1].");
+                        }
+                        if ((stars.Size is { } size) && !((size > 0f) && (size <= 0.5f))) {
+                            errors.Add(item: $"{layerPath}.size {size} lies outside (0, 0.5]: a star wider than half its cell straddles cells it is not tested in.");
                         }
 
                         JudgeScalar(
@@ -382,6 +408,71 @@ public static partial class WorldDefinitionValidator {
 
                         break;
                     }
+                case WorldRenderSkyLayer.Aurora aurora: {
+                        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.AuroraIntensity, path: $"{layerPath}.intensity", scalar: aurora.Intensity);
+                        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.AuroraBase, path: $"{layerPath}.base", scalar: aurora.Base?.Value);
+                        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.AuroraHeight, path: $"{layerPath}.height", scalar: aurora.Height?.Value);
+                        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.AuroraFold, path: $"{layerPath}.fold", scalar: aurora.Fold?.Value);
+                        JudgeColor(color: aurora.Color, definition: definition, errors: errors, path: $"{layerPath}.color");
+                        JudgeColor(color: aurora.Top, definition: definition, errors: errors, path: $"{layerPath}.top");
+                        if (aurora.Rays is { } rays) {
+                            RequirePositive(errors: errors, name: $"{layerPath}.rays", value: rays);
+                        }
+                        if (aurora.Waves is { } waves) {
+                            RequirePositive(errors: errors, name: $"{layerPath}.waves", value: waves);
+                        }
+
+                        break;
+                    }
+                case WorldRenderSkyLayer.Noise noise: {
+                        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.NoiseCoverage, path: $"{layerPath}.coverage", scalar: noise.Coverage);
+                        JudgeColor(color: noise.Low, definition: definition, errors: errors, path: $"{layerPath}.low");
+                        JudgeColor(color: noise.High, definition: definition, errors: errors, path: $"{layerPath}.high");
+                        if (noise.Scale is { } scale) {
+                            RequirePositive(errors: errors, name: $"{layerPath}.scale", value: scale);
+                        }
+                        if ((noise.Softness is { } softness) && !((softness >= SdfSky.MinCloudSoftness) && (softness <= 1f))) {
+                            errors.Add(item: $"{layerPath}.softness {softness} lies outside [{SdfSky.MinCloudSoftness}, 1]: a narrower band leaves the noise's covered edge without two distinct edges.");
+                        }
+                        if ((noise.Gain is { } gain) && !((gain > 0f) && (gain < 1f))) {
+                            errors.Add(item: $"{layerPath}.gain {gain} lies outside (0, 1).");
+                        }
+                        RequireOctaves(errors: errors, octaves: noise.Octaves, path: $"{layerPath}.octaves");
+
+                        break;
+                    }
+                case WorldRenderSkyLayer.Pattern pattern: {
+                        if ((pattern.Colors is { } colors) && (colors.Count != 2)) {
+                            errors.Add(item: $"{layerPath}.colors carries {colors.Count} colours; a pattern paints two.");
+                        }
+                        for (var colorIndex = 0; (colorIndex < (pattern.Colors?.Count ?? 0)); colorIndex++) {
+                            JudgeColor(color: pattern.Colors![colorIndex], definition: definition, errors: errors, path: $"{layerPath}.colors[{colorIndex}]");
+                        }
+                        if ((pattern.Cells is { } cells) && !((cells >= 1f) && (cells == MathF.Round(x: cells)) && (cells <= 4096f))) {
+                            errors.Add(item: $"{layerPath}.cells {cells} must be a whole number from 1 to 4096, so the pattern closes on itself around the sky.");
+                        }
+                        if ((pattern.Line is { } line) && !((line > 0f) && (line < 1f))) {
+                            errors.Add(item: $"{layerPath}.line {line} lies outside (0, 1).");
+                        }
+                        if ((pattern.Softness is { } patternSoftness) && !((patternSoftness >= 0f) && (patternSoftness <= 0.5f))) {
+                            errors.Add(item: $"{layerPath}.softness {patternSoftness} lies outside [0, 0.5].");
+                        }
+
+                        break;
+                    }
+                case WorldRenderSkyLayer.Panorama panorama: {
+                        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.PanoramaIntensity, path: $"{layerPath}.intensity", scalar: panorama.Intensity);
+                        if (panorama.Screen is { } screen) {
+                            RequireDeclaredScreen(definition: definition, errors: errors, path: $"{layerPath}.screen", screen: screen);
+                        } else {
+                            errors.Add(item: $"{layerPath}.screen is required: a panorama samples the image a declared screen shows.");
+                        }
+                        if ((WorldSkyLayers.VisibilityOf(layer: panorama) & SdfSkyVisibility.Lighting) != 0) {
+                            errors.Add(item: $"{layerPath}.visibility lets the lighting see a panorama; the environment map binds no screen, so a panorama is seen by the camera alone.");
+                        }
+
+                        break;
+                    }
                 case WorldRenderSkyLayer.Clouds clouds: {
                         JudgeScalar(
                             definition: definition,
@@ -404,6 +495,17 @@ public static partial class WorldDefinitionValidator {
                             path: $"{layerPath}.scale",
                             scalar: clouds.Scale
                         );
+
+                        RequireOctaves(errors: errors, octaves: clouds.Octaves, path: $"{layerPath}.octaves");
+                        if ((clouds.Warp is { } warp) && !(float.IsFinite(f: warp) && (warp >= 0f))) {
+                            errors.Add(item: $"{layerPath}.warp {warp} must be finite and not negative.");
+                        }
+                        if ((clouds.Relief is { } relief) && !(float.IsFinite(f: relief) && (relief >= 0f))) {
+                            errors.Add(item: $"{layerPath}.relief {relief} must be finite and not negative.");
+                        }
+                        if (clouds.Extinction is { } extinction) {
+                            RequirePositive(errors: errors, name: $"{layerPath}.extinction", value: extinction);
+                        }
 
                         if ((clouds.Color is { } cloudColor) && !cloudColor.IsAuthorable(definition: definition)) {
                             errors.Add(item: $"{layerPath}.color '{cloudColor}' {BindableColor.Grammar}.");
@@ -455,6 +557,49 @@ public static partial class WorldDefinitionValidator {
                         break;
                     }
             }
+        }
+    }
+    // What every layer of the stack carries: its opacity, mask, transform and clock.
+    private static void ValidateSkyLayerCommon(WorldDefinition definition, WorldRenderSkyLayer layer, string path, List<string> errors) {
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.SkyLayerOpacity, path: $"{path}.opacity", scalar: layer.Opacity);
+
+        if (layer.Transform is { } transform) {
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.SkyLayerTurn, path: $"{path}.transform.turn", scalar: transform.Turn?.Value);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.SkyLayerTilt, path: $"{path}.transform.tilt", scalar: transform.Tilt?.Value);
+        }
+        if ((layer.Clock is { } clock) && !(definition.Timeline.Clocks ?? []).Any(predicate: candidate => string.Equals(a: candidate?.Name, b: clock, comparisonType: StringComparison.Ordinal))) {
+            errors.Add(item: $"{path}.clock '{clock}' names no clock in the timeline section.");
+        }
+        if (layer.Mask is not { } mask) {
+            return;
+        }
+        if ((mask.Band is null) == (mask.Cone is null)) {
+            errors.Add(item: $"{path}.mask states {((mask.Band is null) ? "neither a band nor a cone" : "a band and a cone")}; a mask is one of them.");
+        }
+        if ((mask.Band is { } band) && ((band.Count != 2) || !band.All(predicate: static angle => (double.IsFinite(d: angle) && (Math.Abs(value: angle) <= (Math.PI / 2d)))) || !(band[0] < band[1]))) {
+            errors.Add(item: $"{path}.mask.band must be two ascending elevations from -90deg to 90deg.");
+        }
+        if ((mask.Cone is { } cone) && (!(cone.Spread > 0d) || (cone.Spread > Math.PI) || (((System.Numerics.Vector3)cone.Toward) == System.Numerics.Vector3.Zero))) {
+            errors.Add(item: $"{path}.mask.cone needs a nonzero toward and a spread in (0deg, 180deg].");
+        }
+        if ((mask.Feather is { } feather) && !(double.IsFinite(d: feather) && (feather >= 0d))) {
+            errors.Add(item: $"{path}.mask.feather {feather} must be a finite angle, not negative.");
+        }
+    }
+    private static void JudgeColor(BindableColor? color, WorldDefinition definition, string path, List<string> errors) {
+        if ((color is { } value) && !value.IsAuthorable(definition: definition)) {
+            errors.Add(item: $"{path} '{value}' {BindableColor.Grammar}.");
+        }
+    }
+    private static void RequireOctaves(uint? octaves, string path, List<string> errors) {
+        if ((octaves is { } count) && ((count < 1u) || (count > 8u))) {
+            errors.Add(item: $"{path} {count} lies outside 1 to 8.");
+        }
+    }
+    // A screen a sky layer samples is one the world declares, by its surface index.
+    private static void RequireDeclaredScreen(WorldDefinition definition, int screen, string path, List<string> errors) {
+        if (!definition.Screens.Any(predicate: candidate => (candidate?.Index == screen))) {
+            errors.Add(item: $"{path} {screen} names no screen the world declares; a panorama or a textured disc samples a screen's image by its index.");
         }
     }
     private static void ValidateGradient(WorldDefinition definition, WorldRenderSkyLayer.Gradient gradient, string path, List<string> errors) {

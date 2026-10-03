@@ -8,11 +8,15 @@
 #ifndef PASSES_SDF_SKY_PASS_HLSLI
 #define PASSES_SDF_SKY_PASS_HLSLI
 #define SDF_DYNAMIC_TRANSFORMS
+// The screens a panorama layer or a textured disc samples (sky/kinds/panorama.hlsli, sky/kinds/disc.hlsli).
+#define SDF_SCREEN_SOURCES
+#define SDF_SKY_SCREENS
 #include "../isa/sdf-sky.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-visibility.hlsli"
 #include "../frame/sdf-work.hlsli"
-#include "../shade/sdf-sky.hlsli"
+#include "../frame/sdf-environment.hlsli"
+#include "../sky/sdf-sky.hlsli"
 #include "../shade/sdf-sky-environment.hlsli"
 #include "../shade/sdf-transport.hlsli"
 
@@ -65,17 +69,21 @@ ViewportData sdfSkyPassView() {
 // The sky's field runs at a pixel of the pass's extent, filtered from the render grid (passGroup.imageExtent) the sky
 // evaluated them on: the bilinear taps beside the pixel, each weighted by whether the sky evaluated it, so an unevaluated
 // texel never darkens the sky. False when the sky evaluated none of them. On a native view's grid every pixel lands on its
-// own texel and reads it alone.
-bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scale, out float3 offset) {
+// own texel and reads it alone. The base is read at every tap and counts its load in the lowest run's row; each upper run
+// reads the upper images holding its six half floats (its scale, then its offset) and counts them in its own row.
+bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scales[SDF_SKY_MAX_UPPER_FIELD_RUNS], out float3 offsets[SDF_SKY_MAX_UPPER_FIELD_RUNS]) {
     int2 grid = int2(passGroup.imageExtent);
     float2 position = ((((float2(pixel) + 0.5) * float2(grid)) / float2(passGroup.extent)) - 0.5);
     int2 origin = int2(floor(position));
     float2 fraction = (position - float2(origin));
+    uint upper = min(sdfSky[0].UpperRuns, SDF_SKY_MAX_UPPER_FIELD_RUNS);
     float total = 0.0;
 
     base = float3(0.0, 0.0, 0.0);
-    scale = float3(0.0, 0.0, 0.0);
-    offset = float3(0.0, 0.0, 0.0);
+    [unroll] for (uint run = 0u; (run < SDF_SKY_MAX_UPPER_FIELD_RUNS); run++) {
+        scales[run] = float3(0.0, 0.0, 0.0);
+        offsets[run] = float3(0.0, 0.0, 0.0);
+    }
     [unroll] for (uint i = 0u; i < 4u; i++) {
         int2 corner = int2((int)(i & 1u), (int)(i >> 1u));
         float weight = (lerp((1.0 - fraction.x), fraction.x, (float)corner.x) * lerp((1.0 - fraction.y), fraction.y, (float)corner.y));
@@ -85,16 +93,28 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scale, out float3 o
             float4 runBase = skyBase.Load(tap);
             puckCountDetail(0u, 0u, 0u, 0u, 0u, 1u);
 
-            // Only the base is written for an invalid tap. Do not load its unwritten scale or offset: multiplying an
-            // undefined value by zero does not exclude it from the filter (zero times NaN is still NaN).
+            // Only the base is written for an invalid tap. Do not load its unwritten upper runs: multiplying an undefined
+            // value by zero does not exclude it from the filter (zero times NaN is still NaN).
             if (runBase.a <= 0.0) {
                 continue;
             }
             weight *= runBase.a;
             base += (weight * runBase.rgb);
-            scale += (weight * skyScale.Load(tap).rgb);
-            offset += (weight * skyOffset.Load(tap).rgb);
-            puckCountDetail(3u, 0u, 0u, 0u, 0u, 2u);
+            if (upper > 0u) {
+                float4 upper0 = skyUpper0.Load(tap);
+                float4 upper1 = skyUpper1.Load(tap);
+
+                puckCountDetail(1u, 0u, 0u, 0u, 0u, 2u);
+                scales[0] += (weight * upper0.xyz);
+                offsets[0] += (weight * float3(upper0.w, upper1.xy));
+                if (upper > 1u) {
+                    float4 upper2 = skyUpper2.Load(tap);
+
+                    puckCountDetail(2u, 0u, 0u, 0u, 0u, 1u);
+                    scales[1] += (weight * float3(upper1.zw, upper2.x));
+                    offsets[1] += (weight * upper2.yzw);
+                }
+            }
             total += weight;
         }
     }
@@ -102,13 +122,16 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scale, out float3 o
         return false;
     }
     base /= total;
-    scale /= total;
-    offset /= total;
+    [unroll] for (uint summary = 0u; (summary < SDF_SKY_MAX_UPPER_FIELD_RUNS); summary++) {
+        scales[summary] = ((summary < upper) ? (scales[summary] / total) : float3(1.0, 1.0, 1.0));
+        offsets[summary] = ((summary < upper) ? (offsets[summary] / total) : float3(0.0, 0.0, 0.0));
+    }
 
     return true;
 }
 // The sky the fog and the haze in-scatter in a direction: the residency's environment map (sdfSkyEnvironment), the
-// gradient with no body, filtered bilinearly over the four texels about the direction. It evaluates no sky.
+// layers the lighting sees with no body, filtered bilinearly over the four texels about the direction. It evaluates no
+// sky.
 float3 sdfSkyPassEnvironment(float3 direction) {
     uint taps[4];
     float weights[4];
