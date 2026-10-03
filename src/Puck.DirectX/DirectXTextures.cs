@@ -77,10 +77,12 @@ public static unsafe class DirectXTextures {
     /// <param name="memory">The device-local counts the texture joins, or <see langword="null"/>; the owner counts its
     /// release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
     /// <param name="mipLevels">The number of mip levels the texture has; one for a texture without mips.</param>
+    /// <param name="calls">The answerer of the creation call, or <see langword="null"/> for the device's own
+    /// (<see cref="DirectXDeviceCommandCalls"/>); a law gives it one that fails.</param>
     /// <returns>The texture, owned by the caller.</returns>
     /// <exception cref="Puck.Abstractions.Gpu.DeviceLostException">The device was removed.</exception>
     /// <exception cref="DirectXException">The creation failed for another reason.</exception>
-    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null, GpuDeviceMemoryWork? memory = null, ushort mipLevels = 1) {
+    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, DXGI_FORMAT format, uint width, uint height, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, D3D12_HEAP_FLAGS heapFlags = D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE, D3D12_CLEAR_VALUE? clearValue = null, GpuDeviceMemoryWork? memory = null, ushort mipLevels = 1, IDirectXCommandCalls? calls = null) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT,
         };
@@ -92,7 +94,7 @@ public static unsafe class DirectXTextures {
             width: width
         );
         var texture = DirectXCommandCalls.CreateCommittedResource(
-            calls: new DirectXDeviceCommandCalls(device: device),
+            calls: (calls ?? new DirectXDeviceCommandCalls(device: device)),
             clearValue: clearValue,
             description: in description,
             heapFlags: heapFlags,

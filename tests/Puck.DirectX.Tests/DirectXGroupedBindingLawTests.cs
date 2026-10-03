@@ -200,6 +200,55 @@ public sealed unsafe class DirectXGroupedBindingLawTests {
             bindings.DestroyPool(poolHandle: pool);
         }
     }
+    /// <summary>A destroyed view's handle never names a view created after it: across a tight loop of destroying an
+    /// image and creating the next, each new view's handle differs from every destroyed one, and a write naming a
+    /// destroyed handle is refused by name though a live view was created in its place.</summary>
+    [Fact]
+    public void A_destroyed_views_handle_never_names_a_view_created_after_it() {
+        using var context = DirectXTestDevices.Warp();
+        var services = context.Services;
+        var bindings = services.Bindings;
+        var filmGrain = GpuGroupLayoutTables.FilmGrain(pushesIndex: true);
+        using var layout = DirectXRootSignatures.CreateLayout(
+            description: filmGrain,
+            device: ((ID3D12Device*)context.Device.Handle)
+        );
+        var pool = bindings.CreatePool(sizes: GpuDescriptorPoolSizes.ForGroups(groups: filmGrain.Groups), name: default);
+        var destroyed = new HashSet<nint>();
+
+        try {
+            var pass = bindings.AllocateSet(
+                descriptorSetLayoutHandle: layout.GroupHandles[3],
+                poolHandle: pool,
+                name: default
+            );
+
+            for (var cycle = 0; (cycle < 64); cycle++) {
+                using var image = services.ImageFactory.Create(
+                    format: GpuPixelFormat.R8G8B8A8Unorm,
+                    height: 4,
+                    name: default,
+                    usage: GpuImageUsage.Sampled,
+                    width: 4
+                );
+
+                Assert.DoesNotContain(collection: destroyed, expected: image.ImageViewHandle);
+
+                foreach (var handle in destroyed) {
+                    _ = Assert.Throws<ObjectDisposedException>(testCode: () => bindings.WriteSampledImage(
+                        arrayElement: 0,
+                        binding: 1,
+                        descriptorSetHandle: pass,
+                        imageViewHandle: handle
+                    ));
+                }
+
+                _ = destroyed.Add(item: image.ImageViewHandle);
+            }
+        } finally {
+            bindings.DestroyPool(poolHandle: pool);
+        }
+    }
     [Fact]
     public void A_pools_sets_release_with_it_across_a_thousand_allocate_and_destroy_cycles() {
         using var context = DirectXTestDevices.Warp();
