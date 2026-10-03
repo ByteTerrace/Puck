@@ -42,6 +42,33 @@ public sealed class DirectXImageViewsLawTests {
         }
     }
     [Fact]
+    public void ARegistrationReservesTheRoomEveryReleaseNeeds() {
+        const BindingFlags Fields = BindingFlags.Static | BindingFlags.NonPublic;
+        var free = ((Stack<int>)typeof(DirectXImageViews).GetField(bindingAttr: Fields, name: "Free")!.GetValue(obj: null)!);
+        var gate = ((Lock)typeof(DirectXImageViews).GetField(bindingAttr: Fields, name: "Gate")!.GetValue(obj: null)!);
+        var views = ((List<DirectXImageView?>)typeof(DirectXImageViews).GetField(bindingAttr: Fields, name: "Views")!.GetValue(obj: null)!);
+        var handles = new nint[100];
+
+        try {
+            for (var index = 0; (index < handles.Length); index++) {
+                handles[index] = DirectXImageViews.Register(view: new DirectXImageView());
+            }
+
+            // Releasing every view pushes its slot onto the free list: a push that had to grow the list could throw
+            // after the slot is already retired, so the list is never smaller than the slots it may hold.
+            lock (gate) {
+                Assert.True(
+                    condition: (free.EnsureCapacity(capacity: 0) >= views.Count),
+                    userMessage: "The free list has less room than the table has slots."
+                );
+            }
+        } finally {
+            foreach (var handle in handles) {
+                DirectXImageViews.Release(handle: handle);
+            }
+        }
+    }
+    [Fact]
     public void AStaleOrMalformedReleaseCannotFreeALiveView() {
         var stale = DirectXImageViews.Register(view: new DirectXImageView());
 

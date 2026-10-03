@@ -6,6 +6,8 @@ namespace Puck.DirectX;
 /// The table every Direct3D 12 image view handle names: a slot index and the slot's generation, packed into one
 /// nonzero handle. Releasing a view advances its slot's generation before the slot is reused, so a destroyed view's
 /// handle never names a view created after it, and resolving it finds nothing. An exhausted slot is never reused.
+/// Registering reserves the room a later release needs, so <see cref="Release"/> allocates nothing and cannot fail, and a
+/// registration that throws leaves the table as it was.
 /// Handles belong to this process lifetime and are never persisted or exchanged between processes.
 /// A <see cref="System.Runtime.InteropServices.GCHandle"/>
 /// cannot serve here: the runtime reissues a freed handle's value to the next allocation, so a destroyed view's handle
@@ -28,6 +30,9 @@ public static class DirectXImageViews {
         lock (Gate) {
             if (!Free.TryPop(result: out var index)) {
                 index = Views.Count;
+                Views.EnsureCapacity(capacity: (index + 1));
+                Generations.EnsureCapacity(capacity: (index + 1));
+                _ = Free.EnsureCapacity(capacity: (index + 1));
                 Views.Add(item: null);
                 Generations.Add(item: 0u);
             }

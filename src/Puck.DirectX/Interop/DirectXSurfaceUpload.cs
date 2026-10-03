@@ -52,6 +52,9 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
     private uint m_levels;
     private uint[] m_rowCounts = [];
     private ulong[] m_rowSizes = [];
+    // True from the moment a recording is submitted until the queue is known to have finished it: while it holds, the
+    // command allocator, the staging buffer and the texture are in use by the GPU.
+    private bool m_submitted;
     private nint m_texture;
     private D3D12_RESOURCE_STATES m_textureState;
     private nint m_uploadBuffer;
@@ -163,7 +166,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             levels: levels,
             width: width
         );
-
+        SettleSubmission();
         EnsureResources(
             format: format,
             height: height,
@@ -247,7 +250,8 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             NumCommandLists: 1,
             ppCommandLists: &executable
         );
-        WaitForGpu();
+        m_submitted = true;
+        SettleSubmission();
     }
 
     // Refuses a width or height beyond the largest two-dimensional texture Direct3D 12 admits. The device accepts a larger
@@ -305,15 +309,9 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             format: format
         );
 
-        // A resize or format change releases resources the GPU may still be reading: the upload path submits and
-        // returns without draining, so in-flight work can outlive the old texture. Drain first, exactly as Dispose
-        // does. Skipped on the first allocation, where nothing has been submitted against these resources yet.
-        if (0 != m_texture) {
-            WaitForGpu();
-        }
-
         // The replacement is built whole before anything is swapped, so a creation that fails leaves the current
-        // texture, its buffer and its view as they were.
+        // texture, its buffer and its view as they were. Upload settled the last submission before it came here, so
+        // retiring the current resources below cannot release one the GPU is reading.
         var description = DirectXTextures.Describe(
             format: dxgiFormat,
             height: height,
@@ -361,23 +359,35 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
                 sizeBytes: uploadBytes
             );
         } catch {
-            DirectXDeviceMemory.CountReleased(
-                memory: m_deviceContext.Memory,
-                resource: ((nint)texture)
-            );
-            _ = ((IUnknown*)texture)->Release();
+            DiscardTexture(texture: ((nint)texture));
 
             throw;
         }
 
-        DisposeImageResources();
+        // Registering the view is the last step that can fail, so it comes before the replacement is published; the
+        // table reserves the room releasing it needs, so retiring the current resources cannot fail either.
+        nint view;
+
+        try {
+            view = DirectXImageViews.Register(view: new DirectXImageView {
+                Format = dxgiFormat,
+                ResourceHandle = ((nint)texture),
+            });
+        } catch {
+            DiscardTexture(texture: ((nint)texture));
+            _ = ((IUnknown*)uploadBuffer)->Release();
+
+            throw;
+        }
+
+        var retiredBuffer = m_uploadBuffer;
+        var retiredTexture = m_texture;
+        var retiredView = m_imageViewHandle;
+
         m_texture = ((nint)texture);
         m_uploadBuffer = ((nint)uploadBuffer);
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
-        m_imageViewHandle = DirectXImageViews.Register(view: new DirectXImageView {
-            Format = dxgiFormat,
-            ResourceHandle = m_texture,
-        });
+        m_imageViewHandle = view;
         m_layouts = layouts;
         m_rowCounts = rowCounts;
         m_rowSizes = rowSizes;
@@ -385,10 +395,15 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         m_height = height;
         m_levels = levels;
         m_width = width;
+        RetireImageResources(
+            buffer: retiredBuffer,
+            texture: retiredTexture,
+            view: retiredView
+        );
     }
     // Creates the command allocator and the closed list that records into it, then releases the pair they replace: the
-    // first pair at construction, and the pair a failed recording left open. Nothing submitted has used the old pair,
-    // since every earlier upload waited for the queue and a failed recording never reached it.
+    // first pair at construction, and the pair a failed recording left open. Nothing submitted has used the old pair:
+    // every upload settles its submission before it records, and a failed recording never reached the queue.
     private void CreateCommandResources() {
         var commandList = DirectXCommandCalls.CreateCommandList(
             allocator: out var commandAllocator,
@@ -457,15 +472,50 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             fenceValue: ref m_fenceValue,
             queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)
         );
+    // Waits for the queue to finish the last submission, so the allocator, the staging buffer and the texture are idle.
+    // The submission stays outstanding while the wait fails, so a later call waits again.
+    private void SettleSubmission() {
+        if (m_submitted) {
+            WaitForGpu();
+            m_submitted = false;
+        }
+    }
+    // Counts a texture no owner will hold as released and releases it.
+    private void DiscardTexture(nint texture) {
+        try {
+            DirectXDeviceMemory.CountReleased(
+                memory: m_deviceContext.Memory,
+                resource: texture
+            );
+        } finally {
+            Release(pointer: ref texture);
+        }
+    }
+    // Retires a texture, its staging buffer and its view, each in turn whether or not the one before it failed.
+    private void RetireImageResources(nint buffer, nint texture, nint view) {
+        try {
+            DirectXImageViews.Release(handle: view);
+        } finally {
+            try {
+                Release(pointer: ref buffer);
+            } finally {
+                DiscardTexture(texture: texture);
+            }
+        }
+    }
     private void DisposeImageResources() {
-        DirectXImageViews.Release(handle: m_imageViewHandle);
+        var buffer = m_uploadBuffer;
+        var texture = m_texture;
+        var view = m_imageViewHandle;
+
         m_imageViewHandle = 0;
-        Release(pointer: ref m_uploadBuffer);
-        DirectXDeviceMemory.CountReleased(
-            memory: m_deviceContext.Memory,
-            resource: m_texture
+        m_texture = 0;
+        m_uploadBuffer = 0;
+        RetireImageResources(
+            buffer: buffer,
+            texture: texture,
+            view: view
         );
-        Release(pointer: ref m_texture);
     }
 
     /// <summary>Drains the queue, then releases the texture, upload buffer and command resources. A removed

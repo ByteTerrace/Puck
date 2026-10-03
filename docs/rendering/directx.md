@@ -307,6 +307,10 @@ the next upload replaces the allocator and the list before it records.
 A rebuild for a new extent or format creates the replacement texture and staging
 buffer before it retires the current ones and their image view, so a creation the
 device refuses leaves the current texture and view in place.
+Each upload first waits for the queue to finish the previous submission, even when its
+wait failed, before it writes staging memory, reuses or replaces its command
+allocator, or retires a texture; the rebuild publishes its replacement texture,
+buffer, view and extent together.
 
 The compositor creates its swap chain as SDR in the preferred 8-bit unsigned
 normalized format, then chooses its `DisplayOutput` through
