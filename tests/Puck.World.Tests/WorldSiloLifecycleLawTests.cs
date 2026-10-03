@@ -647,13 +647,15 @@ public sealed class WorldSiloLifecycleLawTests {
             host: host,
             identity: identity
         );
+        // The refusal needs no step, so it is pumped without one: a stepping pump steps until the task completes, and
+        // under load those steps cross the checkpoint cadence, whose legitimate capture would move the ordinal below.
         await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => PumpAsync(
             host,
             host.ReloadAsync(
                 identity,
                 TestContext.Current.CancellationToken
             ),
-            step: true
+            step: false
         ));
         Assert.Equal(
             saved.Ordinal,

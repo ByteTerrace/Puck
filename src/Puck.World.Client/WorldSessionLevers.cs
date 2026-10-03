@@ -24,10 +24,6 @@ public static partial class WorldSessionLevers {
     public const string Bakes = "bakes";
     /// <summary>The unchanged-frame cadence gate (<c>world.cadence</c>).</summary>
     public const string CadenceGate = "cadence";
-    /// <summary>Dynamic resolution of the world's own views (<c>world.dynamic-resolution</c>): on or off in
-    /// <see cref="WorldSessionLever.A"/>, and a forced grid in (0, 1] in <see cref="WorldSessionLever.B"/>, zero for the
-    /// controller's own choice.</summary>
-    public const string DynamicResolution = "dynamic-resolution";
     /// <summary>The per-tile far-bound cull (<c>world.far-field bound</c>).</summary>
     public const string FarBound = "far-field.bound";
     /// <summary>The audio mix master gain (<c>world.volume</c>), folding into <c>audio</c>.</summary>
@@ -107,18 +103,15 @@ public static partial class WorldSessionLevers {
         );
         sink.Register(
             name: RenderScale,
-            setter: lever => settings.RenderScale = ((float)lever.A)
+            setter: lever => {
+                if (!settings.SetResolution((lever.View ?? "*"), ((WorldRenderScaleOperation)((int)lever.B)), ((float)lever.A), out var refusal)) {
+                    Console.Error.WriteLine(value: $"[{refusal}]");
+                }
+            }
         );
         sink.Register(
             name: Temporal,
             setter: lever => settings.Temporal = Flag(lever: lever)
-        );
-        sink.Register(
-            name: DynamicResolution,
-            setter: lever => {
-                settings.DynamicResolution = Flag(lever: lever);
-                settings.DynamicResolutionForced = ((float)lever.B);
-            }
         );
         sink.Register(
             name: UpscaleSharpness,

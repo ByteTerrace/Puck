@@ -258,9 +258,18 @@ public sealed class FixedStepPump {
     }
     /// <summary>Spends a host interval without stepping, for a host that holds its tick while the tick's frame has not
     /// rendered: the simulation steps none of that time, so it rebases <see cref="CaptureOriginTicks"/> by all of it,
-    /// and input captured meanwhile is due in the step after the hold.</summary>
+    /// and input captured meanwhile is due in the step after the hold. A pump that holds its clock also hands the
+    /// interval to <see cref="IFixedStepSimulation.HoldsClock"/>, the one place a capture's hold is decided and charged,
+    /// so a capture owed a frame spends its hold budget during a frame hold exactly as during a withheld step, and is
+    /// refused once the budget is spent; the frame hold itself continues until the frame renders.</summary>
     /// <param name="intervalTicks">The host interval since the previous call, in engine ticks.</param>
-    public void Hold(ulong intervalTicks) => CaptureOriginTicks += intervalTicks;
+    public void Hold(ulong intervalTicks) {
+        CaptureOriginTicks += intervalTicks;
+
+        if (m_holdsClock) {
+            _ = m_simulation.HoldsClock(withheldTicks: intervalTicks);
+        }
+    }
 
     // Drains the console before a step, then decides whether the step runs: it does not when the drain changed the
     // simulation's rate (read before the drain as ratePerSecond), when the host may not step, or when a holding pump's

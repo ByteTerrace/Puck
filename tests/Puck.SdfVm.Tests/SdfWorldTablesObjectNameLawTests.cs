@@ -88,6 +88,23 @@ public sealed class SdfWorldTablesObjectNameLawTests {
         Assert.Contains(collection: names, expected: "DescriptorPool sdf.world/descriptors");
         Assert.Contains(collection: names, expected: "DescriptorSet sdf.world/tables/world group[0]");
         Assert.Contains(collection: names, expected: "CommandPool sdf.world/commands[1]");
+        // The sky's environment: its one map and one set of coefficients, its sets and its kernel counters.
+        Assert.Equal(
+            actual: names.Where(predicate: static name => name.Contains(comparisonType: StringComparison.Ordinal, value: " sdf.world/sky-environment")),
+            expected: [
+                "Buffer sdf.world/sky-environment-counters/readback[0]",
+                "Buffer sdf.world/sky-environment-counters/readback[1]",
+                "Buffer sdf.world/sky-environment-counters[0]",
+                "Buffer sdf.world/sky-environment-counters[1]",
+                "Buffer sdf.world/sky-environment/block",
+                "Buffer sdf.world/sky-environment/coefficients",
+                "Buffer sdf.world/sky-environment/frame block",
+                "Buffer sdf.world/sky-environment/map",
+                "DescriptorSet sdf.world/sky-environment/frame group",
+                "DescriptorSet sdf.world/sky-environment[0]",
+                "DescriptorSet sdf.world/sky-environment[1]",
+            ]
+        );
         Assert.Contains(
             collection: names,
             filter: static name => name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Pipeline gpu.pass-pipelines/sdf-beam/")

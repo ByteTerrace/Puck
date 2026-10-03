@@ -152,8 +152,8 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                 y: leaf
             )) {
                 passed = ((file.Names.Count == 0)
-                    ? $"its source {file.Path} is a module library, which emits no document"
-                    : $"its source {file.Path} is a composition, which declares no world named '{leaf}'"
+                    ? $"its source {WorldDocumentLabel.Of(path: file.Path)} is a module library, which emits no document"
+                    : $"its source {WorldDocumentLabel.Of(path: file.Path)} is a composition, which declares no world named '{leaf}'"
                 );
             }
         }
@@ -163,6 +163,13 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
             claims: claims,
             reason: out reason
         )) {
+            // The refusal names the colliding files, so it is worded over their names alone: the directory they are in is the host's.
+            _ = WorldDocumentName.TryCarriers(
+                carriers: out _,
+                claims: claims.Select(selector: static claim => (claim with { Path = WorldDocumentLabel.Of(path: claim.Path) })),
+                reason: out reason
+            );
+
             return false;
         }
 
@@ -336,15 +343,15 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                 passed: out var passed,
                 reason: out var collision
             )) {
-                reason = $"document '{name}' (named by {referrerName}) names more than one document: {collision}";
+                reason = $"document '{name}' (named by {WorldDocumentLabel.Of(path: referrerName)}) names more than one document: {collision}";
 
                 return false;
             }
 
             if (carrier is not { } found) {
                 reason = ((passed is null)
-                    ? $"document '{name}' (named by {referrerName}) has neither a source at {sourcePath} nor a document at {documentPath}."
-                    : $"document '{name}' (named by {referrerName}) has no document at {documentPath}, and {passed}."
+                    ? $"document '{name}' (named by {WorldDocumentLabel.Of(path: referrerName)}) has neither a source nor a document."
+                    : $"document '{name}' (named by {WorldDocumentLabel.Of(path: referrerName)}) has no document, and {passed}."
                 );
 
                 return false;
@@ -366,8 +373,8 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
                     var error = compilation.Diagnostics.FirstOrDefault(predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
                     reason = ((error is null)
-                        ? $"{resolvedName} does not compile."
-                        : $"{resolvedName}({error.Span.Line},{error.Span.Column}) does not compile: {error.Code} {error.Message.ReplaceLineEndings(replacementText: " ")}"
+                        ? $"{WorldDocumentLabel.Of(path: resolvedName)} does not compile."
+                        : $"{WorldDocumentLabel.Of(path: resolvedName)}({error.Span.Line},{error.Span.Column}) does not compile: {error.Code} {error.Message.ReplaceLineEndings(replacementText: " ")}"
                     );
 
                     return false;
@@ -382,7 +389,7 @@ public sealed class PuckDocumentComposer : IWorldDocumentSource {
 
             return true;
         } catch (Exception ex) {
-            reason = $"cannot read document {resolvedName}: {ex.Message}";
+            reason = $"cannot read document '{name}': {WorldDocumentLabel.Failure(exception: ex)}";
 
             return false;
         }

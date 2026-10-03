@@ -12,8 +12,7 @@ public interface IGpuSurfaceUpload : IDisposable {
     /// blocking backend) or queue-ordered ahead of that work (Vulkan's pipelined fenced path); the caller's pixel buffer
     /// is free to reuse either way. The returned handle is owned by this upload object — the caller never destroys it —
     /// and is only guaranteed valid until the next <see cref="Upload"/> on this instance or this object's disposal
-    /// (Direct3D 12 replaces the handle on every call; Vulkan reuses the same view while the extent, format and level
-    /// count are unchanged).</summary>
+    /// (both backends reuse the same view while the extent, format and level count are unchanged).</summary>
     /// <param name="pixels">The image's levels from level 0, tightly packed and back to back
     /// (<see cref="GpuPixelFormats.ChainByteLength"/>): rows of texels, or rows of 4x4 blocks for a block-compressed
     /// format.</param>

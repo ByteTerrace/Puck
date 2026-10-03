@@ -705,7 +705,8 @@ collision and seat rig a body needs rather than inheriting them from a basis.
 
 Two gaps stay open. The browser host cannot run a leg at all — it has no
 command ingress, no acting principal and no authoritative server — so
-`--host browser` is refused by name and cross-host determinism is unproven. A
+`--host browser` is refused by name and server-versus-browser determinism is
+unproven; native Windows against Linux is held by `puck determinism`. A
 scheduled command's own mutation verdict is recorded as a run-level echo in
 `schedule.json` rather than attributed to the row that submitted it, because a
 verb registers its correlation id inside its own submission; so an echo refusal

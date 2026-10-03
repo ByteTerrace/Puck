@@ -35,7 +35,7 @@
       "id": "s04",
       "case": "v01-lane-handback-no-gpu",
       "label": "good",
-      "answer": "First I merge the integration branch the brief names (its current tip) into the lane, then build `src/Puck.Cli` and copy the output into `<scratchpad>/<lane>-cli/`, outside the checkout, and run every verb from that copy rather than the global `puck`. I run `puck gate --base origin/<that integration branch>` with no `--gpu`, because the brief grants none, and I report its verdict without repeating the steps it already ran. The changed render-graph law goes through `puck laws prove`, not a revert in the shared tree. The plan's canary and parity lines are not run: I list them as GPU legs owed in the hand-back, under Needs you, Changed and Found.",
+      "answer": "First I merge the integration branch the brief names (its current tip) into the lane, then build `src/Puck.Cli` and copy the output into `<scratchpad>/<lane>-cli/`, outside the checkout, and run every verb from that copy rather than the global `puck`. I run `puck gate --merge-base origin/<that integration branch>` with no `--gpu`, because the brief grants none, and I report its verdict without repeating the steps it already ran. The changed render-graph law goes through `puck laws prove`, not a revert in the shared tree. The plan's canary and parity lines are not run: I list them as GPU legs owed in the hand-back, under Needs you, Changed and Found.",
       "labels": {
         "merges-integration-tip": true,
         "gate-without-gpu": true,

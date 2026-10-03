@@ -131,16 +131,9 @@
           "default": false
         },
         "renderScale": {
-          "description": "The boot render-scale tier.",
-          "enum": [
-            "Native",
-            "ThreeQuarter",
-            "Half",
-            "Quarter",
-            "Eighth"
-          ],
-          "default": "Native",
-          "title": "WorldRenderScaleTier"
+          "description": "The scalar boot render-scale ceiling in [0.125, 1].",
+          "type": "number",
+          "default": 1
         },
         "upscaleSharpness": {
           "description": "The boot reconstruction sharpness: the spatial resolve\u0027s blend (0 bilinear .. 1 Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect\u0027s own extent.",
@@ -153,21 +146,9 @@
           "default": false
         },
         "dynamicResolution": {
-          "description": "Whether the world\u0027s own views boot with dynamic resolution (world.dynamic-resolution): each frame one controller moves each view\u0027s render grid between DynamicResolutionFloor and the render-scale ceiling, by the present timing or, where the presenter reports none, by the views\u0027 counted march steps against the budget the floor tier\u0027s committed counters ceilings give per output pixel. A native ceiling is lowered to three-quarter while it is on, since a native view reconstructs nothing.",
+          "description": "Whether views boot adapting their grids (world.render-scale auto). Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while adaptation is enabled, since a native view reconstructs nothing.",
           "type": "boolean",
           "default": false
-        },
-        "dynamicResolutionFloor": {
-          "description": "The lowest render-scale tier dynamic resolution moves a view\u0027s grid to.",
-          "enum": [
-            "Native",
-            "ThreeQuarter",
-            "Half",
-            "Quarter",
-            "Eighth"
-          ],
-          "default": "Quarter",
-          "title": "WorldRenderScaleTier"
         },
         "low": {
           "description": "The world.quality low preset.",
@@ -191,7 +172,19 @@
               "type": "boolean"
             },
             "renderScale": {
-              "description": "The render-scale tier the preset selects.",
+              "description": "The scalar render-scale ceiling the preset selects.",
+              "type": "number"
+            },
+            "temporal": {
+              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
+              "type": "boolean"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
+              "type": "boolean"
+            },
+            "renderScaleFloor": {
+              "description": "The per-view floor tier the preset selects (Quarter by default).",
               "enum": [
                 "Native",
                 "ThreeQuarter",
@@ -200,14 +193,6 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
-            },
-            "temporal": {
-              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
-              "type": "boolean"
-            },
-            "dynamicResolution": {
-              "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
-              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -236,7 +221,19 @@
               "type": "boolean"
             },
             "renderScale": {
-              "description": "The render-scale tier the preset selects.",
+              "description": "The scalar render-scale ceiling the preset selects.",
+              "type": "number"
+            },
+            "temporal": {
+              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
+              "type": "boolean"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
+              "type": "boolean"
+            },
+            "renderScaleFloor": {
+              "description": "The per-view floor tier the preset selects (Quarter by default).",
               "enum": [
                 "Native",
                 "ThreeQuarter",
@@ -245,14 +242,6 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
-            },
-            "temporal": {
-              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
-              "type": "boolean"
-            },
-            "dynamicResolution": {
-              "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
-              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -281,7 +270,19 @@
               "type": "boolean"
             },
             "renderScale": {
-              "description": "The render-scale tier the preset selects.",
+              "description": "The scalar render-scale ceiling the preset selects.",
+              "type": "number"
+            },
+            "temporal": {
+              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
+              "type": "boolean"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
+              "type": "boolean"
+            },
+            "renderScaleFloor": {
+              "description": "The per-view floor tier the preset selects (Quarter by default).",
               "enum": [
                 "Native",
                 "ThreeQuarter",
@@ -290,14 +291,6 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
-            },
-            "temporal": {
-              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
-              "type": "boolean"
-            },
-            "dynamicResolution": {
-              "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
-              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -22816,6 +22809,68 @@
             "integer",
             "null"
           ],
+          "default": null
+        },
+        "quality": {
+          "description": "Per-view render quality and tier floors; a row named * supplies the defaults.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "A view\u0027s durable render quality. A name of * supplies the defaults for the world\u0027s own player views (world, world$2 on); a named row overrides only that view, and a camera or session view takes only a row that names it, rendering native otherwise. Pins are session state and have no document member.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "The render view\u0027s instance name, or * for the player-view defaults.",
+                "type": "string"
+              },
+              "renderScale": {
+                "description": "The scalar allocation ceiling, or null to inherit the render defaults.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "renderScaleFloor": {
+                "description": "The lowest dynamic grid tier, or null to use the selected tier\u0027s floor (Quarter by default).",
+                "enum": [
+                  "Native",
+                  "ThreeQuarter",
+                  "Half",
+                  "Quarter",
+                  "Eighth",
+                  null
+                ],
+                "default": null,
+                "title": "WorldRenderScaleTier"
+              },
+              "tier": {
+                "description": "The authored quality preset whose floor this view uses.",
+                "default": null,
+                "title": "QualityTier",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  null
+                ]
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false,
+            "title": "WorldViewQuality"
+          },
           "default": null
         },
         "layouts": {

@@ -103,7 +103,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format token, or checks it with `--check`. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
-| [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) | reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE` and `CAPACITY` lines an agent admits or holds work by; `--watch` streams each line when due. |
+| [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE` and `CAPACITY` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in a worktree of its own, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
@@ -1291,7 +1291,9 @@ A selection with an offscreen or windowed proof on a named backend warms the
 engine's pipeline cache before any leg starts. The runner boots the first
 offscreen proof whose positive leg is one plain World process, once per
 backend those proofs boot, into one state directory: each boot waits for the
-engine to be ready, prints its `pipeline-cache.<backend>` counts, and quits,
+engine to be ready, captures one frame (`<backend>-encode.png`, read back
+through the display encode, so no leg's first capture builds the encode's
+pipeline), prints its `pipeline-cache.<backend>` counts, and quits,
 under a 180-second timeout of its own (`CanaryCommand.WarmSeconds`). Every
 offscreen and windowed leg then starts with a copy of that `pipeline-cache`
 directory in its fresh state directory, so no leg builds the engine's
@@ -1302,8 +1304,8 @@ and the leg budget, and the run's closing counts report how many seeded legs
 exited with the cache byte for byte as they received it: a pipeline the cache
 did not answer is written back to it, so an unchanged cache means every
 pipeline the leg created was a hit. A warm boot that times out, exits nonzero,
-never narrates the engine ready, or prints no counts fails the selection with
-exit 2, naming its backend, before any leg starts.
+never narrates the engine ready, never lands its capture, or prints no counts
+fails the selection with exit 2, naming its backend, before any leg starts.
 
 The selection forms are mutually exclusive and every execution selection must
 be nonempty. `--jobs` combines with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script

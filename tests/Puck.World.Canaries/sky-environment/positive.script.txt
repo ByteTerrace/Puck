@@ -1,0 +1,9 @@
+# Every frame renders every pass, so the read's newest completed submissions are a whole frame of the view and the
+# residency's upload after its first.
+world.cadence off
+# The engine ready first, however long a cold driver cache takes; the leg's own timeout bounds it.
+world.wait ready 180
+world.wait 30
+world.counters gpu
+world.screenshot {run}/fog.png
+world.wait captures 30

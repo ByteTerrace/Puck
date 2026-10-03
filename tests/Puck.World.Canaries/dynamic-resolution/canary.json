@@ -1,7 +1,7 @@
 {
   "id": "dynamic-resolution",
-  "title": "A forced dynamic-resolution sweep moves the world view through its tiers inside one allocation, each frame matching that tier allocated on its own",
-  "binding": "The positive leg boots the still counters blocks at a 256x144 output with render.dynamicResolution on at the native tier, so the world view is allocated at the three-quarter ceiling (224x126). The script forces the grid to three-quarter, half and quarter with world.dynamic-resolution and captures each, then turns dynamic resolution off and captures the same view with world.render-scale set to each tier, which allocates the view at that tier. Each grid capture differs from its tier's capture by a mean of at most 0.5 codes over the blocks, and the quarter grid differs from the three-quarter tier by more, so the claims separate the extents. Between a read after the first capture and a read after the sweep, the world node's graph revision and its created images, buffers and descriptor sets, the tables' created images and buffers, and the created pipelines and shader modules are all unchanged, while the sky pass writes one texel per grid pixel: 28224 (224x126) before and 11664 (144x81) after, and primary marches fewer steps. The discriminating leg runs the same timeline with dynamic resolution off through the sweep, so every grid capture is the native frame: the texel counts read 36864 twice and no grid capture matches its tier.",
+  "title": "A pinned dynamic-resolution sweep moves the world view through its tiers inside one allocation, each frame matching that tier allocated on its own",
+  "binding": "The positive leg boots the still counters blocks at a 256x144 output with render.dynamicResolution on at the native tier, so the world view is allocated at the three-quarter ceiling (224x126). The script pins the grid to three-quarter, half and quarter with world.render-scale and captures each, then turns dynamic resolution off and captures the same view with world.render-scale set to each tier, which allocates the view at that tier. Each grid capture differs from its tier's capture by a mean of at most 0.5 codes over the blocks, and the quarter grid differs from the three-quarter tier by more, so the claims separate the extents. Between a read after the first capture and a read after the sweep, the world node's graph revision and its created images, buffers and descriptor sets, the tables' created images and buffers, and the created pipelines and shader modules are all unchanged, while the sky pass writes one texel per grid pixel: 28224 (224x126) before and 11664 (144x81) after, and primary marches fewer steps. The discriminating leg runs the same timeline with dynamic resolution off through the sweep, so every grid capture is the native frame: the texel counts read 36864 twice and no grid capture matches its tier.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -22,7 +22,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.dynamic-resolution",
+        "verb": "world.render-scale",
         "occurrence": 1,
         "outcome": "accepted"
       },
@@ -47,7 +47,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.dynamic-resolution",
+        "verb": "world.render-scale",
         "occurrence": 2,
         "outcome": "accepted"
       },
@@ -67,7 +67,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.dynamic-resolution",
+        "verb": "world.render-scale",
         "occurrence": 3,
         "outcome": "accepted"
       },
@@ -92,13 +92,13 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.dynamic-resolution",
+        "verb": "world.render-scale",
         "occurrence": 4,
         "outcome": "accepted"
       },
       {
         "verb": "world.render-scale",
-        "occurrence": 1,
+        "occurrence": 5,
         "outcome": "accepted"
       },
       {
@@ -123,7 +123,7 @@
       },
       {
         "verb": "world.render-scale",
-        "occurrence": 2,
+        "occurrence": 6,
         "outcome": "accepted"
       },
       {
@@ -148,7 +148,7 @@
       },
       {
         "verb": "world.render-scale",
-        "occurrence": 3,
+        "occurrence": 7,
         "outcome": "accepted"
       },
       {
@@ -504,7 +504,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.dynamic-resolution",
+        "verb": "world.render-scale",
         "occurrence": 1,
         "outcome": "accepted"
       },
@@ -529,7 +529,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.dynamic-resolution",
+        "verb": "world.render-scale",
         "occurrence": 2,
         "outcome": "accepted"
       },
@@ -549,7 +549,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.dynamic-resolution",
+        "verb": "world.render-scale",
         "occurrence": 3,
         "outcome": "accepted"
       },
@@ -574,13 +574,13 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.dynamic-resolution",
+        "verb": "world.render-scale",
         "occurrence": 4,
         "outcome": "accepted"
       },
       {
         "verb": "world.render-scale",
-        "occurrence": 1,
+        "occurrence": 5,
         "outcome": "accepted"
       },
       {
@@ -605,7 +605,7 @@
       },
       {
         "verb": "world.render-scale",
-        "occurrence": 2,
+        "occurrence": 6,
         "outcome": "accepted"
       },
       {
@@ -630,7 +630,7 @@
       },
       {
         "verb": "world.render-scale",
-        "occurrence": 3,
+        "occurrence": 7,
         "outcome": "accepted"
       },
       {

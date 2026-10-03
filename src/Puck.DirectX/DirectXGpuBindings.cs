@@ -183,13 +183,13 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         return set;
     }
     // The image view a descriptor write names, refused by name when the handle is zero or the view it named has been
-    // destroyed: a destroyed image frees its token, which then names no view.
+    // destroyed: a destroyed image releases its handle, which then names no view, even after its slot is reused.
     private static DirectXImageView ImageViewOf(nint imageViewHandle) {
         if (imageViewHandle == 0) {
             throw new InvalidOperationException(message: "An image descriptor write names no image view (handle 0).");
         }
 
-        return ((GCHandle.FromIntPtr(value: imageViewHandle).Target as DirectXImageView) ?? throw new ObjectDisposedException(
+        return (DirectXImageViews.Resolve(handle: imageViewHandle) ?? throw new ObjectDisposedException(
             objectName: nameof(DirectXImageView),
             message: $"An image descriptor write names image view 0x{imageViewHandle:X}, which has been destroyed."
         ));

@@ -237,19 +237,9 @@
             "default": null
           },
           "tier": {
+            "$ref": "./common.schema.json#/$defs/QualityTier",
             "description": "The quality tier the instance renders at, from the authored quality vocabulary: the variant of its source\u0027s package it loads, or the tier its source compiles for where no package holds it. A tier selects how the passes compute and never what they read, so two documents differing only in a row\u0027s tier present the same state. null loads the variant no tier names.",
-            "default": null,
-            "title": "QualityTier",
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "low",
-              "medium",
-              "high",
-              null
-            ]
+            "default": null
           }
         },
         "required": [
@@ -395,6 +385,58 @@
         "integer",
         "null"
       ],
+      "default": null
+    },
+    "quality": {
+      "description": "Per-view render quality and tier floors; a row named * supplies the defaults.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A view\u0027s durable render quality. A name of * supplies the defaults for the world\u0027s own player views (world, world$2 on); a named row overrides only that view, and a camera or session view takes only a row that names it, rendering native otherwise. Pins are session state and have no document member.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The render view\u0027s instance name, or * for the player-view defaults.",
+            "type": "string"
+          },
+          "renderScale": {
+            "description": "The scalar allocation ceiling, or null to inherit the render defaults.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "renderScaleFloor": {
+            "description": "The lowest dynamic grid tier, or null to use the selected tier\u0027s floor (Quarter by default).",
+            "enum": [
+              "Native",
+              "ThreeQuarter",
+              "Half",
+              "Quarter",
+              "Eighth",
+              null
+            ],
+            "default": null,
+            "title": "WorldRenderScaleTier"
+          },
+          "tier": {
+            "$ref": "./common.schema.json#/$defs/QualityTier",
+            "description": "The authored quality preset whose floor this view uses.",
+            "default": null
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "title": "WorldViewQuality"
+      },
       "default": null
     },
     "layouts": {

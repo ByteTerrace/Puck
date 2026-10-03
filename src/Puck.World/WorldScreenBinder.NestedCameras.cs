@@ -246,6 +246,7 @@ internal sealed partial class WorldScreenBinder {
             ) {
                 Quality = quality,
             });
+            views[^1] = ResolveResolution(views[^1], camera.Name, camera.Camera.RenderWidth, camera.Camera.RenderHeight);
         }
     }
     // The level a view of a routed scene's frame past its seats and windows films: a camera view's.

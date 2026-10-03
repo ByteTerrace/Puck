@@ -87,9 +87,10 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.AdvancedGamingBrick.Forge.Tests
                          Puck.AdvancedGamingBrick.Tests  Puck.Analyzers.Tests
                          Puck.Assets.Tests  Puck.Attestation.Tests
-                         Puck.Audio.Tests  Puck.Cli.Tests  Puck.Commands.Tests
-                         Puck.DirectX.Tests  Puck.GamingBricks.Transpiler.Tests
-                         Puck.Hosting.Tests  Puck.HumbleGamingBrick.Forge.Tests
+                         Puck.Audio.Tests  Puck.Azure.Tests  Puck.Cli.Tests
+                         Puck.Commands.Tests  Puck.DirectX.Tests
+                         Puck.GamingBricks.Transpiler.Tests  Puck.Hosting.Tests
+                         Puck.HumbleGamingBrick.Forge.Tests
                          Puck.HumbleGamingBrick.Tests
                          Puck.HumbleGamingDeck.Tests  Puck.Input.Tests
                          Puck.Launcher.Tests  Puck.Machines.Tests

@@ -85,6 +85,7 @@
         <Project Path="tests/Puck.Assets.Tests/Puck.Assets.Tests.csproj" />
         <Project Path="tests/Puck.Attestation.Tests/Puck.Attestation.Tests.csproj" />
         <Project Path="tests/Puck.Audio.Tests/Puck.Audio.Tests.csproj" />
+        <Project Path="tests/Puck.Azure.Tests/Puck.Azure.Tests.csproj" />
         <Project Path="tests/Puck.Cli.Tests/Puck.Cli.Tests.csproj" />
         <Project Path="tests/Puck.Commands.Tests/Puck.Commands.Tests.csproj" />
         <Project Path="tests/Puck.DirectX.Tests/Puck.DirectX.Tests.csproj" />

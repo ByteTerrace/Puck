@@ -6,7 +6,7 @@ namespace Puck.World;
 
 // The module owns the endpoint's lifetime. Text source resolution is deferred to avoid the source -> registry ->
 // modules -> source DI cycle; no worker starts until the human explicitly opts in through the console.
-internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, WorldRenderProbe? probe) : ICommandModule, IAsyncDisposable, IDisposable {
+internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, WorldCaptureScheduler captureScheduler, WorldRenderProbe? probe) : ICommandModule, IAsyncDisposable, IDisposable {
     private LocalControlServer? m_server;
     private Task m_draining = Task.CompletedTask;
 
@@ -48,7 +48,10 @@ internal sealed class WorldControlCommandModule(Func<TextCommandSource> source, 
                             path => {
                                 var request = new FrameCaptureRequest(path: path);
 
-                                (probe?.Root ?? throw new InvalidOperationException(message: "Capture requires an initialized offscreen or windowed renderer.")).RequestCapture(request: request);
+                                captureScheduler.ArmUnscheduled(
+                                    request: request,
+                                    target: (probe?.Root ?? throw new InvalidOperationException(message: "Capture requires an initialized offscreen or windowed renderer."))
+                                );
 
                                 return request;
                             }

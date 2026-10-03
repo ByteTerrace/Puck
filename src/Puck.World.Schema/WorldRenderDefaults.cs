@@ -69,16 +69,18 @@ public static class WorldApplicationDefaults {
 /// tier (the individual <c>world.shadows</c>/<c>.ao</c>/<c>.render-scale</c> verbs still override afterward).</summary>
 /// <param name="Shadows">The soft-shadow tier the preset selects.</param>
 /// <param name="AmbientOcclusion">Whether the preset enables ambient occlusion.</param>
-/// <param name="RenderScale">The render-scale tier the preset selects.</param>
+/// <param name="RenderScale">The scalar render-scale ceiling the preset selects.</param>
 /// <param name="Temporal">Whether the preset reconstructs the world's views over time (<c>world.temporal</c>).</param>
 /// <param name="DynamicResolution">Whether the preset moves each view's render extent with the load
-/// (<c>world.dynamic-resolution</c>).</param>
+/// (<c>world.render-scale auto</c>).</param>
+/// <param name="RenderScaleFloor">The per-view floor tier the preset selects (Quarter by default).</param>
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
-    WorldRenderScaleTier RenderScale,
+    float RenderScale,
     bool Temporal = false,
-    bool DynamicResolution = false
+    bool DynamicResolution = false,
+    WorldRenderScaleTier RenderScaleFloor = WorldRenderScaleTier.Quarter
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -86,18 +88,14 @@ public readonly record struct WorldQualityPreset(
 /// <param name="Shadows">The boot soft-shadow tier.</param>
 /// <param name="ShadowCrowdRadius">The boot soft-shadow crowd radius (world units).</param>
 /// <param name="AmbientOcclusion">Whether ambient occlusion boots on.</param>
-/// <param name="RenderScale">The boot render-scale tier.</param>
+/// <param name="RenderScale">The scalar boot render-scale ceiling in [0.125, 1].</param>
 /// <param name="UpscaleSharpness">The boot reconstruction sharpness: the spatial resolve's blend (0 bilinear .. 1
 /// Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.</param>
 /// <param name="Temporal">Whether the world's own views boot reconstructing over time (<c>world.temporal</c>): each
 /// jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.</param>
-/// <param name="DynamicResolution">Whether the world's own views boot with dynamic resolution
-/// (<c>world.dynamic-resolution</c>): each frame one controller moves each view's render grid between
-/// <paramref name="DynamicResolutionFloor"/> and the render-scale ceiling, by the present timing or, where the presenter
-/// reports none, by the views' counted march steps against the budget the floor tier's committed counters ceilings give
-/// per output pixel. A native ceiling is lowered to three-quarter while it is on, since a native view reconstructs
-/// nothing.</param>
-/// <param name="DynamicResolutionFloor">The lowest render-scale tier dynamic resolution moves a view's grid to.</param>
+/// <param name="DynamicResolution">Whether views boot adapting their grids (<c>world.render-scale auto</c>).
+/// Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while
+/// adaptation is enabled, since a native view reconstructs nothing.</param>
 /// <param name="LowRaw">The <c>world.quality low</c> preset.</param>
 /// <param name="MediumRaw">The <c>world.quality medium</c> preset.</param>
 /// <param name="HighRaw">The <c>world.quality high</c> preset.</param>
@@ -124,11 +122,10 @@ public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     float ShadowCrowdRadius = 0f,
     bool AmbientOcclusion = false,
-    WorldRenderScaleTier RenderScale = WorldRenderScaleTier.Native,
+    float RenderScale = 1f,
     float UpscaleSharpness = 0f,
     bool Temporal = false,
     bool DynamicResolution = false,
-    WorldRenderScaleTier DynamicResolutionFloor = WorldRenderScaleTier.Quarter,
     [property: JsonPropertyName("low"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? LowRaw = null,
     [property: JsonPropertyName("medium"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? MediumRaw = null,
     [property: JsonPropertyName("high"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? HighRaw = null,

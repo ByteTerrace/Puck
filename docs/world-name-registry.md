@@ -2769,6 +2769,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.graphs[].name` | `WorldViewGraph.Name` | a view graph instance name |
 | `views.graphs[].source` | `WorldViewGraph.Source` | a view graph's source is a document path |
 | `views.post[].name` | `WorldViewPostPass.Name` | a post pass name |
+| `views.quality[].name` | `WorldViewQuality.Name` | a render view instance name or the default selector * |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `hud.panels[].id` | `WorldHudPanel.Id` | a HUD panel id |

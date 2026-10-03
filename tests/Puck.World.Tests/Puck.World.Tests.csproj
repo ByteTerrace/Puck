@@ -16,7 +16,7 @@
         <!-- Composes IObjectBlobStore through PuckStorageServiceRegistration.AddCore so the backend law suite
              drives the real routed store (IObjectBlobStoreBackend is internal to Puck.Storage) rather than a second,
              hand-rolled dispatch. -->
-        <PackageReference Include="FSharp.Core" Version="[10.*, )" />
+        <PackageReference Include="FSharp.Core" Version="[11.*, )" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*, )" />
         <PackageReference Include="Resharp" Version="[1.*, )" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />

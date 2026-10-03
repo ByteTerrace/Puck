@@ -19,7 +19,8 @@ public sealed class SdfKernelSetLawTests {
     private static readonly string[] Stems = [
         "sdf-world-ambient", "sdf-beam", "sdf-brick-bake", "sdf-cull-args",
         "sdf-instance-cull", "sdf-world-primary", "sdf-world-shadow", "sdf-sky-runs", "sdf-world-surface", "sdf-world-views",
-        "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve", "sdf-composite",
+        "sdf-world-views-core", "sdf-world-views-folds", "sdf-resolve", "sdf-composite", "sdf-sky-environment",
+        "sdf-sky-environment-reduce",
     ];
 
     private static WorkCounterSet Work() =>

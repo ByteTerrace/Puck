@@ -31,10 +31,9 @@ same change. The user's current instruction outranks it.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
   or changed law, with `--fix <commit>` or with `--file-list` for an
   uncommitted fix, instead of the manual withholding below: it withholds the
-  fix in a persistent proof clone of its own that it builds incrementally,
-  never in your tree or a shared one (a cold scratch worktree only when that
-  clone is busy or unusable), and refuses a proof when a build fails, a selected test is skipped or the two
-  legs ran different tests.
+  fix in a proof tree of its own (a persistent clone it builds incrementally,
+  never your tree or a shared one), and refuses a proof when a build fails, a
+  selected test is skipped or the two legs ran different tests.
 
 Run covered steps by hand only where a brief rules a verb out, for example a
 machine that must not build the solution. Complete checks the gate omits:
@@ -64,6 +63,11 @@ and `puck docs citations` when required below, under the GPU rules.
 - Send every build and test run's full output to a lane-named log
   (`<scratchpad>/<lane>-gate.log`) and stop at the first build error. A flake
   needs its failure message to be judged.
+- Pass `-nodeReuse:false` to every build, and to `dotnet restore` as well:
+  restore otherwise leaves MSBuild reuse nodes that hold memory after it exits.
+- A build interrupted under memory pressure can leave a corrupt assembly under
+  `obj/` (the `ref` assembly), and every dependent compile then fails with
+  errors that point at it. Delete that `obj` `ref` directory and rebuild.
 - Do not edit the source tree while a canary, parity or test run is going:
   canaries rebuild from source, and tests read baselines, schemas and generated
   tables from it. Apply the
@@ -150,6 +154,11 @@ brief requires a manual proof, use these steps:
    `cd <tree>; git ...`, a `cd` line followed by Git lines, or
    `cd <tree> && git a; git b`, a failed `cd` leaves the later Git commands
    running against the real repository.
+   A mutation made by text substitution can differ from the fix you meant to
+   withhold, so it is not the withheld fix until a diff against the fixed file
+   shows exactly that change and nothing else. Prefer an exact edit, or let
+   `puck laws prove --file-list` or `--fix` withhold it, and record how in the
+   commit message.
 2. Build the withheld tree until the build exits 0, repairing even an unrelated
    compile error in it: a failed build leaves the previous binaries, and a run
    against them tests the fix.
@@ -232,11 +241,11 @@ World run with effective `host.presentation: none` uses no GPU; the
 A detector that waits for the GPU to go idle by matching process command lines
 excludes the matching shell (`powershell`, `pwsh` or `bash`). The query's own
 command line contains the strings it searches for; without this exclusion it
-waits on itself forever. A search that always reports exactly one match is
-suspect, not proof of a busy GPU: exclude the search's own process by process
-id, or use a pattern that cannot match its own command line (a bracketed first
-letter), then confirm whether a real process remains. Never skip or postpone a
-granted GPU leg because of a match that was the search itself. Run such a
+waits on itself forever. Treat a match you cannot account for as suspect, not as
+proof of a busy GPU: exclude the search's own process by process id, or use a
+pattern that cannot match its own command line (a bracketed first letter), then
+confirm whether a real process remains. Never skip or postpone a granted GPU leg
+because of a match that was the search itself. Run such a
 detector once by hand on an idle machine before trusting it.
 
 On Windows, stopping a background task can kill a wrapper shell and leave the
@@ -263,11 +272,8 @@ The same rule applies to load-sensitive CPU tests.
 
 A test that creates a scratch git repository under the temporary directory
 disables automatic maintenance in it (`maintenance.auto=false` and `gc.auto=0`
-in its configuration). Maintenance that a scratch repository's own commands
-start in the background outlives the test and has removed files from other
-worktrees on the machine. A lane that sees files vanish from an unrelated
-worktree while such a test runs suspects this first and checks whether the two
-repositories share an object store, alternates or a common directory.
+in its configuration). Background maintenance started by a scratch repository's
+own commands outlives the test and can touch other repositories on the machine.
 
 ## What a finished lane proves
 

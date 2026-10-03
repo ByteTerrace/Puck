@@ -240,7 +240,7 @@ jobs:
         with:
           cache: npm
           cache-dependency-path: src/Puck.Dashboard/src/package-lock.json
-          node-version: 24.20.0
+          node-version: 24.21.0
       - name: Install Puck CLI
         uses: ./.github/actions/setup-puck
         with:

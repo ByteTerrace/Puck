@@ -8769,17 +8769,21 @@ export type WorldQualityPreset = {
    */
   ambientOcclusion?: boolean;
   /**
-   * The render-scale tier the preset selects.
+   * The scalar render-scale ceiling the preset selects.
    */
-  renderScale?: WorldRenderScaleTier;
+  renderScale?: number;
   /**
    * Whether the preset reconstructs the world's views over time (world.temporal).
    */
   temporal?: boolean;
   /**
-   * Whether the preset moves each view's render extent with the load (world.dynamic-resolution).
+   * Whether the preset moves each view's render extent with the load (world.render-scale auto).
    */
   dynamicResolution?: boolean;
+  /**
+   * The per-view floor tier the preset selects (Quarter by default).
+   */
+  renderScaleFloor?: WorldRenderScaleTier;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -8939,9 +8943,9 @@ export type WorldRenderDefaults = {
    */
   ambientOcclusion?: boolean;
   /**
-   * The boot render-scale tier.
+   * The scalar boot render-scale ceiling in [0.125, 1].
    */
-  renderScale?: WorldRenderScaleTier;
+  renderScale?: number;
   /**
    * The boot reconstruction sharpness: the spatial resolve's blend (0 bilinear .. 1 Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.
    */
@@ -8951,13 +8955,9 @@ export type WorldRenderDefaults = {
    */
   temporal?: boolean;
   /**
-   * Whether the world's own views boot with dynamic resolution (world.dynamic-resolution): each frame one controller moves each view's render grid between DynamicResolutionFloor and the render-scale ceiling, by the present timing or, where the presenter reports none, by the views' counted march steps against the budget the floor tier's committed counters ceilings give per output pixel. A native ceiling is lowered to three-quarter while it is on, since a native view reconstructs nothing.
+   * Whether views boot adapting their grids (world.render-scale auto). Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while adaptation is enabled, since a native view reconstructs nothing.
    */
   dynamicResolution?: boolean;
-  /**
-   * The lowest render-scale tier dynamic resolution moves a view's grid to.
-   */
-  dynamicResolutionFloor?: WorldRenderScaleTier;
   /**
    * The world.quality low preset.
    */
@@ -9200,7 +9200,7 @@ export type WorldRenderLightingKey = {
 };
 
 /**
- * The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view's output keeps its rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition's dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the world document's quality presets, the console world.render-scale verb and the boot resolution read. Each extent below is a lone whole-display view at 1280x800.
+ * The enumerated world render-scale tiers a player picks at the console and a view's floor names, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view's output keeps its rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition's dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the quality presets' floors, the console world.render-scale verb and the per-view floors read; a ceiling is a scalar. Each extent below is a lone whole-display view at 1280x800.
  */
 export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter" | "Eighth";
 
@@ -11172,6 +11172,10 @@ export type WorldViewDefaults = {
    */
   nestingDepth?: number | null;
   /**
+   * Per-view render quality and tier floors; a row named * supplies the defaults.
+   */
+  quality?: (WorldViewQuality | null)[] | null;
+  /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   layouts?: (WorldViewLayout | null)[] | null;
@@ -11313,6 +11317,25 @@ export type WorldViewPostPass = {
    * The package's config values, each absent field at its default, or null for every default. The graph compiler binds them against the package's schema when the root graph is composed, and a boot refuses a value that does not bind, naming the row.
    */
   config?: unknown;
+};
+
+export type WorldViewQuality = {
+  /**
+   * The render view's instance name, or * for the player-view defaults.
+   */
+  name: string;
+  /**
+   * The scalar allocation ceiling, or null to inherit the render defaults.
+   */
+  renderScale?: number | null;
+  /**
+   * The lowest dynamic grid tier, or null to use the selected tier's floor (Quarter by default).
+   */
+  renderScaleFloor?: WorldRenderScaleTier | null;
+  /**
+   * The authored quality preset whose floor this view uses.
+   */
+  tier?: QualityTier | null;
 };
 
 export type WorldViewSlot = {
