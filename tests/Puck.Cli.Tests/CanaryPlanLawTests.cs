@@ -190,12 +190,15 @@ public sealed class CanaryPlanLawTests {
             actual: CanaryCommand.Plan(backends: WorldOffscreenLeg.Backends, manifests: [manifests[0]], namedWorldArtifact: false).WarmBoots
         );
     }
-    /// <summary>A warm boot succeeds only when it exits 0 within its timeout after reporting the engine ready and
-    /// printing its backend's pipeline-cache counts, the ready line narrated on standard error; a timeout, a nonzero exit, a missing ready line or missing counts
-    /// is refused, naming the backend.</summary>
+    /// <summary>A warm boot succeeds only when it exits 0 within its timeout after reporting the engine ready, landing
+    /// its capture through the display encode, so the encode is ready in the cache every leg starts from, and printing
+    /// its backend's pipeline-cache counts, the ready and capture lines narrated on standard error; a timeout, a nonzero
+    /// exit, a missing ready line, a capture that never landed (refused, or another file's) or missing counts is
+    /// refused, naming the backend.</summary>
     [Fact]
     public void AWarmBootThatTimesOutExitsNonzeroOrNeverGetsReadyIsRefusedByItsBackend() {
-        const string Ready = "[engine: ready at tick 12]\n";
+        const string EngineReady = "[engine: ready at tick 12]\n";
+        const string Ready = (EngineReady + "[capture] main -> D:\\run\\vulkan-encode.png\n");
         const string Counts = "[world.counters: pipeline-cache.vulkan\n  gpu.created.pipelines 14\n  gpu.pipeline-cache.hits 0\n  gpu.pipeline-cache.misses 14\n";
 
         static string? Refusal(string backend, string stdout, string stderr = Ready, int exitCode = 0, bool timedOut = false) => CanaryCommand.WarmRefusal(
@@ -210,6 +213,10 @@ public sealed class CanaryPlanLawTests {
         Assert.Contains(expectedSubstring: "warm on vulkan from plain's positive world never reported the engine ready", actualString: Refusal(backend: "vulkan", stderr: string.Empty, stdout: Counts));
         Assert.Contains(expectedSubstring: "warm on vulkan from plain's positive world never reported the engine ready", actualString: Refusal(backend: "vulkan", stderr: string.Empty, stdout: (Ready + Counts)));
         Assert.Contains(expectedSubstring: "printed no pipeline-cache.vulkan counts", actualString: Refusal(backend: "vulkan", stdout: string.Empty));
+        Assert.Null(@object: Refusal(backend: "directx", stderr: (EngineReady + "[capture] world -> D:\\run\\directx-encode.png\n"), stdout: Counts));
+        Assert.Contains(expectedSubstring: "warm on vulkan from plain's positive world never landed its capture, so the display encode's pipeline was not built", actualString: Refusal(backend: "vulkan", stderr: EngineReady, stdout: Counts));
+        Assert.Contains(expectedSubstring: "never landed its capture", actualString: Refusal(backend: "vulkan", stderr: (EngineReady + "[capture] refused D:\\run\\vulkan-encode.png: the run ended before any frame served it\n"), stdout: Counts));
+        Assert.Contains(expectedSubstring: "never landed its capture", actualString: Refusal(backend: "directx", stderr: Ready, stdout: Counts));
     }
     /// <summary>A run whose warm boot cannot start a World fails the selection with exit 2, naming the backend, and
     /// starts no leg.</summary>

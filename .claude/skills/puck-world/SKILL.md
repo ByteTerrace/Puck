@@ -498,7 +498,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   in `CanaryCeilings.json`, which a deliberate growth records with
   `puck canary-ceilings` in the same change. A GPU selection first warms the engine pipeline cache
   once per backend and seeds every offscreen and windowed leg with it
-  (`CanaryCommand.Warm.cs`), so no leg builds the engine's pipelines cold. The
+  (`CanaryCommand.Warm.cs`), its warm boot capturing one frame so the display encode is cached too, and no leg builds the engine's pipelines cold. The
   acting-principal/administration and control-application authority contracts
   are proved in `tests/Puck.World.Tests` (`AuthorityAdministrationLawTests`,
   `EngageAuthorityLawTests`, `ControlApplicationLawTests`); a retired battery leaves no record directory
