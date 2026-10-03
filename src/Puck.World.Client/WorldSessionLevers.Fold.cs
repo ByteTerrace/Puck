@@ -101,6 +101,7 @@ public static partial class WorldSessionLevers {
             UpscaleSharpness = settings.UpscaleSharpness,
             Temporal = settings.Temporal,
             ShadowAmortize = settings.ShadowAmortize,
+            SkyQuality = settings.SkyQuality,
             DynamicResolution = settings.DynamicResolution,
         });
 

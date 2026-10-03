@@ -79,6 +79,7 @@ public static class WorldApplicationDefaults {
 /// <param name="ShadowFadeSlots">The number of additional shadow handoff slots, from 0 through 2.</param>
 /// <param name="ShadowFadeTicks">The length of a shadow handoff in delivered ticks; zero selects instant changes.</param>
 /// <param name="ShadowOverflow">How a crossing proceeds when its handoff capacity is occupied.</param>
+/// <param name="Sky">The sky's quality tier the preset selects (<c>world.sky-quality</c>).</param>
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
@@ -90,7 +91,8 @@ public readonly record struct WorldQualityPreset(
     int ShadowFadeSlots = 0,
     uint ShadowFadeTicks = 0,
     WorldShadowOverflow ShadowOverflow = WorldShadowOverflow.Instant,
-    WorldRenderScaleTier RenderScaleFloor = WorldRenderScaleTier.Quarter
+    WorldRenderScaleTier RenderScaleFloor = WorldRenderScaleTier.Quarter,
+    WorldSkyTier Sky = WorldSkyTier.High
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -133,6 +135,8 @@ public readonly record struct WorldQualityPreset(
 /// <param name="ShadowFadeSlots">The boot number of additional shadow handoff slots, from 0 through 2.</param>
 /// <param name="ShadowFadeTicks">The boot length of a shadow handoff in delivered ticks; zero selects instant changes.</param>
 /// <param name="ShadowOverflow">How a crossing proceeds when its handoff capacity is occupied.</param>
+/// <param name="SkyQuality">The sky's boot quality tier (<c>world.sky-quality</c>): a layer below it writes no entry, and
+/// below <see cref="WorldSkyTier.High"/> each kind draws its reduced form.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     float ShadowCrowdRadius = 0f,
@@ -153,7 +157,8 @@ public sealed record WorldRenderDefaults(
     int ShadowLights = 1,
     int ShadowFadeSlots = 0,
     uint ShadowFadeTicks = 0,
-    WorldShadowOverflow ShadowOverflow = WorldShadowOverflow.Instant
+    WorldShadowOverflow ShadowOverflow = WorldShadowOverflow.Instant,
+    WorldSkyTier SkyQuality = WorldSkyTier.High
 ) {
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units. The march advances a
     /// float depth against a 0.001-unit surface epsilon; 8192 is the largest power of two at which a float's spacing
@@ -358,50 +363,83 @@ public sealed record WorldRenderCurvature(
     BindableScalar? InkHigh = null,
     BindableColor? InkColor = null
 );
-/// <summary>The procedural sky as an ordered stack of layers. Absent is the default look: the two-stop gradient and fog
-/// density <c>SdfSky</c> starts from, which a layer drawn over an unauthored gradient draws over too. The layers
-/// composite in a fixed order, whatever order they are authored in: the gradient, then the sun disc and the stars,
-/// then the clouds over them; fog is read every frame on its own. A
-/// layer kind appears at most once. Every value a layer carries may be keyed on a clock on its own; the section may
-/// instead be keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key a partial record addressing
-/// layers by name.</summary>
-/// <param name="Layers">The layers.</param>
+/// <summary>The procedural sky: a frame and an open, ordered stack of layers. Absent is the default look: the two-stop
+/// gradient and fog density <c>SdfSky</c> starts from, which a layer drawn over an unauthored gradient draws over too.
+/// The layers composite in the order they are authored, each by its blend, and a kind may appear more than once; fog is
+/// read every frame on its own. At most <c>SdfSky.MaxLayers</c> layers draw, and the layers the camera sees cut into at
+/// most <c>SdfSky.MaxUpperFieldRuns</c> field runs above the lowest run. Every value a layer carries may be keyed on a
+/// clock on its own; the section may instead be keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key
+/// a partial record addressing layers by name.</summary>
+/// <param name="Layers">The layers, lowest first.</param>
 /// <param name="Clock">The clock the section's keys read, by name in the <c>timeline</c> section. Required with
 /// <paramref name="Keys"/> and refused without them.</param>
 /// <param name="Keys">The section's keys, ascending in time. A field a key states is keyed on
 /// <paramref name="Clock"/> through the keys that state it; a field no key states keeps its authored value.</param>
+/// <param name="Frame">Which way is up for the sky. Absent is world +y.</param>
 public sealed record WorldRenderSky(
     IReadOnlyList<WorldRenderSkyLayer>? Layers = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Clock = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderSkyKey>? Keys = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderSkyKey>? Keys = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderSkyFrame? Frame = null
 );
 /// <summary>One key of <see cref="WorldRenderSky.Keys"/>: a partial record of the sky at one time.</summary>
 /// <param name="At">Where on the section's clock the key sits, in the clock's span units, in <c>[0, span)</c>.</param>
 /// <param name="Ease">How time eases from this key to the next key that states each field. Absent is
 /// <see cref="WorldEase.Linear"/>.</param>
 /// <param name="Layers">The layers this key moves, by name: each the same kind as the layer of that name, stating only
-/// the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, a layer's name and the
-/// sun disc's light are structure, which a key never states.</param>
+/// the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, kinds, a layer's name,
+/// blend, mask, visibility, tier and clock and the sun disc's light are structure, which a key never states.</param>
 public sealed record WorldRenderSkyKey(
     double At,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEase? Ease = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldRenderSkyLayer>? Layers = null
 );
-/// <summary>One sky layer. The <c>$type</c> string is the JSON discriminator.</summary>
+/// <summary>One sky layer. The <c>$type</c> string is the JSON discriminator. Every layer but fog also carries what any
+/// layer carries: its blend, opacity, mask, transform, clock, visibility and the lowest quality tier it draws at.</summary>
 [JsonDerivedType(typeof(WorldRenderSkyLayer.Gradient), typeDiscriminator: "gradient")]
 [JsonDerivedType(typeof(WorldRenderSkyLayer.Fog), typeDiscriminator: "fog")]
 [JsonDerivedType(typeof(WorldRenderSkyLayer.SunDisc), typeDiscriminator: "sunDisc")]
 [JsonDerivedType(typeof(WorldRenderSkyLayer.Stars), typeDiscriminator: "stars")]
 [JsonDerivedType(typeof(WorldRenderSkyLayer.Clouds), typeDiscriminator: "clouds")]
+[JsonDerivedType(typeof(WorldRenderSkyLayer.Aurora), typeDiscriminator: "aurora")]
+[JsonDerivedType(typeof(WorldRenderSkyLayer.Noise), typeDiscriminator: "noise")]
+[JsonDerivedType(typeof(WorldRenderSkyLayer.Pattern), typeDiscriminator: "pattern")]
+[JsonDerivedType(typeof(WorldRenderSkyLayer.Panorama), typeDiscriminator: "panorama")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldRenderSkyLayer {
     private WorldRenderSkyLayer() {
     }
 
-    /// <summary>Gets the layer's name, which a section key addresses it by, or <see langword="null"/> for an unnamed
-    /// layer no key can address.</summary>
+    /// <summary>Gets the layer's name, which a section key addresses it by and its counted rows are labelled with, or
+    /// <see langword="null"/> for an unnamed layer no key can address, labelled by its kind.</summary>
     [JsonIgnore]
     public abstract string? LayerName { get; }
+    /// <summary>Gets how the layer composes over the colour beneath it. Absent is its kind's: <c>over</c> for a gradient,
+    /// clouds, noise, a pattern and a panorama, <c>add</c> for stars, a sun disc and an aurora.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldSkyBlend? Blend { get; init; }
+    /// <summary>Gets the layer's opacity, in <c>[0, 1]</c>, which scales its alpha. Zero draws nothing and counts no work.
+    /// Absent is one.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BindableScalar? Opacity { get; init; }
+    /// <summary>Gets where the layer draws. Absent is everywhere.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldRenderSkyMask? Mask { get; init; }
+    /// <summary>Gets the layer's own transform about the sky frame. Absent is none.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldRenderSkyTransform? Transform { get; init; }
+    /// <summary>Gets the clock, by name in the <c>timeline</c> section, whose phase moves the layer's own motion: an
+    /// aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Clock { get; init; }
+    /// <summary>Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone
+    /// for every other kind.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldSkyVisibility? Visibility { get; init; }
+    /// <summary>Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work.
+    /// Absent is <see cref="WorldSkyTier.Low"/>, every tier.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldSkyTier? Tier { get; init; }
 
     /// <summary>The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.</summary>
     /// <param name="Stops">Two to <c>SdfSky.MaxStops</c> stops, strictly ascending in elevation.</param>
@@ -413,7 +451,8 @@ public abstract record WorldRenderSkyLayer {
         /// <inheritdoc/>
         public override string? LayerName => Name;
     }
-    /// <summary>The exponential distance fog fading toward the sky gradient.</summary>
+    /// <summary>The exponential distance fog fading toward the sky the lighting sees. Not a layer of the stack: it takes
+    /// none of a layer's blend, opacity, mask, transform, clock, visibility or tier.</summary>
     /// <param name="Density">The density per world unit. Absent is the pinned density.</param>
     /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
     public sealed record Fog(
@@ -423,18 +462,24 @@ public abstract record WorldRenderSkyLayer {
         /// <inheritdoc/>
         public override string? LayerName => Name;
     }
-    /// <summary>The visible sun disc — an additive highlight about one directional light's direction.</summary>
+    /// <summary>The visible sun disc about one directional light's direction: an additive glow, or with
+    /// <paramref name="Texture"/> the image a screen shows across the disc.</summary>
     /// <param name="Light">The <see cref="WorldRenderLighting.Lights"/> slot of a directional light. Absent is the
     /// shadow light, or the first directional when none shadows.</param>
     /// <param name="Radius">The disc's angular half-radius, in <c>(0, π/2]</c> radians. Absent is the engine
     /// default.</param>
     /// <param name="Intensity">The peak additive brightness. Absent is zero, which draws nothing.</param>
     /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    /// <param name="Color"><see cref="BindableColor"/>'s grammar: the disc's tint. Absent is white.</param>
+    /// <param name="Texture">The <c>texture</c> body shape: the screen whose image the disc shows. Absent is the
+    /// glow.</param>
     public sealed record SunDisc(
         int? Light = null,
         BindableAngle? Radius = null,
         BindableScalar? Intensity = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderSkyTexture? Texture = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
         public override string? LayerName => Name;
@@ -445,18 +490,24 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="Seed">The hash seed folded into every cell.</param>
     /// <param name="Twinkle">Scintillation for a share of the stars. Optional; absent twinkles none.</param>
     /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    /// <param name="Sparsity">The share of the cells that carry a star, in <c>(0, 1]</c>. Absent is the engine
+    /// default.</param>
+    /// <param name="Size">A star's angular radius as a share of one cell's angular pitch, in <c>(0, 0.5]</c>. Absent is
+    /// the engine default.</param>
     public sealed record Stars(
         float? Density = null,
         BindableScalar? Brightness = null,
         uint? Seed = null,
         WorldRenderSkyTwinkle? Twinkle = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Sparsity = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Size = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
         public override string? LayerName => Name;
     }
-    /// <summary>The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera,
-    /// thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.</summary>
+    /// <summary>The procedural cloud layer: a deterministic hashed-lattice noise on a dome above the camera,
+    /// thresholded by coverage and fading into the horizon.</summary>
     /// <param name="Coverage">The fraction of the sky the layer covers, in <c>[0, 1]</c>. Absent is zero.</param>
     /// <param name="Softness">The width of a cloud's edge, in <c>(0, 1]</c>. Absent is the engine default.</param>
     /// <param name="Scale">The size of one cloud cell in layer units (the layer sits at unit height). Absent is the
@@ -472,6 +523,12 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="Shear">The wind of the shaping field relative to the cloud field, in layer units per second. A
     /// rate, as <paramref name="Drift"/> is. Absent holds the shapes.</param>
     /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    /// <param name="Octaves">The fractal octaves at the high tier, one to eight. Absent is four.</param>
+    /// <param name="Warp">How far the first fractal sum bends the second's domain, in cells. Absent is 0.6.</param>
+    /// <param name="Relief">The heightfield's rise per unit thickness, the steepness its lighting reads. Absent is
+    /// 0.7.</param>
+    /// <param name="Extinction">Beer's-law extinction per unit thickness: how quickly a cloud turns opaque. Absent is
+    /// 3.5.</param>
     public sealed record Clouds(
         BindableScalar? Coverage = null,
         BindableScalar? Softness = null,
@@ -482,6 +539,98 @@ public abstract record WorldRenderSkyLayer {
         BindableScalar? Spin = null,
         BindableAngle? Curl = null,
         BindableVector2? Shear = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] uint? Octaves = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Warp = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Relief = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Extinction = null
+    ) : WorldRenderSkyLayer {
+        /// <inheritdoc/>
+        public override string? LayerName => Name;
+    }
+    /// <summary>Aurora curtains: rays rising from a wavering base, fading upward from <paramref name="Color"/> to
+    /// <paramref name="Top"/>, moving with the layer's clock.</summary>
+    /// <param name="Intensity">The curtains' peak brightness. Absent is zero, which draws nothing.</param>
+    /// <param name="Color"><see cref="BindableColor"/>'s grammar: the colour at a curtain's base. Absent is green.</param>
+    /// <param name="Top"><see cref="BindableColor"/>'s grammar: the colour at a curtain's top. Absent is violet.</param>
+    /// <param name="Base">The curtains' mean base elevation, in radians. Absent is about 17°.</param>
+    /// <param name="Height">How far above its base a curtain rises, in radians. Absent is about 20°.</param>
+    /// <param name="Fold">How far the base wavers, in radians. Absent is about 5°.</param>
+    /// <param name="Rays">The rays per turn of azimuth. Absent is 96.</param>
+    /// <param name="Waves">The base's waves per turn of azimuth. Absent is 5.</param>
+    /// <param name="Seed">The hash seed.</param>
+    /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    public sealed record Aurora(
+        BindableScalar? Intensity = null,
+        BindableColor? Color = null,
+        BindableColor? Top = null,
+        BindableAngle? Base = null,
+        BindableAngle? Height = null,
+        BindableAngle? Fold = null,
+        float? Rays = null,
+        float? Waves = null,
+        uint? Seed = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderSkyLayer {
+        /// <inheritdoc/>
+        public override string? LayerName => Name;
+    }
+    /// <summary>A fractal noise field over the sky, coloured from <paramref name="Low"/> to <paramref name="High"/> and
+    /// covered where it rises past one less its coverage, sliding with the layer's clock.</summary>
+    /// <param name="Low"><see cref="BindableColor"/>'s grammar: the colour where the noise is lowest. Absent is black.</param>
+    /// <param name="High"><see cref="BindableColor"/>'s grammar: the colour where it is highest. Absent is white.</param>
+    /// <param name="Coverage">The share of the sky the noise covers, in <c>[0, 1]</c>. Absent is one.</param>
+    /// <param name="Softness">The covered edge's width as a share of the noise's range, in <c>(0, 1]</c>. Absent is
+    /// 0.25.</param>
+    /// <param name="Scale">The lattice cells per unit of direction. Absent is four.</param>
+    /// <param name="Octaves">The fractal octaves at the high tier, one to eight. Absent is four.</param>
+    /// <param name="Gain">Each octave's amplitude relative to the one before it, in <c>(0, 1)</c>. Absent is one
+    /// half.</param>
+    /// <param name="Seed">The hash seed.</param>
+    /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    public sealed record Noise(
+        BindableColor? Low = null,
+        BindableColor? High = null,
+        BindableScalar? Coverage = null,
+        float? Softness = null,
+        float? Scale = null,
+        uint? Octaves = null,
+        float? Gain = null,
+        uint? Seed = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderSkyLayer {
+        /// <inheritdoc/>
+        public override string? LayerName => Name;
+    }
+    /// <summary>A painted pattern over azimuth and elevation, scrolling one cell a cycle of the layer's clock.</summary>
+    /// <param name="Shape">What it paints. Absent is a checker.</param>
+    /// <param name="Colors">Its two colours, in <see cref="BindableColor"/>'s grammar. Absent is black and white.</param>
+    /// <param name="Cells">The cells per turn of azimuth, a whole number. Absent is 24.</param>
+    /// <param name="Line">A stripe's or grid line's width as a share of a cell, in <c>(0, 1)</c>. Absent is 0.1.</param>
+    /// <param name="Softness">The edge's width as a share of a cell, in <c>[0, 0.5]</c>. Absent is 0.05.</param>
+    /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    public sealed record Pattern(
+        WorldSkyPatternShape? Shape = null,
+        IReadOnlyList<BindableColor>? Colors = null,
+        float? Cells = null,
+        float? Line = null,
+        float? Softness = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderSkyLayer {
+        /// <inheritdoc/>
+        public override string? LayerName => Name;
+    }
+    /// <summary>The image a diegetic screen shows, sampled by direction: the screen's source, at infinity. The camera
+    /// alone sees it, since the environment map binds no screen.</summary>
+    /// <param name="Screen">The screen's surface index (<see cref="WorldScreen.Index"/>), a screen the world declares.
+    /// Required.</param>
+    /// <param name="Projection">How a direction maps to the image. Absent is equirectangular.</param>
+    /// <param name="Intensity">The image's brightness scale. Absent is one.</param>
+    /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
+    public sealed record Panorama(
+        int? Screen = null,
+        WorldSkyProjection? Projection = null,
+        BindableScalar? Intensity = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>

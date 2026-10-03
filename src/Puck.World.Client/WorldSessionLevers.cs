@@ -39,6 +39,8 @@ public static partial class WorldSessionLevers {
     public const string Shadows = "shadows";
     /// <summary>The complete shadow policy: stable slots, fade slots, fade ticks and overflow in lanes A through D.</summary>
     public const string ShadowSlots = "shadow-slots";
+    /// <summary>The sky's quality tier ordinal (<c>world.sky-quality</c>), a <see cref="WorldSkyTier"/>.</summary>
+    public const string SkyQuality = "sky-quality";
     /// <summary>The target present rate in Hz, 0 meaning automatic display pacing (<c>world.target</c>), folding into
     /// <c>host</c>.</summary>
     public const string TargetHertz = "target";
@@ -125,6 +127,14 @@ public static partial class WorldSessionLevers {
             setter: lever => settings.Temporal = Flag(lever: lever)
         );
         sink.Register(name: ShadowAmortize, setter: lever => settings.ShadowAmortize = Flag(lever: lever));
+        sink.Register(
+            name: SkyQuality,
+            setter: lever => settings.SkyQuality = (((int)lever.A) switch {
+                0 => WorldSkyTier.Low,
+                1 => WorldSkyTier.Medium,
+                _ => WorldSkyTier.High,
+            })
+        );
         sink.Register(
             name: UpscaleSharpness,
             setter: lever => settings.UpscaleSharpness = ((float)lever.A)

@@ -48,8 +48,17 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)}]";
     }
+    // A sky tier's spelling, as the document and world.sky-quality spell it.
+    private static string SkyQualityName(WorldSkyTier tier) => tier switch {
+        WorldSkyTier.Low => "low",
+        WorldSkyTier.Medium => "medium",
+        _ => "high",
+    };
+    // The world.sky-quality echo.
+    private static string SkyQualityEcho(WorldRenderSettings settings) =>
+        $"[world.sky-quality: {SkyQualityName(tier: settings.SkyQuality)}]";
     private string DescribeShadowMarch() =>
         DescribeAdaptiveQuality(
             mode: ((int)settings.ShadowMarch),
@@ -725,8 +734,37 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.sky-quality",
+            description: "Sets the sky's quality tier, live: world.sky-quality [low|medium|high] — no argument echoes the current tier. A sky layer whose tier lies above it writes no entry and counts no work; below high each kind draws its reduced form (clouds take one thickness tap and three octaves at low, shaded flat, and three octaves at medium; stars stop twinkling at low; an aurora and a noise field take fewer octaves). The world's quality presets set it through their sky row.",
+            handler: (context, args) => {
+                if (args.Count == 0) {
+                    return new CommandResult(Output: SkyQualityEcho(settings: settings));
+                }
+
+                WorldSkyTier? tier = args[0].ToString() switch {
+                    "low" => WorldSkyTier.Low,
+                    "medium" => WorldSkyTier.Medium,
+                    "high" => WorldSkyTier.High,
+                    _ => null,
+                };
+
+                if (tier is not { } chosen) {
+                    return CommandResult.Error(output: $"[world.sky-quality: unknown tier '{args[0]}' — low|medium|high]");
+                }
+
+                return SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.SkyQuality,
+                    a: ((double)chosen),
+                    formatEcho: () => new CommandResult(Output: SkyQualityEcho(settings: settings))
+                );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.quality",
-            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
+            description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution, render-scale and sky-quality levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeQuality());
@@ -777,6 +815,12 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                 );
 
                 link.SubmitSessionLever(lever: WorldSessionLevers.ShadowPolicy(preset: preset), principal: context.Principal);
+                SubmitLever(
+                    link: link,
+                    principal: context.Principal,
+                    name: WorldSessionLevers.SkyQuality,
+                    a: ((double)preset.Sky)
+                );
                 SubmitLever(link, context.Principal, WorldSessionLevers.RenderScale,
                     WorldRenderScaleTiers.Scale(tier: preset.RenderScaleFloor), b: ((double)WorldRenderScaleOperation.Floor),
                     section: WorldSection.Views);

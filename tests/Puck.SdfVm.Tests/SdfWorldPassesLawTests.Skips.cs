@@ -56,14 +56,22 @@ public sealed partial class SdfWorldPassesLawTests {
 
         Assert.True(condition: view.Runtime.Work(instance: 0).TryReadCompleted(sample: sample));
 
-        // Every part SdfWorldWorkDetails names reports its rows, whichever recorder serves it: the sky's and the composite's
-        // evaluations are counted in their gradient rows, and a part that named none would drop them.
-        foreach (var part in new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Parts.Shadow }) {
+        // The sky and the composite report the sky's detail rows, whichever recorder serves them: its field runs' rows and the
+        // default look's gradient, whose evaluations are counted there, and a part that named none would drop them.
+        string[] skyRows = [.. Enumerable.Range(count: SdfSkyDetails.Runs, start: 0).Select(selector: SdfSkyDetails.RunLabel), SdfSky.DefaultGradientLabel];
+
+        foreach (var part in new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }) {
             var pass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${part}");
 
-            foreach (var label in SdfWorldWorkDetails.Of(part: part)) {
+            foreach (var label in skyRows) {
                 Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: pass), collection: sample.Details.ToArray());
             }
+        }
+        // The shadow pass reports its decision rows, into which it counts each secondary pixel (P18-13).
+        var shadowPass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.Shadow}");
+
+        foreach (var label in SdfShadowDecisions.Labels) {
+            Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: shadowPass), collection: sample.Details.ToArray());
         }
 
         var binds = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.PipelineBinds);

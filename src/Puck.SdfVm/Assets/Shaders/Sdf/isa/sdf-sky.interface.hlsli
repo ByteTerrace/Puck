@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/8a6ae1385848343bba8709710c70a36edb8ecbfb5132ade35b7f99cd152652d5). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/af12d33f6ff1ff8f3fa93353275eaee1284e4ddfc8f2e8ef5a039cb8126e88d9). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -15,40 +15,40 @@ struct SdfLight {
 
 struct SdfSkyBlock {
     [[vk::offset(0)]] float FogDensity;
-    [[vk::offset(4)]] uint StopCount;
+    [[vk::offset(4)]] uint LayerCount;
     [[vk::offset(8)]] uint SoftboxCount;
-    [[vk::offset(12)]] int DiscLight;
-    [[vk::offset(16)]] float3 DiscDirection;
-    [[vk::offset(28)]] float DiscIntensity;
-    [[vk::offset(32)]] float DiscExponent;
-    [[vk::offset(36)]] uint _pad36;
-    [[vk::offset(40)]] float StarDensity;
-    [[vk::offset(44)]] float StarBrightness;
-    [[vk::offset(48)]] uint StarSeed;
-    [[vk::offset(52)]] float TwinkleShare;
-    [[vk::offset(56)]] float TwinkleDepth;
-    [[vk::offset(60)]] float TwinklePhase;
-    [[vk::offset(64)]] float3 CloudColor;
-    [[vk::offset(76)]] float CloudCoverage;
-    [[vk::offset(80)]] float CloudSoftness;
-    [[vk::offset(84)]] float CloudScale;
-    [[vk::offset(88)]] uint CloudSeed;
-    [[vk::offset(92)]] float CloudCurl;
-    [[vk::offset(96)]] float2 CloudDriftOffset;
-    [[vk::offset(104)]] float2 CloudShearOffset;
-    [[vk::offset(112)]] float3 CloudLightDirection;
-    [[vk::offset(124)]] float CloudSpinAngle;
-    [[vk::offset(128)]] float3 CloudLightColor;
-    [[vk::offset(140)]] uint _pad140;
-    [[vk::offset(144)]] float3 HorizonLow;
-    [[vk::offset(156)]] uint _pad156;
-    [[vk::offset(160)]] float3 HorizonHigh;
-    [[vk::offset(172)]] uint _pad172;
+    [[vk::offset(12)]] uint Quality;
+    [[vk::offset(16)]] float3 FrameRight;
+    [[vk::offset(28)]] uint BaseRun;
+    [[vk::offset(32)]] float3 FrameUp;
+    [[vk::offset(44)]] uint UpperRuns;
+    [[vk::offset(48)]] float3 FrameForward;
+    [[vk::offset(60)]] uint _pad60;
+    [[vk::offset(64)]] float3 HorizonLow;
+    [[vk::offset(76)]] uint _pad76;
+    [[vk::offset(80)]] float3 HorizonHigh;
+    [[vk::offset(92)]] uint _pad92;
 };
 
-struct SdfSkyStop {
-    [[vk::offset(0)]] float3 Color;
-    [[vk::offset(12)]] float Elevation;
+struct SdfSkyLayer {
+    [[vk::offset(0)]] uint Kind;
+    [[vk::offset(4)]] uint Blend;
+    [[vk::offset(8)]] uint Detail;
+    [[vk::offset(12)]] uint Visibility;
+    [[vk::offset(16)]] float Opacity;
+    [[vk::offset(20)]] uint Mask;
+    [[vk::offset(24)]] float MaskSoftness;
+    [[vk::offset(28)]] float Phase;
+    [[vk::offset(32)]] float4 MaskBand;
+    [[vk::offset(48)]] float4 Rotation;
+    [[vk::offset(64)]] float4 P0;
+    [[vk::offset(80)]] float4 P1;
+    [[vk::offset(96)]] float4 P2;
+    [[vk::offset(112)]] float4 P3;
+    [[vk::offset(128)]] float4 P4;
+    [[vk::offset(144)]] float4 P5;
+    [[vk::offset(160)]] float4 P6;
+    [[vk::offset(176)]] float4 P7;
 };
 
 struct SdfSoftbox {
@@ -117,10 +117,10 @@ struct SdfSkyFrame {
 [[vk::binding(24, 1)]] Texture2D<float4> sdfImpostorEmission : register(t24, space1);
 [[vk::binding(25, 1)]] StructuredBuffer<SdfLight> sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2 : register(t25, space1);
 #define sdfLights sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2
-[[vk::binding(26, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6 : register(t26, space1);
-#define sdfSky sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6
-[[vk::binding(27, 1)]] StructuredBuffer<SdfSkyStop> sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224 : register(t27, space1);
-#define sdfSkyStops sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224
+[[vk::binding(26, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayout18bdcd9d9a9298fda6d03178d92762358a576a0e94d2b6cc2cb399de54837b24 : register(t26, space1);
+#define sdfSky sdfSkyLayout18bdcd9d9a9298fda6d03178d92762358a576a0e94d2b6cc2cb399de54837b24
+[[vk::binding(27, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t27, space1);
+#define sdfSkyLayers sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8
 [[vk::binding(28, 1)]] StructuredBuffer<SdfSoftbox> sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf : register(t28, space1);
 #define sdfSoftboxes sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf
 [[vk::binding(29, 1)]] StructuredBuffer<SdfShadowHandoff> sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e : register(t29, space1);
@@ -205,20 +205,23 @@ struct SdfSkyPass {
     [[vk::offset(512)]] uint workCounterRow;
     [[vk::offset(516)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa79E3A77C : register(b0, space3);
-#define passGroup passGroupIsa79E3A77C
+[[vk::binding(0, 3)]] ConstantBuffer<SdfSkyPass> passGroupIsa0897E421 : register(b0, space3);
+#define passGroup passGroupIsa0897E421
 [[vk::binding(1, 3)]] Texture2D<float4> lit : register(t1, space3);
 [[vk::binding(2, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> cullBounds : register(t3, space3);
 [[vk::binding(4, 3)]] StructuredBuffer<uint> transport : register(t4, space3);
 [[vk::binding(5, 3)]] Texture2D<float4> skyBase : register(t5, space3);
-[[vk::binding(6, 3)]] Texture2D<float4> skyScale : register(t6, space3);
-[[vk::binding(7, 3)]] Texture2D<float4> skyOffset : register(t7, space3);
-[[vk::binding(8, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyBaseRW : register(u8, space3);
-[[vk::binding(9, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyScaleRW : register(u9, space3);
-[[vk::binding(10, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyOffsetRW : register(u10, space3);
-[[vk::binding(11, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u11, space3);
-[[vk::binding(12, 3)]] RWStructuredBuffer<uint> workCounters : register(u12, space3);
+[[vk::binding(6, 3)]] Texture2D<float4> skyUpper0 : register(t6, space3);
+[[vk::binding(7, 3)]] Texture2D<float4> skyUpper1 : register(t7, space3);
+[[vk::binding(8, 3)]] Texture2D<float4> skyUpper2 : register(t8, space3);
+[[vk::binding(9, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyBaseRW : register(u9, space3);
+[[vk::binding(10, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper0RW : register(u10, space3);
+[[vk::binding(11, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper1RW : register(u11, space3);
+[[vk::binding(12, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> skyUpper2RW : register(u12, space3);
+[[vk::binding(13, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u13, space3);
+[[vk::binding(14, 3)]] Texture2D<float4> screenSources[32] : register(t14, space3);
+[[vk::binding(46, 3)]] RWStructuredBuffer<uint> workCounters : register(u46, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

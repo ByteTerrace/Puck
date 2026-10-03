@@ -611,12 +611,16 @@ public static partial class SdfWorldPackage {
         /// pixel the resolve copied whole from one render sample, carrying that sample's ray distance's float bits, from
         /// which the composite derives the transport as a native view's composite does.</summary>
         public const string Transport = "transport";
-        /// <summary>The sky's lowest field run, which composes over nothing, so its offset alone.</summary>
+        /// <summary>The sky's lowest field run, which composes over nothing, so its offset alone, with whether the sky
+        /// evaluated the texel in its alpha.</summary>
         public const string SkyBase = "skyBase";
-        /// <summary>The scale of the sky's field run above its point run.</summary>
-        public const string SkyScale = "skyScale";
-        /// <summary>The offset of the sky's field run above its point run.</summary>
-        public const string SkyOffset = "skyOffset";
+        /// <summary>The first of the sky's upper field runs' images: six half floats a run (its scale, then its offset),
+        /// packed across the upper images' channels in run order.</summary>
+        public const string SkyUpper0 = "skyUpper0";
+        /// <summary>The second of the sky's upper field runs' images.</summary>
+        public const string SkyUpper1 = "skyUpper1";
+        /// <summary>The third of the sky's upper field runs' images.</summary>
+        public const string SkyUpper2 = "skyUpper2";
         /// <summary>The per-tile instance masks.</summary>
         public const string InstanceMasks = "instanceMasks";
         /// <summary>The cull buffer: the tile planes and the part bounds.</summary>

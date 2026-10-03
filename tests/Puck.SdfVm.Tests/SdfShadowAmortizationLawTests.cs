@@ -27,7 +27,7 @@ public sealed class SdfShadowAmortizationLawTests {
         var shadow = Source(path: "surface/sdf-shadow.hlsli");
         var names = new[] { "interleaved", "ownership", "light-motion", "occluder-motion", "receiver", "reprojected" };
 
-        Assert.Equal(names, SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Shadow));
+        Assert.Equal(names, SdfShadowDecisions.Labels);
         foreach (var name in names) {
             Assert.Contains($"SDF_SHADOW_DECISION_{name.Replace(newChar: '_', oldChar: '-').ToUpperInvariant()}", shadow);
         }

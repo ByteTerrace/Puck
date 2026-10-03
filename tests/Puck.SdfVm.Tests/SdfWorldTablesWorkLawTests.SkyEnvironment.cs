@@ -8,11 +8,12 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-// The sky's environment refreshes only on change: the upload renders the map and its coefficients when the sky's gradient
-// moves while the fog reads it, and otherwise records nothing, its pass reading skipped. A still sky renders once; a body,
-// the stars, the twinkle, the fog's density and the clouds leave the map as it is; a stop renders it again; an unfogged
-// sky renders nothing until its fog reads the map; an installed kernel reload renders it again; and a refresh never
-// overwrites the counts of the refresh two uploads before it before the ledger reads them.
+// The sky's environment refreshes only on change: the upload renders the map and its coefficients when the layers its
+// lighting sees move while the fog reads it, and otherwise records nothing, its pass reading skipped. A still sky renders
+// once; a body, the stars, the twinkle, the fog's density, the clouds and every other layer only the camera sees leave the
+// map as it is; a stop, a lit layer added, and the sky frame render it again; an unfogged sky renders nothing until its fog
+// reads the map; an installed kernel reload renders it again; and a refresh never overwrites the counts of the refresh two
+// uploads before it before the ledger reads them.
 public sealed partial class SdfWorldTablesWorkLawTests {
     [Fact]
     public void AStillSkyRendersItsEnvironmentOnceAndThenRecordsNothing() {
@@ -26,39 +27,49 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Contains(actualString: rig.Report(), expectedSubstring: "\nwork environment skipped\n");
     }
     [Fact]
-    public void OnlyAMoveOfTheGradientTheFogReadsRendersTheEnvironmentAgain() {
+    public void OnlyAMoveOfTheLayersTheLightingSeesRendersTheEnvironmentAgain() {
         using var rig = new Rig();
         var sky = rig.Frame.Sky;
 
         rig.Render();
         Assert.Equal(expected: 1L, actual: rig.Engine.SkyEnvironmentRenders);
 
-        // Everything but the gradient: the twinkle's phase, the stars, a disc, the fog's density, the studio horizon and a
-        // cloud layer, covering the sky and drifting.
-        sky.Block.TwinklePhase = 0.25f;
-        sky.Block.StarBrightness = 2f;
-        sky.Block.DiscLight = 0;
+        // Everything the lighting does not see: twinkling stars, a disc the lighting sees too (a body never enters the
+        // map), the fog's density, the studio horizon and a cloud layer, covering the sky and drifting.
+        _ = sky.Add(blend: SdfSkyBlend.Add, label: "stars", parameters: new SdfSkyStars { Brightness = 2f, TwinklePhase = 0.25f });
+        _ = sky.Add(blend: SdfSkyBlend.Add, label: "disc", parameters: new SdfSkyDisc { Intensity = 1f, Light = 0 }, visibility: SdfSkyVisibility.Both);
+        var clouds = sky.Add(label: "clouds", parameters: new SdfSkyClouds { Coverage = 0.5f });
+
         sky.Block.FogDensity = (2f * SdfSky.DefaultFogDensity);
         sky.Block.HorizonLow = Vector3.One;
-        sky.Block.CloudCoverage = 0.5f;
         rig.Render();
-        sky.Block.CloudDriftOffset = new Vector2(x: 3f, y: 1f);
+        sky.Parameters<SdfSkyClouds>(index: clouds).DriftOffset = new Vector2(x: 3f, y: 1f);
         rig.Render();
         Assert.Equal(expected: 1L, actual: rig.Engine.SkyEnvironmentRenders);
 
         // A stop moves the gradient.
-        sky.SetStop(index: 1, stop: new SdfSkyStop(Color: new Vector3(x: 0.2f, y: 0.4f, z: 0.9f), Elevation: 1f));
+        ref var gradient = ref sky.First<SdfSkyGradient>();
+
+        gradient.SetStop(color: new Vector3(x: 0.2f, y: 0.4f, z: 0.9f), elevation: 1f, index: 1);
         rig.Render();
         Assert.Equal(expected: 2L, actual: rig.Engine.SkyEnvironmentRenders);
 
         // A stop in use beyond the last moves it; one past the stops in use does not.
-        sky.StopCount = 3;
-        sky.SetStop(index: 2, stop: new SdfSkyStop(Color: Vector3.One, Elevation: 1f));
+        gradient.Count = 3u;
+        gradient.SetStop(color: Vector3.One, elevation: 1f, index: 2);
         rig.Render();
-        sky.SetStop(index: 3, stop: new SdfSkyStop(Color: Vector3.Zero, Elevation: 1f));
-        rig.Render();
+        gradient.SetStop(color: Vector3.Zero, elevation: 1f, index: 3);
         rig.Render();
         Assert.Equal(expected: 3L, actual: rig.Engine.SkyEnvironmentRenders);
+
+        // A layer the lighting sees joins the map; the sky frame turns it.
+        _ = sky.Add(label: "haze", parameters: new SdfSkyNoise(), visibility: SdfSkyVisibility.Lighting);
+        rig.Render();
+        Assert.Equal(expected: 4L, actual: rig.Engine.SkyEnvironmentRenders);
+        sky.FrameUp = new Vector3(x: 0.2f, y: 1f, z: 0f);
+        rig.Render();
+        rig.Render();
+        Assert.Equal(expected: 5L, actual: rig.Engine.SkyEnvironmentRenders);
     }
     [Fact]
     public void AnUnfoggedSkyRendersNoEnvironmentUntilItsFogReadsIt() {
@@ -120,7 +131,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             var refreshes = ((upload % 2) == 1);
 
             if (refreshes && (upload > 1)) {
-                rig.Frame.Sky.SetStop(index: 1, stop: new SdfSkyStop(Color: new Vector3(value: (0.1f * upload)), Elevation: 1f));
+                rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.1f * upload)), elevation: 1f, index: 1);
             }
 
             rig.Render();
@@ -161,9 +172,10 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             actual: (SdfSkyEnvironment.MapBytes, SdfSkyEnvironment.CoefficientBytes, SdfWorldTables.SkyEnvironmentBytes),
             expected: (32_768, 144, 32_912)
         );
-        // Its kernel counters: a counter and a readback buffer a ring slot, a row an upload pass and the environment's two
-        // named rows (plain and gradient), each row twelve 64-bit counters: six shadow slots and the secondary shadow pixels.
-        Assert.Equal(expected: 576, actual: ((SdfWorldTables.PassLabels.Length + 2) * GpuKernelCounters.RowBytes));
+        // Its kernel counters: a counter and a readback buffer a ring slot, a row an upload pass, the environment's plain row
+        // and one row each of the sky's detail rows, at their capacity, each row twelve 64-bit counters: six shadow slots and
+        // the secondary shadow pixels.
+        Assert.Equal(expected: 3_552, actual: (((SdfWorldTables.PassLabels.Length + 1) + SdfSkyDetails.Capacity) * GpuKernelCounters.RowBytes));
     }
 
     // The sky evaluations a report's environment line carries.

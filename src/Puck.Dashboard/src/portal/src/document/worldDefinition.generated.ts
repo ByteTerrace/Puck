@@ -1094,6 +1094,8 @@ export type DocumentVector3 = [number, number, number] | string;
 
 export type DocumentWriteMask = string;
 
+export type DoubleList = number[];
+
 export type DrawTiming = "Boot" | "TickPeriod" | "Event";
 
 export type DynamicsRow = {
@@ -8804,6 +8806,10 @@ export type WorldQualityPreset = {
    * The per-view floor tier the preset selects (Quarter by default).
    */
   renderScaleFloor?: WorldRenderScaleTier;
+  /**
+   * The sky's quality tier the preset selects (world.sky-quality).
+   */
+  sky?: WorldSkyTier;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -9030,6 +9036,10 @@ export type WorldRenderDefaults = {
    * How a crossing proceeds when its handoff capacity is occupied.
    */
   shadowOverflow?: WorldShadowOverflow;
+  /**
+   * The sky's boot quality tier (world.sky-quality): a layer below it writes no entry, and below High each kind draws its reduced form.
+   */
+  skyQuality?: WorldSkyTier;
 };
 
 export type WorldRenderEnvironment = {
@@ -9246,7 +9256,7 @@ export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter
 
 export type WorldRenderSky = {
   /**
-   * The layers.
+   * The layers, lowest first.
    */
   layers?: (WorldRenderSkyLayer | null)[] | null;
   /**
@@ -9257,6 +9267,31 @@ export type WorldRenderSky = {
    * The section's keys, ascending in time. A field a key states is keyed on Clock through the keys that state it; a field no key states keeps its authored value.
    */
   keys?: (WorldRenderSkyKey | null)[] | null;
+  /**
+   * Which way is up for the sky. Absent is world +y.
+   */
+  frame?: WorldRenderSkyFrame | null;
+};
+
+/**
+ * A cone mask: the directions within Spread of Toward, in the sky frame.
+ */
+export type WorldRenderSkyCone = {
+  /**
+   * The cone's axis in the sky frame, any nonzero length.
+   */
+  toward: DocumentVector3;
+  /**
+   * The cone's angular radius in radians, in (0, π].
+   */
+  spread: number;
+};
+
+export type WorldRenderSkyFrame = {
+  /**
+   * The sky's up direction in world space, any nonzero length. Absent is world +y.
+   */
+  up?: DocumentVector3;
 };
 
 export type WorldRenderSkyKey = {
@@ -9269,7 +9304,7 @@ export type WorldRenderSkyKey = {
    */
   ease?: WorldEase | null;
   /**
-   * The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, a layer's name and the sun disc's light are structure, which a key never states.
+   * The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, kinds, a layer's name, blend, mask, visibility, tier and clock and the sun disc's light are structure, which a key never states.
    */
   layers?: {
     [k: string]: WorldRenderSkyLayer | null;
@@ -9277,12 +9312,88 @@ export type WorldRenderSkyKey = {
 };
 
 /**
- * One sky layer. The $type string is the JSON discriminator.
+ * One sky layer. The $type string is the JSON discriminator. Every layer but fog also carries what any layer carries: its blend, opacity, mask, transform, clock, visibility and the lowest quality tier it draws at.
  */
-export type WorldRenderSkyLayer = WorldRenderSkyLayerGradient | WorldRenderSkyLayerFog | WorldRenderSkyLayerSunDisc | WorldRenderSkyLayerStars | WorldRenderSkyLayerClouds | null;
+export type WorldRenderSkyLayer = WorldRenderSkyLayerGradient | WorldRenderSkyLayerFog | WorldRenderSkyLayerSunDisc | WorldRenderSkyLayerStars | WorldRenderSkyLayerClouds | WorldRenderSkyLayerAurora | WorldRenderSkyLayerNoise | WorldRenderSkyLayerPattern | WorldRenderSkyLayerPanorama | null;
 
 /**
- * The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.
+ * Aurora curtains: rays rising from a wavering base, fading upward from Color to Top, moving with the layer's clock.
+ */
+export type WorldRenderSkyLayerAurora = {
+  $type?: "aurora";
+  /**
+   * The curtains' peak brightness. Absent is zero, which draws nothing.
+   */
+  intensity?: BindableScalar;
+  /**
+   * BindableColor's grammar: the colour at a curtain's base. Absent is green.
+   */
+  color?: BindableColor;
+  /**
+   * BindableColor's grammar: the colour at a curtain's top. Absent is violet.
+   */
+  top?: BindableColor;
+  /**
+   * The curtains' mean base elevation, in radians. Absent is about 17°.
+   */
+  base?: BindableAngle;
+  /**
+   * How far above its base a curtain rises, in radians. Absent is about 20°.
+   */
+  height?: BindableAngle;
+  /**
+   * How far the base wavers, in radians. Absent is about 5°.
+   */
+  fold?: BindableAngle;
+  /**
+   * The rays per turn of azimuth. Absent is 96.
+   */
+  rays?: number | null;
+  /**
+   * The base's waves per turn of azimuth. Absent is 5.
+   */
+  waves?: number | null;
+  /**
+   * The hash seed.
+   */
+  seed?: number | null;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * The procedural cloud layer: a deterministic hashed-lattice noise on a dome above the camera, thresholded by coverage and fading into the horizon.
  */
 export type WorldRenderSkyLayerClouds = {
   $type?: "clouds";
@@ -9326,11 +9437,55 @@ export type WorldRenderSkyLayerClouds = {
    * The name a section key addresses the layer by, unique among the layers.
    */
   name?: string | null;
+  /**
+   * The fractal octaves at the high tier, one to eight. Absent is four.
+   */
+  octaves?: number | null;
+  /**
+   * How far the first fractal sum bends the second's domain, in cells. Absent is 0.6.
+   */
+  warp?: number | null;
+  /**
+   * The heightfield's rise per unit thickness, the steepness its lighting reads. Absent is 0.7.
+   */
+  relief?: number | null;
+  /**
+   * Beer's-law extinction per unit thickness: how quickly a cloud turns opaque. Absent is 3.5.
+   */
+  extinction?: number | null;
   layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
 };
 
 /**
- * The exponential distance fog fading toward the sky gradient.
+ * The exponential distance fog fading toward the sky the lighting sees. Not a layer of the stack: it takes none of a layer's blend, opacity, mask, transform, clock, visibility or tier.
  */
 export type WorldRenderSkyLayerFog = {
   $type?: "fog";
@@ -9343,6 +9498,34 @@ export type WorldRenderSkyLayerFog = {
    */
   name?: string | null;
   layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
 };
 
 /**
@@ -9359,6 +9542,218 @@ export type WorldRenderSkyLayerGradient = {
    */
   name?: string | null;
   layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * A fractal noise field over the sky, coloured from Low to High and covered where it rises past one less its coverage, sliding with the layer's clock.
+ */
+export type WorldRenderSkyLayerNoise = {
+  $type?: "noise";
+  /**
+   * BindableColor's grammar: the colour where the noise is lowest. Absent is black.
+   */
+  low?: BindableColor;
+  /**
+   * BindableColor's grammar: the colour where it is highest. Absent is white.
+   */
+  high?: BindableColor;
+  /**
+   * The share of the sky the noise covers, in [0, 1]. Absent is one.
+   */
+  coverage?: BindableScalar;
+  /**
+   * The covered edge's width as a share of the noise's range, in (0, 1]. Absent is 0.25.
+   */
+  softness?: number | null;
+  /**
+   * The lattice cells per unit of direction. Absent is four.
+   */
+  scale?: number | null;
+  /**
+   * The fractal octaves at the high tier, one to eight. Absent is four.
+   */
+  octaves?: number | null;
+  /**
+   * Each octave's amplitude relative to the one before it, in (0, 1). Absent is one half.
+   */
+  gain?: number | null;
+  /**
+   * The hash seed.
+   */
+  seed?: number | null;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * The image a diegetic screen shows, sampled by direction: the screen's source, at infinity. The camera alone sees it, since the environment map binds no screen.
+ */
+export type WorldRenderSkyLayerPanorama = {
+  $type?: "panorama";
+  /**
+   * The screen's surface index (Index), a screen the world declares. Required.
+   */
+  screen?: number | null;
+  /**
+   * How a direction maps to the image. Absent is equirectangular.
+   */
+  projection?: WorldSkyProjection | null;
+  /**
+   * The image's brightness scale. Absent is one.
+   */
+  intensity?: BindableScalar;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * A painted pattern over azimuth and elevation, scrolling one cell a cycle of the layer's clock.
+ */
+export type WorldRenderSkyLayerPattern = {
+  $type?: "pattern";
+  /**
+   * What it paints. Absent is a checker.
+   */
+  shape?: WorldSkyPatternShape | null;
+  /**
+   * Its two colours, in BindableColor's grammar. Absent is black and white.
+   */
+  colors?: BindableColor[] | null;
+  /**
+   * The cells per turn of azimuth, a whole number. Absent is 24.
+   */
+  cells?: number | null;
+  /**
+   * A stripe's or grid line's width as a share of a cell, in (0, 1). Absent is 0.1.
+   */
+  line?: number | null;
+  /**
+   * The edge's width as a share of a cell, in [0, 0.5]. Absent is 0.05.
+   */
+  softness?: number | null;
+  /**
+   * The name a section key addresses the layer by, unique among the layers.
+   */
+  name?: string | null;
+  layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
 };
 
 /**
@@ -9386,11 +9781,47 @@ export type WorldRenderSkyLayerStars = {
    * The name a section key addresses the layer by, unique among the layers.
    */
   name?: string | null;
+  /**
+   * The share of the cells that carry a star, in (0, 1]. Absent is the engine default.
+   */
+  sparsity?: number | null;
+  /**
+   * A star's angular radius as a share of one cell's angular pitch, in (0, 0.5]. Absent is the engine default.
+   */
+  size?: number | null;
   layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
 };
 
 /**
- * The visible sun disc — an additive highlight about one directional light's direction.
+ * The visible sun disc about one directional light's direction: an additive glow, or with Texture the image a screen shows across the disc.
  */
 export type WorldRenderSkyLayerSunDisc = {
   $type?: "sunDisc";
@@ -9410,7 +9841,61 @@ export type WorldRenderSkyLayerSunDisc = {
    * The name a section key addresses the layer by, unique among the layers.
    */
   name?: string | null;
+  /**
+   * BindableColor's grammar: the disc's tint. Absent is white.
+   */
+  color?: BindableColor;
+  /**
+   * The texture body shape: the screen whose image the disc shows. Absent is the glow.
+   */
+  texture?: WorldRenderSkyTexture | null;
   layerName?: string | null;
+  /**
+   * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.
+   */
+  blend?: WorldSkyBlend | null;
+  /**
+   * Gets the layer's opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.
+   */
+  opacity?: BindableScalar;
+  /**
+   * Gets where the layer draws. Absent is everywhere.
+   */
+  mask?: WorldRenderSkyMask | null;
+  /**
+   * Gets the layer's own transform about the sky frame. Absent is none.
+   */
+  transform?: WorldRenderSkyTransform | null;
+  /**
+   * Gets the clock, by name in the timeline section, whose phase moves the layer's own motion: an aurora's curtains, a noise field's slide, a pattern's scroll. Absent holds them still.
+   */
+  clock?: string | null;
+  /**
+   * Gets who sees the layer. Absent is its kind's: the camera and the lighting for a gradient, the camera alone for every other kind.
+   */
+  visibility?: WorldSkyVisibility | null;
+  /**
+   * Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.
+   */
+  tier?: WorldSkyTier | null;
+};
+
+/**
+ * Where a sky layer draws: an elevation band of the sky frame, or a cone about a direction. Exactly one of Band and Cone.
+ */
+export type WorldRenderSkyMask = {
+  /**
+   * The band's lowest and highest elevation in radians, two angles in [−π/2, π/2], ascending.
+   */
+  band?: DoubleList | null;
+  /**
+   * The cone.
+   */
+  cone?: WorldRenderSkyCone | null;
+  /**
+   * The width of the mask's edge, an angle in radians. Absent is a hard edge.
+   */
+  feather?: number | null;
 };
 
 /**
@@ -9425,6 +9910,30 @@ export type WorldRenderSkyStop = {
    * BindableColor's grammar: the colour at this elevation. Absent is white.
    */
   color?: BindableColor;
+};
+
+/**
+ * The texture body shape: the image a diegetic screen shows, drawn across a body's disc, as a panorama samples its screen.
+ */
+export type WorldRenderSkyTexture = {
+  /**
+   * The screen's surface index (Index), a screen the world declares.
+   */
+  screen: number;
+};
+
+/**
+ * A sky layer's own transform about the sky frame: a turn about its up, then a tilt about its right axis. Each angle may bind or key on a clock, so a layer turns over a day.
+ */
+export type WorldRenderSkyTransform = {
+  /**
+   * The turn about the sky frame's up. Absent is none.
+   */
+  turn?: BindableAngle;
+  /**
+   * The tilt about the sky frame's right axis. Absent is none.
+   */
+  tilt?: BindableAngle;
 };
 
 /**
@@ -10211,6 +10720,16 @@ export type WorldSimulationDefaults = {
    */
   rateHz: number;
 };
+
+export type WorldSkyBlend = "over" | "add" | "multiply" | "screen";
+
+export type WorldSkyPatternShape = "checker" | "stripes" | "grid";
+
+export type WorldSkyProjection = "equirect" | "octahedral";
+
+export type WorldSkyTier = "low" | "medium" | "high";
+
+export type WorldSkyVisibility = "camera" | "lighting" | "both";
 
 /**
  * A row's solidity facet — it participates in contact resolution using its own declared shape. Presence is the whole switch; null means decoration — the row is drawn but bodies pass through it.

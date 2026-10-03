@@ -22,7 +22,7 @@ public sealed class SdfPassBindingLawTests {
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
         (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, SdfKernel.ShadowFade1, SdfKernel.ShadowFade2, .. ViewsKernels]),
         (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, .. ViewsKernels]),
-        (SdfKernelInterfaces.SkyStops, [SdfKernel.Sky, SdfKernel.Composite]),
+        (SdfKernelInterfaces.SkyLayers, [SdfKernel.Sky, SdfKernel.Composite]),
         (SdfKernelInterfaces.Softboxes, ViewsKernels),
         (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite]),
     ];

@@ -15,3 +15,9 @@ public enum SdfShadowDecision {
     /// <summary>The secondary visibility is reprojected.</summary>
     Reprojected,
 }
+
+/// <summary>The shadow pass's work-detail rows, one per <see cref="SdfShadowDecision"/> in its order.</summary>
+public static class SdfShadowDecisions {
+    /// <summary>Gets the row labels the shadow pass counts each secondary pixel's decision into.</summary>
+    public static IReadOnlyList<string> Labels { get; } = ["interleaved", "ownership", "light-motion", "occluder-motion", "receiver", "reprojected"];
+}

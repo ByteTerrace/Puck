@@ -5,7 +5,7 @@ namespace Puck.SignedDistance;
 /// <summary>How a sky layer composes over the colour beneath it: <c>over</c> is a·c + (1 − a)·d, <c>add</c> d + a·c,
 /// <c>multiply</c> the colour beneath scaled toward c by a, and <c>screen</c> the colour beneath lifted toward one by
 /// a·c. Each is affine in the colour beneath, per channel.</summary>
-public enum SdfSkyBlend {
+public enum SdfSkyBlend : uint {
     /// <summary>The layer covers the colour beneath by its alpha.</summary>
     Over,
     /// <summary>The layer adds its colour, weighted by its alpha.</summary>
@@ -18,7 +18,7 @@ public enum SdfSkyBlend {
 /// <summary>The class a sky layer is evaluated in: a field layer is band-limited, so the sky pass evaluates it at the
 /// sky's field extent; a point layer has features smaller than a field texel, so the composite evaluates it at each
 /// pixel.</summary>
-public enum SdfSkyLayerClass {
+public enum SdfSkyLayerClass : uint {
     /// <summary>A band-limited layer, evaluated at the field extent and summarized with its run.</summary>
     Field,
     /// <summary>A layer of features smaller than a field texel, evaluated at each pixel.</summary>
@@ -38,14 +38,56 @@ public readonly record struct SdfSkyLayerSample(SdfSkyLayerClass Class, SdfSkyBl
 /// <param name="Offset">A field run's per-channel offset; zero for a point run.</param>
 /// <param name="Points">A point run's layers in their authored order; none for a field run.</param>
 public sealed record SdfSkyRun(bool Field, Vector3 Scale, Vector3 Offset, IReadOnlyList<SdfSkyLayerSample> Points);
+/// <summary>The run structure a stack cuts into as its layers are added in authored order: whether its lowest run is a
+/// field run (the base the sky pass writes alone) and how many field runs lie above its lowest run. A layer that would
+/// open a field run past <see cref="SdfSky.MaxUpperFieldRuns"/> is refused, so <see cref="SdfSky.Pack"/> writes no entry
+/// for it and the validator names it.</summary>
+public struct SdfSkyRunCount {
+    private bool m_any;
+    private bool m_inField;
+
+    /// <summary>Gets whether the stack's lowest run is a field run.</summary>
+    public bool BaseRun { readonly get; private set; }
+    /// <summary>Gets the field runs above the stack's lowest run.</summary>
+    public int UpperRuns { readonly get; private set; }
+
+    /// <summary>Adds the next layer of the stack, unless it would open a field run past
+    /// <see cref="SdfSky.MaxUpperFieldRuns"/>.</summary>
+    /// <param name="layerClass">The layer's class.</param>
+    /// <returns><see langword="false"/> when the layer would open one field run too many, which leaves the count as it
+    /// was.</returns>
+    public bool TryAdd(SdfSkyLayerClass layerClass) {
+        if (layerClass != SdfSkyLayerClass.Field) {
+            m_any = true;
+            m_inField = false;
+
+            return true;
+        }
+        if (m_inField) {
+            return true;
+        }
+        if (!m_any) {
+            BaseRun = true;
+        } else if (UpperRuns >= SdfSky.MaxUpperFieldRuns) {
+            return false;
+        } else {
+            UpperRuns++;
+        }
+
+        m_any = true;
+        m_inField = true;
+
+        return true;
+    }
+}
 /// <summary>
-/// The CPU reference for how the sky and composite passes compose a sky's layer stack (rendering plan P18-5). The stack
-/// is cut into runs without reordering it; each field run is summarized exactly as the affine map it applies to the
-/// colour beneath, since every blend is affine in that colour and a composition of affine maps is affine; and the
-/// composite walks the runs in the authored order, applying each field run's map and each point run's layers. The result
-/// is the stack's one ordered evaluation, so stars beneath clouds are dimmed by them as authored. The kernels evaluate
-/// today's stack, the gradient, the disc and the stars, then the clouds, through the same three runs
-/// (<c>shade/sdf-sky.hlsli</c>).
+/// The CPU reference for how the sky and composite passes compose a sky's layer stack. The stack is cut into runs without
+/// reordering it; each field run is summarized exactly as the affine map it applies to the colour beneath, since every
+/// blend is affine in that colour and a composition of affine maps is affine; and the composite walks the runs in the
+/// authored order, applying each field run's map and each point run's layers. The result is the stack's one ordered
+/// evaluation, so stars beneath clouds are dimmed by them as authored, and a disc between two cloud layers is covered by
+/// the upper one alone. The kernels walk the layer table through the same runs (<c>sky/sdf-sky.hlsli</c>): the lowest
+/// field run as its offset alone, every upper one as its scale and offset.
 /// </summary>
 public static class SdfSkyRuns {
     /// <summary>Returns the affine map one layer applies to the colour beneath it.</summary>

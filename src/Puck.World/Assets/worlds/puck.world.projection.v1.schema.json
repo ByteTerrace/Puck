@@ -222,6 +222,15 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "sky": {
+              "description": "The sky\u0027s quality tier the preset selects (world.sky-quality).",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "title": "WorldSkyTier"
             }
           },
           "additionalProperties": false,
@@ -295,6 +304,15 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "sky": {
+              "description": "The sky\u0027s quality tier the preset selects (world.sky-quality).",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "title": "WorldSkyTier"
             }
           },
           "additionalProperties": false,
@@ -368,6 +386,15 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
+            },
+            "sky": {
+              "description": "The sky\u0027s quality tier the preset selects (world.sky-quality).",
+              "enum": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "title": "WorldSkyTier"
             }
           },
           "additionalProperties": false,
@@ -2453,13 +2480,13 @@
           ],
           "properties": {
             "layers": {
-              "description": "The layers.",
+              "description": "The layers, lowest first.",
               "type": [
                 "array",
                 "null"
               ],
               "items": {
-                "description": "One sky layer. The $type string is the JSON discriminator.",
+                "description": "One sky layer. The $type string is the JSON discriminator. Every layer but fog also carries what any layer carries: its blend, opacity, mask, transform, clock, visibility and the lowest quality tier it draws at.",
                 "type": [
                   "object",
                   "null"
@@ -2609,13 +2636,289 @@
                           "string",
                           "null"
                         ]
+                      },
+                      "blend": {
+                        "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.",
+                        "enum": [
+                          "over",
+                          "add",
+                          "multiply",
+                          "screen",
+                          null
+                        ],
+                        "title": "WorldSkyBlend"
+                      },
+                      "opacity": {
+                        "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "mask": {
+                        "description": "Gets where the layer draws. Absent is everywhere.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "band": {
+                            "description": "The band\u0027s lowest and highest elevation in radians, two angles in [\u2212\u03C0/2, \u03C0/2], ascending.",
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "items": {
+                              "type": "number"
+                            },
+                            "default": null
+                          },
+                          "cone": {
+                            "description": "The cone.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "toward": {
+                                "description": "The cone\u0027s axis in the sky frame, any nonzero length.",
+                                "title": "DocumentVector3",
+                                "anyOf": [
+                                  {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 3
+                                  },
+                                  {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                  }
+                                ]
+                              },
+                              "spread": {
+                                "description": "The cone\u0027s angular radius in radians, in (0, \u03C0].",
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "toward",
+                              "spread"
+                            ],
+                            "additionalProperties": false,
+                            "default": null,
+                            "title": "WorldRenderSkyCone"
+                          },
+                          "feather": {
+                            "description": "The width of the mask\u0027s edge, an angle in radians. Absent is a hard edge.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyMask"
+                      },
+                      "transform": {
+                        "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "turn": {
+                            "description": "The turn about the sky frame\u0027s up. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "tilt": {
+                            "description": "The tilt about the sky frame\u0027s right axis. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyTransform"
+                      },
+                      "clock": {
+                        "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "visibility": {
+                        "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind.",
+                        "enum": [
+                          "camera",
+                          "lighting",
+                          "both",
+                          null
+                        ],
+                        "title": "WorldSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ],
+                        "title": "WorldSkyTier"
                       }
                     },
                     "additionalProperties": false,
                     "title": "WorldRenderSkyLayerGradient"
                   },
                   {
-                    "description": "The exponential distance fog fading toward the sky gradient.",
+                    "description": "The exponential distance fog fading toward the sky the lighting sees. Not a layer of the stack: it takes none of a layer\u0027s blend, opacity, mask, transform, clock, visibility or tier.",
                     "properties": {
                       "$type": {
                         "const": "fog"
@@ -2686,13 +2989,247 @@
                           "string",
                           "null"
                         ]
+                      },
+                      "blend": {
+                        "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.",
+                        "enum": [
+                          "over",
+                          "add",
+                          "multiply",
+                          "screen",
+                          null
+                        ],
+                        "title": "WorldSkyBlend"
+                      },
+                      "opacity": {
+                        "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "mask": {
+                        "description": "Gets where the layer draws. Absent is everywhere.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "band": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/band",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          },
+                          "feather": {
+                            "description": "The width of the mask\u0027s edge, an angle in radians. Absent is a hard edge.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyMask"
+                      },
+                      "transform": {
+                        "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "turn": {
+                            "description": "The turn about the sky frame\u0027s up. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "tilt": {
+                            "description": "The tilt about the sky frame\u0027s right axis. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyTransform"
+                      },
+                      "clock": {
+                        "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "visibility": {
+                        "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind.",
+                        "enum": [
+                          "camera",
+                          "lighting",
+                          "both",
+                          null
+                        ],
+                        "title": "WorldSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ],
+                        "title": "WorldSkyTier"
                       }
                     },
                     "additionalProperties": false,
                     "title": "WorldRenderSkyLayerFog"
                   },
                   {
-                    "description": "The visible sun disc \u2014 an additive highlight about one directional light\u0027s direction.",
+                    "description": "The visible sun disc about one directional light\u0027s direction: an additive glow, or with Texture the image a screen shows across the disc.",
                     "properties": {
                       "$type": {
                         "const": "sunDisc"
@@ -2819,11 +3356,314 @@
                         ],
                         "default": null
                       },
+                      "color": {
+                        "description": "BindableColor\u0027s grammar: the disc\u0027s tint. Absent is white.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "texture": {
+                        "description": "The texture body shape: the screen whose image the disc shows. Absent is the glow.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "screen": {
+                            "description": "The screen\u0027s surface index (Index), a screen the world declares.",
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "screen"
+                        ],
+                        "additionalProperties": false,
+                        "default": null,
+                        "title": "WorldRenderSkyTexture"
+                      },
                       "layerName": {
                         "type": [
                           "string",
                           "null"
                         ]
+                      },
+                      "blend": {
+                        "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.",
+                        "enum": [
+                          "over",
+                          "add",
+                          "multiply",
+                          "screen",
+                          null
+                        ],
+                        "title": "WorldSkyBlend"
+                      },
+                      "opacity": {
+                        "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "mask": {
+                        "description": "Gets where the layer draws. Absent is everywhere.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "band": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/band",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          },
+                          "feather": {
+                            "description": "The width of the mask\u0027s edge, an angle in radians. Absent is a hard edge.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyMask"
+                      },
+                      "transform": {
+                        "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "turn": {
+                            "description": "The turn about the sky frame\u0027s up. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "tilt": {
+                            "description": "The tilt about the sky frame\u0027s right axis. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyTransform"
+                      },
+                      "clock": {
+                        "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "visibility": {
+                        "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind.",
+                        "enum": [
+                          "camera",
+                          "lighting",
+                          "both",
+                          null
+                        ],
+                        "title": "WorldSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ],
+                        "title": "WorldSkyTier"
                       }
                     },
                     "additionalProperties": false,
@@ -3083,18 +3923,268 @@
                         ],
                         "default": null
                       },
+                      "sparsity": {
+                        "description": "The share of the cells that carry a star, in (0, 1]. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "size": {
+                        "description": "A star\u0027s angular radius as a share of one cell\u0027s angular pitch, in (0, 0.5]. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
                       "layerName": {
                         "type": [
                           "string",
                           "null"
                         ]
+                      },
+                      "blend": {
+                        "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.",
+                        "enum": [
+                          "over",
+                          "add",
+                          "multiply",
+                          "screen",
+                          null
+                        ],
+                        "title": "WorldSkyBlend"
+                      },
+                      "opacity": {
+                        "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "mask": {
+                        "description": "Gets where the layer draws. Absent is everywhere.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "band": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/band",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          },
+                          "feather": {
+                            "description": "The width of the mask\u0027s edge, an angle in radians. Absent is a hard edge.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyMask"
+                      },
+                      "transform": {
+                        "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "turn": {
+                            "description": "The turn about the sky frame\u0027s up. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "tilt": {
+                            "description": "The tilt about the sky frame\u0027s right axis. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyTransform"
+                      },
+                      "clock": {
+                        "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "visibility": {
+                        "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind.",
+                        "enum": [
+                          "camera",
+                          "lighting",
+                          "both",
+                          null
+                        ],
+                        "title": "WorldSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ],
+                        "title": "WorldSkyTier"
                       }
                     },
                     "additionalProperties": false,
                     "title": "WorldRenderSkyLayerStars"
                   },
                   {
-                    "description": "The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.",
+                    "description": "The procedural cloud layer: a deterministic hashed-lattice noise on a dome above the camera, thresholded by coverage and fading into the horizon.",
                     "properties": {
                       "$type": {
                         "const": "clouds"
@@ -3550,15 +4640,2004 @@
                         ],
                         "default": null
                       },
+                      "octaves": {
+                        "description": "The fractal octaves at the high tier, one to eight. Absent is four.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "warp": {
+                        "description": "How far the first fractal sum bends the second\u0027s domain, in cells. Absent is 0.6.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "relief": {
+                        "description": "The heightfield\u0027s rise per unit thickness, the steepness its lighting reads. Absent is 0.7.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "extinction": {
+                        "description": "Beer\u0027s-law extinction per unit thickness: how quickly a cloud turns opaque. Absent is 3.5.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
                       "layerName": {
                         "type": [
                           "string",
                           "null"
                         ]
+                      },
+                      "blend": {
+                        "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.",
+                        "enum": [
+                          "over",
+                          "add",
+                          "multiply",
+                          "screen",
+                          null
+                        ],
+                        "title": "WorldSkyBlend"
+                      },
+                      "opacity": {
+                        "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "mask": {
+                        "description": "Gets where the layer draws. Absent is everywhere.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "band": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/band",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          },
+                          "feather": {
+                            "description": "The width of the mask\u0027s edge, an angle in radians. Absent is a hard edge.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyMask"
+                      },
+                      "transform": {
+                        "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "turn": {
+                            "description": "The turn about the sky frame\u0027s up. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "tilt": {
+                            "description": "The tilt about the sky frame\u0027s right axis. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyTransform"
+                      },
+                      "clock": {
+                        "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "visibility": {
+                        "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind.",
+                        "enum": [
+                          "camera",
+                          "lighting",
+                          "both",
+                          null
+                        ],
+                        "title": "WorldSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ],
+                        "title": "WorldSkyTier"
                       }
                     },
                     "additionalProperties": false,
                     "title": "WorldRenderSkyLayerClouds"
+                  },
+                  {
+                    "description": "Aurora curtains: rays rising from a wavering base, fading upward from Color to Top, moving with the layer\u0027s clock.",
+                    "properties": {
+                      "$type": {
+                        "const": "aurora"
+                      },
+                      "intensity": {
+                        "description": "The curtains\u0027 peak brightness. Absent is zero, which draws nothing.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "color": {
+                        "description": "BindableColor\u0027s grammar: the colour at a curtain\u0027s base. Absent is green.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "top": {
+                        "description": "BindableColor\u0027s grammar: the colour at a curtain\u0027s top. Absent is violet.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "base": {
+                        "description": "The curtains\u0027 mean base elevation, in radians. Absent is about 17\u00B0.",
+                        "default": null,
+                        "title": "BindableAngle",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "height": {
+                        "description": "How far above its base a curtain rises, in radians. Absent is about 20\u00B0.",
+                        "default": null,
+                        "title": "BindableAngle",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "fold": {
+                        "description": "How far the base wavers, in radians. Absent is about 5\u00B0.",
+                        "default": null,
+                        "title": "BindableAngle",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "rays": {
+                        "description": "The rays per turn of azimuth. Absent is 96.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "waves": {
+                        "description": "The base\u0027s waves per turn of azimuth. Absent is 5.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "seed": {
+                        "description": "The hash seed.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the layer by, unique among the layers.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "layerName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.",
+                        "enum": [
+                          "over",
+                          "add",
+                          "multiply",
+                          "screen",
+                          null
+                        ],
+                        "title": "WorldSkyBlend"
+                      },
+                      "opacity": {
+                        "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "mask": {
+                        "description": "Gets where the layer draws. Absent is everywhere.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "band": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/band",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          },
+                          "feather": {
+                            "description": "The width of the mask\u0027s edge, an angle in radians. Absent is a hard edge.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyMask"
+                      },
+                      "transform": {
+                        "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "turn": {
+                            "description": "The turn about the sky frame\u0027s up. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "tilt": {
+                            "description": "The tilt about the sky frame\u0027s right axis. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyTransform"
+                      },
+                      "clock": {
+                        "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "visibility": {
+                        "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind.",
+                        "enum": [
+                          "camera",
+                          "lighting",
+                          "both",
+                          null
+                        ],
+                        "title": "WorldSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ],
+                        "title": "WorldSkyTier"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerAurora"
+                  },
+                  {
+                    "description": "A fractal noise field over the sky, coloured from Low to High and covered where it rises past one less its coverage, sliding with the layer\u0027s clock.",
+                    "properties": {
+                      "$type": {
+                        "const": "noise"
+                      },
+                      "low": {
+                        "description": "BindableColor\u0027s grammar: the colour where the noise is lowest. Absent is black.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "high": {
+                        "description": "BindableColor\u0027s grammar: the colour where it is highest. Absent is white.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "coverage": {
+                        "description": "The share of the sky the noise covers, in [0, 1]. Absent is one.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "softness": {
+                        "description": "The covered edge\u0027s width as a share of the noise\u0027s range, in (0, 1]. Absent is 0.25.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "scale": {
+                        "description": "The lattice cells per unit of direction. Absent is four.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "octaves": {
+                        "description": "The fractal octaves at the high tier, one to eight. Absent is four.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "gain": {
+                        "description": "Each octave\u0027s amplitude relative to the one before it, in (0, 1). Absent is one half.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "seed": {
+                        "description": "The hash seed.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the layer by, unique among the layers.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "layerName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.",
+                        "enum": [
+                          "over",
+                          "add",
+                          "multiply",
+                          "screen",
+                          null
+                        ],
+                        "title": "WorldSkyBlend"
+                      },
+                      "opacity": {
+                        "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "mask": {
+                        "description": "Gets where the layer draws. Absent is everywhere.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "band": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/band",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          },
+                          "feather": {
+                            "description": "The width of the mask\u0027s edge, an angle in radians. Absent is a hard edge.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyMask"
+                      },
+                      "transform": {
+                        "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "turn": {
+                            "description": "The turn about the sky frame\u0027s up. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "tilt": {
+                            "description": "The tilt about the sky frame\u0027s right axis. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyTransform"
+                      },
+                      "clock": {
+                        "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "visibility": {
+                        "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind.",
+                        "enum": [
+                          "camera",
+                          "lighting",
+                          "both",
+                          null
+                        ],
+                        "title": "WorldSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ],
+                        "title": "WorldSkyTier"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerNoise"
+                  },
+                  {
+                    "description": "A painted pattern over azimuth and elevation, scrolling one cell a cycle of the layer\u0027s clock.",
+                    "properties": {
+                      "$type": {
+                        "const": "pattern"
+                      },
+                      "shape": {
+                        "description": "What it paints. Absent is a checker.",
+                        "enum": [
+                          "checker",
+                          "stripes",
+                          "grid",
+                          null
+                        ],
+                        "default": null,
+                        "title": "WorldSkyPatternShape"
+                      },
+                      "colors": {
+                        "description": "Its two colours, in BindableColor\u0027s grammar. Absent is black and white.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "default": null,
+                        "items": {
+                          "title": "BindableColor",
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "clock": {
+                                  "type": "string"
+                                },
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "at": {
+                                        "type": "number"
+                                      },
+                                      "value": {
+                                        "type": "string"
+                                      },
+                                      "ease": {
+                                        "type": "string",
+                                        "enum": [
+                                          "Linear",
+                                          "Smooth",
+                                          "Step"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "at",
+                                      "value"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "clock",
+                                "keys"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "cells": {
+                        "description": "The cells per turn of azimuth, a whole number. Absent is 24.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "line": {
+                        "description": "A stripe\u0027s or grid line\u0027s width as a share of a cell, in (0, 1). Absent is 0.1.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "softness": {
+                        "description": "The edge\u0027s width as a share of a cell, in [0, 0.5]. Absent is 0.05.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the layer by, unique among the layers.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "layerName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.",
+                        "enum": [
+                          "over",
+                          "add",
+                          "multiply",
+                          "screen",
+                          null
+                        ],
+                        "title": "WorldSkyBlend"
+                      },
+                      "opacity": {
+                        "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "mask": {
+                        "description": "Gets where the layer draws. Absent is everywhere.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "band": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/band",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          },
+                          "feather": {
+                            "description": "The width of the mask\u0027s edge, an angle in radians. Absent is a hard edge.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyMask"
+                      },
+                      "transform": {
+                        "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "turn": {
+                            "description": "The turn about the sky frame\u0027s up. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "tilt": {
+                            "description": "The tilt about the sky frame\u0027s right axis. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyTransform"
+                      },
+                      "clock": {
+                        "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "visibility": {
+                        "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind.",
+                        "enum": [
+                          "camera",
+                          "lighting",
+                          "both",
+                          null
+                        ],
+                        "title": "WorldSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ],
+                        "title": "WorldSkyTier"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerPattern"
+                  },
+                  {
+                    "description": "The image a diegetic screen shows, sampled by direction: the screen\u0027s source, at infinity. The camera alone sees it, since the environment map binds no screen.",
+                    "properties": {
+                      "$type": {
+                        "const": "panorama"
+                      },
+                      "screen": {
+                        "description": "The screen\u0027s surface index (Index), a screen the world declares. Required.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "projection": {
+                        "description": "How a direction maps to the image. Absent is equirectangular.",
+                        "enum": [
+                          "equirect",
+                          "octahedral",
+                          null
+                        ],
+                        "default": null,
+                        "title": "WorldSkyProjection"
+                      },
+                      "intensity": {
+                        "description": "The image\u0027s brightness scale. Absent is one.",
+                        "default": null,
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "name": {
+                        "description": "The name a section key addresses the layer by, unique among the layers.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "layerName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "blend": {
+                        "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora.",
+                        "enum": [
+                          "over",
+                          "add",
+                          "multiply",
+                          "screen",
+                          null
+                        ],
+                        "title": "WorldSkyBlend"
+                      },
+                      "opacity": {
+                        "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one.",
+                        "title": "BindableScalar",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "clock": {
+                                "type": "string"
+                              },
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "at": {
+                                      "type": "number"
+                                    },
+                                    "value": {
+                                      "type": "number"
+                                    },
+                                    "ease": {
+                                      "type": "string",
+                                      "enum": [
+                                        "Linear",
+                                        "Smooth",
+                                        "Step"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "at",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "clock",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "mask": {
+                        "description": "Gets where the layer draws. Absent is everywhere.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "band": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/band",
+                            "default": null
+                          },
+                          "cone": {
+                            "$ref": "#/properties/render/properties/sky/properties/layers/items/anyOf/0/properties/mask/properties/cone",
+                            "default": null
+                          },
+                          "feather": {
+                            "description": "The width of the mask\u0027s edge, an angle in radians. Absent is a hard edge.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyMask"
+                      },
+                      "transform": {
+                        "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "turn": {
+                            "description": "The turn about the sky frame\u0027s up. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "tilt": {
+                            "description": "The tilt about the sky frame\u0027s right axis. Absent is none.",
+                            "default": null,
+                            "title": "BindableAngle",
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "clock": {
+                                    "type": "string"
+                                  },
+                                  "keys": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "at": {
+                                          "type": "number"
+                                        },
+                                        "value": {
+                                          "type": "number"
+                                        },
+                                        "ease": {
+                                          "type": "string",
+                                          "enum": [
+                                            "Linear",
+                                            "Smooth",
+                                            "Step"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "at",
+                                        "value"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "clock",
+                                  "keys"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "title": "WorldRenderSkyTransform"
+                      },
+                      "clock": {
+                        "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "visibility": {
+                        "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind.",
+                        "enum": [
+                          "camera",
+                          "lighting",
+                          "both",
+                          null
+                        ],
+                        "title": "WorldSkyVisibility"
+                      },
+                      "tier": {
+                        "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier.",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high",
+                          null
+                        ],
+                        "title": "WorldSkyTier"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerPanorama"
                   }
                 ],
                 "title": "WorldRenderSkyLayer"
@@ -3602,7 +6681,7 @@
                     "title": "WorldEase"
                   },
                   "layers": {
-                    "description": "The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, a layer\u0027s name and the sun disc\u0027s light are structure, which a key never states.",
+                    "description": "The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, kinds, a layer\u0027s name, blend, mask, visibility, tier and clock and the sun disc\u0027s light are structure, which a key never states.",
                     "type": [
                       "object",
                       "null"
@@ -3620,6 +6699,38 @@
                 "title": "WorldRenderSkyKey"
               },
               "default": null
+            },
+            "frame": {
+              "description": "Which way is up for the sky. Absent is world \u002By.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "up": {
+                  "description": "The sky\u0027s up direction in world space, any nonzero length. Absent is world \u002By.",
+                  "default": null,
+                  "title": "DocumentVector3",
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "minItems": 3,
+                      "maxItems": 3
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldRenderSkyFrame"
             }
           },
           "additionalProperties": false,
@@ -3918,6 +7029,16 @@
           ],
           "default": "instant",
           "title": "WorldShadowOverflow"
+        },
+        "skyQuality": {
+          "description": "The sky\u0027s boot quality tier (world.sky-quality): a layer below it writes no entry, and below High each kind draws its reduced form.",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "high",
+          "title": "WorldSkyTier"
         }
       },
       "additionalProperties": false,
