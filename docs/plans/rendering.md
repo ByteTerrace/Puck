@@ -7738,7 +7738,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       a held clock that advances the state row); the inspector's sky text
       equals `world.lighting`'s echo.
     - Counted-cost gate: a held clock renders nothing new after one frame.
-13. **P18-13, temporal amortization of secondary shadows.** After P15-5.
+13. **P18-13, temporal amortization of secondary shadows.** Implemented after P15-5;
+    GPU qualification and floor-device ceiling recordings remain owed.
     - Delivers: with reconstruction on, each shadow slot after the first marches
       a quarter of its pixels per frame, interleaved by the jitter index, and
       reprojects the rest from a history of the K row. A receiver's identity
@@ -7749,7 +7750,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
         light name now. The history stores each slot's owner, and a slot
         reassigned or fading marches all its pixels until its history is rebuilt.
       - **Light motion:** the slot's light direction has turned since the
-        history's tick by more than a stated fraction of its penumbra angle.
+        history's tick by more than one quarter of its penumbra angle. Each
+        slot retains an anchor until a full rebuild; every accepted direction
+        stays within one eighth of the angle from that anchor, so any pair of
+        retained samples stays within one quarter. Penumbra edits also reject.
       - **Occluder motion:** the group's gathered occluder set (the shadow
         gather's per-group list) holds a dynamic-transform slot whose row
         differs between P15-3's previous dynamic-transform table and the
@@ -7757,21 +7761,53 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
         can touch.
       - **Receiver:** P15's identity and depth test fails.
 
-      The first slot marches every pixel. `world.shadow-amortize` is a session
-      lever with a preset row.
+      The first slot marches every pixel. Incoming fade slots do too, and a
+      stable fading slot rejects history through its first nonfading rebuild.
+      `world.shadow-amortize` is a session lever with a preset row: off at low,
+      on at medium and high, effective only with temporal reconstruction.
+      The jitter sample index selects one of four parity classes of render
+      pixels. Rejection precedes this selection, so a changed owner reprojects
+      zero pixels, including pixels scheduled to march anyway.
+
+      The temporal fragment keeps a writer-ordered render-grid buffer of five
+      words per pixel: packed K, receiver identity, full ray distance, the
+      writer's sample index and rejection reactivity. Its bytes enter the
+      graph's memory accounting; native and spatial fragments have none.
+      Skipped shadow writers cannot reuse another camera's history: a sample
+      stamp validates the pixel against the preceding render. Each view keeps
+      four owner names and penumbra anchors, committed only when its shadow
+      writer submits. The gather checks all three dynamic rows by their bits
+      and tests both current and previous bounds, including a suppressed or
+      departed occluder. Flat and camera-mask fallbacks conservatively test
+      the whole dynamic table, as do unmasked world segments. First and incoming slots
+      skip these motion checks. Rejected shadows
+      raise the existing color-history reactivity so reconstruction cannot
+      keep the old shadow. With the lever off, K history writes and decision
+      pixels are zero; low has no shadow history allocation or work.
     - Touches: `surface/sdf-shadow.hlsli`, `surface/sdf-shadow-gather.hlsli`
-      (the moved-occluder test), `SdfWorldPackage.Fragment` (the K history and
-      its owners), `frame/sdf-reprojection.hlsli`, `quality.puck`.
-    - Done when: a `temporal-shadows` canary's converged binary-star scene is
-      within a stated tolerance of the unamortized one; a body moving through a
-      still receiver's shadow, a light turning on its orbit, and a slot changing
+      (the moved-occluder test), `SdfWorldPackage.TemporalFragment` (the K
+      history), `SdfShadowHistory` (its owners), `frame/sdf-reprojection.hlsli`,
+      `quality.puck`.
+    - Checks: a `temporal-shadows` canary's converged binary-star scene is
+      within two mean eight-bit codes of the unamortized one over its receiver
+      strip; a body moving through a still receiver's shadow, a light turning
+      on its orbit, and a slot changing
       hands each show no trail past the frame the rule rejects them on (red leg:
       with only the receiver test, the moving occluder's old shadow lingers);
-      a law counts each rejection reason.
+      laws hold the four rejection reasons, counted pixel and per-slot march
+      detail rows, name identity through a reorder, slow light drift, handoffs,
+      successful-submission metadata, the off-switch and the render-grid
+      allocation. GPU image and counted-cost qualification remain owed.
     - Counted-cost gate: each secondary slot's march steps at about a quarter
       of the unamortized row plus its rejections, counted by reason and
       re-recorded lower; zero reprojected pixels on a frame where a slot
       changes hands.
+      `gpu.shadow.pixels` partitions secondary lit pixels into `interleaved`,
+      `ownership`, `light-motion`, `occluder-motion`, `receiver` and
+      `reprojected` detail rows. Each row carries its march steps and slot-step
+      columns too; their sums and the plain remainder reconcile to the pass.
+      K history writes count five stored words per active pixel, only with
+      amortization on and more than one stable slot. There is no new dispatch.
 14. **P18-14, the floor tier's sky defaults.** The lead's call from the
     counted rows.
     - Delivers: the sky leg recorded at each tier and field scale in the
