@@ -22,9 +22,9 @@
       },
       "FSharp.Core": {
         "type": "Direct",
-        "requested": "[10.*, )",
-        "resolved": "10.1.401",
-        "contentHash": "/lvOK51KD8IangBYkfDVna3/HrE/r4VUnX3dI01KDspctoYXmind3POeoYkqWKeXHwiKlf6Hc9TxwSnoSCWcjw=="
+        "requested": "[11.*, )",
+        "resolved": "11.0.100",
+        "contentHash": "ijfOz8ihqkFNdKUY57l8YTrbJNfQW/6tFYAUU57ByZzmTxxf1o12cQaCqDOjNqAz4h86AKS7IwQkNhYcrjLeCQ=="
       },
       "Microsoft.CodeAnalysis.CSharp": {
         "type": "Direct",
@@ -1553,8 +1553,8 @@
       },
       "Wasmtime": {
         "type": "Transitive",
-        "resolved": "44.0.0",
-        "contentHash": "Mo93hPzT2wzxQlntv0yqWChspMCp9KlT4rTYseriz/WZ1wKjRCE5WBwrN2ljBeqBitKINPMwupN4Ar1jnaS7Vw=="
+        "resolved": "48.0.2",
+        "contentHash": "BBqIEIPSTQ5cCVfxk6kH4lYSwNiMQ8Bf2F8Sy1I8N0JkvrWYoqhG3ro41R3JhNStIs0tVbqajBXXKnahyxHn0g=="
       },
       "ByteTerrace.Puck.Abstractions": {
         "type": "Project",
@@ -1702,7 +1702,7 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Wasmtime": "[44.0.0, 44.0.0]"
+          "Wasmtime": "[48.0.2, 48.0.2]"
         }
       },
       "ByteTerrace.Puck.Shaders": {

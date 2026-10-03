@@ -26,7 +26,7 @@
         <!-- Direct only to float past 1.17.1, which declares Azure.Identity.OnBehalfOfCredential that Azure.Core 1.60
              also declares; transitively Microsoft.Extensions.Azure pins the colliding floor. -->
         <PackageReference Include="Azure.Identity" Version="[1.*,2.0)" />
-        <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="[1.*,1.8.0)" />
+        <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="[1.*,2.0)" />
         <PackageReference Include="Azure.Storage.Blobs" Version="[12.*,13.0)" />
         <PackageReference Include="Azure.ResourceManager.ResourceGraph" Version="[1.*,2.0)" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="[10.*,11.0)" />

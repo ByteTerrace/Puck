@@ -215,15 +215,6 @@
           "System.CommandLine": "[2.*, )"
         }
       },
-      "ByteTerrace.Puck.Machines": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
-        }
-      },
       "ByteTerrace.Puck.GamingBricks.Forge": {
         "type": "Project",
         "dependencies": {
@@ -259,6 +250,15 @@
           "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )"
         }
       },
+      "ByteTerrace.Puck.Machines": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
+        }
+      },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
@@ -278,13 +278,6 @@
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
-      "puck.machines.post": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
-        }
-      },
       "puck.humblegamingbrick.post": {
         "type": "Project",
         "dependencies": {
@@ -294,6 +287,13 @@
           "ByteTerrace.Puck.HumbleGamingBrick.Forge": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "Puck.Machines.Post": "[1.0.0, )"
+        }
+      },
+      "puck.machines.post": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       }
     }

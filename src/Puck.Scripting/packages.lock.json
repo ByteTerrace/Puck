@@ -10,9 +10,9 @@
       },
       "Wasmtime": {
         "type": "Direct",
-        "requested": "[44.0.0, 44.0.0]",
-        "resolved": "44.0.0",
-        "contentHash": "Mo93hPzT2wzxQlntv0yqWChspMCp9KlT4rTYseriz/WZ1wKjRCE5WBwrN2ljBeqBitKINPMwupN4Ar1jnaS7Vw=="
+        "requested": "[48.0.2, 48.0.2]",
+        "resolved": "48.0.2",
+        "contentHash": "BBqIEIPSTQ5cCVfxk6kH4lYSwNiMQ8Bf2F8Sy1I8N0JkvrWYoqhG3ro41R3JhNStIs0tVbqajBXXKnahyxHn0g=="
       },
       "Microsoft.Extensions.DependencyInjection.Abstractions": {
         "type": "Transitive",
