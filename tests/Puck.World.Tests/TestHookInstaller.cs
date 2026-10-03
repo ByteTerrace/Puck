@@ -19,5 +19,9 @@ internal static class TestHookInstaller {
     [ModuleInitializer]
     internal static void Install() {
         WorldSchemaVocabularyHooks.Install(probeKindCheck: static _ => true);
+        var projections = new Puck.Testing.TemporaryDirectory(prefix: "puck-protoref-process-");
+
+        WorldProjectionContent.ConfigureShared(store: new Puck.Assets.ContentAddressedStore(root: projections.RootPath));
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => projections.Dispose();
     }
 }

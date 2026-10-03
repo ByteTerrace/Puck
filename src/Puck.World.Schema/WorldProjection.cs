@@ -1,4 +1,8 @@
+using Puck.Abstractions;
+using Puck.Assets.Documents;
+using Puck.World.Authoring;
 using Puck.Commands;
+using Puck.Assets;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
@@ -75,7 +79,7 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="DefaultSeatKit">The default seat kit's name.</param>
 /// <param name="Assignment">The body-to-kit assignment.</param>
 /// <param name="BindingOverlays">The world's binding layers — a visitor's seat composes over them.</param>
-/// <param name="Creations">The embedded creation documents rendering resolves shapes from.</param>
+/// <param name="Creations">The content references rendering resolves prototype bodies from.</param>
 /// <param name="Placements">The placement rows, as the recipient's state disclosure deals them
 /// (<see cref="WorldStateDisclosure.Disclose"/>).</param>
 /// <param name="Speakers">The speaker rows.</param>
@@ -122,7 +126,7 @@ public sealed record WorldProjectionDocument(
     string DefaultSeatKit,
     WorldRowAssignment Assignment,
     IReadOnlyList<WorldBindingOverlay> BindingOverlays,
-    [property: System.Text.Json.Serialization.JsonPropertyName("prototypes")] IReadOnlyList<WorldPrototype> Creations,
+    [property: System.Text.Json.Serialization.JsonPropertyName("prototypes")] IReadOnlyList<WorldPrototypeReference> Creations,
     IReadOnlyList<WorldPlacement> Placements,
     IReadOnlyList<WorldSpeaker> Speakers,
     IReadOnlyList<WorldTune> Tunes,
@@ -241,7 +245,8 @@ public static class WorldProjection {
     /// emitted.</exception>
     /// <exception cref="InvalidOperationException">The composed projection does not round-trip or flatten: a fault, not
     /// a refusal.</exception>
-    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false, WorldClockAnchorLedger? anchors = null) {
+    /// <param name="content">The store receiving disclosed prototype bodies, or the shared store.</param>
+    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, StateArena arena, in ArenaTime time, Principal? recipient = null, bool unrestricted = false, WorldClockAnchorLedger? anchors = null, ContentAddressedStore? content = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (tier != WorldDisclosureTier.Presentation) {
@@ -311,7 +316,7 @@ public static class WorldProjection {
             DefaultSeatKit: definition.DefaultSeatKit,
             Assignment: definition.Assignment,
             BindingOverlays: definition.BindingOverlays,
-            Creations: definition.Creations,
+            Creations: ReferencePrototypes(definition, arena, recipient, unrestricted, (content ?? WorldProjectionContent.Shared)),
             Placements: placements,
             Speakers: definition.Speakers,
             Tunes: definition.Tunes,
@@ -590,6 +595,27 @@ public static class WorldProjection {
             ? null
             : [.. spaces.Where(predicate: space => named.Contains(item: space.Name.Value))]);
     }
+    private static IReadOnlyList<WorldPrototypeReference> ReferencePrototypes(WorldDefinition definition, StateArena arena,
+        Principal? recipient, bool unrestricted, ContentAddressedStore store) {
+        var references = new List<WorldPrototypeReference>();
+
+        foreach (var prototype in definition.Creations) {
+            WorldStateDisclosure.ValidateBindings(arena: arena, definition: definition, graph: prototype,
+                recipient: recipient, unrestricted: unrestricted);
+            var flattened = prototype;
+
+            if (WorldStateDocumentValues.HasReference(graph: prototype)) {
+                flattened = JsonSerializer.Deserialize(
+                    utf8Json: JsonSerializer.SerializeToUtf8Bytes(value: prototype, jsonTypeInfo: WorldJsonContext.Default.WorldPrototype),
+                    jsonTypeInfo: WorldJsonContext.Default.WorldPrototype)!;
+                if (!WorldStateDocumentValues.TryFlatten(graph: flattened, reason: out var reason, source: definition)) {
+                    throw new InvalidOperationException(message: $"the projected prototype could not be flattened: {reason}");
+                }
+            }
+            references.Add(item: WorldProjectionContent.Put(prototype: flattened, store: store));
+        }
+        return references;
+    }
 
     /// <summary>Serializes a projection to its compact canonical UTF-8 bytes, the form it travels to a recipient in:
     /// <see cref="Serialize"/>'s members and order with no whitespace.</summary>
@@ -689,7 +715,9 @@ public static class WorldProjection {
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when the projection hydrated and every document value resolved.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="projection"/> is <see langword="null"/>.</exception>
-    public static bool TryToDefinition(WorldProjectionDocument projection, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason) {
+    /// <param name="content">The recipient content cache, or the shared store.</param>
+    /// <param name="fetch">The authorized fetch door for missing prototype objects.</param>
+    public static bool TryToDefinition(WorldProjectionDocument projection, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason, ContentAddressedStore? content = null, Func<ContentPin, byte[]?>? fetch = null) {
         ArgumentNullException.ThrowIfNull(argument: projection);
 
         definition = null;
@@ -702,6 +730,10 @@ public static class WorldProjection {
             return false;
         }
 
+        if (!WorldProjectionContent.TryResolve(references: projection.Creations, store: (content ?? WorldProjectionContent.Shared),
+            fetch: fetch, prototypes: out var prototypes, reason: out reason)) {
+            return false;
+        }
         var state = WorldFieldsSection.ToStateSection(composite: projection.Fields);
 
         if (projection.Observations is { Count: > 0 } observations) {
@@ -760,7 +792,7 @@ public static class WorldProjection {
             AddonsRaw: [],
             BindingOverlaysRaw: projection.BindingOverlays,
             StorageRaw: new WorldStorageDefaults(),
-            CreationsRaw: projection.Creations,
+            CreationsRaw: prototypes,
             PlacementsRaw: new WorldPlacementsSection(Rows: projection.Placements),
             SpeakersRaw: projection.Speakers,
             TunesRaw: projection.Tunes,
@@ -946,6 +978,95 @@ public static class WorldProjection {
         );
         reason = string.Empty;
 
+        return true;
+    }
+}
+/// <summary>A prototype's local name and the full content pin of its disclosed body.</summary>
+/// <param name="Id">The name placements address in this projection.</param>
+/// <param name="Content">The SHA-256 pin of the canonical document and mesh.</param>
+public sealed record WorldPrototypeReference(DocumentIdentifier Id, string Content);
+/// <summary>The content shared by prototypes, independently of their names in individual worlds.</summary>
+/// <param name="Document">The disclosed creation document.</param>
+/// <param name="Mesh">The disclosed mesh, when present.</param>
+[FormatPart("WorldFederationCodec.WireKey")]
+public sealed record WorldPrototypeContent(CreationDocument Document, WorldPrototypeMesh? Mesh);
+/// <summary>Stores and resolves projection prototype bodies through the existing content-addressed store.</summary>
+public static class WorldProjectionContent {
+    private static readonly Lock StoreGate = new();
+
+    private static ContentAddressedStore? ConfiguredStore;
+
+    private static readonly Lazy<ContentAddressedStore> SharedStore = new(valueFactory: () => new ContentAddressedStore(
+        root: PuckUserDirectory.Resolve(name: "projections")));
+
+    /// <summary>Gets the recipient cache shared across worlds and observation lifetimes.</summary>
+    public static ContentAddressedStore Shared {
+        get {
+            lock (StoreGate) {
+                return (ConfiguredStore ?? SharedStore.Value);
+            }
+        }
+    }
+
+    /// <summary>Chooses the process's immutable-content store before any default consumer opens it.</summary>
+    /// <param name="store">The store the host or test process owns.</param>
+    /// <exception cref="InvalidOperationException">A consumer has already opened or configured the store.</exception>
+    public static void ConfigureShared(ContentAddressedStore store) {
+        ArgumentNullException.ThrowIfNull(argument: store);
+        lock (StoreGate) {
+            if (SharedStore.IsValueCreated || (ConfiguredStore is not null)) {
+                throw new InvalidOperationException(message: "Configure projection content before any consumer opens it.");
+            }
+            ConfiguredStore = store;
+        }
+    }
+    /// <summary>Serializes exactly the disclosed prototype body, without its world-local name.</summary>
+    /// <param name="prototype">The flattened prototype.</param>
+    /// <returns>Its compact canonical bytes.</returns>
+    [FormatLeaf]
+    public static byte[] Serialize(WorldPrototype prototype) => CanonicalJsonDocument.SerializeCompact(
+        value: new WorldPrototypeContent(Document: prototype.Document, Mesh: prototype.Mesh),
+        jsonTypeInfo: WorldJsonContext.Default.WorldPrototypeContent);
+    /// <summary>Stores a flattened prototype and returns its reference.</summary>
+    /// <param name="prototype">The disclosed prototype.</param>
+    /// <param name="store">The content store.</param>
+    /// <returns>The name and content pin.</returns>
+    public static WorldPrototypeReference Put(WorldPrototype prototype, ContentAddressedStore store) => new(
+        Id: prototype.Id, Content: store.Put(content: Serialize(prototype: prototype)).ToString());
+    /// <summary>Resolves references from the recipient's cache, fetching only missing objects and verifying their pins.</summary>
+    /// <param name="references">The references delivered by the authority.</param>
+    /// <param name="store">The recipient cache.</param>
+    /// <param name="fetch">The authorized fetch door, or null when all objects must already be held.</param>
+    /// <param name="prototypes">The hydrated prototypes on success.</param>
+    /// <param name="reason">The refusal on failure.</param>
+    /// <returns>Whether every reference resolved.</returns>
+    public static bool TryResolve(IReadOnlyList<WorldPrototypeReference> references, ContentAddressedStore store,
+        Func<ContentPin, byte[]?>? fetch, out IReadOnlyList<WorldPrototype> prototypes, out string reason) {
+        var result = new List<WorldPrototype>();
+
+        prototypes = [];
+        reason = "projection prototype content is missing, malformed or does not match its pin.";
+        if (references is null) { return false; }
+        foreach (var reference in references) {
+            if ((reference is null) || !ContentPin.TryParse(text: reference.Content, pin: out var pin)) { return false; }
+            if (!store.TryGet(content: out var bytes, pin: pin)) {
+                bytes = fetch?.Invoke(pin);
+                if ((bytes is null) || (ContentPin.Compute(content: bytes) != pin)) { return false; }
+                _ = store.Put(content: bytes);
+            } else if (ContentPin.Compute(content: bytes) != pin) {
+                return false;
+            }
+            try {
+                var body = JsonSerializer.Deserialize(utf8Json: bytes, jsonTypeInfo: WorldJsonContext.Untrusted.WorldPrototypeContent);
+
+                if (body?.Document is null) { return false; }
+                result.Add(item: new WorldPrototype(Id: reference.Id, Document: body.Document, Mesh: body.Mesh));
+            } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
+                return false;
+            }
+        }
+        prototypes = result;
+        reason = string.Empty;
         return true;
     }
 }
