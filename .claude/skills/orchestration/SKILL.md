@@ -77,6 +77,12 @@ measured in minutes. Never hold a finished lane for others to make a batch, and
 never assemble a multi-lane qualification branch; a lane that cannot land alone
 is a dependency to name in the brief, not a reason to wait.
 
+Spread qualification across the fleet. A partner merges the integration head
+into its own branch and runs `puck gate` without `--gpu` on its own machine
+before it pushes, naming the verdict in its push; the lead then adds only the
+GPU legs that need its devices and the fast-forward. The lead's machine
+qualifies its own local lanes and the GPU legs, not every partner's CPU suites.
+
 A gate blocks a lane, never a partner: the partner takes its next work from its
 track or the ready queue.
 

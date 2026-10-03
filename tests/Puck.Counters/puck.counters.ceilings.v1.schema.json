@@ -6,7 +6,7 @@
     "generator": "Puck.World.WorldSchema"
   },
   "title": "Puck counters ceilings (puck.counters.ceilings.v1)",
-  "description": "A puck.counters.ceilings.v1 document: the counted-cost ceilings puck counters --check holds the counters workload to, pass by pass, and puck counters --record writes. Each backend\u0027s run states, for every pass of every render node and for the work outside every pass, what each GPU submission kind may read there: at most its ceiling, where a ceiling of zero is a required zero. A deterministic kind is judged on any device; a per-backend-deterministic kind (PerBackendDeterministic) only on the device its run was recorded on, and is reported as not judged on any other, except a zero that is a structural contract (RequiredZero), which holds on every device and is judged on every one.",
+  "description": "A puck.counters.ceilings.v1 document: the counted-cost ceilings puck counters --check holds the counters workload to, pass by pass, and puck counters --record writes. Each backend states, for every pass of every render node and for the work outside every pass, what each GPU submission kind may read there: at most its ceiling, where a ceiling of zero is a required zero. The ceilings every device shares (deterministic counts, and the zeros that are structural contracts, RequiredZero) are the backend\u0027s own; the magnitudes of per-backend-deterministic counts (PerBackendDeterministic), which follow the device, are one record per device, and a run is judged against its own device\u0027s record.",
   "type": [
     "object",
     "null"
@@ -20,157 +20,181 @@
       "description": "The workload\u0027s console script, repository-relative with forward slashes.",
       "type": "string"
     },
-    "runs": {
-      "description": "One run per backend, in the order they ran.",
+    "width": {
+      "description": "The offscreen presentation\u0027s width in pixels.",
+      "type": "integer"
+    },
+    "height": {
+      "description": "The offscreen presentation\u0027s height in pixels.",
+      "type": "integer"
+    },
+    "backends": {
+      "description": "One entry per backend, in the order they ran.",
       "type": "array",
       "items": {
-        "description": "One backend\u0027s ceilings, as recorded on one device.",
+        "description": "One backend\u0027s ceilings: one record per device it was recorded on, and the ceilings every device shares.",
         "type": [
           "object",
           "null"
         ],
         "properties": {
           "backend": {
-            "description": "The backend the ceilings were recorded on: vulkan or directx.",
+            "description": "The backend: vulkan or directx.",
             "type": "string"
           },
-          "device": {
-            "description": "The device they were recorded on, which a per-backend-deterministic ceiling is judged on alone.",
-            "type": "object",
-            "properties": {
-              "backend": {
-                "type": "string"
-              },
-              "adapter": {
-                "type": "string"
-              },
-              "vendor": {
-                "type": "integer"
-              },
-              "device": {
-                "type": "integer"
-              },
-              "driver.raw": {
-                "type": "integer"
-              },
-              "driver": {
-                "type": "string"
-              },
-              "api": {
-                "type": "string"
-              },
-              "driver.name": {
-                "type": "string",
-                "default": ""
-              },
-              "driver.id": {
-                "type": "integer",
-                "default": 0
-              },
-              "conformance": {
-                "type": "string",
-                "default": ""
-              },
-              "pipeline-cache.uuid": {
-                "type": "string",
-                "default": ""
-              }
-            },
-            "required": [
-              "backend",
-              "adapter",
-              "vendor",
-              "device",
-              "driver.raw",
-              "driver",
-              "api"
-            ],
-            "additionalProperties": false,
-            "title": "GpuDeviceIdentity"
-          },
-          "width": {
-            "description": "The offscreen presentation\u0027s width in pixels.",
-            "type": "integer"
-          },
-          "height": {
-            "description": "The offscreen presentation\u0027s height in pixels.",
-            "type": "integer"
-          },
-          "ceilings": {
-            "description": "Every pass\u0027s ceiling for every kind, in the order the run reported the counts.",
+          "devices": {
+            "description": "One record per device, keyed by its adapter (the PCI vendor and device) and its driver implementation (DriverId), in the order they were first recorded; a record of one device never moves another\u0027s.",
             "type": "array",
             "items": {
-              "description": "What one kind may read in one pass of one render node, or in the work outside its every pass.",
+              "description": "One device\u0027s ceilings on one backend: the per-backend-deterministic magnitudes its run read.",
               "type": [
                 "object",
                 "null"
               ],
               "properties": {
-                "node": {
-                  "description": "The render node.",
-                  "type": "string"
-                },
-                "pass": {
-                  "description": "The pass, or null for the work outside every pass.",
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "kind": {
-                  "description": "The GPU submission kind\u0027s dotted name.",
-                  "type": "string"
-                },
-                "class": {
-                  "description": "What the count was recorded as: the kind\u0027s class, loosened to its pass\u0027s.",
-                  "enum": [
-                    "deterministic",
-                    "per-backend-deterministic",
-                    "pacing",
-                    "allocation-zero-nonzero"
+                "device": {
+                  "description": "The device as its run reported it, its driver version among it as recorded evidence: a driver update keeps the record, which the device is still judged against.",
+                  "type": "object",
+                  "properties": {
+                    "backend": {
+                      "type": "string"
+                    },
+                    "adapter": {
+                      "type": "string"
+                    },
+                    "vendor": {
+                      "type": "integer"
+                    },
+                    "device": {
+                      "type": "integer"
+                    },
+                    "driver.raw": {
+                      "type": "integer"
+                    },
+                    "driver": {
+                      "type": "string"
+                    },
+                    "api": {
+                      "type": "string"
+                    },
+                    "driver.name": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "driver.id": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "conformance": {
+                      "type": "string",
+                      "default": ""
+                    },
+                    "pipeline-cache.uuid": {
+                      "type": "string",
+                      "default": ""
+                    }
+                  },
+                  "required": [
+                    "backend",
+                    "adapter",
+                    "vendor",
+                    "device",
+                    "driver.raw",
+                    "driver",
+                    "api"
                   ],
-                  "title": "WorkClass"
+                  "additionalProperties": false,
+                  "title": "GpuDeviceIdentity"
                 },
-                "ceiling": {
-                  "description": "The most the count may read; zero requires it to read zero.",
-                  "type": "integer"
-                },
-                "requiredZero": {
-                  "description": "Whether the ceiling is a zero that holds on every device: the kind is a magnitude that varies with the device (a kernel kind such as the march steps), and the pass never does that kind of work, so zero is a structural contract and not one device\u0027s reading. A per-backend-deterministic ceiling is judged on a foreign device only when it is a required zero. Only a zero ceiling of a per-backend-deterministic class carries it; a deterministic ceiling is judged everywhere by its class, and a count loosened to its pass\u0027s class is a reading of the recording device alone.",
-                  "type": "boolean",
-                  "default": false
-                },
-                "detail": {
-                  "description": "The label within the pass, or null for its total or work outside every pass.",
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "default": null
+                "ceilings": {
+                  "description": "Every per-backend-deterministic count that is not a required zero, in the order the run reported the counts.",
+                  "type": "array",
+                  "items": {
+                    "description": "What one kind may read in one pass of one render node, or in the work outside its every pass.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "node": {
+                        "description": "The render node.",
+                        "type": "string"
+                      },
+                      "pass": {
+                        "description": "The pass, or null for the work outside every pass.",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "kind": {
+                        "description": "The GPU submission kind\u0027s dotted name.",
+                        "type": "string"
+                      },
+                      "class": {
+                        "description": "What the count was recorded as: the kind\u0027s class, loosened to its pass\u0027s.",
+                        "enum": [
+                          "deterministic",
+                          "per-backend-deterministic",
+                          "pacing",
+                          "allocation-zero-nonzero"
+                        ],
+                        "title": "WorkClass"
+                      },
+                      "ceiling": {
+                        "description": "The most the count may read; zero requires it to read zero.",
+                        "type": "integer"
+                      },
+                      "requiredZero": {
+                        "description": "Whether the ceiling is a zero that holds on every device: the kind is a magnitude that varies with the device (a kernel kind such as the march steps), and the pass never does that kind of work, so zero is a structural contract and not one device\u0027s reading, and it is a ceiling every device shares. Only a zero ceiling of a per-backend-deterministic class carries it; a deterministic ceiling is shared by its class, and a count loosened to its pass\u0027s class is one device\u0027s reading.",
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "detail": {
+                        "description": "The label within the pass, or null for its total or work outside every pass.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "node",
+                      "pass",
+                      "kind",
+                      "class",
+                      "ceiling",
+                      "detail"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldCountCeiling"
+                  }
                 }
               },
               "required": [
-                "node",
-                "pass",
-                "kind",
-                "class",
-                "ceiling",
-                "detail"
+                "device",
+                "ceilings"
               ],
               "additionalProperties": false,
-              "title": "WorldCountCeiling"
+              "title": "WorldCountersDeviceCeilings"
+            }
+          },
+          "ceilings": {
+            "description": "The ceilings every device is judged against: each deterministic count\u0027s, and each required zero, in the order the run reported the counts.",
+            "type": "array",
+            "items": {
+              "$ref": "#/properties/backends/items/properties/devices/items/properties/ceilings/items"
             }
           }
         },
         "required": [
           "backend",
-          "device",
-          "width",
-          "height",
+          "devices",
           "ceilings"
         ],
         "additionalProperties": false,
-        "title": "WorldCountersCeilingRun"
+        "title": "WorldCountersBackendCeilings"
       }
     },
     "schema": {
@@ -182,7 +206,9 @@
   "required": [
     "workload",
     "script",
-    "runs"
+    "width",
+    "height",
+    "backends"
   ],
   "additionalProperties": false
 }

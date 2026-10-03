@@ -366,13 +366,13 @@ internal static class AffectedCommand {
 
     // A plan line is repository-relative and runs from the root, so --run runs its in-process commands from the root
     // whatever directory the verb starts in.
-    private static int Execute(string repositoryRoot, AffectedPlan plan, bool gpu) {
+    private static int Execute(string repositoryRoot, AffectedPlan plan, bool gpu, int gpuJobs, int suiteJobs) {
         var caller = Environment.CurrentDirectory;
 
         Environment.CurrentDirectory = repositoryRoot;
 
         try {
-            return ExecuteAtRoot(gpu: gpu, plan: plan, repositoryRoot: repositoryRoot);
+            return ExecuteAtRoot(gpu: gpu, gpuJobs: gpuJobs, plan: plan, repositoryRoot: repositoryRoot, suiteJobs: suiteJobs);
         } finally {
             Environment.CurrentDirectory = caller;
         }
@@ -388,71 +388,27 @@ internal static class AffectedCommand {
     /// <summary>The selection of a suite's CPU tests: every test whose class does not carry the <c>Gpu</c> trait.</summary>
     public static readonly string[] CpuSelection = ["--filter-not-trait", "Category=Gpu"];
 
-    private static bool AdmitHeavySuite(string repositoryRoot, string suite) {
+    // A heavy suite waits while another process runs one, machine-wide, and for memory and disk headroom: two at once
+    // exhaust the memory. The waiting process's own runs never hold it back.
+    internal static bool AdmitHeavySuite(string repositoryRoot, string suite) {
         var probe = new HostProbe(checkoutRoot: repositoryRoot);
 
         return HostAdmission.Wait(cancellationToken: CancellationToken.None, clock: TimeProvider.System, delay: Thread.Sleep, device: false, error: Console.Error, heavySuite: true, sample: () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), step: suite);
     }
-    private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu) {
+
+    private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu, int gpuJobs, int suiteJobs) {
         var failed = new List<string>();
 
         if (CheckCanaries(ids: plan.CanaryChecks, root: PuckRootCommand.Create(clock: TimeProvider.System)) != 0) {
             failed.Add(item: "canary manifests");
         }
 
-        // Each suite builds first, leaving no MSBuild node behind (CliOptions.NoNodeReuse), and then runs its CPU tests
-        // over the binaries that build wrote: Microsoft.Testing.Platform hands any option it does not own to the test
-        // application, which refuses MSBuild switches. A plain run selects exactly what CI's does, so an explicit tier such
-        // as Maths' Deep and Exhaustive stays out, and the Gpu trait keeps device laws out (CpuSelection). The capture's
-        // post-exit drain bounds any process that inherited its pipes. The platform prints each failure with its message
-        // and stack, and the run's summary counts after it.
-        foreach (var suite in plan.Suites) {
-            var build = CliProcess.RunCaptured(
-                arguments: BuildArguments(suite: suite),
-                fileName: "dotnet",
-                input: string.Empty,
-                timeout: TimeSpan.FromMinutes(minutes: 30),
-                workingDirectory: repositoryRoot
-            );
-
-            if (build.ExitCode != 0) {
-                Console.Out.WriteLine(value: $"affected: {suite} FAILED — the build exited {build.ExitCode}");
-                foreach (var line in Lines(text: build.Stdout).Concat(second: Lines(text: build.Stderr))) {
-                    Console.Out.WriteLine(value: $"  {line}");
-                }
-
-                failed.Add(item: suite);
-                continue;
-            }
-
-            // A heavy suite waits while another process runs one, machine-wide: two at once exhaust the memory.
-            if (HostProcesses.IsHeavyTestAssembly(assembly: suite) && !AdmitHeavySuite(repositoryRoot: repositoryRoot, suite: suite)) {
-                Console.Out.WriteLine(value: $"affected: {suite} REFUSED — host admission did not return within {HostAdmission.HeavyTimeout.TotalHours:0} hours");
-                failed.Add(item: suite);
-                continue;
-            }
-
-            var run = CliProcess.RunCaptured(
-                arguments: [.. TestArguments(suite: suite), .. CpuSelection],
-                fileName: "dotnet",
-                input: string.Empty,
-                timeout: TimeSpan.FromMinutes(minutes: 30),
-                workingDirectory: repositoryRoot
-            );
-            var output = Lines(text: run.Stdout);
-
-            Console.Out.WriteLine(value: $"affected: {suite} {((run.ExitCode == 0) ? "passed" : "FAILED")} — {CliTestRun.Summary(output: output)}");
-
-            // A failed suite's whole report follows its verdict line: every failure with its message and stack, or
-            // the build errors that stopped it.
-            if (run.ExitCode != 0) {
-                foreach (var line in output.Concat(second: Lines(text: run.Stderr))) {
-                    Console.Out.WriteLine(value: $"  {line}");
-                }
-
-                failed.Add(item: suite);
-            }
-        }
+        // The suites build once and run their CPU tests side by side (AffectedSuites).
+        failed.AddRange(collection: AffectedSuites.Run(
+            jobs: suiteJobs,
+            repositoryRoot: repositoryRoot,
+            suites: plan.Suites
+        ));
 
         foreach (var world in plan.Worlds) {
             if (PuckRootCommand.Invoke(args: ["test", world]) != 0) {
@@ -467,12 +423,12 @@ internal static class AffectedCommand {
             failed.Add(item: "catalog");
         }
 
-        // The canaries boot real Worlds and parity holds both GPU backends, so they run only when asked for, one after
-        // the other, after every CPU check.
+        // The canaries boot real Worlds and parity holds both GPU backends, so they run only when asked for, after every
+        // CPU check: the canaries' legs side by side up to --gpu-jobs on the GPU, then parity.
         if (
             gpu &&
             (plan.Canaries.Count > 0) &&
-            (PuckRootCommand.Invoke(args: ["canary", .. plan.Canaries]) != 0)
+            (PuckRootCommand.Invoke(args: ["canary", "--gpu-jobs", gpuJobs.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), .. plan.Canaries]) != 0)
         ) {
             failed.Add(item: "canaries");
         }
@@ -555,7 +511,7 @@ internal static class AffectedCommand {
         }
     }
 
-    private static int Run(string? since, string? mergeBase, bool run, bool gpu, bool record) {
+    private static int Run(string? since, string? mergeBase, bool run, bool gpu, int gpuJobs, int suiteJobs, bool record) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refuse(verb: Verb, what: Environment.CurrentDirectory, why: "is not inside the Puck repository.");
         }
@@ -597,7 +553,7 @@ internal static class AffectedCommand {
         );
 
         return (run
-            ? Execute(gpu: gpu, plan: plan, repositoryRoot: repositoryRoot)
+            ? Execute(gpu: gpu, gpuJobs: gpuJobs, plan: plan, repositoryRoot: repositoryRoot, suiteJobs: suiteJobs)
             : CliExit.Success
         );
     }
@@ -615,18 +571,20 @@ internal static class AffectedCommand {
     /// <summary>Creates <c>--gpu</c>, which adds the chosen canaries and parity to a run; <c>puck affected</c> and
     /// <c>puck gate</c> share it.</summary>
     /// <returns>The option.</returns>
-    internal static Option<bool> Gpu() => new(name: "--gpu") { Description = "Also run the chosen canaries and then parity, one after the other, after the CPU checks: real-World and GPU work, so run it on a machine with no competing build or GPU load." };
+    internal static Option<bool> Gpu() => new(name: "--gpu") { Description = "Also run the chosen canaries, up to --gpu-jobs legs on the GPU at once, and then parity, after the CPU checks: real-World and GPU work, so run it on a machine with no competing build or GPU load." };
 
     public static Command Create() {
         var sinceOption = new Option<string>(name: "--since") { Description = "The base revision the working tree is compared against (default: HEAD, so only uncommitted changes)." };
         var mergeBaseOption = MergeBase(description: "Compare the working tree against the merge base of HEAD and this revision, so what the target gained after the branch left it is not the branch's change. Excludes --since.");
-        var runOption = new Option<bool>(name: "--run") { Description = "Build and run the chosen suites, then puck test on the chosen worlds, then the catalog check." };
+        var runOption = new Option<bool>(name: "--run") { Description = "Build the chosen suites once and run their CPU tests side by side, then puck test on the chosen worlds, then the catalog check." };
         var gpuOption = Gpu();
+        var gpuJobsOption = CanaryCommand.GpuJobs();
+        var suiteJobsOption = AffectedSuites.Jobs();
         var recordOption = new Option<bool>(name: "--record") { Description = $"Record {CoveragePath}: build a World that records the methods it compiles, run the full canary set on it, and map each canary's methods to source files. A full run; do it when the owner asks for one." };
         var command = new Command(
             description: "Name the test suites and canaries a change needs, and with --run run exactly those.",
             name: Verb
-        ) { sinceOption, mergeBaseOption, runOption, gpuOption, recordOption };
+        ) { sinceOption, mergeBaseOption, runOption, gpuOption, gpuJobsOption, suiteJobsOption, recordOption };
 
         command.Detail(detail: $"""
               Changed files are the working tree against --since (or against the merge base of HEAD
@@ -676,17 +634,23 @@ internal static class AffectedCommand {
               file matches its declared data inputs. Each baseline line names its artifact and is
               followed by the exact puck baselines <artifact> --check command the gate runs.
 
-              --run runs manifest checks, the suites, the worlds and the catalog check; --run --gpu then runs the chosen
-              canaries and parity, one after the other. Baseline checks run only through puck gate.
+              --run runs manifest checks, then builds the chosen suites in one build and runs the CPU
+              tests of up to --suite-jobs of them at once; a heavy suite starts first and waits on the
+              machine-wide heavy-suite admission before its run. Each suite prints its verdict and wall
+              time as it ends. It then runs the worlds and the catalog check. --run --gpu then runs the chosen canaries, up to
+              --gpu-jobs legs on the GPU at once, and then parity. Baseline checks run only through
+              puck gate.
 
               Exit codes: 0 planned or every chosen check passed, 1 a chosen check failed, 2 refused.
             """);
         command.SetAction(action: parseResult => Run(
             gpu: parseResult.GetValue(option: gpuOption),
+            gpuJobs: parseResult.GetValue(option: gpuJobsOption),
             mergeBase: parseResult.GetValue(option: mergeBaseOption),
             record: parseResult.GetValue(option: recordOption),
             run: parseResult.GetValue(option: runOption),
-            since: parseResult.GetValue(option: sinceOption)
+            since: parseResult.GetValue(option: sinceOption),
+            suiteJobs: parseResult.GetValue(option: suiteJobsOption)
         ));
 
         return command;

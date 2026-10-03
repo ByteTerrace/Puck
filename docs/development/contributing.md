@@ -152,9 +152,10 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 CLI outside the checkout. It builds the solution, copies the CLI it built,
 runs the affected selection against the merge base, and checks the repository's
 ledgers and generated files. Its [ordered plan](../reference/cli.md#puck-gatethe-change-scoped-gate)
-is shared with help and held by laws. `--gpu` adds the affected canaries and
-parity, device suites, every recorded counters workload and docs citations,
-serially. `--record` requires `--gpu` and refreshes canary coverage only after
+is shared with help and held by laws. The affected suites run side by side
+(`--suite-jobs`). `--gpu` adds the affected canaries, side by side up to
+`--gpu-jobs` legs on the GPU, then parity, device suites, every recorded
+counters workload and docs citations, one step after another. `--record` requires `--gpu` and refreshes canary coverage only after
 every qualification step passes. Admission uses host load's defaults before
 heavy steps; the kept log and step timeline name each result. The affected selection comes from
 [`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs),
@@ -347,7 +348,8 @@ with every count tagged by class, and fails when a deterministic count differs
 between the backends. Keep the report from before a change and compare it with
 the one after, using `puck counters compare`. `puck counters --check` also holds
 every pass's counts to the counted-cost ceilings in
-`tests/Puck.Counters/counters.ceilings.json`, and `--record` rewrites them in the
+`tests/Puck.Counters/counters.ceilings.json`, judging each device against its own
+record, and `--record` records the running device's counts into them in the
 change that explains why a count moved.
 
 Compare the same document, camera, resolution, quality settings, backend and
