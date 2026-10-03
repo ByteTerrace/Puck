@@ -2334,9 +2334,15 @@ the proof covers what they fed into world state and not the cores themselves; th
 history keeps no per-tick machine digest, which would wait on every queued machine
 worker every tick. When the world has stepped a machine, the seek's verdict says
 its cores were not compared (`WorldHistorySeekReport.MachineCoresOutsideProof`). The capture
-is suspended for the re-simulation, the restored timeline is delivered without a
-step (`WorldTick.PresentRestoredTimeline`), and `TimelineRestored` refreshes the
-local route epochs. A re-simulated step sets `ReplaysInput`, so nothing is
+is suspended for the re-simulation, and a seek delivers once: the output hub
+withholds every timeline delivery for the seek's span
+(`WorldOutputHub.WithholdsTimeline`, set and cleared beside `EnterReplay`), so
+neither the restore, nor a load-door install, nor any re-simulated tick's state
+or snapshot reaches a viewer, a session or a federation projection. The restored
+timeline is then delivered once, the definition and the target tick's snapshot
+(`WorldTick.PresentRestoredTimeline`), through both the in-place and the
+load-door restore, and `TimelineRestored` refreshes the local route epochs
+(`HistorySeekDeliveryLawTests`). A re-simulated step sets `ReplaysInput`, so nothing is
 forwarded through a portal to a world that is not rewinding. Save effects are
 suppressed during the seek. Providers from the abandoned timeline are retired;
 an explicit extension epoch admits fresh providers when the host is ready.

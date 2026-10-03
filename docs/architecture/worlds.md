@@ -767,7 +767,9 @@ tick. Only a write or a jump of the authoritative state changes an observation, 
 projection: every jump (a whole-document rebuild by `world.reset`, `world.load` or `world.reload`, an
 undo, a replay drive, and a checkpoint restore) marks the definition for
 the one delivery door (`WorldDocument.MarkDefinitionDeliveryPending`), and a restore, which completes
-outside the tick, delivers at once. So the per-tick step sends anchors alone and nothing while a value
+outside the tick, delivers at once. A history seek is one jump however it gets there: it withholds every
+delivery of its span (its restore, a load-door install, each re-simulated tick's state and snapshot)
+and then delivers the restored definition and the target tick's snapshot once. So the per-tick step sends anchors alone and nothing while a value
 only moves as its trait says; the `world.projection` work
 source counts every composition. A late view hydrates the exact current phase; while a
 clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from

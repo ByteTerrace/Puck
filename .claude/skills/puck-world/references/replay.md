@@ -662,6 +662,14 @@ The contracts a change must keep:
   restore forgets to clear. Checkpoints preserve armed music
   transitions as well as the music clock. Capture refuses a document whose score
   differs from the still-running boot music plan.
+- **Deliver once.** A seek withholds every timeline delivery of its span
+  (`WorldOutputHub.WithholdsTimeline`, set and cleared in `TrySeek` beside
+  `EnterReplay`): the restore's definition, a load-door install, and each
+  re-simulated tick's state and snapshot reach no sink. `PresentRestoredTimeline`
+  then delivers one definition and one snapshot at the target, whichever door
+  restored and however many ticks were re-simulated, zero included
+  (`HistorySeekDeliveryLawTests`). Nothing downstream may rely on seeing a
+  re-simulated tick: a projection feed re-composes from that one definition.
 - **Refuse before moving; read once.** Every refusal precedes the first change
   to the live world. A recorded reload is read once, by the preflight, and the
   re-simulation installs those verified bytes, so a file changing mid-seek can
