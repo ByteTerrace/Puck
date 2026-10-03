@@ -3349,7 +3349,8 @@ low cost. CI runs `puck canary-ceilings --check` in the `ledgers` job of `verify
 ## `puck formats`—strict format tokens
 
 `FormatVersions.json` at the repository root lists every strictly versioned wire, persisted, or cache format the
-tracked `src/` tree declares, each with its current token and declaring file. It is generated from the source, so
+`src/` tree declares, each with its current token and declaring file. Discovery includes tracked and unignored new
+source files, so staging a new dependency does not change a recorded shape. It is generated from the source, so
 the constants remain the one source of truth and the ledger is their checked-in mirror.
 
 ```text
@@ -3386,9 +3387,9 @@ writer and image layout. A version-shaped string inside an object initializer is
 The digest is what lets two lanes collide. Git merges two identical edits of one line without a conflict,
 and two lanes that bump a codec to the same next token write the same token line; they changed the codec
 differently, so their digest lines differ and conflict. A lane that edits a codec without bumping its token fails
-`--check` with a `reshaped` finding until the author reruns `puck formats`, which is the moment to decide whether
-the encoding changed and the token should too. This also covers document schemas: a field change under an
-unchanged schema token requires recording its new shape.
+`--check` with a `reshaped` finding until the author reruns `puck formats`. Tokens stay fixed until release;
+deliberate encoding changes record their new shape in the same change. This also covers document schemas:
+a field change under an unchanged schema token requires recording its new shape.
 
 The digest uses the existing formatter's syntactic and null-pattern normalizers before hashing syntax structure
 without trivia. Parentheses do not contribute an extra node, but operator grouping remains in the tree. Resolved

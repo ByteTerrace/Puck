@@ -73,9 +73,12 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-group value holding the lights the lights table holds this frame, at most its records
     /// (<c>uint</c>).</summary>
     public const string LightCount = "lightCount";
-    /// <summary>The pass-group value holding the index of the light that drives the soft-shadow march, or −1 when none
-    /// does (<c>int</c>).</summary>
-    public const string ShadowLight = "shadowLight";
+    /// <summary>The stable shadow slots' light indices; an empty slot holds −1 (<c>int4</c>).</summary>
+    public const string ShadowSlots = "shadowSlots";
+    /// <summary>The configured stable shadow slot count (<c>uint</c>).</summary>
+    public const string ShadowSlotCount = "shadowSlotCount";
+    /// <summary>The active incoming shadow march count (<c>uint</c>).</summary>
+    public const string ShadowFadeCount = "shadowFadeCount";
     /// <summary>The pass-group value holding the curvature shading's cavity-darkening gain (<c>float</c>).</summary>
     public const string CurvatureCavity = "curvatureCavity";
     /// <summary>The pass-group value holding the curvature shading's rim gain (<c>float</c>).</summary>
@@ -286,7 +289,7 @@ public static partial class SdfWorldPackage {
 
     /// <summary>Gets the values every pass of the fragment reads from its pass block beside the extent, which the mesh
     /// pass's interface shares so its block lies alike: the world values, the view, the frame's levers, its light count
-    /// and shadow light, and its curvature shading. The lights and the sky are World-group tables the SDF engine's
+    /// and shadow slot table, and its curvature shading. The lights and the sky are World-group tables the SDF engine's
     /// kernel interface adds (<c>SdfKernelInterfaces</c>), bound only by the passes that read them.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> Values { get; } = [
         Value(name: ImageExtent, type: ShaderValueType.Uint2),
@@ -311,7 +314,9 @@ public static partial class SdfWorldPackage {
         Value(name: FarDistance, type: ShaderValueType.Float),
         Value(name: DebugMode, type: ShaderValueType.Uint),
         Value(name: LightCount, type: ShaderValueType.Uint),
-        Value(name: ShadowLight, type: ShaderValueType.Int),
+        Value(name: ShadowSlots, type: ShaderValueType.Int4),
+        Value(name: ShadowSlotCount, type: ShaderValueType.Uint),
+        Value(name: ShadowFadeCount, type: ShaderValueType.Uint),
         Value(name: CurvatureCavity, type: ShaderValueType.Float),
         Value(name: CurvatureRim, type: ShaderValueType.Float),
         Value(name: CurvatureInk, type: ShaderValueType.Float),
@@ -579,7 +584,7 @@ public static partial class SdfWorldPackage {
         public const string Surface = "surface";
         /// <summary>Ambient resolution, continuing the visibility records.</summary>
         public const string Ambient = "ambient";
-        /// <summary>The key light's soft shadow, continuing the visibility records.</summary>
+        /// <summary>Each stable and active incoming slot's soft shadow, continuing the visibility records.</summary>
         public const string Shadow = "shadow";
         /// <summary>Shading the hits into the lit image.</summary>
         public const string Views = "views";

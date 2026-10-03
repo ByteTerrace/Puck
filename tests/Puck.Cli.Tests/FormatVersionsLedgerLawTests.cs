@@ -155,7 +155,7 @@ public sealed class FormatVersionsLedgerLawTests {
         );
     }
     [Fact]
-    public void ACodecChangedWithoutABumpIsDriftAskingWhetherTheTokenShouldMove() {
+    public void ACodecChangedWithoutABumpIsDriftRequestingTheNewShapeAndKeepingTokensUntilRelease() {
         var problems = Check(
             current: Sources(body: "return 2;"),
             recordedFrom: Sources()
@@ -171,7 +171,7 @@ public sealed class FormatVersionsLedgerLawTests {
             collection: problems,
             filter: static problem => problem.Contains(
                 comparisonType: StringComparison.Ordinal,
-                value: "if the encoding changed, bump the token"
+                value: "record the new digest with `puck formats`; tokens stay fixed until release"
             )
         );
     }

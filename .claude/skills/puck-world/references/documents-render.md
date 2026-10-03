@@ -7,7 +7,8 @@ file is the decision/derivation prose the schema cannot state.
 ### `render` — the render defaults
 
 `WorldRenderDefaults` (`WorldRenderDefaults.cs`), optional; `Absent` is the
-inert section. The boot levers (`shadows`, `shadowCrowdRadius`,
+inert section. The boot levers (`shadows`, `shadowCrowdRadius`, `shadowLights`,
+`shadowFadeSlots`, `shadowFadeTicks`, `shadowOverflow`,
 `ambientOcclusion`, `renderScale`, `upscaleSharpness`, the `low`/`medium`/
 `high` presets) seed `WorldRenderSettings` once at boot and move only through
 their verbs afterwards; `world.save` folds a moved lever back into the section
@@ -55,7 +56,7 @@ record.
 `curvature`. Every value may be keyed on a `timeline` clock, and the section may
 be keyed whole (`clock`, `keys`): each key a partial record addressing a light
 by its `name`, of its own kind, stating values only (a light's `name` and
-`shadows` are structure and refused). The sky keys the same way, addressing a
+`shadow` are structure and refused). The sky keys the same way, addressing a
 layer by `name`. `WorldRenderKeys.Expand` turns section keys into value keys
 and `WorldKeyResolver` resolves them, for the validator with no live source and
 for the client through its state mirror. Ordered values (gradient stop
@@ -105,7 +106,7 @@ Each light's `$type` union:
 
 | `$type` | Carries |
 |---|---|
-| `directional` | `direction`, `color`, `weight`, `angularRadius`, `shadows` — at most one shadowing light per world |
+| `directional` | `direction`, `color`, `weight`, `angularRadius`, `shadow` (`always`, `auto`, or `never`); `always` and `auto` require a unique `name` |
 | `hemisphere` | `color`, `base`, `gradient` |
 | `rim` | `color`, `weight`, `power` — a view-dependent silhouette brighten added after the material shade |
 | `point` | `position`, `radius`, `color`, `weight`, optional `anchor` — inverse-square falloff with a soft core (`intensity = weight / (1 + (distance / radius)^2)`); lambert diffuse plus the material's GGX specular from the light's own direction, both scaled by ambient occlusion like every non-shadow light; no shadow march |
@@ -123,7 +124,66 @@ surface illumination. It declares `position`, positive `radius`,
 `weight`, and an optional entity, entity-part, or placement `anchor`.
 Anchors resolve each frame; unavailable anchors give weight zero.
 Point and Occluder positions are `BindableVector3`: keyed, they blend linearly, never along an arc.
-`world.lighting` reads back the authored light definitions.
+`world.lighting` reads back the authored light definitions and the allocator's
+slots at this tick, naming each light and its selection reason (`always`, or
+`auto` with its rank). A shadow candidate is identified by its `name`, never
+its light-table index. `always` candidates rank first, then `auto` candidates
+by tick-state luminance. At equal priority, current holders precede non-holders;
+authored order breaks ties among non-holders and on a fresh selection. Selected
+names retain their slots when ranking or authored order changes. Reusing a
+table index for a different name produces an ordinary crossing.
+
+`WorldShadowSelection` reduces each complete delivered state into those bounded
+slots; it reads the mirror's current samples and delivered clock, not the
+frame's interpolation. On the boot client the ordinary tick notification follows
+the snapshot's field cells. `DeliverDefinition` supplies the new definition and
+revision with its notification, so a pure reorder is detected before the reset
+decision; its next snapshot installs the completed field samples with
+`completingDelivery: true`, resampling the same tick without another identity
+reset. A followed session observes structural reseeds and every completed
+delivery through a `WorldSessionMirror.ObserveDeliveredState` lease, even when no frame
+reads it, and the lease's `Work` source counts the shared observer samples.
+The callback mirror is borrowed only for that callback; the selection retains
+only bounded candidates and assignments. Disposing the lease ends callbacks
+synchronously, and the last observer retires its optional sample store.
+
+The boot render settings and each `WorldQualityPreset` carry `shadowLights`
+(K, 0..4), `shadowFadeSlots` (F, 0..2), `shadowFadeTicks` (nonnegative engine
+ticks), and `shadowOverflow` (`queue` or `instant`). The boot default is 1/0/0
+with `instant`, and the named pinned sun is an `always` candidate. A preset
+applies all four fields as one settings change. Validation checks the boot
+policy and every reachable preset,
+including `auto`: K > 0 with F = 0 and positive fade ticks, positive F with
+zero fade ticks, and a queue that cannot progress are refused by name. The
+shipped presets currently use K = 0/1/2 and F = 0 with zero fade ticks and
+`instant`; the final sky defaults remain the P18-14 decision.
+
+`WorldShadowAllocator` detects crossings on delivered ticks and derives fade
+progress only from the presented tick. Fixed current and prior handoff records
+hold integer crossing ticks and durations, 32 bytes each per fade slot for
+F <= 2. Active readouts give outgoing and incoming light indices, stable slot
+and progress; steady reads neither advance a handoff nor allocate. The full
+report includes active handoffs and queue targets. `queue` waits for a target
+slot's active handoff (`SlotInHandoff`), a desired identity participating in
+another handoff (`IdentityInUse`), or busy fade capacity (`FadeCapacity`).
+Only delivered boundaries recompute current targets; a still-needed crossing
+starts at the first delivered tick its blocker clears. Matching queued targets
+take free fade capacity before fresh crossings, oldest first, with slot index
+breaking equal-age ties. `instant` swaps
+atomically for overlap or exhausted capacity, releasing all old participants.
+F = 0 or zero fade duration also chooses instant behavior. Seek, reload,
+structural revision, backward delivery and policy changes install without fades,
+preserving the held slots of names still selected and filling freed slots in
+rank order.
+
+`MarchSlots` is stable count plus active handoff count, bounded by K + F.
+`SdfLights.ShadowSlots` carries that full selection to the counted GPU march.
+The K word holds four 8-bit stable visibilities. Active incoming marches use
+policy-sized transient storage, R8 at F = 1 and R8G8 at F = 2, absent at F = 0.
+Each light's own occlusion deficit fades out or in with progress, leaving its
+radiance unchanged; a light outside the slots shades unshadowed. The per-slot
+march counters and counted 16-byte handoff uploads follow the
+[P18-7 binding contract](../../../../docs/plans/rendering.md#p18--sky-and-atmosphere).
 
 `CreationDocument.PaletteSize = 16` bounds `puck.creation.v1`'s `palette`
 array. Each `PaletteEntryDocument` entry: `color` (`#RRGGBB` or a

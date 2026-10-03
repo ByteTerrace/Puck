@@ -235,11 +235,44 @@ separate constraint on dense populations; reusable appearances do not remove it.
   up again when `WorldStateMirror.Generation` moves. `WorldClient.DeliverState` refreshes the slots the delivery's
   `WorldStateStamp` moved, `DeliverSnapshot` hands the snapshot's field cells to
   the mirror's state view and refreshes the field rows they moved and the
-  trait-bearing slots still moving, `DeliverDefinition` re-resolves every slot, and
-  `WorldFramePresenter.CaptureFrame` applies the frame's interpolation fraction
+  trait-bearing slots still moving, then publishes the complete delivery through
+  `WorldStateMirror.Delivered`. The earlier state refresh publishes no partial
+  delivery. `DeliverDefinition` re-resolves every slot and publishes its new
+  definition and revision with the delivery, so selection detects a pure light
+  reorder before its reset decision. Its next snapshot installs again after
+  supplying field cells, with `completingDelivery: true`, so selection resamples even at the same
+  tick without another identity reset. `WorldFramePresenter.CaptureFrame`
+  applies the frame's interpolation fraction
   (pinned to one offscreen) before anything reads it. `StateMirrorFor` answers
   the mirror of the authority a seat is routed to: this one for the authority
   the client observes, and that authority's followed session mirror otherwise.
+- `WorldShadowSelection.cs` consumes complete delivered samples through that
+  mirror, resolving each named directional's color and weight at the delivered
+  tick. It reduces them to `WorldShadowAllocator`'s bounded slots before a
+  later frame can skip an intermediate delivery. It retains no borrowed
+  mirror; a lock protects the candidate and slot arrays when a session's
+  delivery thread and the frame reader differ. `WorldEnvironmentResolve`
+  reads the selected interval, reports held slots, active handoffs and queued
+  crossings, and forwards the full selection through `SdfLights.ShadowSlots`
+  to the counted GPU march. Active handoffs upload each light's indices, slot
+  and presented weight; shading scales each light's own shadow deficit.
+  `WorldShadowAllocator` holds fixed current and prior handoff records, with
+  integer crossing ticks and durations. Each read derives progress from the
+  presented tick, without advancing a fade or allocating. Queued crossings
+  wait for their slot, identity or fade capacity; the first delivered tick
+  that clears the blocker starts the still-needed crossing. Waiting targets
+  take free fade capacity before fresh crossings, oldest first and then by slot
+  index. Reset installs have no fade and preserve surviving selected names in
+  their held slots. Instant overflow
+  releases overlapping participants and installs the new owner atomically.
+  `CopyPresented` samples the selection's actual delivered interval at the frame's fraction,
+  so a lazy frame mirror
+  that coalesces several ticks cannot mislabel the slot report's tick. The
+  report copies its slots, policy and tick under one lock. A followed session uses
+  `WorldSessionMirror.ObserveDeliveredState` to reduce structural reseeds and
+  every completed delivery independently of `FollowState`'s frame sampling; disposing the
+  observation ends those callbacks synchronously. The fade readout and GPU
+  slot policy are described in the [World guide](../Puck.World/README.md#graphics-options).
 - `WorldStateLease.cs` is one holder's acquired slots: a stamp registration's
   lanes, drivers, gates, poses and effectors, a body's scale, a seat's
   state-backed binding contexts. A body's holder calls `Arrive` with what the

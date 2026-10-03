@@ -158,6 +158,54 @@
         },
         {
           "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
           "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -281,7 +329,7 @@
           "pass": "environment",
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 96
+          "ceiling": 288
         },
         {
           "node": "sdf:world",
@@ -289,6 +337,54 @@
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
           "ceiling": 4096
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -422,6 +518,54 @@
           "node": "sdf:world",
           "pass": null,
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -558,6 +702,54 @@
           "node": "world",
           "pass": "sdf.world$mask",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -699,6 +891,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$cull-args",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -829,6 +1069,54 @@
           "node": "world",
           "pass": "sdf.world$cull-args",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -969,6 +1257,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$surface",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -1103,6 +1439,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$views",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -1232,6 +1616,54 @@
           "node": "world",
           "pass": "sdf.world$views",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -1367,6 +1799,54 @@
           "node": "world",
           "pass": "sdf.world$resolve",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -1507,6 +1987,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -1642,6 +2170,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": null,
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -1766,7 +2342,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 288
+          "ceiling": 864
         },
         {
           "node": "world",
@@ -1777,6 +2353,54 @@
           "requiredZero": true
         },
         {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
           "node": "main",
           "pass": "main$view$1",
           "kind": "gpu.dispatches",
@@ -1908,6 +2532,54 @@
           "node": "main",
           "pass": "main$view$1",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -2050,6 +2722,54 @@
         },
         {
           "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
           "pass": "main$view$3",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -2186,6 +2906,54 @@
         },
         {
           "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -2316,6 +3084,54 @@
           "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -2446,7 +3262,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 96
+          "ceiling": 288
         },
         {
           "node": "main",
@@ -2457,6 +3273,54 @@
           "requiredZero": true
         },
         {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
           "node": "sdf:world",
           "pass": "fillers",
           "kind": "gpu.dispatches",
@@ -2594,6 +3458,54 @@
         },
         {
           "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
           "pass": "bricks",
           "kind": "gpu.dispatches",
           "class": "per-backend-deterministic",
@@ -2729,6 +3641,54 @@
           "requiredZero": true
         },
         {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
           "node": "world",
           "pass": "sdf.world$mesh",
           "kind": "gpu.dispatches",
@@ -2866,6 +3826,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$ambient",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -3002,6 +4010,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$shadow",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -3132,6 +4188,54 @@
           "node": "world",
           "pass": "sdf.world$shadow",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -3294,6 +4398,54 @@
         },
         {
           "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
           "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -3417,7 +4569,7 @@
           "pass": "environment",
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 96
+          "ceiling": 288
         },
         {
           "node": "sdf:world",
@@ -3425,6 +4577,54 @@
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
           "ceiling": 4096
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -3558,6 +4758,54 @@
           "node": "sdf:world",
           "pass": null,
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -3694,6 +4942,54 @@
           "node": "world",
           "pass": "sdf.world$mask",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -3835,6 +5131,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$cull-args",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -3965,6 +5309,54 @@
           "node": "world",
           "pass": "sdf.world$cull-args",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -4105,6 +5497,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$surface",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -4239,6 +5679,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$surface",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$views",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -4368,6 +5856,54 @@
           "node": "world",
           "pass": "sdf.world$views",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -4503,6 +6039,54 @@
           "node": "world",
           "pass": "sdf.world$resolve",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -4643,6 +6227,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -4778,6 +6410,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": null,
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -4902,7 +6582,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 288
+          "ceiling": 864
         },
         {
           "node": "world",
@@ -4913,6 +6593,54 @@
           "requiredZero": true
         },
         {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
           "node": "main",
           "pass": "main$view$1",
           "kind": "gpu.dispatches",
@@ -5044,6 +6772,54 @@
           "node": "main",
           "pass": "main$view$1",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -5186,6 +6962,54 @@
         },
         {
           "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
           "pass": "main$view$3",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -5322,6 +7146,54 @@
         },
         {
           "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -5452,6 +7324,54 @@
           "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true
@@ -5582,7 +7502,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 96
+          "ceiling": 288
         },
         {
           "node": "main",
@@ -5593,6 +7513,54 @@
           "requiredZero": true
         },
         {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
           "node": "sdf:world",
           "pass": "fillers",
           "kind": "gpu.dispatches",
@@ -5730,6 +7698,54 @@
         },
         {
           "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
           "pass": "bricks",
           "kind": "gpu.dispatches",
           "class": "per-backend-deterministic",
@@ -5865,6 +7881,54 @@
           "requiredZero": true
         },
         {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
           "node": "world",
           "pass": "sdf.world$mesh",
           "kind": "gpu.dispatches",
@@ -6002,6 +8066,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$ambient",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -6138,6 +8250,54 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$shadow",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -6268,6 +8428,54 @@
           "node": "world",
           "pass": "sdf.world$shadow",
           "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shadow.slot5.steps",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true

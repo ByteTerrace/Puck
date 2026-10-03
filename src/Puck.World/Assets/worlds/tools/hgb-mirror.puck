@@ -755,10 +755,11 @@ views {
 
 render {
   farDistance: 120
+  shadowLights: 1
   tonemap: Filmic
   lighting {
     lights [
-      directional(direction: [3, 5, 4], color: "#FFF0D8", weight: 0.72, shadows: true, angularRadius: 0.2)
+      directional(name: "key", direction: [3, 5, 4], color: "#FFF0D8", weight: 0.72, shadow: always, angularRadius: 0.2)
       directional(direction: [-0.7, 0.35, -0.6], color: "#C3D2F0", weight: 0.16)
       hemisphere(color: "#C8D6E2", base: 0.16, gradient: 0.1)
     ]

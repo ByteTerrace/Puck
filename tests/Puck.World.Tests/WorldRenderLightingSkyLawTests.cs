@@ -14,7 +14,7 @@ namespace Puck.World.Tests;
 /// authored field threads through untouched, a state-bound colour reads its cell live, and the validator refuses the
 /// shapes the lights table and the sky's tables cannot carry.</summary>
 public sealed class WorldRenderLightingSkyLawTests {
-    private static WorldRenderDefaults BaseDefaults() => WorldRenderDefaults.Absent;
+    private static WorldRenderDefaults BaseDefaults() => WorldRenderDefaults.Absent with { ShadowLights = 1 };
     private static WorldStateRow ColorsRow(string hex) => new(
         Name: CellName.Parse(candidate: "colors"),
         Kind: CellKind.Text,
@@ -49,7 +49,7 @@ public sealed class WorldRenderLightingSkyLawTests {
     private static WorldRenderLighting SunAndSky(BindableColor? sunColor = null) => new(Lights: [
         new WorldRenderLight.Directional(
             Color: sunColor,
-            Shadows: true
+            Shadow: WorldShadowMode.Always, Name: "sun"
         ),
         new WorldRenderLight.Hemisphere(),
     ]);
@@ -117,7 +117,7 @@ public sealed class WorldRenderLightingSkyLawTests {
         );
         Assert.Equal(
             expected: 0,
-            actual: resolved.Lights.ShadowLight
+            actual: resolved.Lights.ShadowSlots[0]
         );
         Assert.Equal(
             expected: SdfLights.DefaultSunDirection,
@@ -145,7 +145,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 RenderRaw = BaseDefaults() with {
                     Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(
                     AngularRadius: 0.5f,
-                    Shadows: true
+                    Shadow: WorldShadowMode.Always, Name: "sun"
                 )]),
                 },
             })),
@@ -153,7 +153,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 RenderRaw = BaseDefaults() with {
                     Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(
                     AngularRadius: 0.1f,
-                    Shadows: true
+                    Shadow: WorldShadowMode.Always, Name: "sun"
                 )]),
                 },
             }))
@@ -281,7 +281,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 Weight: 0.42f,
                 Color: new BindableColor(Raw: "#FFD9A6"),
                 AngularRadius: 0.2f,
-                Shadows: true
+                Shadow: WorldShadowMode.Always, Name: "sun"
             ),
                 new WorldRenderLight.Directional(
                 Direction: new Vector3(
@@ -305,7 +305,7 @@ public sealed class WorldRenderLightingSkyLawTests {
         );
         Assert.Equal(
             expected: 0,
-            actual: resolved.Lights.ShadowLight
+            actual: resolved.Lights.ShadowSlots[0]
         );
 
         var key = resolved.Lights[0];
@@ -618,7 +618,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                     z: 0f
                 ),
                 Weight: 0.1f,
-                Shadows: true
+                Shadow: WorldShadowMode.Always, Name: "sun"
             ),
                 new WorldRenderLight.Directional(
                 Direction: new Vector3(
@@ -1143,39 +1143,6 @@ public sealed class WorldRenderLightingSkyLawTests {
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
                 RenderRaw = BaseDefaults() with { Lighting = SunAndSky(sunColor: new BindableColor(Raw: "state.colors.sun")) },
                 StateRaw = new WorldStateSection(World: [ColorsRow(hex: "#FFD9A6")]),
-            }))
-        );
-    }
-    [Fact]
-    public void TwoShadowingLights_RefuseByName_ControlOneClean() {
-        Laws.RefusalWithControl(
-            lawId: "render.lighting.one-shadow-light",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with {
-                    Lighting = new WorldRenderLighting(Lights: [
-                        new WorldRenderLight.Directional(Shadows: true),
-                        new WorldRenderLight.Directional(
-                    Direction: new Vector3(
-                        x: -1f,
-                        y: 1f,
-                        z: 0f
-                    ),
-                    Shadows: true
-                ),
-                    ]),
-                },
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with {
-                    Lighting = new WorldRenderLighting(Lights: [
-                        new WorldRenderLight.Directional(Shadows: true),
-                        new WorldRenderLight.Directional(Direction: new Vector3(
-                    x: -1f,
-                    y: 1f,
-                    z: 0f
-                )),
-                    ]),
-                },
             }))
         );
     }

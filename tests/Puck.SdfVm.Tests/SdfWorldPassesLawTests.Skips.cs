@@ -8,7 +8,7 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 // The shading levers decide which stages a view's frame runs: the ambient part runs exactly when ambient occlusion is on,
-// and the shadow part exactly when soft shadows are on and the environment has a shadow light. A part the lever turns off
+// and the shadow part exactly when soft shadows are on and the environment has shadow slots. A part the lever turns off
 // records nothing, so its pass line binds no pipeline.
 public sealed partial class SdfWorldPassesLawTests {
     // Whether each of the ambient and shadow parts bound its pipeline in a view's latest completed frame.
@@ -77,6 +77,13 @@ public sealed partial class SdfWorldPassesLawTests {
         return (Ran(part: SdfWorldPackage.Parts.Ambient), Ran(part: SdfWorldPackage.Parts.Shadow));
     }
 
+    [Fact]
+    public void ZeroStableSlotsSkipShadowsEvenWithShadowCastingLights() {
+        var frame = Frame();
+
+        frame.Lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 0);
+        Assert.Equal(expected: (true, false), actual: StagesOf(frame: frame));
+    }
     [Fact]
     public void TheAmbientAndShadowPartsRunExactlyWhenTheirLeversTurnThemOn() {
         var frame = Frame();

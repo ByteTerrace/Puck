@@ -11,14 +11,16 @@ namespace Puck.SdfVm.Tests;
 /// environment map the composite alone), as its SPIR-V reflects.
 /// </summary>
 public sealed class SdfPassBindingLawTests {
-    // The pass block's bytes: the extent and the world values, the view, the levers, the light count and shadow light, and
+    // The pass block's bytes: the extent and the world values, the view, the levers, the light count and shadow slots, and
     // the curvature shading, 16-aligned.
-    private const uint PassBlockBytes = 496;
+    private const uint PassBlockBytes = 512;
 
-    private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds];
+    private static readonly SdfKernel[] ViewsKernels = [SdfKernel.Views, SdfKernel.ViewsCore, SdfKernel.ViewsFolds,
+        SdfKernel.ViewsFade1, SdfKernel.ViewsCoreFade1, SdfKernel.ViewsFoldsFade1,
+        SdfKernel.ViewsFade2, SdfKernel.ViewsCoreFade2, SdfKernel.ViewsFoldsFade2];
     // The kernels each light and sky table is bound by, and no other.
     private static readonly (string Table, SdfKernel[] Readers)[] Readers = [
-        (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, .. ViewsKernels]),
+        (SdfKernelInterfaces.Lights, [SdfKernel.Shadow, SdfKernel.ShadowFade1, SdfKernel.ShadowFade2, .. ViewsKernels]),
         (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyStops, [SdfKernel.Sky, SdfKernel.Composite]),
         (SdfKernelInterfaces.Softboxes, ViewsKernels),

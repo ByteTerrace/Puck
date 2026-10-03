@@ -89,6 +89,11 @@ session-lever deliveries), `WorldScreenOp.cs` (the screen-machine lifecycle
 vocabulary insert/eject/select/options/link/unlink, each CAS-pinned where it
 names on-disk content), and `WorldSubmissionResult.cs`.
 
+A session lever carries four presentation-only value lanes, A through D. The
+shadow policy uses one `shadow-slots` delivery for its stable slots, fade
+slots, duration and overflow policy, so a preset never publishes a partial
+shadow configuration. The strict World wire key is `PUCKWRL4`.
+
 `WorldSubmissionCodec.cs` is the single encoder/decoder owner for each of the
 thirteen payload leaves (`TryEncodeCommittedMutation`/`TryDecodeCommittedMutation`
 are a separate entry-point pair for persisted journal entries, not another
@@ -163,6 +168,32 @@ a mirror over the neighbour image pinned for the tick, the same image its
 geometry comes from, so it never shows a color ahead of its geometry; the
 capture scheduler reads a camera `select` key through its own mirror at the armed
 tick.
+
+`WorldStateMirror.Delivered` publishes delivered samples for consumers that
+must observe every tick. A boot client's state refresh defers that notification
+until the same tick's snapshot has supplied its field cells. A structural
+`DeliverDefinition` immediately installs and publishes a reseed; the next
+snapshot installs again after its field cells with `completingDelivery: true`.
+`LastInstallCompletedDelivery` lets consumers resample a completed same-tick
+delivery without treating it as another structural discontinuity. `Scalar` and
+`Color` accept `delivered: true` to resolve bindings and keys from current
+samples and the delivered clock, independently of the frame's interpolation.
+These are presentation reads; they write no simulation state.
+
+`WorldSessionMirror.ObserveDeliveredState` leases the equivalent per-delivery
+observation for a followed authority. It immediately seeds available state and
+calls its observer on structural reseeds and after each completed snapshot,
+field cells included, even when no frame samples that session. Its structural
+install and completing snapshot use the same reseed and completion distinction
+as the boot client. The callback borrows its definition,
+structural revision and state mirror only for that call. Consumers reduce what
+they need into bounded state, such as Client's `WorldShadowSelection`; they
+retain no callback mirror or queue of deliveries. All observers on one session
+share one optional sample store and its `DeliveredStateObservation.Work`
+counter source. That store shares the existing field storage and resolver but
+keeps its samples separate from the lazy frame mirror, so presentation never
+reads samples being updated by a delivery. Disposing a lease synchronously
+ends its callbacks; the last lease releases the optional sample store.
 
 `WorldAdmissionDoor` (the admission section's identity door, verified against
 a document's own trust list) lives in `Puck.World.Schema`—a

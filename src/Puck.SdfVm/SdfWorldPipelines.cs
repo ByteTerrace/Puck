@@ -28,10 +28,11 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     private bool m_disposed;
     private SdfKernelSet m_kernels;
 
-    private SdfWorldPipelines(SdfKernelSet kernels, bool includesBrickPipelines, Slot?[] slots) {
+    private SdfWorldPipelines(SdfKernelSet kernels, bool includesBrickPipelines, Slot?[] slots, SdfShadowFadeVariants shadowFadeVariants) {
         m_kernels = kernels;
         m_slots = slots;
         IncludesBrickPipelines = includesBrickPipelines;
+        m_shadowFadeVariants = shadowFadeVariants;
     }
 
     /// <summary>Gets whether the set was acquired for an engine with a brick pool. A kernel set with no brick kernels
@@ -42,17 +43,18 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     /// <summary>Gets the kernel set the installed pipelines were created from; a committed reload replaces it.</summary>
     public SdfKernelSet Kernels => m_kernels;
 
-    /// <summary>Takes a lease on every engine pipeline for a kernel set, each an entry of the pass-pipeline cache, joining
+    /// <summary>Takes a lease on the base and reachable fade pipelines, each an entry of the pass-pipeline cache, joining
     /// the entries other holders lease and starting the rest building on the thread pool. Safe on any thread.</summary>
     /// <param name="cache">The composition's pass-pipeline cache.</param>
     /// <param name="device">The device the pipelines are created on.</param>
     /// <param name="kernels">The compiled kernel set for the device's backend.</param>
     /// <param name="includeBrickPipelines">Whether to lease the brick bake pipeline, for an engine with a brick
     /// pool.</param>
+    /// <param name="shadowFadeVariants">The additional fade capacities the source's policies can reach.</param>
     /// <returns>The set, owned by the caller, which disposes it to release its leases.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="cache"/>, <paramref name="device"/> or
     /// <paramref name="kernels"/> is <see langword="null"/>.</exception>
-    public static SdfWorldPipelines Acquire(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels, bool includeBrickPipelines) {
+    public static SdfWorldPipelines Acquire(GpuPassPipelineCache cache, IGpuDeviceContext device, SdfKernelSet kernels, bool includeBrickPipelines, SdfShadowFadeVariants shadowFadeVariants = SdfShadowFadeVariants.None) {
         ArgumentNullException.ThrowIfNull(argument: cache);
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: kernels);
@@ -61,7 +63,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         var slots = new Slot?[specs.Length];
 
         try {
-            foreach (var kernel in BuildOrder(kernels: kernels)) {
+            foreach (var kernel in BuildOrder(kernels: kernels, shadowFadeVariants: shadowFadeVariants)) {
                 var spec = specs[((int)kernel)];
                 var bytecode = kernels[kernel];
 
@@ -89,6 +91,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         return new SdfWorldPipelines(
             includesBrickPipelines: includeBrickPipelines,
             kernels: kernels,
+            shadowFadeVariants: shadowFadeVariants,
             slots: slots
         );
     }
@@ -96,13 +99,15 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     /// in <see cref="SdfKernel"/> order. A cold driver's translation grows with the kernel, and a set is ready only once its
     /// slowest pipeline is, so the longest starts while the device's threads are free rather than behind the rest.</summary>
     /// <param name="kernels">The compiled kernel set for a device's backend.</param>
-    /// <returns>Every kernel a set leases up front (all but the resolve kernel, which builds on demand), in build
+    /// <param name="shadowFadeVariants">The additional fade capacities the source's policies can reach.</param>
+    /// <returns>Every base and requested fade kernel a set leases up front (resolve builds on demand), in build
     /// order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="kernels"/> is <see langword="null"/>.</exception>
-    public static IReadOnlyList<SdfKernel> BuildOrder(SdfKernelSet kernels) {
+    public static IReadOnlyList<SdfKernel> BuildOrder(SdfKernelSet kernels, SdfShadowFadeVariants shadowFadeVariants = SdfShadowFadeVariants.None) {
         ArgumentNullException.ThrowIfNull(argument: kernels);
 
-        return [.. SdfWorldTables.PipelineLayouts.Leased.OrderByDescending(keySelector: kernel => kernels[kernel].Length)];
+        return [.. SdfWorldTables.PipelineLayouts.Leased.Where(predicate: kernel => ((FadeVariantOf(kernel: kernel) & ~shadowFadeVariants) == 0))
+            .OrderByDescending(keySelector: kernel => kernels[kernel].Length)];
     }
     /// <summary>Describes how far the set's builds have come as a clause: <c>building (9 of 11 pipelines
     /// created; waiting on sdf-world-surface, sdf-world-views)</c>, naming the pipelines not yet built in
@@ -283,7 +288,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 var slot = m_slots[index];
                 var kernel = ((SdfKernel)index);
 
-                if ((slot is null) && (kernel != SdfKernel.Resolve)) {
+                if ((slot is null) && (kernel != SdfKernel.Resolve) && (FadeVariantOf(kernel: kernel) == SdfShadowFadeVariants.None)) {
                     continue;
                 }
                 var bytecode = kernels[kernel];
@@ -301,7 +306,10 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                     (refusals ??= []).Add(item: $"'{SdfKernelSet.StemOf(kernel: kernel)}': {mismatch}");
                 }
 
-                changed.Add(item: (index, slot, bytecode));
+                // Inactive fade bytecode is validated for a later demand, but creates no pipeline during a reload.
+                if ((slot is not null) || (kernel == SdfKernel.Resolve)) {
+                    changed.Add(item: (index, slot, bytecode));
+                }
             }
 
             if (refusals is not null) {
@@ -330,6 +338,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 baseline: baseline,
                 kernels: kernels,
                 replacements: [.. replacements],
+                shadowFadeVariants: m_shadowFadeVariants,
                 target: this
             );
         }
@@ -366,9 +375,20 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         if (!ReferenceEquals(objA: reload.Baseline, objB: m_kernels)) {
             throw new InvalidOperationException(message: "The reload was prepared against kernels that are no longer installed.");
         }
+        // A first demand may have acquired old bytecode after preparation. Refuse the stale reload before any swap;
+        // retrying prepares replacements for those newly active slots too, without ever leasing inactive variants.
+        var added = m_shadowFadeVariants & ~reload.ShadowFadeVariants;
+
+        foreach (var kernel in SdfKernelSet.Kernels) {
+            if (((FadeVariantOf(kernel: kernel) & added) != 0) && !m_kernels[kernel].Span.SequenceEqual(other: reload.Kernels[kernel].Span)) {
+                throw new InvalidOperationException(message: "The reload was prepared before a changed shadow fade variant was requested; request the reload again.");
+            }
+        }
     }
-    // The views variants, one of which a program dispatches its views with (SdfWorldTables.ViewsPipeline).
-    internal static bool IsViews(SdfKernel kernel) => (kernel is (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds));
+    // The views variants, one of which a program dispatches its views with (SdfWorldTables.ViewsPipelineFor).
+    internal static bool IsViews(SdfKernel kernel) => (kernel is (SdfKernel.Views or SdfKernel.ViewsCore or SdfKernel.ViewsFolds
+        or SdfKernel.ViewsFade1 or SdfKernel.ViewsCoreFade1 or SdfKernel.ViewsFoldsFade1
+        or SdfKernel.ViewsFade2 or SdfKernel.ViewsCoreFade2 or SdfKernel.ViewsFoldsFade2));
     // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone. The
     // slots are a set's, in kernel order. Without viewsRequired, a views variant still building or refused leaves the set
     // ready.
@@ -492,10 +512,11 @@ public sealed class SdfWorldPipelineReload : IDisposable {
 
     private State m_state;
 
-    internal SdfWorldPipelineReload(SdfWorldPipelines target, SdfKernelSet baseline, SdfKernelSet kernels, (int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)[] replacements) {
+    internal SdfWorldPipelineReload(SdfWorldPipelines target, SdfKernelSet baseline, SdfKernelSet kernels, SdfShadowFadeVariants shadowFadeVariants, (int Index, GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> Lease)[] replacements) {
         Baseline = baseline;
         Kernels = kernels;
         Target = target;
+        ShadowFadeVariants = shadowFadeVariants;
         m_replacements = replacements;
         m_retired = new GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>?[replacements.Length];
     }
@@ -506,6 +527,7 @@ public sealed class SdfWorldPipelineReload : IDisposable {
     public SdfKernelSet Kernels { get; }
 
     internal SdfKernelSet Baseline { get; }
+    internal SdfShadowFadeVariants ShadowFadeVariants { get; }
     internal SdfWorldPipelines Target { get; }
 
     /// <summary>Returns a task that completes once every replacement is built, for the holder's own background build,

@@ -61,6 +61,26 @@
           "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
           "type": "boolean"
         },
+        "shadowLights": {
+          "description": "The number of held shadow slots, from 0 through 4.",
+          "type": "integer"
+        },
+        "shadowFadeSlots": {
+          "description": "The number of additional shadow handoff slots, from 0 through 2.",
+          "type": "integer"
+        },
+        "shadowFadeTicks": {
+          "description": "The length of a shadow handoff in delivered ticks; zero selects instant changes.",
+          "type": "integer"
+        },
+        "shadowOverflow": {
+          "description": "How a crossing proceeds when its handoff capacity is occupied.",
+          "enum": [
+            "instant",
+            "queue"
+          ],
+          "title": "WorldShadowOverflow"
+        },
         "renderScaleFloor": {
           "$ref": "#/$defs/WorldRenderScaleTier",
           "description": "The per-view floor tier the preset selects (Quarter by default)."
@@ -258,6 +278,15 @@
         }
       ]
     },
+    "WorldShadowMode": {
+      "enum": [
+        "always",
+        "auto",
+        "never",
+        null
+      ],
+      "title": "WorldShadowMode"
+    },
     "WorldRenderLightDirectional": {
       "description": "A Lambert directional light.",
       "properties": {
@@ -284,16 +313,13 @@
           "description": "The light\u0027s angular radius, in [0, atan 0.3] radians: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
           "default": null
         },
-        "shadows": {
-          "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
-          "type": [
-            "boolean",
-            "null"
-          ],
+        "shadow": {
+          "$ref": "#/$defs/WorldShadowMode",
+          "description": "How this light competes for shadow slots. Absent is Never. A directional without a presented shadow slot is scaled by ambient occlusion instead.",
           "default": null
         },
         "name": {
-          "description": "The name a section key addresses the light by, unique among the lights.",
+          "description": "The unique identity a section key and the shadow allocator address. Required when Shadow is Always or Auto.",
           "type": [
             "string",
             "null"

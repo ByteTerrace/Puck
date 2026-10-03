@@ -35,11 +35,13 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private static readonly uint ScreenSourcesBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.ScreenSources);
 
     private readonly RenderGraphPackageRecorderContext m_context;
-    private readonly RenderGraphFragmentPass m_fragmentPass;
+    private readonly string[] m_inputs;
+    private readonly string[] m_outputs;
     private readonly SdfWorldPasses m_owner;
     private readonly string m_part;
     // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment).
     private readonly bool m_temporal;
+    private readonly int m_fadeCapacity;
 
     // The view the pass records, followed in place when the instance resolves another its passes can record
     // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead.
@@ -77,16 +79,25 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_owner = owner;
         m_view = view;
         m_part = (context.Part ?? throw new ArgumentException(message: $"Pass '{context.Pass}' runs no part of '{RenderGraphPackageCatalog.SdfWorld}'.", paramName: nameof(context)));
-        // The runtime installs the graph of the fragment the package selects this frame, so every pass of one graph is
-        // created against the same selection.
+        // Port declarations are captured by graph planning, before the asynchronous build. The live frame may already
+        // request another fade capacity when this recorder installs or follows a view.
+        var prefix = context.Pass[..^m_part.Length];
+
+        string LocalName(ShaderPipelineResource resource) => (resource.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix)
+            ? resource.Name[prefix.Length..] : resource.Name);
+
+        m_inputs = [.. context.Inputs.Select(selector: LocalName)];
+        m_outputs = [.. context.Outputs.Select(selector: LocalName)];
         var fragment = owner.FragmentOf(instance: context.Instance)!;
 
-        m_temporal = ReferenceEquals(objA: fragment, objB: SdfWorldPackage.TemporalFragment);
-        m_fragmentPass = fragment.Passes.Single(predicate: pass => string.Equals(
-            a: pass.Name,
-            b: m_part,
-            comparisonType: StringComparison.Ordinal
-        ));
+        m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
+        var incoming = context.Inputs.Concat(second: context.Outputs).SingleOrDefault(predicate: resource => (LocalName(resource: resource) == SdfWorldPackage.IncomingVisibility));
+
+        m_fadeCapacity = ((incoming is null) ? 0 : ShaderPipelineRenderNode.ParseFormat(format: incoming.Format) switch {
+            GpuPixelFormat.R8Unorm => 1,
+            GpuPixelFormat.R8G8Unorm => 2,
+            _ => throw new InvalidOperationException(message: $"Pass '{context.Pass}' has an unsupported incoming visibility format '{incoming.Format}'."),
+        });
 
         DeclareScreens(residency: view.Residency);
 
@@ -103,7 +114,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         if (!IsMesh) {
             m_sets = new RenderGraphPackageSets(
                 context: context,
-                groupLayoutHandles: tables.Pipeline(kernel: SdfKernel.Beam).GroupLayoutHandles,
+                groupLayoutHandles: tables.Pipeline(kernel: SdfWorldPipelines.ShadowKernelOf(fadeCapacity: m_fadeCapacity)).GroupLayoutHandles,
                 groups: groups
             );
 
@@ -207,8 +218,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     // - the mesh part a frame that draws no mesh, when the hit passes, whose pass block's mesh draws are then zero, read
     //   nothing of the target;
     // - the ambient part a view whose ambient occlusion is off, whose neutral occlusion the surface pass already wrote;
-    // - the shadow part a view whose soft shadows are off or a frame that has no shadow light, when views reads nothing
-    //   of the record's key row.
+    // - the shadow part a view whose soft shadows are off or a frame that has no shadow slots, when views reads nothing
+    //   of the record's shadow row.
     public bool Skips(in FrameContext context) {
         var mesh = IsMesh;
         var ambient = string.Equals(a: m_part, b: SdfWorldPackage.Parts.Ambient, comparisonType: StringComparison.Ordinal);
@@ -240,7 +251,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             return quality.DisableAmbientOcclusion;
         }
 
-        return (quality.DisableSoftShadows || (frame.Lights.ShadowLight < 0));
+        return (quality.DisableSoftShadows || (frame.Lights.ShadowSlots.SlotCount == 0));
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         Follow();
@@ -320,8 +331,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     public void Submitted(int slot, IGpuSubmissionFence fence) => m_pick?.Submitted(fence: fence, slot: slot);
 
     private int InputIndexOf(string member) {
-        for (var index = 0; (index < m_fragmentPass.Inputs.Count); index++) {
-            if (ReadMemberOf(version: m_fragmentPass.Inputs[index].Name) == member) {
+        for (var index = 0; (index < m_inputs.Length); index++) {
+            if (ReadMemberOf(version: m_inputs[index]) == member) {
                 return index;
             }
         }
@@ -382,8 +393,8 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             SdfWorldPackage.Parts.Primary => tables.Pipeline(kernel: SdfKernel.Primary),
             SdfWorldPackage.Parts.Surface => tables.Pipeline(kernel: SdfKernel.Surface),
             SdfWorldPackage.Parts.Ambient => tables.Pipeline(kernel: SdfKernel.Ambient),
-            SdfWorldPackage.Parts.Shadow => tables.Pipeline(kernel: SdfKernel.Shadow),
-            _ => tables.ViewsPipeline,
+            SdfWorldPackage.Parts.Shadow => tables.Pipeline(kernel: SdfWorldPipelines.ShadowKernelOf(fadeCapacity: m_fadeCapacity)),
+            _ => tables.ViewsPipelineFor(fadeCapacity: m_fadeCapacity),
         };
 
         BindPorts(
@@ -613,14 +624,16 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var bindings = tables.Bindings;
         var output = tables.StorageFiller.ImageViewHandle;
         var meshVisibility = tables.SampledFiller.ImageViewHandle;
+        var incomingVisibility = tables.SampledFiller.ImageViewHandle;
+        var incomingWritten = tables.StorageFiller.ImageViewHandle;
 
         foreach (var member in ScratchMembers) {
             tables.WriteWorldBuffer(buffer: tables.DummyBuffer, member: member, set: set);
         }
 
 
-        for (var port = 0; (port < m_fragmentPass.Inputs.Count); port++) {
-            var name = m_fragmentPass.Inputs[port].Name;
+        for (var port = 0; (port < m_inputs.Length); port++) {
+            var name = m_inputs[port];
             var bound = recording.Inputs[port];
 
             if (bound.Buffer is { } buffer) {
@@ -633,16 +646,20 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
                 comparisonType: StringComparison.Ordinal
             )) {
                 meshVisibility = bound.Image.ImageViewHandle;
+            } else if (name == SdfWorldPackage.IncomingVisibility) {
+                incomingVisibility = bound.Image.ImageViewHandle;
             }
         }
-        for (var port = 0; (port < m_fragmentPass.Outputs.Count); port++) {
-            var name = m_fragmentPass.Outputs[port].Name;
+        for (var port = 0; (port < m_outputs.Length); port++) {
+            var name = m_outputs[port];
             var bound = recording.Outputs[port];
 
             if (bound.Buffer is { } buffer) {
                 if (WrittenMemberOf(version: name) is { } member) {
                     tables.WriteWorldBuffer(buffer: buffer, member: member, set: set);
                 }
+            } else if (name == SdfWorldPackage.IncomingVisibility) {
+                incomingWritten = bound.Image.ImageViewHandle;
             } else if (bound.Kind == ShaderPipelineResourceKind.Image) {
                 output = bound.Image.ImageViewHandle;
             }
@@ -661,6 +678,16 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             descriptorSetHandle: set,
             imageViewHandle: meshVisibility
         );
+        if (m_fadeCapacity != 0) {
+            var layout = SdfWorldInterfaces.WorldFadeParameters[m_fadeCapacity].Layout;
+
+            bindings.WriteSampledImage(arrayElement: 0,
+                binding: SdfKernelInterfaces.BindingOf(layout: layout, member: SdfWorldPackage.IncomingVisibility),
+                descriptorSetHandle: set, imageViewHandle: incomingVisibility);
+            bindings.WriteStorageImage(arrayElement: 0,
+                binding: SdfKernelInterfaces.BindingOf(layout: layout, member: SdfWorldPackage.IncomingVisibilityWritten),
+                descriptorSetHandle: set, imageViewHandle: incomingWritten);
+        }
         Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
     }

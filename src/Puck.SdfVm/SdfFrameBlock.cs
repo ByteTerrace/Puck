@@ -15,7 +15,7 @@ namespace Puck.SdfVm;
 public readonly record struct SdfPassValues(uint ScreenCount, uint InstanceMaskWordCount, uint MeshDraws, int DebugMode);
 /// <summary>
 /// Writes what one view's passes read of a frame into an <c>sdf.world</c> pass block: the world values, the view's camera,
-/// the frame's levers, its light count and shadow light, and its curvature shading, each at the offset the generated
+/// the frame's levers, its light count and shadow slots, and its curvature shading, each at the offset the generated
 /// declarations read it from (<see cref="SdfWorldInterfaces.WorldParameters"/>). It is the one writer of that block; the
 /// kernels read each value by name through <c>isa/sdf-world.interface.hlsli</c>. The lights and the sky are no part of
 /// it: the tables write them into their own regions (<see cref="SdfLights.Pack"/>, <see cref="SdfSky.Pack"/>).
@@ -65,7 +65,9 @@ public static class SdfFrameBlock {
     private static readonly int NearDistance = Offset(member: SdfWorldPackage.NearDistance);
     private static readonly int ScreenCount = Offset(member: SdfWorldPackage.ScreenCount);
     private static readonly int ShadowDistanceScale = Offset(member: SdfWorldPackage.ShadowDistanceScale);
-    private static readonly int ShadowLight = Offset(member: SdfWorldPackage.ShadowLight);
+    private static readonly int ShadowSlots = Offset(member: SdfWorldPackage.ShadowSlots);
+    private static readonly int ShadowSlotCount = Offset(member: SdfWorldPackage.ShadowSlotCount);
+    private static readonly int ShadowFadeCount = Offset(member: SdfWorldPackage.ShadowFadeCount);
     private static readonly int TanHalfFieldOfView = Offset(member: SdfWorldPackage.TanHalfFieldOfView);
     private static readonly int TileGrid = Offset(member: SdfWorldPackage.TileGrid);
     private static readonly int ViewBase = Offset(member: SdfWorldPackage.ViewBase);
@@ -136,7 +138,7 @@ public static class SdfFrameBlock {
     /// <summary>Writes a view's values into a pass block: its render extent and tile grid, the frame's bound screens,
     /// instance-mask width and mesh draws the tables packed, the view's camera and quality
     /// (<see cref="SdfViewSnapshot.Quality"/>), the far distance and the debug view mode, the frame's bench levers, its
-    /// light count and shadow light (<see cref="SdfLights"/>), and its curvature shading. The extent is not written: the
+    /// light count and shadow slots (<see cref="SdfLights"/>), and its curvature shading. The extent is not written: the
     /// node writes it.</summary>
     /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>
     /// <param name="tables">The values of the tables that packed <paramref name="frame"/>.</param>
@@ -179,7 +181,11 @@ public static class SdfFrameBlock {
         var curvature = lights.Curvature;
 
         WriteUInt32(block: block, offset: LightCount, value: ((uint)lights.Count));
-        WriteUInt32(block: block, offset: ShadowLight, value: unchecked((uint)lights.ShadowLight));
+        for (var slot = 0; (slot < SdfShadowSlots.MaxSlots); slot++) {
+            WriteUInt32(block: block, offset: (ShadowSlots + (slot * sizeof(int))), value: unchecked((uint)lights.ShadowSlots[slot]));
+        }
+        WriteUInt32(block: block, offset: ShadowSlotCount, value: ((uint)lights.ShadowSlots.SlotCount));
+        WriteUInt32(block: block, offset: ShadowFadeCount, value: ((uint)lights.ShadowSlots.FadeCount));
         WriteSingle(block: block, offset: CurvatureCavity, value: curvature.Cavity);
         WriteSingle(block: block, offset: CurvatureRim, value: curvature.Rim);
         WriteSingle(block: block, offset: CurvatureInk, value: curvature.Ink);

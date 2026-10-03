@@ -179,11 +179,23 @@ read without it.
 
 ### Lighting
 
-At most 8 lights, and **at most one** may set `shadows: true`.
+At most 8 lights. A directional's `shadow: always` or `shadow: auto`
+requires its unique `name`; `shadow: never` is the default. The allocator
+selects up to `render.shadowLights` (0..4), keeping selected names in their
+existing slots. Its CPU handoffs use presented-tick fade progress and report
+queued crossings. Every occupied stable slot and active incoming handoff
+reaches its own counted GPU shadow march, bounded by K + F.
+`queue` waits for a busy slot, identity or fade capacity and reconsiders current
+targets at delivered ticks; a crossing starts at the first delivered tick its
+blocker clears. `instant` resolves overlap and capacity atomically.
+Shading fades each light's own shadow deficit while
+keeping its radiance unchanged.
+The full slot and quality policy belongs to
+[`puck-world`](../../puck-world/references/documents-render.md#render--the-render-defaults).
 
 | `$type` | Fields |
 |---|---|
-| `directional` | `direction` (nonzero), `color`, `weight` ≥ 0, `angularRadius` in [0, atan(0.3)], `shadows` |
+| `directional` | `direction` (nonzero), `color`, `weight` ≥ 0, `angularRadius` in [0, atan(0.3)], `shadow`, `name` |
 | `hemisphere` | `color`, `base` ≥ 0, `gradient` |
 | `rim` | `color`, `weight` ≥ 0, `power` ≥ 0 |
 | `point` | `position`, `radius` > 0, `color`, `weight` ≥ 0, `anchor` |
@@ -224,6 +236,10 @@ motion terms.
 |---|---|---|---|
 | `shadows` | `Off`/`Low`/`Medium`/`High` | `Off` | `world.shadows` |
 | `shadowCrowdRadius` | 0..100 | 0 | `world.shadows` |
+| `shadowLights` | 0..4 | 1 | `world.lighting` |
+| `shadowFadeSlots` | 0..2 | 0 | `world.lighting` |
+| `shadowFadeTicks` | nonnegative engine ticks | 0 | `world.lighting` |
+| `shadowOverflow` | `queue`/`instant` | `instant` | `world.lighting` |
 | `ambientOcclusion` | bool | false | `world.ao` |
 | `renderScale` | `Native`..`Eighth` | `Native` | `world.render-scale` |
 | `temporal` | bool | false | `world.temporal` |
@@ -233,5 +249,5 @@ motion terms.
 | `cycle` | a state row plus ≥ 2 keys at ascending `at` in [0, 1) | absent | `world.lighting` |
 
 `world.lighting` echoes the whole lighting, curvature, sky, environment, tonemap,
-and cycle state in one line each. An unauthored field reads `default`, meaning
+and cycle state, plus named shadow slots and their selection reasons. An unauthored field reads `default`, meaning
 the engine's pinned value for that kind — not zero.
