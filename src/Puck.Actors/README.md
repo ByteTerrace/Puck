@@ -28,18 +28,28 @@ https://claude.ai/code/artifact/aed8686b-2eff-4595-9ec0-6030489200dc
 
 `GET /users/{oid}/provisioning-state`
 
-Both return `200` with:
+`PUT /users/{oid}/guest-access` (body `{ "guestAccess": "None | Read | ReadWrite" }`)
+
+`PUT /users/{oid}/storage-access` (body `{ "canRead": true, "canWrite": true }`)
+
+These four return `200` with:
 
 ```json
 {
-    "status": "NotOnboarded | Onboarding | Ready | Faulted",
+    "status": "NotOnboarded | Onboarding | Ready | Migrating | Faulted",
     "completedSteps": ["Identity", "Storage", "Keys", "Finalized"],
     "updatedAt": "<ISO 8601 UTC instant>",
-    "faultReason": null
+    "faultReason": null,
+    "storageReadEnabled": true,
+    "storageWriteEnabled": true,
+    "guestAccess": "None | Read | ReadWrite"
 }
 ```
 
-`400` when the escrow is malformed or already expired. Idempotent and safe to call on every sign-in:
+`GET /users/{oid}/storage-location` returns `200` with the user's storage
+`partition`, `blobEndpoint` and `isMigrating`.
+
+`400` when the escrow is malformed or already expired, or a guest-access or storage-access change is refused. Idempotent and safe to call on every sign-in:
 `Ready` is a grain-memory fast path. A `Faulted` grain resumes from its last completed step on the next
 `ensure-provisioned` call (fresh sign-in ⇒ fresh escrow).
 

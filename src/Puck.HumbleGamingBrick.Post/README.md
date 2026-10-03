@@ -341,9 +341,11 @@ pass/fail, reported in the stage output with vector counts and a reason naming
 both oracles, per "external suites are evidence, never gates":
 
 - `10` (STOP): this corpus's reference models STOP as a one-byte
-  opcode (PC+1), while this core's `ExecuteStop` deliberately reads a second
-  operand byte (PC+2)—real-hardware STOP behavior is a long-debated
-  two-interpretation question.
+  opcode (PC+1) on every vector, while this core's `ExecuteStop` consumes the
+  pad byte (PC+2) exactly when no interrupt is pending (`IE & IF`, independent
+  of IME) and leaves it unconsumed only when one is already latched. The
+  shipped vectors are all no-pending cases. The `sm83-stop-pending-interrupt`
+  Tier-A stage covers the pending edge directly.
 - `fb` (EI): this corpus's reference re-arms EI's delay countdown
   even when IME is already set; this core's EI-as-no-op-when-already-enabled
   is pinned by the acceptance suite's `ei_sequence` test (which stays green),
