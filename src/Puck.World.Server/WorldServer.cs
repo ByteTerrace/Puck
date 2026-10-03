@@ -221,8 +221,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// registers) once real ticks have run it. A world with a boot-declared cartridge means recording must arm
     /// before its first step, same as a world that mounts an addon must arm before its first tick.</summary>
     public bool AnyMachineEverPumped => m_machines.AnyEverPumped;
-    /// <summary>Gets whether a screen operation reached host dispatch, a screen memory binding accessed hardware,
-    /// or a named provider operation reached its runtime commit barrier. This conservative, irreversible latch closes boot-only replay and checkpoint
+    /// <summary>Gets whether a screen operation reached host dispatch or a named provider operation reached its runtime
+    /// commit barrier. This conservative, irreversible latch closes boot-only replay and checkpoint
     /// reconstruction even when a runtime operation faults after changing hardware. Screen operations before
     /// recording are absent from its authority tape; generic provider operations have no entry in the current
     /// replay format and are refused while its screen-operation tap is attached.</summary>

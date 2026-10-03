@@ -686,8 +686,7 @@ The contracts a change must keep:
   did not scan to get there; a seek scans only from where it starts.
 - **Refuse uncaptured state.** Seek checks under the authority gate for pending
   input and provider contributions, live sessions, addon guests, screen
-  operations (including successful screen memory access to named machines),
-  unsupported machines and external obligations. Recorded spans
+  operations, unsupported machines and external obligations. Recorded spans
   refuse external authority events, changed rebuild content, and a hosted
   world's reload, which is replayed from its store and no history holds one. Seek retires
   providers from the abandoned timeline and suppresses save effects while
