@@ -221,7 +221,7 @@ Every package below carries its own check on the programme page; tick it there a
 Every package below carries its own check on the programme page; tick it there and here in the same change.
 
 - [x] E1 build mode, the grid and snapping, checked by the `editor-grid` canary.
-- [ ] E2 selection, a visibility identity per drawn instance, GPU and CPU picking, and highlight.
+- [ ] E2 selection and highlight (the identity map and GPU hover picking are in place through P13; the line primitive, `world.select`, `world.selection`, the highlight and verbs on a selection are open).
 - [ ] E3 undo, redo, duplicate, delete and measure.
 - [ ] E4 debug views everywhere (startable today; its NaN marker, gradient-magnitude mode and, after E2, selected-placement slice included).
 - [x] E5 the inspector (`world.inspect`; its selection line fills when E2 lands).

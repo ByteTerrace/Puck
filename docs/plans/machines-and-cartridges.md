@@ -10,24 +10,47 @@ vocabulary, and puts provider knowledge behind extension contracts; the guest
 side gives `puck.cartridge.v1` the program and memory structures a whole game
 needs. The reasoning behind every decision is in
 [the decisions register](../decisions/machines-and-cartridges.md). A third
-machine family, the NES and Famicom core, is planned on its own page:
+machine family, the NES and Famicom core, has its own page:
 [Humble Gaming Deck](humble-gaming-deck.md).
 
 ## Implementation status
 
-- **Landed:** named machine identities, neutral hosting seams, ordered
-  operations, and the machine host described by
-  [its README](../../src/Puck.World.Machines/README.md); the mirror source
-  (`hgb-mirror.puck`) driving five machine-owned bindings and reading a sixth
-  back; the arcade module declaring three named producers. On the cartridge
+- **Landed:** the machine host described by
+  [its README](../../src/Puck.World.Machines/README.md). Named `machines`
+  declarations construct independently of screens, carry a running flag, and
+  replace atomically under a new generation; `machine.state` reports them and
+  `machine.operation <instance> <generation> <operationId> <json>` submits a
+  descriptor-validated provider operation through the ordered authority domain
+  (`screen.insert` and `forge.play` use that path). Named memory bindings
+  declare space, format, access (inspect, patch or bus), update (on change or
+  every tick) and conversion (checked by default); addresses are unsigned, a
+  failed read keeps the last accepted value and exposes availability, and
+  overlapping writes refuse. They synchronize after rules and before machine
+  advance, in authored order, with a generation-aware on-change memo.
+  A cable port is declared on the machine row and cable groups derive from
+  those declarations. A host-selected content-admission policy
+  (`IMachineContentAdmissionPolicy`) checks the exact source and executable
+  bytes when the host prepares a machine's content, at boot and at every
+  replacement; the `puck.cartridge.v1` preset `GamingBrickContentPolicies` has
+  tests and no production consumer, and the composition registers the open
+  policy. A world checkpoint carries named handheld machine cores, held input,
+  pacing, instance generations and the binding memos, and restores only against
+  the same firmware, cartridge and core identity. The mirror source
+  (`hgb-mirror.puck`) drives five machine-owned bindings and reads a sixth
+  back; the arcade module declares three named producers. On the cartridge
   side, `Sm83Emitter` emits `Call`, `Return`, and `ReturnFromInterrupt`,
   `ThumbEmitter` emits `Call`, `CartridgeExpressions.Reads` consumes
   `Puck.State`'s expression, and `scene` partitions the frame.
-- **Not started:** every package below. Screens are still index-addressed; no
-  generic machine-operation effect, execution receipt, or reusable cabinet
-  module exists; `Puck.World` references both bricks and both forges directly;
-  the cartridge document declares no procedure, typed region, or interrupt
-  body, and every frame-shaped ceiling stands.
+- **Open:** screens are index-addressed (`WorldScreen.Index`), and a cable
+  group lists screen indices; no rule effect invokes a machine operation, no
+  execution or content receipt exists, and a tape arms only before any cabinet
+  has stepped; checkpoints still refuse pumped addon guests, applied screen
+  operations, live coupled links, enabled rewind history and
+  `screens[].memory` access; addon memory watches are keyed by screen; no
+  reusable cabinet module exists; `Puck.World` references both bricks and both
+  forges directly; the cartridge document declares no procedure, typed region,
+  or interrupt body, and every frame-shaped ceiling stands. Each package below
+  names its part.
 
 ## The forcing artifact
 
@@ -70,34 +93,43 @@ hardware observations, addon watches, the execution and content receipt,
    omits them only when the source identifies exactly one compatible port;
    ambiguity is a validation error, derivation mints no authority, and a
    passive monitor gets no control. A feed change releases held input before
-   rebinding. Cable endpoints move to the machine row and ordered groups derive
-   from machine names; a coupled group advances with no display.
+   rebinding. Cable endpoints are declared on the machine row and groups derive
+   from those declarations. In place: cable endpoints on the machine row, a
+   removed display leaving its machine and generation alone and releasing its
+   input, and named link members that advance once. Open: authored screen
+   `Name` and the derived catalog, routes that name a machine instance and
+   port, and cable-group membership by machine name in place of screen index.
 2. **Hardware consumers.** One machine-operation payload carries instance,
    expected generation, provider operation id, and a descriptor-validated
    payload; rules invoke it through one generic, schema-validated effect whose
    dynamic arguments use the state-expression compiler and declared parameter
-   types. Direct predicates, addon watches, and availability reporting move to
-   named instances. Bindings declare address space, width, byte order, access
-   mode (inspect, patch, bus or device operation), update semantics (on change
-   or held every tick), and conversion (checked by default); addresses cover the
-   provider's declared range past `0xFFFF`; a failed read is distinct from a
-   valid zero and leaves the last accepted cell unchanged with its validity
-   exposed; multiple writes to one range compose explicitly or refuse; a
-   replaced machine cannot suppress a first write the old instance saw. The
-   phase order stands: world rules, binding synchronization in authored order,
-   machine advance with the tick's folded input. Budgets count instances, guest
-   memory, queued work, watches, links, and outputs independently of displays,
-   and capacity refuses before allocation or commit.
+   types. Direct predicates and addon watches move to named instances. In
+   place: the operation payload as `machine.operation`; availability reporting
+   in `machine.state`; bindings declaring address space, width, access mode
+   (inspect, patch, bus), update semantics (on change or held every tick) and
+   conversion (checked by default), with addresses past `0xFFFF`, a failed read
+   that leaves the last accepted cell unchanged with its availability exposed,
+   overlapping writes refused, a replaced machine's first write never
+   suppressed, and the phase order of world rules, binding synchronization in
+   authored order, then machine advance with the tick's folded input. Open: the
+   generic rule effect, named-instance direct predicates and addon watches
+   (the watches still key by screen), byte order and device-operation access
+   on bindings, and budgets that count instances, guest memory, queued work,
+   watches, links, and outputs independently of displays, with capacity
+   refusing before allocation or commit.
 3. **Boot-anchored reproduction.** A neutral receipt identifies the provider
    artifact closure, canonical configuration, firmware and content, compiler
    and output identity (source and compiler identity for a forged cartridge),
    and any snapshot format, hashed over reproducible content rather than
    paths, timestamps, or renderer indices; a missing or mismatching receipt
    refuses by name before advancement. External operations are recorded once;
-   deterministic rule and binding work is re-executed once. The checkpoint
-   refusal for machine-bearing history stays until full restoration
-   round-trips; until then a tape can only arm before any cabinet has stepped,
-   which is why the quilt canaries arm at tick 0.
+   deterministic rule and binding work is re-executed once. The world checkpoint
+   carries named handheld cores, held input, pacing, instance generations and
+   binding memos; its refusal stays, by name, for a pumped addon guest, an
+   applied screen operation, a live coupled link, enabled rewind history and
+   `screens[].memory` access until full restoration round-trips for them. Until
+   the receipt exists and those round-trip, a tape can only arm before any
+   cabinet has stepped, which is why the quilt canaries arm at tick 0.
 4. **Cabinets are priced.** A colocated quilt runs every cabinet of every
    instance it starts — fifteen emulators for the four corners and the island —
    and the tick waits on their workers, so the headless quilt ticks at about a
@@ -144,7 +176,13 @@ links, and backlog, so a stopped machine and a missing framebuffer stay
 distinct. Saving a live world writes its canonical definition and never
 overwrites a module-based source. The three UX details (no repetitive wiring;
 a source switch releases or explicitly retargets held control; empty, failed,
-and stopped remain distinguishable) are settled here.
+and stopped remain distinguishable) are settled here. In place: each engine's
+`MachineEngineDescriptor` supplies its versioned configuration, ports,
+operations and hardware spaces to construction and validation, machine rows
+carry an explicit `running` flag, `machine.state` reports a machine's execution
+and binding outcomes, and `world.row.set machines` edits a declaration through
+the ordinary mutation door. Open: the reusable cabinet module imported under
+two aliases, and the three UX details.
 
 **Check:** placing the cabinet is one statement; two aliases work; insert,
 reset, eject, and source selection have explicit effects; failed content, empty
@@ -162,7 +200,15 @@ for a host-scoped registration set shared by the executable, CLI, validators,
 replay hosts, and instances, with no module-initializer registration or
 process-global validation state; provider configuration, cartridge compilation,
 symbol maps, commands, and Tune-to-Humble hosting live with their extensions;
-core persistence carries a generic receipt. A distribution without either brick
+core persistence carries a generic receipt. In place: the entry contract is
+`AddMachineEngine` in `Puck.Abstractions` (an `IMachineEngine` and its
+`IMachineContentProvider`), `WorldMachineCatalog.From` builds each host's
+immutable catalog from the composed extensions, and `Puck.World.Machines`
+references no Gaming Brick core or forge and registers nothing from a module
+initializer. Open: `Puck.World.csproj` still references both bricks and both
+forges, `TuneMachineSource` uses the Humble brick and `ForgeCommandModule` the shared forge directly, the
+generic persistence receipt waits on the cabinet module's receipt, and the
+distribution without either brick. A distribution without either brick
 builds and runs camera, view, QR, text, and test-pattern screens and admits a
 different provider through the same contract; static composition survives for
 AOT and browser deployments; the loader shares neutral contract assemblies with
@@ -183,18 +229,29 @@ passes.
 **Owns:** the bundled HGB boot ROMs and AGB BIOS with their qualification, the
 immutable content-admission policy the machine host invokes.
 
-**Delivers:** the packaged images rebuilt independently; cold and fast handoff,
-IRQ and services, model transitions, graphics and audio exercised with
+**Delivers:** the packaged images rebuilt independently (`puck firmware hgb`
+and `puck firmware agb` rebuild them, and `--verify` compares the bytes, which
+proves reproducible generation and not hardware compatibility); cold and fast
+handoff, IRQ and services, model transitions, graphics and audio exercised with
 independent expected values; HGB's boot-mapping and model-change guard kept;
-AGB service coverage including stateful sequences, sound, and MultiBoot; the
-recorded `A.gba` render failure investigated before any compatibility claim.
+AGB service coverage including stateful sequences, sound, and MultiBoot (the
+bundled-firmware stage in `Puck.AdvancedGamingBrick.Post` is a functional smoke
+of the services, not full sound or MultiBoot conformance); the recorded
+`A.gba` render failure investigated before any compatibility claim.
 The policy is enforced below every loading path (boot, insert, replacement,
 reload, restore, replay) after trusted preparation and before runtime creation,
 over exact source and executable bytes and the provider-verified format, with
-selection under separate operator authority. The `puck.cartridge.v1` admission preset,
-`GamingBrickContentPolicies`, sits beside the format it names in
-`Puck.GamingBricks.Forge` and has no production consumer yet; the machine host
-is its first.
+selection under separate operator authority. In place: the policy contract
+(`IMachineContentAdmissionPolicy`, `MachineContentAdmissionPolicy`) in
+`Puck.Abstractions`, which the machine host evaluates when it prepares a
+machine's content, at boot and at each replacement, with an explicit
+disposition for auxiliary asset paths; the `puck.cartridge.v1` preset,
+`GamingBrickContentPolicies`, beside the format it names in
+`Puck.GamingBricks.Forge`, with `MachineContentAdmissionPolicyTests`. Open: no
+production consumer selects that preset (the composition registers the open
+policy, and a restricted host supplies its own at construction), selection
+under separate operator authority, and a law for each of reload, restore and
+replay.
 
 **Check:** raw ROM rejection, relabeled input, changed source or output pins,
 valid new user-authored content, allowlist acceptance and rejection, and a
