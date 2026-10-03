@@ -1,4 +1,5 @@
 using Puck.Shaders;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -21,6 +22,9 @@ public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMes
     /// <summary>Gets the composition's mesh pass, one graphics pipeline a device in the pass pipelines, which a view's mesh
     /// pass draws with.</summary>
     public SdfMeshRasterPass MeshRaster { get; } = (meshRaster ?? throw new ArgumentNullException(paramName: nameof(meshRaster)));
+    /// <summary>Gets the detail rows the sky's runs and layers count in, one set every residency of the composition packs
+    /// its sky against, so a view keeps its rows when it follows another residency.</summary>
+    public SdfSkyDetails SkyDetails { get; } = new();
 
     /// <summary>Gets the composition's pass-pipeline cache, the region copy's and the mesh pass's own, whose entries the
     /// engine's kernel variants are too.</summary>

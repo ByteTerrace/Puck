@@ -16,7 +16,7 @@ namespace Puck.SdfVm;
 //   - the pass block      : the view's camera basis, fov/aspect, off-axis offset, far distance and debug view mode, every
 //                          lever, the light count, the shadow slots and the curvature shading (SdfFrameBlock), less the
 //                          render extent, which the scheduler renders a view again for when it moves.
-//   - m_lightRegion, m_skyRegion, m_skyStopRegion, m_softboxRegion : the lights and the sky with their presented-tick
+//   - m_lightRegion, m_skyRegion, m_skyLayerRegion, m_softboxRegion : the lights and the sky with their presented-tick
 //                          bakes (the twinkle phase, the cloud offsets).
 //   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
 //                          showing one renders again exactly when the presented tick moves it.
@@ -100,7 +100,7 @@ public sealed partial class SdfWorldTables {
         hash.Add(values: m_volumeRegion.Contents);
         hash.Add(values: m_lightRegion.Contents);
         hash.Add(values: m_skyRegion.Contents);
-        hash.Add(values: m_skyStopRegion.Contents);
+        hash.Add(values: m_skyLayerRegion.Contents);
         hash.Add(values: m_softboxRegion.Contents);
         hash.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
         hash.Add(values: m_screenSurfaceRegion.Contents);

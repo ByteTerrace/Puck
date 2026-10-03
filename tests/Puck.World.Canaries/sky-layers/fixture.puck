@@ -114,3 +114,25 @@ placements {
     position [0, -10, -8]
   }
 }
+
+screens [
+  {
+    index: 0
+    origin [0, -60, 0]
+    right [1, 0, 0]
+    up [0, 0, 1]
+    halfWidth: 1
+    halfHeight: 1
+    halfDepth: 0.1
+    round: 0
+    source: producer(id: "testPattern", settings: {
+      width: 64
+      height: 32
+    }
+    )
+    route {
+      engageable: false
+      engageRadius: 0
+    }
+  }
+]

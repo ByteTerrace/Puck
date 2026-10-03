@@ -1,6 +1,7 @@
 using System.CommandLine;
 using Puck.Cli.Architecture;
 using Puck.Cli.Canary;
+using Puck.Cli.Host;
 
 namespace Puck.Cli.Affected;
 
@@ -379,6 +380,11 @@ internal static class AffectedCommand {
     /// <summary>The selection of a suite's CPU tests: every test whose class does not carry the <c>Gpu</c> trait.</summary>
     public static readonly string[] CpuSelection = ["--filter-not-trait", "Category=Gpu"];
 
+    private static bool AdmitHeavySuite(string repositoryRoot, string suite) {
+        var probe = new HostProbe(checkoutRoot: repositoryRoot);
+
+        return HostAdmission.Wait(cancellationToken: CancellationToken.None, clock: TimeProvider.System, delay: Thread.Sleep, device: false, error: Console.Error, heavySuite: true, sample: () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), step: suite);
+    }
     private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu) {
         var failed = new List<string>();
 
@@ -407,6 +413,13 @@ internal static class AffectedCommand {
                     Console.Out.WriteLine(value: $"  {line}");
                 }
 
+                failed.Add(item: suite);
+                continue;
+            }
+
+            // A heavy suite waits while another process runs one, machine-wide: two at once exhaust the memory.
+            if (HostProcesses.IsHeavyTestAssembly(assembly: suite) && !AdmitHeavySuite(repositoryRoot: repositoryRoot, suite: suite)) {
+                Console.Out.WriteLine(value: $"affected: {suite} REFUSED — host admission did not return within {HostAdmission.HeavyTimeout.TotalHours:0} hours");
                 failed.Add(item: suite);
                 continue;
             }

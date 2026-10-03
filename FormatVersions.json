@@ -396,7 +396,7 @@
                 "P:Puck.Assets.Documents.DocumentVector3.Y",
                 "P:Puck.Assets.Documents.DocumentVector3.Z"
             ],
-            "shape": "2e72a2f7f16386d3",
+            "shape": "13ed85ae54ea7e45",
             "source": "src/Puck.World.Authoring/Authoring/CreationDocument.cs",
             "token": "puck.creation.v1"
         },
@@ -796,7 +796,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Hosting.RenderGraphRefresh.EveryFrame"
             ],
-            "shape": "326120ec81f0697a",
+            "shape": "a488fa230a57852d",
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },
@@ -1036,7 +1036,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "7ae099e8fb55e40b",
+            "shape": "d2e03cce30cc1a53",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "1"
         },
@@ -1055,7 +1055,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "7ae099e8fb55e40b",
+            "shape": "d2e03cce30cc1a53",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "PWBK"
         },
@@ -1084,7 +1084,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "c36fae949a4ac196",
+            "shape": "374fb89d72506360",
             "source": "src/Puck.World.Schema/WorldCameraProgram.cs",
             "token": "puck.camera.program.v1"
         },
@@ -1162,7 +1162,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersCeilings"
             ],
-            "shape": "ac3dba8586368708",
+            "shape": "78fb5ee9580d9311",
             "source": "src/Puck.World.Schema/WorldCountersCeilings.cs",
             "token": "puck.counters.ceilings.v1"
         },
@@ -1181,7 +1181,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersReport"
             ],
-            "shape": "252254360f400322",
+            "shape": "6c4687474e18aef3",
             "source": "src/Puck.World.Schema/WorldCountersReport.cs",
             "token": "puck.counters.report.v1"
         },
@@ -1250,7 +1250,6 @@
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.FindMultiColumnCandidateGroups(System.Text.Json.Nodes.JsonArray)",
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.FormatValue(System.Text.Json.Nodes.JsonNode,System.Int32,System.Type)",
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.HasUnsupportedTraits(System.Text.Json.Nodes.JsonObject)",
-                "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.HoldsNull(System.Text.Json.Nodes.JsonNode,System.Int32)",
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.IsKeyOnlyRow(System.Text.Json.Nodes.JsonObject)",
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.IsPileRow(System.Text.Json.Nodes.JsonObject)",
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.IsSlotRow(System.Text.Json.Nodes.JsonObject)",
@@ -1326,13 +1325,12 @@
                 "M:Puck.World.WorldCurveTable.#ctor(Puck.World.OrdinalTable)",
                 "M:Puck.World.WorldDefinitionFileSource.ComputeChainContentHash(System.Collections.Generic.IReadOnlyList{System.Byte[]})",
                 "M:Puck.World.WorldDefinitionFileSource.ComputeContentHash(System.ReadOnlySpan{System.Byte})",
-                "M:Puck.World.WorldDefinitionFileSource.DocumentFileExists(System.String)",
                 "M:Puck.World.WorldDefinitionFileSource.PeekComposedImage(System.String,System.String)",
                 "M:Puck.World.WorldDefinitionFileSource.TryComposeChainWithImports(Puck.World.IWorldDocumentSource,System.String,System.Byte[],System.Text.Json.Nodes.JsonObject@,System.Collections.Generic.IReadOnlyList{System.Byte[]}@,System.String@,System.String,Puck.Abstractions.Machines.IMachineValidationCatalog,Puck.World.WorldDocumentOrigins)",
                 "M:Puck.World.WorldDefinitionFileSource.TryComposeDocumentTree(System.String,System.Text.Json.Nodes.JsonObject@,System.String@,System.String,Puck.Abstractions.Machines.IMachineValidationCatalog,Puck.World.IWorldDocumentSource,System.Byte[])",
                 "M:Puck.World.WorldDefinitionFileSource.TryGetComposedImage(System.String,System.Byte[]@,System.String)",
                 "M:Puck.World.WorldDefinitionFileSource.TryParseDocument(System.String,System.String,Puck.World.WorldDefinition@,System.String@)",
-                "M:Puck.World.WorldDefinitionFileSource.TryReadDocumentFile(System.String,System.Byte[]@,System.String@,Puck.World.IWorldDocumentSource,System.String,System.Boolean)",
+                "M:Puck.World.WorldDefinitionFileSource.TryReadDocument(Puck.World.IWorldDocumentSource,System.String,System.String,System.String@,System.Byte[]@,System.String@)",
                 "M:Puck.World.WorldDefinitionFileSource.TryResolveDocumentIn(System.String,System.String,System.String@,System.String@,System.String@)",
                 "M:Puck.World.WorldDefinitionLoader.TryPrepareAndAdmit(Puck.World.WorldDefinition,System.String,System.String,Puck.World.IWorldNeighbourResolver,Puck.World.WorldDefinitionAdmission@,System.String@,Puck.Abstractions.Machines.IMachineValidationCatalog,System.Func{Puck.World.WorldDefinition,Puck.World.WorldDefinition},Puck.World.CompiledWorldRequest,System.Boolean)",
                 "M:Puck.World.WorldDefinitionRows.FindStateRow(System.Collections.Generic.IReadOnlyList{Puck.World.WorldStateRow},System.String)",
@@ -1448,8 +1446,11 @@
                 "M:Puck.World.WorldDefinitionValidator.ValidateUpdate(Puck.World.WorldUpdateDefaults,System.Collections.Generic.List{System.String})",
                 "M:Puck.World.WorldDefinitionValidator.ValidateVerdicts(Puck.World.WorldDefinition,System.Collections.Generic.List{System.String})",
                 "M:Puck.World.WorldDefinitionValidator.ValidateViews(Puck.World.WorldViewDefaults,Puck.World.WorldDefinition,System.Int32,System.Collections.Generic.HashSet{System.String},System.Collections.Generic.ISet{System.String},System.Collections.Generic.ISet{System.String},System.Collections.Generic.ISet{System.String},System.Collections.Generic.List{System.String})",
+                "M:Puck.World.WorldDocumentLabel.Failure(System.Exception)",
                 "M:Puck.World.WorldDocumentName.For(SafeName)",
+                "M:Puck.World.WorldDocumentName.IsSourceFile(System.String)",
                 "M:Puck.World.WorldDocumentName.OfDocumentFile(System.String)",
+                "M:Puck.World.WorldDocumentName.OfSourceFile(System.String)",
                 "M:Puck.World.WorldDocumentPaths.DirectoryOf(System.String)",
                 "M:Puck.World.WorldDrawBootResolver.TryResolve(Puck.World.WorldDefinition,System.String,Puck.World.WorldDefinition@,System.String@)",
                 "M:Puck.World.WorldExports.Describe",
@@ -1494,7 +1495,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "f497dba17269c758",
+            "shape": "5cb0e7f49ae7d3bd",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
@@ -1630,7 +1631,7 @@
                 "P:Puck.World.WorldDefinition.State",
                 "P:Puck.World.WorldJsonContext.WorldProjectionDocument"
             ],
-            "shape": "e512e4dc522c8871",
+            "shape": "5c2646edbc99652c",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },

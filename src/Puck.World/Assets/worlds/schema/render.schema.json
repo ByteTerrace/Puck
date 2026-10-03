@@ -151,7 +151,7 @@
       ],
       "properties": {
         "layers": {
-          "description": "The layers.",
+          "description": "The layers, lowest first.",
           "type": [
             "array",
             "null"
@@ -192,7 +192,7 @@
                 "default": null
               },
               "layers": {
-                "description": "The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, a layer\u0027s name and the sun disc\u0027s light are structure, which a key never states.",
+                "description": "The layers this key moves, by name: each the same kind as the layer of that name, stating only the fields it moves. A gradient states every stop the layer has, in order. Counts, seeds, kinds, a layer\u0027s name, blend, mask, visibility, tier and clock and the sun disc\u0027s light are structure, which a key never states.",
                 "type": [
                   "object",
                   "null"
@@ -210,6 +210,23 @@
             "title": "WorldRenderSkyKey"
           },
           "default": null
+        },
+        "frame": {
+          "description": "Which way is up for the sky. Absent is world \u002By.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "up": {
+              "$ref": "./common.schema.json#/$defs/DocumentVector3",
+              "description": "The sky\u0027s up direction in world space, any nonzero length. Absent is world \u002By.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderSkyFrame"
         }
       },
       "additionalProperties": false,
@@ -343,6 +360,16 @@
       ],
       "default": "instant",
       "title": "WorldShadowOverflow"
+    },
+    "skyQuality": {
+      "description": "The sky\u0027s boot quality tier (world.sky-quality): a layer below it writes no entry, and below High each kind draws its reduced form.",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "high",
+      "title": "WorldSkyTier"
     }
   },
   "additionalProperties": false,

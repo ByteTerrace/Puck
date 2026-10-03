@@ -102,12 +102,12 @@ public sealed partial class WorldEnvironmentResolve {
         }
         return candidate with { LightIndex = -1 };
     }
+    // A sun disc that names no light follows the first shadow slot's, or the first directional when none shadows.
     private void ApplySunDiscLight(SdfLights lights, SdfSky sky) {
         if (m_sky?.Layers is not { } layers) { return; }
-        for (var index = 0; (index < layers.Count); index++) {
-            if (layers[index] is WorldRenderSkyLayer.SunDisc { Light: null }) {
-                sky.Block.DiscLight = ((lights.ShadowSlots[0] >= 0) ? lights.ShadowSlots[0] : FirstDirectional(lights: lights));
-                return;
+        for (var index = 0; ((index < layers.Count) && (index < m_skyLayerIndex.Length)); index++) {
+            if ((layers[index] is WorldRenderSkyLayer.SunDisc { Light: null }) && (m_skyLayerIndex[index] >= 0)) {
+                sky.Parameters<SdfSkyDisc>(index: m_skyLayerIndex[index]).Light = ((lights.ShadowSlots[0] >= 0) ? lights.ShadowSlots[0] : FirstDirectional(lights: lights));
             }
         }
     }
