@@ -19,12 +19,15 @@ same change. The user's current instruction outranks it.
 `puck gate` and `puck laws prove` are the routes. Run both from a CLI copy
 (below) outside the checkout.
 
-- **`puck gate --merge-base origin/<integration-branch>`** is the route for
-  verifying a lane. Run it on the lane's final head against the integration
-  branch the brief names, report its verdict, and read its `--help` for what it
-  already covers; do not repeat by hand a step it ran. Without `--gpu` it runs
-  no canary or parity, so with no grant run it without `--gpu` and list the
-  plan's canary and parity lines as GPU legs owed.
+- **`puck gate --merge-base origin/<integration-branch>`** is the batch
+  qualification. Run it on the lane's final head against the integration branch
+  the brief names and report its verdict; do not repeat steps it ran. `--gpu`
+  adds the affected canaries and parity, the device suites, every recorded
+  counters workload and docs citations, serially. `--record` requires `--gpu`
+  and refreshes canary coverage only after every qualification step passes.
+  Without a GPU grant, omit `--gpu` and list those GPU additions as owed.
+  Admission uses host load's defaults before heavy steps; `gate.log` and
+  `gate.steps` retain output and the flushed step timeline.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
   or changed law, with `--fix <commit>` or with `--file-list` for an
   uncommitted fix, instead of the manual withholding below: it withholds the

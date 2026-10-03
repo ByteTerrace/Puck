@@ -21,7 +21,7 @@ internal sealed class DotnetLawRunner : ILawRunner {
         File.Delete(path: countsPath);
         var build = CliProcess.RunCaptured(
             cancellationToken: cancellationToken,
-            arguments: ["build", project, "-c", CliOptions.DefaultConfiguration, "-v", "diag", "-consoleloggerparameters:ErrorsOnly;Summary", "-nologo", "--disable-build-servers", "-p:NuGetAudit=false", $"-logger:{typeof(LawBuildLogger).FullName},{typeof(LawBuildLogger).Assembly.Location};{countsPath}"],
+            arguments: ["build", CliOptions.NoNodeReuse, project, "-c", CliOptions.DefaultConfiguration, "-v", "diag", "-consoleloggerparameters:ErrorsOnly;Summary", "-nologo", "--disable-build-servers", "-p:NuGetAudit=false", $"-logger:{typeof(LawBuildLogger).FullName},{typeof(LawBuildLogger).Assembly.Location};{countsPath}"],
             fileName: "dotnet",
             input: string.Empty,
             timeout: BuildTimeout,
@@ -53,7 +53,7 @@ internal sealed class DotnetLawRunner : ILawRunner {
     public LawRun Run(string tree, string project, string law, string results, CancellationToken cancellationToken) {
         var run = CliProcess.RunCaptured(
             cancellationToken: cancellationToken,
-            arguments: ["test", project, "-c", CliOptions.DefaultConfiguration, "--no-build", "-nologo", "--filter", $"FullyQualifiedName~{law}", "--logger", $"trx;LogFileName={ReportName}", "--results-directory", results],
+            arguments: ["test", CliOptions.NoNodeReuse, project, "-c", CliOptions.DefaultConfiguration, "--no-build", "-nologo", "--filter", $"FullyQualifiedName~{law}", "--logger", $"trx;LogFileName={ReportName}", "--results-directory", results],
             fileName: "dotnet",
             input: string.Empty,
             timeout: TestTimeout,

@@ -1958,7 +1958,7 @@ has stepped), and `AnyScreenOpEverApplied` (once any screen op has applied
 AT ALL, independent of stepping—screen ops apply synchronously, between
 fixed steps, so an insert/eject/select/options/link/unlink can change live
 host state before a single tick has run, which the other two latches would
-miss). Successful screen memory access sets the screen-operation latch too.
+miss).
 A world with named machines also refuses recording after its first world tick:
 paused machines still synchronize bindings, and neither their prior writes nor
 their memo belongs to the tape's boot image. Offline replay reconstructs a fresh host from the tape's embedded

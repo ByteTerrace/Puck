@@ -238,6 +238,7 @@ public sealed class WorldSessionMirror : IClientSink {
 
         m_document = new WorldDeliveredDocument(
             Definition: placeholder,
+            Lifetime: 0,
             Version: default
         );
         m_stateView = new WorldDocumentStateView(definition: () => Definition);

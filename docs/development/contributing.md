@@ -148,18 +148,17 @@ fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
 
 ### Verify a change
 
-`puck gate` is how a change is verified, by agents and people alike. Run it
-from a copy of the candidate's own CLI outside the checkout. It builds the
-solution and stops on a failed build; copies the CLI that build wrote into a
-directory of its own; runs the suites, test worlds and catalog check the change
-reaches, read against the merge base with the target branch so the target's
-newer commits are not counted; and runs `format`, `lengths`, `comment-smells`,
-`docs links`, `schema`, `architecture`, `registry`, `vocabulary`, `shaders generate`,
-`branding`, `formats` and `canary-ceilings` in their check forms only. `puck gate --gpu` adds the
-affected canaries and parity, one after the other, on a machine with no
-competing build or GPU work. The suites and canaries come from
+`puck gate` is the batch qualification, run from a copy of the candidate's own
+CLI outside the checkout. It builds the solution, copies the CLI it built,
+runs the affected selection against the merge base, and checks the repository's
+ledgers and generated files. Its [ordered plan](../reference/cli.md#puck-gatethe-change-scoped-gate)
+is shared with help and held by laws. `--gpu` adds the affected canaries and
+parity, device suites, every recorded counters workload and docs citations,
+serially. `--record` requires `--gpu` and refreshes canary coverage only after
+every qualification step passes. Admission uses host load's defaults before
+heavy steps; the kept log and step timeline name each result. The affected selection comes from
 [`puck affected`](../reference/cli.md#puck-affectedthe-checks-a-change-needs),
-chosen from the project graph and recorded canary coverage, and nothing wider.
+chosen from the project graph and recorded canary coverage.
 The full sets run only when the owner asks for them. See
 [`puck gate`](../reference/cli.md#puck-gatethe-change-scoped-gate) for the
 steps and the log the run keeps.

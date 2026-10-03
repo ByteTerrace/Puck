@@ -96,4 +96,15 @@ internal sealed class GitScratchCheckout : IDisposable {
         name: $"checkout/{name}",
         text: text
     );
+    /// <summary>Adds a linked worktree beside the checkout, inside the directory this fixture deletes.</summary>
+    /// <param name="name">The worktree directory name.</param>
+    /// <param name="revision">An existing branch or commit to check out.</param>
+    /// <param name="detached">Whether to detach HEAD at the revision.</param>
+    /// <returns>The worktree's absolute path.</returns>
+    public string AddWorktree(string name, string revision, bool detached = false) {
+        var path = Path.Combine(path1: m_directory.RootPath, path2: $"worktrees/{name}");
+
+        _ = Git(["worktree", "add", .. (detached ? new[] { "--detach" } : Array.Empty<string>()), path, revision]);
+        return path;
+    }
 }
