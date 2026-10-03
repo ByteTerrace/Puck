@@ -812,6 +812,10 @@ admission's refusal of one is held on admission's own function,
 `WorldRuleWorkBudget.Refuse`, and at the sheet, not through a world. The
 reference schedule, reference-cycle admission, and the shared report are C1's.
 
+The comparison of reference costs with independent full-workload measurements
+([costing §8 step 5](abstract-machine-costing.md#8-implementation-order-and-acceptance)) waits for C1's
+reference schedule.
+
 ### Embeddings (done)
 
 **Owns:** `src/Puck.Embeddings`, `EmbeddingLock`, `EmbedCommand`,
