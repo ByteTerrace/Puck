@@ -103,7 +103,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format token, or checks it with `--check`. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
-| [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE` and `CAPACITY` lines an agent admits or holds work by; `--watch` streams each line when due. |
+| [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in a worktree of its own, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
@@ -946,12 +946,14 @@ CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
   itself. The classifier uses the running executable or managed entry assembly;
   a `dotnet run` wrapper does not count; its World child counts once it starts.
   Canary `--list` and `--plan`, parity/counters `compare`, and help count no GPU work.
-- `PRESSURE` appears while free memory is under `--pressure-ram` or free disk
-  is under `--pressure-disk`, at most once every five minutes.
-- Otherwise `CAPACITY` appears while the CPU mean is under `--capacity-cpu` and
-  free memory is over `--capacity-ram`, at most once every ten minutes.
-  It waits for a full CPU window. `PRESSURE` wins over `CAPACITY` within one
-  reading.
+- `PRESSURE` appears when free memory falls under `--pressure-ram` or free
+  disk under `--pressure-disk`, and again when those reasons change.
+- Otherwise `CAPACITY` appears when the CPU mean falls under `--capacity-cpu`
+  with free memory over `--capacity-ram`, and `LOADED` when that ends without
+  pressure. Both wait for a full CPU window. `PRESSURE` wins over `CAPACITY`
+  within one reading.
+- Each line marks a transition: while a state holds, `--watch` prints nothing
+  more, so a watcher sees each change once.
 
 The default thresholds require CPU below 50% and free RAM above 5GB for capacity;
 pressure means free RAM below 2GB or free disk below 10GB. Options override these defaults. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
@@ -962,7 +964,7 @@ it ran without `-nodeReuse:false`.
 Without `--watch` the verb takes one reading over one second, judges that
 reading's own CPU figure, and exits. With `--watch` it reads every
 `--interval` seconds (default 10) until cancelled, judges the CPU mean over the
-last `--window` readings (default 6), and prints a line only when one is due,
+last `--window` readings (default 6), and prints a line only on a transition,
 so its output works as an event stream for a monitor. The readings are cheap
 operating-system queries: kernel CPU time, the memory status, the process list
 and each process's command line on Windows, and `/proc` on Linux. The verb

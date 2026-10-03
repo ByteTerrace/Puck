@@ -119,7 +119,10 @@ while the leg runs. Use [`verification`](../verification/SKILL.md#gpu-legs) for
 grants, GPU work classification and execution.
 
 Run a load governor on any machine that hosts many agents, through
-`puck host load`, which samples the machine's load and names its state:
+`puck host load`, which samples the machine's load and names its state. Under a
+watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
+`LOADED` when capacity ends without pressure, `PRESSURE`, `GPU busy` and
+`GPU idle`), so each change arrives once:
 
 - Size admission by the job's measured peak. On capacity, admit light work only.
   A heavy job (a solution build plus a full suite, about 7 GB at its peak) needs

@@ -44,7 +44,7 @@ internal static class HostCommand {
             : CliExit.Success);
     }
     private static Command CreateLoad() {
-        var watchOption = new Option<bool>(name: "--watch") { Description = "Keep reading every --interval seconds and print a line only when one is due, until cancelled." };
+        var watchOption = new Option<bool>(name: "--watch") { Description = "Keep reading every --interval seconds and print a line on each transition, until cancelled." };
         var intervalOption = new Option<int>(name: "--interval") { DefaultValueFactory = _ => 10, Description = "Seconds between readings with --watch." };
         var windowOption = new Option<int>(name: "--window") { DefaultValueFactory = _ => 6, Description = "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist." };
         var capacityCpuOption = new Option<double?>(name: "--capacity-cpu") { DefaultValueFactory = _ => HostLoadThresholds.Default.CapacityCpuPercent, Description = "CAPACITY needs the CPU mean below this percentage (with --capacity-ram)." };
@@ -57,18 +57,19 @@ internal static class HostCommand {
         ValidateThreshold(option: pressureRamOption);
         ValidateThreshold(option: pressureDiskOption);
         var command = new Command(
-            description: "Report CPU, memory, disk and GPU busyness as admission lines: GPU busy|idle, PRESSURE, CAPACITY.",
+            description: "Report CPU, memory, disk and GPU busyness as admission lines: GPU busy|idle, PRESSURE, CAPACITY, LOADED.",
             name: "load"
         ) { watchOption, intervalOption, windowOption, capacityCpuOption, capacityRamOption, pressureRamOption, pressureDiskOption };
 
         command.Detail(detail: $"""
               Lines (each carries cpu=, freeRAM=, freeDisk= and reuseNodes=):
                 GPU busy (<process> <id>) | GPU idle   at the first reading and on every change after
-                PRESSURE <why>                         free memory or disk under its pressure threshold,
-                                                       at most once every 5 minutes
+                PRESSURE <why>                         free memory or disk falls under its pressure
+                                                       threshold, and again when the reasons change
                 CAPACITY                               otherwise, the CPU mean under --capacity-cpu and free
-                                                       memory over --capacity-ram, at most once every 10
-                                                       minutes, once --window readings exist
+                                                       memory over --capacity-ram, once --window readings exist
+                LOADED                                 otherwise, once --window readings exist: capacity ended
+              One line per transition: a state that holds prints nothing more.
               PRESSURE wins over CAPACITY within one reading. Defaults: CPU below {HostLoadThresholds.Default.CapacityCpuPercent}%,
               free RAM above {HostLoadThresholds.Default.CapacityRamGb}GB; pressure below {HostLoadThresholds.Default.PressureRamGb}GB RAM or {HostLoadThresholds.Default.PressureDiskGb}GB disk. Options override these defaults; gate uses them unchanged.
 
