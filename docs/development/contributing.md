@@ -75,6 +75,7 @@ subdirectory there:
 | Subdirectory | Owner |
 |---|---|
 | `world` | The game's state root: profiles and replays (`--state-dir` replaces it) |
+| `projections` | Content-addressed prototype bodies shared by projection recipients across joins and worlds |
 | `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root |
 | `bakes` | The creation bakes presentations make, shared the same way |
 | `world-builds` | The shared Release builds of `Puck.World` the CLI gates run |

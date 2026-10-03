@@ -42,6 +42,8 @@ internal sealed class WorldDeferredForwardedAuthority(WorldForwardingDestination
         }
         (retired as IDisposable)?.Dispose();
     }
+    public byte[]? FetchPrototype(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
+        Volatile.Read(location: ref m_current)?.FetchPrototype(ceiling: ceiling, pin: pin, remainingHops: remainingHops);
     public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
         ((Volatile.Read(location: ref m_current) is { } current)
             ? current.StreamProjectionAsync(
