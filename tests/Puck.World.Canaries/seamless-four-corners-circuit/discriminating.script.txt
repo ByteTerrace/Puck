@@ -1,5 +1,5 @@
-# Every named instance is posed exactly where the positive leg poses it, and never driven, so no automatic
-# adjacency crossing ever fires and the named instance an unreached hop tries to address never activated.
+# The traveler is posed exactly where the positive leg poses it, and never driven, so no automatic
+# adjacency crossing ever fires and the traveler seats in unreached named instances stay inactive.
 world.wait 5
 wire.errors reset
 world.adjacencies

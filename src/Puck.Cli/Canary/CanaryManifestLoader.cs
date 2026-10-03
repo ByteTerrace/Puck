@@ -5,6 +5,7 @@ namespace Puck.Cli.Canary;
 
 internal static partial class CanaryManifestLoader {
     private const int MaximumFederatedLegTimeoutSeconds = 240;
+    private const int MaximumHeadlessLegTimeoutSeconds = 90;
     private const int MaximumLegTimeoutSeconds = 60;
     private const string UnknownMemberDetail = "strict manifests refuse fields the runner does not read.";
 
@@ -1598,7 +1599,9 @@ internal static partial class CanaryManifestLoader {
             var isFederated = ((positive.Authorities.Count != 0) || (discriminating.Authorities.Count != 0));
             var maximumLegTimeoutSeconds = (isFederated
                 ? MaximumFederatedLegTimeoutSeconds
-                : MaximumLegTimeoutSeconds
+                : ((bootShape == CanaryBootShape.Headless)
+                    ? MaximumHeadlessLegTimeoutSeconds
+                    : MaximumLegTimeoutSeconds)
             );
 
             // The leg ends when its script does (the runner closes every script with wire.errors and quit); this is

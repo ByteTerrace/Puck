@@ -1083,7 +1083,8 @@ authored script: `wire.errors`, whose exact response count it checks, and
 `quit`, which ends the World once everything queued ahead of it has run. The
 manifest's `timeoutSeconds` is therefore not how long a leg runs. It is the
 ceiling at which the runner kills a leg that has hung, from 1 to 60 seconds
-(240 for a federated leg). Every World the runner starts also gets
+(90 for a headless leg, 240 for a federated leg). Every World the runner starts
+also gets
 `--exit-after-seconds` at that ceiling, so a World the runner can no longer
 kill stops on its own. A companion authority gets its client's ceiling plus
 fifteen seconds, so it outlasts its client.

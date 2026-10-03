@@ -10,6 +10,7 @@ namespace Puck.Cli.Tests;
 /// dependency on the real <c>tests/Puck.World.Canaries</c> corpus. One good manifest and one orphan directory (no
 /// <c>canary.json</c>) sit side by side: the non-strict (running) shape must skip the orphan, name it, and still
 /// load the good manifest; the strict (<c>--list</c>) shape must refuse the whole discovery on the orphan alone.
+/// Headless legs admit up to 90 seconds of simulation work while GPU legs retain their 60-second ceiling.
 /// </summary>
 public sealed class CanaryManifestLoaderLawTests : IDisposable {
     private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-cli-tests-canary-loader-");
@@ -99,6 +100,34 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
         }
         """;
 
+    [InlineData("headless", 0, false, 90)]
+    [InlineData("headless", 1, true, 90)]
+    [InlineData("headless", 60, true, 90)]
+    [InlineData("headless", 61, true, 90)]
+    [InlineData("headless", 90, true, 90)]
+    [InlineData("headless", 91, false, 90)]
+    [InlineData("windowed", 60, true, 60)]
+    [InlineData("windowed", 61, false, 60)]
+    [Theory]
+    public void AHeadlessLegHasABoundedSimulationBudgetWithoutWideningTheGpuBudget(string bootShape, int seconds, bool accepted, int ceiling) {
+        var directory = Path.Combine(path1: m_directory.RootPath, path2: "tests", path3: "Puck.World.Canaries", path4: "good-one");
+
+        File.WriteAllText(path: Path.Combine(path1: directory, path2: "canary.json"), contents: LegManifest(
+            id: "good-one", worldPrefix: "tests/Puck.World.Canaries/good-one/").Replace(
+                newValue: $"\"bootShape\": \"{bootShape}\"", oldValue: "\"bootShape\": \"headless\"").Replace(
+                newValue: $"\"timeoutSeconds\": {seconds}", oldValue: "\"timeoutSeconds\": 10"));
+        var loaded = CanaryManifestLoader.TryLoadAll(error: out _, manifests: out var manifests,
+            refused: out var refused, repositoryRoot: m_directory.RootPath, strict: false);
+
+        Assert.Equal(actual: loaded, expected: accepted);
+        if (accepted) {
+            Assert.Equal(expected: seconds, actual: Assert.Single(collection: manifests).TimeoutSeconds);
+        } else {
+            Assert.Empty(collection: manifests);
+            Assert.Contains(collection: refused, filter: refusal => refusal.Reason.Contains(
+                comparisonType: StringComparison.Ordinal, value: $"timeoutSeconds must be in 1..{ceiling}"));
+        }
+    }
     [InlineData("true", true)]
     [InlineData("false", false)]
     [InlineData("null", null)]
