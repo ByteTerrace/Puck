@@ -20,7 +20,7 @@ It intentionally omits implementation chronology and review provenance.
 | Analytic forward-mode normals | Shipped default; four-tap comparison remains available | [Gradients and normals](gradients-and-normals.md) |
 | Normal-ladder AO | Shipped three-tap ambient-only path | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Cone AO and bent normals | Optional quality tier; open | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
-| World-space radiance cache traced through the field | Planned global illumination, shared by every view of a world | [Rendering plan](../../../plans/rendering.md#p6-gi-global-illumination-from-the-field) |
+| World-space radiance cache traced through the field | Partial: the CPU reference and the cache's transport model (`IrradianceLattice` and its siblings in `Puck.SignedDistance/Illumination`) have landed; the GPU cache, light views and lighting (G2 to G10) are planned | [Rendering plan](../../../plans/rendering.md#p6-gi-global-illumination-from-the-field) |
 | Penumbra soft shadows | Shipped with a workgroup grid gather | [Shading, ambient occlusion, and shadows](shading-ao-shadows.md) |
 | Material blending at smooth seams | Shipped hit-only shading path | [Materials and primitives](materials-and-primitives.md) |
 | Non-orthogonal screen and text frames | Not supported; refused at every door that accepts a frame | [Materials and primitives](materials-and-primitives.md) |

@@ -80,10 +80,10 @@ before any scoring, unlock or progression is layered on it. The nexus's own feel
 dungeon's — a promenading pace fit for a shared plaza.
 
 `studio` ships beside them as a non-game **dev canvas** for character work, and as Puck's first
-formal border crossing (owner amendment): the nexus and studio meet at a mapped border, so
-studio is reachable by walking through the island's fourth arch as well as by `--world`. It is not a
-game world and not a destination in the reveal graph. A doc counting "four worlds" is counting the
-charter's roster; the directory holds five documents.
+formal border crossing (owner amendment): the nexus and studio meet at a mapped border. It is not a
+game world and not a destination in the reveal graph. The island is `puck.world.json`; Dive, Kart,
+Jump, Studio and the other districts are modules under `Assets/worlds/modules` that it imports, so
+a doc counting "four worlds" is counting the charter's roster, not the files.
 
 **Reveals are a core world mechanic** — attunement-like achievement facts carried on the identity,
 general enough for cross-game unlocks between trusted servers. Every world is a starting point; all

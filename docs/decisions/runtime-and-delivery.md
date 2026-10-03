@@ -8,6 +8,12 @@ contract has the shape it has.
 
 ## Products
 
+**Status: not implemented; owned by [the product tree](../plans/runtime-and-delivery.md#the-product-tree).**
+Nothing below exists yet: there is no `content/` tree, no `product.json`, and
+no `--product` option. `Puck.World` boots the worlds under its own
+`Assets/worlds`, and the build and release verbs read their content from there.
+The decisions in this section are the contract those steps deliver.
+
 **The engine ships no content.** `Puck.World` and its siblings ship engine
 data only: shaders, fonts, overlays, probe kinds, document schemas, each owned
 by the project that uses it. Worlds, cartridges, music, addons, and art belong
@@ -67,8 +73,10 @@ Reversi, Hearts or Snake, keeps it. A citation of a real product as prior art,
 such as an emulator reference or a game named for its feel, is not a shipped
 name.
 
-**Every house cartridge has a `.puck` source.** `pip.agb` gets one by
-decompiling its document, reproduced byte for byte through `puck compile`.
+**Every house cartridge has a `.puck` source.** `pip.agb` is the one exception
+today: its source is the hand-authored `pip.agb.cartridge.json` under
+`Assets/cartridges`. It gets a `.puck` by decompiling that document, reproduced
+byte for byte through `puck compile`.
 
 **Licensed images stay usable as evidence, recorded by hash only.** Their bytes
 never enter the repository; the ledger records id and SHA-256, and the battery

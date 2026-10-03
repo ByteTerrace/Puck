@@ -131,8 +131,9 @@ shadow march, the 64 lanes in an 8×8 workgroup walk the world-space instance
 grid along the sun ray and cooperatively build one groupshared mask covering
 the complete instance capacity. Each pixel then marches that mask. The mask
 contains every occluder the flat all-instances march could hit, while its grid
-walk is shared across the workgroup. No automated check compares it with the
-flat march.
+walk is shared across the workgroup. An admitted instance a pixel's ray never
+reaches composes as the accumulator to the bit, so by construction the masked
+march equals the flat march exactly. No automated check compares them.
 
 The gather cone matters. It is **not** a bare ray: it is the *penumbra cone*,
 wider than the ray itself, because the closest-approach estimate must include
