@@ -251,9 +251,14 @@ These are one-line cautions; the owning pages hold the derivations.
   begins every chain with `ResetPoint` rather than trusting what ran before. The
   classifier, the skip spheres and the part compiler start from the world point
   because of it. `SdfOpRoles.Of` is the one table of point ops, field ops and
-  lattices, and a new op is classified there first. A scope's compose radius
-  reaches `L` times as far when the scope's field joins its parent divided by its
-  Lipschitz factor (`PopField.Data1.Y = 1/L`), and the halo says so.
+  lattices, and a new op is classified there first. `SegmentRanges` is the one
+  definition of a segment (before each `ResetPoint` and at every instance's first
+  and end instruction, an empty instance included) that the directory and the
+  refusal both read. A scope's compose radius reaches `L` times as far when the
+  scope's field joins its parent divided by its Lipschitz factor
+  (`PopField.Data1.Y = 1/L`), and the halo says so; an instance bound contains the
+  surface and the blends' influence, and the field outside it is at least its
+  distance to the bound over `SdfInstanceCost.FieldRescale`, not the distance.
 - **Bounds compose through the set operations.** `SdfBoundAlgebra` is the one
   statement: an intersection takes the smaller operand bound (unbounded and
   finite is finite), a subtraction its subject's, a union the larger (one

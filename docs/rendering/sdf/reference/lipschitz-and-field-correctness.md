@@ -175,12 +175,24 @@ a field scope, whose shapes join one field by their blends: inside `PushField` a
 unbounded lattice intersected with a box is as bounded as the box, a box minus a
 lattice keeps the box's bound, and a lattice with a box unioned in is unbounded.
 Outside a scope every intersection, field op and fold with no edge reads the one
-global accumulator, so a flat instance holding one is unmaskable. Every bound is measured from the world point: a segment starts there, because the
+global accumulator, so a flat instance holding one is unmaskable. A bound has two guarantees, and a reader takes the one it needs. It contains the instance's
+surface and the influence of its blends, so a ray that misses it misses the instance: the beam
+cull, the grid binning, the shadow and ambient gathers and the part compiler read it so, and the
+halo carries a scope's soft compose out to its radius times the scope's factor `L`. And the
+instance's field outside it is at least the distance to the bound divided by
+`SdfInstanceCost.FieldRescale`, the largest `L` of a scope that divides its field before the
+parent sees it (1 when none does). The directory's running-minimum skip never reads an instance
+bound for a scope: a segment holding a push or pop is always evaluated, and the CPU evaluator
+culls only an instance that is a pure union with no scope.
+
+Every bound is measured from the world point: a segment starts there, because the
 directory and the instance mask can skip or compile a segment apart from its neighbours and a
 skipped one passes the point before it along, so `SdfProgram` refuses a stream that may
 carry a moved point into a segment that reads it without a `ResetPoint` of its own (a
 shapeless world segment, which is never skipped, is the one reset that holds across a
-boundary). A lattice opens an unbounded fold unless its limit gives it an edge; `SdfOpRoles`
+boundary). A segment is what the directory says it is: `SegmentRanges` splits before each
+`ResetPoint` and at every instance's first and end instruction, so an empty instance is a
+boundary too, and the refusal and the directory read one definition. A lattice opens an unbounded fold unless its limit gives it an edge; `SdfOpRoles`
 is the one table of which ops move the point, which move the field, and which open a lattice,
 and an op without a row refuses by name. A `Plane` is
 unmaskable wherever it stands, and `SdfBoundAlgebraLawTests` samples the field

@@ -278,6 +278,37 @@ public sealed class SdfBoundAlgebraLawTests {
             Assert.Contains(expectedSubstring: "without a ResetPoint", actualString: refusal.Message);
         }
     }
+    // An empty instance still splits the directory where its neighbours meet, so the segment rule reads the directory's own
+    // boundaries, not a change of owner: the witness moves the point to (100, 0, 0), opens and closes an instance holding
+    // nothing, then draws a sphere that the directory bounds at the origin while the sequential evaluation reads it moved.
+    [Fact]
+    public void AnEmptyInstanceIsASegmentBoundaryTheRuleSees() {
+        SdfProgram Program(bool resetAfter) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            _ = builder.ResetPoint();
+            _ = builder.Translate(offset: new Vector3(x: 110f, y: 0f, z: 0f));
+            _ = builder.Sphere(material: material, radius: 1f);
+            _ = builder.ResetPoint();
+            _ = builder.Translate(offset: new Vector3(x: 100f, y: 0f, z: 0f));
+            _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+            _ = builder.EndInstance();
+
+            if (resetAfter) {
+                _ = builder.ResetPoint();
+            }
+
+            _ = builder.Sphere(material: material, radius: 1f);
+
+            return builder.Build();
+        }
+
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => Program(resetAfter: false));
+
+        Assert.Contains(expectedSubstring: "without a ResetPoint", actualString: refusal.Message);
+        Assert.Null(@object: Record.Exception(testCode: () => Program(resetAfter: true)));
+    }
     // A scope's push and pop touch only the field, so an instance that opens with one and resets the point right after
     // begins at the world point however the stream before it moved it.
     [Fact]
@@ -323,6 +354,136 @@ public sealed class SdfBoundAlgebraLawTests {
         Assert.False(condition: cost.Unmaskable);
         Assert.True(condition: (cost.Halo >= 101f), userMessage: $"halo {cost.Halo}");
         Assert.True(condition: (cost.BoundRadius >= (1f + 101f)), userMessage: $"bound {cost.BoundRadius}");
+    }
+
+    // A scope whose field carries relief (a cellular displacement) joins its parent divided by its Lipschitz factor L, so the
+    // field outside the instance's bound is at least its distance to the bound divided by L, not the distance itself. The
+    // bound still contains the surface and the blend's influence: no sample outside it changes which side of the surface the
+    // program reads. Both are sampled well past the bound, on a bare twin of the program the exact evaluator can answer.
+    private static (SdfProgram Instanced, SdfProgram Bare, SdfProgram WorldOnly) StretchedScope(SdfBlendOp compose) {
+        var worlds = new SdfProgram[3];
+
+        for (var variant = 0; (variant < 3); variant++) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            _ = builder.Translate(offset: new Vector3(x: 4.1f, y: 0f, z: 0f));
+            _ = builder.Sphere(material: material, radius: 1f);
+            _ = builder.ResetPoint();
+
+            if (variant != 2) {
+                if (variant == 0) {
+                    _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+                }
+
+                _ = builder.PushField(compose: compose, smooth: ((compose == SdfBlendOp.SmoothUnion) ? 1f : 0f));
+                _ = builder.Sphere(material: material, radius: 0.5f);
+                _ = builder.CellDisplace(amplitude: 1f, frequency: 3f, mode: SdfCellMode.F1, randomness: 0.4f, seed: 7u);
+                _ = builder.PopField();
+
+                if (variant == 0) {
+                    _ = builder.EndInstance();
+                }
+            }
+
+            worlds[variant] = builder.Build();
+        }
+
+        return (worlds[0], worlds[1], worlds[2]);
+    }
+
+    [Fact]
+    public void TheFieldPastARescaledInstancesBoundIsAtLeastItsDistanceToTheBoundOverItsRescale() {
+        var (instanced, _, _) = StretchedScope(compose: SdfBlendOp.Union);
+        var cost = instanced.InspectInstance(index: 0);
+
+        Assert.True(condition: (cost.FieldRescale > 2f), userMessage: $"rescale {cost.FieldRescale}");
+        Assert.False(condition: cost.Unmaskable);
+
+        // Only the scope: the world sphere would answer instead of the instance wherever it is nearer.
+        var scopeOnly = new SdfProgramBuilder();
+        var material = scopeOnly.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = scopeOnly.ResetPoint();
+        _ = scopeOnly.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 1f);
+        _ = scopeOnly.PushField(compose: SdfBlendOp.Union);
+        _ = scopeOnly.Sphere(material: material, radius: 0.5f);
+        _ = scopeOnly.CellDisplace(amplitude: 1f, frequency: 3f, mode: SdfCellMode.F1, randomness: 0.4f, seed: 7u);
+        _ = scopeOnly.PopField();
+        _ = scopeOnly.EndInstance();
+
+        var program = scopeOnly.Build();
+        var scopeCost = program.InspectInstance(index: 0);
+        var evaluator = new SdfFieldEvaluator(program: program);
+        var random = new Random(Seed: 2061);
+        var sampled = 0;
+        var belowTheBareDistance = 0;
+
+        for (var sample = 0; (sample < 2000); sample++) {
+            var point = new Vector3(
+                x: ((((float)random.NextDouble()) * 600f) - 300f),
+                y: ((((float)random.NextDouble()) * 600f) - 300f),
+                z: ((((float)random.NextDouble()) * 600f) - 300f)
+            );
+            var past = (point.Length() - scopeCost.BoundRadius);
+
+            if (past <= 0f) {
+                continue;
+            }
+
+            Assert.True(condition: evaluator.TryDistance(position: Position(point: point), distance: out var field, material: out _), userMessage: $"at {point}");
+            Assert.True(
+                condition: (((float)field) >= ((past / scopeCost.FieldRescale) - 0.05f)),
+                userMessage: $"at {point}: field {((float)field)} is under its distance {past} to the bound {scopeCost.BoundRadius} over the rescale {scopeCost.FieldRescale}"
+            );
+
+            sampled++;
+            belowTheBareDistance += ((((float)field) < (past - 1f)) ? 1 : 0);
+        }
+
+        Assert.True(condition: (sampled > 1000), userMessage: $"only {sampled} samples fell past the bound");
+        Assert.True(condition: (belowTheBareDistance > 0), userMessage: "no sample read below the plain distance to the bound, so the rescale was never exercised");
+    }
+    // The blend a rescaled scope joins its parent with reaches the scope's radius times its factor, and past that the program
+    // reads the same side of the surface as it does without the instance at every sampled point.
+    [Fact]
+    public void ASoftComposeOfARescaledScopeChangesNoSignPastItsBound() {
+        var (instanced, bare, worldOnly) = StretchedScope(compose: SdfBlendOp.SmoothUnion);
+        var cost = instanced.InspectInstance(index: 0);
+
+        Assert.True(condition: (cost.Halo >= (1f * cost.FieldRescale)), userMessage: $"halo {cost.Halo} under the compose radius times the rescale {cost.FieldRescale}");
+
+        var with = new SdfFieldEvaluator(program: bare);
+        var without = new SdfFieldEvaluator(program: worldOnly);
+        var random = new Random(Seed: 2062);
+        var sampled = 0;
+        var probes = new List<Vector3> { new(x: 3f, y: 0f, z: 0f), new(x: 3f, y: 0.5f, z: 0f), new(x: 2.5f, y: 0f, z: 0f) };
+
+        for (var sample = 0; (sample < 4000); sample++) {
+            probes.Add(item: new Vector3(
+                x: ((((float)random.NextDouble()) * 40f) - 20f),
+                y: ((((float)random.NextDouble()) * 40f) - 20f),
+                z: ((((float)random.NextDouble()) * 40f) - 20f)
+            ));
+        }
+
+        foreach (var point in probes) {
+            if (point.Length() <= cost.BoundRadius) {
+                continue;
+            }
+
+            Assert.True(condition: with.TryDistance(position: Position(point: point), distance: out var inside, material: out _));
+            Assert.True(condition: without.TryDistance(position: Position(point: point), distance: out var outside, material: out _));
+            // The instance may not move the surface where it is outside its bound.
+            Assert.Equal(
+                actual: (((float)inside) > 0f),
+                expected: (((float)outside) > 0f)
+            );
+
+            sampled++;
+        }
+
+        Assert.True(condition: (sampled > 100), userMessage: $"only {sampled} probes fell past the bound");
     }
     // Two lattices with no edge intersect to one with none, whichever kinds they are, CellJitter at zero jitter and the
     // log-spherical shells included.

@@ -13,8 +13,8 @@ public sealed partial class SdfProgram {
         _ => ((SdfOpRoles.Of(op: instruction.Op) == SdfOpRole.Lattice) ? throw new InvalidOperationException(message: $"SDF lattice op {instruction.Op} has no unbounded-limit rule.") : false),
     };
     // A segment (the unit the directory skips, and an instance's compiled part program evaluates alone) starts from the
-    // world point. ResetPoint says so where the stream splits at one, but the stream also splits where the owner changes
-    // (an instance begins or ends), and a segment that does not begin with a ResetPoint inherits whatever point the
+    // world point. ResetPoint says so where the stream splits at one, but the stream also splits at every instance's first
+    // and end instruction (an empty instance included, per SegmentRanges), and a segment that does not begin with a ResetPoint inherits whatever point the
     // segments before it left. A segment the directory or the instance mask can skip passes the state before it along
     // unchanged, so a moved point can reach a later segment through any number of ResetPoints. A stream whose point can
     // be moved when a segment that reads it begins without a ResetPoint refuses by name: the inherited point would depend
@@ -30,23 +30,13 @@ public sealed partial class SdfProgram {
         var moved = false;
         var mover = -1;
 
-        for (var first = 0; (first < m_instructions.Length);) {
-            var end = (first + 1);
-
-            while (
-                (end < m_instructions.Length) &&
-                (m_instructions[end].Op != SdfOp.ResetPoint) &&
-                (instructionOwners[end] == instructionOwners[first])
-            ) {
-                end++;
-            }
-
+        foreach (var (first, last) in SegmentRanges()) {
             var startsWithReset = (m_instructions[first].Op == SdfOp.ResetPoint);
             var firstMover = -1;
             var hasShape = false;
             var readsPoint = false;
 
-            for (var index = first; (index < end); index++) {
+            for (var index = first; (index <= last); index++) {
                 var op = m_instructions[index].Op;
 
                 hasShape |= (op == SdfOp.ShapeBlend);
@@ -80,7 +70,6 @@ public sealed partial class SdfProgram {
             }
 
             moved = (leavesMoved || (skippable && moved));
-            first = end;
         }
     }
 }

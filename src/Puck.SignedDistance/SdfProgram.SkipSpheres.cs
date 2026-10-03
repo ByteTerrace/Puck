@@ -34,37 +34,22 @@ public sealed partial class SdfProgram {
     private (List<BoundRecord> ShapeBounds, List<BoundRecord> Segments) AnalyzeBounds(int[] instructionOwners) {
         var segments = new List<BoundRecord>();
         var shapeBounds = new List<BoundRecord>();
-        var segmentStart = 0;
 
         // O(instructions + instances) lookups replacing the per-instruction linear scans of m_instances the segment
         // walk below would otherwise do (a boundary test per instruction, an owner resolve per segment — together
         // O(instructions x instances)). The owner map arrives from ValidatePackedContract, which already built it for
         // the field-scope walk over the same stream.
-        var instanceBoundaries = BuildInstanceBoundaries();
-
         // Segments split BEFORE each ResetPoint AND at every instance boundary (m_instances' First/End): a segment
         // never straddles two instances (or an instance and the WORLD set), so the instance table below can express
         // "this instance owns segments [a, b)" as a plain contiguous directory range. The next segment's leading
         // ResetPoint rebuilds every piece of chain state a segment skip leaves stale.
-        while (segmentStart < m_instructions.Length) {
-            var segmentEnd = segmentStart;
-
-            while (
-                ((segmentEnd + 1) < m_instructions.Length) &&
-                (m_instructions[(segmentEnd + 1)].Op != SdfOp.ResetPoint) &&
-                !instanceBoundaries.Contains(item: (segmentEnd + 1))
-            ) {
-                segmentEnd++;
-            }
-
+        foreach (var (segmentStart, segmentEnd) in SegmentRanges()) {
             segments.Add(item: AnalyzeSegment(
                 segmentStart: segmentStart,
                 segmentEnd: segmentEnd,
                 instanceIndex: instructionOwners[segmentStart],
                 shapeBounds: shapeBounds
             ));
-
-            segmentStart = (segmentEnd + 1);
         }
 
         // Merge consecutive skippable segments into fewer, wider directory entries — every map() call pays one test
@@ -337,6 +322,35 @@ public sealed partial class SdfProgram {
             ? dynamicSlot
             : 0)
         );
+    }
+    // The ONE definition of a segment, read by the directory (AnalyzeBounds, so by both HLSL walks) and by
+    // RequireSegmentsStartAtTheWorldPoint: the stream splits BEFORE each ResetPoint AND at every instance boundary
+    // (BuildInstanceBoundaries: each instance's First and End, so an empty instance still splits where its two
+    // neighbours meet), which keeps a segment from straddling two instances (or an instance and the WORLD set) and lets the
+    // instance table say "this instance owns segments [a, b)" as a contiguous directory range. Each range is
+    // [Start, End] inclusive.
+    private List<(int Start, int End)> SegmentRanges() {
+        var ranges = new List<(int Start, int End)>();
+        var boundaries = BuildInstanceBoundaries();
+        var start = 0;
+
+        while (start < m_instructions.Length) {
+            var end = start;
+
+            while (
+                ((end + 1) < m_instructions.Length) &&
+                (m_instructions[(end + 1)].Op != SdfOp.ResetPoint) &&
+                !boundaries.Contains(item: (end + 1))
+            ) {
+                end++;
+            }
+
+            ranges.Add(item: (start, end));
+
+            start = (end + 1);
+        }
+
+        return ranges;
     }
     // The set of instruction indices that force a segment split: the FIRST instruction of some instance's range, or the
     // first instruction AFTER some instance's range ends (the second because the ended instance's last segment must not
