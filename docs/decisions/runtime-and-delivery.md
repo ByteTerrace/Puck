@@ -191,7 +191,7 @@ keeps its public API, constructor and phase order.
 
 **Presentation code receives a presentation view, never the authority's
 document.** The primary client is handed the authority's own document by
-reference: `WorldDocument.Apply` passes its live definition to
+reference: `WorldDocument.DeliverPending` passes its live definition to
 `Host.Output.DeliverDefinition`, `WorldOutputHub` fans it out, and
 `WorldClient.DeliverDefinition` stores it, so any presentation reader can reach
 anything a document holds. A federated neighbour observes the same world through

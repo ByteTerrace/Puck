@@ -31,7 +31,7 @@ between them. `world.counters gpu` reports the upload under the residency
 (`sdf:world` for the world's) and each view's passes under its instance, as
 `sdf.world$mask` through `sdf.world$composite`. Here is what the culling and
 rendering passes do; [the engine README](../../../../src/Puck.SdfVm/README.md)
-describes the visibility records the four per-pixel passes share: one per pixel
+describes the visibility records the five per-pixel passes share: one per pixel
 of each view's render grid, 64 bytes. A view whose render-scale ceiling is below
 native puts the full-output `resolve` pass described under
 [render scale](#render-scale-tiers-trade-resolution-for-frame-time) between views
@@ -102,10 +102,10 @@ the seats the same way it places panes.
 ## What each pass costs
 
 The passes scale with different things. `mask` and `beam` scale with how many
-instances lie near each tile's cone. `primary`, `surface`, `ambient`, and
+instances lie near each tile's cone. `primary`, `surface`, `ambient`, `shadow` and
 `views` scale with on-screen content: how many pixels hit a surface and how
 much of the program each field query walks. `cull-args` is small; `composite`
-scales with the output's pixels and `sky` with the uncovered ones. **The four per-pixel passes are the scale lever for
+scales with the output's pixels and `sky` with the uncovered ones. **The five per-pixel passes are the scale lever for
 on-screen content; `mask`+`beam` is the scale lever for instance count.**
 Moving work between the per-pixel passes can relieve register pressure but
 adds hit-buffer traffic, so compare their sum as well as each label.
@@ -195,7 +195,7 @@ installs that extent the root presents its last image and a capture waits for
 the first frame at it
 ([loading and installing](../../../reference/shaders.md#loading-and-installing)).
 
-A view whose ceiling is native keeps the original ten-pass fragment and writes
+A view whose ceiling is native keeps the eleven-pass native fragment and writes
 its output directly. It allocates no resolve resources and ignores the current
 grid, so a layout transition does not dip it. A changed ceiling rebuilds the
 view's graph beside the installed one, which presents its last image until the
@@ -204,14 +204,23 @@ account includes the output beside the render ceiling, and its scheduling price
 sums the passes' current grids.
 Render scale is *presentation only*: it never touches simulation state, and which
 tier a view uses is a host decision, not baked into the content. In `Puck.World`,
-`world.render-scale` sets it for every player view and `world.upscale-sharpness`
-sets the reconstruction blend.
+`world.render-scale [view]` sets a view's ceiling, with the world's default
+applying to every player view and a camera or session view keeping its native
+extent until a lever or a `views.quality` row names it, and
+`world.upscale-sharpness` sets the reconstruction blend.
 
 ### Dynamic resolution
 
-With dynamic resolution on (`world.render-scale auto`), one controller policy,
-`WorldDynamicResolution`, moves the world's own views' render grid each frame
-between a floor and the render-scale ceiling. The grid is
+With dynamic resolution on (`world.render-scale [view] auto`), one policy,
+`WorldDynamicResolution`, moves a view's render grid each frame between the
+view's floor and its render-scale ceiling. Every view owns its own controller,
+with its own history and a load source that reads only that view's submissions;
+`auto` without a view applies to the world's own player views (`world`,
+`world$2` on), and a camera or session view adapts only when a lever names it.
+`world.render-scale [view] pin <scale>` holds a view's grid instead, as a
+session pin that no load moves and that enters neither a save nor a replay;
+`auto` releases it, and the policy resumes from the pinned grid within one step.
+The grid is
 `SdfViewSnapshot.ResolvedRenderScale`, the same grid a layout transition dips,
 so the two compose; it moves inside the allocation the ceiling sized, so no
 frame reallocates, rebuilds or resets history. A view at a native ceiling
@@ -221,11 +230,11 @@ allocates its views at three-quarter.
 Each fresh load sample moves the grid through one response: within 10% of its
 budget the grid holds, and outside it the grid moves toward the scale whose
 area meets the budget by at most a sixteenth of itself down or a thirty-second
-up. The sample is the views' GPU frame time against the display period, from
+up. The sample is the view's GPU frame time against the display period, from
 the same pass timestamps `world.gpu-timing` reads; a present-paced swapchain
 reports every kept present as exactly its period, so only the GPU's time shows
 the headroom to raise the grid again. A device that times nothing falls back to
-the present interval, and a host with neither, an offscreen one, to the views'
+the present interval, and a host with neither, an offscreen one, to the view's
 counted march steps against the floor tier's committed ceilings per output
 pixel. Counted work per frame then scales with the grid, which
 `world.counters gpu` shows as the sky pass's texels written.
@@ -250,6 +259,7 @@ adjacent grids, the controller settles on the cheaper one rather than
 alternating: a sample over the budget marks its grid, and the grid rises onto
 the mark only once a sample, compared exactly against the budget, predicts it
 within the budget.
+
 ## The sky once, and a composite last
 
 Views shades only the pixels a surface covers. It writes the **lit image**: each
@@ -400,7 +410,10 @@ view.
 Each view's history is its own fragment's: two versions at the output extent,
 one allocation a frame slot each, that the next frame reads through
 `ResourceReference.PreviousFrame`. A resize carries a history buffer only when
-its resolved byte capacity and element size still match.
+its resolved byte capacity and element size still match. A history version advances only when its
+writer records and its submission succeeds: a failed or skipped write keeps the
+last successful history and the sample count that went with it, reading history
+demands nothing of its writer, and device loss starts from none.
 
 - The **history color** holds, per output pixel, the weighted mean of every sample
   the pixel has gathered: the lit color in its RGB and the coverage in its alpha,
@@ -598,11 +611,12 @@ upload's passes, and each view's node counts the work each of its passes
 (`sdf.world$mask` through `sdf.world$composite`) records, with no arming and no
 effect on the image: dispatches, indirect dispatches, barriers, pipeline and
 descriptor-set binds, push-constant bytes, descriptor writes and host-visible
-upload bytes. The upload has three passes: `fillers`, the fillers' first
+upload bytes. The upload has four passes: `fillers`, the fillers' first
 transitions and clears, which only the first upload runs; `bricks`, a queued
 brick's staging copy and the carve bake's slices with the pool's barriers,
-which an upload runs only when it writes the pool; and `upload`, the regions'
-writes and copies. The `bricks` and `upload` passes follow each device's
+which an upload runs only when it writes the pool; `upload`, the regions'
+writes and copies; and `environment`, the sky environment map's refresh, which
+an upload runs only when [the map](#the-environment-map) is owed. The `bricks` and `upload` passes follow each device's
 residency policy, so they are per-backend deterministic, and `puck counters`
 does not hold the two backends to them.
 
