@@ -338,7 +338,9 @@ internal static partial class LawProof {
             document.Descendants(name: (schema + "Counters")).Any(predicate: static counters => (new[] { "error", "timeout", "aborted" }.Any(predicate: name => (((int?)counters.Attribute(name: name)) is > 0)))));
         var failures = results.Where(predicate: static result => (((string?)result.Attribute(name: "outcome")) == "Failed"))
             .Select(selector: result => new LawFailure(
-                Message: (Lines(text: (((string?)result.Descendants(name: (schema + "Message")).FirstOrDefault()) ?? string.Empty)).FirstOrDefault()?.Trim() ?? "no message"),
+                // The failure's own message is ErrorInfo's: the result's output lines are Message elements too
+                // (Output/TextMessages), and they come first, so a law that writes output would otherwise report that.
+                Message: (Lines(text: (((string?)result.Descendants(name: (schema + "ErrorInfo")).Descendants(name: (schema + "Message")).FirstOrDefault()) ?? string.Empty)).FirstOrDefault()?.Trim() ?? "no message"),
                 Test: (((string?)result.Attribute(name: "testName")) ?? "?")
             ))
             .OrderBy(comparer: StringComparer.Ordinal, keySelector: static failure => failure.Test)
