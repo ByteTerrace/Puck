@@ -34,10 +34,10 @@ namespace Puck.World.Server;
 /// <see cref="WorldContactRequirement.GradientDerivedUp"/>, which derives it from the field gradient instead (a
 /// planetoid, an inverted ceiling, or the inside of a sphere are all walkable). Contact resolution receives the
 /// body's already-resolved ambient up separately, so authored gravity may still define another walkability axis.</para>
-/// <para>Immutable and per-revision: it holds no per-body state, so one instance is shared by reference across every
-/// bodies and installing a rebuild is a single reference swap on <see cref="WorldServer"/>. The wrapped
-/// <see cref="SdfFieldEvaluator"/> holds only a managed <c>CompiledInstruction[]</c>, so a replaced instance needs no
-/// disposal.</para>
+/// <para>Per-revision: it holds no per-body state, so one instance is shared by reference across the bodies and
+/// installing a rebuild is a single reference swap on <see cref="WorldServer"/>. A bounded <see cref="SdfBoundsCache"/>
+/// reuses identical sweep boxes over the immutable program. The lattice remains outside that cache and is read
+/// afresh; replacing the field also replaces its cache. Neither needs disposal.</para>
 /// <para>The "which op can be solid" ceiling is <see cref="SdfFieldEvaluator"/>'s warp-free excluded-op set:
 /// <see cref="TryBuild"/> forwards the constructor's <see cref="ArgumentException"/> message verbatim as its reject
 /// reason, so <see cref="WorldServer"/> turns an unsupported solid into a loud apply-time rejection instead of a
@@ -115,6 +115,7 @@ public sealed class WorldSolidField : IContactField {
             ? null
             : new FieldLatticeSolid(lattice: lattice)
         );
+        var sweepBounds = (evaluator.HasShape ? new SdfBoundsCache(field: evaluator) : null);
 
         m_contactField = ((latticeSolid is null)
             ? m_field
@@ -131,15 +132,15 @@ public sealed class WorldSolidField : IContactField {
             groundedThreshold: tuning.GroundedThreshold,
             maxIterations: tuning.MaxIterations,
             query: m_query,
-            sweep: (evaluator.HasShape, latticeSolid) switch {
-                (true, null) => evaluator,
-                (true, { } solid) => new CertifiedFieldSweep(field: new FieldBoundsUnion(
-                    a: evaluator,
+            sweep: (sweepBounds, latticeSolid) switch {
+                ( { } bounds, null) => new CertifiedFieldSweep(field: bounds),
+                ( { } bounds, { } solid) => new CertifiedFieldSweep(field: new FieldBoundsUnion(
+                    a: bounds,
                     b: solid
                 )),
-                (false, { } solid) => new CertifiedFieldSweep(field: solid),
+                (null, { } solid) => new CertifiedFieldSweep(field: solid),
                 // No geometry for a body to cross: the endpoint solve finds nothing either.
-                (false, null) => null,
+                (null, null) => null,
             },
             sweepBoundsQueryBudget: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget,
             sweepWork: FixedContactSweepWork.Process
