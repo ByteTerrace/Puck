@@ -61,7 +61,8 @@ public sealed class CountersDeviceCeilingsLawTests {
         Script: CountersCommand.ScriptPath,
         Workload: CountersCommand.WorldPath
     );
-    private static string RecordIn(string path, string backend, string adapter) {
+    // The raw text of a backend's record for an adapter, or null when the file holds none.
+    private static string? RecordIn(string path, string backend, string adapter) {
         using var document = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: path));
 
         foreach (var entry in document.RootElement.GetProperty(propertyName: "backends").EnumerateArray()) {
@@ -76,7 +77,7 @@ public sealed class CountersDeviceCeilingsLawTests {
             }
         }
 
-        throw new InvalidOperationException(message: $"{path} holds no {backend} record for {adapter}");
+        return null;
     }
 
     // A run on a device with no record fails naming the device and the verb that records it, never passing silently; the
