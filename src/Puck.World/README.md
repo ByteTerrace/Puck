@@ -1459,10 +1459,11 @@ ends the feed, which the consumer reopens with fresh metadata; unknown discovery
 refuses the open. An SDR
 display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
 shared targets the screen samples and a Vulkan host converts through
-`source-rgba`. An HDR display is captured in half-float scRGB on either host
-and converts on its CPU tier through `source-transfer` into working values at
-the host section's `paperWhiteNits`, so its highlights keep their luminance
-above SDR white. On an SDR output those highlights clip at the display encode,
+`source-rgba`. An HDR display is captured in half-float scRGB, which a
+Direct3D 12 host copies into half-float shared targets and converts on the GPU
+through `source-scrgb`, and a Vulkan host converts on its CPU tier through
+`source-transfer`, both into working values at the host section's
+`paperWhiteNits`, so its highlights keep their luminance above SDR white. On an SDR output those highlights clip at the display encode,
 as any working value above 1 does.
 
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
@@ -1921,8 +1922,10 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
-shadow tier, an ambient-occlusion switch, a temporal-reconstruction switch, a
-dynamic-resolution switch and a render-scale ceiling and floor tier; the names are
+shadow tier, a shadow-slot policy, an ambient-occlusion switch, a
+temporal-reconstruction switch, a dynamic-resolution switch and render-scale
+ceiling and floor tiers. Its four shadow-policy fields apply together as one
+settings change. The names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
@@ -2056,9 +2059,7 @@ a horizon curve there unless the `render.sky` fog layer absorbs it first.
 Two document sections author the scene's lighting instead of a verb, re-read
 on every definition revision (a live edit lands on the next frame).
 `render.lighting.lights[]` is a typed list, at most eight, each `$type`
-`directional` (`direction`, `color`, `weight`, `angularRadius`, `shadows`—the
-one shadowing light drives the soft-shadow march, whose penumbra is the tangent
-of its angular radius; the rest are scaled by ambient occlusion), `hemisphere`
+`directional` (`direction`, `color`, `weight`, `angularRadius`, `shadow`), `hemisphere`
 (`color`, `base`, `gradient`) or `rim` (`color`, `weight`, `power`, added after
 the material shade); absent, the pinned sun and hemisphere render.
 `render.lighting.curvature` adds cavity darkening, ridge light and an ink outline
@@ -2070,8 +2071,56 @@ star hash-dealt its own blackbody colour and apparent luminosity;
 and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
 —a hashed, warped noise layer over everything above it, all on the tick clock),
 composited in that order whatever order they are authored in. Every field is
-optional individually, and a light or a layer may carry a `name`.
-`world.lighting` echoes both sections.
+optional individually, and a layer may carry a `name`. A directional's
+`shadow` is `always`, `auto` or `never` (the default). `always` and `auto`
+require a unique light `name`; `never` consumes no shadow slot. Each delivered
+tick selects `always` lights first, then `auto` lights by their tick-state color
+and weight's luminance. Among equally ranked lights, current slot holders win;
+authored order breaks ties among non-holders and on a fresh selection. A pure
+reorder keeps the holder, and selected names retain their slots when ranking
+or list order moves.
+`world.lighting` echoes both sections and reports each selected light's slot
+and reason, including an `auto` light's rank. It also reports active handoffs
+and queued crossings with their capacity, identity or slot reason.
+
+The boot render settings and each quality preset carry four shadow-policy
+fields: `shadowLights` (K, 0..4), `shadowFadeSlots` (F, 0..2),
+`shadowFadeTicks` (nonnegative engine ticks) and `shadowOverflow` (`queue` or
+`instant`). The boot row defaults to 1/0/0 with `instant`; without authored
+lights, the named pinned sun occupies slot 0 as an `always` candidate. A load
+refuses positive K
+and positive fade ticks with no F, positive F with zero fade ticks, and a
+queue policy that cannot progress, at every reachable tier including `auto`.
+The shipped quality table currently selects K = 0/1/2, F = 0, zero fade ticks
+and instant overflow for low/medium/high. Final sky defaults remain the
+[P18-14 decision](../../docs/plans/rendering.md#p18--sky-and-atmosphere).
+
+The allocator detects a crossing at a delivered tick and holds at most F CPU
+handoffs. Each reports the outgoing and incoming light indices, stable slot
+and progress computed from the presented tick and `shadowFadeTicks`. Reading
+never advances a fade, so repeated frames at one frozen tick agree. With
+`queue`, a crossing waits for its slot's active handoff (`SlotInHandoff`),
+its desired light's participation in another handoff (`IdentityInUse`), or
+busy fade capacity (`FadeCapacity`). Current targets are recomputed only at
+delivered boundaries, and a still-needed crossing starts at the first
+delivered tick its blocker clears. Queued targets take newly free fade capacity
+before fresh crossings, oldest first, with slot index breaking equal-age ties.
+`instant` resolves overlap and exhausted
+capacity atomically, releasing all old participants. F = 0 or zero fade
+duration also chooses instant behavior. A seek, reload,
+structural revision, backward delivery or policy change installs without fades.
+Names still selected keep the slots they held; new names take freed slots in
+rank order. Reusing a light-table index for a different name is a crossing.
+
+The frame carries the full K selection and active handoffs, at most K + F
+march slots. Each selected light casts its own shadow with its own angular
+radius; directionals outside the slots shade unshadowed. During a handoff,
+the outgoing light's shadow deficit fades out and the incoming light's fades
+in, each retaining its radiance. `world.counters gpu` reports each slot's
+march steps separately. Incoming visibility storage is provisioned by F:
+absent at 0, one byte per pixel at 1 and two bytes per pixel at 2. Starting a
+handoff allocates no texture. The [P18-7 contract](../../docs/plans/rendering.md#p18--sky-and-atmosphere)
+owns the packed visibilities, counted controls and K + F bound.
 
 The sky's twinkle and cloud motion and each bounded volume's advection and
 pulse run on the presented engine tick of the world the frame draws, the tick

@@ -33,8 +33,8 @@ public sealed partial class WorldServer {
     /// <summary>Adopts the mounted Simulation-lane addon host.</summary>
     /// <param name="runtime">The host to adopt.</param>
     public void AdoptAddonHost(IWorldAddonHost runtime) => m_addons = runtime;
-    /// <summary>Latches that a screen operation reached host dispatch,
-    /// closing boot-only replay and checkpoint reconstruction.</summary>
+    /// <summary>Latches that a screen operation reached host dispatch, closing boot-only replay and checkpoint
+    /// reconstruction.</summary>
     public void NoteScreenOpApplied() => AnyScreenOpEverApplied = true;
     /// <inheritdoc cref="WorldDocument.ApplyCommand"/>
     public void ApplyCommand(WorldCommand command, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) =>

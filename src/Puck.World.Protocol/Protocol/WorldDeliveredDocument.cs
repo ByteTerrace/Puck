@@ -8,4 +8,4 @@ namespace Puck.World.Protocol;
 /// <param name="Lifetime">How many times an observer of the destination has seen another world replace the previous one:
 /// it advances when a delivery names a different activation than the document before it, and is published in the same
 /// reference write as the document it describes.</param>
-public sealed record WorldDeliveredDocument(WorldDefinition Definition, WorldDocumentVersion Version, int Lifetime = 0);
+public sealed record WorldDeliveredDocument(WorldDefinition Definition, WorldDocumentVersion Version, int Lifetime);

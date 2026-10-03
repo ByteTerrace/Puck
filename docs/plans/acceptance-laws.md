@@ -18,11 +18,17 @@ are fixed with laws of their own.
 
 ## Implementation status
 
-None of the six composed laws is written. The design was read against the
-integration branch, and a review checked that no law can pass while its claim is
-false. Designing the laws found seven gaps. Five of them (G1 to G5) are fixed
-in code, each held by laws of its own, so the six laws are written against the
-fixed contracts:
+Law 1 is implemented, in `tests/Puck.World.Tests/ProjectionAnchorLawTests.Seek.cs`;
+law 2's local walked crossing in
+`tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`, without its federated,
+rollback and shared-identity variants;
+law 3's write, read and collision legs in
+`tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; and law 5 in
+`tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. Laws 4 and 6 are not
+written yet. The design was read against the integration branch, and a review
+checked that no law can pass while its claim is false. Designing the laws found
+seven gaps. Five of them (G1 to G5) are fixed in code, each held by laws of its
+own, so the six laws are written against the fixed contracts:
 
 - G1 and G2 decide law 1: a seek delivers once
   (`HistorySeekDeliveryLawTests`), and a viewer never keeps a future clock
@@ -64,12 +70,17 @@ it fails at its assertion, not by a skip.
 **Claim.** Restore or seek, then delivery to an existing viewer: the projection,
 time travel and recipients agree.
 
-**Scenario.** A world with one clock row that advances every tick and a fog
-density bound to it. At tick 0 a federation projection sink attaches at the
-Presentation tier, the way `ProjectionAnchorLawTests` attaches theirs. The
-world steps three ticks, the oldest keyframe tick is noted, a state cell is
-written, and the world steps three more. `world.history seek` then returns to
-the keyframe, and the sink's stream is decoded into a projection hold.
+**Scenario.** A world with one clock row that advances every tick, a fog
+density bound to it, and a row only another seat may read. At tick 0 a
+federation projection sink attaches at the Presentation tier, the way the
+other `ProjectionAnchorLawTests` laws attach theirs, and is drained as the world steps
+past the history's second keyframe. `world.history seek` then returns to that
+keyframe, and the sink's stream is decoded into a projection hold.
+
+What the seek discards depends on the door. A journaled write between the
+keyframe and the seek changes the history's fingerprint and sends the restore
+through the load door. So the in-place variants discard only the clock's own
+advance, and the load-door variants journal a write.
 
 The viewer is a sink, not a session: a seek refuses while a session is live,
 because session input and grants are not captured, so a session cannot witness
@@ -89,8 +100,10 @@ Four variants run the same steps:
 **Decided by.**
 
 - The sink is still attached: its detach reason is empty.
-- The eased value read from the hold equals the authority's read at the
-  server's time, and differs from the value written after the keyframe.
+- The hold presents what the authority presents at the restored tick: the
+  clock's phase and the keyed fog. The authority's value there differs from
+  the one the seek discarded. A clock with no number at the keyframe presents
+  what a fresh viewer presents, its seed.
 - The anchor the hold carries is at or before the authority's engine tick, so
   the viewer is never left predicting from a future anchor.
 - The authoritative hash after the seek equals the hash the live run recorded
@@ -104,7 +117,10 @@ Four variants run the same steps:
   kinds, and the definition it was built from) equals the projection a fresh
   sink receives when it attaches after the seek. Correct counts and a correct
   clock are not enough: a hold that kept a row the structural edit added, or
-  lost one it removed, fails here.
+  lost one it removed, fails here. Clock anchors are compared by what they
+  present, not by value: the authority replaces a recipient's anchor only when
+  its prediction misses, so a held anchor and a fresh one may differ while
+  presenting the same phase.
 
 **Crosses.**
 
@@ -201,7 +217,18 @@ grants and census across an arrival and a rollback. No law asserts the mobility
 credential or the velocity after replay. This law adds them, on a walked, mapped
 crossing with a profiled traveller, through both tapes.
 
-**Lives in** `tests/Puck.World.Tests`. **GPU:** none.
+**Lives in** `tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`.
+**GPU:** none.
+
+**As implemented.** The recording starts at the rows' first tick, because a tape
+re-establishes the document and the seats, never a pose or other state a row
+reached before it was armed. So row A's document authors seat 0's spawn a short
+walk in front of its door. The isolated reland is the companion tape's own
+re-drive: at every recorded tick the replayed destination is read through
+`DriveTraces`' tick observer and compared with the live destination, field for
+field. A reservation that mints the credential is not red on this walk, because
+its reservation and detach run in one drain; G3's own laws witness it
+(`CrossingTapeOrderLawTests.Reservation.cs`).
 
 **The contract it proves:** the reservation reads the mobility credential
 without minting it, and only the departure's detach mints it, which the replay's
@@ -276,9 +303,19 @@ and the comparison of the journal and the document bytes.
 
 **Lives in** `tests/Puck.World.Tests`. **GPU:** none.
 
-**Witness for G5:** before the fix, the restored guest read 99 where the
-uninterrupted one read 7. `MachineBindingCheckpointLawTests` pins the divergence
-the fix removes.
+**As implemented.** One theory runs the write and read legs, and both carry the
+collision: two machines, `left` and `right`, each bind `value` and `other` at the
+same ordinals, and each guest edits each bound value differently. B restores A's
+checkpoint in place (`WorldServer.RestoreCheckpoint`). The seek leg's in-place
+door is G5's own law (`MachineBindingCheckpointLawTests`, a seek over a running
+machine). The load-door seek and `replay.drive` doors have no leg yet.
+
+**Witness for G5:** the law is red when the restore drops the captured memo. The
+write leg's guests are rewritten to the world's values (11 where the
+uninterrupted run holds 7), and the read leg journals four mirror writes the
+uninterrupted run never makes. Restoring each observation under its binding
+name alone is red too: the left machine takes the right machine's memo and is
+rewritten.
 
 ## Law 4: a displayed source survives the screen's changes
 
@@ -362,8 +399,9 @@ destination.
 build, which already carries private markers. It also gets a `chat$inbox` cell,
 a HUD panel text and a binding overlay, each with its own marker.
 
-- Codec leg: encode a commit member carrying that identity with
-  `WorldFederationCodec.EncodeCommit`, then decode it.
+- Codec leg: take the commit members the source logged in its departure
+  record, the members it then sends, encode them with
+  `WorldFederationCodec.EncodeCommit`, and decode them.
 - End-to-end leg: seat the identity on the federation harness's source,
   walk it across to the remote destination, and drain.
 - A colocated twin runs the same crossing between two rows of one host.
@@ -403,11 +441,14 @@ bytes (`WorldFederationCodec.EncodeCommit`). This law adds the one end-to-end
 case the milestone names: a commit that crosses, federated and colocated, read
 at the bytes on the wire and at the seat it lands in.
 
-**Lives in** `tests/Puck.World.Tests`. The federated leg skips on a host without
-QUIC, as the federation harness does. **GPU:** none.
+**Lives in** `tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. The
+federated leg skips itself on a host without QUIC; the federation harness has no
+such skip, so the harness's own laws fail there instead. **GPU:** none.
 
-**Witness for G4:** before the fix, the commit bytes carried the whole owned
-document.
+**Witness for G4:** the law is red when the projection carries the owned
+document in its name, the one free text a projection has: the commit bytes then
+hold the private row. A projection's records cannot carry the document's world
+rows at all, because the projection wire refuses them.
 
 ## Law 6: an unsupported operation changes nothing before it refuses
 

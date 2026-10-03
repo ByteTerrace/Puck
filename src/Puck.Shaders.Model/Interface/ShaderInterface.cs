@@ -272,7 +272,7 @@ public sealed partial class ShaderInterface {
             member.Format.HasValue &&
             (StorageFormatSpelling(format: member.Format.Value) is null)
         ) {
-            throw new InvalidDataException(message: $"{where}: a storage image cannot be {member.Format.Value}; it is R8G8B8A8Unorm, R16G16B16A16Float or R32G32B32A32Float.");
+            throw new InvalidDataException(message: $"{where}: a storage image cannot be {member.Format.Value}; it is R8Unorm, R8G8Unorm, R8G8B8A8Unorm, R16G16B16A16Float or R32G32B32A32Float.");
         }
     }
 
@@ -349,6 +349,8 @@ public sealed partial class ShaderInterface {
     /// <returns>The <c>vk::image_format</c> spelling, or <see langword="null"/>.</returns>
     public static string? StorageFormatSpelling(GpuPixelFormat format) =>
         format switch {
+            GpuPixelFormat.R8Unorm => "r8",
+            GpuPixelFormat.R8G8Unorm => "rg8",
             GpuPixelFormat.R8G8B8A8Unorm => "rgba8",
             GpuPixelFormat.R16G16B16A16Float => "rgba16f",
             GpuPixelFormat.R32G32B32A32Float => "rgba32f",

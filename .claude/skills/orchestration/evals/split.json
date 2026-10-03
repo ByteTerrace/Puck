@@ -18,8 +18,8 @@
     "o21-brief-a-codex-partner-to-build",
     "o23-review-slots-are-full",
     "o29-hard-stale-remote-and-started-fix",
-    "o34-finished-lane-waits-on-others",
-    "o35-audit-armed-as-a-monitor"
+    "o36-finished-lane-waits-on-others",
+    "o37-audit-armed-as-a-monitor"
   ],
   "test": [
     "o01-base-claim-from-two-dot",
@@ -40,7 +40,7 @@
     "o31-hard-gate-blocks-lane-owner-says-ship",
     "o32-owed-work-from-commit-bodies",
     "o33-hard-flake-proof-burner-brief",
-    "o33-owner-points-out-a-process-defect",
-    "o34-hard-cleanup-kills-by-command-line"
+    "o34-hard-cleanup-kills-by-command-line",
+    "o35-owner-points-out-a-process-defect"
   ]
 }

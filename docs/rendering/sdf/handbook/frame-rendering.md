@@ -17,7 +17,7 @@ submits one **upload** that brings those tables up to date. Then every view of
 the scene is an instance of the render graph's `sdf.world` package, and its node
 records the package's eleven native passes into its own submission, reading the tables
 the upload wrote. The upload precedes culling; camera traversal, surface evaluation, AO,
-the key light's shadow, lighting, the sky and the composite have separate dispatches. The
+the selected lights' shadows, lighting, the sky and the composite have separate dispatches. The
 passes finish that view's own output image:
 
 ```text
@@ -86,8 +86,11 @@ depth, raised to the mesh projection's near plane when necessary, and writes
 each pixel's visibility record: ray parameter, identity, material and march data,
 misses included. **surface** adds the geometric normal and curvature to it.
 **ambient** evaluates contact occlusion along those normals into the record.
-**shadow** marches the key light's soft shadow from each lit surface into the
-record. **views** reads the record and computes materials, lighting and
+**shadow** gathers and marches each selected light from each lit surface,
+packing four 8-bit stable visibilities into the record's K word. Each active
+handoff adds one incoming march, bounded by K + F; its visibility uses a
+policy-sized transient texture, one byte per pixel at F = 1 and two at F = 2,
+absent at F = 0. **views** reads those visibilities and computes materials, lighting and
 volumes. A view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or
 soft shadows off skips that pass; quality is each view's, so views of one frame
 render at different cost. Compare all five passes when measuring per-pixel field cost: moving

@@ -178,7 +178,7 @@ descriptor set every frame:
 | `pointerDown` | `uint` | One while the pointer is pressed. |
 | `pointerPresses` | `uint` | How many presses the pointer has made over the instance. |
 | `cameraPosition`, `cameraTarget`, `cameraUp` | `float3` | The paired camera. |
-| `cameraFov` | `float` | The paired camera's vertical field of view in radians; zero when none is paired. |
+| `cameraFov` | `float` | The paired camera's vertical field of view in radians; zero when none is paired. A pass that renders through its paired camera projects exactly as the camera does, with no factor of its own on this field of view, since a hit through the pane continues along the camera's ray for the same pixel; a model in another frame maps the camera's ray into it by a similarity, which leaves the projection unchanged. |
 | `placedExtent` | `float2` | The extent, in display pixels, of the rect the root places the instance's output in this frame, or the node's own extent when nothing places it. A pane renders at its layout's allocation envelope, which holds one extent while its rect eases, and the placement stretches the whole output into the rect, so a pass maps its output onto that rect and projects at `placedExtent.x / placedExtent.y`, the paired camera's aspect, never at `extent`'s. |
 
 A World has one presentation clock, its state mirror
@@ -831,7 +831,8 @@ composer, then places the views and panes of that same frame.
 For every instance a slot shows it places the pane at the slot's rect, with
 the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
 `main`, producer the pane, at its largest width and height over the layout
-transition in flight, retained through interruptions until the chain settles,
+transition in flight, or its start's extent when the transition grows it on
+one axis and shrinks it on the other, retained through interruptions until the chain settles,
 then its own rect subject to scheduler quantization and shrink hysteresis) so easing its rect never
 resizes a node, advances the pane's clock, and feeds its
 camera, pointer and time. A pane the active layout does not show is not shown:
@@ -1279,11 +1280,19 @@ at binding 2), one thread a pixel in 8×8 groups. A graph names its ports
 | `source-rgba.comp.hlsl` | RGBA8 or BGRA8 | RGBA8 |
 | `source-transfer.comp.hlsl` | RGBA8, R10G10B10A2 or half-float RGBA under an sRGB, linear (scRGB) or PQ transfer function, with BT.709 or BT.2020 primaries | half-float working values: linear light relative to the paper white, in BT.709, on the extended sRGB curve, so 1 is SDR white and nothing above it is clipped |
 
+`source-scrgb.comp.hlsl` converts an imported half-float scRGB image on the
+device rather than an uploaded region: it reads the image at binding 1 as a
+`Texture2D` named `source`, texel by texel at the extent it writes, and writes
+what `source-transfer` writes for the same pixels. It is the Direct3D 12 host's
+conversion of an HDR desktop capture's GPU copies, which an image converter
+(`RenderGraphRuntime.CreateImageConverter`) binds to its graph's external input
+one slot at a time (`ImageSourceConversion.ImagePassOf`).
+
 `ImageSourceConversion` is their CPU reference and names the kernel a format
-needs (`PassOf`). The build compiles all four for both backends. The graph
+needs (`PassOf`, `ImagePassOf`). The build compiles all five for both backends. The graph
 runtime dispatches them as catalog packages (`SourceConversionPackage`, which
 the World registers) when it renders an uploaded source instance. The
-`source-conversion` canary runs all four kernels as passes of an offscreen
+`source-conversion` canary runs the four upload kernels as passes of an offscreen
 pipeline on both backends, `source-transfer` over an sRGB region and a
 half-float scRGB one, and holds their output to the CPU reference.
 
@@ -1884,11 +1893,16 @@ the work counters: every pass of `sdf.world`, `place`, `overlay`, the source
 conversions and every post-process package, which must) declares the work
 counters in its interface (`ShaderWorkCounters`), whose generated include
 carries the functions its shaders count through, and keeps a counter buffer and
-a readback buffer per frame slot, one row a pass (`GpuKernelCounters`). A
+a readback buffer per frame slot, rows for passes and named work details (`GpuKernelCounters`).
+Detail labels grow in recorder order (`IRenderGraphPackageRecorder.WorkDetails`);
+the node grows only a completed slot's buffers, under its peak memory budget,
+before it records again. A detailed pass has a `plain` remainder row, and its
+detail rows sum to the pass totals after readback. A
 compute kernel counts through `puckCountWork`, one wave sum added by the wave's
 first active lane, and a fragment stage through `puckCountFragmentWork`, the
 same over the wave's lanes that are not helper lanes. Every generated include
-declares both functions, and one whose interface declares no work counters
+declares those functions and `puckCountDetail`, which adds an active invocation's
+work to its named row. An interface declaring no work counters
 declares them empty. A kernel therefore counts unguarded: a package's kernel
 that a document pass compiles by naming its source, such as `place` or a source
 conversion, reads the declarations the loader generates for the document's
@@ -1898,7 +1912,8 @@ ahead of the first pass and copies them to its readback behind the last, which
 counts one clear, one copy and three buffer barriers outside every pass: the
 clear before the compute and fragment stages that add, those stages before the
 copy, and the copy before the host's read. The ledger adds each row's
-`gpu.march.steps` and `gpu.texels.written` to its pass once the submission
+kernel kinds, including `gpu.sky.evaluations`, `gpu.sky.hashes` and
+`gpu.sky.texture-loads`, to its pass once the submission
 completes. What the
 node does between submissions to install or rebuild a graph, the sets it
 writes and the pass blocks it sends to every frame slot, counts in no

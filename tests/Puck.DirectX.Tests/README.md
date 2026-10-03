@@ -18,8 +18,8 @@ neutral pixel format, the sRGB and 10-bit formats a Vulkan swapchain may take
 included, maps to its own `DXGI_FORMAT`.
 
 The device laws run on a software (WARP) device without the debug layer and
-skip when the host has none: the shader-visible heap pair, pools as ranges of
-it, and the spike's root signatures created from their plans, with a group's
+skip when the host has none: the software device API answering every member of
+`IDirectXDeviceApi`, the shader-visible heap pair, pools as ranges of it, and the spike's root signatures created from their plans, with a group's
 sampler table taken from its pool's range of the sampler heap. The debug-layer
 tests create a device on the default adapter with the debug layer on and skip
 when the host has no device or no debug layer. One deliberate violation must

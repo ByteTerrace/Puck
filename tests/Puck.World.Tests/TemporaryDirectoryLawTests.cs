@@ -19,7 +19,7 @@ public sealed class TemporaryDirectoryLawTests {
     // An owner whose disposal returns at once and leaves a worker running, the way a background build that was cancelled
     // but not joined does: the worker holds a file open and releases it after a while or, given a signal, writes to it
     // once the signal is set and then releases it. The signalled write lands after the owners returned and before the
-    // handle closes, so the delete, which cannot succeed while the handle is open, always sees it.
+    // handle closes, and the directory reads the file only once the handle has closed, so that read always sees it.
     private sealed class Straggler(FileStream held, ManualResetEventSlim? write = null) : IDisposable {
         public void Dispose() => _ = Task.Factory.StartNew(
             action: () => {
@@ -127,7 +127,9 @@ public sealed class TemporaryDirectoryLawTests {
         Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "an open handle blocks a delete only where the file system refuses it.");
         var state = new TemporaryDirectory(prefix: "puck-fixture-never-delete-", teardownBound: TeardownBound);
         using var held = Hold(state: state);
-        var expected = Assert.Throws<IOException>(testCode: () => Directory.Delete(path: state.RootPath, recursive: true));
+        // The directory reads each file once no writer holds it before it deletes anything, so its last error is that
+        // read's refusal.
+        var expected = Assert.Throws<IOException>(testCode: () => new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: state.PathOf(name: Late), share: FileShare.Read));
         var teardown = Task.Factory.StartNew(
             function: () => Record.Exception(testCode: () => {
                 state.Dispose();
@@ -203,6 +205,66 @@ public sealed class TemporaryDirectoryLawTests {
         state.Conclude(passed: true);
 
         Assert.False(condition: Directory.Exists(path: state.RootPath));
+    }
+    [Fact]
+    public async Task AWriterThatSharesReadingHoldsUpThePassingDeleteOnUnix() {
+        // Unix's advisory locks give a writer that shares reading the same shared lock a reader takes, so only an exclusive
+        // read refuses it; a delete that went ahead would unlink the file under the writer and lose whatever it writes next.
+        Assert.SkipWhen(condition: OperatingSystem.IsWindows(), reason: "Windows' share modes are held by ADeleteThatNeverSucceedsNamesItsLastErrorAndRemainingFile.");
+        var state = new TemporaryDirectory(prefix: "puck-fixture-unix-writer-", teardownBound: TeardownBound);
+        using var held = Hold(state: state);
+        var teardown = Task.Factory.StartNew(
+            function: () => Record.Exception(testCode: () => {
+                state.Dispose();
+                state.Conclude(passed: true);
+            }),
+            cancellationToken: CancellationToken.None,
+            creationOptions: TaskCreationOptions.LongRunning,
+            scheduler: TaskScheduler.Default
+        );
+
+        try {
+            var finished = await Task.WhenAny(task1: teardown, task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TestLiveness.Bound));
+
+            Assert.Same(actual: finished, expected: teardown);
+            var failure = Assert.IsType<TimeoutException>(@object: await teardown);
+
+            Assert.Contains(expectedSubstring: $"Still present: {Late}", actualString: failure.Message);
+            Assert.True(condition: File.Exists(path: state.PathOf(name: Late)));
+        } finally {
+            held.Dispose();
+            _ = await teardown;
+            if (Directory.Exists(path: state.RootPath)) {
+                Directory.Delete(path: state.RootPath, recursive: true);
+            }
+        }
+    }
+    [Fact]
+    public void AReaderThatSharesAFileDoesNotHoldUpThePassingDelete() {
+        // Unix's advisory locks cannot tell this reader from a writer that shares reading, so there it holds the delete up.
+        Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "only Windows' share modes tell a reader that shares a file from a writer.");
+        // An observer outside the law, such as an indexer or a scanner, holds a file open to read it and shares it for
+        // reading, writing and deletion. It writes nothing, so the passing verdict reads the file beside it and deletes.
+        var state = new TemporaryDirectory(prefix: "puck-fixture-reader-", teardownBound: TeardownBound);
+        var path = state.WriteText(name: Late, text: "x");
+        using var reader = new FileStream(
+            access: FileAccess.Read,
+            mode: FileMode.Open,
+            path: path,
+            share: FileShare.ReadWrite | FileShare.Delete
+        );
+
+        try {
+            state.Dispose();
+            state.Conclude(passed: true);
+
+            Assert.False(condition: Directory.Exists(path: state.RootPath));
+        } finally {
+            reader.Dispose();
+            if (Directory.Exists(path: state.RootPath)) {
+                Directory.Delete(path: state.RootPath, recursive: true);
+            }
+        }
     }
     [Fact]
     public void ADirectoryNamesTheFileAnOwnersWorkerWroteAfterItsDisposeReturned() {

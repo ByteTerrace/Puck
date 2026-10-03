@@ -29,7 +29,7 @@ public sealed class ShadersGenerateLawTests {
     ];
 
     // Each conversion package's interface include, beside its kernel.
-    private static (string Path, string Text)[] SourceIncludes => [.. RenderGraphPackageCatalog.SourceConversions.Select(selector: static id => ($"src/Puck.Shaders/Assets/Shaders/Sources/{id}.interface.hlsli", InterfaceOf(id: id)))];
+    private static (string Path, string Text)[] SourceIncludes => [.. RenderGraphPackageCatalog.SourceConversions.Concat(second: RenderGraphPackageCatalog.ImageConversions).Select(selector: static id => ($"src/Puck.Shaders/Assets/Shaders/Sources/{id}.interface.hlsli", InterfaceOf(id: id)))];
 
     private static string InterfaceOf(string id) {
         Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(id: id, package: out var package));

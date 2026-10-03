@@ -128,8 +128,12 @@ public static class SdfDriftMonolith {
 
         // RIGHT — wallpaper fold: a P6M hex kaleidoscope over an ASYMMETRIC motif (cone + off-center sphere) with a
         // 3-coloring parity stride, so a flipped mirror or a trunc-vs-floor cell key changes pixels on one backend.
-        // The motif sits well clear of cell boundaries/seams so every fold branch is an exact isometry.
+        // The motif sits well clear of cell boundaries/seams so every fold branch is an exact isometry. A hex lattice
+        // has no continuous clamp, so the carpet is bounded by intersecting it: two slabs cut the five-by-five
+        // parallelogram of cells (axial indices -2..2) 0.3 past the outer cell centers, which keeps each outer motif
+        // whole and excludes every cell beyond it.
         _ = builder
+            .PushField()
             .ResetPoint()
             .Translate(offset: new Vector3(
             x: 2.7f,
@@ -143,8 +147,8 @@ public static class SdfDriftMonolith {
                 y: 0.85f
             ),
             limit: new Vector2(
-                x: 2f,
-                y: 2f
+                x: SdfWallpaperFold.UnboundedLimit,
+                y: SdfWallpaperFold.UnboundedLimit
             ),
             materialStride: 1
         )
@@ -172,8 +176,8 @@ public static class SdfDriftMonolith {
                 y: 0.85f
             ),
             limit: new Vector2(
-                x: 2f,
-                y: 2f
+                x: SdfWallpaperFold.UnboundedLimit,
+                y: SdfWallpaperFold.UnboundedLimit
             ),
             materialStride: 1
         )
@@ -185,7 +189,44 @@ public static class SdfDriftMonolith {
             .Sphere(
             radius: 0.07f,
             material: rose
-        );
+        )
+            .ResetPoint()
+            .Translate(offset: new Vector3(
+            x: 2.7f,
+            y: 0f,
+            z: 0.2f
+        ))
+            .Box(
+            halfExtents: new Vector3(
+                x: 60f,
+                y: 4f,
+                z: 1.7722f
+            ),
+            round: 0f,
+            material: rose,
+            blend: SdfBlendOp.Intersection
+        )
+            .ResetPoint()
+            .Translate(offset: new Vector3(
+            x: 2.7f,
+            y: 0f,
+            z: 0.2f
+        ))
+            .Rotate(rotation: Quaternion.CreateFromAxisAngle(
+            axis: Vector3.UnitY,
+            angle: (MathF.PI / 6f)
+        ))
+            .Box(
+            halfExtents: new Vector3(
+                x: 1.7722f,
+                y: 4f,
+                z: 60f
+            ),
+            round: 0f,
+            material: rose,
+            blend: SdfBlendOp.Intersection
+        )
+            .PopField();
 
         // FRONT — deep smooth/chamfer chain: a row of overlapping spheres, the first a plain union, each subsequent one
         // blended into the running field with an ALTERNATING smooth-min / √2-chamfer seam. Deep nesting so the smin and

@@ -221,12 +221,12 @@ internal static class NuGetCommand {
             // project graph. Metadata and release smoke probes disable build servers to keep children scoped to the verb.
             if (!noBuild) {
                 await CliProcess.RunCheckedAsync(
-                    arguments: ["restore", project, "--locked-mode"],
+                    arguments: ["restore", CliOptions.NoNodeReuse, project, "--locked-mode"],
                     fileName: "dotnet",
                     workingDirectory: root
                 );
             }
-            List<string> pack = ["pack", project, "--configuration", "Release", "--no-restore", "--output", output];
+            List<string> pack = ["pack", CliOptions.NoNodeReuse, project, "--configuration", "Release", "--no-restore", "--output", output];
 
             if (noBuild) { pack.Add(item: "--no-build"); }
             await CliProcess.RunCheckedAsync(

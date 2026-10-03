@@ -327,12 +327,13 @@ the rows the document names then. A probe parameter's `post` target
 writes a row's float config field live (`WorldPostPasses`). A pane the
 active layout does not show is not scheduled. The world's capture composes
 cameras and places the current layout before scheduling that same frame. View
-and pane allocations reserve the largest extent of the transition in flight,
-including its spectator fallback, and retain reservations through interruptions
-until the chain settles. Settled footprints request the occupant's own rect,
-subject to scheduler quantization and shrink hysteresis. Easing changes placement
-without rebuilding a node; growth and shrinkage on opposite axes rebuild at both
-transition boundaries. The `rendering` skill owns the graph document, the scheduler
+and pane allocations reserve the largest extent of the transition in flight when
+its endpoints nest, including its spectator fallback, keep the start's extent when
+they oppose (growth on one axis, shrinkage on the other), and retain reservations
+through interruptions until the chain settles. Settled footprints request the
+occupant's own rect, subject to scheduler quantization and shrink hysteresis.
+Easing changes placement without rebuilding a node, and a transition allocates at
+most once. The `rendering` skill owns the graph document, the scheduler
 and the host (`WorldViewGraphHost`).
 
 ## Pointer, cursor, Free Cam

@@ -298,7 +298,7 @@ public sealed class RenderGraphDocumentLawTests {
                 var values = package.Members.Where(predicate: static member => (
                     (member.Kind == ShaderInterfaceMemberKind.Value) &&
                     (member.Group == ShaderInterfaceGroup.Pass) &&
-                    (member.Name != ShaderWorkCounters.Row)
+                    !ShaderWorkCounters.Members.Contains(value: member)
                 )).ToArray();
                 var actual = (pass.Config ?? new Dictionary<string, ShaderConfigField>());
                 var where = $"{Path.GetRelativePath(path: path, relativeTo: root)} pass '{pass.Name}' ({package.Id})";

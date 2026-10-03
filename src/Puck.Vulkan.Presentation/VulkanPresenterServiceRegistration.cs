@@ -199,6 +199,7 @@ public static class VulkanPresenterServiceRegistration {
     }
     /// <summary>Registers one native API per Vulkan capability the renderer, compositor, and engine use.</summary>
     /// <param name="services">The service collection.</param>
+    [OpensGpuDevice]
     public static IServiceCollection AddVulkanNativeApis(this IServiceCollection services) {
         AddProcedures(services: services);
         services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);

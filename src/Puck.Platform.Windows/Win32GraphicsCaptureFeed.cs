@@ -32,8 +32,9 @@ namespace Puck.Platform.Windows;
 /// <para>
 /// The captured display decides the frames' format and color space once, at open (<see cref="Output"/>,
 /// <see cref="CaptureOutputOf"/>): an SDR display is captured in B8G8R8A8 sRGB, and an HDR display in half-float scRGB,
-/// which keeps its luminance above SDR white where an 8-bit capture would clip it. An HDR capture rides the CPU path
-/// alone, since the shared targets are B8G8R8A8. An HDR toggle, a move to a display that differs in it, or failed display
+/// which keeps its luminance above SDR white where an 8-bit capture would clip it. Either rides the GPU path in shared
+/// targets of its own format, which the copy preserves, so an HDR capture's scRGB frames reach the consumer's device to
+/// convert there (<see cref="NativeImageGpuCaptureTargets.Format"/>). An HDR toggle, a move to a display that differs in it, or failed display
 /// discovery ends the feed, with display checks on frame callbacks and background checks queued by consumer liveness
 /// polls even when no frames arrive. Both read through a held DXGI factory (<see cref="Win32DisplayColorSpaceProbe"/>);
 /// its consumer reopens it with the current display contract.
@@ -258,8 +259,11 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     public void AttachGpuTargets(NativeImageGpuCaptureTargets targets) {
         ArgumentNullException.ThrowIfNull(argument: targets);
 
-        if (Output.IsHdr) {
-            throw new NotSupportedException(message: "An HDR capture's frames are half-float scRGB, which the B8G8R8A8 shared targets cannot hold; it converts through its CPU path.");
+        if (targets.Format != Output.Format) {
+            throw new ArgumentException(
+                message: $"The capture's frames are {Output.Format}; its shared targets must be too, since a copy across formats is silently dropped, but they are {targets.Format}.",
+                paramName: nameof(targets)
+            );
         }
 
         var handles = targets.SharedTargetHandles;
@@ -1070,7 +1074,8 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
     // Opens a consumer-provisioned shared texture (a D3D12 CreateSharedHandle NT handle) on this device; the caller owns
     // the returned ID3D11Texture2D* and releases it via ReleaseTexture. Device-level and safe off the callback gate
     // (the device is multithread-protected). Rejects a target whose format or extent CopyResource would silently drop:
-    // the capture pool is B8G8R8A8_UNORM, and a cross-format/extent CopyResource is a release-build no-op, not an error.
+    // the capture pool is in the capture's format, B8G8R8A8_UNORM or R16G16B16A16_FLOAT, and a cross-format/extent
+    // CopyResource is a release-build no-op, not an error.
     public nint OpenSharedTarget(nint sharedHandle, int expectedWidth, int expectedHeight) {
         using var handle = new SafeFileHandle(
             ownsHandle: false,
@@ -1084,16 +1089,19 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         );
 
         D3D11_TEXTURE2D_DESC description;
+        var expectedFormat = ((m_format == GpuPixelFormat.R16G16B16A16Float)
+            ? DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16_FLOAT
+            : DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM);
 
         ((ID3D11Texture2D*)texture)->GetDesc(pDesc: &description);
         if (
-            (description.Format != DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM) ||
+            (description.Format != expectedFormat) ||
             (description.Width != ((uint)expectedWidth)) ||
             (description.Height != ((uint)expectedHeight))
         ) {
             ReleaseTexture(texture: ((nint)texture));
             throw new ArgumentException(
-                message: $"The shared target must be a {expectedWidth}x{expectedHeight} B8G8R8A8_UNORM texture; got {description.Width}x{description.Height} {description.Format}.",
+                message: $"The shared target must be a {expectedWidth}x{expectedHeight} {expectedFormat} texture; got {description.Width}x{description.Height} {description.Format}.",
                 paramName: nameof(sharedHandle)
             );
         }

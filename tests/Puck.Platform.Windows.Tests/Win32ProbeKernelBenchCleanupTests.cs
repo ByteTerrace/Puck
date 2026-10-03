@@ -8,6 +8,7 @@ using Xunit;
 namespace Puck.Platform.Windows.Tests;
 
 [SupportedOSPlatform("windows10.0.10240")]
+[Trait("Category", "Gpu")]
 public sealed class Win32ProbeKernelBenchCleanupTests {
     // Win32ProbeKernelBench's attachment is a private nested type and OpenRingResources takes the internal
     // IProbeKernelDevice, so both the type and a real device are reached through reflection.

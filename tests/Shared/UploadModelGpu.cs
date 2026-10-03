@@ -45,6 +45,7 @@ internal sealed class UploadModelGpu :
 
     private readonly ConcurrentDictionary<nint, byte> m_uploadModules = new();
     private readonly ConcurrentDictionary<nint, byte> m_uploadPipelines = new();
+    private readonly ConcurrentDictionary<nint, string> m_pipelineNames = new();
     // The command buffers recorded since a barrier whose first scope holds the compute stage, which orders every earlier
     // compute read of a staged destination before a copy writes it, and the buffers a transition from the compute stage
     // orders the same way in one command buffer; a copy recorded under neither is refused.
@@ -54,6 +55,9 @@ internal sealed class UploadModelGpu :
 
     private nint m_boundPipeline;
     private nint m_boundSet;
+
+    /// <summary>Gets the pipeline the most recent bind selected.</summary>
+    public string BoundPipelineName => m_pipelineNames[m_boundPipeline];
 
     private long m_nextHandle = 0x1000;
 
@@ -205,6 +209,8 @@ internal sealed class UploadModelGpu :
             _ = gate.Wait(timeout: TimeSpan.FromSeconds(value: 60));
         }
         var pipeline = PipelineOf(layout: description.Layout);
+
+        m_pipelineNames[pipeline.Handle] = description.Name;
 
         if (m_uploadModules.ContainsKey(key: computeShaderModule.Handle)) {
             _ = m_uploadPipelines.TryAdd(

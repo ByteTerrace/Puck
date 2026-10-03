@@ -717,7 +717,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                 }
 
                 // The preset table is world data (WorldDefinition.Render), read off the LIVE definition so a mutated
-                // preset table applies immediately: look the named tier up and write its four levers into the live
+                // preset table applies immediately: look the named tier up and write its levers into the live
                 // settings.
                 if (QualityTiers.Parse(name: args[0].ToString()) is not { } tier) {
                     return CommandResult.Error(output: $"[world.quality: unknown preset '{args[0]}' — {string.Join(separator: "|", values: QualityTiers.Names)}]");
@@ -758,6 +758,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     a: 0.0
                 );
 
+                link.SubmitSessionLever(lever: WorldSessionLevers.ShadowPolicy(preset: preset), principal: context.Principal);
                 SubmitLever(link, context.Principal, WorldSessionLevers.RenderScale,
                     WorldRenderScaleTiers.Scale(tier: preset.RenderScaleFloor), b: ((double)WorldRenderScaleOperation.Floor),
                     section: WorldSection.Views);

@@ -39,9 +39,9 @@ public enum SdfOp : uint {
     /// distances are preserved. Instruction lanes: Shape = <see cref="SdfWallpaperGroup"/>, Blend =
     /// <see cref="SdfPlane"/>, Material = the parity-material stride (the cell key — checker parity or hex
     /// 3-coloring — strides the material id of later shape wins in the chain; 0 keeps the fold purely geometric).
-    /// Data0.xy = cell extents (hex: pitch = x, y must equal it), Data1.xy = RepeatLimited-style cell limits,
-    /// Data1.z = the symmetry-LOD distance threshold (0 = off): past it the lattice keeps its copies but the in-cell
-    /// folds are skipped — upright copies, cheaper and shimmer-free at range.</summary>
+    /// Data0.xy = cell extents (hex: pitch = x), Data0.zw = their exact reciprocals (<see cref="SdfWallpaperFold.InverseCell"/>),
+    /// Data1.xy = the cell limits (<see cref="SdfWallpaperFold.LimitRefusal"/>: whole numbers on a square lattice,
+    /// unbounded on a hex lattice); Data1.zw are unused.</summary>
     WallpaperFold = 18,
     /// <summary>Log-spherical domain warp: tiles space into infinite self-similar "Droste" shells by folding the
     /// radial log-coordinate to the nearest shell — a translation along <c>log(radius)</c> becomes a uniform scaling

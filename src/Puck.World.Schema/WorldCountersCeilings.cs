@@ -52,11 +52,13 @@ public sealed record WorldCountersCeilingRun(
 /// only when it is a required zero. Only a zero ceiling of a per-backend-deterministic class carries it; a deterministic
 /// ceiling is judged everywhere by its class, and a count loosened to its pass's class is a reading of the recording
 /// device alone.</param>
+/// <param name="Detail">The label within the pass, or null for its total or work outside every pass.</param>
 public sealed record WorldCountCeiling(
     string Node,
     string? Pass,
     string Kind,
     WorkClass Class,
     long Ceiling,
-    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] bool RequiredZero = false
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] bool RequiredZero = false,
+    [property: System.Text.Json.Serialization.JsonRequired] string? Detail = null
 );

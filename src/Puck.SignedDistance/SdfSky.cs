@@ -261,8 +261,8 @@ public sealed class SdfSky {
                 : disc.Direction);
         }
 
-        if (lights.ShadowLight >= 0) {
-            var key = lights[lights.ShadowLight];
+        if (lights.ShadowSlots[0] >= 0) {
+            var key = lights[lights.ShadowSlots[0]];
 
             block.CloudLightDirection = SdfLights.UnitDirection(direction: key.Direction);
             block.CloudLightColor = key.Color;

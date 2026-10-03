@@ -14,13 +14,24 @@ namespace Puck.Scripting;
 /// engine turns signal-based traps off, and Wasmtime checks memory bounds, division and stack depth explicitly in
 /// generated code instead. Traps keep their kinds; guest code pays an explicit bounds check on each memory access.
 /// The binding exposes no setter for the native option, so the config's handle is reached through its internal
-/// accessor; a binding that renames it fails every engine's construction rather than leaving the handlers in.</summary>
-internal static partial class WasmtimeSignals {
+/// accessor and the native setter is taken from the wasmtime library loaded for the binding assembly (the binding's
+/// own library while no import resolver is registered for it); a binding that renames either fails
+/// every engine's construction rather than leaving the handlers in.</summary>
+internal static class WasmtimeSignals {
     [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_NativeHandle")]
     [return: UnsafeAccessorType("Wasmtime.Config+Handle, Wasmtime.Dotnet")]
     private static extern object NativeHandle(Config config);
-    [LibraryImport("wasmtime")]
-    private static partial void wasmtime_config_signals_based_traps_set(nint config, [MarshalAs(UnmanagedType.U1)] bool enable);
+    // The native library loaded by name in the binding assembly's context, with the binding's own search paths.
+    // NativeLibrary.Load bypasses a DllImportResolver, so this is the library the binding loads only while no resolver
+    // is registered for the binding assembly, which nothing in Puck does.
+    private static unsafe delegate* unmanaged<nint, byte, void> SignalsBasedTrapsSet() => ((delegate* unmanaged<nint, byte, void>)NativeLibrary.GetExport(
+        handle: NativeLibrary.Load(
+            assembly: typeof(Config).Assembly,
+            libraryName: "wasmtime",
+            searchPath: null
+        ),
+        name: "wasmtime_config_signals_based_traps_set"
+    ));
 
     /// <summary>Turns signal-based traps off on a config that has not yet built its engine.</summary>
     /// <param name="config">The config.</param>
@@ -31,10 +42,9 @@ internal static partial class WasmtimeSignals {
 
         try {
             handle.DangerousAddRef(success: ref added);
-            wasmtime_config_signals_based_traps_set(
-                config: handle.DangerousGetHandle(),
-                enable: false
-            );
+            unsafe {
+                SignalsBasedTrapsSet()(handle.DangerousGetHandle(), 0);
+            }
         } finally {
             if (added) {
                 handle.DangerousRelease();

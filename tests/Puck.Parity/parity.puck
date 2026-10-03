@@ -523,11 +523,12 @@ render {
   temporal: false
   lighting {
     lights [
-      directional(shadows: true)
+      directional(name: "key", shadow: always)
       hemisphere()
       point(color: "#29C8FF", position: [0, 2.6, 19.4], radius: 1.4, weight: 1.6)
     ]
   }
+  shadowLights: 1
   shadows: High
   sky {
     layers [

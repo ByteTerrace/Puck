@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/34a5056d7cad6530ce28a0c1e0464642fc9e1ade039ff18c948c11c5eb98cb21). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/e329b713c8b4879a92fa40d15daf5473d36984ac4d19bd5895248194ac191217). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -55,24 +55,26 @@ struct SdfMeshPass {
     [[vk::offset(272)]] float4 previousView[6];
     [[vk::offset(368)]] uint screenCount;
     [[vk::offset(372)]] float shadowDistanceScale;
-    [[vk::offset(376)]] int shadowLight;
-    [[vk::offset(380)]] float tanHalfFieldOfView;
-    [[vk::offset(384)]] uint temporal;
-    [[vk::offset(388)]] uint _pad388;
-    [[vk::offset(392)]] uint2 tileGrid;
-    [[vk::offset(400)]] uint viewBase;
-    [[vk::offset(404)]] uint _pad404;
-    [[vk::offset(408)]] uint _pad408;
-    [[vk::offset(412)]] uint _pad412;
-    [[vk::offset(416)]] float3 viewForward;
+    [[vk::offset(376)]] uint shadowFadeCount;
+    [[vk::offset(380)]] uint shadowSlotCount;
+    [[vk::offset(384)]] int4 shadowSlots;
+    [[vk::offset(400)]] float tanHalfFieldOfView;
+    [[vk::offset(404)]] uint temporal;
+    [[vk::offset(408)]] uint2 tileGrid;
+    [[vk::offset(416)]] uint viewBase;
+    [[vk::offset(420)]] uint _pad420;
+    [[vk::offset(424)]] uint _pad424;
     [[vk::offset(428)]] uint _pad428;
-    [[vk::offset(432)]] float3 viewPosition;
+    [[vk::offset(432)]] float3 viewForward;
     [[vk::offset(444)]] uint _pad444;
-    [[vk::offset(448)]] float3 viewRight;
+    [[vk::offset(448)]] float3 viewPosition;
     [[vk::offset(460)]] uint _pad460;
-    [[vk::offset(464)]] float3 viewUp;
-    [[vk::offset(476)]] uint viewportCount;
-    [[vk::offset(480)]] uint workCounterRow;
+    [[vk::offset(464)]] float3 viewRight;
+    [[vk::offset(476)]] uint _pad476;
+    [[vk::offset(480)]] float3 viewUp;
+    [[vk::offset(492)]] uint viewportCount;
+    [[vk::offset(496)]] uint workCounterRow;
+    [[vk::offset(500)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfMeshPass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfMeshRegion : register(t1, space3);
@@ -86,13 +88,18 @@ struct SdfMeshPushedIndex {
 [[vk::push_constant]] ConstantBuffer<SdfMeshPushedIndex> pushedIndex : register(b0, space4);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, then sky evaluations, as a
+// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
+// sky texture loads, then six shadow-slot step counts, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 6u;
+static const uint PuckWorkRowWords = 22u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
+static const uint PuckWorkSkyHashesWord = 6u;
+static const uint PuckWorkSkyTextureLoadsWord = 8u;
+static const uint PuckWorkShadowWord = 10u;
+static const uint PuckWorkShadowSlots = 6u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -120,12 +127,25 @@ void puckCountWork(uint steps, uint texels) {
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
     }
 }
-// Adds an invocation's sky evaluations to its pass's row: the wave sums them, and its first active lane adds the sum.
-void puckCountSky(uint evaluations) {
-    uint waveEvaluations = WaveActiveSum(evaluations);
+// Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
+// Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
+void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
+    if (passGroup.workCounterRowDetail == 0u) {
+        return;
+    }
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+    puckAddWork((row + PuckWorkStepsWord), steps);
+    puckAddWork((row + PuckWorkTexelsWord), texels);
+    puckAddWork((row + PuckWorkSkyWord), evaluations);
+    puckAddWork((row + PuckWorkSkyHashesWord), hashes);
+    puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
+}
+// The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
+void puckCountShadow(uint slot, uint steps) {
+    uint waveSteps = WaveActiveSum(steps);
 
-    if (WaveIsFirstLane()) {
-        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
+    if ((slot < PuckWorkShadowSlots) && WaveIsFirstLane()) {
+        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkShadowWord + (slot * 2u)), waveSteps);
     }
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper

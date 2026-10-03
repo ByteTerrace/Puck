@@ -3,7 +3,7 @@ namespace Puck.Platform;
 /// <summary>
 /// A consumer-provisioned set of shared GPU capture targets for the zero-copy transport of a native-image feed. The
 /// consumer creates the textures in shared GPU memory on its render device — each <see cref="Width"/> × <see cref="Height"/>,
-/// B8G8R8A8 — and hands their D3D12 <c>CreateSharedHandle</c> NT handles to
+/// in the feed's own <see cref="Format"/> (<see cref="INativeImageCaptureFeed.Output"/>) — and hands their D3D12 <c>CreateSharedHandle</c> NT handles to
 /// <see cref="INativeImageCaptureFeed.AttachGpuTargets"/>, with the publication the two sides share. The feed opens each
 /// handle once on its capture device and, each published tick, copies the captured frame into a slot it reserves
 /// through <see cref="Slots"/> (<see cref="LatestSlotPublication.TryReserveWriteSlot"/>, which never names a slot a
@@ -13,7 +13,7 @@ namespace Puck.Platform;
 /// with it, which the consumer's submission waits for.
 /// </summary>
 /// <param name="SharedTargetHandles">The shared NT handles (D3D12 <c>CreateSharedHandle</c>) of the target textures, each
-/// created at <see cref="Width"/> × <see cref="Height"/> B8G8R8A8; two or more are required.</param>
+/// created at <see cref="Width"/> × <see cref="Height"/> in <see cref="Format"/>; two or more are required.</param>
 /// <param name="Width">The shared-target width in pixels; the consumer sizes it to the live source extent
 /// (<see cref="INativeImageCaptureFeed.SourceWidth"/>).</param>
 /// <param name="Height">The shared-target height in pixels; the consumer sizes it to the live source extent
@@ -25,11 +25,15 @@ namespace Puck.Platform;
 /// active.</param>
 /// <param name="SharedFenceHandle">The consumer's shared fence (a Direct3D 12 <c>D3D12_FENCE_FLAG_SHARED</c> fence's NT
 /// handle) the feed signals after each copy, or zero to complete every copy on the CPU.</param>
+/// <param name="Format">The shared targets' format: the format of the frames the feed captures
+/// (<see cref="INativeImageCaptureFeed.Output"/>), B8G8R8A8 for an SDR display and half-float RGBA for an HDR one, since
+/// the copy is format-preserving.</param>
 public sealed record NativeImageGpuCaptureTargets(
     IReadOnlyList<nint> SharedTargetHandles,
     int Width,
     int Height,
     LatestSlotPublication Slots,
     int CpuReadbackDivisor = 8,
-    nint SharedFenceHandle = 0
+    nint SharedFenceHandle = 0,
+    GpuPixelFormat Format = GpuPixelFormat.B8G8R8A8Unorm
 );

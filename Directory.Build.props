@@ -87,7 +87,13 @@
              MSBuild reports as an error under the repo-wide TreatWarningsAsErrors/CodeAnalysisTreatWarningsAsErrors
              gate. -->
         <Compile Include="$(MSBuildThisFileDirectory)build/VerifiedCodeAttribute.cs" Link="Properties/VerifiedCodeAttribute.cs" />
+        <!-- The format boundary markers `puck formats` reads from syntax; linked as source for the same reason. -->
+        <Compile Include="$(MSBuildThisFileDirectory)build/FormatLeafAttribute.cs" Link="Properties/FormatLeafAttribute.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/FormatSeamAttribute.cs" Link="Properties/FormatSeamAttribute.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/FormatPartAttribute.cs" Link="Properties/FormatPartAttribute.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)build/DerivationAttribute.cs" Link="Properties/DerivationAttribute.cs" />
+        <!-- The way onto the host's GPU, matched by name by GpuTraitAnalyzer (GPU001); linked like the brand. -->
+        <Compile Include="$(MSBuildThisFileDirectory)build/OpensGpuDeviceAttribute.cs" Link="Properties/OpensGpuDeviceAttribute.cs" />
         <!-- The brand ledger Puck.Analyzers reads at RegisterCompilationStartAction time; see VerifiedCode.json
              itself for the schema and the analyzer's VerifiedCodeManifest.cs for the reader. -->
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)VerifiedCode.json" />

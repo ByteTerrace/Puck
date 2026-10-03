@@ -11,7 +11,8 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The host prepares its graph before the residency captures the world. That capture composes both the
-/// cameras and placements, and an eased rect does not change a view's scheduled allocation extent.</summary>
+/// cameras and placements, an eased rect does not change a view's scheduled allocation extent, and a transition
+/// rebuilds its node at most once, an opposite-axis one included.</summary>
 public sealed class WorldCameraPlacementLawTests : IDisposable {
     private readonly TemporaryDirectory m_directory = new();
 
@@ -22,11 +23,18 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
     [InlineData(true, true)]
     [Theory]
     public void EveryTransitionFramePlacesTheRectItsCameraProjects(bool interrupted, bool subpixel) {
-        Run(checkPlacement: true, interrupted: interrupted, subpixel: subpixel);
+        Run(checkPlacement: true, interrupted: interrupted, opposite: false, subpixel: subpixel);
+        Run(checkPlacement: true, interrupted: interrupted, opposite: true, subpixel: subpixel);
     }
     [Fact]
     public void AnEasedRectCrossesQuantizationStepsWithoutRebuildingItsNodeUntilTheTransitionSettles() {
-        Run(checkPlacement: false, interrupted: false, subpixel: false);
+        Run(checkPlacement: false, interrupted: false, opposite: false, subpixel: false);
+    }
+    [Fact]
+    public void AnOppositeAxisTransitionRebuildsItsNodeOnceWhenItSettles() {
+        // A 0.75-by-0.25 view easing to 0.25-by-0.75 grows on one axis and shrinks on the other: it keeps its start's
+        // extent through the ease and rebuilds once, to its settled rect.
+        Run(checkPlacement: false, interrupted: false, opposite: true, subpixel: false);
     }
     [Fact]
     public void AnArrivingCameraKeepsAFiniteProjectionAtItsCollapsedFirstFrame() {
@@ -247,7 +255,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
         Assert.True(condition: request.TryFail(error: new OperationCanceledException()));
     }
 
-    private void Run(bool interrupted, bool checkPlacement, bool subpixel) {
+    private void Run(bool interrupted, bool checkPlacement, bool opposite, bool subpixel) {
         using var host = WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_directory,
@@ -258,8 +266,8 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
                 return definition with {
                     ViewsRaw = definition.Views with {
                         Layouts = [
-                            Layout(camera: camera, name: "wide", width: 0.75f),
-                            Layout(camera: camera, name: "narrow", width: (subpixel ? 0.001f : 0.25f)),
+                            Layout(camera: camera, height: (opposite ? 0.25f : 1f), name: "wide", width: 0.75f),
+                            Layout(camera: camera, height: (opposite ? 0.75f : 1f), name: "narrow", width: (subpixel ? 0.001f : 0.25f)),
                         ],
                     },
                 };
@@ -320,10 +328,15 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
                 if (index == 0) { continue; }
                 extent ??= (row.Width, row.Height);
                 // Through the ease the node keeps the wide layout's 0.75 of the display, crossing every quantization
-                // step of the eased rect; it shrinks once, to the narrow 0.25, on the frame the transition settles.
+                // step of the eased rect; it shrinks once, to the narrow 0.25, on the frame the transition settles. An
+                // opposite-axis transition keeps the wide layout's quarter height too, and grows it to the narrow
+                // layout's three quarters in that same rebuild.
                 var settled = (view.Region.Width == 0.25f);
 
-                Assert.Equal(expected: (settled ? (64, 128) : (192, 128)), actual: (row.Width, row.Height));
+                Assert.Equal(
+                    expected: (settled ? (64, (opposite ? 96 : 128)) : (192, (opposite ? 32 : 128))),
+                    actual: (row.Width, row.Height)
+                );
                 if ((row.Width, row.Height) != extent.Value) {
                     rebuilds++;
                     extent = (row.Width, row.Height);
@@ -371,9 +384,9 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
             ["fill"] = new(diagnostics: [], dxil: bytecode, name: "fill", sourceHash: "fill", sourcePath: "fill.hlsl", spirv: bytecode),
         });
     }
-    private static WorldViewLayout Layout(string? camera, string name, float width) => new(
+    private static WorldViewLayout Layout(string? camera, string name, float width, float height = 1f) => new(
         Name: name,
-        Slots: [new WorldViewSlot(Camera: camera, Width: 0.25f), new WorldViewSlot(Camera: camera, Width: width, X: 0.25f)],
+        Slots: [new WorldViewSlot(Camera: camera, Width: 0.25f), new WorldViewSlot(Camera: camera, Height: height, Width: width, X: 0.25f)],
         TransitionRenderScale: 0.5f,
         TransitionSeconds: 0.6f);
 }

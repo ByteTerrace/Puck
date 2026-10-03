@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -16,9 +17,6 @@
         <!-- Workspaces supplies the AdhocWorkspace/Solution/AdditionalDocument model the code-fix cases apply
              their changed solutions through. -->
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="[5.*, )" />
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
         <!-- Directory.Build.props hands every project Puck.Analyzers as a compiler extension

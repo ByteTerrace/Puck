@@ -355,8 +355,8 @@ public static partial class WorldDefinitionValidator {
 
                     RefuseStructure(
                         errors: errors,
-                        path: $"{path}.shadows",
-                        stated: (directional.Shadows is not null)
+                        path: $"{path}.shadow",
+                        stated: (directional.Shadow is not null)
                     );
                     RequireKeyDirection(
                         errors: errors,

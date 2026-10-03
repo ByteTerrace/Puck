@@ -134,11 +134,14 @@ not a filename; one declaration may be written `entry world name = …`, the wor
 `Puck.World --world <source>.puck` boots (a composition with no entry is refused
 at boot by name). A world source that declares no world and lowers to an empty
 document (a module library, `WorldCompilation.EmitsDocument` false) writes
-nothing, prints nothing, and exits 0. `--tree <root> --output <directory> [--written <report>] <sources…>` mirrors every
-source under `<root>` into `<directory>`, ships the bakes and pipeline packages they
-name (`bakes.puckbake`, `packages/`), and removes any other `*.world.json`, `*.puckb`,
-`*.puckbake` or stored package there. `--check` compiles into a scratch directory and
-exits 1 naming every file that differs from `<directory>`, writing nothing. Every name under `<root>` resolves through the name index
+nothing, prints nothing, and exits 0. `--tree <root> --output <directory> [--written <report>] [<sources…>]` mirrors the
+supplied sources under `<root>` into `<directory>`. Without sources it selects
+every `.puck` and `.world.json` under `<root>` recursively, in ordinal path
+order; explicit sources retain their supplied order. It ships the bakes and
+pipeline packages they name (`bakes.puckbake`, `packages/`), and removes any
+other `*.world.json`, `*.puckb`, `*.puckbake` or stored package there. `--check`
+compiles into a scratch directory and exits 1 naming every file that differs
+from `<directory>`, writing nothing. Every name under `<root>` resolves through the name index
 before anything is written; a hand-authored `.world.json` ships as it stands
 with its compiled world unless the `.puck` of its exact name emits that name, so
 one beside a module library or beside a composition declaring other worlds

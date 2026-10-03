@@ -24,7 +24,7 @@ internal static partial class CliProjectBuild {
     /// <summary>The build command without its output directory, which the World source-state key covers.</summary>
     /// <param name="project">The project file to build.</param>
     /// <returns>The arguments shared by every build.</returns>
-    public static string[] Arguments(string project) => ["build", "--disable-build-servers", project, "-c", "Release", "--nologo", "-p:NuGetAudit=false"];
+    public static string[] Arguments(string project) => ["build", CliOptions.NoNodeReuse, "--disable-build-servers", project, "-c", "Release", "--nologo", "-p:NuGetAudit=false"];
 
     // A failed build's refusal: why it failed, its first error lines (or its last lines when none is an error), and
     // where its whole output is kept.

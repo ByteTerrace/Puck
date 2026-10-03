@@ -75,7 +75,7 @@ staged region of frame data owes, copied into its device-local buffer; see
 (`sdf-mesh.vert`/`.frag`, rasterizing the frame's mesh draws, and `sdf-mesh-impostor.frag` the baked impostors' cards a view records) →
 `sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
 (normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) →
-`sdf-world-shadow.comp` (the key light's soft shadow) → the views kernel
+`sdf-world-shadow.comp` (the selected slots' soft shadows) → the views kernel
 (materials, lighting and diagnostics, shading hits only into the lit image,
 premultiplied by coverage) → `sdf-sky-runs.comp` (the sky's field runs, only where
 coverage is below one) → `sdf-composite.comp` (the sky's runs in their authored
@@ -103,7 +103,10 @@ map and its coefficients, rendered only when its gradient changes
 (`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
 counts the view's passes as `sdf.world$mask` through `sdf.world$composite`, their
-kernels' march steps, texels written and sky evaluations among them. The views
+kernels' march steps, texels written and sky evaluations, hashes and texture
+loads among them. The sky and composite expose per-layer detail rows, and the
+shadow exposes its slot; the ledger reconciles these with the plain remainder
+into each pass's totals. The views
 kernel ships in three compiled variants
 (`SdfViewsKernelVariant.Full`/`.Folds`/`.CoreOps`). Folds strips heavy operations;
 CoreOps also strips the remaining exotic cases. The program selects the smallest
@@ -115,8 +118,11 @@ record per pixel of the view, `SdfVisibilityWords` words (`sdf-visibility.hlsli`
 depth, hit acceptance, terminal field radius and threshold, material and seam
 data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
-shadow the key light's soft-shadow visibility, each adding its queries to the
-combined count. The planner's buffer barrier orders each producer's
+shadow four 8-bit stable visibilities in the one K word, each adding its queries
+to the combined count. Active handoffs add incoming marches, bounded by K + F,
+and write policy-sized transient visibility storage: R8 at F = 1, R8G8 at
+F = 2, absent at F = 0. Each light shades from its own visibility and each
+handoff scales that light's own occlusion deficit. The planner's barriers order each producer's
 record writes before its consumer. Views binds the record read-only, and every hit pass binds the
 beam's tile planes read-only, so a buffer a pass only reads is never held in a
 read-write state. These four dispatches share indirect bounds and live view
