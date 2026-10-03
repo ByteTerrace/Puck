@@ -44,7 +44,13 @@ internal sealed unsafe class KernelBench : IDisposable {
     // Packed the same way Win32D3D11.FindAdapterByLuid matches it: (HighPart << 32) | LowPart.
     public long AdapterLuid { get; }
 
+    [OpensGpuDevice]
     public static KernelBench? TryCreate(bool requireVideoSupport = false) {
+        // DXGI and Direct3D 11 exist only on Windows: elsewhere there is no adapter, and a caller skips.
+        if (!OperatingSystem.IsWindows()) {
+            return null;
+        }
+
         var adapter = FindHardwareAdapter();
 
         if (adapter is null) {

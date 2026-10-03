@@ -47,6 +47,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private GpuDeviceCapabilities? m_capabilities;
 
     /// <summary>Initializes a new instance that creates its device on the default adapter at feature level 11.0.</summary>
+    [OpensGpuDevice]
     public DirectXDeviceContext()
         : this(
         adapterLuid: 0,

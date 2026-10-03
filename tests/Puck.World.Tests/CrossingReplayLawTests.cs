@@ -152,6 +152,7 @@ public sealed class CrossingReplayLawTests {
             Intents: tick.Intents
         ))],
     };
+
     private static bool IsArrival(WorldReplayEntry entry, WorldChannelTable channels) => WorldReplayEntryDescriber.Describe(
         channels: channels,
         entry: entry

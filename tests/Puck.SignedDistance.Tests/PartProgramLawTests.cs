@@ -538,8 +538,10 @@ public sealed class PartProgramLawTests {
             words[(instances + 2)]
         );
     }
+    // The compiled part evaluator discards the scope's final point, which nothing after the instance may read: a world
+    // shape following the scope without a ResetPoint of its own would inherit it, and the program refuses that stream.
     [Fact]
-    public void PointStateUsedAfterTheScopePreventsCompilation() {
+    public void PointStateUsedAfterTheScopeIsRefusedAtTheProgram() {
         var instructions = Scope(
             inner: 1,
             materialA: 0,
@@ -553,15 +555,18 @@ public sealed class PartProgramLawTests {
             material: 0,
             radius: 1
         ));
-        Assert.Equal(
-            0,
-            PartTable(words: Build(
-                instructions,
-                [Range(
-                        end: 8,
-                        first: 0
-                    )]
-            ).Words)
+
+        var refusal = Assert.Throws<ArgumentException>(testCode: () => Build(
+            instructions,
+            [Range(
+                    end: 8,
+                    first: 0
+                )]
+        ));
+
+        Assert.Contains(
+            expectedSubstring: "without a ResetPoint",
+            actualString: refusal.Message
         );
     }
     [InlineData(false)]

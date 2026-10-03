@@ -39,10 +39,10 @@ documentation, and this skill with them when guidance disagrees.
 ## Run a tier
 
 A plain `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release`
-runs Smoke + Default. Deep, Exhaustive and Smoke alone run only when selected
-with `--settings tests/Puck.Maths.Tests/<tier>.runsettings`; a `--filter` on the
-`tier` trait cannot select them, because it is combined with the default's
-filter.
+runs Smoke + Default. Deep and Exhaustive cases are explicit: select one with
+`--explicit on --filter-trait tier=<tier>`, and Smoke alone with
+`--filter-trait tier=Smoke`. Without `--explicit on`, a Deep or Exhaustive
+filter selects no test.
 
 ## Load the full reference selectively
 

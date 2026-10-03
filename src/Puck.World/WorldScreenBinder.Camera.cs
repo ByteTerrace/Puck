@@ -1674,7 +1674,16 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
                 DisposeResources();
             }
         }
-        public bool TryAcquire(out GpuImageLease frame) {
+        public bool TryAcquire(out GpuImageLease frame) => TryAcquire(
+            frame: out frame,
+            image: out _
+        );
+        // Acquires the latest published slot as TryAcquire(out GpuImageLease) does, with the slot's image when the render
+        // device made it (the Direct3D 12 host's ring, whose images it owns), so a pass on that device can read it, or null
+        // for an imported ring's slot, which has no image of the render device's own.
+        public bool TryAcquire(out GpuImageLease frame, out IGpuImage? image) {
+            image = null;
+
             if (
                 m_retired ||
                 !m_stream.TryAcquireLatest(
@@ -1700,6 +1709,10 @@ internal sealed partial class WorldScreenBinder : IWorldSeatCameras {
             ++m_outstanding;
 
             var handle = Handle(slot: slot);
+
+            image = ((m_imports is null)
+                ? m_images[slot]
+                : null);
 
             // The producer published the value its write signals; the submission that samples this lease waits for it
             // on the GPU. Zero means the write finished before publication.

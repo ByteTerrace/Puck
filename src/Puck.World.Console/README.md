@@ -83,9 +83,11 @@ entry: the frame that showed its tick, or a
 named `refusal` with its `detail` (the vocabulary is in the
 [parity README](../../tests/Puck.Parity/README.md)). While a capture waits for
 its frame, `AwaitsFrame` holds, and the host composes that frame before its
-next step. The offscreen host, which already steps one tick per produced frame,
-goes further and steps no tick past the armed one until the capture is served
-or refused (`HoldsClock`), composing the owed frame again meanwhile. The hold counts from
+next step. Both rendered hosts, windowed and offscreen, go further and step no
+tick past the armed one until the capture is served or refused (`HoldsClock`),
+composing the owed frame again meanwhile. A capture a script arms with
+`world.screenshot` (`ArmUnscheduled`) is held for the same way, from the same
+budgets, but writes no manifest entry: its outcome is its own request's. The hold counts from
 readiness: time held while the engine is not ready (`IWorldEngineReadiness`,
 its pipeline set not yet installed or no frame produced from it) is spent from
 `BuildHoldBudgetSeconds` (180) per run, and time held once it is ready from
@@ -97,6 +99,16 @@ scheduler counts `world.captures.held` and `world.captures.ticks-while-armed`
 under its `world.captures` work source. It lives here rather than in `Puck.World.Client` because it reads
 `WorldServer` (the capture state hash and the `SolidField` inside-check), a
 reference Client is denied.
+
+The read-back modules for the rest of the server-side surface live here too:
+`world.counters` (`WorldCountersCommandModule`, which prints a section per
+registered `IWorkCounterSource`, plus the render nodes' GPU work and an
+allocation reading; `WorldCountersServiceRegistration` registers it and the
+server's own counters), `world.lighting` (`WorldLightingCommandModule`, the
+`render` section's lights, sky, grounding and tonemap), `world.timeline`
+(`WorldTimelineCommandModule`, the named clocks), `world.extensions`
+(`WorldExtensionsCommandModule`, the host-approved extension runtime), and
+`machine.state`/`machine.operation` (`WorldMachineCommandModule`).
 
 `WorldConsoleNarrationSink` (`WorldConsoleNarrationSink.cs`) is the
 `IWorldNarrationSink` implementation every composition root binds so a

@@ -55,8 +55,8 @@ constructor that the OpenAI package no longer ships, and fails when it runs.
 ## Verification
 
 ```text
-dotnet test tests/Puck.World.Agents.Tests -c Release --filter FullyQualifiedName~AzureOpenAiChatClientLawTests
-dotnet test tests/Puck.World.Tests -c Release --filter FullyQualifiedName~ExtensionModelLawTests
+dotnet test tests/Puck.World.Agents.Tests -c Release --filter-class "*AzureOpenAiChatClientLawTests"
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*ExtensionModelLawTests"
 ```
 
 The first shows that the provider registers under its name, creates a client

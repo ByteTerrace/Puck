@@ -358,6 +358,12 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_skyRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyRecord), region: SkyRegionIndex));
         m_skyStopRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_skyStopRecords), region: SkyStopRegionIndex));
         m_softboxRegion = scope.Own(created: CreateRegion(byteCount: RecordBytes(records: m_softboxRecords), region: SoftboxRegionIndex));
+        m_shadowHandoffBuffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
+            name: RegionName(region: ShadowHandoffRegionIndex), sizeBytes: ((ulong)RecordBytes(records: m_shadowHandoffs)), usage: GpuBufferUsage.Storage));
+        m_shadowHandoffRegion = scope.Own(created: new GpuRegion(
+            destination: m_shadowHandoffBuffer, byteCount: RecordBytes(records: m_shadowHandoffs), slotCount: FrameRingSize,
+            buffers: gpu.BufferFactory, bindings: gpu.Bindings, recorder: gpu.Recorder, copyPipeline: m_regionCopyPipeline,
+            name: RegionName(region: ShadowHandoffRegionIndex), copySets: m_regionCopyPool.Region(index: ShadowHandoffRegionIndex)));
         m_meshRegionBytes = SdfMeshRegion.DrawBytes;
         m_previousDynamicTransforms = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
             name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)m_dynamicTransformRegion.ByteCount), usage: GpuBufferUsage.Storage));

@@ -9,7 +9,7 @@ using Xunit;
 namespace Puck.DirectX.Tests;
 
 /// <summary>The Direct3D 12 memory profile is a pure function of the structures the runtime and DXGI report
-/// (<see cref="DirectXNativeDeviceApi.MemoryProfile"/>): fixture structures for a cache-coherent unified adapter, a
+/// (<see cref="DirectXFeatureReads.MemoryProfile(in D3D12_FEATURE_DATA_ARCHITECTURE, in DXGI_ADAPTER_DESC1, in D3D12_FEATURE_DATA_D3D12_OPTIONS16)"/>): fixture structures for a cache-coherent unified adapter, a
 /// unified one without cache coherence, and discrete adapters with and without GPU upload heaps fill the profile each
 /// should and select the policy each should. No device is created.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -114,7 +114,7 @@ public sealed class DirectXMemoryProfileLawTests {
             GPUUploadHeapSupported = uploadHeaps,
         };
 
-        return DirectXNativeDeviceApi.MemoryProfile(
+        return DirectXFeatureReads.MemoryProfile(
             adapter: in adapter,
             architecture: in architecture,
             options16: in options16

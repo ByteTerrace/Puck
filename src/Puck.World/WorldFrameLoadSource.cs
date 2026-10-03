@@ -8,13 +8,13 @@ using Puck.World.Client;
 
 namespace Puck.World;
 
-/// <summary>The load the dynamic-resolution controller reads in a presentation with a render graph: the world's own views'
-/// (<c>world</c>, <c>world$2</c> on) GPU frame time, from the pass timestamps <see cref="WorldGpuTiming"/> records while
+/// <summary>The load the dynamic-resolution controller reads in a presentation with a render graph: one view's
+/// (<paramref name="view"/>, the world's own by default) GPU frame time, from the pass timestamps <see cref="WorldGpuTiming"/> records while
 /// the controller asks; the presenter's present timing, when the host's presenter reports it (a windowed World's
 /// swapchain; an offscreen World presents nothing, so it reports none); the counted march steps of the views' completed
 /// submissions; and their budget per output pixel from the counters ceilings the floor tier committed
 /// (<c>tests/Puck.Counters/counters.ceilings.json</c>, compiled in as <see cref="CeilingsResource"/>) for the device's
-/// backend. A timed or counted reading sums each view's newest submission not read before, through a
+/// backend. A timed or counted reading sums the view's newest submissions not read before, through a
 /// <see cref="WorldFrameLoadAggregate"/> per signal, and names the grid each submission's node recorded it at
 /// (<see cref="ShaderPipelineRenderNode.TryGetRenderGrid"/>). Reading allocates nothing.</summary>
 /// <param name="presentTiming">Resolves the presenter's present timing, on the first read, or <see langword="null"/> for a

@@ -26,7 +26,7 @@ machine recipe used to validate a restore.
 `AgbMachineSnapshot` contains CPU registers and banked state, bus memories,
 pipeline and prefetch latches, PPU, APU, DMA, timer, interrupt, scheduler,
 serial, cartridge, backup, and master-cycle state. Subsystems implement
-`IAgbSnapshotable` through their `*.State.cs` partials.
+`ISnapshotable` (from `Puck.Machines`) through their `*.State.cs` partials.
 
 `AgbMachineFactory` owns construction. `AgbMachineInstance.Fork` (a `global
 using` alias for `Puck.Machines.MachineInstance<AdvancedGamingBrickMachine,

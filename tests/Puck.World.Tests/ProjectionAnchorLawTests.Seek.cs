@@ -82,7 +82,7 @@ public sealed partial class ProjectionAnchorLawTests {
         var hostHas = hostMirror.TryPhase(clock: out _, name: Clock, phase: out var hostPhase);
         var recipientHas = recipientMirror.TryPhase(clock: out _, name: Clock, phase: out var recipientPhase);
 
-        Assert.Equal(expected: (hostHas, hostPhase), actual: (recipientHas, recipientPhase));
+        Assert.Equal(actual: (recipientHas, recipientPhase), expected: (hostHas, hostPhase));
         Assert.Equal(
             expected: hostMirror.Scalar(fallback: float.NaN, scalar: Density),
             actual: recipientMirror.Scalar(fallback: float.NaN, scalar: Density)
@@ -90,9 +90,9 @@ public sealed partial class ProjectionAnchorLawTests {
     }
     // The definition with its clocks' anchors cleared: everything structural a projection carries.
     private static WorldDefinition WithoutAnchors(WorldDefinition definition) => definition with {
-        TimelineRaw = (definition.TimelineRaw is { Clocks: { } clocks } timeline)
+        TimelineRaw = ((definition.TimelineRaw is { Clocks: { } clocks } timeline)
             ? timeline with { Clocks = [.. clocks.Select(selector: static clock => clock with { Anchor = null })] }
-            : definition.TimelineRaw,
+            : definition.TimelineRaw),
     };
     private static void AssertNoHiddenRow(WorldDefinition held, string when) => Assert.False(
         condition: held.State.Any(predicate: static row => (row.Name.Value == Hidden)),
@@ -106,11 +106,11 @@ public sealed partial class ProjectionAnchorLawTests {
         Value: raw
     );
 
-    [Theory]
     [InlineData("in-place")]
     [InlineData("load-door")]
     [InlineData("unnumbered-clock")]
     [InlineData("between-keyframes")]
+    [Theory]
     public async Task A_history_seek_reaches_an_existing_viewer(string variant) {
         // The clock advances by a whole raw unit stride every tick, keyed fog follows it, and a row only seat1 may
         // read sits beside it. The unnumbered variant's clock holds no number until one is written after the keyframe.
@@ -186,7 +186,7 @@ public sealed partial class ProjectionAnchorLawTests {
         AssertNoHiddenRow(held: hold.Definition!, when: "before the seek");
 
         if (variant == "unnumbered-clock") {
-            Assert.True(condition: (AnchorOf(definition: hold.Definition!) is { } ahead) && (ahead.Tick > (target * Fixtures.StepTicksAt(rateHz: RateHz))), userMessage: "the control: the viewer holds an anchor stood after the seek's target");
+            Assert.True(condition: ((AnchorOf(definition: hold.Definition!) is { } ahead) && (ahead.Tick > (target * Fixtures.StepTicksAt(rateHz: RateHz)))), userMessage: "the control: the viewer holds an anchor stood after the seek's target");
         }
 
         var log = new DeliveryLog();

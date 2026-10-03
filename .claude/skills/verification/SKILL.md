@@ -19,12 +19,15 @@ same change. The user's current instruction outranks it.
 `puck gate` and `puck laws prove` are the routes. Run both from a CLI copy
 (below) outside the checkout.
 
-- **`puck gate --merge-base origin/<integration-branch>`** is the route for
-  verifying a lane. Run it on the lane's final head against the integration
-  branch the brief names, report its verdict, and read its `--help` for what it
-  already covers; do not repeat by hand a step it ran. Without `--gpu` it runs
-  no canary or parity, so with no grant run it without `--gpu` and list the
-  plan's canary and parity lines as GPU legs owed.
+- **`puck gate --merge-base origin/<integration-branch>`** is the lane's
+  qualification. Run it on the lane's final head against the integration branch
+  the brief names and report its verdict; do not repeat steps it ran. `--gpu`
+  adds the affected canaries and parity, the device suites, every recorded
+  counters workload and docs citations, serially. `--record` requires `--gpu`
+  and refreshes canary coverage only after every qualification step passes.
+  Without a GPU grant, omit `--gpu` and list those GPU additions as owed.
+  Admission uses host load's defaults before heavy steps; `gate.log` and
+  `gate.steps` retain output and the flushed step timeline.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
   or changed law, with `--fix <commit>` or with `--file-list` for an
   uncommitted fix, instead of the manual withholding below: it withholds the
@@ -96,10 +99,11 @@ check form:
 
 Run the recording form only to apply a deliberate change: `puck lengths` after
 shrinking a recorded file, `puck format --file-list` over your own files,
-`puck formats` after bumping a format token, `puck canary-ceilings` after
-changing canary cost, a baseline whose movement the change explains. Review
-the rewritten file's diff and commit it in the same change. A ledger rewritten
-during verification hides the drift the check exists to report.
+`puck formats` after editing a format's source (it records the shape and rewrites the generated
+`FormatShapes.g.cs` files; it never asks for a token bump), `puck canary-ceilings` after
+changing canary cost, a baseline whose movement the change explains. Review the rewritten file's diff
+and commit it in the same change. A ledger rewritten during verification hides
+the drift the check exists to report.
 
 A recording verb that exits nonzero has not recorded, whatever file it wrote.
 `puck counters --record` writes no file and exits 1 when the backends disagree
@@ -178,7 +182,7 @@ brief requires a manual proof, use these steps:
 
 In xUnit v3, `Assert.Throws`, `Assert.ThrowsAny`, `Assert.ThrowsAsync`,
 `Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception
-(verified on xUnit 3.2.2). A law that wraps a call which can skip, such as a
+(verified on xUnit 4.0.1). A law that wraps a call which can skip, such as a
 device or capability probe, can therefore report **Skipped** with its fix
 withheld and pin nothing. In such laws, catch the exception directly with a
 `try`/`catch` and assert on it.
@@ -193,7 +197,7 @@ owed when your change relies on it.
 GPU work is `puck parity`, `puck counters`, any canary requiring `gpu`
 (including `--merge`), a windowed or offscreen `Puck.World` run, any verb that
 boots one in those modes, and any test that opens a device. This includes a
-full `Puck.World.Tests` run: its device-law classes open the GPU. `puck docs
+full `Puck.World.Tests` run: its `Gpu` classes open the GPU. `puck docs
 citations` builds `Puck.World` and boots it headless and windowed to read its
 help vocabulary, so it waits for the GPU like any other GPU leg; given
 `--enumeration <file>`, a saved `help` listing, it boots nothing and may run
@@ -203,20 +207,23 @@ World run with effective `host.presentation: none` uses no GPU; the
 
 - A GPU runs one GPU leg at a time. Legs compete for the device, the ports and
   the frame budget, and a contended leg times out.
-- While another GPU leg runs, filter World tests with
-  `--filter "FullyQualifiedName!~DeviceLaw"` and list the skipped device-law
-  classes as owed. Keep the CPU-heavy work restriction below.
+- While another GPU leg runs, run test suites with
+  `--filter-not-trait Category=Gpu` and list the skipped `Gpu` classes as
+  owed. Every class that opens a hardware GPU device carries
+  `[Trait("Category", "Gpu")]`, whatever its name, and the build refuses a class
+  that reaches a way onto the GPU marked `[OpensGpuDevice]` without it (GPU001).
+  Keep the CPU-heavy work restriction below.
 - In delegated work, run GPU legs only under a grant the lead issues in your
   brief. Without one, run none: list each leg you need (verb, canaries,
   backend) in your hand-back report.
 - With a grant, run the granted legs serially, nothing else GPU-bound beside
   them, and keep CPU-heavy work (solution builds, large suites) off the machine
   while they run.
-- Qualify the merged head, never a batch on its own. Before a batch's GPU run,
-  merge the current integration head into it. A stale batch can fail or pass
-  because it lacks changes already on the integration branch.
-  [`orchestration`](../orchestration/SKILL.md#assemble-and-refresh-batches)
-  owns batch assembly and merge sequencing.
+- Qualify the merged head. Before a lane's GPU run, merge the current
+  integration head into it: a stale lane can fail or pass because it lacks
+  changes already on the integration branch.
+  [`orchestration`](../orchestration/SKILL.md#land-each-lane-on-its-own) owns
+  landing order.
 - A per-change GPU check is one to four canaries on one backend: the backend
   the change touches, or Vulkan when it is backend-neutral. Parity runs when
   the change means to move pixels or simulation state, and otherwise once at
@@ -299,7 +306,7 @@ command for the parts it covers.
 
 | Skill | Route there for |
 |---|---|
-| [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, integration batches, machines and GPU grants. |
+| [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, per-lane landings, machines and GPU grants. |
 | [`review-passes`](../review-passes/SKILL.md) | Briefing a cross-family review-and-fix pass, and verifying and landing its fixes. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers, mutation probe and recorded registers. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The Humble and Advanced Post batteries. |

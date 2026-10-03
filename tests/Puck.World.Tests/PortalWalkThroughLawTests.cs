@@ -35,7 +35,9 @@ public sealed class PortalWalkThroughLawTests {
     private const ulong ArrivalTransferId = 4_201UL;
     private const string DoorPrototype = "door";
     private const float DoorScale = 5f;
+
     internal const string Face = "door";
+
     private const int ForwardOrdinal = 0;
     private const string SourceAuthority = "peer-world/source";
     private const int WalkBound = 120;
@@ -68,6 +70,7 @@ public sealed class PortalWalkThroughLawTests {
             Name: SafeName.Parse(candidate: "neighbour")
         )],
     });
+
     // Commits one traveller into a row the way an authenticated peer authority does, and answers its body.
     private static int AdmitPeer(WorldServer server, int ordinal = 0) {
         var origin = new WorldEntityAddress(

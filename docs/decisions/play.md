@@ -211,8 +211,9 @@ compliance.
 completion** (`FrameCaptureRequest.Completion`), not a file's existence or a
 pending echo; one pending request, arbitrated on the owning thread.
 
-**Cost reports return `WorldCostReport.Generate`'s facts intact**; calibration
-stays out of the adapter.
+**The rule-cost report returns `WorldCostReport.Generate`'s facts intact**; the
+console reads it through `world.budget.rules`, and calibration stays out of the
+adapter. `world.cost` is the editor's per-placement verb and not this report.
 
 **Submission is distinct from execution.** Queueing a simulation command
 returns no verdict, so receipts carry correlation through deferred dispatch;

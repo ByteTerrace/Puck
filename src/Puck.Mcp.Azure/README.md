@@ -51,7 +51,7 @@ tool's input schema.
 ## Verification
 
 ```text
-dotnet test tests/Puck.World.Tests -c Release --filter FullyQualifiedName~ExtensionModelLawTests
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*ExtensionModelLawTests"
 dotnet test tests/Puck.World.Azure.Tests -c Release
 ```
 

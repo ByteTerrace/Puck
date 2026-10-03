@@ -64,7 +64,7 @@ public sealed class BodyUpRelativeVelocityLawTests {
         var upperBefore = upper.FixedPosition;
         var velocityBefore = upper.ApproximateWorldVelocity();
 
-        Assert.Equal(expected: (up * -fallSpeed), actual: velocityBefore);
+        Assert.Equal(actual: velocityBefore, expected: (up * -fallSpeed));
 
         fixture.Server.Population.ResolveDynamicContacts();
 

@@ -61,6 +61,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     private readonly IDirectXCommandListRecorder m_commandListRecorder;
     private readonly GpuPassPipelineCache m_pipelines;
+    private readonly PresentationWork m_presentation;
     private readonly double m_paperWhiteNits;
     private readonly GpuPixelFormat m_preferredFormat;
     private readonly DisplayColorSpace m_requestedColorSpace;
@@ -125,17 +126,21 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <param name="presentationOptions">The neutral present-mode, surface-format, color-space and paper-white
     /// preferences.</param>
     /// <param name="pipelines">The composition's pass pipelines, which the display encode is an entry of.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/> or <paramref name="pipelines"/> is <see langword="null"/>.</exception>
+    /// <param name="presentation">The presentation counters a present with no swap chain records its skip in.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="commandListRecorder"/>, <paramref name="presentationOptions"/>, <paramref name="pipelines"/> or <paramref name="presentation"/> is <see langword="null"/>.</exception>
     public DirectXSurfaceCompositor(
         IDirectXCommandListRecorder commandListRecorder,
         PresentationOptions presentationOptions,
-        GpuPassPipelineCache pipelines
+        GpuPassPipelineCache pipelines,
+        PresentationWork presentation
     ) {
         ArgumentNullException.ThrowIfNull(commandListRecorder);
         ArgumentNullException.ThrowIfNull(presentationOptions);
         ArgumentNullException.ThrowIfNull(pipelines);
+        ArgumentNullException.ThrowIfNull(presentation);
 
         m_commandListRecorder = commandListRecorder;
+        m_presentation = presentation;
         m_pipelines = pipelines;
         m_paperWhiteNits = presentationOptions.PaperWhiteNits;
         m_presentMode = presentationOptions.PresentMode;
@@ -335,6 +340,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <param name="drawCommands">The ordered list of draw commands to execute this frame.</param>
     public void Present(DirectXDeviceContext deviceContext, IReadOnlyList<DirectXDrawCommand> drawCommands) {
         if (m_swapChain == 0) {
+            // No swap chain this tick: no GPU work submitted. Counted as presentation.skipped, which world.counters reads.
+            m_presentation.RecordSkip();
+
             return;
         }
 

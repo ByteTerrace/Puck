@@ -83,6 +83,7 @@ public sealed partial class SdfProgram {
     /// <summary>Each packed <see cref="SdfShapeType.Sweep"/> curve table entry's uvec4 stride: (A.xyz, radiusStart),
     /// (B.xyz, radiusEnd), (C.xyz, bulge).</summary>
     private const int SweepCurveVectorsPerEntry = 3;
+
     /// <summary>The UNMASKABLE-instance sentinel radius: an instance carrying an unbounded shape or compose
     /// (<see cref="HasUnmaskableInfluence"/>) packs this instead of a real bound, so the beam prepass's sphere-vs-cone
     /// test <c>axisDistance &lt;= (radius + chord*alongRay) * inverseAperture</c> passes for every tile and the instance
@@ -93,7 +94,8 @@ public sealed partial class SdfProgram {
     /// within 20 decades of it. Needs no shader change: the existing cull arithmetic already always admits it, and it is
     /// non-negative so neither the parked-slot skip in <c>collectInstanceMaskWord</c> nor the one in
     /// <c>sdfNextVisibleInstanceRange</c> misfires.</para></summary>
-    private const float UnmaskableBoundRadius = 1.0e30f;
+    public const float UnmaskableBoundRadius = 1.0e30f;
+
     private const int WordsPerVector = 4;
 
     private readonly bool m_buildInstanceGrid;
@@ -754,10 +756,7 @@ public sealed partial class SdfProgram {
 
         for (var index = 0; (index < m_instances.Length); index++) {
             var instance = m_instances[index];
-            var unmaskable = HasUnmaskableInfluence(
-                first: instance.First,
-                end: instance.End
-            );
+            var unmaskable = IsUnmaskable(instance: instance);
 
             if (
                 unmaskable &&
@@ -994,6 +993,15 @@ public sealed partial class SdfProgram {
     /// hole) lives strictly inside the union hull — inside any covering bound — so masking an Xor instance with a
     /// covering, union-margin bound is exactly as safe as masking a union member (see MaxSmoothBlendRadius's sizing
     /// note).</para>
+    /// <para>The folds with no edge. A point fold whose lattice is unbounded (<see cref="SdfWallpaperFold.IsUnbounded"/>, an
+    /// infinite <see cref="SdfOp.Repeat"/>, a <see cref="SdfOp.RepeatLimited"/> at <see cref="SdfDomainOps.UnboundedRepeatLimit"/>)
+    /// puts copies of every shape after it at every distance until the next <see cref="SdfOp.ResetPoint"/>, so such a shape is an
+    /// unbounded operand. Inside a scope the operands compose through <see cref="SdfBoundAlgebra"/>: intersected with a
+    /// finite shape it is bounded by that shape, subtracted from one it is bounded by it, and only a union with it, or
+    /// the scope's whole field, leaves the scope unbounded. An unbounded scope is an unbounded instance. At depth 0 each
+    /// shape is its own operand of the world's field, so an unbounded one is an unbounded instance. An instance begins at
+    /// the world point (<see cref="RequireSegmentsStartAtTheWorldPoint"/> refuses a stream that moves the point across
+    /// its start), so a fold never reaches it from outside.</para>
     /// <para>No bound inflation closes either gap, because the far-field answer is not the accumulator. Such an instance
     /// therefore packs <see cref="UnmaskableBoundRadius"/>, a bound so large that the beam prepass's sphere-vs-cone test
     /// passes for every tile and the instance is always evaluated — the same graceful degradation <c>AnalyzeSegment</c>
@@ -1003,6 +1011,15 @@ public sealed partial class SdfProgram {
     /// <returns><see langword="true"/> when the slice has unbounded influence.</returns>
     internal bool HasUnmaskableInfluence(int first, int end) {
         var scopeDepth = 0;
+        // A point fold with no edge (an unbounded wallpaper or repeat) makes every shape after it unbounded until the
+        // next ResetPoint. A scope touches only the field, so it never ends one. A slice starts from the world point:
+        // the program refuses a stream that may carry a moved point into a segment that reads it
+        // (RequireSegmentsStartAtTheWorldPoint), so no fold is inherited.
+        var foldUnbounded = false;
+        // The open scope's field, as a bound under SdfBoundAlgebra (0 for finite, Unbounded for none), and
+        // whether a shape has joined it. The cap is one scope deep (SdfProgramBuilder.MaxFieldScopeDepth).
+        var scopeBound = 0f;
+        var scopeHasShape = false;
 
         for (var index = first; (index < end); index++) {
             var instruction = m_instructions[index];
@@ -1014,6 +1031,19 @@ public sealed partial class SdfProgram {
                 return true;
             }
 
+            if (instruction.Op == SdfOp.ResetPoint) {
+                foldUnbounded = false;
+
+                continue;
+            }
+
+            // A fold whose lattice has no edge repeats what follows at every distance, whatever scope it stands in.
+            if (OpensUnboundedFold(instruction: instruction)) {
+                foldUnbounded = true;
+
+                continue;
+            }
+
             // A PushField reseeds the accumulator, so an accumulator-reading op INSIDE the scope (scopeDepth > 0) reads
             // only the scope's own field — it does NOT make the instance unmaskable. That is the scoped-accumulator
             // payoff: a scoped Onion/Dilate/intersection hands the instance a finite, cullable bound back, instead of
@@ -1021,6 +1051,8 @@ public sealed partial class SdfProgram {
             // depth, can be unmaskable (an intersection-family compose composes the whole scope against the parent).
             if (instruction.Op == SdfOp.PushField) {
                 scopeDepth++;
+                scopeBound = 0f;
+                scopeHasShape = false;
 
                 continue;
             }
@@ -1035,12 +1067,14 @@ public sealed partial class SdfProgram {
 
                 scopeDepth--;
 
+                // The closed scope composes into the instance as one operand: unbounded if the scope's own field is.
+                // Union and subtraction composes both leave the influence where the scope's field is, so an unbounded
+                // scope is an unbounded instance; an intersection compose reads the parent accumulator outright.
                 if (
                     (scopeDepth == 0) &&
                     (
-                        (instruction.Blend == ((uint)SdfBlendOp.Intersection)) ||
-                        (instruction.Blend == ((uint)SdfBlendOp.SmoothIntersection)) ||
-                        (instruction.Blend == ((uint)SdfBlendOp.ChamferIntersection))
+                        SdfBoundAlgebra.IsIntersection(blend: ((SdfBlendOp)instruction.Blend)) ||
+                        SdfBoundAlgebra.IsUnbounded(bound: scopeBound)
                     )
                 ) {
                     return true;
@@ -1049,8 +1083,26 @@ public sealed partial class SdfProgram {
                 continue;
             }
 
-            // Ops nested in a scope are already handled by the scope's own compose (above): skip them.
+            // Ops nested in a scope are handled by the scope's own compose, which bounds them as a field: a shape joins
+            // the scope's field by its blend, so the scope is as bounded as SdfBoundAlgebra says its operands leave it.
             if (scopeDepth > 0) {
+                if (instruction.Op == SdfOp.ShapeBlend) {
+                    var operand = (foldUnbounded
+                        ? SdfBoundAlgebra.Unbounded
+                        : 0f
+                    );
+
+                    scopeBound = (scopeHasShape
+                        ? SdfBoundAlgebra.Compose(
+                            accumulated: scopeBound,
+                            blend: ((SdfBlendOp)instruction.Blend),
+                            operand: operand
+                        )
+                        : operand
+                    );
+                    scopeHasShape = true;
+                }
+
                 continue;
             }
 
@@ -1070,17 +1122,27 @@ public sealed partial class SdfProgram {
                 continue;
             }
 
-            if (
-                (instruction.Blend == ((uint)SdfBlendOp.Intersection)) ||
-                (instruction.Blend == ((uint)SdfBlendOp.SmoothIntersection)) ||
-                (instruction.Blend == ((uint)SdfBlendOp.ChamferIntersection))
-            ) {
+            if (SdfBoundAlgebra.IsIntersection(blend: ((SdfBlendOp)instruction.Blend))) {
+                return true;
+            }
+
+            // At depth 0 every shape is its own operand of the world's field: one with no edge leaves the instance none.
+            if (foldUnbounded) {
                 return true;
             }
         }
 
         return false;
     }
+    // Whether an instance is classified as having no bound: it declares none (SdfBoundAlgebra.Unbounded, the authoring
+    // stamper's composed answer), or its instructions leave it none (HasUnmaskableInfluence). The one test every reader
+    // of an instance's bound asks, so a declared bound and the tree it covers cannot disagree.
+    internal bool IsUnmaskable(SdfInstanceRange instance) =>
+        (SdfBoundAlgebra.IsUnbounded(bound: instance.Radius) ||
+        HasUnmaskableInfluence(
+            first: instance.First,
+            end: instance.End
+        ));
 
     /// <summary>Returns whether an instance is shadow-transparent: omitting it from a soft-shadow march can only make
     /// the field more solid (never light-leak), so the <c>sdf.shadow-proxy</c> lever may safely drop it from the shadow
@@ -1275,6 +1337,17 @@ public sealed partial class SdfProgram {
             }
 
             var radius = MathF.Abs(x: instruction.Data1.X);
+
+            // A scope's field joins its parent divided by its own Lipschitz factor L (PopField.Data1.Y = 1/L, patched by
+            // AnalyzeLipschitz before the bounds are classified), so a soft compose blends wherever that quotient is within
+            // the radius of the parent: out to L times the radius beyond the scope's geometry. The halo is measured in the
+            // scope's own units, as the rescale leaves the scope's zero set where it was.
+            if (
+                (instruction.Op == SdfOp.PopField) &&
+                (instruction.Data1.Y > 0f)
+            ) {
+                radius /= instruction.Data1.Y;
+            }
 
             if (
                 (instruction.Blend == ((uint)SdfBlendOp.SmoothUnion)) ||

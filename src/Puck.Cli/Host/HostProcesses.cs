@@ -1,6 +1,7 @@
 using System.CommandLine.Parsing;
 
 using Puck.Cli.Counters;
+using Puck.Cli.Gate;
 using Puck.Cli.Parity;
 
 namespace Puck.Cli.Host;
@@ -14,11 +15,11 @@ namespace Puck.Cli.Host;
 /// <c>restore</c>, <c>msbuild</c>, <c>publish</c> or <c>pack</c>, whatever project they name;</item>
 /// <item>GPU work is the World (<c>Puck.World</c> or <c>Puck.World.dll</c>), a <c>canary</c>, <c>parity</c> or
 /// <c>counters</c> verb of the CLI, or a test host running the device-law assemblies (<c>Puck.DirectX.Tests</c>,
-/// <c>Puck.Vulkan.Tests</c>, <c>Puck.World.Tests</c>).</item>
+/// <c>Puck.Vulkan.Tests</c>, <c>Puck.World.Tests</c>, <c>Puck.Platform.Windows.Tests</c>).</item>
 /// </list>
 /// </summary>
 internal static class HostProcesses {
-    private static readonly string[] DeviceTestAssemblies = ["Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.World.Tests"];
+    private static readonly string[] DeviceTestAssemblies = [.. GatePlan.Steps.Where(predicate: step => (step.Kind == GateStepKind.DeviceSuite)).Select(selector: step => step.Name)];
     private static readonly string[] NeverWork = ["powershell", "pwsh", "bash", "sh", "cmd", "grep", "conhost", "MSBuild", "csc", "VBCSCompiler"];
     private static readonly string[] ExecValueOptions = ["--depsfile", "--runtimeconfig", "--additionalprobingpath", "--additional-deps", "--fx-version", "--roll-forward", "--roll-forward-on-no-candidate-fx"];
 

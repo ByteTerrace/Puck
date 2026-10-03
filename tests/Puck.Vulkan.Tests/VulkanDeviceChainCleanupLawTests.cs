@@ -183,6 +183,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             },
             physicalDeviceApi: driver,
             physicalDeviceSelector: new VulkanPhysicalDeviceSelector(physicalDeviceApi: driver),
+            presentation: new PresentationWork(name: "presentation.vulkan"),
             presentationOptions: new PresentationOptions(),
             renderPassFactory: null!,
             surfaceFactory: new VulkanSurfaceFactory(surfaceApi: driver),
@@ -340,10 +341,9 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
 
             return (QueueHandle + ((nint)queueFamilyIndex));
         }
-        // The base features the factory requires, fragmentStoresAndAtomics (index 26) and shaderSampledImageArrayDynamicIndexing
-        // (index 34), and no other.
+        // The required base features: fragment storage (26), extended storage formats (29) and sampled array indexing (34).
         public IReadOnlyList<bool> GetFeatureSupport(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
-            [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is 26 or 34))];
+            [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is 26 or 29 or 34))];
         public GpuMemoryProfile GetMemoryProfile(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
             default;
         public VkPhysicalDeviceType GetPhysicalDeviceType(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>

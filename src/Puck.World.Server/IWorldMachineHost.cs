@@ -35,8 +35,8 @@ public readonly record struct WorldMachineCartridge(string Path, string SourceHa
 /// <summary>
 /// The seam <see cref="WorldServer"/> — and every replay/instance-host caller that boots a shadow world of its own —
 /// pumps every declared screen's machine through, mirroring <see cref="IWorldAddonHost"/>'s own shape for the WASM
-/// guest seam. <c>Puck.World.Addons.Machines.WorldMachineHost</c> is the one implementation; it is constructed from
-/// the composition root (where the concrete emulator/instrument engines are known) and handed to
+/// guest seam. <c>Puck.World.Machines.WorldMachineHost</c> is the one implementation; it is constructed from
+/// the composition root (where the host-selected engines are known) and handed to
 /// <see cref="WorldServer"/> as a peer singleton, never built by this project directly — the whole reason this
 /// interface exists is that <c>Puck.World.Server</c> must stay free of the emulator cores and the renderer's
 /// projects (a machine is a mounted guest, like a WASM addon), so a browser or silo build of Server needs neither.

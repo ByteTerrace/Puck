@@ -20,16 +20,16 @@ namespace Puck.World.Tests;
 /// arrival tick.
 /// </summary>
 public sealed class CrossingReplayTravellerLawTests {
+    private const int StepsAfterArrival = 10;
     private const string TravellerId = "traveller";
     private const int WalkBound = 120;
-    private const int StepsAfterArrival = 10;
 
     // Everything the law compares about the traveller on one server, or its absence and the census.
     private static string Traveller(WorldServer server) {
         var population = server.Population;
 
         for (var slot = 0; (slot < population.Capacity); slot++) {
-            if (population.EntryBody(index: slot) is { Profile.Id: TravellerId } body && population.IsActive(index: slot)) {
+            if ((population.EntryBody(index: slot) is { Profile.Id: TravellerId } body) && population.IsActive(index: slot)) {
                 var state = body.CaptureTransferState();
                 var projection = new WireWriter();
 
@@ -112,6 +112,7 @@ public sealed class CrossingReplayTravellerLawTests {
             seats: WorldEmbodiedSeats.None,
             stateRoot: new WorldStateRoot(path: hostState.RootPath)
         );
+
         var (rowA, rowAServer, rowAState) = FileBackedRows.Build(definition: rowADefinition, name: "row-a", path: rowAPath);
         var (rowB, rowBServer, rowBState) = FileBackedRows.Build(definition: rowBDefinition, name: "row-b", path: rowBPath);
 
@@ -131,7 +132,7 @@ public sealed class CrossingReplayTravellerLawTests {
                 machineHostFactory: Fixtures.MachineHostFactory,
                 profiles: rowAServer.Profiles,
                 stateRoot: new WorldStateRoot(path: tapes.RootPath),
-                transport: (LoopbackTransport)rowA.Link
+                transport: ((LoopbackTransport)rowA.Link)
             );
             var name = $"crossing-{Guid.NewGuid():N}";
             var live = new List<string>();
@@ -150,7 +151,7 @@ public sealed class CrossingReplayTravellerLawTests {
                 }
                 host.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
                 live.Add(item: Traveller(server: rowBServer));
-                if ((arrivedAt < 0) && !live[^1].StartsWith(value: "absent", comparisonType: StringComparison.Ordinal)) {
+                if ((arrivedAt < 0) && !live[^1].StartsWith(comparisonType: StringComparison.Ordinal, value: "absent")) {
                     arrivedAt = step;
                 }
             }
@@ -177,7 +178,7 @@ public sealed class CrossingReplayTravellerLawTests {
                     right: Drive(live: rowBServer, observeTick: (_, server) => replayed.Add(item: Traveller(server: server)), tape: companion).Authoritative
                 )
             );
-            Assert.Equal(expected: live, actual: replayed);
+            Assert.Equal(actual: replayed, expected: live);
 
             // The red leg: the destination tape with its arrival stripped replays identically up to the arrival and
             // diverges on it.
