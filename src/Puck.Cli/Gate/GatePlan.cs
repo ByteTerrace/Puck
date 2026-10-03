@@ -16,7 +16,7 @@ internal static class GatePlan {
         ("Puck.Platform.Windows.Tests", []),
     ];
     public static readonly IReadOnlyList<GateStep> Steps = [
-        new("build", GateStepKind.Build, ["build", "Puck.slnx", "-c", CliOptions.DefaultConfiguration, "-v", "q", "-nologo"], Heavy: true),
+        new("build", GateStepKind.Build, ["build", "Puck.slnx", "-c", CliOptions.DefaultConfiguration, CliOptions.NoNodeReuse, "-v", "q", "-nologo"], Heavy: true),
         new("copy CLI", GateStepKind.CopyCli, []),
         new("affected", GateStepKind.Puck, ["affected", "--merge-base", "<merge base>", "--run"], Heavy: true),
         new("format", GateStepKind.Puck, ["format", "--check", "--file-list", "<file list>"], Sources: true),

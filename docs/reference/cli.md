@@ -811,7 +811,7 @@ suite Puck.World.Tests
 test src/Puck.World/Assets/worlds/games/reversi.puck
 canary pipeline-ink
 catalog src/Puck.World/bin/Release/net10.0/Assets/worlds
-dotnet build --disable-build-servers src/Puck.World/Puck.World.csproj -c Release -v q -nologo
+dotnet build --disable-build-servers src/Puck.World/Puck.World.csproj -c Release -nodeReuse:false -v q -nologo
 puck compile --tree src/Puck.World/Assets/worlds --output src/Puck.World/bin/Release/net10.0/Assets/worlds --check
 parity
 ```
@@ -854,7 +854,7 @@ and named (see [Conventions](#conventions)).
 against the merge base of `HEAD` and `--merge-base` (default
 `origin/features/gfx-pipeline`). The plan runs serially in this order:
 
-1. `build`: `dotnet build Puck.slnx -c Release -v q -nologo`.
+1. `build`: `dotnet build Puck.slnx -c Release -nodeReuse:false -v q -nologo`.
    A failed build stops the gate before it can use stale binaries.
 2. `copy CLI`: copy the freshly built CLI into the run's own directory.
    Subsequent puck steps use this candidate copy.

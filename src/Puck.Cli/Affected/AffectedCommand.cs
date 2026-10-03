@@ -291,7 +291,7 @@ internal static class AffectedCommand {
 
         return CliExit.Success;
     }
-    private static string[] CatalogBuildArguments() => ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", "-v", "q", "-nologo"];
+    private static string[] CatalogBuildArguments() => ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", CliOptions.NoNodeReuse, "-v", "q", "-nologo"];
 
     /// <summary>Returns the shipped catalog check's arguments, with repository-relative, forward-slashed paths.</summary>
     /// <returns>The arguments both the printed plan and the in-process check use from the repository root.</returns>
@@ -355,15 +355,15 @@ internal static class AffectedCommand {
     }
 
     /// <summary>The shared Release suite invocation, including its failure-reporting console logger.</summary>
-    public static string[] TestArguments(string suite) => ["test", $"tests/{suite}/{suite}.csproj", "-c", "Release", "-v", "q", "-nologo", "--logger", "console;verbosity=minimal"];
+    public static string[] TestArguments(string suite) => ["test", $"tests/{suite}/{suite}.csproj", "-c", "Release", CliOptions.NoNodeReuse, "-v", "q", "-nologo", "--logger", "console;verbosity=minimal"];
 
     private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu) {
         var failed = new List<string>();
 
         // dotnet test builds each suite and applies the settings its project binds (RunSettingsFilePath), so an
-        // opt-in tier such as Maths' Deep and Exhaustive stays out exactly as it does in CI. The suites build one after
-        // another over a shared project graph, so build servers stay enabled for the next suite to reuse; the capture's
-        // post-exit drain bounds a server that inherited its pipes. The console logger is named at minimal verbosity:
+        // opt-in tier such as Maths' Deep and Exhaustive stays out exactly as it does in CI. No suite leaves an MSBuild node
+        // behind (CliOptions.NoNodeReuse); the capture's post-exit drain bounds any process that inherited its pipes. The
+        // console logger is named at minimal verbosity:
         // under a quiet build it would otherwise print a failed test's name on standard error and its message nowhere,
         // and minimal prints each failure with its message and stack, and nothing for a pass.
         foreach (var suite in plan.Suites) {

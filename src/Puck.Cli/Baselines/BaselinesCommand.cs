@@ -118,7 +118,7 @@ internal static class BaselinesCommand {
         Console.Error.WriteLine(value: $"puck {path}: building {artifact.Project} (Release).");
 
         var build = CliProcess.RunCaptured(
-            arguments: ["build", "--disable-build-servers", project, "-c", "Release", "--nologo", "-v", "q"],
+            arguments: ["build", CliOptions.NoNodeReuse, "--disable-build-servers", project, "-c", "Release", "--nologo", "-v", "q"],
             fileName: "dotnet",
             input: string.Empty,
             workingDirectory: repositoryRoot,

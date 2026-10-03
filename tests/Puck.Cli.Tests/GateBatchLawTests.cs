@@ -57,6 +57,14 @@ public sealed partial class GateRunLawTests {
         Assert.All(runner.Steps.Where(predicate: step => (step[0] == "counters")), step => Assert.Contains(collection: step, expected: "--check"));
     }
     [Fact]
+    public void EveryBuildAndTestTheGateAndAffectedLaunchLeavesNoMSBuildNodeBehind() {
+        Assert.Equal(actual: CliOptions.NoNodeReuse, expected: "-nodeReuse:false");
+        Assert.Contains(collection: GatePlan.Steps.Single(predicate: static step => (step.Kind == GateStepKind.Build)).Arguments, expected: CliOptions.NoNodeReuse);
+        Assert.All(collection: GatePlan.Steps.Where(predicate: static step => (step.Kind == GateStepKind.DeviceSuite)), action: static step => Assert.Contains(collection: step.Arguments, expected: CliOptions.NoNodeReuse));
+        Assert.Contains(collection: AffectedCommand.TestArguments(suite: "Puck.Cli.Tests"), expected: CliOptions.NoNodeReuse);
+        Assert.Contains(collection: CliProjectBuild.Arguments(project: "src/Puck.World/Puck.World.csproj"), expected: CliOptions.NoNodeReuse);
+    }
+    [Fact]
     public void WorldTestsRunOnlyItsDeviceLawsAndTheOtherDeviceSuitesRunWhole() {
         var selection = GatePlan.DeviceSuites.ToDictionary(elementSelector: static device => device.Selection, keySelector: static device => device.Suite);
 

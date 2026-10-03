@@ -32,6 +32,7 @@ public sealed class AffectedRecordingLawTests {
 
         Assert.Equal(2, calls.Count);
         Assert.Contains("-p:PuckRecordMethods=true", calls[0]);
+        Assert.Contains(CliOptions.NoNodeReuse, calls[0]);
         Assert.Contains("--keep-transcripts", calls[1]);
         var transcript = scratch.PathOf(name: AffectedCoverage.CanaryTranscriptName);
 

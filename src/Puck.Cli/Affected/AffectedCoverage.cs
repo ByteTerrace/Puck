@@ -185,7 +185,7 @@ internal static partial class AffectedCoverage {
         execute ??= (arguments, timeout) => CliProcess.RunCaptured(fileName: "dotnet", arguments: arguments,
             input: string.Empty, timeout: timeout, workingDirectory: repositoryRoot);
         var compile = execute(
-            arg1: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", "--nologo", "-v", "q", "-p:NuGetAudit=false", "-p:PuckRecordMethods=true", "--output", build],
+            arg1: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", CliOptions.NoNodeReuse, "--nologo", "-v", "q", "-p:NuGetAudit=false", "-p:PuckRecordMethods=true", "--output", build],
             arg2: TimeSpan.FromMinutes(minutes: 30)
         );
 
