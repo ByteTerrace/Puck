@@ -130,14 +130,16 @@
           "pass": "fillers",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
           "pass": "fillers",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -151,7 +153,8 @@
           "pass": "fillers",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -263,14 +266,16 @@
           "pass": "upload",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
           "pass": "upload",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -284,7 +289,8 @@
           "pass": "upload",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -396,14 +402,16 @@
           "pass": null,
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
           "pass": null,
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -417,7 +425,8 @@
           "pass": null,
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -529,14 +538,16 @@
           "pass": "sdf.world$mask",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": "sdf.world$mask",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -550,7 +561,8 @@
           "pass": "sdf.world$mask",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -669,7 +681,8 @@
           "pass": "sdf.world$beam",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -683,7 +696,8 @@
           "pass": "sdf.world$beam",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -795,14 +809,16 @@
           "pass": "sdf.world$cull-args",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": "sdf.world$cull-args",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -816,7 +832,8 @@
           "pass": "sdf.world$cull-args",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -949,7 +966,8 @@
           "pass": "sdf.world$primary",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -1082,7 +1100,8 @@
           "pass": "sdf.world$surface",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -1194,7 +1213,8 @@
           "pass": "sdf.world$views",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -1215,7 +1235,8 @@
           "pass": "sdf.world$views",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -1327,7 +1348,8 @@
           "pass": "sdf.world$resolve",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -1348,7 +1370,8 @@
           "pass": "sdf.world$resolve",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -1460,7 +1483,8 @@
           "pass": "sdf.world$sky",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -1593,7 +1617,8 @@
           "pass": "sdf.world$composite",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -1726,14 +1751,16 @@
           "pass": null,
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": null,
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -1747,7 +1774,8 @@
           "pass": null,
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -1859,14 +1887,16 @@
           "pass": "main$view$1",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
           "pass": "main$view$1",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -1880,7 +1910,8 @@
           "pass": "main$view$1",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -1992,14 +2023,16 @@
           "pass": "main$view$2",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
           "pass": "main$view$2",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -2013,7 +2046,8 @@
           "pass": "main$view$2",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -2125,14 +2159,16 @@
           "pass": "main$view$3",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
           "pass": "main$view$3",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -2146,7 +2182,8 @@
           "pass": "main$view$3",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -2258,14 +2295,16 @@
           "pass": "main$view$4",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -2279,7 +2318,8 @@
           "pass": "main$view$4",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -2391,14 +2431,16 @@
           "pass": null,
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
           "pass": null,
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -2412,7 +2454,8 @@
           "pass": null,
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -2524,14 +2567,16 @@
           "pass": "bricks",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
           "pass": "bricks",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -2545,7 +2590,8 @@
           "pass": "bricks",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -2657,14 +2703,16 @@
           "pass": "sdf.world$mesh",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": "sdf.world$mesh",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -2678,7 +2726,8 @@
           "pass": "sdf.world$mesh",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -2790,14 +2839,16 @@
           "pass": "sdf.world$ambient",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": "sdf.world$ambient",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -2811,7 +2862,8 @@
           "pass": "sdf.world$ambient",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -2923,14 +2975,16 @@
           "pass": "sdf.world$shadow",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": "sdf.world$shadow",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -2944,7 +2998,8 @@
           "pass": "sdf.world$shadow",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         }
       ]
     },
@@ -3076,14 +3131,16 @@
           "pass": "fillers",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
           "pass": "fillers",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -3097,7 +3154,8 @@
           "pass": "fillers",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -3209,14 +3267,16 @@
           "pass": "upload",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
           "pass": "upload",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -3230,7 +3290,8 @@
           "pass": "upload",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -3342,14 +3403,16 @@
           "pass": null,
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
           "pass": null,
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -3363,7 +3426,8 @@
           "pass": null,
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -3475,14 +3539,16 @@
           "pass": "sdf.world$mask",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": "sdf.world$mask",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -3496,7 +3562,8 @@
           "pass": "sdf.world$mask",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -3615,7 +3682,8 @@
           "pass": "sdf.world$beam",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -3629,7 +3697,8 @@
           "pass": "sdf.world$beam",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -3741,14 +3810,16 @@
           "pass": "sdf.world$cull-args",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": "sdf.world$cull-args",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -3762,7 +3833,8 @@
           "pass": "sdf.world$cull-args",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -3895,7 +3967,8 @@
           "pass": "sdf.world$primary",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -4028,7 +4101,8 @@
           "pass": "sdf.world$surface",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -4140,7 +4214,8 @@
           "pass": "sdf.world$views",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -4161,7 +4236,8 @@
           "pass": "sdf.world$views",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -4273,7 +4349,8 @@
           "pass": "sdf.world$resolve",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -4294,7 +4371,8 @@
           "pass": "sdf.world$resolve",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -4406,7 +4484,8 @@
           "pass": "sdf.world$sky",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -4539,7 +4618,8 @@
           "pass": "sdf.world$composite",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -4672,14 +4752,16 @@
           "pass": null,
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": null,
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -4693,7 +4775,8 @@
           "pass": null,
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -4805,14 +4888,16 @@
           "pass": "main$view$1",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
           "pass": "main$view$1",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -4826,7 +4911,8 @@
           "pass": "main$view$1",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -4938,14 +5024,16 @@
           "pass": "main$view$2",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
           "pass": "main$view$2",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -4959,7 +5047,8 @@
           "pass": "main$view$2",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -5071,14 +5160,16 @@
           "pass": "main$view$3",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
           "pass": "main$view$3",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -5092,7 +5183,8 @@
           "pass": "main$view$3",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -5204,14 +5296,16 @@
           "pass": "main$view$4",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -5225,7 +5319,8 @@
           "pass": "main$view$4",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -5337,14 +5432,16 @@
           "pass": null,
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
           "pass": null,
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "main",
@@ -5358,7 +5455,8 @@
           "pass": null,
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -5470,14 +5568,16 @@
           "pass": "bricks",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
           "pass": "bricks",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "sdf:world",
@@ -5491,7 +5591,8 @@
           "pass": "bricks",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -5603,14 +5704,16 @@
           "pass": "sdf.world$mesh",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": "sdf.world$mesh",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -5624,7 +5727,8 @@
           "pass": "sdf.world$mesh",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -5736,14 +5840,16 @@
           "pass": "sdf.world$ambient",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": "sdf.world$ambient",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -5757,7 +5863,8 @@
           "pass": "sdf.world$ambient",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -5869,14 +5976,16 @@
           "pass": "sdf.world$shadow",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
           "pass": "sdf.world$shadow",
           "kind": "gpu.texels.written",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -5890,7 +5999,8 @@
           "pass": "sdf.world$shadow",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 0
+          "ceiling": 0,
+          "requiredZero": true
         }
       ]
     }

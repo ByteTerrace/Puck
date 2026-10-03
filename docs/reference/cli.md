@@ -1771,15 +1771,30 @@ nothing) and a pass the floor tier skips (the shadow and ambient passes, and
 the mesh pass of a meshless frame) hold required zeros. Every recorded ceiling must
 have been measured: its count read, of the class it was recorded as, or its pass
 reported and not executed, which reads zero. A per-backend-deterministic count's
-value is judged only on the device the backend's ceilings were recorded on; on
-any other, one line says how many were not judged. The run prints one line for
+value is judged only on the device the backend's ceilings were recorded on, with
+one exception: a ceiling that carries `requiredZero` is a zero of a kernel kind
+(march steps, texels written, sky evaluations), a magnitude that follows the
+device, that its pass never counts, so zero is a structural contract and is
+judged on every device and backend. On any other device, one line says how many
+per-backend-deterministic counts were not judged and how many required zeros
+were still judged. A zero of a deterministic kind loosened to a device-following
+pass's class (the SDF `upload` and `bricks` passes) is one device's policy, not
+a required zero, and is not judged elsewhere. The run prints one line for
 each count over its ceiling, each required zero broken, each ceiling not measured
 or measured as another class, and each count no ceiling was recorded for, naming
 its backend, class, kind, pass and node, then whether the ceilings hold.
 
 `--record` writes the run's counts as the ceilings instead, each reading its own
-ceiling, and every submission kind of a pass that did not execute as a required
-zero. A ceiling is re-recorded only in the change that explains why its count
+ceiling, and every submission kind of a pass that did not execute as a zero. A
+zero of a per-backend-deterministic kind is written with `requiredZero` set. A
+record is all or nothing: when the backends disagree on a deterministic count or
+a pass state, or the recorded ceilings would fail their own run, the verb writes
+no file, leaves an existing one byte for byte as it was, prints `not written: …`
+and exits 1. The write uses a flushed temporary file and atomic replacement;
+a write failure also leaves the existing ceilings unchanged, prints the reason
+and exits 1. `--output` names a different file from the ceilings when `--check`
+or `--record` is selected; a collision refuses before the workload runs.
+A ceiling is re-recorded only in the change that explains why its count
 moved, never from wall-clock or GPU timing. `--ceilings <file>` names another
 ceilings file for either option.
 

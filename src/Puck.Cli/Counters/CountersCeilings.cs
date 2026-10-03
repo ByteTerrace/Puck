@@ -1,10 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Gpu;
+using Puck.Assets;
 using Puck.World;
 
 namespace Puck.Cli.Counters;
@@ -15,7 +15,9 @@ namespace Puck.Cli.Counters;
 /// under a ceiling: <see cref="Record"/> takes each count's reading as its ceiling, so a count that read zero is a required
 /// zero, and <see cref="Check"/> fails a count over its ceiling, a required zero broken and a count no ceiling was recorded
 /// for, naming its backend, kind, pass and node. A per-backend-deterministic count is judged only on the device its
-/// backend's ceilings were recorded on; elsewhere it is reported as not judged.
+/// backend's ceilings were recorded on, and reported as not judged elsewhere, except a required zero
+/// (<see cref="WorldCountCeiling.RequiredZero"/>): a per-backend-deterministic kind (the kernel kinds, whose magnitudes
+/// follow the device) that a pass never counts is a structural contract, so it is judged on every device.
 /// </summary>
 internal static class CountersCeilings {
     /// <summary>The ceilings the workload is held to, repository-relative.</summary>
@@ -23,8 +25,7 @@ internal static class CountersCeilings {
 
     private const string Outside = "outside";
 
-    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
-    private static readonly HashSet<string> SubmissionKinds = [.. GpuWork.SubmissionKinds.ToArray().Select(selector: static kind => kind.Name)];
+    private static readonly Dictionary<string, WorkKind> SubmissionKindsByName = GpuWork.SubmissionKinds.ToArray().ToDictionary(keySelector: static kind => kind.Name);
 
     /// <summary>What a check found: the counts that failed their ceilings, and the notes about counts it did not judge.</summary>
     /// <param name="Failures">One line per failure, naming the backend, class, kind, pass and node.</param>
@@ -38,12 +39,24 @@ internal static class CountersCeilings {
     public static bool IsCeiled(WorldCount count) => (
         string.Equals(a: count.Source, b: GpuWorkReport.Section, comparisonType: StringComparison.Ordinal) &&
         (count.Node is not null) &&
-        SubmissionKinds.Contains(item: count.Kind) &&
+        SubmissionKindsByName.ContainsKey(key: count.Kind) &&
         (count.Class is WorkClass.Deterministic or WorkClass.PerBackendDeterministic)
     );
+    /// <summary>Indicates whether a recorded zero is a required zero that holds on every device: the ceiling is zero, its
+    /// class is per-backend-deterministic, and the kind itself is one (a magnitude that varies with the device), so the
+    /// class is not merely a pass's loosening of a deterministic kind, whose zero is one device's policy.</summary>
+    /// <param name="kind">The submission kind.</param>
+    /// <param name="recorded">The class the count is recorded as: the kind's, loosened to its pass's.</param>
+    /// <param name="ceiling">The ceiling.</param>
+    /// <returns><see langword="true"/> when the zero is a structural contract and judged on every device.</returns>
+    public static bool IsRequiredZero(WorkKind kind, WorkClass recorded, long ceiling) => (
+        (ceiling == 0L) &&
+        (recorded == WorkClass.PerBackendDeterministic) &&
+        (kind.Class == WorkClass.PerBackendDeterministic)
+    );
     /// <summary>Records a report's counts as ceilings: each backend's run on its device, every ceiled count's reading its
-    /// ceiling, and for every pass that did not execute a required zero for each submission kind, which the pass reads
-    /// once it does.</summary>
+    /// ceiling, and for every pass that did not execute a zero for each submission kind, which the pass reads once it does.
+    /// A zero of a per-backend-deterministic kind is recorded as a required zero, judged on every device.</summary>
     /// <param name="report">The report.</param>
     /// <returns>The ceilings.</returns>
     public static WorldCountersCeilings Record(WorldCountersReport report) => new(
@@ -55,15 +68,21 @@ internal static class CountersCeilings {
                     Class: count.Class,
                     Kind: count.Kind,
                     Node: count.Node!,
-                    Pass: count.Pass
+                    Pass: count.Pass,
+                    RequiredZero: IsRequiredZero(ceiling: count.Value, kind: SubmissionKindsByName[count.Kind], recorded: count.Class)
                 )),
-                .. run.Passes.Where(predicate: static pass => (pass.State != GpuPassState.Executed)).SelectMany(selector: static pass => GpuWork.SubmissionKinds.ToArray().Select(selector: kind => new WorldCountCeiling(
-                    Ceiling: 0L,
-                    Class: CountersReading.ClassIn(kind: kind.Class, pass: pass.Class),
-                    Kind: kind.Name,
-                    Node: pass.Node,
-                    Pass: pass.Label
-                ))),
+                .. run.Passes.Where(predicate: static pass => (pass.State != GpuPassState.Executed)).SelectMany(selector: static pass => GpuWork.SubmissionKinds.ToArray().Select(selector: kind => {
+                    var recorded = CountersReading.ClassIn(kind: kind.Class, pass: pass.Class);
+
+                    return new WorldCountCeiling(
+                        Ceiling: 0L,
+                        Class: recorded,
+                        Kind: kind.Name,
+                        Node: pass.Node,
+                        Pass: pass.Label,
+                        RequiredZero: IsRequiredZero(ceiling: 0L, kind: kind, recorded: recorded)
+                    );
+                })),
             ],
             Device: run.Device,
             Height: run.Height,
@@ -75,7 +94,7 @@ internal static class CountersCeilings {
     /// <summary>Holds a report to ceilings, backend by backend. Every recorded ceiling must have been measured: its count
     /// read, of the class it was recorded as, or its pass present and not executed, which reads zero; and every ceiled
     /// count read must have a ceiling. Only then is each value compared, a per-backend-deterministic one only on the device
-    /// the backend's ceilings were recorded on.</summary>
+    /// the backend's ceilings were recorded on, except a required zero, which is compared on every device.</summary>
     /// <param name="report">The report.</param>
     /// <param name="ceilings">The ceilings.</param>
     /// <returns>The failures and the notes; no failure when every expectation was measured and every judged count is
@@ -123,11 +142,12 @@ internal static class CountersCeilings {
                 keySelector: static pass => (pass.Node, pass.Label)
             );
             var unjudged = 0;
+            var zerosJudged = 0;
 
             foreach (var count in run.Counts.Where(predicate: static count => (
                 string.Equals(a: count.Source, b: GpuWorkReport.Section, comparisonType: StringComparison.Ordinal) &&
                 (count.Node is not null) &&
-                SubmissionKinds.Contains(item: count.Kind)
+                SubmissionKindsByName.ContainsKey(key: count.Kind)
             ))) {
                 measured[(count.Node!, count.Pass, count.Kind)] = count;
             }
@@ -146,6 +166,8 @@ internal static class CountersCeilings {
                         (state == GpuPassState.Executed)
                     ) {
                         failures.Add(item: $"{where} was recorded but not measured");
+                    } else if (ceiling.RequiredZero && !judged) {
+                        zerosJudged++;
                     }
 
                     continue;
@@ -156,9 +178,14 @@ internal static class CountersCeilings {
                     continue;
                 }
                 if ((ceiling.Class == WorkClass.PerBackendDeterministic) && !judged) {
-                    unjudged++;
+                    // A required zero is a structural contract, so it holds on a foreign device too.
+                    if (!ceiling.RequiredZero) {
+                        unjudged++;
 
-                    continue;
+                        continue;
+                    }
+
+                    zerosJudged++;
                 }
                 if ((ceiling.Ceiling == 0L) && (count.Value != 0L)) {
                     failures.Add(item: $"{where} breaks its required zero: reads {Spell(value: count.Value)}");
@@ -171,8 +198,8 @@ internal static class CountersCeilings {
                 failures.Add(item: $"{run.Backend}: {EnumWireName<WorkClass>.Of(value: count.Class)} kind={count.Kind} pass={(count.Pass ?? Outside)} node={count.Node} reads {Spell(value: count.Value)} with no ceiling recorded");
             }
 
-            if (unjudged > 0) {
-                notes.Add(item: $"{run.Backend}: {unjudged} per-backend-deterministic count(s) not judged: the ceilings were recorded on {Describe(device: recorded.Device)}, this run's device is {Describe(device: run.Device)}");
+            if (!judged && ((unjudged > 0) || (zerosJudged > 0))) {
+                notes.Add(item: $"{run.Backend}: {unjudged} per-backend-deterministic count(s) not judged, {zerosJudged} required zero(s) still judged: the ceilings were recorded on {Describe(device: recorded.Device)}, this run's device is {Describe(device: run.Device)}");
             }
         }
 
@@ -221,23 +248,33 @@ internal static class CountersCeilings {
             return false;
         }
 
+        foreach (var run in ceilings.Runs) {
+            foreach (var ceiling in run.Ceilings) {
+                if (!SubmissionKindsByName.TryGetValue(key: ceiling.Kind, value: out var kind)) {
+                    reason = $"a malformed ceiling: {run.Backend} kind={ceiling.Kind} is not a GPU submission kind";
+                    ceilings = null;
+
+                    return false;
+                }
+                if (ceiling.RequiredZero != IsRequiredZero(ceiling: ceiling.Ceiling, kind: kind, recorded: ceiling.Class)) {
+                    reason = $"a malformed ceiling: {run.Backend} kind={ceiling.Kind} pass={(ceiling.Pass ?? Outside)} node={ceiling.Node} requiredZero does not match its kind, class and ceiling";
+                    ceilings = null;
+
+                    return false;
+                }
+            }
+        }
+
         reason = string.Empty;
 
         return true;
     }
-    /// <summary>Writes a ceilings document as indented UTF-8 JSON ending in one line feed.</summary>
+    /// <summary>Atomically replaces a ceilings document with indented UTF-8 JSON ending in one line feed.</summary>
     /// <param name="path">The file to write.</param>
     /// <param name="ceilings">The ceilings.</param>
     public static void Write(string path, WorldCountersCeilings ceilings) {
-        var directory = Path.GetDirectoryName(path: path);
-
-        if (directory is { Length: > 0 }) {
-            _ = Directory.CreateDirectory(path: directory);
-        }
-
-        File.WriteAllText(
+        AtomicFile.WriteAllText(
             contents: $"{JsonSerializer.Serialize(value: ceilings, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings)}\n",
-            encoding: Utf8,
             path: path
         );
     }

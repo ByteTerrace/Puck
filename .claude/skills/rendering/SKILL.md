@@ -1226,8 +1226,17 @@ per-backend-deterministic submission counts, pass by pass and outside every
 pass, to `tests/Puck.Counters/counters.ceilings.json`
 (`puck.counters.ceilings.v1`): a count reads at most its ceiling, a ceiling of
 zero is a required zero, and a per-backend-deterministic count is judged only
-on the device its backend was recorded on. `--record` rewrites the file, only
-in the change that explains the move. It needs a GPU on both backends, so it
+on the device its backend was recorded on, except a ceiling carrying
+`requiredZero` (a zero of a kernel kind such as the march steps or sky
+evaluations, which the recorder sets and the reader validates), a structural
+contract that is judged on every device; the foreign-device note says how many
+counts were not judged and how many zeros still were. `--record` rewrites the file, only
+in the change that explains the move, and writes nothing when the backends
+disagree on a deterministic count or pass state, or the recorded ceilings fail
+their own run. It uses atomic replacement; a write failure leaves the existing
+ceilings unchanged. A refused record prints `not written: …` and exits 1.
+`--output` names a different file from the ceilings with `--check` or `--record`.
+It needs a GPU on both backends, so it
 runs with the other GPU checks, never beside a build.
 
 **Qualification judges a published package, not a change.** `puck qualify
