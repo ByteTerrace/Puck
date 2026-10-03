@@ -83,7 +83,7 @@ public sealed partial class GateRunLawTests {
         Workload(branches, "a", script: true);
         Workload(branches, "b");
         var affected = new AffectedPlan(Baselines: BaselinesCommand.Artifacts, Canaries: ["example"], CanaryChecks: [], Catalog: false, Deleted: [], Everything: true, Parity: true, Suites: [], Unmapped: [], Worlds: []);
-        var steps = GatePlan.Expand(affected: affected, fileList: "files.json", gpu: true, mergeBase: "HEAD", record: true, repositoryRoot: branches.Checkout.Root, sources: true)
+        var steps = GatePlan.Expand(affected: affected, fileList: "files.json", gpu: true, mergeBase: "HEAD", record: true, repositoryRoot: branches.Checkout.Root, sources: true, suiteJobs: 4, gpuJobs: 4)
             .Where(predicate: static step => (step.Kind is GateStepKind.Puck or GateStepKind.Baseline or GateStepKind.Canaries or GateStepKind.Parity))
             .ToArray();
 

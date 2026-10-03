@@ -151,31 +151,22 @@ public sealed class WorldDynamicResolution {
 
         return Math.Clamp(max: ceiling, min: low, value: ((float)next));
     }
-    /// <summary>The march steps a frame is budgeted per output pixel: the ceilings the counters workload's run on
-    /// <paramref name="backend"/> (or its first run, when none ran there) records for every pass of the
-    /// <see cref="BudgetNode"/> node, summed, over the run's output pixels. Recording new floor evidence moves it.</summary>
+    /// <summary>The march steps a frame is budgeted per output pixel: the ceilings of the <see cref="BudgetNode"/> node's
+    /// every pass in the counters workload's record for <paramref name="backend"/> (or its first backend, when none was
+    /// recorded there), its shared ceilings and its first device's, summed, over the workload's output pixels. The first
+    /// device is the floor device the ledger was first recorded on, which a record of another device never displaces, so
+    /// recording new floor evidence moves the budget.</summary>
     /// <param name="ceilings">The committed counters ceilings.</param>
     /// <param name="backend">The backend the presentation runs on.</param>
-    /// <returns>The budget per output pixel, or zero for a document with no run.</returns>
+    /// <returns>The budget per output pixel, or zero for a document with no backend or no device.</returns>
     public static double StepBudgetPerPixel(WorldCountersCeilings ceilings, string? backend) {
-        var run = (ceilings.Runs.FirstOrDefault(predicate: run => string.Equals(a: run.Backend, b: backend, comparisonType: StringComparison.Ordinal)) ?? ceilings.Runs.FirstOrDefault());
+        var recorded = (ceilings.Backends.FirstOrDefault(predicate: candidate => string.Equals(a: candidate.Backend, b: backend, comparisonType: StringComparison.Ordinal)) ?? ceilings.Backends.FirstOrDefault());
 
-        if ((run is null) || (run.Width <= 0) || (run.Height <= 0)) {
+        if ((recorded is null) || (recorded.Devices.Count == 0) || (ceilings.Width <= 0) || (ceilings.Height <= 0)) {
             return 0d;
         }
 
-        var steps = 0L;
-
-        foreach (var ceiling in run.Ceilings) {
-            if (
-                string.Equals(a: ceiling.Node, b: BudgetNode, comparisonType: StringComparison.Ordinal) &&
-                string.Equals(a: ceiling.Kind, b: GpuWork.MarchSteps.Name, comparisonType: StringComparison.Ordinal)
-            ) {
-                steps += ceiling.Ceiling;
-            }
-        }
-
-        return (((double)steps) / (((long)run.Width) * run.Height));
+        return (((double)(MarchSteps(ceilings: recorded.Ceilings) + MarchSteps(ceilings: recorded.Devices[0].Ceilings))) / (((long)ceilings.Width) * ceilings.Height));
     }
     /// <summary>Forgets the grid, the pin and the over-budget mark, for a view whose policy is off and renders its ceiling:
     /// the next <see cref="Advance"/> starts from that ceiling, so a policy resumed after a pin or an off switch moves from
@@ -319,6 +310,20 @@ public sealed class WorldDynamicResolution {
     }
     // Whether a * b <= c * d exactly, for finite non-negative doubles: each product of two 53-bit significands is exact
     // in 106 bits, and the two are compared at their binary exponents without rounding.
+    private static long MarchSteps(IReadOnlyList<WorldCountCeiling> ceilings) {
+        var steps = 0L;
+
+        foreach (var ceiling in ceilings) {
+            if (
+                string.Equals(a: ceiling.Node, b: BudgetNode, comparisonType: StringComparison.Ordinal) &&
+                string.Equals(a: ceiling.Kind, b: GpuWork.MarchSteps.Name, comparisonType: StringComparison.Ordinal)
+            ) {
+                steps += ceiling.Ceiling;
+            }
+        }
+
+        return steps;
+    }
     private static bool ProductAtMost(double a, double b, double c, double d) {
         var (left, leftExponent) = Product(x: a, y: b);
         var (right, rightExponent) = Product(x: c, y: d);
