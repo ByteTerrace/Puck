@@ -3146,6 +3146,11 @@ puck formats --check    write nothing; exit 1 for an unrecorded, stale, bumped, 
                         or a ledger whose bytes differ from what the verb writes
 ```
 
+Both forms refuse with exit 2 before discovery if non-ignored, untracked C# sources exist under `src/`, excluding
+`*.g.cs` files. The refusal writes nothing and lists every such file in sorted, repository-relative paths with forward
+slashes. Run `git add` on those files or remove them first: the ledger is computed from tracked sources only and
+cannot describe what will be committed while those sources are omitted.
+
 A declaration is a format when it is a `const`, a `static readonly` field, or a static or expression-bodied property
 whose initializer is one of two things:
 
