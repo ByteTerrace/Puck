@@ -3080,8 +3080,15 @@ token. A unit covers:
 - any other repository type it names, one level deep: the type's header and data members, never the types those members
   name in turn;
 - a repository member it calls that is marked `[FormatLeaf]`, on the member or on a type that holds it, with that
-  member's own units in turn, and every override or implementation of a covered virtual or interface member; and a
-  property whose body calls nothing in the repository.
+  member's own units in turn, and every override or implementation of a covered virtual or interface member, whether or
+  not the slot's own declaration has a body (an abstract property, an auto-property an override replaces, a static
+  abstract interface member); and a property whose body calls nothing in the repository.
+
+The depth limit applies to the types a layout names, not to what its initializers read: a covered layout's constants,
+enum values and method groups are followed whole, so a constant that chains through other classes, or a delegate a static
+field binds, is covered or open like any call. The calls the syntax does not name count too: a `foreach`'s
+`GetEnumerator`, `MoveNext` and `Current`, a `using`'s disposal, an `await`'s awaiter, a deconstruction, user-defined
+operators and conversions, and a method-group conversion.
 
 A closure over every call reaches the whole engine (a world codec's would hold ten thousand units), so the boundary is
 explicit. A call into any other repository member is *open*: the shape cannot see what it does. A member that is not part

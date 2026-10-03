@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 using Puck.Cli.Format;
 using Puck.Cli.Format.Rewriters;
 
@@ -71,6 +72,12 @@ internal sealed class FormatShapeClosure {
     private sealed class Reached {
         public List<Call> Calls { get; } = [];
         public List<(Unit Unit, bool Expand)> Layouts { get; } = [];
+        // The layouts a layout unit's own headers and member types name: followed only when the unit is expanded, which
+        // is the one-level depth limit. A layout's initializers are never deep.
+        public List<(Unit Unit, bool Expand)> DeepLayouts { get; } = [];
+
+        public bool Deep { get; set; }
+
         public SortedSet<string> Refusals { get; } = new(comparer: StringComparer.Ordinal);
     }
     private sealed class FileIndex {
@@ -151,31 +158,43 @@ internal sealed class FormatShapeClosure {
     private sealed record Analysis(IReadOnlyList<Unit> Units, IReadOnlyList<string> Open, IReadOnlyList<string> Refusals);
 
     private Analysis Analyze((string Source, string Owner, string Member) format) {
-        var seen = new HashSet<Unit>(collection: Roots(format: format));
-        var pending = new Queue<Unit>(collection: seen);
+        var roots = Roots(format: format).ToArray();
+        var seen = new HashSet<Unit>(collection: roots);
+        var pending = new Queue<(Unit Unit, bool Expand)>(collection: roots.Select(selector: static root => (root, true)));
+        var scanned = new HashSet<Unit>();
+        var expanded = new HashSet<Unit>();
         var unfollowed = new List<Call>();
         var refusals = new SortedSet<string>(comparer: StringComparer.Ordinal);
 
-        while (pending.TryDequeue(result: out var unit)) {
+        void Follow(Unit unit, bool expand) {
+            seen.Add(item: unit);
+
+            if (!scanned.Contains(item: unit) || (expand && !expanded.Contains(item: unit))) { pending.Enqueue(item: (unit, expand)); }
+        }
+
+        while (pending.TryDequeue(result: out var next)) {
+            var (unit, expand) = next;
             var reach = Reach(unit: unit);
 
-            foreach (var refusal in reach.Refusals) { refusals.Add(item: refusal); }
-            foreach (var (layout, expand) in reach.Layouts) {
-                if (seen.Add(item: layout) && expand) { pending.Enqueue(item: layout); }
-            }
-            foreach (var call in reach.Calls) {
-                if (call.Mark is Mark.Seam) { continue; }
-                if ((call.Mark is Mark.Leaf) || call.Targets.Any(predicate: seen.Contains) || IsPlainAccessor(call: call)) {
-                    foreach (var target in call.Targets.Concat(second: call.Dispatch)) {
-                        if (seen.Add(item: target)) { pending.Enqueue(item: target); }
+            if (scanned.Add(item: unit)) {
+                foreach (var refusal in reach.Refusals) { refusals.Add(item: refusal); }
+                foreach (var (layout, expandLayout) in reach.Layouts) { Follow(expand: expandLayout, unit: layout); }
+                foreach (var call in reach.Calls) {
+                    if (call.Mark is Mark.Seam) { continue; }
+                    if ((call.Mark is Mark.Leaf) || call.Targets.Concat(second: call.Dispatch).Any(predicate: seen.Contains) || IsPlainAccessor(call: call)) {
+                        foreach (var target in call.Targets.Concat(second: call.Dispatch)) { Follow(expand: false, unit: target); }
+                    } else {
+                        unfollowed.Add(item: call);
                     }
-                } else {
-                    unfollowed.Add(item: call);
                 }
+            }
+            if (expand && expanded.Add(item: unit)) {
+                foreach (var (layout, expandLayout) in reach.DeepLayouts) { Follow(expand: expandLayout, unit: layout); }
             }
         }
 
-        var open = unfollowed.Where(predicate: call => !call.Targets.Any(predicate: seen.Contains)).Select(selector: static call => call.Callee).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
+        // A call whose units were reached some other way is covered, not open.
+        var open = unfollowed.Where(predicate: call => !call.Targets.Concat(second: call.Dispatch).Any(predicate: seen.Contains)).Select(selector: static call => call.Callee).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).ToArray();
 
         return new Analysis(
             Open: open,
@@ -184,7 +203,7 @@ internal sealed class FormatShapeClosure {
         );
     }
     // A property whose body calls nothing in the repository only reads data: its body is covered, not left open.
-    private bool IsPlainAccessor(Call call) => (call.Callee.StartsWith(comparisonType: StringComparison.Ordinal, value: "P:") && call.Targets.All(predicate: target => (Reach(unit: target).Calls.Count == 0)));
+    private bool IsPlainAccessor(Call call) => (call.Callee.StartsWith(comparisonType: StringComparison.Ordinal, value: "P:") && (call.Targets.Length > 0) && (call.Dispatch.Length == 0) && call.Targets.All(predicate: target => (Reach(unit: target).Calls.Count == 0)));
     private string Digest(IReadOnlyList<Unit> units) {
         var builder = new StringBuilder();
 
@@ -362,12 +381,17 @@ internal sealed class FormatShapeClosure {
         m_reach[unit] = reach;
 
         var model = Model(tree: m_trees[unit.Path]);
+        var root = Index(path: unit.Path).Nodes[(unit.Key, unit.Kind)];
 
-        foreach (var node in Region(root: Index(path: unit.Path).Nodes[(unit.Key, unit.Kind)])) {
+        foreach (var node in Region(root: root)) {
+            // What a layout's headers and member types name is one level deep; what its initializers read is part of the
+            // value and is followed whole.
+            reach.Deep = ((unit.Kind == UnitKind.Layout) && !InInitializer(node: node, root: root));
+
             switch (node) {
                 case IdentifierNameSyntax or GenericNameSyntax or ObjectCreationExpressionSyntax or ImplicitObjectCreationExpressionSyntax
                     or ConstructorInitializerSyntax or BinaryExpressionSyntax or PrefixUnaryExpressionSyntax or PostfixUnaryExpressionSyntax
-                    or CastExpressionSyntax or ElementAccessExpressionSyntax or AssignmentExpressionSyntax or ForEachStatementSyntax:
+                    or CastExpressionSyntax or ElementAccessExpressionSyntax or AssignmentExpressionSyntax:
                     var info = model.GetSymbolInfo(node);
 
                     Resolve(symbol: info.Symbol, reach: reach);
@@ -376,6 +400,38 @@ internal sealed class FormatShapeClosure {
                         foreach (var candidate in info.CandidateSymbols) { Resolve(reach: reach, symbol: candidate); }
                     }
 
+                    if (node is AssignmentExpressionSyntax assignment) { Deconstruction(info: model.GetDeconstructionInfo(assignment: assignment), reach: reach); }
+
+                    break;
+                case CommonForEachStatementSyntax loop:
+                    // The enumerator pattern a foreach lowers to is called implicitly: no name in the syntax carries it.
+                    var iteration = model.GetForEachStatementInfo(forEachStatement: loop);
+
+                    Resolve(symbol: iteration.GetEnumeratorMethod, reach: reach);
+                    Resolve(symbol: iteration.MoveNextMethod, reach: reach);
+                    Resolve(symbol: iteration.CurrentProperty, reach: reach);
+                    Resolve(symbol: iteration.DisposeMethod, reach: reach);
+                    Resolve(symbol: iteration.ElementConversion.MethodSymbol, reach: reach);
+                    Resolve(symbol: iteration.CurrentConversion.MethodSymbol, reach: reach);
+
+                    if (loop is ForEachVariableStatementSyntax variables) { Deconstruction(info: model.GetDeconstructionInfo(@foreach: variables), reach: reach); }
+
+                    break;
+                case AwaitExpressionSyntax awaited:
+                    var awaiting = model.GetAwaitExpressionInfo(awaitExpression: awaited);
+
+                    Resolve(symbol: awaiting.GetAwaiterMethod, reach: reach);
+                    Resolve(symbol: awaiting.IsCompletedProperty, reach: reach);
+                    Resolve(symbol: awaiting.GetResultMethod, reach: reach);
+                    break;
+                case UsingStatementSyntax { Declaration: { } declaration }:
+                    Disposal(type: model.GetTypeInfo(declaration.Type).Type, reach: reach);
+                    break;
+                case UsingStatementSyntax { Expression: { } resource }:
+                    Disposal(type: model.GetTypeInfo(resource).Type, reach: reach);
+                    break;
+                case LocalDeclarationStatementSyntax { UsingKeyword.RawKind: not 0 } local:
+                    Disposal(type: model.GetTypeInfo(local.Declaration.Type).Type, reach: reach);
                     break;
             }
             if (
@@ -386,11 +442,59 @@ internal sealed class FormatShapeClosure {
 
                 if (conversion.IsUserDefined) { Resolve(symbol: conversion.MethodSymbol, reach: reach); }
             }
+            // Implicit calls the syntax does not name: method-group conversions, collection-initializer adds, operators,
+            // property reads and the copy a with-expression takes.
+            if (IsBodyRoot(node: node) && (model.GetOperation(node) is { } operation)) {
+                foreach (var child in operation.DescendantsAndSelf()) {
+                    switch (child) {
+                        case IInvocationOperation invocation: Resolve(symbol: invocation.TargetMethod, reach: reach); break;
+                        case IObjectCreationOperation creation: Resolve(symbol: creation.Constructor, reach: reach); break;
+                        case IWithOperation with: Resolve(symbol: with.CloneMethod, reach: reach); break;
+                        case IMethodReferenceOperation methodReference: Resolve(symbol: methodReference.Method, reach: reach); break;
+                        case IMemberReferenceOperation member: Resolve(symbol: member.Member, reach: reach); break;
+                        case IConversionOperation conversion: Resolve(symbol: conversion.OperatorMethod, reach: reach); break;
+                        case IBinaryOperation binary: Resolve(symbol: binary.OperatorMethod, reach: reach); break;
+                        case IUnaryOperation unary: Resolve(symbol: unary.OperatorMethod, reach: reach); break;
+                        case IIncrementOrDecrementOperation increment: Resolve(symbol: increment.OperatorMethod, reach: reach); break;
+                        case ICompoundAssignmentOperation compound: Resolve(symbol: compound.OperatorMethod, reach: reach); break;
+                    }
+                }
+            }
         }
 
+        reach.Deep = false;
         reach.Calls.RemoveAll(match: call => (Array.IndexOf(array: call.Targets, value: unit) >= 0));
 
         return reach;
+    }
+    // The nodes whose operation tree carries a body or an initializer: a member's block or expression body and each
+    // initializer, which Roslyn binds as one unit.
+    private static bool IsBodyRoot(SyntaxNode node) => node switch {
+        BlockSyntax block => (block.Parent is BaseMethodDeclarationSyntax or AccessorDeclarationSyntax),
+        ArrowExpressionClauseSyntax or EqualsValueClauseSyntax => true,
+        ConstructorInitializerSyntax => true,
+        _ => false,
+    };
+    private static bool InInitializer(SyntaxNode node, SyntaxNode root) {
+        for (var current = node; ((current is not null) && (current != root)); current = current.Parent) {
+            if (current is EqualsValueClauseSyntax or ArrowExpressionClauseSyntax or BaseMethodDeclarationSyntax or AccessorDeclarationSyntax) { return true; }
+        }
+
+        return false;
+    }
+    private void Deconstruction(DeconstructionInfo info, Reached reach) {
+        Resolve(symbol: info.Method, reach: reach);
+        Resolve(symbol: info.Conversion?.MethodSymbol, reach: reach);
+
+        if (!info.Nested.IsDefault) {
+            foreach (var nested in info.Nested) { Deconstruction(info: nested, reach: reach); }
+        }
+    }
+    // A using's disposal is a call the syntax does not name: every Dispose a resource type or its bases declare.
+    private void Disposal(ITypeSymbol? type, Reached reach) {
+        for (var current = type; (current is not null); current = current.BaseType) {
+            foreach (var member in current.GetMembers().Where(predicate: static item => (item is IMethodSymbol { Name: "Dispose" or "DisposeAsync" }))) { Resolve(reach: reach, symbol: member); }
+        }
     }
     private void Resolve(ISymbol? symbol, Reached reach) {
         switch (symbol) {
@@ -431,22 +535,18 @@ internal sealed class FormatShapeClosure {
         var expand = ((type.TypeKind is TypeKind.Enum) || (MarkOf(reach: reach, symbol: type) is Mark.Leaf));
 
         foreach (var path in Paths(symbol: type)) {
-            if (Index(path: path).Nodes.ContainsKey(key: (key, UnitKind.Layout))) { reach.Layouts.Add(item: (new Unit(Key: key, Kind: UnitKind.Layout, Path: path), expand)); }
+            if (Index(path: path).Nodes.ContainsKey(key: (key, UnitKind.Layout))) { (reach.Deep ? reach.DeepLayouts : reach.Layouts).Add(item: (new Unit(Key: key, Kind: UnitKind.Layout, Path: path), expand)); }
         }
     }
     private void Member(ISymbol symbol, Reached reach) {
         var key = KeyOf(symbol: symbol);
         var targets = Paths(symbol: symbol).Where(predicate: path => Index(path: path).Nodes.ContainsKey(key: (key, UnitKind.Code))).Select(selector: path => new Unit(Key: key, Kind: UnitKind.Code, Path: path)).ToArray();
-
-        if (targets.Length == 0) {
-            if (symbol.ContainingType is { } owner) { Layout(type: owner.OriginalDefinition, reach: reach); }
-
-            return;
-        }
-
         var dispatch = new List<Unit>();
 
-        if (symbol.IsVirtual || symbol.IsAbstract || symbol.IsOverride || ((symbol.ContainingType?.TypeKind == TypeKind.Interface) && !symbol.IsStatic)) {
+        // A slot dispatches whether or not its own declaration has a body: an abstract or interface member, an auto-property
+        // an override replaces, and a static abstract or virtual interface member all reach their overrides and
+        // implementations.
+        if (symbol.IsVirtual || symbol.IsAbstract || symbol.IsOverride || (symbol.ContainingType?.TypeKind == TypeKind.Interface)) {
             if (Implementers().TryGetValue(key: key, value: out var implementers)) {
                 foreach (var implementer in implementers) {
                     var implementerKey = KeyOf(symbol: implementer.OriginalDefinition);
@@ -457,6 +557,10 @@ internal sealed class FormatShapeClosure {
                 }
             }
         }
+        if (targets.Length == 0) {
+            if (symbol.ContainingType is { } owner) { Layout(type: owner.OriginalDefinition, reach: reach); }
+        }
+        if ((targets.Length == 0) && (dispatch.Count == 0)) { return; }
 
         reach.Calls.Add(item: new Call(
             Callee: key,
@@ -519,7 +623,7 @@ internal sealed class FormatShapeClosure {
                     }
                 }
                 foreach (var contract in type.AllInterfaces.Where(predicate: static item => (item.DeclaringSyntaxReferences.Length > 0))) {
-                    foreach (var slot in contract.GetMembers().Where(predicate: static item => ((item is IMethodSymbol or IPropertySymbol or IEventSymbol) && !item.IsStatic))) {
+                    foreach (var slot in contract.GetMembers().Where(predicate: static item => ((item is IMethodSymbol or IPropertySymbol or IEventSymbol) && (!item.IsStatic || item.IsAbstract || item.IsVirtual)))) {
                         if ((type.FindImplementationForInterfaceMember(interfaceMember: slot) is { } implementation) && (implementation.DeclaringSyntaxReferences.Length > 0)) {
                             Add(key: KeyOf(symbol: slot.OriginalDefinition), implementer: implementation);
                         }

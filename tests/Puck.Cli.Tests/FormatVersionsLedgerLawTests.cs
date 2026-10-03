@@ -668,4 +668,121 @@ public sealed class FormatVersionsLedgerLawTests {
             actual: FormatVersionsLedger.Explain(files: reordered, id: "WorldAuthorityCheckpointCodec.SupportedVersion")!.Value.Entry.Shape
         );
     }
+
+    // The invariant: whatever the codec's read and write paths can reach is covered by the shape or recorded open. Each input
+    // below once escaped both.
+    private static Dictionary<string, string> Codec(string wire, params (string Path, string Text)[] files) {
+        var sources = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
+            ["src/Puck.Demo/Wire.cs"] = $$"""
+                namespace Puck.Demo;
+                public static class Wire {
+                    public const int FormatVersion = 3;
+                    {{wire}}
+                }
+                """,
+        };
+
+        foreach (var (path, text) in files) { sources[$"src/Puck.Demo/{path}"] = ("namespace Puck.Demo;\n" + text); }
+
+        return sources;
+    }
+    private static FormatEntry Format(Dictionary<string, string> sources) => Entry(entries: FormatVersionsLedger.Discover(files: sources), id: "Wire.FormatVersion");
+    private static Dictionary<string, string> Edited(Dictionary<string, string> sources, string path, string from, string to) {
+        var edited = new Dictionary<string, string>(sources, StringComparer.Ordinal);
+
+        Assert.Contains(actualString: edited[$"src/Puck.Demo/{path}"], expectedSubstring: from);
+        edited[$"src/Puck.Demo/{path}"] = edited[$"src/Puck.Demo/{path}"].Replace(newValue: to, oldValue: from);
+
+        return edited;
+    }
+
+    [InlineData("")]
+    [InlineData("[FormatLeaf]")]
+    [Theory]
+    public void ADispatchThroughABodylessPropertyIsCoveredWhenMarkedAndOpenWhenNot(string mark) {
+        var sources = Codec(
+            wire: "public static int Read(Slot slot) => slot.Width;",
+            ("Slot.cs", $"{mark} public abstract class Slot {{ public abstract int Width {{ get; }} }}"),
+            ("Impl.cs", "public sealed class Impl : Slot { public override int Width => 1; }")
+        );
+        var entry = Format(sources: sources);
+
+        if (mark.Length == 0) {
+            Assert.Contains(collection: entry.Open, filter: static call => call.StartsWith(comparisonType: StringComparison.Ordinal, value: "P:Puck.Demo.Slot.Width"));
+        } else {
+            Assert.Empty(collection: entry.Open);
+            Assert.NotEqual(expected: entry.Shape, actual: Format(sources: Edited(from: "=> 1", path: "Impl.cs", sources: sources, to: "=> 2")).Shape);
+        }
+    }
+    [Fact]
+    public void AStaticAbstractInterfaceSlotReachesItsImplementationsThroughAGenericCodec() {
+        var sources = Codec(
+            wire: "public static byte[] Encode<T>(byte[] bytes) where T : IWidth => bytes[..T.Size()];",
+            ("IWidth.cs", "[FormatLeaf] public interface IWidth { static abstract int Size(); }"),
+            ("Shape.cs", "public sealed class Shape : IWidth { public static int Size() => 1; }")
+        );
+        var entry = Format(sources: sources);
+
+        Assert.Empty(collection: entry.Open);
+        Assert.NotEqual(expected: entry.Shape, actual: Format(sources: Edited(from: "=> 1", path: "Shape.cs", sources: sources, to: "=> 2")).Shape);
+    }
+    [Fact]
+    public void AConstantChainBehindACastEnumMovesTheShapeWhereverItEnds() {
+        var sources = Codec(
+            wire: "public static byte Write(Tag tag) => (byte)tag;",
+            ("Tag.cs", "public enum Tag : byte { Record = Sizes.Record }"),
+            ("Sizes.cs", "public static class Sizes { public const int Record = Limits.Record; }"),
+            ("Limits.cs", "public static class Limits { public const int Record = 1; }")
+        );
+
+        Assert.NotEqual(expected: Format(sources: sources).Shape, actual: Format(sources: Edited(from: "= 1", path: "Limits.cs", sources: sources, to: "= 2")).Shape);
+    }
+    [InlineData("")]
+    [InlineData("[FormatLeaf]")]
+    [Theory]
+    public void ADelegateAStaticInitializerBindsIsCoveredWhenMarkedAndOpenWhenNot(string mark) {
+        var sources = Codec(
+            wire: "public static int Read() => Widths.Width();",
+            ("Widths.cs", "public static class Widths { public static readonly System.Func<int> Width = Helpers.Width; }"),
+            ("Helpers.cs", $"{mark} public static class Helpers {{ public static int Width() => 1; }}")
+        );
+        var entry = Format(sources: sources);
+
+        if (mark.Length == 0) {
+            Assert.Contains(collection: entry.Open, filter: static call => call.StartsWith(comparisonType: StringComparison.Ordinal, value: "M:Puck.Demo.Helpers.Width"));
+        } else {
+            Assert.Empty(collection: entry.Open);
+            Assert.NotEqual(expected: entry.Shape, actual: Format(sources: Edited(from: "=> 1", path: "Helpers.cs", sources: sources, to: "=> 2")).Shape);
+        }
+    }
+    [Fact]
+    public void AForeachsImplicitEnumeratorCallsAreCoveredWhenTheCollectionIsMarked() {
+        var sources = Codec(
+            wire: "public static int Sum(Bytes bytes) { var total = 0; foreach (var value in bytes) { total += value; } return total; }",
+            ("Bytes.cs", """
+                [FormatLeaf]
+                public sealed class Bytes {
+                    public Enumerator GetEnumerator() => new();
+                    public struct Enumerator {
+                        private int m_index;
+                        public bool MoveNext() => (m_index++ < 1);
+                        public int Current => 0;
+                    }
+                }
+                """)
+        );
+        var entry = Format(sources: sources);
+
+        Assert.Empty(collection: entry.Open);
+        Assert.NotEqual(expected: entry.Shape, actual: Format(sources: Edited(from: "< 1", path: "Bytes.cs", sources: sources, to: "< 2")).Shape);
+    }
+    [Fact]
+    public void AForeachOverAnUnmarkedCollectionLeavesItsEnumeratorOpen() {
+        var sources = Codec(
+            wire: "public static int Sum(Bytes bytes) { var total = 0; foreach (var value in bytes) { total += value; } return total; }",
+            ("Bytes.cs", "public sealed class Bytes { public Enumerator GetEnumerator() => new(); public struct Enumerator { public bool MoveNext() => false; public int Current => 0; } }")
+        );
+
+        Assert.Contains(collection: Format(sources: sources).Open, filter: static call => call.StartsWith(comparisonType: StringComparison.Ordinal, value: "M:Puck.Demo.Bytes.Enumerator.MoveNext"));
+    }
 }
