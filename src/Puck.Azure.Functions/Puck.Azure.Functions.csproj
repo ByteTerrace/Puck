@@ -16,10 +16,9 @@
     <ItemGroup>
         <!-- From Azure.Monitor.OpenTelemetry.Exporter 1.9 a provider's shutdown writes pending telemetry to offline
              storage on the local disk and leaves delivery to a background drain in this or a later process. A retiring
-             Flex worker has no later process on that disk, so its final request and exception telemetry would be lost,
-             and the drain budget cannot save it: Shutdown() does not wait on the drain, and Dispose() is capped by
-             OpenTelemetry's five-second grace. This switch restores the blocking final transmission, bounded by that
-             same shutdown grace. -->
+             Flex worker has no later process on that disk, so its final request and exception telemetry would be lost.
+             This switch makes a provider's shutdown send that batch instead. Puck.Azure's
+             UseAzureMonitorExporterWithBoundedShutdown shuts the providers down while the host stops and bounds the send. -->
         <RuntimeHostConfigurationOption Include="Azure.Monitor.OpenTelemetry.Exporter.DisablePersistOnShutdown" Value="true" />
     </ItemGroup>
 
@@ -35,7 +34,6 @@
         <!-- Direct only to float past 1.17.1, which declares Azure.Identity.OnBehalfOfCredential that Azure.Core 1.60
              also declares; transitively Microsoft.Extensions.Azure pins the colliding floor. -->
         <PackageReference Include="Azure.Identity" Version="[1.*,2.0)" />
-        <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="[1.*,2.0)" />
         <PackageReference Include="Azure.Storage.Blobs" Version="[12.*,13.0)" />
         <PackageReference Include="Azure.ResourceManager.ResourceGraph" Version="[1.*,2.0)" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="[10.*,11.0)" />
