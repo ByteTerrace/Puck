@@ -29,6 +29,7 @@
     "o17-box-with-five-builds-and-a-gpu-leg",
     "o22-partner-designs-against-an-unpushed-batch",
     "o24-gpu-debt-in-an-unlanded-branch",
-    "o25-partner-finishes-and-waits"
+    "o25-partner-finishes-and-waits",
+    "o26-one-owner-per-queue-item"
   ]
 }
