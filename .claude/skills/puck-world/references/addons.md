@@ -155,7 +155,7 @@ Response (or vice versa) refuses; declaring Input requires the
 Request+Response pair (disclosures ride Response — an Input-only guest is
 provably inert).
 
-`WorldAddonWire.WorldAddonChannelResolver` is the ONE place guest channel
+`WorldAddonChannelResolver` (in `WorldAddonWire.cs`) is the ONE place guest channel
 names meet the world's `WorldChannelTable`: the guest addresses its own
 declared name table by position; resolution returns the world ordinal (role
 channels at their fixed `ChannelRole` slots 0–5, composition channels from

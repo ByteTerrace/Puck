@@ -425,8 +425,10 @@ determinism for cross-authority dynamic contact.
 ## What the tape does and does not carry about federation
 
 Every authority tapes its own half of a crossing. The source's
-`WorldReplayEntry.Transfer` names the target authority (and whether it is
-remote) and the slots that departed; a re-drive detaches them. The
+`WorldReplayEntry.Departure` entries name each detached or restored slot, and a
+re-drive detaches them; its `WorldReplayEntry.Transfer` names the target
+authority (and whether it is remote), the outcome and the slots the settlement
+made final, and is the pairing key. The
 destination's `WorldReplayEntry.Arrival` carries the arrival record and is
 landed again through the shadow's own escrow at the tick it landed
 (`ReplayRefusal.ArrivalRefused` when it cannot land in the same body indices);
@@ -560,8 +562,8 @@ Run the focused laws after changing frames, handoff continuity, hysteresis,
 contact sweeping, or crossing durability:
 
 ```text
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldAdjacencyLawTests|FullyQualifiedName~WorldAdjacencyCornerContactLawTests|FullyQualifiedName~FederationTransferLawTests|FullyQualifiedName~MappedArrivalApplicationLawTests|FullyQualifiedName~HighSpeedGroundContactLawTests|FullyQualifiedName~CrossingRecoveryLawTests|FullyQualifiedName~CrossingHandoffTokenLawTests|FullyQualifiedName~CrossingReplayLawTests|FullyQualifiedName~WorldSiloCrossingRecoveryLawTests"
-dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldFrameIsometryLawTests"
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter-class "*WorldAdjacencyLawTests" --filter-class "*WorldAdjacencyCornerContactLawTests" --filter-class "*FederationTransferLawTests" --filter-class "*MappedArrivalApplicationLawTests" --filter-class "*HighSpeedGroundContactLawTests" --filter-class "*CrossingRecoveryLawTests" --filter-class "*CrossingHandoffTokenLawTests" --filter-class "*CrossingReplayLawTests" --filter-class "*WorldSiloCrossingRecoveryLawTests"
+dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter-class "*WorldFrameIsometryLawTests"
 ```
 
 Run `puck canary seamless-adjacency` for the driven crossing on NW's east face

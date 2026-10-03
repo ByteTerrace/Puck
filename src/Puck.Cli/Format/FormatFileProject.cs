@@ -157,7 +157,7 @@ internal static class FormatFileProject {
 
             // An explicit target makes MSBuild report items as the build left them rather than as evaluated, so this
             // one build is also the closure evaluation the semantic passes would otherwise run.
-            Run(arguments: ["build", project, "--disable-build-servers", "-t:Build", "-c", Configuration, "-p:RestoreLockedMode=false", "-getItem:ReferencePathWithRefAssemblies", $"-getItem:{SourceItem}", "-getProperty:TargetPath", $"-getResultOutputFile:{report}"], workingDirectory: repository);
+            Run(arguments: ["build", CliOptions.NoNodeReuse, project, "--disable-build-servers", "-t:Build", "-c", Configuration, "-p:RestoreLockedMode=false", "-getItem:ReferencePathWithRefAssemblies", $"-getItem:{SourceItem}", "-getProperty:TargetPath", $"-getResultOutputFile:{report}"], workingDirectory: repository);
             var closures = new CompileClosures();
 
             closures.Record(
@@ -198,7 +198,7 @@ internal static class FormatFileProject {
                     a: original,
                     b: rewritten
                 )) {
-                    Run(arguments: ["build", project, "--disable-build-servers", "-c", Configuration, "--no-restore"], workingDirectory: repository);
+                    Run(arguments: ["build", CliOptions.NoNodeReuse, project, "--disable-build-servers", "-c", Configuration, "--no-restore"], workingDirectory: repository);
                     RewriteIo.WriteText(
                         file: file,
                         text: rewritten

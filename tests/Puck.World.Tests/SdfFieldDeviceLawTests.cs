@@ -30,6 +30,7 @@ namespace Puck.World.Tests;
 /// it does not finish one program's lattice through the full interpreter in minutes.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed partial class SdfFieldDeviceLawTests {
     // The largest distance the device and the evaluator may disagree by: the evaluator computes in Q48.16 fixed point,
     // the device in single precision, and the trigonometry and exponentials of the warps differ by a few ulps between

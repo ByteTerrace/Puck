@@ -1,7 +1,9 @@
 # Puck.DirectX
 
 Puck.DirectX provides the low-level Direct3D 12 graphics backend substrate:
-CsWin32 COM bindings, resource-barrier tracking, and WARP software fallback.
+CsWin32 COM bindings, resource-barrier tracking, and the means to create a WARP software
+device (`IDirectXDeviceApi.CreateWarpDevice`), which only tests ask for: no production path
+falls back to it.
 
 `DirectXGpuTimestampFactory` provides optional pass timestamp heaps. Queue
 frequency and heap creation use `DirectXCommandCalls` so device removal follows

@@ -956,7 +956,8 @@
       "lights": [
         {
           "$type": "directional",
-          "shadows": true
+          "name": "key",
+          "shadow": "always"
         },
         {
           "$type": "hemisphere"
@@ -974,6 +975,7 @@
         }
       ]
     },
+    "shadowLights": 1,
     "shadows": "High",
     "sky": {
       "layers": [

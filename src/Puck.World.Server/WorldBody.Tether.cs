@@ -124,7 +124,7 @@ public sealed partial class WorldBody {
             return;
         }
 
-        var velocity = (m_planarVelocity + (FixedVector3.UnitY * m_verticalVelocity));
+        var velocity = ComposedVelocity();
         var result = tether.Solve(
             anchor: in anchor,
             position: ref m_position,
@@ -137,16 +137,10 @@ public sealed partial class WorldBody {
             return;
         }
 
-        m_planarVelocity = new FixedVector3(
-            X: velocity.X,
-            Y: FixedQ4816.Zero,
-            Z: velocity.Z
+        SplitVelocity(
+            resetVerticalRemainder: true,
+            velocity: velocity
         );
-
-        if (m_verticalVelocity != velocity.Y) {
-            m_verticalVelocity = velocity.Y;
-            m_verticalVelocityAccumulator.Reset();
-        }
     }
 
     // Reads the attach/detach channels DIRECTLY (never through the kit action table — see FixedWorldTether's own

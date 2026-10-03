@@ -67,7 +67,7 @@ the pricing itself: reference kernels for the unpriced vocabularies, declared
 bounds for the helper loops that currently leave a kernel unresolved, and
 memory-service measurements, which the capture reads rather than invents.
 
-One compilation now retains its work sheet and report for server and console
+One compilation retains its work sheet and report for server and console
 consumers. Browser and portal worker reports preserve exact counts and distinguish
 known, unmodeled, and overflowed bounds. The report remains diagnostic: recurring
 reference cycles and synchronous edit costs are unresolved, and heuristic
@@ -99,8 +99,11 @@ The minimum contracts, as the code declares them:
 CostModel: Id, ReferenceProfile, EvidenceDigest
 CostBound: Known(nonnegative reference cycles) | Unmodeled(reason) | Overflow
 RuleCost: Setup, Check, Effects
-WorldCostReport: ModelId, Scope, RecurringBound, SearchReservations,
-                 EditBurstBound, Resources, Contributors, Issues
+WorldCostReport: ModelId, Scope, SimulationRateHz, StepPeriodEngineTicks,
+                 StepAllowanceCycles, RecurringBound, SearchReservations,
+                 TotalBound, ReferenceEngineTicks, Admitted, Contributors,
+                 Issues, HeuristicWorkUnitsPerTick, EvidenceDigest,
+                 EditBurstBound, Resources
 ```
 
 `CostModel` holds no coefficients of its own: its prices are the evidence
@@ -355,39 +358,40 @@ counts authorized submissions: changing the CPU currency must not reinterpret
 those security quotas. A future total-world deadline requires costs for the
 other server phases and the composition/scheduling of hosted worlds.
 
-## 6. Search must spend a bounded amount of work
+## 6. Search spends a bounded amount of work
 
-Replace `leftover / JudgeCost` as the authoritative search allowance. A node
-counter may remain as an authored limit and diagnostic, but it is not a unit
-of computational cost.
+A compiled search job has a deterministic work allowance. A node counter is an
+authored limit and diagnostic, never a unit of computational cost. In the
+heuristic units the allowance is what the rules' work sheet and one fold of
+every row (the stamp that tells a job its inputs changed) leave of the per-tick
+ceiling, divided equally among the declared jobs, with each share's remainder
+unspent and no job borrowing from another (`WorldSearchCompilation.TryPlanAll`).
+Nothing infers available work from idle jobs or host timings.
 
-Give every compiled search job a deterministic cycle allowance. Reserve
-mandatory per-step search maintenance before distributing the remaining
-authored allowance. Initially divide the remainder equally across declared
-jobs, rounding down and leaving the remainder unused; this preserves simple,
-predictable allocation. Never infer available work from currently idle jobs
-or host timings unless a later explicit scheduler contract implements that.
+The search walk is resumable bounded units. Every unit is priced, the costliest
+is reserved before any runs, and a walk yields when the next unit does not fit.
+A restart and a replay come out of the same allowance, so frequent input changes
+buy no free rebuilds. A chance ply, at the root or inside the walk, and a tree
+step are units on the walk's explicit stack, so a step suspends inside one and a
+checkpoint carries what it has folded. A share that cannot cover a restart, a
+full replay and one unit is refused by that sum, never allowed to overspend "to
+make progress" and never left in silent starvation. Completed outputs publish
+atomically across yields (`ArenaSearchAllowanceLawTests` holds every step under
+its allowance against a judge counted from outside the search). Search changes
+can move completion ticks and results; verify determinism and update affected
+fixtures and replays in the same change. There are no consumers requiring an
+old-price compatibility mode.
 
-Represent the search walk as resumable bounded units. Before executing a unit,
-reserve its complete cost; yield if it does not fit. Count candidate inspection
-and cursor maintenance even when no judge runs. Include frame copy/reset,
-candidate application, judge, scoring, position hashing/transposition work,
-tree selection and playout, chance outcome traversal, backpropagation, and
-output installation. The sum of reservations bounds the step's modeled work.
-
-Make root chance evaluation and recursive chance descendants obey this same
-budget. They must resume through explicit continuation state instead of doing
-a whole recursive subtree inside one outer node. Tree/UCT playouts need the
-same treatment. Preserve deterministic traversal, tie breaking, seed state,
-and atomic publication of completed outputs across yields. Charge restart and
-cancellation work too; frequent input changes must not provide free rebuilds.
-
-If the smallest indivisible unit exceeds its job's allowance, either split it
-at a semantics-preserving boundary or reject the plan with the exact reason.
-Never let it overspend "to make progress" and never allow permanent silent
-starvation. Search changes can intentionally move completion ticks and results;
-verify determinism and update affected fixtures/replays in the same change.
-There are no consumers requiring an old-price compatibility mode.
+Still open, and C1's: the allowance, the judge price and each unit price are
+heuristic work units until the reference schedule prices them in cycles, and
+the report's `SearchReservations` stays `Unmodeled` for a world with search
+rows because search traversal, frame copies and chance expansion have no
+complete cycle reservation. A unit's cycle price includes candidate inspection
+and cursor maintenance even when no judge runs, frame copy and reset, candidate
+application, the judge, scoring, position hashing and transposition work, tree
+selection and playout, chance outcome traversal, backpropagation, output
+installation, and restart and cancellation work; the sum of reservations bounds
+the step's modeled work.
 
 ## 7. Authoring and identity
 
@@ -421,6 +425,15 @@ does not already identify the schedule exactly. Never embed a second mutable
 copy of the table in documents or let an authored document select a cheaper
 profile. Deliberate schedule revisions are engine-version changes.
 
+In place: the typed report from the shared C# implementation reaches the
+console (`world.budget.rules`) and the browser (`BrowserCostReport`, with
+64-bit values as decimal strings), its contributors carry document locations
+resolved to defining files and module instances, it is produced for a document
+that exceeds its budget, and it carries `ModelId` and `EvidenceDigest`. Open,
+with C1's activation: the reference-budget and headroom display, because the
+recurring bound is `Unmodeled` until the schedule prices it, and the schedule
+identity in compiled plans and replay.
+
 ## 8. Implementation order and acceptance
 
 Steps 1, 3, and 5 are the costing correction. Steps 2 and 4, the reference
@@ -430,11 +443,11 @@ ceiling. Implement each step completely before moving to the next. A
 temporary comparison against the old model is useful during development; delete
 the old heuristics when the replacement becomes authoritative.
 
-1. **Correct the accounting structure.** Separate setup/check/firing costs;
-   correct exclusions, pair inspections, and shared preparation. Add explicit
-   unknown/overflow handling and exhaustive vocabulary coverage. Keep current
-   weights labeled heuristic while building the replacement; do not rename
-   them to cycles.
+1. **Correct the accounting structure.** Landed. Separate setup/check/firing
+   costs; correct exclusions, pair inspections, and shared preparation. Add
+   explicit unknown/overflow handling and exhaustive vocabulary coverage. The
+   current weights stay labeled heuristic while the replacement is built; do not
+   rename them to cycles.
 2. **Build and substantiate the reference schedule.** Add the focused benchmark
    cases to the existing harness, capture the fixed reference code, derive
    kernel and memory coefficients, and record formulas/evidence in one owning
@@ -442,8 +455,12 @@ the old heuristics when the replacement becomes authoritative.
    explicit unmodeled result. A test should enumerate the registered vocabulary
    so a new operation cannot silently escape pricing. A source/compiler change
    affecting a reference kernel must require review of its evidence.
-3. **Integrate structural costs and bounded search.** Follow the actual mutation
-   and search paths above. Extend existing tests and diagnostics; do not invent
+3. **Integrate structural costs and bounded search.** Landed in the heuristic
+   units, except that a line-of-sight test is a flat weight ([the costing
+   correction](state-and-language.md#the-costing-correction) owns that
+   remainder) and the synchronous edit burst (`EditBurstBound`) has no cycle
+   bound until C1 prices rebuild paths. Follow the actual mutation and search
+   paths above. Extend existing tests and diagnostics; do not invent
    a parallel permanent verification runner. Verify independent observed event
    counts against static bounds, not only one cost formula against another.
 4. **Activate reference-cycle admission and shared reporting.** Apply the exact

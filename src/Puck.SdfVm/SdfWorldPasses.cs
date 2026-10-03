@@ -184,6 +184,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             !entry.Picker.Pending &&
             (entry.RenderedBindings == entry.Bindings) &&
             (entry.RenderedSharpness == entry.CurrentSharpness) &&
+            (entry.RenderedShadowFadeCapacity == entry.CurrentShadowFadeCapacity) &&
             (entry.InstalledTemporal == entry.RequestsTemporal) &&
             (view.Residency.Tables is { } tables) &&
             entry.Temporal.Stands(
@@ -286,6 +287,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.RenderedBindings = entry.Bindings;
             entry.RenderedScale = entry.CurrentScale;
             entry.RenderedSharpness = entry.CurrentSharpness;
+            entry.RenderedShadowFadeCapacity = entry.CurrentShadowFadeCapacity;
             entry.Temporal.Rendered();
         }
     }

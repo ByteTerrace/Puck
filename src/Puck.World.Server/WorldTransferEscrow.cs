@@ -78,7 +78,13 @@ public readonly record struct WorldTransferActionRegister(string Name, ActionSta
 public sealed record WorldTransferActionContinuity(
     IReadOnlyList<WorldTransferChannelEdge> Channels,
     IReadOnlyList<WorldTransferActionRegister> Registers
-);
+) {
+    /// <summary>Gets the continuity that carries no edge and no register.</summary>
+    public static WorldTransferActionContinuity Empty { get; } = new(
+        Channels: [],
+        Registers: []
+    );
+}
 /// <summary>The unconsumed geometric image of one already-evaluated simulation step. Actions, timers, gravity, and
 /// authored motion have run exactly once on the source authority; a destination may only sweep this segment through
 /// its own contact and ownership topology. It must never call <see cref="WorldBody.Advance"/> for the represented
@@ -102,6 +108,15 @@ public readonly record struct WorldContinuumTrajectory(
     /// <summary>A representation-level work ceiling. Exhaustion is a deterministic safety clamp at the last
     /// confirmed owner; it is not an authored feel parameter.</summary>
     public const byte MaxBoundaryEvents = 8;
+
+    /// <summary>Gets whether the segment is one a carrier may hold: a nonempty engine-time interval, consumed at least
+    /// through its end, that has crossed between one and <see cref="MaxBoundaryEvents"/> ownership faces. Every
+    /// decoder and the escrow refuse a segment that is not.</summary>
+    public bool IsWellFormed => (
+        (ContinuumEndEngineTick > ContinuumStartEngineTick) &&
+        (ConsumedThroughEngineTick >= ContinuumEndEngineTick) &&
+        (BoundaryEvents is > 0 and <= MaxBoundaryEvents)
+    );
 }
 /// <summary>The destination's reservation verdict and assigned body indices.</summary>
 public sealed record WorldTransferReservationReply(bool Accepted, string Reason, ulong DeadlineDestinationTick, IReadOnlyList<int> BodyIndices, WorldDefinition? DestinationDefinition) {
@@ -129,7 +144,12 @@ public sealed record WorldTransferCommitMember(
     WorldTransferActionContinuity? ActionContinuity = null,
     WorldContinuumTrajectory? Continuum = null,
     FixedQ4816 TravelTurn = default
-);
+) {
+    /// <summary>Gets the action edges and registers the traveller carries. Carrying none is the empty continuity: an
+    /// absent one reads as <see cref="WorldTransferActionContinuity.Empty"/>, so a commit means the same whichever
+    /// carrier built it.</summary>
+    public WorldTransferActionContinuity ActionContinuity { get; init; } = (ActionContinuity ?? WorldTransferActionContinuity.Empty);
+}
 /// <summary>The transfer escrow table shared by colocated and QUIC authority transports. It owns destination capacity
 /// from reserve until commit, explicit abort, or deterministic deadline expiry; it never queues a full request.</summary>
 public sealed partial class WorldTransferEscrow {
@@ -410,22 +430,19 @@ public sealed partial class WorldTransferEscrow {
 
         return true;
     }
-    private static bool ActionContinuityMatches(WorldTransferActionContinuity? left, WorldTransferActionContinuity? right) =>
+    private static bool ActionContinuityMatches(WorldTransferActionContinuity left, WorldTransferActionContinuity right) =>
         (ReferenceEquals(
             objA: left,
             objB: right
-        ) || ((left is not null) && (right is not null) &&
-        (left.Channels is not null) && (right.Channels is not null) && (left.Registers is not null) && (right.Registers is not null) &&
+        ) || ((left.Channels is not null) && (right.Channels is not null) && (left.Registers is not null) && (right.Registers is not null) &&
         left.Channels.SequenceEqual(second: right.Channels) && left.Registers.SequenceEqual(second: right.Registers)));
     // IReadOnlyList does not imply immutable storage. Retain a value image of continuity, including at checkpoint
     // capture/restore, so caller edits cannot rewrite which commit this idempotency receipt accepted.
     private static WorldTransferCommitMember CopyCommitMember(WorldTransferCommitMember member) => member with {
-        ActionContinuity = ((member.ActionContinuity is { } continuity)
-        ? new WorldTransferActionContinuity(
-            Channels: [.. continuity.Channels],
-            Registers: [.. continuity.Registers]
-        )
-        : null),
+        ActionContinuity = new WorldTransferActionContinuity(
+            Channels: [.. member.ActionContinuity.Channels],
+            Registers: [.. member.ActionContinuity.Registers]
+        ),
     };
     private static int PreferredOrLowestFree(bool[] consumed, int preferred, int first) {
         if (
@@ -725,7 +742,7 @@ public sealed partial class WorldTransferEscrow {
             return WorldTransferStatus.Missing;
         }
 
-        if (members.Any(predicate: static member => ((member.ActionContinuity is { } continuity) && ((continuity.Channels is null) || (continuity.Registers is null))))) {
+        if (members.Any(predicate: static member => ((member.ActionContinuity is not { Channels: not null, Registers: not null })))) {
             reason = $"transfer {transferId} carries invalid action continuity collections";
             return WorldTransferStatus.Missing;
         }
@@ -1134,11 +1151,7 @@ public sealed partial class WorldTransferEscrow {
         }
         if (
             (member.Continuum is { } continuum) &&
-            (!member.HasMappedArrival ||
-             (continuum.ContinuumEndEngineTick <= continuum.ContinuumStartEngineTick) ||
-             (continuum.ConsumedThroughEngineTick < continuum.ContinuumEndEngineTick) ||
-             (continuum.BoundaryEvents == 0) ||
-             (continuum.BoundaryEvents > WorldContinuumTrajectory.MaxBoundaryEvents))
+            (!member.HasMappedArrival || !continuum.IsWellFormed)
         ) {
             return "carries an invalid continuum interval or boundary count";
         }
@@ -1175,10 +1188,7 @@ public sealed partial class WorldTransferEscrow {
 
         if (member.HasMappedArrival) {
             m_server.Population.ApplyMappedArrival(
-                actionContinuity: (member.ActionContinuity ?? new WorldTransferActionContinuity(
-                    Channels: [],
-                    Registers: []
-                )),
+                actionContinuity: member.ActionContinuity,
                 continuum: member.Continuum,
                 destinationCompletedEngineTick: m_server.CompletedEngineTicks,
                 motionProgramName: member.BodyMotionProgramName,

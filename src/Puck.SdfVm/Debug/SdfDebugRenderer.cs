@@ -737,10 +737,10 @@ public sealed class SdfDebugRenderer {
                 );
 
                 break;
-            case SdfGalleryExhibit.WallpaperP4G:
-                // P4G renders as p4 (KNOWN DEFECT) — an ASYMMETRIC tile reveals the dropped mirror classes. Tiles XZ.
+            case SdfGalleryExhibit.WallpaperP4M:
+                // An ASYMMETRIC tile shows every mirror class: the cell walls and the cell diagonal. Tiles XZ.
                 _ = builder.ResetPoint().WallpaperFold(
-                    group: SdfWallpaperGroup.P4G,
+                    group: SdfWallpaperGroup.P4M,
                     cell: new Vector2(
                         x: 2f,
                         y: 2f

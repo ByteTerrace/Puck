@@ -52,14 +52,21 @@ field evaluations improve the target scenes.
 
 ## Shadows
 
-Soft shadows march toward each relevant light and estimate penumbra from the
-occluder distance. An 8×8 workgroup grid gather limits the candidate instance
+Soft shadows march toward each light in the allocator's stable slots and each
+active incoming handoff, estimating penumbra from that light's angular radius
+and the occluder distance. Up to four stable visibilities occupy the existing
+K word as 8-bit lanes. A directional outside the slots shades unshadowed, scaled
+by ambient occlusion. During a handoff, the outgoing light's own occlusion
+deficit fades to zero while the
+incoming light's grows from zero; each keeps its radiance. The
+[P18-7 contract](../../../plans/rendering.md#p18--sky-and-atmosphere) bounds the
+marches by K + F and provisions incoming visibility storage by policy.
+An 8×8 workgroup grid gather limits the candidate instance
 set for the shadow ray; each pixel then consumes the shared mask.
 Shadow steps must honor program `stepScale`, fold-safe bounds, and the same
 conservative sampled-region behavior as primary rays. The minimum stride steps
 through an occluder thinner than itself, but a stride that reaches a fold wall
-(a wallpaper fold's symmetry-LOD switch or a log-sphere shell boundary) lands
-just past it, within the occlusion threshold, and samples the other side before
+(a log-sphere shell boundary) lands just past it, within the occlusion threshold, and samples the other side before
 striding on.
 
 Light culling must never exclude a light that can affect the pixel. Oversized

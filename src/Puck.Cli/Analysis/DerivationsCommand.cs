@@ -90,9 +90,8 @@ public static class DerivationsCommand {
             BAKE chunk and pack entry versions use the first four bytes as an unsigned big-endian integer.
             Run after changing producer dependencies, then build consumers. --check checks source freshness.
 
-            Next slices: other compiled-world chunk versions, shader packages, GpuPipelineCacheStore content keys,
-            and kernel sets. External implementation changes, reflection and dynamic dispatch are outside this
-            source-syntax fingerprint; source is evaluated in the solution's Release configuration.
+            External implementation changes, reflection and dynamic dispatch are outside this source-syntax
+            fingerprint; source is evaluated in the solution's Release configuration.
             """);
 
         command.SetAction(action: async parseResult => await RunAsync(check: parseResult.GetValue(option: check)));

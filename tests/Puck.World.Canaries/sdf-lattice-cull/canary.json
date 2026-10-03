@@ -1,0 +1,196 @@
+{
+  "id": "sdf-lattice-cull",
+  "title": "A hex wallpaper lattice with no edge, clipped by a box inside one scoped placement, is bounded by the box and still draws across the whole of it",
+  "binding": "The positive leg boots an offscreen 128x128 view, half render scale, of a creation whose first shape is a sphere of radius 0.8 folded through a P6M wallpaper of pitch 1 in the XY plane with no limit (a lattice with no edge) and whose second shape is a box of half extents (1.2, 1.2, 0.5) composed by intersection, so the placement is one scoped instance whose composed bound is the box's: the intersection of a lattice with no edge and a finite shape is finite, and the instance is cullable by it, not always evaluated. The spheres overlap (the lattice's covering radius is 0.577, below 0.8, and the spheres still cover the plane at the box's front face, where their section is 0.62), so the surface the camera sees is the box's front face and the whole footprint is the one emissive grey, code 128, with lighting and fog off. A bound that dropped the clipped lattice, one that took the lattice's reach, or a cull that lost the instance leaves the footprint's centre sky-black. The region outside the footprint is the black sky. The discriminating leg moves the placement 200 units behind the frame, so the footprint is the sky and the lattice observation fails while the sky observation holds.",
+  "bootShape": "offscreen",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "requirements": [
+    "gpu"
+  ],
+  "timeoutSeconds": 60,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/sdf-lattice-cull/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "the-box-footprint-is-the-lattice",
+        "capture": "lattice.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.4,
+          0.6,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "maximum": [
+          0.505,
+          0.505,
+          0.505,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "outside-the-box-is-the-sky",
+        "capture": "lattice.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.02,
+          0.4,
+          0.12,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.01,
+          0.01,
+          0.01,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/sdf-lattice-cull/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      {
+        "verb": "world.wait",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 3,
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "type": "imageRegion",
+        "name": "the-box-footprint-is-the-lattice",
+        "capture": "lattice.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.4,
+          0.6,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.5,
+          0.5,
+          0.5,
+          1
+        ],
+        "maximum": [
+          0.505,
+          0.505,
+          0.505,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "outside-the-box-is-the-sky",
+        "capture": "lattice.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.02,
+          0.4,
+          0.12,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.01,
+          0.01,
+          0.01,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      }
+    ]
+  }
+}

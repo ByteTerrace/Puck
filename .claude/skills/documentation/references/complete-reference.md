@@ -418,7 +418,7 @@ document under `docs/` that names the skill.
   API reference under `docs/api/api/` and `docs/api/_site/` is git-ignored build
   output of `dotnet docfx docs/api/docfx.json`. Editing any of them closes
   nothing. Everything else committed under `docs/api/` — `docfx.json`,
-  `index.md`, `toc.yml`, and that folder's `.gitignore` — is hand-maintained,
+  `index.md`, `toc.yml`, `templates/`, and that folder's `.gitignore` — is hand-maintained,
   and `docs/api/index.md` is an ordinary document the root `README.md` routes to.
 - **A stale document is evidence, not law.** `AGENTS.md` rule 2: documents,
   skills, gates, comments, and precedent are evidence. A stale one discovered

@@ -1,6 +1,6 @@
 // The light stage: shades one pixel's hit from its surface sample (SdfSurfaceSample) into the view's lit color, and
 // nothing on a miss. It samples a bound screen, re-resolves the material, lights the surface through the one light
-// interface (sdf-light.hlsli), the key light under the soft shadow the shadow stage wrote, applies the editor grid, and
+// interface (sdf-light.hlsli), each slotted light under its own shadow, applies the editor grid, and
 // reports the pixel's coverage: one for a solid hit, less on a silhouette edge against the sky, zero on a miss. It also
 // reports the pixel's reactivity for a temporal view's resolve: one for a screen, whose content changes on its own, and
 // for emission, which the material model cannot tell animated from steady, the share of the color the material and atlas
@@ -48,18 +48,25 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
 #endif
 
     if (useFinalShading && !sampledScreen) {
-        // The shadow light's Lambert term under the soft-shadow visibility the shadow stage wrote (the ambient lights still
-        // fill shadowed regions, so shadows read soft, not black). The record's key row is current exactly where the
-        // shadow stage marched: where the surface faces the light, a light shadows, soft shadows are on, and the pixel is
-        // no mesh's. The unbound glass reads sunDiffuse too.
+        // Neutral defaults also cover skipped shadow passes. The incoming image is read only during active handoffs.
+        float4 shadowVisibility = float4(1.0, 1.0, 1.0, 1.0);
+        float2 incoming = float2(1.0, 1.0);
         float3 keyDirection = worldSunDirection();
         float sunDiffuse = max(dot(normal, keyDirection), 0.0);
-        float keyVisibility = 1.0;
 
-        if ((sunDiffuse > 0.0) && (passGroup.shadowLight >= 0) && !worldSoftShadowsDisabled() && !s.mesh) {
-            keyVisibility = s.keyVisibility;
-            sunDiffuse *= keyVisibility;
+        if ((passGroup.shadowSlotCount > 0u) && !worldSoftShadowsDisabled() && !s.mesh) {
+            shadowVisibility = sdfLoadVisibilityShadows(worldVisibilityRecord(p.pixel, p.viewIndex));
+#if SDF_SHADOW_FADE_SLOTS > 0
+            if (passGroup.shadowFadeCount > 0u) {
+#if SDF_SHADOW_FADE_SLOTS == 1
+                incoming.x = incomingVisibility.Load(int3(p.pixel, 0));
+#else
+                incoming = incomingVisibility.Load(int3(p.pixel, 0));
+#endif
+            }
+#endif
         }
+        sunDiffuse *= sdfLightVisibility(passGroup.shadowSlots.x, shadowVisibility, incoming, 1.0);
 
         if (material >= SDF_SCREEN_MATERIAL) {
             // The unbound glass: a declared screen with no source bound this frame (or the plain sentinel), unlit apart
@@ -169,7 +176,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             // occlusion and the normal debug view keep the geometric normal.
             applySoften(normal, probes.softenSum, shadeMaterial.soften);
 
-            // The ambient stage's occlusion, into the ambient fill only (the key light is governed by its soft shadow). A
+            // The ambient stage's occlusion, into the ambient fill and unslotted directionals. A
             // wrapped (skin-like) material relaxes it toward 1; wrap = 0 leaves it as it is.
             float ambientOcclusion = s.ambient;
             ambientOcclusion = lerp(ambientOcclusion, 1.0, saturate(shadeMaterial.wrap * 0.35));
@@ -183,7 +190,8 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             shadeSurface.rayDirection = p.rayDirection;
             shadeSurface.material = shadeMaterial;
             shadeSurface.ambientOcclusion = ambientOcclusion;
-            shadeSurface.keyVisibility = keyVisibility;
+            shadeSurface.shadowVisibility = shadowVisibility;
+            shadeSurface.incomingVisibility = incoming;
 
             float3 radiance = float3(0.0, 0.0, 0.0);
             float3 rim = float3(0.0, 0.0, 0.0);

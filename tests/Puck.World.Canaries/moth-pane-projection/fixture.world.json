@@ -1,0 +1,110 @@
+{
+  "cameras": [
+    {
+      "anchor": null,
+      "name": "pack",
+      "renderHeight": 64,
+      "renderWidth": 64,
+      "rig": {
+        "name": "pack",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.38,
+                2.7
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.3,
+                0.1
+              ]
+            }
+          },
+          {
+            "$type": "fieldOfView",
+            "fieldOfViewRadians": 0.54
+          }
+        ],
+        "version": "puck.camera.program.v1"
+      }
+    }
+  ],
+  "host": {
+    "authority": null,
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 64,
+    "journalDepth": 2000,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "offscreen",
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0,
+    "width": 64
+  },
+  "render": {
+    "tonemap": "Filmic"
+  },
+  "schema": "puck.world.definition.v1",
+  "views": {
+    "layouts": [
+      {
+        "name": "moth",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": null,
+            "height": 1,
+            "instance": "moth",
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      }
+    ],
+    "seatControl": {
+      "maxPitch": 0.01,
+      "minPitch": -0.01,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "pipeline",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 0.01,
+          "pitch": 0,
+          "yaw": 0
+        },
+        {
+          "$type": "fieldOfView",
+          "fieldOfViewRadians": 0.001
+        }
+      ],
+      "version": "puck.camera.program.v1"
+    },
+    "graphs": [
+      {
+        "camera": "pack",
+        "name": "moth",
+        "source": "../../../src/Puck.World/Assets/pipelines/moth.hlsl",
+        "timeScale": 0
+      }
+    ]
+  }
+}
