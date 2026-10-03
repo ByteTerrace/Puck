@@ -18,11 +18,11 @@ public static class WorldDocumentEmitterUnits {
     // Qualified `call.argument` keys only: `pitch`/`yaw` are radians as `orbit` arguments and degrees-or-anything
     // as a bare property elsewhere, so a bare name must never reach the radians conversion.
     private static readonly HashSet<string> RadiansCallArguments = new(comparer: StringComparer.Ordinal) {
-        "orbit.pitch", "orbit.yaw", "sunDisc.radius", "clouds.curl",
+        "orbit.pitch", "orbit.yaw", "sunDisc.radius", "clouds.curl", "aurora.base", "aurora.height", "aurora.fold",
     };
     // An angle a light or the sky keeps in radians under a name that does not say so, written in degrees.
     private static readonly HashSet<string> RadiansFields = new(comparer: StringComparer.Ordinal) {
-        "angularRadius",
+        "angularRadius", "band", "feather", "spread", "turn", "tilt",
     };
     private static readonly HashSet<string> MetersFields = new(comparer: StringComparer.Ordinal) {
         "position", "scale", "radius", "margin", "reach", "standoff", "cellSize", "spacing", "distance",

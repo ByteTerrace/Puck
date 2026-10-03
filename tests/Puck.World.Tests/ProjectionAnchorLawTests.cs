@@ -107,20 +107,21 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
     }
     // The authority's presentation and the recipient's, each through a real state mirror at the same tick: the clock's
     // phase and the keyed fog it resolves.
-    // The records the kernels read for a resolved environment: the light table, and the sky's block, stops and
+    // The records the kernels read for a resolved environment: the light table, and the sky's block, layers and
     // softboxes as the sky packs them over those lights.
-    private static (SdfLight[] Lights, SdfSkyBlock Block, SdfSkyStop[] Stops, SdfSoftbox[] Softboxes) Packed(WorldResolvedEnvironment environment) {
-        var stops = new SdfSkyStop[SdfSky.MaxStops];
+    private static (SdfLight[] Lights, SdfSkyBlock Block, SdfSkyLayer[] Stops, SdfSoftbox[] Softboxes) Packed(WorldResolvedEnvironment environment) {
+        var layers = new SdfSkyLayer[SdfSky.MaxLayers];
         var softboxes = new SdfSoftbox[SdfSky.MaxSoftboxes];
 
         environment.Sky.Pack(
             block: out var block,
+            details: new SdfSkyDetails(),
+            layers: layers,
             lights: environment.Lights,
-            softboxes: softboxes,
-            stops: stops
+            softboxes: softboxes
         );
 
-        return (environment.Lights.Records.ToArray(), block, stops, softboxes);
+        return (environment.Lights.Records.ToArray(), block, layers, softboxes);
     }
     private static void AssertPresentsAsTheHost(WorldDefinition host, WorldDefinition recipient, ulong tick, ulong engineTick) {
         var hostMirror = ClientFixtures.StateMirror(definition: host, engineTick: engineTick, tick: tick);

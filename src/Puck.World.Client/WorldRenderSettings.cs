@@ -44,6 +44,7 @@ public sealed partial class WorldRenderSettings {
     private Client.WorldShadowSettings m_shadowSlots;
     private bool m_temporal;
     private float m_upscaleSharpness;
+    private WorldSkyTier m_skyQuality;
 
     /// <summary>Initializes a new instance of the <see cref="WorldRenderSettings"/> class from the world definition's
     /// render-lever boot defaults (<see cref="WorldRenderDefaults"/>), copied into the live, mutable settings the
@@ -63,6 +64,7 @@ public sealed partial class WorldRenderSettings {
         RenderScale = defaults.RenderScale;
         UpscaleSharpness = defaults.UpscaleSharpness;
         Temporal = defaults.Temporal;
+        SkyQuality = defaults.SkyQuality;
         DynamicResolution = defaults.DynamicResolution;
         FarBound = true;
         CadenceGate = true;
@@ -152,6 +154,10 @@ public sealed partial class WorldRenderSettings {
     /// <see cref="Puck.SdfVm.SdfViewQuality.Temporal"/> lane. A change rebuilds each view's graph beside the installed
     /// one. Camera and session views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
+    /// <summary>The sky's quality tier (<c>world.sky-quality</c>): a layer below it writes no entry and counts no work,
+    /// and below <see cref="WorldSkyTier.High"/> each kind draws its reduced form. Boots at the definition's
+    /// <c>render.skyQuality</c>; a quality preset's <c>sky</c> row sets it.</summary>
+    public WorldSkyTier SkyQuality { get => m_skyQuality; set { m_skyQuality = value; m_revision++; } }
     /// <summary>The continuous reconstruction sharpness: the spatial resolve's blend from bilinear (0) to clamped
     /// Catmull-Rom (1), and the strength of the contrast-adaptive sharpen <c>place</c> applies to a temporally resolved
     /// view at its rect's own extent. A native view that does not reconstruct ignores it.</summary>
