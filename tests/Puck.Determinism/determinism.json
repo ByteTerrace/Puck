@@ -70,7 +70,7 @@
         },
         {
             "name": "billiards",
-            "world": "../Puck.World.Tests/Fixtures/minimal-billiards-host.world.json",
+            "world": "../Puck.World.Tests/Fixtures/minimal-billiards-host.puck",
             "ticks": 120,
             "seats": [0],
             "intents": [],
