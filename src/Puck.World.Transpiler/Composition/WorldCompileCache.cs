@@ -91,7 +91,7 @@ public sealed class WorldCompileCache {
     // A temporary file untouched for this long belongs to a write that will never finish; a younger one may be
     // another process's write in flight.
     private static readonly TimeSpan AbandonedAfter = TimeSpan.FromMinutes(minutes: 1);
-    private static readonly byte[] Magic = "PUCKWCC3"u8.ToArray();
+    private static readonly byte[] Magic = "PUCKWCC1"u8.ToArray();
     private readonly ConcurrentDictionary<string, Lock> m_compiling = new(comparer: StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, WorldCompiledSource> m_held = new(comparer: StringComparer.Ordinal);
     private readonly Lock m_persistLock = new();

@@ -40,7 +40,7 @@ public sealed class WorldCompileCacheLawTests {
     private static byte[] Forge(string build, string key, string source, byte[] document) {
         using var stream = new MemoryStream();
 
-        stream.Write(buffer: "PUCKWCC3"u8);
+        stream.Write(buffer: "PUCKWCC1"u8);
         using (var writer = new BinaryWriter(encoding: Encoding.UTF8, leaveOpen: true, output: stream)) {
             writer.Write(value: build);
             writer.Write(value: key);

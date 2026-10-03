@@ -33,9 +33,9 @@
                 "M:Puck.Machines.MachineInstance`2.GetRequiredService``1",
                 "M:Puck.Maths.Fnv1aHash.Compute(System.ReadOnlySpan{System.Byte})"
             ],
-            "shape": "ef0d84b0aba4fcbd",
+            "shape": "a97812568d7eeb9a",
             "source": "src/Puck.AdvancedGamingBrick/AgbMachineSnapshot.cs",
-            "token": "6"
+            "token": "1"
         },
         "AssetChunk.Version": {
             "open": [
@@ -426,7 +426,7 @@
             ],
             "shape": "962bda5aad6c3435",
             "source": "src/Puck.World.Schema/CompiledWorldChunks.cs",
-            "token": "2"
+            "token": "1"
         },
         "DeterminismManifest.Schema": {
             "open": [
@@ -465,9 +465,9 @@
                 "M:Puck.HumbleGamingDeck.HumbleGamingDeckCore.LoadBatterySave",
                 "M:Puck.Maths.Fnv1aHash.Compute(System.ReadOnlySpan{System.Byte})"
             ],
-            "shape": "178962de80582679",
+            "shape": "d31ccb4ce1666a5d",
             "source": "src/Puck.HumbleGamingDeck/HgdMachineSnapshot.cs",
-            "token": "5"
+            "token": "1"
         },
         "LocalEndpointCapability.Revision": {
             "open": [
@@ -502,9 +502,9 @@
                 "M:Puck.Maths.Fnv1aHash.Compute(System.ReadOnlySpan{System.Byte})",
                 "P:Puck.Machines.MachineSnapshot`3.Size"
             ],
-            "shape": "6f75e771ed563072",
+            "shape": "bdeb524870be17fc",
             "source": "src/Puck.HumbleGamingBrick/MachineSnapshot.cs",
-            "token": "9"
+            "token": "1"
         },
         "MusicDocument.CurrentSchema": {
             "open": [
@@ -555,7 +555,7 @@
                 "M:Puck.Text.FontAtlas.TryGetGlyph(System.Int32,Puck.Text.FontAtlasGlyph@)",
                 "M:System.IO.TextWriter.WriteLine(System.String)"
             ],
-            "shape": "a85157d5a5d7a5b6",
+            "shape": "e1902bf7819398a0",
             "source": "src/Puck.Overlays/OverlayGlyphSdfPack.cs",
             "token": "POGP"
         },
@@ -565,9 +565,9 @@
                 "M:Puck.Text.FontAtlas.TryGetGlyph(System.Int32,Puck.Text.FontAtlasGlyph@)",
                 "M:System.IO.TextWriter.WriteLine(System.String)"
             ],
-            "shape": "a85157d5a5d7a5b6",
+            "shape": "e1902bf7819398a0",
             "source": "src/Puck.Overlays/OverlayGlyphSdfPack.cs",
-            "token": "3"
+            "token": "1"
         },
         "ParityManifestLoader.ContractSchema": {
             "open": [
@@ -656,9 +656,9 @@
                 "M:System.IO.Stream.Dispose(System.Boolean)",
                 "M:System.IO.Stream.DisposeAsync"
             ],
-            "shape": "a914885f0da6bb4d",
+            "shape": "59d135838fa4cf14",
             "source": "src/Puck.Machines/QueuedMachineCheckpoint.cs",
-            "token": "puck.queued-machine.v4"
+            "token": "puck.queued-machine.v1"
         },
         "RatchetLedger.Format": {
             "open": [
@@ -828,9 +828,9 @@
                 "M:Puck.Shaders.ShaderToolchain.Resolve(System.String)",
                 "P:Puck.Shaders.ShaderToolchain.Identity"
             ],
-            "shape": "4dc008770756e2d6",
+            "shape": "8b25f6ff7e59dc20",
             "source": "src/Puck.Shaders/ShaderCompiler.cs",
-            "token": "puck-shader-compiler-4"
+            "token": "puck-shader-compiler-1"
         },
         "ShaderPackageManifest.SchemaName": {
             "open": [
@@ -903,9 +903,9 @@
                 "M:Puck.Assets.ContentPin.OfFile(System.String)",
                 "M:Puck.Cli.CliGit.Run(System.String,System.String[])"
             ],
-            "shape": "6b245d8afcd28e61",
+            "shape": "f6ae54aa0a05f9b3",
             "source": "src/Puck.Cli/WorldArtifactKey.cs",
-            "token": "puck.world-artifact-key.v2"
+            "token": "puck.world-artifact-key.v1"
         },
         "WorldAuthorityCheckpointCodec.Magic": {
             "open": [
@@ -941,7 +941,7 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "b52dc485fe21e809",
+            "shape": "612b503053d91c92",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "PCKP"
         },
@@ -979,9 +979,9 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "b52dc485fe21e809",
+            "shape": "612b503053d91c92",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
-            "token": "21"
+            "token": "1"
         },
         "WorldAuthorityReceiptSnapshot.CurrentSchema": {
             "open": [
@@ -1008,7 +1008,7 @@
             "open": [
                 "M:Puck.Networking.WireFailure.ToString"
             ],
-            "shape": "0106eeeb71a2689f",
+            "shape": "6869244a92478856",
             "source": "src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs",
             "token": "PJNL"
         },
@@ -1016,9 +1016,9 @@
             "open": [
                 "M:Puck.Networking.WireFailure.ToString"
             ],
-            "shape": "0106eeeb71a2689f",
+            "shape": "6869244a92478856",
             "source": "src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs",
-            "token": "3"
+            "token": "1"
         },
         "WorldBakePack.FormatVersion": {
             "open": [
@@ -1128,9 +1128,9 @@
                 "P:Puck.World.Transpiler.WorldCompilation.EmitsDocument",
                 "P:Puck.World.Transpiler.WorldCompilation.Success"
             ],
-            "shape": "7e0bf140e1ac5fd7",
+            "shape": "c064aa8c00a18296",
             "source": "src/Puck.World.Transpiler/Composition/WorldCompileCache.cs",
-            "token": "PUCKWCC3"
+            "token": "PUCKWCC1"
         },
         "WorldCounterpartAttestation.SchemaVersion": {
             "open": [
@@ -1578,9 +1578,9 @@
                 "P:Puck.World.WorldDefinition.StateCatalog",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "5a6eabeac34fe285",
+            "shape": "34d4bccc3f149a26",
             "source": "src/Puck.World.Server/WorldFederationCodec.cs",
-            "token": "PUCKFED6"
+            "token": "PUCKFED1"
         },
         "WorldProjectionDocument.SchemaVersion": {
             "open": [
@@ -1758,9 +1758,9 @@
                 "P:Puck.World.Server.WorldServer.Definition",
                 "P:Puck.World.Server.WorldServer.NextInputTick"
             ],
-            "shape": "4eadf34d37896d3b",
+            "shape": "3cb2f16898e6c456",
             "source": "src/Puck.World.Protocol/Protocol/WorldProtocol.cs",
-            "token": "PUCKWRL5"
+            "token": "PUCKWRL1"
         },
         "WorldReleaseDeploymentStore.Schema": {
             "open": [
@@ -1824,7 +1824,7 @@
                 "M:Puck.World.WorldSiloDefinitionSerialization.TryLoadFile(System.String,Puck.World.WorldSiloDefinition@,System.String@,System.Collections.Generic.IReadOnlyCollection{System.String})",
                 "P:Puck.World.WorldInstance.CompletedTicks"
             ],
-            "shape": "65ccf8df499f7ad6",
+            "shape": "d20dc5a8a4e1675a",
             "source": "src/Puck.Cli/Automation/WorldReleaseExerciseCommand.cs",
             "token": "puck.world.qualification-exercise.v1"
         },
@@ -1959,7 +1959,7 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "89177b9a4616745c",
+            "shape": "131f3075b78ec517",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
@@ -1997,9 +1997,9 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "89177b9a4616745c",
+            "shape": "131f3075b78ec517",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
-            "token": "9"
+            "token": "1"
         },
         "WorldScheduleSection.ManifestSchemaId": {
             "open": [

@@ -296,13 +296,9 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// </remarks>
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
-    // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 9 carries the recorded authority, its typed rebuild origins and its document paths, each starting seat's
-    // full identity projection, the companion tapes of a set, each departure and its rollback where the authority
-    // decided it, settlements by target authority, every arrival a commit decided with its outcome and each traveler as
-    // its identity projection alone, federated input, and the seat identity a fork switches to. Refuse earlier tapes at
-    // intake instead of reporting their old shape as a simulation divergence.
-    private const uint ShapeToken = 9u;
+    // A name, never a counter: this build writes and reads exactly one tape contract, which the shape fingerprint
+    // FormatShapes carries identifies. Earlier tapes are refused at intake instead of reported as a simulation divergence.
+    private const uint ShapeToken = 1u;
     // A shape fingerprint is sixteen hex digits (FormatShapes); the bound leaves room for none else.
     private const int MaxFingerprintChars = 32;
 
@@ -1064,9 +1060,9 @@ public sealed partial class WorldReplaySnapshot {
             maximum: WorldBodiesLimits.CapacityCeiling
         );
         var outcome = new WorldArrivalOutcome(
+            Adopted: adopted,
             Generations: generations,
-            RolledBack: rolledBack,
-            Adopted: adopted
+            RolledBack: rolledBack
         );
         var refused = new WorldReplayEntry.Arrival(
             Encoded: encoded,

@@ -28,7 +28,7 @@ public readonly record struct WorldAuthorityJournalEntry(ulong Tick, ulong Engin
 public static class WorldAuthorityStoreWireCodec {
     // "PJNL" — Puck Journal.
     private const uint JournalMagic = 0x4C4E4A50U;
-    private const ushort JournalVersion = 3;
+    private const ushort JournalVersion = 1;
     private const int MaxEntryBytes = ((8 * 1024) * 1024);
 
     /// <summary>Encodes one journal page's whole entry sequence.</summary>
