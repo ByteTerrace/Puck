@@ -22,7 +22,7 @@ count); it reads the island's.
 | `dive` | `dive.world.json` | The pool: a medium lattice, a diver kit, fish, a depth row |
 | `kart` | `kart.puck` | A track on a curve, a kart kit, gates, a lap counter |
 | `jump` | `jump.world.json` | A platform course rising from the shard steps, a vaulter kit, a trophy |
-| `arena` | `arena.world.json` | The hp/targeting/attack and elemental suites in a walled yard |
+| `arena` | `arena.puck` | The hp/targeting/attack and elemental suites in a walled yard |
 | `studio` | `studio.world.json` | A flat stage for character work, look cycling, a mirror wall, a gate that opens once awakened |
 
 The island places the courts on its crown: `dive` north at (0, 0, -46), `kart` east at (48, 0, 0), `jump`

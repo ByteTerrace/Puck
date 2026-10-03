@@ -30,7 +30,7 @@ journal, and deliberately outside the `gatesDrive` check, which is what lets a
 `valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
 palettes bind to text cells, and a state write re-resolves every bound value
 (re-running the look resolve when `lookAssignment` is touched), this is how a
-rule restyles a body — the arena module's (`modules/arena.world.json`) `look-*` rules drive one
+rule restyles a body — the arena module's (`modules/arena.puck`) `look-*` rules drive one
 `lookOf.<body>` cell per body. A text row also takes a `fromState` copy from
 another text cell. Two indirections make "the body my `target` cell names"
 addressable: a key spelled `$cell:<row>:<key>` resolves to that cell's integer
@@ -273,7 +273,7 @@ rule (including the one being fired) still names it — retire the referencing
 rule first, in an earlier mutation of the same or a prior tick, then remove the
 placement. Sense a PERMANENT placement (boot-declared, never removed) rather
 than a token placement a rule itself spawns/removes, for exactly this reason.
-The arena module (`src/Puck.World/Assets/worlds/modules/arena.world.json`) is the worked example: two
+The arena module (`src/Puck.World/Assets/worlds/modules/arena.puck`) is the worked example: two
 boot-declared region placements (`firePit`/`icePool`), `Region` interactions
 that schedule a burn/freeze deadline, and `Level` rules that act while `$tick`
 has not yet reached it.
