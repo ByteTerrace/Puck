@@ -40,8 +40,7 @@ stale and is corrected in the same change.
   preserve any existing dirty work and clear it before the fast-forward.
 - For a code pass, restore and build that worktree first so `obj/` and `bin/`
   exist. The Codex sandbox has no network: fetch corpora and packages before
-  the run, and have the brief tell the pass to build with `--no-restore`, since
-  a restore inside the sandbox fails. A documentation-only pass needs no build unless XML comments change.
+  the run. A documentation-only pass needs no build unless XML comments change.
 - Launch a Codex pass as the companion's `task --write`. The subcommand takes
   `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file` and `--background`.
   Set `--cwd` to the review worktree and use the model and effort the lead
