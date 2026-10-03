@@ -24,6 +24,7 @@ internal static class BaselinesCommand {
             CheckedFiles: null,
             CommittedDirectory: "tests/Puck.World.Browser.Tests/Fixtures/browser-parity",
             Description: "The browser determinism canary's native state hashes, which the wasm harness also reads.",
+            Inputs: ["src/Puck.World/Assets/worlds/standard.world.json", "src/Puck.World/Assets/worlds/quality.puck", "src/Puck.World/Assets/worlds/games/tictactoe.puck"],
             Name: "browser-parity",
             Project: "Puck.World.Browser.Tests",
             RunArguments: ["-class", "Puck.World.Browser.Tests.BrowserParityRecordingTests"],
@@ -33,6 +34,7 @@ internal static class BaselinesCommand {
             CheckedFiles: null,
             CommittedDirectory: "tests/Puck.State.Rebuild.Corpus",
             Description: "The author-expression corpus inventory, inventory.md.",
+            Inputs: ["src/Puck.World/Assets/**/*.puck", "worlds/**/*.puck", "src/Puck.World.Transpiler/Samples/**/*.puck"],
             Name: "corpus-inventory",
             Project: "Puck.State.Rebuild.Corpus",
             RunArguments: ["-class", "Puck.State.Rebuild.Corpus.CorpusInventoryTests"],
@@ -44,6 +46,7 @@ internal static class BaselinesCommand {
             CheckedFiles: ["coverage-manifest.json", "leg-ledger.md"],
             CommittedDirectory: "tests/Puck.Maths.Tests",
             Description: "The Puck.Maths law ledger: coverage manifest, leg ledger, frontier and RESULTS.md.",
+            Inputs: ["VerifiedCode.json"],
             Name: "maths-ledger",
             Project: "Puck.Maths.Tests",
             RunArguments: ["-trait-", "tier=Deep", "-trait-", "tier=Exhaustive"],
@@ -55,6 +58,7 @@ internal static class BaselinesCommand {
             CheckedFiles: null,
             CommittedDirectory: "tests/Puck.World.Tests/ShippedWorldStateBaselines",
             Description: "Each shipped world's canonical state export and tick-cost record after its scripted sequence.",
+            Inputs: ["src/Puck.World/Assets/worlds/**/*.puck", "src/Puck.World/Assets/worlds/**/*.world.json", "worlds/parlor/**/*.puck"],
             Name: "state",
             Project: "Puck.World.Tests",
             RunArguments: ["-class", "Puck.World.Tests.ShippedWorldStateBaselineTests"],
@@ -294,6 +298,7 @@ internal static class BaselinesCommand {
 /// <param name="CheckedFiles">The file names <c>--check</c> compares, or <see langword="null"/> for every record.</param>
 /// <param name="CommittedDirectory">The repository-relative directory holding the committed files.</param>
 /// <param name="Description">The subcommand's help text.</param>
+/// <param name="Inputs">Repository-relative globs for data the owning tests read outside their project's reach.</param>
 /// <param name="Name">The subcommand and the <c>records/&lt;name&gt;</c> directory the tests write.</param>
 /// <param name="Project">The test project, named as its directory under <c>tests</c> and its assembly.</param>
 /// <param name="RunArguments">The xUnit arguments selecting the tests that write the records.</param>
@@ -302,8 +307,12 @@ internal sealed record BaselineArtifact(
     IReadOnlyList<string>? CheckedFiles,
     string CommittedDirectory,
     string Description,
+    IReadOnlyList<string> Inputs,
     string Name,
     string Project,
     IReadOnlyList<string> RunArguments,
     int Runs
-);
+) {
+    /// <summary>The check arguments shared by the affected plan and gate execution.</summary>
+    public string[] CheckArguments() => ["baselines", Name, "--check"];
+}

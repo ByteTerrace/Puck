@@ -462,6 +462,11 @@ internal static class AffectedCommand {
             into.WriteLine(value: "parity");
         }
 
+        foreach (var baseline in plan.Baselines) {
+            into.WriteLine(value: $"baseline {baseline.Name}");
+            into.WriteLine(value: $"puck {string.Join(separator: ' ', value: baseline.CheckArguments())}");
+        }
+
         foreach (var path in plan.Unmapped) {
             into.WriteLine(value: $"unmapped {path}");
         }
@@ -580,8 +585,12 @@ internal static class AffectedCommand {
               dotnet build and puck compile --check commands --run uses, runnable from the repository root;
               it holds no test worlds. Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
 
+              A baseline is chosen when its owning test project is reached or a changed or deleted
+              file matches its declared data inputs. Each baseline line names its artifact and is
+              followed by the exact puck baselines <artifact> --check command the gate runs.
+
               --run runs the suites, the worlds and the catalog check; --run --gpu then runs the chosen
-              canaries and parity, one after the other.
+              canaries and parity, one after the other. Baseline checks run only through puck gate.
 
               Exit codes: 0 planned or every chosen check passed, 1 a chosen check failed, 2 refused.
             """);

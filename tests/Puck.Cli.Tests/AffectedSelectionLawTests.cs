@@ -52,7 +52,7 @@ public sealed class AffectedSelectionLawTests {
                 changed: ["src/World/Door.cs"],
                 coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) }
             ),
-            expected: new AffectedPlan(Canaries: ["doors"], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
+            expected: new AffectedPlan(Baselines: [], Canaries: ["doors"], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
             comparer: new PlanComparer()
         );
     }
@@ -256,6 +256,7 @@ public sealed class AffectedSelectionLawTests {
     private sealed class PlanComparer : IEqualityComparer<AffectedPlan> {
         public bool Equals(AffectedPlan? x, AffectedPlan? y) =>
             ((x is not null) && (y is not null) &&
+            x.Baselines.SequenceEqual(second: y.Baselines) &&
             x.Canaries.SequenceEqual(second: y.Canaries) &&
             (x.Catalog == y.Catalog) &&
             (x.Everything == y.Everything) &&

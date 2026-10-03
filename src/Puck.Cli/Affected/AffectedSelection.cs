@@ -1,3 +1,6 @@
+using Microsoft.Extensions.FileSystemGlobbing;
+using Puck.Cli.Baselines;
+
 namespace Puck.Cli.Affected;
 
 /// <summary>One project as selection sees it: where it lives and what it references.</summary>
@@ -13,6 +16,7 @@ internal sealed record AffectedProject(string Directory, string Name, IReadOnlyL
 /// <param name="RequiresGpu">Whether the canary renders on a GPU, which makes it a reason to run parity.</param>
 internal sealed record AffectedCanary(string Directory, IReadOnlyList<string> Files, string Id, bool RequiresGpu);
 /// <summary>What a change needs run.</summary>
+/// <param name="Baselines">The committed baseline artifacts, in ordinal name order, checked by the gate.</param>
 /// <param name="Canaries">The canary ids, ordinal order.</param>
 /// <param name="Catalog">Whether the shipped world catalog must be checked against a fresh tree compile
 /// (<c>puck compile --tree … --check</c>): a shipped world source, or code whose output the compile writes, changed.</param>
@@ -26,7 +30,7 @@ internal sealed record AffectedCanary(string Directory, IReadOnlyList<string> Fi
 /// recorded names, so no canary could be chosen for them and no recording ever can; ordinal order.</param>
 /// <param name="Worlds">Changed <c>.puck</c> sources that declare <c>test</c> blocks, for <c>puck test</c>; ordinal
 /// order.</param>
-internal sealed record AffectedPlan(IReadOnlyList<string> Canaries, bool Catalog, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted);
+internal sealed record AffectedPlan(IReadOnlyList<BaselineArtifact> Baselines, IReadOnlyList<string> Canaries, bool Catalog, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted);
 /// <summary>
 /// Chooses the suites and canaries a set of changed files needs, and nothing wider. Suites follow the project graph:
 /// a changed project and every project that references it, transitively. Canaries follow what they were recorded
@@ -231,7 +235,16 @@ internal static class AffectedSelection {
             reached = projects.Where(predicate: project => affected.Contains(item: project.Name));
         }
 
+        var reachedProjects = reached.Select(selector: static project => project.Name).ToHashSet(comparer: StringComparer.OrdinalIgnoreCase);
+        var baselines = BaselinesCommand.Artifacts.Where(predicate: artifact => {
+            var inputs = new Matcher(comparisonType: StringComparison.Ordinal);
+
+            inputs.AddIncludePatterns(artifact.Inputs);
+            return (reachedProjects.Contains(item: artifact.Project) || inputs.Match(files: changed).HasMatches);
+        }).OrderBy(keySelector: static artifact => artifact.Name, comparer: StringComparer.Ordinal);
+
         return new AffectedPlan(
+            Baselines: [.. baselines],
             Canaries: [.. selected],
             Catalog: (catalog || everything),
             Everything: everything,

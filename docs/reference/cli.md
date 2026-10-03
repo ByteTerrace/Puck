@@ -745,6 +745,11 @@ base, so passing both is refused.
   no project owns, such as a test data directory under `tests/`, chooses the
   projects whose sources name that directory, spelled by its first two
   segments such as `tests/Puck.World.Verdicts` or `worlds/parlor`.
+- **Baselines** follow the same reached projects: a baseline is chosen when its
+  owning test project is reached, or a changed or deleted path matches the
+  repository-relative data globs declared beside its artifact. The plan lists
+  them in ordinal name order; `puck gate` runs their checks. A docs-only change
+  selects none.
 - **The catalog**: a change to a shipped world under
   `src/Puck.World/Assets/worlds`, a World pipeline source, the compile verb, or
   a project the composer, the SDF baker, the shader packager or the texture
@@ -822,6 +827,10 @@ holds no test worlds. The following two lines are the exact commands `--run`
 uses to build that catalog and check it, in that order. Each runs from the
 repository root; the compile selects the tree's sources itself.
 
+Each `baseline <artifact>` line is followed by its exact
+`puck baselines <artifact> --check` command. The gate owns these checks;
+`affected --run` does not run them a second time.
+
 `--run` builds and runs the chosen suites, then `puck test` on the chosen
 worlds, then the catalog check, and exits 1 when any of them fails. A suite
 prints one verdict line; a failed one follows it with its whole report, each
@@ -862,8 +871,8 @@ against the merge base of `HEAD` and `--merge-base` (default
    A failed build stops the gate before it can use stale binaries.
 2. `copy CLI`: copy the freshly built CLI into the run's own directory.
    Subsequent puck steps use this candidate copy.
-3. `affected`: `puck affected --merge-base <merge base> --run`, adding `--gpu`
-   when selected, for the chosen canaries followed by parity.
+3. `affected`: `puck affected --merge-base <merge base> --run` for the selected
+   suites, worlds and catalog check.
 4. `format`: `puck format --check --file-list <file list>` over changed C# and
    `.puck` sources; skipped when no such source changed.
 5. `lengths`: `puck lengths --check`.
@@ -878,17 +887,23 @@ against the merge base of `HEAD` and `--merge-base` (default
 14. `formats`: `puck formats --check`.
 15. `canary-ceilings`: `puck canary-ceilings --check`.
 16. `derivations`: `puck derivations --check`.
-17. `Puck.World.Tests`: device suite, only with `--gpu`.
-18. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
-19. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
-20. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-21. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.world.json`
+17. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
+18. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
+19. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
+20. `baselines state`: `puck baselines state --check` when reached.
+21. `affected canaries`: `puck canary <canaries>` for the selected canaries, only with `--gpu`.
+22. `parity`: `puck parity` when selected, only with `--gpu`.
+23. `Puck.World.Tests`: device suite, only with `--gpu`.
+24. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+25. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+26. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+27. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.world.json`
     with matching `<name>.ceilings.json`, in ordinal order. Each runs
     `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
     `<name>.script.txt` supplies `--script` when present; otherwise the script
     recorded in the ceilings supplies it, or the verb's default when absent.
-22. `docs citations`: `puck docs citations`, only with `--gpu`.
-23. `affected record`: `puck affected --record`, only with `--gpu --record`
+28. `docs citations`: `puck docs citations`, only with `--gpu`.
+29. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
 
 The device suites use `dotnet test` in Release with the same minimal console
@@ -899,7 +914,14 @@ root command tree: every `--check` command has a step or an explicit reasoned
 exclusion beside the plan. Another law holds this ordered list and help to that
 plan.
 
-Before the solution build, affected run, each device suite, each counters
+Each baseline declares its owning test project and the data globs its tests read
+outside that project's reach. The affected map selects the checks against the
+same merge base as the suites. The gate runs each reached baseline once, after
+the repository checks and before the selected GPU commands. The completeness
+law requires every baseline check to have a baseline step and non-empty inputs.
+
+Before the solution build, affected run, each baseline check, selected canaries
+and parity, each device suite, each counters
 workload, citations and recording, admission uses
 [`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s default
 classification in-process. Capacity with an idle GPU admits immediately.

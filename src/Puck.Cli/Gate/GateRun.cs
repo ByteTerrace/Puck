@@ -56,6 +56,9 @@ internal static class GateRun {
         if (!AffectedCommand.TryReadChanged(changed: out var changed, deleted: out var deleted, error: out var changeError, repositoryRoot: repositoryRoot, since: mergeBase)) {
             return CliExit.Refuse(verb: Verb, what: mergeBase, why: changeError);
         }
+        if (!AffectedCommand.TryPlan(changed: out _, error: out var planError, plan: out var affected, repositoryRoot: repositoryRoot, since: mergeBase)) {
+            return CliExit.Refuse(verb: Verb, what: mergeBase, why: planError);
+        }
         var logPath = Path.Combine(path1: directory, path2: "gate.log");
         var stepsPath = Path.Combine(path1: directory, path2: "gate.steps");
         var shownLog = CliPaths.ToDisplay(fullPath: logPath);
@@ -79,7 +82,7 @@ internal static class GateRun {
 
         Console.Out.WriteLine(value: $"gate: {changed.Count} changed file(s) against {mergeBase[..12]}, the merge base of HEAD and {target}; full output in {shownLog}; steps in {shownSteps}.");
         try {
-            foreach (var step in GatePlan.Expand(repositoryRoot, mergeBase, fileList, (sources.Count > 0), gpu, record)) {
+            foreach (var step in GatePlan.Expand(repositoryRoot, mergeBase, fileList, (sources.Count > 0), gpu, record, affected!)) {
                 if (step.Record && (failed.Count > 0)) {
                     Console.Out.WriteLine(value: $"gate: {step.Name} skipped; qualification failed.");
                     continue;

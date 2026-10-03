@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Puck.Cli.Affected;
+using Puck.Cli.Baselines;
 using Puck.Cli.Gate;
 using Puck.Testing;
 using Xunit;
@@ -44,7 +45,7 @@ public sealed partial class GateRunLawTests {
             return;
         }
         Assert.True(condition: (deviceStart > runner.Events.IndexOf(item: "run affected")));
-        Assert.Contains("--gpu", runner.Steps[0]);
+        Assert.DoesNotContain("--gpu", runner.Steps[0]);
         Assert.Equal(new[] { "Puck.World.Tests", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests" },
             runner.Devices.Select(selector: arguments => Path.GetFileNameWithoutExtension(path: arguments[1])));
         foreach (var arguments in runner.Devices) {
@@ -78,8 +79,9 @@ public sealed partial class GateRunLawTests {
 
         Workload(branches, "a", script: true);
         Workload(branches, "b");
-        var steps = GatePlan.Expand(fileList: "files.json", gpu: true, mergeBase: "HEAD", record: true, repositoryRoot: branches.Checkout.Root, sources: true)
-            .Where(predicate: static step => (step.Kind == GateStepKind.Puck))
+        var affected = new AffectedPlan(Baselines: BaselinesCommand.Artifacts, Canaries: ["example"], Catalog: false, Deleted: [], Everything: true, Parity: true, Suites: [], Unmapped: [], Worlds: []);
+        var steps = GatePlan.Expand(affected: affected, fileList: "files.json", gpu: true, mergeBase: "HEAD", record: true, repositoryRoot: branches.Checkout.Root, sources: true)
+            .Where(predicate: static step => (step.Kind is GateStepKind.Puck or GateStepKind.Baseline or GateStepKind.Canaries or GateStepKind.Parity))
             .ToArray();
 
         Assert.Contains(collection: steps, filter: static step => (step.Arguments[0] == "counters"));
@@ -115,6 +117,8 @@ public sealed partial class GateRunLawTests {
         using var branches = new Branches();
 
         Workload(branches, "a");
+        branches.Checkout.Write(name: "build/trigger.props", text: "<Project />");
+        branches.Checkout.Write(name: "tests/Puck.World.Canaries/example/positive.script.txt", text: "wire.errors\n\n");
         foreach (var step in GatePlan.Steps.Where(predicate: step => ((step.Kind != GateStepKind.CopyCli) && !step.Record))) {
             using var directory = new TemporaryDirectory(prefix: "puck-gate-record-failure-law-");
             var runner = new FakeRunner(build: new GateStepResult(ExitCode: ((step.Kind == GateStepKind.Build) ? 1 : 0), Output: "")) {
@@ -208,6 +212,12 @@ public sealed class GatePlanLawTests {
             Assert.False(condition: string.IsNullOrWhiteSpace(value: reason));
         }
         Assert.All(included, check => Assert.Contains(expected: check, set: checks));
+        foreach (var artifact in BaselinesCommand.Artifacts) {
+            Assert.False(condition: string.IsNullOrWhiteSpace(value: artifact.Project));
+            Assert.NotEmpty(collection: artifact.Inputs);
+            Assert.All(collection: artifact.Inputs, action: static input => Assert.False(condition: string.IsNullOrWhiteSpace(value: input)));
+            Assert.Contains(collection: GatePlan.Steps, filter: step => ((step.Kind == GateStepKind.Baseline) && step.Arguments.SequenceEqual(other: artifact.CheckArguments())));
+        }
     }
     [Fact]
     public void DiscoveryRequiresCeilingsUsesOptionalOrRecordedScriptsAndSortsWorkloads() {

@@ -50,7 +50,8 @@ internal static class GateCommand {
         mergeBaseOption.DefaultValueFactory = static _ => GateRun.DefaultTarget;
         command.Detail(detail: (GatePlan.Detail() + $"""
 
-            The affected step adds --gpu for the chosen canaries, then parity. Counters expands every
+            Baseline steps run only when affected reaches their owning project or declared data inputs.
+            The chosen canaries and parity follow the baseline checks, only with --gpu. Counters expands every
             tests/Puck.Counters/*.world.json with matching ceilings, using its sibling script when
             present or the script recorded in its ceilings. Checks write nothing; --record writes coverage.
             Before each heavy step, admission uses host load's default classification in-process.

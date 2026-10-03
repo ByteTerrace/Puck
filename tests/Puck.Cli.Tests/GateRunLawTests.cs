@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Cli.Affected;
+using Puck.Cli.Baselines;
 using Puck.Cli.Gate;
 using Puck.Testing;
 using Xunit;
@@ -49,7 +50,9 @@ public sealed partial class GateRunLawTests {
             return Path.Combine(path1: directory, path2: "Puck.Cli.dll");
         }
         public GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments) {
-            var name = (((arguments[0] == "docs") || (arguments[0] == "shaders")) ? string.Join(separator: ' ', values: arguments.Take(count: 2)) : arguments[0]);
+            var name = (((arguments[0] == "docs") || (arguments[0] == "shaders") || (arguments[0] == "baselines")) ? string.Join(separator: ' ', values: arguments.Take(count: 2)) : arguments[0]);
+
+            if (arguments[0] == "canary") { name = "affected canaries"; }
 
             if (arguments.Contains(value: "--record")) { name += " record"; }
             if (arguments[0] == "counters") { name += (" " + Path.GetFileName(path: arguments[3])[..^".world.json".Length]); }
@@ -69,6 +72,31 @@ public sealed partial class GateRunLawTests {
         public string Base { get; }
 
         public Branches() {
+            Checkout.Write(name: "build/Architecture.props", text: "<Project />");
+            foreach (var artifact in BaselinesCommand.Artifacts) {
+                Checkout.Write(name: $"tests/{artifact.Project}/{artifact.Project}.csproj", text: "<Project />");
+            }
+            Checkout.Write(name: "tests/Puck.World.Canaries/example/world.json", text: "{}");
+            Checkout.Write(name: "tests/Puck.World.Canaries/example/positive.script.txt", text: "wire.errors\n");
+            Checkout.Write(name: "tests/Puck.World.Canaries/example/discriminating.script.txt", text: "wire.errors\n");
+            Checkout.Write(name: "tests/Puck.World.Canaries/example/canary.json", text: """
+                {
+                  "id": "example", "title": "gate selection", "binding": "gate selection",
+                  "bootShape": "windowed", "requirements": ["gpu"], "timeoutSeconds": 10,
+                  "positive": {
+                    "world": "tests/Puck.World.Canaries/example/world.json", "script": "positive.script.txt",
+                    "commands": [{ "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }],
+                    "expect": [{ "type": "line", "name": "clean", "stream": "stdout", "match": "contains", "text": "clean", "present": true }]
+                  },
+                  "discriminating": {
+                    "world": "tests/Puck.World.Canaries/example/world.json", "script": "discriminating.script.txt",
+                    "commands": [{ "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }],
+                    "expect": [{ "type": "line", "name": "clean", "stream": "stdout", "match": "contains", "text": "clean", "present": true }]
+                  }
+                }
+                """);
+            Assert.True(condition: Puck.Cli.Canary.CanaryManifestLoader.TryLoadAll(repositoryRoot: Checkout.Root, strict: true,
+                manifests: out _, refused: out _, error: out var manifestError), userMessage: manifestError);
             Checkout.Write(name: "src/Shared.cs", text: "shared\n");
             Checkout.Write(name: "docs/guide.md", text: "# Guide\n");
             Base = Checkout.Commit(message: "a");
@@ -184,14 +212,17 @@ public sealed partial class GateRunLawTests {
     public void GpuWorkRunsOnlyWhenAskedFor() {
         using var branches = new Branches();
 
+        branches.Checkout.Write(name: "tests/Puck.World.Canaries/example/positive.script.txt", text: "wire.errors\n\n");
+
         foreach (var gpu in ((bool[])[false, true])) {
             using var directory = new TemporaryDirectory(prefix: "puck-gate-law-");
             var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: string.Empty));
 
             _ = Gate(branches: branches, directory: directory, gpu: gpu, runner: runner);
 
-            Assert.Equal(actual: runner.Steps[0].Contains(value: "--gpu"), expected: gpu);
-            Assert.Equal(actual: runner.Steps.Count(predicate: static step => step.Contains(value: "--gpu")), expected: (gpu ? 1 : 0));
+            Assert.DoesNotContain(collection: runner.Steps[0], expected: "--gpu");
+            Assert.Equal(actual: runner.Steps.Count(predicate: static step => (step[0] == "canary")), expected: (gpu ? 1 : 0));
+            Assert.Equal(actual: runner.Steps.Count(predicate: static step => (step[0] == "parity")), expected: (gpu ? 1 : 0));
         }
 
         Assert.Equal(actual: ConsoleCapture.RunSplit(run: static () => PuckRootCommand.Invoke(args: ["affected", "--gpu"])).ExitCode, expected: CliExit.Refused);
