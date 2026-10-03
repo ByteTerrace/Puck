@@ -1,41 +1,40 @@
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Puck.Cli.Format;
-using Puck.Cli.Format.Rewriters;
 
 namespace Puck.Cli.Formats;
 
 /// <summary>One strictly versioned format in <c>FormatVersions.json</c>.</summary>
 /// <param name="Id">The format's name: its declaring type and member, such as <c>WorldFederationCodec.WireKey</c>.</param>
 /// <param name="Source">The repository-relative path of the file that declares the token.</param>
-/// <param name="Shape">A digest of the format's canonical source (<see cref="FormatVersionsLedger.ShapeOf"/>).</param>
+/// <param name="Shape">A digest of the format's canonical source (<see cref="FormatShapeClosure"/>).</param>
 /// <param name="Token">The format's current token.</param>
-internal sealed record FormatEntry(string Id, string Source, string Shape, string Token);
+/// <param name="Open">The repository members the format's closure calls that are neither covered by the shape nor marked
+/// (<see cref="FormatShapeClosure"/>), by documentation-comment id in ordinal order. A recorded call can leave and never
+/// join.</param>
+internal sealed record FormatEntry(string Id, string Source, string Shape, string Token, IReadOnlyList<string> Open);
 /// <summary>
 /// <c>FormatVersions.json</c>: every strictly versioned wire, persisted, or cache format the source declares, its current
 /// token, and the file that declares it. The ledger is generated from the source: <see cref="Discover"/> reads every
 /// declaration of a recognized shape and <c>puck formats</c> writes the result, so the constants stay the one source
 /// of truth and the ledger is their checked-in mirror.
 /// <para>
-/// A format bumped on two branches collides in the ledger's lines, not in the code: each entry spells its token on
-/// its own line, and every format carries a digest of its canonical source on a line of its own. Two
-/// branches that bump to the same new token merge their token lines cleanly, but they changed the codec differently,
-/// so their digest lines differ and conflict. A branch that changes the codec without a bump moves the digest and
-/// fails <c>puck formats --check</c> until the author re-records it, which is the moment to ask whether the encoding
-/// changed and the token should too.
+/// The ledger records each format's shape: a digest of its canonical source on a line of its own. The shape, not the
+/// token, is what tells two layouts apart, so each codec writes it (through the generated <c>FormatShapes.g.cs</c>,
+/// <see cref="FormatShapesFiles"/>) and refuses any other, and a token is never demanded to move. A branch that edits a
+/// codec moves its digest and fails <c>puck formats --check</c> until the author re-records it. Two branches that edit one
+/// codec differently write different digest lines, which conflict, even when their token lines would merge cleanly.
 /// </para>
 /// </summary>
 internal static partial class FormatVersionsLedger {
     /// <summary>The ledger's file name at the repository root.</summary>
     public const string FileName = "FormatVersions.json";
     /// <summary>The ledger's own shape version.</summary>
-    public const int Format = 2;
+    public const int Format = 3;
 
     // Members that carry a binary format's token when their initializer holds exactly one literal. A document
     // schema is recognised by its value instead (SchemaToken), whatever the member is called.
@@ -153,240 +152,22 @@ internal static partial class FormatVersionsLedger {
 
         return true;
     }
-    private static string StemOf(string path) {
-        var name = path[(path.LastIndexOf(value: '/') + 1)..];
-        var dot = name.IndexOf(value: '.');
-
-        return name[..dot];
-    }
-    private static string DirectoryOf(string path) => path[..(path.LastIndexOf(value: '/') + 1)];
-
-    /// <summary>Digests canonical syntax of the declaring file, partial siblings, data types and shared codec
-    /// dependencies. Formatting, trivia and local renames do not move it; operator grouping, argument binding,
-    /// evaluation order and serialized member names remain significant.</summary>
-    /// <param name="files">Every source file's text, by repository-relative path.</param>
-    /// <param name="source">The declaring file.</param>
-    /// <returns>Sixteen lowercase hexadecimal digits of a SHA-256.</returns>
-    public static string ShapeOf(IReadOnlyDictionary<string, string> files, string source) => new Shapes(files: files).Of(source: source);
-
-    private sealed class Shapes {
-        private readonly IReadOnlyDictionary<string, string> m_files;
-        private readonly Dictionary<string, SyntaxTree> m_trees;
-
-        private readonly Dictionary<string, string> m_hashes = new(comparer: StringComparer.Ordinal);
-        private readonly Dictionary<string, string> m_fragments = new(comparer: StringComparer.Ordinal);
-
-        private CSharpCompilation? m_compilation;
-
-        public Shapes(IReadOnlyDictionary<string, string> files) {
-            m_files = files;
-            m_trees = files.ToDictionary(pair => pair.Key, pair => ((SyntaxTree)CSharpSyntaxTree.ParseText(
-                text: pair.Value, path: pair.Key, options: CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview))), StringComparer.Ordinal);
-        }
-
-        private SemanticModel Model(SyntaxTree tree) {
-            m_compilation ??= CSharpCompilation.Create(
-                assemblyName: "FormatShapes",
-                syntaxTrees: m_trees.Values.Append(element: CSharpSyntaxTree.ParseText("global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; global using System.Threading; global using System.Threading.Tasks;", CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview))),
-                references: ((string)AppContext.GetData(name: "TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
-                    .Select(selector: path => MetadataReference.CreateFromFile(path)),
-                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true));
-            return m_compilation.GetSemanticModel(tree);
-        }
-
-        public string Of(string source) {
-            if (m_hashes.TryGetValue(key: source, value: out var hash)) { return hash; }
-            var builder = new StringBuilder();
-
-            foreach (var path in Sources(source: source)) {
-                builder.Append(value: Fragment(path: path)).Append(value: '\u0001');
-            }
-            hash = Convert.ToHexString(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: builder.ToString())))[..16].ToLowerInvariant();
-            m_hashes[source] = hash;
-            return hash;
-        }
-
-        private IEnumerable<string> Sources(string source) {
-            var sources = ShapeSources(files: m_files, source: source).ToHashSet(comparer: StringComparer.Ordinal);
-            var pending = new Queue<string>(collection: sources);
-
-            while (pending.TryDequeue(result: out var path)) {
-                var tree = m_trees[path];
-                var model = Model(tree: tree);
-
-                foreach (var node in tree.GetRoot().DescendantNodes()) {
-                    var type = node switch {
-                        PropertyDeclarationSyntax property => property.Type,
-                        FieldDeclarationSyntax field => field.Declaration.Type,
-                        ParameterSyntax parameter when (parameter.Parent?.Parent is TypeDeclarationSyntax) => parameter.Type,
-                        BaseTypeSyntax basis => basis.Type,
-                        _ => null,
-                    };
-
-                    if (type is not null) { AddType(type: model.GetTypeInfo(type).Type); }
-                }
-            }
-            return sources.Order(comparer: StringComparer.Ordinal);
-
-            void AddType(ITypeSymbol? type) {
-                if (type is IArrayTypeSymbol array) { AddType(type: array.ElementType); }
-                if (type is not INamedTypeSymbol named) { return; }
-                foreach (var argument in named.TypeArguments) { AddType(type: argument); }
-                foreach (var declaration in named.OriginalDefinition.DeclaringSyntaxReferences) {
-                    var path = declaration.SyntaxTree.FilePath;
-
-                    if (m_trees.ContainsKey(key: path) && sources.Add(item: path)) { pending.Enqueue(item: path); }
-                }
-            }
-        }
-        private string Fragment(string path) {
-            if (m_fragments.TryGetValue(key: path, value: out var fragment)) { return fragment; }
-            var builder = new StringBuilder();
-            var tree = m_trees[path];
-            var root = new NullPatternRewriter(model: Model(tree: tree)).Visit(node: tree.GetRoot())!;
-            // Run the existing syntactic normalizers on a trivia-free copy. A comment cannot decide whether a
-            // declaration or initializer is sorted in the fingerprint.
-            root = root.ReplaceTokens(root.DescendantTokens(), static (token, _) => token.WithoutTrivia()).NormalizeWhitespace();
-            foreach (var pass in FormatPasses.All.Where(predicate: pass => (pass.Default && pass.Syntactic))) {
-                root = pass.Apply(node: root);
-                root = CSharpSyntaxTree.ParseText(root.ToFullString(), CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview)).GetRoot();
-            }
-            var canonicalTree = CSharpSyntaxTree.ParseText(root.ToFullString(), CSharpParseOptions.Default.WithLanguageVersion(version: LanguageVersion.Preview), path);
-
-            _ = Model(tree: tree);
-            var model = m_compilation!.ReplaceSyntaxTree(newTree: canonicalTree, oldTree: tree).GetSemanticModel(canonicalTree);
-            var names = new Dictionary<ISymbol, string>(comparer: SymbolEqualityComparer.Default);
-
-            foreach (var node in canonicalTree.GetRoot().DescendantNodes()) {
-                if ((node is ParameterSyntax) && (node.Parent?.Parent is RecordDeclarationSyntax)) { continue; }
-                if ((node is ParameterSyntax or VariableDeclaratorSyntax or SingleVariableDesignationSyntax or ForEachStatementSyntax or CatchDeclarationSyntax)
-                    && (model.GetDeclaredSymbol(node) is ILocalSymbol or IParameterSymbol)) {
-                    var symbol = model.GetDeclaredSymbol(node)!;
-
-                    names.TryAdd(key: symbol, value: $"local{names.Count.ToString(provider: CultureInfo.InvariantCulture)}");
-                }
-            }
-            AppendShape(canonicalTree.GetRoot(), builder, model, names);
-            fragment = builder.ToString();
-            m_fragments[path] = fragment;
-            return fragment;
-        }
-    }
-
-    private static void AppendShape(SyntaxNode node, StringBuilder builder, SemanticModel model, IReadOnlyDictionary<ISymbol, string> names) {
-        if ((node is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } })
-            && (model.GetConstantValue(node) is { HasValue: true, Value: string nameOf })) {
-            builder.Append(value: "nameof:").Append(value: nameOf.Length.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ':');
-            AppendText(builder: builder, text: nameOf);
-            return;
-        }
-        if (node is ParenthesizedExpressionSyntax parentheses) {
-            AppendShape(parentheses.Expression, builder, model, names);
-            return;
-        }
-        builder.Append(value: node.RawKind.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '{');
-        if ((node is ArgumentListSyntax list) && (ArgumentBindings(list: list, model: model) is { } bindings)) {
-            var arguments = bindings.AsEnumerable();
-
-            if (!arguments.Any(predicate: binding => ExpressionSafety.HasSideEffect(expression: binding.Argument.Expression, model: model))) {
-                arguments = arguments.OrderBy(keySelector: binding => binding.Ordinal);
-            }
-            foreach (var (argument, ordinal) in arguments) {
-                builder.Append(value: ordinal.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ':');
-                builder.Append(value: argument.RefKindKeyword.ValueText).Append(value: ':');
-                AppendShape(argument.Expression, builder, model, names);
-            }
-        } else {
-            foreach (var child in node.ChildNodesAndTokens()) {
-                if (child.IsNode) {
-                    AppendShape(child.AsNode()!, builder, model, names);
-                } else {
-                    var token = child.AsToken();
-
-                    if (token.IsKind(kind: SyntaxKind.CommaToken)) { continue; }
-                    var text = token.ValueText;
-
-                    if (token.IsKind(kind: SyntaxKind.IdentifierToken)) {
-                        var symbol = (model.GetDeclaredSymbol(node) ?? model.GetSymbolInfo(node).Symbol);
-
-                        if ((symbol is not null) && names.TryGetValue(key: symbol, value: out var name)) { text = name; }
-                    }
-                    builder.Append(value: token.RawKind.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ':')
-                        .Append(value: text.Length.ToString(provider: CultureInfo.InvariantCulture)).Append(value: ':');
-                    AppendText(builder: builder, text: text);
-                    builder.Append(value: ';');
-                }
-            }
-        }
-        builder.Append(value: '}');
-    }
-    private static void AppendText(string text, StringBuilder builder) {
-        foreach (var character in text) { builder.Append(value: ((int)character).ToString(format: "x4", provider: CultureInfo.InvariantCulture)); }
-    }
-    private static IReadOnlyList<(ArgumentSyntax Argument, int Ordinal)>? ArgumentBindings(ArgumentListSyntax list, SemanticModel model) {
-        if (model.GetSymbolInfo(list.Parent!).Symbol is not IMethodSymbol method) { return null; }
-        var bindings = new List<(ArgumentSyntax, int)>();
-
-        for (var index = 0; (index < list.Arguments.Count); index++) {
-            var argument = list.Arguments[index];
-            var parameter = ((argument.NameColon is { } name)
-                ? method.Parameters.FirstOrDefault(predicate: parameter => (parameter.Name == name.Name.Identifier.ValueText))
-                : method.Parameters.ElementAtOrDefault(index: index));
-
-            if ((parameter is null) || parameter.IsParams) { return null; }
-            bindings.Add(item: (argument, parameter.Ordinal));
-        }
-        return bindings;
-    }
-    private static IEnumerable<string> ShapeSources(IReadOnlyDictionary<string, string> files, string source) {
-        var directory = DirectoryOf(path: source);
-        var stem = StemOf(path: source);
-
-        return files.Keys.Where(predicate: path => ((
-            path.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: directory
-            ) &&
-            (path.IndexOf(
-                startIndex: directory.Length,
-                value: '/'
-            ) < 0) &&
-            (path[directory.Length..].Equals(
-                comparisonType: StringComparison.Ordinal,
-                value: $"{stem}.cs"
-            ) || path[directory.Length..].StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: $"{stem}."
-            ))
-        ) || IsShapeDependency(path: path, source: source))).Order(comparer: StringComparer.Ordinal);
-    }
-    private static bool IsShapeDependency(string source, string path) {
-        var sharedWorldLeaves = (path is "src/Puck.World.Protocol/Protocol/WorldWireCodec.cs" or "src/Puck.World.Protocol/Protocol/WorldWireTags.cs" or "src/Puck.Networking/WireCodec.cs");
-
-        if (source is "src/Puck.World.Protocol/Protocol/WorldProtocol.cs") {
-            return (sharedWorldLeaves || path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World.Protocol/Protocol/WorldSubmissionCodec")
-                || (path is "src/Puck.World.Protocol/Protocol/WorldFrameCodec.cs" or "src/Puck.World.Protocol/Codecs/WorldPeerWireFormat.cs"));
-        }
-        if (source is "src/Puck.World.Server/WorldReplaySnapshot.cs" or "src/Puck.World.Server/WorldFederationCodec.cs"
-            or "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs" or "src/Puck.World.Protocol/Codecs/WorldAuthorityStoreWireCodec.cs") {
-            return (sharedWorldLeaves || path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World.Protocol/Protocol/WorldSubmissionCodec"));
-        }
-        if (source is "src/Puck.HumbleGamingBrick/MachineSnapshot.cs" or "src/Puck.AdvancedGamingBrick/AgbMachineSnapshot.cs"
-            or "src/Puck.HumbleGamingDeck/HgdMachineSnapshot.cs") {
-            return (path.StartsWith(DirectoryOf(path: source), StringComparison.Ordinal)
-                || (path is "src/Puck.Machines/StateWriter.cs" or "src/Puck.Machines/StateReader.cs" or "src/Puck.Machines/SnapshotImage.cs"
-                    or "src/Puck.Machines/SnapshotSection.cs"));
-        }
-        return false;
-    }
 
     /// <summary>Finds every strict format the source declares.</summary>
     /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
     /// <returns>The formats in ordinal id order. A declaring type and member that two files share are told apart by
     /// appending <c>@</c> and the path to both ids.</returns>
-    public static IReadOnlyList<FormatEntry> Discover(IReadOnlyDictionary<string, string> files) {
-        var found = new List<(string Id, string Source, string Token)>();
-        var shapes = new Shapes(files: files);
+    public static IReadOnlyList<FormatEntry> Discover(IReadOnlyDictionary<string, string> files) => Close(files: files, only: null).Select(selector: static pair => pair.Entry).ToArray();
+
+    /// <summary>Closes one format over its boundary, to show what its shape covers and what it leaves open.</summary>
+    /// <param name="files">Every source file's text, by repository-relative path with forward slashes.</param>
+    /// <param name="id">The format's ledger id.</param>
+    /// <returns>The entry and its closure, or <see langword="null"/> when no format has that id.</returns>
+    /// <exception cref="FormatBoundaryException">A seam gives no reason.</exception>
+    internal static (FormatEntry Entry, FormatClosure Closure)? Explain(IReadOnlyDictionary<string, string> files, string id) => Close(files: files, only: id).Select(selector: static pair => (((FormatEntry, FormatClosure)?)pair)).FirstOrDefault();
+
+    private static IReadOnlyList<(FormatEntry Entry, FormatClosure Closure)> Close(IReadOnlyDictionary<string, string> files, string? only) {
+        var found = new List<(string Id, string Source, string Token, string Owner, string Member)>();
 
         foreach (var (path, text) in files.OrderBy(keySelector: static pair => pair.Key, comparer: StringComparer.Ordinal)) {
             // A Post stage's magic numbers frame its test ROMs and probes, not a format the engine reads back.
@@ -413,7 +194,7 @@ internal static partial class FormatVersionsLedger {
                         token: out var token,
                         value: value
                     )) {
-                        found.Add(item: ($"{owner.Identifier.Text}.{name}", path, token));
+                        found.Add(item: ($"{owner.Identifier.Text}.{name}", path, token, owner.Identifier.Text, name));
                     }
                 }
             }
@@ -424,18 +205,23 @@ internal static partial class FormatVersionsLedger {
             comparer: StringComparer.Ordinal
         ).Where(predicate: static group => (group.Count() > 1)).Select(selector: static group => group.Key).ToHashSet(comparer: StringComparer.Ordinal);
 
-        return [.. found.Select(selector: item => new FormatEntry(
-            Id: (shared.Contains(item: item.Id)
-                ? $"{item.Id}@{item.Source}"
-                : item.Id),
-            Shape: shapes.Of(source: item.Source),
-            Source: item.Source,
-            Token: item.Token
-        )).OrderBy(
+        var named = found.Select(selector: item => (Item: item, Id: (shared.Contains(item: item.Id)
+            ? $"{item.Id}@{item.Source}"
+            : item.Id))).Where(predicate: pair => ((only is null) || (pair.Id == only))).OrderBy(
             comparer: StringComparer.Ordinal,
-            keySelector: static entry => entry.Id
-        )];
+            keySelector: static pair => pair.Id
+        ).ToArray();
+        var closures = new FormatShapeClosure(files: files).Of(formats: [.. named.Select(selector: static pair => new FormatRef(Id: pair.Id, Member: pair.Item.Member, Owner: pair.Item.Owner, Source: pair.Item.Source))], allIds: [.. found.Select(selector: item => (shared.Contains(item: item.Id) ? $"{item.Id}@{item.Source}" : item.Id))]);
+
+        return [.. named.Select(selector: (pair, index) => (new FormatEntry(
+            Id: pair.Id,
+            Open: closures[index].Open,
+            Shape: closures[index].Shape,
+            Source: pair.Item.Source,
+            Token: pair.Item.Token
+        ), closures[index]))];
     }
+
     /// <summary>Renders the ledger in its one spelling: entries in ordinal id order, members in ordinal order, four-space
     /// indentation, one value per line, one final line feed.</summary>
     /// <param name="entries">The formats.</param>
@@ -449,6 +235,16 @@ internal static partial class FormatVersionsLedger {
             var entry = entries[index];
 
             builder.Append(value: $"        {Quote(text: entry.Id)}: {{\n");
+
+            if (entry.Open.Count != 0) {
+                builder.Append(value: "            \"open\": [\n");
+
+                for (var call = 0; (call < entry.Open.Count); call++) {
+                    builder.Append(value: $"                {Quote(text: entry.Open[call])}{((call == (entry.Open.Count - 1)) ? string.Empty : ",")}\n");
+                }
+
+                builder.Append(value: "            ],\n");
+            }
 
             builder.Append(value: $"            \"shape\": {Quote(text: entry.Shape)},\n");
 
@@ -480,7 +276,7 @@ internal static partial class FormatVersionsLedger {
         entries = parsed;
 
         try {
-            using var document = JsonDocument.Parse(json: json);
+            using var document = JsonDocument.Parse(json: json, options: new JsonDocumentOptions { AllowDuplicateProperties = false });
             var root = document.RootElement;
 
             if (
@@ -498,16 +294,20 @@ internal static partial class FormatVersionsLedger {
             foreach (var member in root.GetProperty(propertyName: "formats").EnumerateObject()) {
                 if (
                     (member.Value.ValueKind != JsonValueKind.Object) ||
-                    !member.Value.EnumerateObject().Select(selector: item => item.Name).Order(comparer: StringComparer.Ordinal).SequenceEqual(second: ["shape", "source", "token"]) ||
-                    member.Value.EnumerateObject().Any(predicate: static item => (item.Value.ValueKind != JsonValueKind.String))
+                    !member.Value.EnumerateObject().Select(selector: item => item.Name).Where(predicate: static name => (name != "open")).Order(comparer: StringComparer.Ordinal).SequenceEqual(second: ["shape", "source", "token"]) ||
+                    member.Value.EnumerateObject().Any(predicate: static item => ((item.Name != "open") && (item.Value.ValueKind != JsonValueKind.String))) ||
+                    (member.Value.TryGetProperty(propertyName: "open", value: out var open) && ((open.ValueKind != JsonValueKind.Array) || open.EnumerateArray().Any(predicate: static call => (call.ValueKind != JsonValueKind.String))))
                 ) {
-                    error = $"'{member.Name}' must be an object of exactly the string members shape, source and token";
+                    error = $"'{member.Name}' must be an object of exactly the string members shape, source and token, and optionally open, an array of strings";
 
                     return false;
                 }
 
                 parsed.Add(item: new FormatEntry(
                     Id: member.Name,
+                    Open: (member.Value.TryGetProperty(propertyName: "open", value: out var calls)
+                        ? [.. calls.EnumerateArray().Select(selector: static call => call.GetString()!)]
+                        : []),
                     Shape: member.Value.GetProperty(propertyName: "shape").GetString()!,
                     Source: member.Value.GetProperty(propertyName: "source").GetString()!,
                     Token: member.Value.GetProperty(propertyName: "token").GetString()!
@@ -523,6 +323,11 @@ internal static partial class FormatVersionsLedger {
             return false;
         }
     }
+
+    private static string Named(IReadOnlyList<string> calls) => ((calls.Count == 0)
+        ? string.Empty
+        : $" ({string.Join(separator: ", ", values: calls.Take(count: 3))}{((calls.Count > 3) ? ", …" : string.Empty)})");
+
     /// <summary>The <c>--check</c> verdict on a recorded ledger against what the source declares now.</summary>
     /// <param name="recorded">The recorded formats.</param>
     /// <param name="recordedText">The ledger file's text.</param>
@@ -550,13 +355,13 @@ internal static partial class FormatVersionsLedger {
                 b: entry.Token,
                 comparisonType: StringComparison.Ordinal
             )) {
-                problems.Add(item: $"bumped: '{entry.Id}' ({entry.Source}) declares {entry.Token} but the ledger records {was.Token}");
+                problems.Add(item: $"retokened: '{entry.Id}' ({entry.Source}) declares {entry.Token} but the ledger records {was.Token}; run 'puck formats' to record it");
             } else if (!string.Equals(
                 a: was.Shape,
                 b: entry.Shape,
                 comparisonType: StringComparison.Ordinal
             )) {
-                problems.Add(item: $"reshaped: the source of '{entry.Id}' ({entry.Source}) changed while its token stayed {entry.Token}; if the encoding changed, bump the token, then record the new digest");
+                problems.Add(item: $"reshaped: the shape of '{entry.Id}' ({entry.Source}) is now {entry.Shape} and the ledger records {was.Shape}; run 'puck formats' to record it (its codec refuses any other shape by this fingerprint, so no token bump is owed)");
             } else if (!string.Equals(
                 a: was.Source,
                 b: entry.Source,
@@ -567,6 +372,17 @@ internal static partial class FormatVersionsLedger {
         }
         foreach (var entry in recorded.Where(predicate: entry => !currentById.ContainsKey(key: entry.Id))) {
             problems.Add(item: $"stale: '{entry.Id}' ({entry.Source}) is recorded but no longer declared");
+        }
+
+        foreach (var entry in current) {
+            if (recordedById.TryGetValue(key: entry.Id, value: out var was)) {
+                var added = entry.Open.Except(second: was.Open, comparer: StringComparer.Ordinal).ToArray();
+                var removed = was.Open.Except(second: entry.Open, comparer: StringComparer.Ordinal).ToArray();
+
+                if ((added.Length != 0) || (removed.Length != 0)) {
+                    problems.Add(item: $"open: '{entry.Id}' ({entry.Source}) now reaches {added.Length} repository call(s) its shape does not cover that the ledger does not record{Named(calls: added)} and no longer reaches {removed.Length} it records{Named(calls: removed)}; run 'puck formats' to record the new boundary, or mark a call [FormatLeaf] if its behaviour decides a byte of the format, or [FormatSeam(\"its behaviour sets no byte because …\")] if it does not");
+                }
+            }
         }
 
         if (

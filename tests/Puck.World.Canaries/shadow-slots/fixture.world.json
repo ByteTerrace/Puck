@@ -1,0 +1,104 @@
+{
+  "documentId": "shadow-slots",
+  "schema": "puck.world.definition.v1",
+  "host": {
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "height": 128,
+    "width": 128,
+    "presentMode": "Immediate",
+    "presentation": "offscreen",
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0
+  },
+  "render": {
+    "shadows": "High",
+    "shadowLights": 2,
+    "shadowFadeSlots": 0,
+    "shadowFadeTicks": 0,
+    "shadowOverflow": "instant",
+    "ambientOcclusion": false,
+    "temporal": false,
+    "renderScale": 1,
+    "medium": {
+      "shadows": "High",
+      "shadowLights": 1,
+      "shadowFadeSlots": 0,
+      "shadowFadeTicks": 0,
+      "shadowOverflow": "instant",
+      "ambientOcclusion": false,
+      "temporal": false,
+      "dynamicResolution": false,
+      "renderScale": 1
+    },
+    "high": {
+      "shadows": "High",
+      "shadowLights": 2,
+      "shadowFadeSlots": 0,
+      "shadowFadeTicks": 0,
+      "shadowOverflow": "instant",
+      "ambientOcclusion": false,
+      "temporal": false,
+      "dynamicResolution": false,
+      "renderScale": 1
+    },
+    "lighting": {
+      "lights": [
+        {
+          "$type": "directional",
+          "name": "east-sun",
+          "shadow": "auto",
+          "direction": [0.6, 0.8, 0],
+          "color": "#FFE4BB",
+          "weight": 1
+        },
+        {
+          "$type": "directional",
+          "name": "west-sun",
+          "shadow": "auto",
+          "direction": [-0.6, 0.8, 0],
+          "color": "#BBDDFF",
+          "weight": 0.7
+        }
+      ]
+    }
+  },
+  "prototypes": [
+    {
+      "id": "shadow-court",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "shadow-court",
+        "palette": [{ "color": "#CCCCCC", "roughness": 1, "specular": 0 }],
+        "shapes": [
+          { "id": 0, "name": "floor", "type": "Box", "material": 0, "position": [0, -0.25, 0], "scale": [5, 0.25, 5], "rotation": [0, 0, 0, 1] },
+          { "id": 1, "name": "tall-pillar", "type": "Box", "material": 0, "position": [-1.2, 1, 0], "scale": [0.35, 1, 0.35], "rotation": [0, 0, 0, 1] },
+          { "id": 2, "name": "short-pillar", "type": "Box", "material": 0, "position": [1.2, 0.65, 0.8], "scale": [0.35, 0.65, 0.35], "rotation": [0, 0, 0, 1] }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "rows": [{ "id": "court", "prototypeId": "shadow-court", "position": [0, 0, 0], "scale": 1, "yawDegrees": 0 }]
+  },
+  "cameras": [
+    {
+      "name": "court-camera",
+      "renderWidth": 128,
+      "renderHeight": 128,
+      "rig": {
+        "name": "court-camera",
+        "version": "puck.camera.program.v1",
+        "operations": [
+          { "$type": "anchor", "subject": { "$type": "worldPoint", "point": [0, 5, 8] } },
+          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [0, 0.5, 0] } },
+          { "$type": "fieldOfView", "fieldOfViewRadians": 0.9 }
+        ]
+      }
+    }
+  ],
+  "views": {
+    "layouts": [{ "name": "world", "seatCount": 0, "slots": [{ "camera": "court-camera", "x": 0, "y": 0, "width": 1, "height": 1 }], "transitionRenderScale": 1, "transitionSeconds": 0.25 }]
+  }
+}

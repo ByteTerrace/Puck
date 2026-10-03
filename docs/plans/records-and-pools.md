@@ -104,10 +104,18 @@ resolved body while effects address the logical instance through their lexical
 left/right bindings. Release removes the old lifetime; reclaim reads the new
 lifetime's current enum value. There is no second carrier mode.
 
-Identity-owned records belong to the owned identity document and travel through
-its existing persistence and transfer path. Their typed fields must not be squeezed
-into the integer-only identity fact lane (`WorldIdentityFactLane`). Receivers validate record shapes and values;
-they never silently discard fields that cannot be represented.
+Identity-owned records are the capacity-one pools that `identity.records` selects.
+They cross a seam as part of the identity projection (`WorldIdentityProjection`,
+written by `WorldIdentityProjectionWire`), alongside the identity's facts row;
+the owned document never travels. Their typed fields are not squeezed into the
+integer-only identity fact lane (`WorldIdentityFactLane`). Receivers validate
+record shapes and values (`WorldIdentityRecords.Validate`) and refuse a payload
+that cannot be represented rather than discarding fields. A colocated local seat
+coming home adopts the carried records into its owned identity
+(`WorldIdentity.TryAdopt`); a remote round trip does not, which
+[the remote home adoption step](#remote-home-adoption) closes.
+[Worlds and federation](../architecture/worlds.md#joining-authority-and-admission)
+owns the crossing rules.
 
 ## Implementation order and evidence
 
@@ -122,6 +130,7 @@ they never silently discard fields that cannot be represented.
 5. Run affected Release suites, architecture/vocabulary/schema checks, authored
    scenarios and real-World verification. Re-record changed baselines only after
    independent behavior and deterministic replay checks pass.
+6. Close [remote home adoption](#remote-home-adoption).
 
 Regression cases include middle-slot release/reclaim, stale handles, dead-slot
 generations, generation exhaustion, nested claim rollback, release/reclaim during
@@ -151,7 +160,13 @@ fields, and advancing numeric fields with persisted clocks. Logical enum carrier
 cover reclaimed generations and pair-pool carriers. Both Arena and Paddleball use this
 path; Arena keeps fighter health, respawn continuation, pickup state, and carrier
 roles in its records, and Paddleball keeps its ball and paddle roles and state there.
-Identity-owned record transfer and pair interactions have World integration laws.
+Identity-owned record transfer and pair interactions have World integration laws
+(`WorldIdentityRecordLawTests` and `CrossingIdentityPrivacyLawTests` for transfer,
+adoption, rollback and replay; `WorldPoolCarrierLawTests` for carriers and pair
+pools through the host evaluator). Record fields carry bounds, defaults, enums,
+vector spaces and advancing numeric fields; the other row traits (`dynamics`,
+`cycle`, `phase`, `visibility` and `knowledge`) stay row-only, and a world that
+needs one keeps a row.
 
 Retained turns use a load-time row closure and bounded depth. Claim/release rows
 (domain, generation, and fields, including real advancing-field clocks) share the
@@ -169,3 +184,28 @@ scenario is met by the [rulepush package](../../worlds/rulepush/README.md). Its 
 cover selective push, blocking, overlap, noun rewrite and undo. Its canaries
 check deterministic replay and an eight-turn undo whose state hash matches the
 earlier turn.
+
+## Remote home adoption
+
+**Owns:** the federation reservation leaf and its decode in
+`Puck.World.Server`, the identity projection's provenance, and
+`WorldIdentity.TryAdopt`'s remote caller.
+
+**Gap:** when a traveller's round trip crosses a real network, the owned identity
+at home adopts none of the facts and records the traveller carried back. A federation reservation has no field that can ask for a
+local seat, so a decoded reservation is always a peer admission, and a remote
+incarnation claim is unauthenticated. The facts and records another world wrote
+onto the traveller are unsigned, and provenance attestation for carried state does
+not exist. Only a colocated local seat coming home adopts what it carried.
+
+**Delivers:** a remote home arrival that proves it is the seat this authority
+minted, by an authenticated incarnation claim the reservation carries, and a
+signed provenance for the facts and records a visited world wrote, so the owned
+identity adopts through `TryAdopt` only what the owner accepts. A remote arrival
+without that proof stays a peer admission and adopts nothing. The tape, the
+crossing log and the checkpoint keep recording the projection the arrival bound.
+
+**Check:** a law over two real authorities that a badge a parlor writes onto a
+visitor's record is on the owned identity after the visitor walks home across a
+federation link, and that a forged claim and an unsigned carried write adopt
+nothing; replay of the arrival reproduces the bound projection.

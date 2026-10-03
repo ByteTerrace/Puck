@@ -15,6 +15,7 @@ namespace Puck.World.Tests;
 /// as <c>VUID-vkEnumeratePhysicalDevices-pPhysicalDeviceCount-parameter</c> and skips, so neither the loader nor the
 /// driver reads the pointer; a device without the layer is never given it.
 /// </summary>
+[Trait("Category", "Gpu")]
 public sealed class HeadlessVulkanDeviceValidationLawTests {
     private const string Violation = "VUID-vkEnumeratePhysicalDevices-pPhysicalDeviceCount-parameter";
 

@@ -10,7 +10,17 @@
     <!-- Every law that needs a directory under the temporary root takes a TemporaryDirectory, whose verdict-bound
          disposal (and the assembly-level attribute that resolves it) the one shared source carries; its owner
          teardown waits under the one liveness bound TestLiveness states, so both are linked together. -->
+    <!-- Every test project is an xUnit v3 executable on Microsoft.Testing.Platform, the runner global.json selects for
+         `dotnet test`; the reference is declared once here, so no suite can drift onto another framework version. The
+         executable speaks only the platform's command line, whether `dotnet test` starts it or a caller runs it
+         directly, so one test selection spelling serves both. The hang-dump extension gives a run that stops making
+         progress a mini dump (`puck artifacts test-windows` asks for one). -->
+    <PropertyGroup Condition="'$(PuckKind)' == 'Test'">
+        <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    </PropertyGroup>
     <ItemGroup Condition="'$(PuckKind)' == 'Test'">
+        <PackageReference Include="Microsoft.Testing.Extensions.HangDump" Version="[2.*, )" />
+        <PackageReference Include="xunit.v3" Version="[4.*, )" />
         <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/TemporaryDirectory.cs" Link="Properties/TemporaryDirectory.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)tests/Shared/TestLiveness.cs" Link="Properties/TestLiveness.cs" />
     </ItemGroup>
@@ -51,11 +61,7 @@
     <!-- The artifact producer records evaluated test outputs, including any future test projects or TFMs.
          Consumers run these assemblies directly and do not need to evaluate the solution or install workloads. -->
     <Target Name="PuckRecordTestAssembly" AfterTargets="Build"
-            Condition="'$(PuckCaptureTestArtifacts)' == 'true' AND '$(IsTestProject)' == 'true' AND '$(TargetFramework)' != ''">
+            Condition="'$(PuckCaptureTestArtifacts)' == 'true' AND '$(PuckKind)' == 'Test' AND '$(TargetFramework)' != ''">
         <WriteLinesToFile File="$(TargetDir)Puck.TestAssembly" Lines="$(TargetFileName)" Overwrite="true" WriteOnlyWhenDifferent="true" />
-        <WriteLinesToFile Condition="'$(RunSettingsFilePath)' != ''" File="$(TargetDir)Puck.TestSettings"
-                          Lines="$([System.IO.Path]::GetRelativePath('$(MSBuildThisFileDirectory)', '$(RunSettingsFilePath)'))"
-                          Overwrite="true" WriteOnlyWhenDifferent="true" />
-        <Delete Condition="'$(RunSettingsFilePath)' == ''" Files="$(TargetDir)Puck.TestSettings" />
     </Target>
 </Project>

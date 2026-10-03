@@ -1025,7 +1025,7 @@ public sealed class AuthoredShapeAdmissionLawTests {
         AssertCanonicalizerAccepts(shape: Shape(
             domain: [
                 new ShapeDomainOp.Repeat(
-                    Limit: new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit),
+                    Limit: new Vector3(value: SdfDomainOps.UnboundedRepeatLimit),
                     Spacing: Vector3.One
                 ),
             ],

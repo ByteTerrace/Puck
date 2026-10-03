@@ -47,10 +47,14 @@ document directory.
 `world.gpu-timing on|off` enables optional observational per-pass timestamps;
 bare reads completed means over at most 32 pairs. The inspector's FPS and timing
 rows follow that toggle. Timing starts off and creates no timestamp objects or
-commands until requested. A device without timestamps, or a timestamp pool or
+commands until requested; dynamic resolution (see [Graphics options](#graphics-options))
+also requests them while it reads the views' GPU frame time, in which case the
+toggle controls only the readout and bare `world.gpu-timing` reports
+`off (recording for dynamic resolution)`. A device without timestamps, or a timestamp pool or
 readback the device will not create, refuses timing for that render-graph
 instance by name (`<instance>: refused <reason>`); the graph keeps rendering and
-nothing is tried again until timing is turned on anew. An offscreen host
+nothing is tried again until timing is turned on anew or the operator's
+`gpu.faults` change. An offscreen host
 supports explicit placement costs and timing; the panel and pointer feed belong
 to the windowed presentation.
 
@@ -408,12 +412,12 @@ stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes
 orbit/look and never write `Turn`. Authors can pair `player.move` with
 `player.look` for movement-facing/free-orbit alternatives, or use
 `player.move.strafe` with `player.look.steer` for the standard action scheme.
-Pressing the left stick toggles the `run` channel; West and Left Shift retain
-hold-to-run behavior. Holding LT and pressing the left stick toggles autorun
-through the `forward` channel; the chord consumes that press, so it does not
-also flip the bare-stick run toggle.
-Holding LT + RB temporarily makes the standard right stick camera-only free
-look; left-stick movement remains relative to character heading while held.
+The island binds the left stick to `player.move.strafe`, the right stick to
+`player.look.steer`, mouse buttons 1 and 2 to `player.orbit` and `player.steer`,
+and South and Space to `jump`; East and West switch the view layout. It binds
+no run channel, no autorun and no free-look chord. An author gets autorun from
+a channel binding in `toggle` mode (`BindingEntryMode.Toggle`), and the held
+`player.look.free` command suppresses body steering while camera look continues.
 `views.seatRig` authors framing, `views.seatControl` authors the
 world's `World|Body` yaw reference and pitch envelope, and
 `seatDefaults.seatCameraFeel` authors portable sensitivity/inversion/arming/rate.
@@ -668,7 +672,7 @@ keeps running.
 from now, or the next one, before the call reaches the device, so a reload can
 be refused partway through its allocation on real hardware. The kinds are
 `pipeline`, `buffer`, `image`, `render-pass`, `framebuffer`, `shader-module`,
-`command-pool` and `bindings-pool`. The refusal is `GPU_CREATION_FAULT`, naming
+`command-pool`, `bindings-pool` and `timestamp-pool`. The refusal is `GPU_CREATION_FAULT`, naming
 the kind and the creation's number; the node releases what the candidate
 created and the installed graph keeps running. A fault fires once.
 `gpu.faults lose [<n>]` loses the device on the nth frame from now, or the next
@@ -905,8 +909,8 @@ Facts a script needs:
   `IWorldSimulationClock` the frame producer reads. `Puck.Launcher.FixedStepPump`
   (not in this project) owns the accumulator both boot shapes' hosted services
   drive it through.
-- `WorldInstanceHost.cs` / `WorldInstance.cs`—the process's running world
-  instances. The boot world is one entry (name `boot`) beside every instance
+- `WorldInstanceHost.cs` / `WorldInstance.cs` (in `Puck.World.Server`)—the
+  process's running world instances. The boot world is one entry (name `boot`) beside every instance
   `world.instance.start` adds; each non-boot instance holds its own
   `WorldServer`/`WorldPopulation`/`WorldOwnedWorlds` and an empty
   `WorldMachineHost`, shares no singleton with the boot world, and advances on
@@ -951,8 +955,8 @@ Facts a script needs:
   occlusion, far field, cadence, render scale, quality and the rest) is
   composed by both the windowed and the offscreen shapes; `WorldOffscreenCommandModule.cs`
   (`world.resize`) by the offscreen shape alone; `WorldCommandModule.cs`
-  (frame rate, FPS target, cameras, shader reload),
-  `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
+  (frame rate, FPS target, cameras), `WorldShaderReloadCommandModule.cs`
+  (`world.shaders.reload`/`.status`), `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
   `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
   genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`,
   `WorldWheelCommandModule.cs`, `WorldViewCommandModule.cs`, and
@@ -1438,13 +1442,14 @@ registers a third, fake producer whose documents validate and round-trip, and
 `AThirdProducersSourceIsAnInstanceTheRuntimeInstallsThroughItsRegistration`
 installs its screen's source instance through its own registration.
 
-The engine ships four producers, each with its settings record in
+The engine ships five producers, each with its settings record in
 `WorldImageProducerSettings`:
 
 | Id | Settings | Transport | Content class |
 |---|---|---|---|
 | `testPattern` | `width`, `height` | uploaded | deterministic |
 | `qr` | `payload`, `ecLevel` (`M`), `quietZoneModules` (4) | uploaded | deterministic |
+| `color` | `color` (`#RRGGBB`) | uploaded | deterministic |
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
 | `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
 
@@ -1454,10 +1459,11 @@ ends the feed, which the consumer reopens with fresh metadata; unknown discovery
 refuses the open. An SDR
 display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
 shared targets the screen samples and a Vulkan host converts through
-`source-rgba`. An HDR display is captured in half-float scRGB on either host
-and converts on its CPU tier through `source-transfer` into working values at
-the host section's `paperWhiteNits`, so its highlights keep their luminance
-above SDR white. On an SDR output those highlights clip at the display encode,
+`source-rgba`. An HDR display is captured in half-float scRGB, which a
+Direct3D 12 host copies into half-float shared targets and converts on the GPU
+through `source-scrgb`, and a Vulkan host converts on its CPU tier through
+`source-transfer`, both into working values at the host section's
+`paperWhiteNits`, so its highlights keep their luminance above SDR white. On an SDR output those highlights clip at the display encode,
 as any working value above 1 does.
 
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
@@ -1601,8 +1607,9 @@ boot, exact-tick advancement, links, and hardware access for named machines in
 every boot shape, including headless. Screens and speakers consume their named
 outputs. `machine.operation` carries expected generation and named-machine Control
 authority; `screen.insert` and `forge.play` use that executor for named producers,
-while `screen.eject` detaches the display. Legacy screen operations remain in the
-protocol. Generic provider operations are refused during recording until the tape
+while `screen.eject` detaches the display. The screen operations (insert, eject,
+select, options, link, unlink) remain their own ordered payload kind beside the
+generic provider operation. Generic provider operations are refused during recording until the tape
 can capture their execution. A screen showing a machine output reads it as a
 render-graph source instance (package `source.machine`), an uploaded source:
 once per completed tick its upload (`MachineVideoSourceUpload`, made by the
@@ -1866,10 +1873,14 @@ seat-relative probe resolves to the enclosing instance's own seat's target
 instance, or the single instance when the target is not seat-relative.
 Shipped kinds are
 the lit-frame blob centroid `ir-blob` (bright-mass centroid/coverage/mean
-luminance of the above-threshold pixels over the FaceAuth infrared stream)
-and `faerie` (relights the color frame from a light orbiting an authored
-anchor, with the infrared strobe pair's lit-minus-unlit response as the
-height field; see `src/Puck.Shaders/README.md`)—GPU-tier only today.
+luminance of the above-threshold pixels over the FaceAuth infrared stream),
+`ir-marker` (an oriented rectangle over the strobe pair's bright mass, whose
+four corners another probe's sockets can bind), `faerie` (relights the color
+frame from a light orbiting an authored anchor, with the infrared strobe
+pair's lit-minus-unlit response as the height field) and `average` (the
+smallest texture-writing kind); the
+[shader reference](../../docs/reference/shaders.md#probe-kinds-puckprobemanifestv1) describes each kernel—GPU-tier
+only today.
 
 `probe.status` echoes every live instance's run state (or fault), tier, rate,
 cycles/drops, latest capture age, channel values and confidence, every
@@ -1911,8 +1922,10 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
-shadow tier, an ambient-occlusion switch, a temporal-reconstruction switch and a
-render-scale ceiling and floor tier; the names are
+shadow tier, a shadow-slot policy, an ambient-occlusion switch, a
+temporal-reconstruction switch, a dynamic-resolution switch and render-scale
+ceiling and floor tiers. Its four shadow-policy fields apply together as one
+settings change. The names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
@@ -1993,7 +2006,7 @@ hits and each native tool's runs) and the process's SDF kernel loads,
 allocated and released at their allocation sizes, and the peak held; swapchain
 images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
 shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
-baked and refused, the held bakes that could not be decoded (`undecodable`, each named
+baked, refused and switched to drawing, the held bakes that could not be decoded (`undecodable`, each named
 once on the error stream, the prototype drawing through its field), and the field evaluations the bakes spent; and `sdf.mesh.lod`: the
 mesh draws (`near`) and impostor cards (`far`) of baked placements the views
 recorded. The
@@ -2023,7 +2036,7 @@ completed submission's per-pass counts and its created objects, or
 `work unavailable` until a submission completes. A filter selects whole dotted
 segments (`world.counters gpu`, `world.counters state`); a filter that selects
 nothing is refused and lists the sources. `--json` prints one line:
-`{"sources":[{"name":…,"counts":{"<kind>":<value>}}],"gpu":{"device":{…},"nodes":[…]},"allocation":{"gcMode":…,"windows":{…}},"kinds":{"<kind>":{"unit":…,"class":…}}}`.
+`{"sources":[{"name":…,"counts":{"<kind>":<value>}}],"gpu":{"device":{…},"capabilities":{…},"nodes":[…]},"allocation":{"gcMode":…,"windows":{…}},"kinds":{"<kind>":{"unit":…,"class":…}}}`.
 The `kinds` legend gives every reported kind's unit and class
 (`deterministic`, `per-backend-deterministic` or `pacing`), which
 `puck counters` reads to tag each count.
@@ -2046,9 +2059,7 @@ a horizon curve there unless the `render.sky` fog layer absorbs it first.
 Two document sections author the scene's lighting instead of a verb, re-read
 on every definition revision (a live edit lands on the next frame).
 `render.lighting.lights[]` is a typed list, at most eight, each `$type`
-`directional` (`direction`, `color`, `weight`, `angularRadius`, `shadows`—the
-one shadowing light drives the soft-shadow march, whose penumbra is the tangent
-of its angular radius; the rest are scaled by ambient occlusion), `hemisphere`
+`directional` (`direction`, `color`, `weight`, `angularRadius`, `shadow`), `hemisphere`
 (`color`, `base`, `gradient`) or `rim` (`color`, `weight`, `power`, added after
 the material shade); absent, the pinned sun and hemisphere render.
 `render.lighting.curvature` adds cavity darkening, ridge light and an ink outline
@@ -2060,8 +2071,56 @@ star hash-dealt its own blackbody colour and apparent luminosity;
 and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
 —a hashed, warped noise layer over everything above it, all on the tick clock),
 composited in that order whatever order they are authored in. Every field is
-optional individually, and a light or a layer may carry a `name`.
-`world.lighting` echoes both sections.
+optional individually, and a layer may carry a `name`. A directional's
+`shadow` is `always`, `auto` or `never` (the default). `always` and `auto`
+require a unique light `name`; `never` consumes no shadow slot. Each delivered
+tick selects `always` lights first, then `auto` lights by their tick-state color
+and weight's luminance. Among equally ranked lights, current slot holders win;
+authored order breaks ties among non-holders and on a fresh selection. A pure
+reorder keeps the holder, and selected names retain their slots when ranking
+or list order moves.
+`world.lighting` echoes both sections and reports each selected light's slot
+and reason, including an `auto` light's rank. It also reports active handoffs
+and queued crossings with their capacity, identity or slot reason.
+
+The boot render settings and each quality preset carry four shadow-policy
+fields: `shadowLights` (K, 0..4), `shadowFadeSlots` (F, 0..2),
+`shadowFadeTicks` (nonnegative engine ticks) and `shadowOverflow` (`queue` or
+`instant`). The boot row defaults to 1/0/0 with `instant`; without authored
+lights, the named pinned sun occupies slot 0 as an `always` candidate. A load
+refuses positive K
+and positive fade ticks with no F, positive F with zero fade ticks, and a
+queue policy that cannot progress, at every reachable tier including `auto`.
+The shipped quality table currently selects K = 0/1/2, F = 0, zero fade ticks
+and instant overflow for low/medium/high. Final sky defaults remain the
+[P18-14 decision](../../docs/plans/rendering.md#p18--sky-and-atmosphere).
+
+The allocator detects a crossing at a delivered tick and holds at most F CPU
+handoffs. Each reports the outgoing and incoming light indices, stable slot
+and progress computed from the presented tick and `shadowFadeTicks`. Reading
+never advances a fade, so repeated frames at one frozen tick agree. With
+`queue`, a crossing waits for its slot's active handoff (`SlotInHandoff`),
+its desired light's participation in another handoff (`IdentityInUse`), or
+busy fade capacity (`FadeCapacity`). Current targets are recomputed only at
+delivered boundaries, and a still-needed crossing starts at the first
+delivered tick its blocker clears. Queued targets take newly free fade capacity
+before fresh crossings, oldest first, with slot index breaking equal-age ties.
+`instant` resolves overlap and exhausted
+capacity atomically, releasing all old participants. F = 0 or zero fade
+duration also chooses instant behavior. A seek, reload,
+structural revision, backward delivery or policy change installs without fades.
+Names still selected keep the slots they held; new names take freed slots in
+rank order. Reusing a light-table index for a different name is a crossing.
+
+The frame carries the full K selection and active handoffs, at most K + F
+march slots. Each selected light casts its own shadow with its own angular
+radius; directionals outside the slots shade unshadowed. During a handoff,
+the outgoing light's shadow deficit fades out and the incoming light's fades
+in, each retaining its radiance. `world.counters gpu` reports each slot's
+march steps separately. Incoming visibility storage is provisioned by F:
+absent at 0, one byte per pixel at 1 and two bytes per pixel at 2. Starting a
+handoff allocates no texture. The [P18-7 contract](../../docs/plans/rendering.md#p18--sky-and-atmosphere)
+owns the packed visibilities, counted controls and K + F bound.
 
 The sky's twinkle and cloud motion and each bounded volume's advection and
 pulse run on the presented engine tick of the world the frame draws, the tick

@@ -22,7 +22,7 @@ public sealed class CountersLawTests {
     private const string Reading = """
         {"sources":[{"name":"state.arena","counts":{"state.arena.visits":12}}],
          "gpu":{"device":{"backend":"vulkan","adapter":"Example GPU","vendor":4318,"device":10118,"driver":"566.36","driver.raw":2374860800,"api":"1.4.303","driver.name":"","driver.id":0,"conformance":""},
-                "nodes":[{"name":"world","sample":{"submission":61,"revision":3,"passes":[{"label":"upload","class":"per-backend-deterministic","state":"executed","counts":{"gpu.dispatches":1}},{"label":"mask","class":"deterministic","state":"executed","counts":{"gpu.dispatches":1}},{"label":"sky","class":"deterministic","state":"skipped"}],"outside":{"gpu.command-buffers":1}},"lifetime":{"gpu.created.pipelines":14}}]},
+                "nodes":[{"name":"world","sample":{"submission":61,"revision":3,"passes":[{"label":"upload","class":"per-backend-deterministic","state":"executed","details":[],"counts":{"gpu.dispatches":1}},{"label":"mask","class":"deterministic","state":"executed","details":[],"counts":{"gpu.dispatches":1}},{"label":"sky","class":"deterministic","state":"skipped","details":[]}],"outside":{"gpu.command-buffers":1}},"lifetime":{"gpu.created.pipelines":14}}]},
          "allocation":{"gcMode":"workstation, concurrent","windows":{"world.counters.read":0}},
          "kinds":{"state.arena.visits":{"unit":"lanes","class":"deterministic"},"gpu.dispatches":{"unit":"count","class":"deterministic"},"gpu.command-buffers":{"unit":"count","class":"deterministic"},"gpu.created.pipelines":{"unit":"count","class":"per-backend-deterministic"}}}
         """;
@@ -186,7 +186,7 @@ public sealed class CountersLawTests {
         Assert.Equal(
             actual: differences,
             expected: [
-                "deterministic kind=gpu.dispatches pass=upload node=world source=gpu vulkan=1 directx=2",
+                "deterministic kind=gpu.dispatches pass=upload detail=- node=world source=gpu vulkan=1 directx=2",
                 "pass state node=world pass=sky vulkan=skipped directx=executed",
             ]
         );
@@ -203,14 +203,14 @@ public sealed class CountersLawTests {
         var (exitCode, output, _) = Compare(left: Report(vulkan: Run(backend: "vulkan")), right: Report(vulkan: Run(backend: "vulkan", dispatches: 3L)));
 
         Assert.Equal(actual: exitCode, expected: 1);
-        Assert.Equal(actual: output.ReplaceLineEndings(replacementText: "\n"), expected: "counters: vulkan: deterministic kind=gpu.dispatches pass=upload node=world source=gpu left=1 right=3\n");
+        Assert.Equal(actual: output.ReplaceLineEndings(replacementText: "\n"), expected: "counters: vulkan: deterministic kind=gpu.dispatches pass=upload detail=- node=world source=gpu left=1 right=3\n");
     }
     [Fact]
     public void APerBackendCountIsHeldToItsOwnBackendAcrossReports() {
         var (exitCode, output, _) = Compare(left: Report(vulkan: Run(backend: "vulkan")), right: Report(vulkan: Run(backend: "vulkan", pipelines: 15L)));
 
         Assert.Equal(actual: exitCode, expected: 1);
-        Assert.Contains(actualString: output, expectedSubstring: "per-backend-deterministic kind=gpu.created.pipelines pass=- node=world");
+        Assert.Contains(actualString: output, expectedSubstring: "per-backend-deterministic kind=gpu.created.pipelines pass=- detail=- node=world");
     }
     [Fact]
     public void APacingOnlyDifferenceIsIgnored() {
@@ -224,7 +224,7 @@ public sealed class CountersLawTests {
         var (flipped, flippedOutput, _) = Compare(left: Report(vulkan: Run(backend: "vulkan")), right: Report(vulkan: Run(backend: "vulkan", allocated: 24L)));
 
         Assert.Equal(actual: flipped, expected: 1);
-        Assert.Contains(actualString: flippedOutput, expectedSubstring: "vulkan: allocation-zero-nonzero kind=world.counters.read pass=- node=- source=allocation left=0 right=24");
+        Assert.Contains(actualString: flippedOutput, expectedSubstring: "vulkan: allocation-zero-nonzero kind=world.counters.read pass=- detail=- node=- source=allocation left=0 right=24");
 
         var (resized, resizedOutput, _) = Compare(left: Report(vulkan: Run(backend: "vulkan", allocated: 24L)), right: Report(vulkan: Run(backend: "vulkan", allocated: 4096L)));
 

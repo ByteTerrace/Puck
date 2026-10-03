@@ -169,6 +169,14 @@
                 "value": {
                   "description": "The count; for an allocation reading, the fewest bytes a run of the window allocated.",
                   "type": "integer"
+                },
+                "detail": {
+                  "description": "The label within a pass, or null for its total or work outside a pass.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -177,7 +185,8 @@
                 "pass",
                 "kind",
                 "class",
-                "value"
+                "value",
+                "detail"
               ],
               "additionalProperties": false,
               "title": "WorldCount"
@@ -220,13 +229,24 @@
                     "allocation-zero-nonzero"
                   ],
                   "title": "WorkClass"
+                },
+                "details": {
+                  "description": "Gets the grow-only detail labels, including plain, even when this pass did not execute.",
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
                 }
               },
               "required": [
                 "node",
                 "label",
                 "state",
-                "class"
+                "class",
+                "details"
               ],
               "additionalProperties": false,
               "title": "WorldCountersPass"

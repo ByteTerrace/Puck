@@ -20,20 +20,47 @@ struct SdfLightSource {
     float param;
     // A screen's face normal.
     float3 facing;
-    // Whether the light is the shadow light, whose Lambert term the key light's soft shadow scales.
-    bool key;
+    // The table index used to find this light's own visibility; screens have no shadow slot.
+    int index;
 };
 
 // The surface a light answers at: its point, lit normal and camera ray, its material, its ambient occlusion (a wrapped
-// material's already relaxed toward 1) and the key light's shadow visibility.
+// material's already relaxed toward 1) and each stable and incoming light's shadow visibility.
 struct SdfShadeSurface {
     float3 position;
     float3 normal;
     float3 rayDirection;
     SdfMaterialData material;
     float ambientOcclusion;
-    float keyVisibility;
+    float4 shadowVisibility;
+    float2 incomingVisibility;
 };
+
+// Each participant scales only its own occlusion deficit. Unslotted directionals retain ambient occlusion.
+float sdfLightVisibility(int lightIndex, float4 stable, float2 incoming, float ambientOcclusion) {
+    if (lightIndex < 0) {
+        return ambientOcclusion;
+    }
+#if SDF_SHADOW_FADE_SLOTS > 0
+    [loop]
+    for (uint fade = 0u; (fade < min(passGroup.shadowFadeCount, (uint)SDF_SHADOW_FADE_SLOTS)); fade++) {
+        SdfShadowHandoff handoff = sdfShadowHandoffs[fade];
+        if (lightIndex == handoff.Outgoing) {
+            return (1.0 - ((1.0 - stable[handoff.Slot]) * (1.0 - handoff.Weight)));
+        }
+        if (lightIndex == handoff.Incoming) {
+            return (1.0 - ((1.0 - incoming[fade]) * handoff.Weight));
+        }
+    }
+#endif
+    [loop]
+    for (uint shadowSlot = 0u; (shadowSlot < passGroup.shadowSlotCount); shadowSlot++) {
+        if (lightIndex == passGroup.shadowSlots[shadowSlot]) {
+            return stable[shadowSlot];
+        }
+    }
+    return ambientOcclusion;
+}
 
 // What one light adds at a surface: its diffuse term, its specular lobe and its rim brighten, and the factor it scales
 // reflected light by (1 unless it occludes).
@@ -58,6 +85,7 @@ uint sdfLightCount() {
 // The light at `index` of the walk, or false for a screen slot whose source is not bound this frame.
 bool sdfLightAt(uint index, out SdfLightSource light) {
     light = (SdfLightSource)0;
+    light.index = -1;
 
     uint tableCount = passGroup.lightCount;
 
@@ -71,7 +99,7 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
             ? worldPointLightPosition(record)
             : record.Direction);
         light.param = record.Param;
-        light.key = ((int)index == passGroup.shadowLight);
+        light.index = (int)index;
 
         return true;
     }
@@ -98,8 +126,7 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
 #endif
 }
 // What `light` adds at `surface`:
-// - a directional its wrapped Lambert term under the key light's visibility when it is the shadow light and under ambient
-//   occlusion otherwise;
+// - a directional its wrapped Lambert term under its own shadow visibility;
 // - a hemisphere its floor plus its gradient along the normal's height under ambient occlusion;
 // - a point its wrapped Lambert term and its own GGX lobe under an inverse-square falloff and ambient occlusion;
 // - a rim its view-dependent silhouette brighten;
@@ -118,7 +145,7 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface)
 
     if (light.kind == SDF_LIGHT_DIRECTIONAL) {
         float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
-        float occlusion = (light.key ? surface.keyVisibility : surface.ambientOcclusion);
+        float occlusion = sdfLightVisibility(light.index, surface.shadowVisibility, surface.incomingVisibility, surface.ambientOcclusion);
 
         response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
     } else if (light.kind == SDF_LIGHT_HEMISPHERE) {

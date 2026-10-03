@@ -262,19 +262,19 @@ world instance.
 
 For changes under `src/Puck.Maths`, also run the maths law suite. A plain
 `dotnet test` runs the default tier (Smoke and Default), the everyday gate;
-`smoke`, `deep` and `exhaustive` are selected by their committed run settings:
+Deep and Exhaustive cases are explicit, so a run opts into them, and each tier
+is selected by its `tier` trait:
 
 ```powershell
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/smoke.runsettings
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/exhaustive.runsettings
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --filter-trait tier=Smoke
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Exhaustive
 ```
 
-Each tier is a filter on the `tier` trait. A `--filter` on the command line is
-combined with the default tier's filter rather than replacing it, so
-`--filter "tier=Exhaustive"` selects no test; select an opt-in tier with its
-`--settings` file.
+Without `--explicit on`, a `tier=Deep` or `tier=Exhaustive` filter selects no
+test; one law of a tier is selected by its id, the case's display name
+(`--explicit on --filter-display-name <law-id>`).
 
 ### Game changes
 
@@ -410,7 +410,7 @@ browser AppBundle, so it needs that AppBundle published first:
 
 ```powershell
 dotnet publish src/Puck.World.Browser -c Release
-dotnet test tests/Puck.Cli.Tests -c Release --filter "FullyQualifiedName~OfficialBuildCommandTests"
+dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*OfficialBuildCommandTests"
 ```
 
 CI's `artifacts` workflow always publishes the browser before any test project
@@ -660,12 +660,21 @@ meant to establish.
   [ratchet ledgers](../reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers).
 - A strictly versioned format token (a wire key, checkpoint or journal
   version, replay shape token, baker version, magic, or `puck.<name>.vN`
-  schema) is recorded in `FormatVersions.json`. Bump the constant, then run
-  `puck formats`; formatting preserves the canonical digest.
-  `puck formats --check` fails on any disagreement. A codec
-  edited without a bump moves the recorded digest and fails the check, so the
-  author decides whether the token should move, and two lanes that bump one
-  format conflict in the ledger instead of colliding at run time.
+  schema) is recorded in `FormatVersions.json` with the shape fingerprint of its
+  source. Edit the source, then run `puck formats`, which rewrites the ledger and
+  each project's generated `FormatShapes.g.cs`; formatting preserves the
+  fingerprint. `puck formats --check` fails on any disagreement but never asks
+  for a token bump: the codec writes its fingerprint in its header or handshake
+  and refuses data of any other shape by name before any state changes, so a
+  token cannot say what the fingerprint does not. The fingerprint covers the
+  codec's layouts and the members of its files that touch bytes, the enums it
+  casts and the members it calls that carry `[FormatLeaf]`; a call into any other
+  repository member is recorded as open in the ledger, so a helper that decides a byte is marked
+  `[FormatLeaf]`, one that decides none is marked
+  `[FormatSeam("its behaviour sets no byte because …")]`, and a codec that
+  drives the engine moves that work out. Two lanes that edit one codec
+  differently conflict on its shape line in the ledger instead of colliding at
+  run time.
   [`puck formats`](../reference/cli.md#puck-formatsstrict-format-tokens).
 - The cost of the canary gate selections is recorded in `CanaryCeilings.json`,
   never declared by hand. A change that adds or removes canary cost runs

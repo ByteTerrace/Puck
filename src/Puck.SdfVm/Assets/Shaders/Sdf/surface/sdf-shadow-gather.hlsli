@@ -36,7 +36,7 @@ groupshared uint sdfShadowGatherLitCount;
 groupshared float3 sdfAmbientGatherLow;
 groupshared float3 sdfAmbientGatherHigh;
 
-uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float reach, uint lane) {
+uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float reach, int lightIndex, uint lane) {
     // Phase 0 — clear the group mask and publish this lane's hitPoint.
     for (uint word = lane; word < SDF_SHADOW_MASK_WORDS; word += SDF_GROUP_SHADOW_LANES) {
         sdfShadowMaskWords[word] = 0u;
@@ -100,7 +100,7 @@ uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float rea
         return 2u; // nothing in this group marches a shadow; the cleared mask is complete
     }
 
-    float chord = worldShadowPenumbraChord(); // the soft penumbra cone's half-slope, not a bare ray
+    float chord = worldShadowPenumbraChord(lightIndex); // this slot's soft penumbra cone
     float inverseAperture = rsqrt(max((1.0 - (chord * chord)), 1.0e-6));
     float groupReach = (reach + inflate);
 

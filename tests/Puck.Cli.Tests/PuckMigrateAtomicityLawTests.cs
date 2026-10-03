@@ -44,6 +44,20 @@ public sealed class PuckMigrateAtomicityLawTests {
 
     private static readonly IReadOnlyList<PuckMigration> Migrations = [new Retitle()];
 
+    private static bool CanOpenForWriting(string path) {
+        try {
+            using var stream = new FileStream(
+                access: FileAccess.Write,
+                mode: FileMode.Open,
+                path: path,
+                share: FileShare.ReadWrite
+            );
+
+            return true;
+        } catch (UnauthorizedAccessException) {
+            return false;
+        }
+    }
     private static string Path3(string directory) => Path.Combine(
         path1: directory,
         path2: "f3.puck"
@@ -128,6 +142,13 @@ public sealed class PuckMigrateAtomicityLawTests {
                 fileAttributes: FileAttributes.ReadOnly,
                 path: Path3(directory: directory)
             );
+
+            // Whether a read-only file stops this process is the host's own answer, from the fixture itself: a root
+            // user, or a capability that bypasses permissions, opens it for writing and the law has nothing to refuse.
+            if (CanOpenForWriting(path: Path3(directory: directory))) {
+                Assert.Skip(reason: "This process opens a read-only file for writing, so the destination cannot be made unwritable.");
+            }
+
             AssertRefusedAndUntouched(
                 directory: directory,
                 third: World

@@ -1149,10 +1149,16 @@ public static class CreationStampEmitter {
     /// (<paramref name="document"/>, <paramref name="scale"/>, <paramref name="fontFor"/>) — indexed like
     /// <see cref="CreationDocument.TextRuns"/>, reused instead of laying each run out again;
     /// <see langword="null"/> lays every run out fresh, exactly as before this parameter existed.</param>
-    /// <returns>The radius, in the builder's current coordinate space.</returns>
+    /// <param name="composeBlends">Whether the shapes' bounds fold through their blends
+    /// (<see cref="SdfBoundAlgebra.Compose"/>: an intersection takes the smaller bound, so an unbounded shape clipped by
+    /// a finite one is finite; a subtraction keeps its subject's) instead of taking the largest. Only an instance
+    /// holding the whole creation, as one scope, may compose: an instance holding a subset of the shapes has not
+    /// seen the blends that bound them.</param>
+    /// <returns>The radius, in the builder's current coordinate space, or <see cref="SdfBoundAlgebra.Unbounded"/> when
+    /// the creation's composed bound has none.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="scale"/> is not finite and greater than zero.</exception>
-    public static float RenderReach(CreationDocument document, float scale, Func<string?, FontAtlas>? fontFor, IReadOnlyList<TextLayoutResult>? textLayouts = null) {
+    public static float RenderReach(CreationDocument document, float scale, Func<string?, FontAtlas>? fontFor, IReadOnlyList<TextLayoutResult>? textLayouts = null, bool composeBlends = false) {
         ArgumentNullException.ThrowIfNull(document);
 
         if (
@@ -1197,10 +1203,18 @@ public static class CreationStampEmitter {
                 ShapeBumpDocument.ReachExtra(bumps: shape.Bumps)
             );
 
-            reach = MathF.Max(
-                x: reach,
-                y: ((((((shape.Position.Length() + warpedReach) + ShapeDomainOps.Reach(domain: shape.Domain)) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * scale) + (document.Noise?.Amplitude ?? 0f))
-            );
+            var shapeReach = ((((((shape.Position.Length() + warpedReach) + ShapeDomainOps.Reach(domain: shape.Domain)) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * scale) + (document.Noise?.Amplitude ?? 0f));
+
+            reach = ((composeBlends && any)
+                ? SdfBoundAlgebra.Compose(
+                    accumulated: reach,
+                    blend: (shape.Blend ?? SdfBlendOp.Union),
+                    operand: shapeReach
+                )
+                : MathF.Max(
+                    x: reach,
+                    y: shapeReach
+                ));
             any = true;
         }
 

@@ -537,6 +537,7 @@ internal sealed partial class WorldScreenBinder {
         // Releases the envelope and window registrations; the session is the authority's, and the session's instance
         // leaves the render graph once no slot holds the feed.
         public void Dispose() {
+            Emitter?.Dispose();
             WindowRoute.Dispose();
             EnvelopeRegistration?.Dispose();
             EnvelopeRegistration = null;

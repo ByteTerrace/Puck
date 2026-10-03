@@ -4525,13 +4525,14 @@ render {
       rim: 0.02
     }
     lights [
-      directional(direction: [3, 5, -4], color: "#FFF0DC", weight: 0.95, shadows: true, angularRadius: 0.2)
+      directional(name: "key", direction: [3, 5, -4], color: "#FFF0DC", weight: 0.95, shadow: always, angularRadius: 0.2)
       directional(direction: [-0.7, 0.3, -0.65], color: "#DDE3FF", weight: 0.32)
       hemisphere(color: "#F1E5DE", base: 0.3, gradient: 0.1)
     ]
   }
   renderScale: 1
   shadowCrowdRadius: 0
+  shadowLights: 1
   shadows: High
   sky {
     layers [

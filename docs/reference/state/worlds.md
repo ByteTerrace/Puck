@@ -455,8 +455,9 @@ The authoritative scope is built from a fixed, ordered list of named components
 deliberate edit to that list. Rule scheduling caches are never part of any hash.
 
 A checkpoint carries the same state, and search progress rides along through
-`ArenaSearch.Capture`. The replay tape records submissions and the rate history
-and reproduces the authoritative trajectory. A matching replay proves the hashed
+`ArenaSearch.Capture`. The replay tape records each tick's intent submissions and
+authority inputs, stamps the simulation rate in its header, and notes each pause or
+resume of the rate lever. It reproduces the authoritative trajectory. A matching replay proves the hashed
 authoritative state; the document, the grant table, and the HUD are outside that
 hash. The world-level rules for transfer,
 determinism, and replay are in [Worlds and federation](../../architecture/worlds.md),
@@ -481,8 +482,8 @@ operator only, because it prints the values the rules computed.
 | `world.history diff <a> <b> [--json]` | Re-simulates both ticks in an isolated copy and prints which bodies, cells, fields and hash components changed, with values. `--json` prints every change with exact raw values. |
 | `world.history replay-edit <n>` | Takes the document edits made at the cursor, applies them `n` ticks earlier in an isolated copy, and reports the first tick the world would have diverged, with the diff there. |
 
-The history records a full checkpoint (a keyframe) every few seconds of
-simulation at most, and each tick's input and authoritative hash in between. A
+The history records a full checkpoint (a keyframe) between an eighth of a
+second and four seconds of simulation apart, and each tick's input and authoritative hash in between. A
 seek restores the nearest keyframe at or before its target and re-simulates the
 recorded input, so every tick it reaches is checked against the hash the live
 run recorded; a disagreement is reported by tick and the verb fails. Machine

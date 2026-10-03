@@ -40,7 +40,7 @@ public sealed partial class GateRunLawTests {
         public GateStepResult Dotnet(string repositoryRoot, IReadOnlyList<string> arguments) {
             if (arguments[0] == "build") { Execute(name: "build"); return build; }
             Devices.Add(item: [.. arguments]);
-            Execute(name: Path.GetFileNameWithoutExtension(path: arguments[1]));
+            Execute(name: Path.GetFileNameWithoutExtension(path: arguments[(arguments.ToList().IndexOf(item: "--project") + 1)]));
             return new GateStepResult(ExitCode: ExitCode([.. arguments]), Output: "device output");
         }
         public string CopyCli(string repositoryRoot, string directory) {

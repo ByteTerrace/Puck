@@ -74,8 +74,10 @@ live document byte-identical.
 Requesting is not receiving: deny-by-default holds regardless of the
 manifest, and authority materializes only where the row asked AND the grant
 table holds (a hold outside the manifest mints no handle). `WorldAddonWire.cs`
-is the fixed engine-owned mapping from a guest's validated acts onto
-`PlayerIntent` values.
+is the fixed engine-owned mapping between engine capabilities and grant rules
+and the ABI's mask bits and verdicts. The world document's channel table
+decides which channels a guest drives, and `WorldAddonRuntime` folds the
+validated acts into `PlayerIntent` channel vectors at the resolved ordinal.
 
 ## The read-back and the pump points
 
@@ -97,9 +99,10 @@ for a guest-submitted `SubmitMutation` act (stale handle, unrequested
 capability, masked mutation kind, budget exhaustion at three granularities,
 pointer-safety failure, decode failure, and document-apply rejection).
 `RefusalCatalog` (`Puck.World`) reflects over this assembly alongside
-`Puck.World.Schema`, `Puck.World.Server`, and the composition root itself to
-build `world.refusals`' catalog—a scan that drops this assembly silently
-loses the whole `addon.mutate` door.
+`Puck.State`, `Puck.State.Rules`, `Puck.World.Schema`, `Puck.World.Server`,
+`Puck.World.Client`, and the composition root itself to build
+`world.refusals`' catalog—a scan that drops this assembly silently loses the
+whole `addon.mutate` door.
 
 ## Documentation
 

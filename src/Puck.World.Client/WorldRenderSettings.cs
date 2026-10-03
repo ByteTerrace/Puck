@@ -41,6 +41,7 @@ public sealed partial class WorldRenderSettings {
     private ShadowMarchMode m_shadowMarch;
     private ShadowMaskMode m_shadowMask;
     private float m_shadowReach;
+    private Client.WorldShadowSettings m_shadowSlots;
     private bool m_temporal;
     private float m_upscaleSharpness;
 
@@ -53,6 +54,7 @@ public sealed partial class WorldRenderSettings {
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
         ShadowReach = ShadowTiers.Scale(tier: defaults.Shadows);
+        ShadowSlots = Client.WorldShadowSettings.From(render: defaults);
         ShadowCrowdRadius = defaults.ShadowCrowdRadius;
         ShadowMask = ShadowMaskMode.Auto;
         ShadowMarch = ShadowMarchMode.Auto;
@@ -138,6 +140,8 @@ public sealed partial class WorldRenderSettings {
     /// <summary>The live shadow candidate-mask policy. Auto selects the camera-tile approximation at 16 or more
     /// simulated stand-ins; exact and camera-tile are explicit A/B overrides.</summary>
     public ShadowMaskMode ShadowMask { get => m_shadowMask; set { m_shadowMask = value; m_revision++; } }
+    /// <summary>The live shadow-slot policy, set by the world's quality row and persisted by save.</summary>
+    public Client.WorldShadowSettings ShadowSlots { get => m_shadowSlots; set { m_shadowSlots = value; m_revision++; } }
     /// <summary>The engine-wide soft-shadow reach fraction from 0 (off) through 1 (full reach). Named tiers are facades
     /// over this continuous value. The <c>world.shadows</c> verb moves it live through each view's
     /// <see cref="Puck.SdfVm.SdfViewQuality.DisableSoftShadows"/> and <see cref="Puck.SdfVm.SdfViewQuality.ShadowDistanceScale"/>

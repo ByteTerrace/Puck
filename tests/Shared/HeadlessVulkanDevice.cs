@@ -19,7 +19,9 @@ namespace Puck.Testing;
 /// the layer writes what it finds to the device's own writer (the instance's debug output), never to the process's
 /// standard error. Disposing the device destroys it and its instance, so the layer's teardown reports land too, then
 /// fails the law that owns it when the writer holds any <c>[vulkan-debug] validation</c> line, naming the first; that
-/// one check is how every Vulkan device law fails on a validation message.</summary>
+/// one check is how every Vulkan device law fails on a validation message. <see cref="Create(string, bool)"/> opens the
+/// host's driver and carries <c>[OpensGpuDevice]</c>, so a test class that calls it carries <c>[Trait("Category", "Gpu")]</c>
+/// (GPU001) and a run beside another GPU leg leaves it out with <c>--filter-not-trait Category=Gpu</c>.</summary>
 internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuDeviceContext, IDisposable {
     private const string ValidationPrefix = "[vulkan-debug] validation ";
 
@@ -65,6 +67,7 @@ internal sealed partial class HeadlessVulkanDevice : IVulkanDeviceContext, IGpuD
     /// <param name="applicationName">The application name the instance is created with.</param>
     /// <param name="validation">Whether the instance runs under the validation layer.</param>
     /// <returns>The device, owned by the caller.</returns>
+    [OpensGpuDevice]
     public static HeadlessVulkanDevice Create(string applicationName, bool validation = Validation) {
         var provider = new ServiceCollection()
             .AddPuckAllocator()

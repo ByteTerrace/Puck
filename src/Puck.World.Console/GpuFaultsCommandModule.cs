@@ -20,7 +20,7 @@ namespace Puck.World;
 /// </summary>
 /// <param name="faults">The host's creation faults.</param>
 public sealed class GpuFaultsCommandModule(GpuCreationFaults faults) : ICommandModule {
-    private const string Usage = "[gpu.faults: expected gpu.faults arm <kind> [<n>] | lose [<n>] | disarm | list; kinds: pipeline, buffer, image, render-pass, framebuffer, shader-module, command-pool, bindings-pool]";
+    private const string Usage = "[gpu.faults: expected gpu.faults arm <kind> [<n>] | lose [<n>] | disarm | list; kinds: pipeline, buffer, image, render-pass, framebuffer, shader-module, command-pool, bindings-pool, timestamp-pool]";
     private const string Verb = "gpu.faults";
 
     private CommandResult Arm(WireArgs args) {

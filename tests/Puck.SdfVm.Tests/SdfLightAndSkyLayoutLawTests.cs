@@ -49,6 +49,8 @@ public sealed class SdfLightAndSkyLayoutLawTests {
         lights.Set(index: 3, light: new SdfLight(Color: new(x: 0.1f, y: 0.2f, z: 0.3f), Direction: new(x: 4f, y: -1f, z: 6f), DynamicSlot: 9, Kind: SdfLightKind.Point, Param: 1.5f, Shadows: false, Weight: 1.25f));
         lights.Set(index: 4, light: new SdfLight(Color: new(x: 0.55f, y: 0.65f, z: 0.75f), Direction: Vector3.Zero, Kind: SdfLightKind.Rim, Param: 3f, Shadows: false, Weight: 0.4f));
         lights.Curvature = new SdfCurvature(Cavity: 0.3f, Ink: 0.6f, InkColor: new(x: 0.02f, y: 0.03f, z: 0.04f), InkHigh: 14f, InkLow: 5f, Rim: 0.45f);
+        lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 1);
+        lights.ShadowSlots.SetSlot(light: 1, slot: 0);
 
         return lights;
     }
@@ -115,7 +117,7 @@ public sealed class SdfLightAndSkyLayoutLawTests {
             rows[(row * 4)] = x; rows[((row * 4) + 1)] = y; rows[((row * 4) + 2)] = z; rows[((row * 4) + 3)] = w;
         }
 
-        Row(row: ControlRow, w: block.FogDensity, x: lights.Count, y: lights.ShadowLight, z: 0f);
+        Row(row: ControlRow, w: block.FogDensity, x: lights.Count, y: lights.ShadowSlots[0], z: 0f);
         for (var index = 0; (index < SdfLights.MaxLights); index++) {
             var light = lights[index];
             var direction = ((light.Kind == SdfLightKind.Directional) ? Normalized(direction: light.Direction, fallback: SdfLights.DefaultSunDirection) : light.Direction);
@@ -182,7 +184,7 @@ public sealed class SdfLightAndSkyLayoutLawTests {
         var shadow = ((int)Math.Round(a: Lane(lane: 1, row: ControlRow)));
 
         values["lightCount"] = [count];
-        values["shadowLight"] = [shadow];
+        values["shadowSlots[0]"] = [shadow];
         for (var index = 0; (index < count); index++) {
             var row = (LightsRow + (index * RowsPerLight));
 
@@ -288,10 +290,10 @@ public sealed class SdfLightAndSkyLayoutLawTests {
         }
 
         var count = ((uint)Value(member: SdfWorldPackage.LightCount, type: ShaderValueType.Uint)[0]);
-        var shadow = ((int)Value(member: SdfWorldPackage.ShadowLight, type: ShaderValueType.Int)[0]);
+        var shadow = ((int)Value(member: SdfWorldPackage.ShadowSlots, type: ShaderValueType.Int4)[0]);
 
         values["lightCount"] = [count];
-        values["shadowLight"] = [shadow];
+        values["shadowSlots[0]"] = [shadow];
         for (var index = 0; (index < count); index++) {
             values[$"light{index}.direction"] = Field(field: nameof(SdfLight.Direction), record: index, structure: light, table: bytes.Lights);
             values[$"light{index}.weight"] = Field(field: nameof(SdfLight.Weight), record: index, structure: light, table: bytes.Lights);
@@ -355,7 +357,7 @@ public sealed class SdfLightAndSkyLayoutLawTests {
     }
     private static double Component(byte[] bytes, int offset, ShaderValueType type) => type switch {
         ShaderValueType.Uint => BinaryPrimitives.ReadUInt32LittleEndian(source: bytes.AsSpan(start: offset)),
-        ShaderValueType.Int => BinaryPrimitives.ReadInt32LittleEndian(source: bytes.AsSpan(start: offset)),
+        ShaderValueType.Int or ShaderValueType.Int2 or ShaderValueType.Int3 or ShaderValueType.Int4 => BinaryPrimitives.ReadInt32LittleEndian(source: bytes.AsSpan(start: offset)),
         _ => BinaryPrimitives.ReadSingleLittleEndian(source: bytes.AsSpan(start: offset)),
     };
     // The generated structures of the lights and sky tables, by member name.
@@ -374,7 +376,7 @@ public sealed class SdfLightAndSkyLayoutLawTests {
         var current = NewValues(bytes: NewBytes(lights: lights, sky: sky), structures: Structures());
 
         Assert.Equal(expected: 5d, actual: old["lightCount"][0]);
-        Assert.Equal(expected: 1d, actual: old["shadowLight"][0]);
+        Assert.Equal(expected: 1d, actual: old["shadowSlots[0]"][0]);
         Assert.Empty(collection: Differences(current: current, old: old));
     }
     [Fact]

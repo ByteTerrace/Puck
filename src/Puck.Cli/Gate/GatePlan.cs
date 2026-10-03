@@ -8,13 +8,16 @@ internal enum GateStepKind { Build, CopyCli, Puck, DeviceSuite, Counters, Baseli
 internal sealed record GateStep(string Name, GateStepKind Kind, string[] Arguments, bool Heavy = false, bool Gpu = false, bool Record = false, bool Sources = false);
 /// <summary>The ordered batch qualification, shared by execution, help and the documentation laws.</summary>
 internal static class GatePlan {
-    // The device-law suites and the test arguments that select each one's device tests: World.Tests by name, the
-    // others whole. MTP1's merge replaces this with the Gpu trait filter; nothing else spells the selection.
+    // The test selection of every device suite: the test classes that carry the Gpu trait, which GPU001 holds every
+    // class that opens a device to. The CPU runs take the complement (AffectedCommand.CpuSelection); nothing else spells
+    // either selection. The solution build runs first, so each suite runs its built binaries.
+    public static readonly string[] GpuSelection = ["--filter-trait", "Category=Gpu"];
+    // The device-law suites, each run with GpuSelection.
     public static readonly IReadOnlyList<(string Suite, string[] Selection)> DeviceSuites = [
-        ("Puck.World.Tests", ["--filter", "FullyQualifiedName~DeviceLaw|FullyQualifiedName~RenderedProbeKernelHostLawTests|FullyQualifiedName~SharedFenceLawTests|FullyQualifiedName~HeadlessVulkanDeviceValidationLawTests|FullyQualifiedName~HeadlessVulkanLifecycleLawTests"]),
-        ("Puck.DirectX.Tests", []),
-        ("Puck.Vulkan.Tests", []),
-        ("Puck.Platform.Windows.Tests", []),
+        ("Puck.World.Tests", GpuSelection),
+        ("Puck.DirectX.Tests", GpuSelection),
+        ("Puck.Vulkan.Tests", GpuSelection),
+        ("Puck.Platform.Windows.Tests", GpuSelection),
     ];
     public static readonly IReadOnlyList<GateStep> Steps = [
         new("build", GateStepKind.Build, ["build", "Puck.slnx", "-c", CliOptions.DefaultConfiguration, CliOptions.NoNodeReuse, "-v", "q", "-nologo"], Heavy: true),

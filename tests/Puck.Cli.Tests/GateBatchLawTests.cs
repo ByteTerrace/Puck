@@ -47,9 +47,9 @@ public sealed partial class GateRunLawTests {
         Assert.True(condition: (deviceStart > runner.Events.IndexOf(item: "run affected")));
         Assert.DoesNotContain("--gpu", runner.Steps[0]);
         Assert.Equal(new[] { "Puck.World.Tests", "Puck.DirectX.Tests", "Puck.Vulkan.Tests", "Puck.Platform.Windows.Tests" },
-            runner.Devices.Select(selector: arguments => Path.GetFileNameWithoutExtension(path: arguments[1])));
+            runner.Devices.Select(selector: arguments => Path.GetFileNameWithoutExtension(path: arguments[2])));
         foreach (var arguments in runner.Devices) {
-            var suite = Path.GetFileNameWithoutExtension(path: arguments[1]);
+            var suite = Path.GetFileNameWithoutExtension(path: arguments[2]);
 
             Assert.Equal([.. AffectedCommand.TestArguments(suite: suite), .. GatePlan.DeviceSuites.Single(predicate: device => (device.Suite == suite)).Selection], arguments);
         }
@@ -61,17 +61,20 @@ public sealed partial class GateRunLawTests {
     public void EveryBuildAndTestTheGateAndAffectedLaunchLeavesNoMSBuildNodeBehind() {
         Assert.Equal(actual: CliOptions.NoNodeReuse, expected: "-nodeReuse:false");
         Assert.Contains(collection: GatePlan.Steps.Single(predicate: static step => (step.Kind == GateStepKind.Build)).Arguments, expected: CliOptions.NoNodeReuse);
-        Assert.All(collection: GatePlan.Steps.Where(predicate: static step => (step.Kind == GateStepKind.DeviceSuite)), action: static step => Assert.Contains(collection: step.Arguments, expected: CliOptions.NoNodeReuse));
-        Assert.Contains(collection: AffectedCommand.TestArguments(suite: "Puck.Cli.Tests"), expected: CliOptions.NoNodeReuse);
+        // A suite run takes no MSBuild switch, which the test application refuses: it runs the binaries a build wrote.
+        Assert.All(collection: GatePlan.Steps.Where(predicate: static step => (step.Kind == GateStepKind.DeviceSuite)), action: static step => {
+            Assert.Contains(collection: step.Arguments, expected: "--no-build");
+            Assert.DoesNotContain(collection: step.Arguments, expected: CliOptions.NoNodeReuse);
+        });
+        Assert.Contains(collection: AffectedCommand.TestArguments(suite: "Puck.Cli.Tests"), expected: "--no-build");
+        Assert.DoesNotContain(collection: AffectedCommand.TestArguments(suite: "Puck.Cli.Tests"), expected: CliOptions.NoNodeReuse);
+        Assert.Contains(collection: AffectedCommand.BuildArguments(suite: "Puck.Cli.Tests"), expected: CliOptions.NoNodeReuse);
         Assert.Contains(collection: CliProjectBuild.Arguments(project: "src/Puck.World/Puck.World.csproj"), expected: CliOptions.NoNodeReuse);
     }
     [Fact]
-    public void WorldTestsRunOnlyItsDeviceLawsAndTheOtherDeviceSuitesRunWhole() {
-        var selection = GatePlan.DeviceSuites.ToDictionary(elementSelector: static device => device.Selection, keySelector: static device => device.Suite);
-
-        Assert.Equal(expected: "--filter", actual: selection["Puck.World.Tests"][0]);
-        Assert.Contains(expectedSubstring: "FullyQualifiedName~DeviceLaw", actualString: selection["Puck.World.Tests"][1]);
-        Assert.All(collection: selection.Where(predicate: static pair => (pair.Key != "Puck.World.Tests")), action: static pair => Assert.Empty(collection: pair.Value));
+    public void EveryDeviceSuiteRunsTheGpuTraitAndTheCpuRunsItsComplement() {
+        Assert.All(collection: GatePlan.DeviceSuites, action: static device => Assert.Equal(actual: device.Selection, expected: ["--filter-trait", "Category=Gpu"]));
+        Assert.Equal(actual: AffectedCommand.CpuSelection, expected: ["--filter-not-trait", "Category=Gpu"]);
     }
     [Fact]
     public void EveryPuckStepThePlanExpandsParsesThroughTheRootCommand() {

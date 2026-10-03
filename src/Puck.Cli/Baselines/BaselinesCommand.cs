@@ -27,7 +27,7 @@ internal static class BaselinesCommand {
             Inputs: ["src/Puck.World/Assets/worlds/standard.world.json", "src/Puck.World/Assets/worlds/quality.puck", "src/Puck.World/Assets/worlds/games/tictactoe.puck"],
             Name: "browser-parity",
             Project: "Puck.World.Browser.Tests",
-            RunArguments: ["-class", "Puck.World.Browser.Tests.BrowserParityRecordingTests"],
+            RunArguments: CliTestRun.Class(fullName: "Puck.World.Browser.Tests.BrowserParityRecordingTests"),
             Runs: 1
         ),
         new(
@@ -37,10 +37,10 @@ internal static class BaselinesCommand {
             Inputs: ["src/Puck.World/Assets/**/*.puck", "worlds/**/*.puck", "src/Puck.World.Transpiler/Samples/**/*.puck"],
             Name: "corpus-inventory",
             Project: "Puck.State.Rebuild.Corpus",
-            RunArguments: ["-class", "Puck.State.Rebuild.Corpus.CorpusInventoryTests"],
+            RunArguments: CliTestRun.Class(fullName: "Puck.State.Rebuild.Corpus.CorpusInventoryTests"),
             Runs: 1
         ),
-        // The Default tier, unfiltered, as the ledger has always been recorded; frontier.json and RESULTS.md are run
+        // The plain run, which leaves the explicit Deep and Exhaustive rows out; frontier.json and RESULTS.md are run
         // records that move on every green run, so a check holds only the two artifacts the declarations generate.
         new(
             CheckedFiles: ["coverage-manifest.json", "leg-ledger.md"],
@@ -49,7 +49,7 @@ internal static class BaselinesCommand {
             Inputs: ["VerifiedCode.json"],
             Name: "maths-ledger",
             Project: "Puck.Maths.Tests",
-            RunArguments: ["-trait-", "tier=Deep", "-trait-", "tier=Exhaustive"],
+            RunArguments: [],
             Runs: 1
         ),
         // Two runs in two processes must write identical records, so a nondeterministic world fails the recording
@@ -61,7 +61,7 @@ internal static class BaselinesCommand {
             Inputs: ["src/Puck.World/Assets/worlds/**/*.puck", "src/Puck.World/Assets/worlds/**/*.world.json", "worlds/parlor/**/*.puck"],
             Name: "state",
             Project: "Puck.World.Tests",
-            RunArguments: ["-class", "Puck.World.Tests.ShippedWorldStateBaselineTests"],
+            RunArguments: CliTestRun.Class(fullName: "Puck.World.Tests.ShippedWorldStateBaselineTests"),
             Runs: 2
         ),
     ];
@@ -158,9 +158,8 @@ internal static class BaselinesCommand {
                 workingDirectory: repositoryRoot
             );
 
-            // xUnit exits 1 when a test failed, which a stale baseline makes every compare do; anything else means
-            // the run itself did not finish.
-            if (result.TimedOut || (result.ExitCode is not (0 or 1))) {
+            // A failed test, which a stale baseline makes every compare do, is the one nonzero exit of a finished run.
+            if (result.TimedOut || (result.ExitCode is not (0 or CliTestRun.TestsFailed))) {
                 Console.Error.Write(value: result.Stdout);
                 Console.Error.Write(value: result.Stderr);
 
@@ -301,7 +300,7 @@ internal static class BaselinesCommand {
 /// <param name="Inputs">Repository-relative globs for data the owning tests read outside their project's reach.</param>
 /// <param name="Name">The subcommand and the <c>records/&lt;name&gt;</c> directory the tests write.</param>
 /// <param name="Project">The test project, named as its directory under <c>tests</c> and its assembly.</param>
-/// <param name="RunArguments">The xUnit arguments selecting the tests that write the records.</param>
+/// <param name="RunArguments">The <see cref="CliTestRun"/> options selecting the tests that write the records.</param>
 /// <param name="Runs">How many runs must write identical records before any is used.</param>
 internal sealed record BaselineArtifact(
     IReadOnlyList<string>? CheckedFiles,

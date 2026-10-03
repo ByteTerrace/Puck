@@ -170,7 +170,7 @@ public sealed partial class WorldBody {
     /// authority's own contact field. No input, action, timer, gravity, or motion-program operation is evaluated.</summary>
     public void ApplyContinuumTrajectory(in WorldContinuumTrajectory trajectory, int entityIndex, ulong destinationCompletedEngineTick) {
         var next = m_position;
-        var velocity = (m_planarVelocity + (FixedVector3.UnitY * m_verticalVelocity));
+        var velocity = ComposedVelocity();
         var resolution = default(ContactResolution);
 
         m_sweepRefusal = ContactRefusal.None;
@@ -209,12 +209,10 @@ public sealed partial class WorldBody {
         } else {
             m_previousPosition = trajectory.PreviousPosition;
             m_position = next;
-            m_planarVelocity = new FixedVector3(
-                X: velocity.X,
-                Y: FixedQ4816.Zero,
-                Z: velocity.Z
+            SplitVelocity(
+                resetVerticalRemainder: false,
+                velocity: velocity
             );
-            m_verticalVelocity = velocity.Y;
             m_grounded = resolution.Grounded;
             m_lastContactCount = (resolution.Grounded
                 ? 1
@@ -578,20 +576,17 @@ public sealed partial class WorldBody {
             v: seamV
         ) - (frame.Normal * inward));
         m_previousPosition = m_position;
-        var velocity = (m_planarVelocity + (FixedVector3.UnitY * m_verticalVelocity));
+        var velocity = ComposedVelocity();
         var outward = FixedVector3.Dot(
             left: velocity,
             right: frame.Normal
         );
 
         if (outward > FixedQ4816.Zero) {
-            velocity -= (frame.Normal * outward);
-            m_planarVelocity = new FixedVector3(
-                X: velocity.X,
-                Y: FixedQ4816.Zero,
-                Z: velocity.Z
+            SplitVelocity(
+                resetVerticalRemainder: false,
+                velocity: (velocity - (frame.Normal * outward))
             );
-            m_verticalVelocity = velocity.Y;
         }
         m_positionAccumulator.Reset();
         m_pendingContinuum = null;

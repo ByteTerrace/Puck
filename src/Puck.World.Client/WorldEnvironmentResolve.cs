@@ -22,7 +22,7 @@ namespace Puck.World.Client;
 /// every frame.
 /// </para>
 /// </summary>
-public sealed class WorldEnvironmentResolve {
+public sealed partial class WorldEnvironmentResolve : IDisposable {
     // An unauthored lighting section seeds from the pinned sun and hemisphere; an authored list seeds from nothing.
     private static readonly SdfLights Pinned = SdfLights.Default();
     private static readonly SdfLights Empty = new();
@@ -65,10 +65,12 @@ public sealed class WorldEnvironmentResolve {
     /// <param name="mirror">The state mirror every binding and keyed value reads through.</param>
     /// <param name="resolveLightAnchor">Resolves a positional light anchor to its current pose. Missing targets
     /// return null and disable the light for this frame.</param>
+    /// <param name="shadows">The live policy, or the definition's boot policy.</param>
+    /// <param name="shadowSelection">A session's complete delivered selection, or this resolver's own subscription.</param>
     /// <returns>The lights and the sky.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="mirror"/> is
     /// <see langword="null"/>.</exception>
-    public WorldResolvedEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
+    public WorldResolvedEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null, WorldShadowSettings? shadows = null, WorldShadowSelection? shadowSelection = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
@@ -110,6 +112,8 @@ public sealed class WorldEnvironmentResolve {
             m_resolutions++;
         }
 
+        PrepareShadows(mirror, (shadows ?? WorldShadowSettings.From(render: definition.Render)), shadowSelection);
+
         var lights = m_outputLights[m_outputIndex];
         var sky = m_outputSky[m_outputIndex];
 
@@ -122,6 +126,8 @@ public sealed class WorldEnvironmentResolve {
             resolveLightAnchor: resolveLightAnchor
         );
 
+        ApplyShadows(lights: lights, mirror: mirror);
+        ApplySunDiscLight(lights: lights, sky: sky);
         return new WorldResolvedEnvironment(Lights: lights, Sky: sky);
     }
 
@@ -452,7 +458,7 @@ public sealed class WorldEnvironmentResolve {
                                     site: lightSite
                                 ))
                                 : pinned.Param),
-                            Shadows = ((directional.Shadows ?? (pinned.Shadows != 0u)) ? 1u : 0u),
+                            Shadows = 0u,
                             Weight = Scalar(
                                 fallback: pinned.Weight,
                                 mirror: mirror,
@@ -681,9 +687,7 @@ public sealed class WorldEnvironmentResolve {
                     break;
                 }
             case WorldRenderSkyLayer.SunDisc disc: {
-                    block.DiscLight = (disc.Light ?? ((lights.ShadowLight >= 0)
-                        ? lights.ShadowLight
-                        : FirstDirectional(lights: lights)));
+                    block.DiscLight = (disc.Light ?? FirstDirectional(lights: lights));
                     into.SunDiscRadians = Angle(
                         angle: disc.Radius,
                         fallback: into.SunDiscRadians,

@@ -1,0 +1,10 @@
+# The engine ready first: its pipeline set installed and its first frame produced.
+world.wait ready 45
+# The moth pane's one-pass graph compiled, installed and submitted: its clock stands still, so its one frame stands.
+pipeline.wait moth compiled 40
+pipeline.wait moth installed 10
+pipeline.wait moth submitted 1 10
+# The composed display, captured at the render graph's root once the pane has a frame to show.
+world.wait 10
+world.screenshot {run}/frame.png
+world.wait 10

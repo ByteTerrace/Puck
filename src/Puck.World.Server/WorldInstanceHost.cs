@@ -87,7 +87,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // a fresh one per instance would both misreport the host and put a Guid.NewGuid() on an admission path.
     private readonly Guid m_machineId;
     // The screen-machine host builder, supplied by the composition root: Puck.World.Server carries no reference to
-    // the emulator cores or the Tune instrument engine, so it cannot construct Puck.World.Addons.Machines'
+    // Puck.World.Machines or the engines it hosts, so it cannot construct that project's
     // WorldMachineHost itself — the same "the server calls out, the composition root supplies the capability" shape
     // as m_addonHostFactory (WorldReplaySnapshot).
     private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;

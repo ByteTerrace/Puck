@@ -74,12 +74,20 @@ public static class WorldApplicationDefaults {
 /// <param name="DynamicResolution">Whether the preset moves each view's render extent with the load
 /// (<c>world.render-scale auto</c>).</param>
 /// <param name="RenderScaleFloor">The per-view floor tier the preset selects (Quarter by default).</param>
+/// <param name="ShadowLights">The number of held shadow slots, from 0 through 4.</param>
+/// <param name="ShadowFadeSlots">The number of additional shadow handoff slots, from 0 through 2.</param>
+/// <param name="ShadowFadeTicks">The length of a shadow handoff in delivered ticks; zero selects instant changes.</param>
+/// <param name="ShadowOverflow">How a crossing proceeds when its handoff capacity is occupied.</param>
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
     bool AmbientOcclusion,
     float RenderScale,
     bool Temporal = false,
     bool DynamicResolution = false,
+    int ShadowLights = 0,
+    int ShadowFadeSlots = 0,
+    uint ShadowFadeTicks = 0,
+    WorldShadowOverflow ShadowOverflow = WorldShadowOverflow.Instant,
     WorldRenderScaleTier RenderScaleFloor = WorldRenderScaleTier.Quarter
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
@@ -118,6 +126,10 @@ public readonly record struct WorldQualityPreset(
 /// lie within [<see cref="MinFarDistance"/>, <see cref="MaxFarDistance"/>]. Re-read on every definition revision
 /// (a <c>world.row.set render</c> lands on the next frame); <c>world.budget</c> echoes it with its derived
 /// costs.</param>
+/// <param name="ShadowLights">The boot number of held shadow slots, from 0 through 4; one keeps the pinned sun selected.</param>
+/// <param name="ShadowFadeSlots">The boot number of additional shadow handoff slots, from 0 through 2.</param>
+/// <param name="ShadowFadeTicks">The boot length of a shadow handoff in delivered ticks; zero selects instant changes.</param>
+/// <param name="ShadowOverflow">How a crossing proceeds when its handoff capacity is occupied.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     float ShadowCrowdRadius = 0f,
@@ -133,7 +145,11 @@ public sealed record WorldRenderDefaults(
     WorldRenderSky? Sky = null,
     WorldRenderEnvironment? Environment = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTonemap? Tonemap = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null,
+    int ShadowLights = 1,
+    int ShadowFadeSlots = 0,
+    uint ShadowFadeTicks = 0,
+    WorldShadowOverflow ShadowOverflow = WorldShadowOverflow.Instant
 ) {
     /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units. The march advances a
     /// float depth against a 0.001-unit surface epsilon; 8192 is the largest power of two at which a float's spacing
@@ -171,8 +187,8 @@ public sealed record WorldRenderDefaults(
 /// kind. Every value a light or the curvature carries may be keyed on a clock on its own; the section may instead be
 /// keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key a partial record addressing lights by
 /// name.</summary>
-/// <param name="Lights">The lights, at most <c>SdfLights.MaxLights</c>, in slot order. At most one directional
-/// may shadow: the soft-shadow march runs once per lit pixel.</param>
+/// <param name="Lights">The lights, at most <c>SdfLights.MaxLights</c>, in authored order. Shadow-capable directionals
+/// compete for the quality row's shadow slots by mode and tick-resolved luminance.</param>
 /// <param name="Curvature">The stylized curvature enrichment — cavity darkening, curvature rim light, and an ink
 /// outline. Optional; absent (and all-zero) shades exactly as a world that declares none.</param>
 /// <param name="Clock">The clock the section's keys read, by name in the <c>timeline</c> section. Required with
@@ -189,7 +205,7 @@ public sealed record WorldRenderLighting(
     /// <summary>The topology an absent <c>render.lighting</c> resolves to — the pinned shadowing sun and the pinned
     /// hemisphere.</summary>
     public static WorldRenderLighting Pinned { get; } = new(Lights: [
-        new WorldRenderLight.Directional(Shadows: true),
+        new WorldRenderLight.Directional(Shadow: WorldShadowMode.Always, Name: "sun"),
         new WorldRenderLight.Hemisphere(),
     ]);
 }
@@ -231,15 +247,16 @@ public abstract record WorldRenderLight {
     /// <param name="AngularRadius">The light's angular radius, in <c>[0, atan 0.3]</c> radians: the penumbra
     /// half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned
     /// penumbra.</param>
-    /// <param name="Shadows">Whether this light drives the soft-shadow march (at most one light per world). Absent is
-    /// <see langword="false"/>. An unshadowed directional is scaled by ambient occlusion instead.</param>
-    /// <param name="Name">The name a section key addresses the light by, unique among the lights.</param>
+    /// <param name="Shadow">How this light competes for shadow slots. Absent is <see cref="WorldShadowMode.Never"/>.
+    /// A directional without a presented shadow slot is scaled by ambient occlusion instead.</param>
+    /// <param name="Name">The unique identity a section key and the shadow allocator address. Required when
+    /// <paramref name="Shadow"/> is <see cref="WorldShadowMode.Always"/> or <see cref="WorldShadowMode.Auto"/>.</param>
     public sealed record Directional(
         BindableDirection? Direction = null,
         BindableColor? Color = null,
         BindableScalar? Weight = null,
         BindableAngle? AngularRadius = null,
-        bool? Shadows = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldShadowMode? Shadow = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderLight {
         /// <inheritdoc/>

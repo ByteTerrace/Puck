@@ -11,6 +11,7 @@ namespace Puck.World.Server;
 /// selected records and the facts row, and nothing from the owned document behind them. Every reader is bounded and
 /// Try-shaped, since a federated peer's bytes are untrusted.
 /// </summary>
+[FormatLeaf]
 public static class WorldIdentityProjectionWire {
     // A projection's records and facts are immutable values, and a profiled body's continuation folds its projection
     // on every tick a replay records or a history captures. Each instance is validated, and its records serialized,
@@ -20,6 +21,7 @@ public static class WorldIdentityProjectionWire {
     private static readonly ConditionalWeakTable<WorldStateSection, byte[]> RecordBytes = new();
     private static readonly ConditionalWeakTable<WorldStateRow, object> ValidatedFacts = new();
     private static readonly object Validated = new();
+
     /// <summary>Writes a projection.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="projection">The projection to write.</param>

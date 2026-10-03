@@ -152,9 +152,14 @@ public sealed record SdfFrame(
     /// whenever it does; 0 for a producer that supplies a new list instead.</summary>
     public long MeshDrawsRevision { get; init; }
 
-    /// <summary>The lit path's lights table, its shadow light and its curvature shading. The default is the pinned sun
+    /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
     /// and hemisphere ambient an unauthored world renders.</summary>
     public SdfLights Lights { get; init; } = SdfLights.Default();
+
+    /// <summary>Gets the fade capacities reachable through authored policy rows. A residency also requests the live
+    /// <see cref="SdfShadowSlots.FadeCapacity"/> on first demand, including capacities introduced by session levers.</summary>
+    public SdfShadowFadeVariants ShadowFadeVariants { get; init; }
+
     /// <summary>The sky: its gradient, fog, sun disc, stars, clouds and the studio reflection's softboxes and horizon.
     /// The default is the default look an unauthored world renders: the two-stop gradient and the default fog, as
     /// data.</summary>

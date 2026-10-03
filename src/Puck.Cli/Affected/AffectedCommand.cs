@@ -369,8 +369,15 @@ internal static class AffectedCommand {
         }
     }
 
-    /// <summary>The shared Release suite invocation, including its failure-reporting console logger.</summary>
-    public static string[] TestArguments(string suite) => ["test", $"tests/{suite}/{suite}.csproj", "-c", "Release", CliOptions.NoNodeReuse, "-v", "q", "-nologo", "--logger", "console;verbosity=minimal"];
+    /// <summary>The shared Release suite build, which leaves no MSBuild node behind (<see cref="CliOptions.NoNodeReuse"/>).</summary>
+    public static string[] BuildArguments(string suite) => ["build", $"tests/{suite}/{suite}.csproj", "-c", "Release", CliOptions.NoNodeReuse, "-v", "q", "-nologo"];
+    /// <summary>The shared Release suite run over the binaries a build already wrote. Microsoft.Testing.Platform hands
+    /// every option it does not own to the test application, which refuses MSBuild switches, so the run builds nothing
+    /// and takes none.</summary>
+    public static string[] TestArguments(string suite) => ["test", "--project", $"tests/{suite}/{suite}.csproj", "-c", "Release", "--no-build"];
+
+    /// <summary>The selection of a suite's CPU tests: every test whose class does not carry the <c>Gpu</c> trait.</summary>
+    public static readonly string[] CpuSelection = ["--filter-not-trait", "Category=Gpu"];
 
     private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu) {
         var failed = new List<string>();
@@ -379,24 +386,41 @@ internal static class AffectedCommand {
             failed.Add(item: "canary manifests");
         }
 
-        // dotnet test builds each suite and applies the settings its project binds (RunSettingsFilePath), so an
-        // opt-in tier such as Maths' Deep and Exhaustive stays out exactly as it does in CI. No suite leaves an MSBuild node
-        // behind (CliOptions.NoNodeReuse); the capture's post-exit drain bounds any process that inherited its pipes. The
-        // console logger is named at minimal verbosity:
-        // under a quiet build it would otherwise print a failed test's name on standard error and its message nowhere,
-        // and minimal prints each failure with its message and stack, and nothing for a pass.
+        // Each suite builds first, leaving no MSBuild node behind (CliOptions.NoNodeReuse), and then runs its CPU tests
+        // over the binaries that build wrote: Microsoft.Testing.Platform hands any option it does not own to the test
+        // application, which refuses MSBuild switches. A plain run selects exactly what CI's does, so an explicit tier such
+        // as Maths' Deep and Exhaustive stays out, and the Gpu trait keeps device laws out (CpuSelection). The capture's
+        // post-exit drain bounds any process that inherited its pipes. The platform prints each failure with its message
+        // and stack, and the run's summary counts after it.
         foreach (var suite in plan.Suites) {
+            var build = CliProcess.RunCaptured(
+                arguments: BuildArguments(suite: suite),
+                fileName: "dotnet",
+                input: string.Empty,
+                timeout: TimeSpan.FromMinutes(minutes: 30),
+                workingDirectory: repositoryRoot
+            );
+
+            if (build.ExitCode != 0) {
+                Console.Out.WriteLine(value: $"affected: {suite} FAILED — the build exited {build.ExitCode}");
+                foreach (var line in Lines(text: build.Stdout).Concat(second: Lines(text: build.Stderr))) {
+                    Console.Out.WriteLine(value: $"  {line}");
+                }
+
+                failed.Add(item: suite);
+                continue;
+            }
+
             var run = CliProcess.RunCaptured(
-                arguments: TestArguments(suite: suite),
+                arguments: [.. TestArguments(suite: suite), .. CpuSelection],
                 fileName: "dotnet",
                 input: string.Empty,
                 timeout: TimeSpan.FromMinutes(minutes: 30),
                 workingDirectory: repositoryRoot
             );
             var output = Lines(text: run.Stdout);
-            var total = (output.LastOrDefault(predicate: static line => (line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "Passed!") || line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "Failed!")))?.Trim() ?? "no summary");
 
-            Console.Out.WriteLine(value: $"affected: {suite} {((run.ExitCode == 0) ? "passed" : "FAILED")} — {total}");
+            Console.Out.WriteLine(value: $"affected: {suite} {((run.ExitCode == 0) ? "passed" : "FAILED")} — {CliTestRun.Summary(output: output)}");
 
             // A failed suite's whole report follows its verdict line: every failure with its message and stack, or
             // the build errors that stopped it.

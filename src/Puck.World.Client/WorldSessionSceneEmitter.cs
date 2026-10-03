@@ -52,7 +52,17 @@ namespace Puck.World.Client;
 /// view — which is handed no simulation clock at all — can ever do.
 /// </para>
 /// </remarks>
-public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser {
+public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser, IDisposable {
+    /// <summary>Releases the environment's delivered-tick subscription.</summary>
+    public void Dispose() {
+        m_shadowObservation.Dispose();
+        m_environment.Dispose();
+    }
+    /// <summary>Reads the last presented slot census of this session.</summary>
+    /// <param name="definition">The queried authority's definition.</param>
+    /// <returns>The census, or null before a matching frame.</returns>
+    public string? DescribeShadowSlots(WorldDefinition definition) => m_environment.DescribeShadowSlots(definition: definition);
+
     // The BIND-time resolved camera choice: a validated, currently-present camera NAME, or null for "use the
     // destination's default projection" (its first declared camera, else the spawn-centroid overview) — see this
     // type's own construction site in WorldScreenBinder.ResolveSession, which is where the "unknown camera refuses at
@@ -135,6 +145,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // the residency holds keeps its environment through the next dress, as the boot presentation's does.
     private readonly WorldValueDomainGuard m_domains;
     private readonly WorldEnvironmentResolve m_environment;
+    private readonly Func<WorldShadowSettings>? m_shadowSettings;
+
+    private readonly WorldShadowSelection m_deliveredShadows = new();
+
+    private readonly WorldSessionMirror.DeliveredStateObservation m_shadowObservation;
 
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
@@ -157,8 +172,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="bodyColor">The color each avatar is painted with by body index, or <see langword="null"/> for the
     /// mirror's own (<see cref="WorldSessionMirror.BodyColor"/>).</param>
     /// <param name="castsAvatarShadows">Whether avatar transforms participate in soft shadows when the host enables them.</param>
+    /// <param name="shadowSettings">The routed view's live policy, or its own boot policy when absent.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false) {
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false, Func<WorldShadowSettings>? shadowSettings = null) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
         ArgumentNullException.ThrowIfNull(argument: domains);
 
@@ -169,10 +185,16 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_bodyColor = (bodyColor ?? mirror.BodyColor);
         m_bodyColors = ((bodyColor is null) ? null : new Vector3[WorldBodiesLimits.CapacityCeiling]);
         m_castsAvatarShadows = castsAvatarShadows;
+        m_shadowSettings = shadowSettings;
         m_effectiveCameraName = effectiveCameraName;
         m_fieldOfViewRadians = fieldOfViewRadians;
         m_meshDraws = new WorldSceneMeshDraws(pool: m_pool);
         m_source = new WorldSessionStampSource(mirror: mirror);
+        m_deliveredShadows.SetSettings(settings: (shadowSettings?.Invoke() ?? WorldShadowSettings.From(render: mirror.Definition.Render)));
+        m_shadowObservation = mirror.ObserveDeliveredState(observer: (definition, revision, state) => {
+            if (m_shadowSettings is null) { m_deliveredShadows.SetSettings(settings: WorldShadowSettings.From(render: definition.Render)); }
+            m_deliveredShadows.Advance(definition: definition, mirror: state, revision: revision);
+        });
         m_decals = new WorldScreenDecals(
             catalog: TextCatalog,
             colors: new WorldBakedColors(mirror: mirror.FollowState()),
@@ -501,7 +523,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var environment = m_environment.Resolve(
             definition: m_mirror.Definition,
             mirror: m_mirror.FollowState(),
-            revision: m_mirror.DefinitionRevision
+            revision: m_mirror.DefinitionRevision,
+            shadows: m_shadowSettings?.Invoke(),
+            shadowSelection: m_deliveredShadows
         );
 
         return new SdfFrame(
@@ -518,6 +542,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // authority renders.
             FarDistance = m_dressedFarDistance,
             Lights = environment.Lights,
+            ShadowFadeVariants = WorldShadowSettings.FadeVariants(render: m_mirror.Definition.Render),
             Sky = environment.Sky,
             // The mirrored world's static placements' meshes, then its stamp pool's.
             MeshDraws = meshDraws,

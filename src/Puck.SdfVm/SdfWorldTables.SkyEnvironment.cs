@@ -20,6 +20,11 @@ public sealed partial class SdfWorldTables {
 
     private readonly SkyEnvironmentPass m_skyEnvironment;
 
+    // The environment pass's named rows follow the pass rows: its plain row, then the gradient the map's kernel evaluates
+    // through the shared sky function, which counts its own evaluation under the first named row.
+    private const int EnvironmentDetailRows = 2;
+    private const uint EnvironmentDetailRow = (EnvironmentPass + 2);
+
     /// <summary>Gets the bytes the sky's environment keeps on the device: the map and its coefficients
     /// (<see cref="SdfSkyEnvironment.PayloadBytes"/>), one pair however many views read it.</summary>
     public static int SkyEnvironmentBytes => SdfSkyEnvironment.PayloadBytes;
@@ -103,7 +108,7 @@ public sealed partial class SdfWorldTables {
                 buffers: gpu.BufferFactory,
                 owner: ObjectOwner,
                 part: "sky-environment-counters",
-                rows: PassLabelTable.Length,
+                rows: (PassLabelTable.Length + EnvironmentDetailRows),
                 slots: FrameRingSize
             ));
             m_frameBlock = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
@@ -189,6 +194,7 @@ public sealed partial class SdfWorldTables {
             m_frameBlock.Write<byte>(data: frameBlockBytes);
             layout.WriteExtent(block: blockBytes, height: SdfSkyEnvironment.Size, width: SdfSkyEnvironment.Size);
             BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)layout.BlockOffsetOf(member: ShaderWorkCounters.Row))), value: EnvironmentPass);
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)layout.BlockOffsetOf(member: ShaderWorkCounters.DetailRow))), value: EnvironmentDetailRow);
             m_block.Write<byte>(data: blockBytes);
             m_bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: m_frameBlock.BufferHandle, bufferSize: m_frameBlock.SizeBytes, descriptorSetHandle: m_frameSet);
             for (var slot = 0; (slot < FrameRingSize); slot++) {

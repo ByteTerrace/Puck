@@ -2,14 +2,12 @@
     <PropertyGroup>
         <PackageId>ByteTerrace.Puck.HumbleGamingDeck.Tests</PackageId>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
         <IsPackable>false</IsPackable>
         <IsAotCompatible>false</IsAotCompatible>
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
         <Using Include="Xunit" />
         <ProjectReference Include="../../src/Puck.HumbleGamingDeck.Post/Puck.HumbleGamingDeck.Post.csproj" />
     </ItemGroup>
