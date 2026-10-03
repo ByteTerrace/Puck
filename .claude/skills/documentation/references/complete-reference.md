@@ -525,6 +525,10 @@ or a grader changes, since either moves the floor.
    the run a repeat of the old skill, which is also how to see that one case
    alone can swing by 0.2 between identical runs.
 
+**Never aim a step at a test case.** The test split is held out: a step written
+to lift a test case spends it. When a test case exposes a gap worth closing, move
+that case to train by hand, record the move, and add a fresh harder case to test.
+
 **A small test split gives weak evidence.** With fewer than about 10 test cases
 and a swing of 0.2 on a single case between identical runs, a split mean moves
 by chance more than a rule moves it. Send each new case to the test split first
