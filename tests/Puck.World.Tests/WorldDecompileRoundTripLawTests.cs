@@ -134,8 +134,16 @@ public sealed partial class WorldDecompileRoundTripLawTests {
                 newChar: '/',
                 oldChar: '\\'
             );
+            // Skipped directories are matched below the root, so a checkout that is itself a worktree is still read.
+            var below = ("/" + Path.GetRelativePath(
+                path: file,
+                relativeTo: root
+            ).Replace(
+                newChar: '/',
+                oldChar: '\\'
+            ));
 
-            if (SkippedDirectories.Any(predicate: directory => path.Contains(
+            if (SkippedDirectories.Any(predicate: directory => below.Contains(
                 comparisonType: StringComparison.Ordinal,
                 value: directory
             ))) {
