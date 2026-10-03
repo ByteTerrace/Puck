@@ -1759,7 +1759,7 @@
                 "P:Puck.World.Server.WorldServer.Definition",
                 "P:Puck.World.Server.WorldServer.NextInputTick"
             ],
-            "shape": "a6140818d0ac0792",
+            "shape": "3933b390274025fa",
             "source": "src/Puck.World.Protocol/Protocol/WorldProtocol.cs",
             "token": "PUCKWRL4"
         },
@@ -1962,7 +1962,7 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "a5b31747bd3c0e79",
+            "shape": "d59c16c72e391437",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
@@ -2002,9 +2002,9 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "a5b31747bd3c0e79",
+            "shape": "d59c16c72e391437",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
-            "token": "10"
+            "token": "1"
         },
         "WorldScheduleSection.ManifestSchemaId": {
             "open": [

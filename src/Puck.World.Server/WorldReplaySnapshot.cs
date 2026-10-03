@@ -293,14 +293,14 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// </remarks>
 public sealed partial class WorldReplaySnapshot {
     private const uint Magic = 0x5052_4C57u; // "WLRP" in little-endian wire order.
-    // A shape-identity token, not a compatibility sequence: this build writes and reads exactly one tape contract.
-    // Shape 9 carries the recorded authority, its typed rebuild origins and its document paths, each starting seat's
-    // full identity projection, the companion tapes of a set, each departure and its rollback where the authority
-    // decided it, settlements by target authority, every arrival a commit decided with its outcome and each traveler as
-    // its identity projection alone, federated input, and the seat identity a fork switches to. Shape 10 adds the
-    // optional start checkpoint a mid-session recording or a saved history branch starts from. Refuse earlier tapes at
-    // intake instead of reporting their old shape as a simulation divergence.
-    private const uint ShapeToken = 10u;
+    // A shape-identity token, not a compatibility sequence: it stays 1 until a release, and the tape's generated
+    // shape fingerprint (FormatShapes) is what refuses another layout at intake. The tape carries the recorded
+    // authority, its typed rebuild origins and its document paths, each starting seat's full identity projection, the
+    // companion tapes of a set, each departure and its rollback where the authority decided it, settlements by target
+    // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
+    // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
+    // or a saved history branch starts from.
+    private const uint ShapeToken = 1u;
     // A shape fingerprint is sixteen hex digits (FormatShapes); the bound leaves room for none else.
     private const int MaxFingerprintChars = 32;
 
