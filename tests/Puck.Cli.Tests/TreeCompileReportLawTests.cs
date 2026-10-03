@@ -70,6 +70,11 @@ public sealed class TreeCompileReportLawTests {
 
         Assert.True(condition: (automaticBuild.Output.IndexOf(comparisonType: StringComparison.Ordinal, value: "'A.puck'") <
             automaticBuild.Output.IndexOf(comparisonType: StringComparison.Ordinal, value: "'z.puck'")), userMessage: automaticBuild.Output);
+
+        // Paths cross the output boundary with forward slashes.
+        foreach (var run in new[] { built, explicitCheck, automaticCheck, automaticBuild }) {
+            Assert.DoesNotContain(actualString: run.Output, expectedSubstring: "\\");
+        }
     }
     [InlineData(false)]
     [InlineData(true)]

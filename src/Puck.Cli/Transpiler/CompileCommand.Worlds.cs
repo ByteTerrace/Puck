@@ -122,7 +122,7 @@ internal static partial class CompileCommand {
                     key: destination,
                     value: sourcePath
                 );
-                Console.WriteLine(value: $"Successfully compiled '{Path.GetFileName(path: sourcePath)}' -> '{destination}'.");
+                Console.WriteLine(value: $"Successfully compiled '{Path.GetFileName(path: sourcePath)}' -> '{CliPaths.ToDisplay(fullPath: destination)}'.");
             }
             // Each document's compiled world sits beside it, composed where its source sits, as a boot of the source
             // composes it.

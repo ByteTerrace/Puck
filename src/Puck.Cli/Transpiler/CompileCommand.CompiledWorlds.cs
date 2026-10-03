@@ -40,7 +40,7 @@ internal static partial class CompileCommand {
         try {
             document = File.ReadAllBytes(path: documentPath);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"error: Could not read document '{documentPath}': {exception.Message}");
+            Console.Error.WriteLine(value: $"error: Could not read document '{CliPaths.ToDisplay(fullPath: documentPath)}': {exception.Message}");
             return 2;
         }
 
@@ -75,7 +75,7 @@ internal static partial class CompileCommand {
 
             foreach (var key in pack.Keys) {
                 if (!pack.Store.TryGetHeld(key: key, outcome: out var outcome)) {
-                    Console.Error.WriteLine(value: $"error: no outcome for bake key {key.Hex} was derived in this run, so the bake pack '{pack.Path}' cannot hold it.");
+                    Console.Error.WriteLine(value: $"error: no outcome for bake key {key.Hex} was derived in this run, so the bake pack '{CliPaths.ToDisplay(fullPath: pack.Path)}' cannot hold it.");
                     return 2;
                 }
 
@@ -94,10 +94,10 @@ internal static partial class CompileCommand {
                 written[pack.Path] = owner;
             }
 
-            Console.WriteLine(value: $"Wrote bake pack '{pack.Path}' ({outcomes.Count:N0} outcomes, {bytes.Length:N0} bytes; its bake cache baked {pack.Store.Baked:N0} creations and refused {pack.Store.Refused:N0} in {pack.Store.FieldEvaluations:N0} field evaluations).");
+            Console.WriteLine(value: $"Wrote bake pack '{CliPaths.ToDisplay(fullPath: pack.Path)}' ({outcomes.Count:N0} outcomes, {bytes.Length:N0} bytes; its bake cache baked {pack.Store.Baked:N0} creations and refused {pack.Store.Refused:N0} in {pack.Store.FieldEvaluations:N0} field evaluations).");
             return 0;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"error: Could not write bake pack '{pack.Path}': {exception.Message}");
+            Console.Error.WriteLine(value: $"error: Could not write bake pack '{CliPaths.ToDisplay(fullPath: pack.Path)}': {exception.Message}");
             return 2;
         }
     }
@@ -130,7 +130,7 @@ internal static partial class CompileCommand {
             // A fragment's refusal can quote the whole payload it could not parse; its head names the cause.
             var cause = reason.ReplaceLineEndings(replacementText: " ");
 
-            Console.WriteLine(value: $"No compiled world for '{besidePath}': {((cause.Length > MaximumReasonLength) ? (cause[..MaximumReasonLength] + "...") : cause)}");
+            Console.WriteLine(value: $"No compiled world for '{CliPaths.ToDisplay(fullPath: besidePath)}': {((cause.Length > MaximumReasonLength) ? (cause[..MaximumReasonLength] + "...") : cause)}");
             return 0;
         }
 
@@ -141,7 +141,7 @@ internal static partial class CompileCommand {
                 path: destination
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"error: Could not write compiled world '{destination}': {exception.Message}");
+            Console.Error.WriteLine(value: $"error: Could not write compiled world '{CliPaths.ToDisplay(fullPath: destination)}': {exception.Message}");
             return 2;
         }
 
@@ -149,7 +149,7 @@ internal static partial class CompileCommand {
             written[destination] = composeAt;
         }
 
-        Console.WriteLine(value: $"Compiled world '{destination}' ({bytes.Length:N0} bytes).");
+        Console.WriteLine(value: $"Compiled world '{CliPaths.ToDisplay(fullPath: destination)}' ({bytes.Length:N0} bytes).");
 
         if (
             CompiledWorld.TryDecode(container: out var container, content: bytes, header: out _, reason: out _) &&

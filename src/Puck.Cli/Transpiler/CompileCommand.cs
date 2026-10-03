@@ -34,7 +34,7 @@ internal static partial class CompileCommand {
         var fullPath = Path.GetFullPath(path: path);
 
         if (!File.Exists(path: fullPath)) {
-            Console.Error.WriteLine(value: $"error: Source file not found: '{fullPath}'");
+            Console.Error.WriteLine(value: $"error: Source file not found: '{CliPaths.ToDisplay(fullPath: fullPath)}'");
             return 2;
         }
 
@@ -96,7 +96,7 @@ internal static partial class CompileCommand {
         try {
             sourceText = File.ReadAllText(path: sourcePath);
         } catch (Exception ex) {
-            Console.Error.WriteLine(value: $"error: Could not read source file '{sourcePath}': {ex.Message}");
+            Console.Error.WriteLine(value: $"error: Could not read source file '{CliPaths.ToDisplay(fullPath: sourcePath)}': {ex.Message}");
             return 2;
         }
 
@@ -193,10 +193,10 @@ internal static partial class CompileCommand {
                 bytes: jsonBytes,
                 path: outputPath
             );
-            Console.WriteLine(value: $"Successfully compiled '{Path.GetFileName(path: sourcePath)}' -> '{outputPath}' ({jsonBytes.Length:N0} bytes).");
+            Console.WriteLine(value: $"Successfully compiled '{Path.GetFileName(path: sourcePath)}' -> '{CliPaths.ToDisplay(fullPath: outputPath)}' ({jsonBytes.Length:N0} bytes).");
             return 0;
         } catch (Exception ex) {
-            Console.Error.WriteLine(value: $"error: Failed to write output file '{outputPath}': {ex.Message}");
+            Console.Error.WriteLine(value: $"error: Failed to write the output of '{CliPaths.ToDisplay(fullPath: sourcePath)}': {ex.Message}");
             return 2;
         }
     }
@@ -319,7 +319,7 @@ internal static partial class CompileCommand {
         bool bundle,
         bool updateAssets = false
     ) {
-        Console.WriteLine(value: $"[puck watch] Monitoring '{sourcePath}' for changes (Ctrl+C to stop)...");
+        Console.WriteLine(value: $"[puck watch] Monitoring '{CliPaths.ToDisplay(fullPath: sourcePath)}' for changes (Ctrl+C to stop)...");
 
         // Initial run
         ExecuteCompilation(
