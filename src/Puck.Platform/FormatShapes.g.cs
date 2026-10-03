@@ -8,6 +8,6 @@ namespace Puck.Platform.Probes {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>ProbeTrackDocument.SchemaVersion</c>, declared in <c>src/Puck.Platform/Probes/ProbeTrack.cs</c>.</summary>
-        public const string ProbeTrackDocumentSchemaVersion = "6a6bc108c3bff3f4";
+        public const string ProbeTrackDocumentSchemaVersion = "da4513788b4a2ff8";
     }
 }

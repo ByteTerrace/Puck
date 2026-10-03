@@ -8,6 +8,6 @@ namespace Puck.World {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldCaptureManifest.SchemaId</c>, declared in <c>src/Puck.World.Console/WorldCaptureScheduler.cs</c>.</summary>
-        public const string WorldCaptureManifestSchemaId = "8f7aa0d24553ce57";
+        public const string WorldCaptureManifestSchemaId = "18bb4a3f303932bd";
     }
 }

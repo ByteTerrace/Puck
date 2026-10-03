@@ -8,10 +8,10 @@ namespace Puck.Analyzers {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>RatchetLedger.Format</c>, declared in <c>src/Puck.Analyzers/RatchetLedger.cs</c>.</summary>
-        public const string RatchetLedgerFormat = "4f152d5616315268";
+        public const string RatchetLedgerFormat = "502b64b1a7fdfb39";
         /// <summary>The shape fingerprint of <c>VerifiedCodeManifest.SupportedFormat</c>, declared in <c>src/Puck.Analyzers/VerifiedCodeManifest.cs</c>.</summary>
         public const string VerifiedCodeManifestSupportedFormat = "7e37cba0af1e4d6a";
         /// <summary>The shape fingerprint of <c>VerifiedCodeManifest.TokenAlgorithm</c>, declared in <c>src/Puck.Analyzers/VerifiedCodeManifest.cs</c>.</summary>
-        public const string VerifiedCodeManifestTokenAlgorithm = "7e37cba0af1e4d6a";
+        public const string VerifiedCodeManifestTokenAlgorithm = "e73ea86e926391c3";
     }
 }

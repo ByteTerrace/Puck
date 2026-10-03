@@ -21,8 +21,8 @@ namespace Puck.Assets.Documents {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AudioDocument.CurrentSchema</c>, declared in <c>src/Puck.Assets/Documents/AudioDocument.cs</c>.</summary>
-        public const string AudioDocumentCurrentSchema = "b831287c45edb1de";
+        public const string AudioDocumentCurrentSchema = "86fae063b05bb1a7";
         /// <summary>The shape fingerprint of <c>SynthPatchDocument.CurrentSchema</c>, declared in <c>src/Puck.Assets/Documents/SynthPatchDocument.cs</c>.</summary>
-        public const string SynthPatchDocumentCurrentSchema = "e6ddcc987e88eebf";
+        public const string SynthPatchDocumentCurrentSchema = "26a8894f24ed9843";
     }
 }

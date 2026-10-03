@@ -8,7 +8,7 @@ namespace Puck.World.Transpiler.Assets {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AssetLock.SupportedFormat</c>, declared in <c>src/Puck.World.Transpiler/Assets/AssetLock.cs</c>.</summary>
-        public const string AssetLockSupportedFormat = "f58f9b53ee973244";
+        public const string AssetLockSupportedFormat = "edfb8e181ecc7550";
     }
 }
 
@@ -17,7 +17,7 @@ namespace Puck.World.Transpiler.Composition {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldCompileCache.Magic</c>, declared in <c>src/Puck.World.Transpiler/Composition/WorldCompileCache.cs</c>.</summary>
-        public const string WorldCompileCacheMagic = "35d73162411f349f";
+        public const string WorldCompileCacheMagic = "7e0bf140e1ac5fd7";
     }
 }
 
@@ -26,6 +26,6 @@ namespace Puck.World.Transpiler.Embeddings {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>EmbeddingLock.SupportedFormat</c>, declared in <c>src/Puck.World.Transpiler/Embeddings/EmbeddingLock.cs</c>.</summary>
-        public const string EmbeddingLockSupportedFormat = "25f8ec2ed376aa75";
+        public const string EmbeddingLockSupportedFormat = "c2ec76a06fd4dbef";
     }
 }

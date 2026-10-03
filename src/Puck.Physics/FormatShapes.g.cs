@@ -8,6 +8,6 @@ namespace Puck.Physics.Motion {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>CompiledBodyMotionProgram.SupportedVersion</c>, declared in <c>src/Puck.Physics/Motion/CompiledBodyMotionProgram.cs</c>.</summary>
-        public const string CompiledBodyMotionProgramSupportedVersion = "a8c7341b6b9fc931";
+        public const string CompiledBodyMotionProgramSupportedVersion = "da0d53d4ca50ec32";
     }
 }

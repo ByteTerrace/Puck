@@ -8,6 +8,6 @@ namespace Puck.State {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>TableDocument.CurrentSchema</c>, declared in <c>src/Puck.State.Generators/TableDocument.cs</c>.</summary>
-        public const string TableDocumentCurrentSchema = "d8419793bf3e624c";
+        public const string TableDocumentCurrentSchema = "44108c950a0ec9d8";
     }
 }
