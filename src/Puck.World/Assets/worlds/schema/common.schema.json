@@ -84,6 +84,15 @@
         "renderScaleFloor": {
           "$ref": "#/$defs/WorldRenderScaleTier",
           "description": "The per-view floor tier the preset selects (Quarter by default)."
+        },
+        "sky": {
+          "description": "The sky\u0027s quality tier the preset selects (world.sky-quality).",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "WorldSkyTier"
         }
       },
       "additionalProperties": false,
@@ -789,6 +798,116 @@
       "additionalProperties": false,
       "title": "WorldRenderSkyStop"
     },
+    "WorldSkyBlend": {
+      "enum": [
+        "over",
+        "add",
+        "multiply",
+        "screen",
+        null
+      ],
+      "title": "WorldSkyBlend"
+    },
+    "DoubleList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "number"
+      }
+    },
+    "WorldRenderSkyCone": {
+      "description": "A cone mask: the directions within Spread of Toward, in the sky frame.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "toward": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The cone\u0027s axis in the sky frame, any nonzero length."
+        },
+        "spread": {
+          "description": "The cone\u0027s angular radius in radians, in (0, \u03C0].",
+          "type": "number"
+        }
+      },
+      "required": [
+        "toward",
+        "spread"
+      ],
+      "additionalProperties": false,
+      "title": "WorldRenderSkyCone"
+    },
+    "WorldRenderSkyMask": {
+      "description": "Where a sky layer draws: an elevation band of the sky frame, or a cone about a direction. Exactly one of Band and Cone.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "band": {
+          "$ref": "#/$defs/DoubleList",
+          "description": "The band\u0027s lowest and highest elevation in radians, two angles in [\u2212\u03C0/2, \u03C0/2], ascending.",
+          "default": null
+        },
+        "cone": {
+          "$ref": "#/$defs/WorldRenderSkyCone",
+          "description": "The cone.",
+          "default": null
+        },
+        "feather": {
+          "description": "The width of the mask\u0027s edge, an angle in radians. Absent is a hard edge.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyMask"
+    },
+    "WorldRenderSkyTransform": {
+      "description": "A sky layer\u0027s own transform about the sky frame: a turn about its up, then a tilt about its right axis. Each angle may bind or key on a clock, so a layer turns over a day.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "turn": {
+          "$ref": "#/$defs/BindableAngle",
+          "description": "The turn about the sky frame\u0027s up. Absent is none.",
+          "default": null
+        },
+        "tilt": {
+          "$ref": "#/$defs/BindableAngle",
+          "description": "The tilt about the sky frame\u0027s right axis. Absent is none.",
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyTransform"
+    },
+    "WorldSkyVisibility": {
+      "enum": [
+        "camera",
+        "lighting",
+        "both",
+        null
+      ],
+      "title": "WorldSkyVisibility"
+    },
+    "WorldSkyTier": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        null
+      ],
+      "title": "WorldSkyTier"
+    },
     "WorldRenderSkyLayerGradient": {
       "description": "The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.",
       "properties": {
@@ -819,13 +938,44 @@
             "string",
             "null"
           ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
         }
       },
       "additionalProperties": false,
       "title": "WorldRenderSkyLayerGradient"
     },
     "WorldRenderSkyLayerFog": {
-      "description": "The exponential distance fog fading toward the sky gradient.",
+      "description": "The exponential distance fog fading toward the sky the lighting sees. Not a layer of the stack: it takes none of a layer\u0027s blend, opacity, mask, transform, clock, visibility or tier.",
       "properties": {
         "$type": {
           "const": "fog"
@@ -848,13 +998,62 @@
             "string",
             "null"
           ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
         }
       },
       "additionalProperties": false,
       "title": "WorldRenderSkyLayerFog"
     },
+    "WorldRenderSkyTexture": {
+      "description": "The texture body shape: the image a diegetic screen shows, drawn across a body\u0027s disc, as a panorama samples its screen.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "screen": {
+          "description": "The screen\u0027s surface index (Index), a screen the world declares.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "screen"
+      ],
+      "additionalProperties": false,
+      "title": "WorldRenderSkyTexture"
+    },
     "WorldRenderSkyLayerSunDisc": {
-      "description": "The visible sun disc \u2014 an additive highlight about one directional light\u0027s direction.",
+      "description": "The visible sun disc about one directional light\u0027s direction: an additive glow, or with Texture the image a screen shows across the disc.",
       "properties": {
         "$type": {
           "const": "sunDisc"
@@ -885,11 +1084,52 @@
           ],
           "default": null
         },
+        "color": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "BindableColor\u0027s grammar: the disc\u0027s tint. Absent is white.",
+          "default": null
+        },
+        "texture": {
+          "$ref": "#/$defs/WorldRenderSkyTexture",
+          "description": "The texture body shape: the screen whose image the disc shows. Absent is the glow.",
+          "default": null
+        },
         "layerName": {
           "type": [
             "string",
             "null"
           ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
         }
       },
       "additionalProperties": false,
@@ -961,11 +1201,58 @@
           ],
           "default": null
         },
+        "sparsity": {
+          "description": "The share of the cells that carry a star, in (0, 1]. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "size": {
+          "description": "A star\u0027s angular radius as a share of one cell\u0027s angular pitch, in (0, 0.5]. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
         "layerName": {
           "type": [
             "string",
             "null"
           ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
         }
       },
       "additionalProperties": false,
@@ -1036,7 +1323,7 @@
       ]
     },
     "WorldRenderSkyLayerClouds": {
-      "description": "The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.",
+      "description": "The procedural cloud layer: a deterministic hashed-lattice noise on a dome above the camera, thresholded by coverage and fading into the horizon.",
       "properties": {
         "$type": {
           "const": "clouds"
@@ -1097,18 +1384,733 @@
           ],
           "default": null
         },
+        "octaves": {
+          "description": "The fractal octaves at the high tier, one to eight. Absent is four.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "warp": {
+          "description": "How far the first fractal sum bends the second\u0027s domain, in cells. Absent is 0.6.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "relief": {
+          "description": "The heightfield\u0027s rise per unit thickness, the steepness its lighting reads. Absent is 0.7.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "extinction": {
+          "description": "Beer\u0027s-law extinction per unit thickness: how quickly a cloud turns opaque. Absent is 3.5.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
         "layerName": {
           "type": [
             "string",
             "null"
           ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
         }
       },
       "additionalProperties": false,
       "title": "WorldRenderSkyLayerClouds"
     },
+    "WorldRenderSkyLayerAurora": {
+      "description": "Aurora curtains: rays rising from a wavering base, fading upward from Color to Top, moving with the layer\u0027s clock.",
+      "properties": {
+        "$type": {
+          "const": "aurora"
+        },
+        "intensity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The curtains\u0027 peak brightness. Absent is zero, which draws nothing.",
+          "default": null
+        },
+        "color": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "BindableColor\u0027s grammar: the colour at a curtain\u0027s base. Absent is green.",
+          "default": null
+        },
+        "top": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "BindableColor\u0027s grammar: the colour at a curtain\u0027s top. Absent is violet.",
+          "default": null
+        },
+        "base": {
+          "$ref": "#/$defs/BindableAngle",
+          "description": "The curtains\u0027 mean base elevation, in radians. Absent is about 17\u00B0.",
+          "default": null
+        },
+        "height": {
+          "$ref": "#/$defs/BindableAngle",
+          "description": "How far above its base a curtain rises, in radians. Absent is about 20\u00B0.",
+          "default": null
+        },
+        "fold": {
+          "$ref": "#/$defs/BindableAngle",
+          "description": "How far the base wavers, in radians. Absent is about 5\u00B0.",
+          "default": null
+        },
+        "rays": {
+          "description": "The rays per turn of azimuth. Absent is 96.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "waves": {
+          "description": "The base\u0027s waves per turn of azimuth. Absent is 5.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "seed": {
+          "description": "The hash seed.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "name": {
+          "description": "The name a section key addresses the layer by, unique among the layers.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "layerName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerAurora"
+    },
+    "WorldRenderSkyLayerNoise": {
+      "description": "A fractal noise field over the sky, coloured from Low to High and covered where it rises past one less its coverage, sliding with the layer\u0027s clock.",
+      "properties": {
+        "$type": {
+          "const": "noise"
+        },
+        "low": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "BindableColor\u0027s grammar: the colour where the noise is lowest. Absent is black.",
+          "default": null
+        },
+        "high": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "BindableColor\u0027s grammar: the colour where it is highest. Absent is white.",
+          "default": null
+        },
+        "coverage": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The share of the sky the noise covers, in [0, 1]. Absent is one.",
+          "default": null
+        },
+        "softness": {
+          "description": "The covered edge\u0027s width as a share of the noise\u0027s range, in (0, 1]. Absent is 0.25.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "scale": {
+          "description": "The lattice cells per unit of direction. Absent is four.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "octaves": {
+          "description": "The fractal octaves at the high tier, one to eight. Absent is four.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "gain": {
+          "description": "Each octave\u0027s amplitude relative to the one before it, in (0, 1). Absent is one half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "seed": {
+          "description": "The hash seed.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "name": {
+          "description": "The name a section key addresses the layer by, unique among the layers.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "layerName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerNoise"
+    },
+    "WorldSkyPatternShape": {
+      "enum": [
+        "checker",
+        "stripes",
+        "grid",
+        null
+      ],
+      "title": "WorldSkyPatternShape"
+    },
+    "WorldRenderSkyLayerPattern": {
+      "description": "A painted pattern over azimuth and elevation, scrolling one cell a cycle of the layer\u0027s clock.",
+      "properties": {
+        "$type": {
+          "const": "pattern"
+        },
+        "shape": {
+          "$ref": "#/$defs/WorldSkyPatternShape",
+          "description": "What it paints. Absent is a checker.",
+          "default": null
+        },
+        "colors": {
+          "description": "Its two colours, in BindableColor\u0027s grammar. Absent is black and white.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "$ref": "#/$defs/BindableColor"
+          }
+        },
+        "cells": {
+          "description": "The cells per turn of azimuth, a whole number. Absent is 24.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "line": {
+          "description": "A stripe\u0027s or grid line\u0027s width as a share of a cell, in (0, 1). Absent is 0.1.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "softness": {
+          "description": "The edge\u0027s width as a share of a cell, in [0, 0.5]. Absent is 0.05.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "name": {
+          "description": "The name a section key addresses the layer by, unique among the layers.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "layerName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerPattern"
+    },
+    "WorldSkyProjection": {
+      "enum": [
+        "equirect",
+        "octahedral",
+        null
+      ],
+      "title": "WorldSkyProjection"
+    },
+    "WorldRenderSkyLayerPanorama": {
+      "description": "The image a diegetic screen shows, sampled by direction: the screen\u0027s source, at infinity. The camera alone sees it, since the environment map binds no screen.",
+      "properties": {
+        "$type": {
+          "const": "panorama"
+        },
+        "screen": {
+          "description": "The screen\u0027s surface index (Index), a screen the world declares. Required.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "projection": {
+          "$ref": "#/$defs/WorldSkyProjection",
+          "description": "How a direction maps to the image. Absent is equirectangular.",
+          "default": null
+        },
+        "intensity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The image\u0027s brightness scale. Absent is one.",
+          "default": null
+        },
+        "name": {
+          "description": "The name a section key addresses the layer by, unique among the layers.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "layerName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerPanorama"
+    },
+    "WorldRenderSkyLayerView": {
+      "description": "Another world, seen at infinity: a second sdf.world instance (sky$\u003Cname\u003E) rendering the destination\u0027s session from a fixed anchor in it, turned with the viewer\u0027s camera and never translated by it. It renders only while the viewer\u0027s previous frame showed it, and only the rectangle its mask covers (a cone, or the whole frustum without a mask). The camera alone sees it, since the environment map binds no screen. At most SdfSky.MaxInfinityViews view and far layers a world, nested worlds included; a view that cannot render draws its Fallback colour.",
+      "properties": {
+        "$type": {
+          "const": "view"
+        },
+        "name": {
+          "description": "The layer\u0027s name, required: the instance is sky$name and its counted rows carry the name, so it is one part free of $ and ~, unique among the layers.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "destination": {
+          "description": "The destination world, by the name a session screen\u0027s destination takes. Required.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The point in the destination the camera sits at, whatever the viewer does. Absent is its origin.",
+          "default": null
+        },
+        "turn": {
+          "description": "The rotation about up that carries the viewer\u0027s frame into the destination\u0027s, in degrees. Absent is none: the destination\u0027s axes are the viewer\u0027s.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "scale": {
+          "description": "The instance\u0027s render scale against the viewer\u0027s pixel density, in (0, 1]; below the high sky tier it renders at half of it. Absent is one half.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "refresh": {
+          "description": "It renders at most once every this many frames, at least one. Absent is two.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "farDistance": {
+          "description": "The depth its march ends at, in world units. Absent is 1000.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "shadows": {
+          "description": "Whether the instance is dressed with the key light\u0027s soft shadow. Absent is off.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "ambientOcclusion": {
+          "description": "Whether the instance is dressed with ambient occlusion. Absent is off.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "fallback": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "BindableColor\u0027s grammar: the colour drawn where the view cannot render, before its first image and past the nesting depth or the cap. Absent is black.",
+          "default": null
+        },
+        "layerName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerView"
+    },
+    "WorldRenderSkyLayerFar": {
+      "description": "Far geometry: the same mechanism as View over a residency that holds only the named prototypes of this world, a planet or a ring of monoliths or a city on the horizon, rendered by the one sdf.world engine sized to its angular bound, so its cost scales with the pixels it covers and is counted under its own instance. Its image alpha is its coverage: the rest of the sky shows around it.",
+      "properties": {
+        "$type": {
+          "const": "far"
+        },
+        "name": {
+          "description": "The layer\u0027s name, required, as View\u0027s.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "prototypes": {
+          "description": "The prototypes the residency holds, by their ids in prototypes. Required, at least one.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The point the camera sits at, in this world. Absent is its origin.",
+          "default": null
+        },
+        "turn": {
+          "description": "The rotation about up applied to the viewer\u0027s frame, in degrees. Absent is none.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "scale": {
+          "description": "As Scale.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "refresh": {
+          "description": "As Refresh.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "farDistance": {
+          "description": "The depth its march ends at, in world units. Absent is 1000.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "shadows": {
+          "description": "As Shadows.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "ambientOcclusion": {
+          "description": "As AmbientOcclusion.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "fallback": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "As Fallback.",
+          "default": null
+        },
+        "layerName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "blend": {
+          "$ref": "#/$defs/WorldSkyBlend",
+          "description": "Gets how the layer composes over the colour beneath it. Absent is its kind\u0027s: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc and an aurora."
+        },
+        "opacity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the layer\u0027s opacity, in [0, 1], which scales its alpha. Zero draws nothing and counts no work. Absent is one."
+        },
+        "mask": {
+          "$ref": "#/$defs/WorldRenderSkyMask",
+          "description": "Gets where the layer draws. Absent is everywhere."
+        },
+        "transform": {
+          "$ref": "#/$defs/WorldRenderSkyTransform",
+          "description": "Gets the layer\u0027s own transform about the sky frame. Absent is none."
+        },
+        "clock": {
+          "description": "Gets the clock, by name in the timeline section, whose phase moves the layer\u0027s own motion: an aurora\u0027s curtains, a noise field\u0027s slide, a pattern\u0027s scroll. Absent holds them still.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "visibility": {
+          "$ref": "#/$defs/WorldSkyVisibility",
+          "description": "Gets who sees the layer. Absent is its kind\u0027s: the camera and the lighting for a gradient, the camera alone for every other kind."
+        },
+        "tier": {
+          "$ref": "#/$defs/WorldSkyTier",
+          "description": "Gets the lowest quality tier the layer draws at; below it the layer writes no entry and counts no work. Absent is Low, every tier."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerFar"
+    },
     "WorldRenderSkyLayer": {
-      "description": "One sky layer. The $type string is the JSON discriminator.",
+      "description": "One sky layer. The $type string is the JSON discriminator. Every layer but fog also carries what any layer carries: its blend, opacity, mask, transform, clock, visibility and the lowest quality tier it draws at.",
       "type": [
         "object",
         "null"
@@ -1131,6 +2133,24 @@
         },
         {
           "$ref": "#/$defs/WorldRenderSkyLayerClouds"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerAurora"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerNoise"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerPattern"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerPanorama"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerView"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerFar"
         }
       ],
       "title": "WorldRenderSkyLayer"

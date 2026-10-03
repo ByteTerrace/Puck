@@ -1,5 +1,6 @@
 using Puck.Hosting;
 using Puck.SdfVm.Views;
+using Puck.SignedDistance;
 
 namespace Puck.World.Client;
 
@@ -28,7 +29,7 @@ public sealed record WorldInfinityFallback(string? Parent, InfinityViewSpec Spec
 public sealed class WorldInfinityViewPlan {
     /// <summary>The most infinity views a world carries: instances planned at any depth, and views authored in one
     /// world's sky.</summary>
-    public const int MaxViews = 8;
+    public const int MaxViews = SdfSky.MaxInfinityViews;
 
     private WorldInfinityViewPlan(IReadOnlyList<WorldInfinityView> views, IReadOnlyList<WorldInfinityFallback> fallbacks) {
         Views = views;

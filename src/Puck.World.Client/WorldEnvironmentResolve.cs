@@ -48,6 +48,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     private int m_revision = -1;
 
     private WorldRenderSky? m_sky;
+
+    // Each expanded layer's label (WorldSkyLayers.LabelsOf), and where the last resolution wrote it in the stack.
+    private string?[] m_skyLabels = [];
+    private int[] m_skyLayerIndex = [];
+
     private PresentedTick m_tick;
 
     /// <summary>Initializes a new instance of the <see cref="WorldEnvironmentResolve"/> class.</summary>
@@ -67,10 +72,12 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     /// return null and disable the light for this frame.</param>
     /// <param name="shadows">The live policy, or the definition's boot policy.</param>
     /// <param name="shadowSelection">A session's complete delivered selection, or this resolver's own subscription.</param>
+    /// <param name="skyQuality">The sky's quality tier (<c>world.sky-quality</c>), or <see langword="null"/> for the
+    /// definition's boot tier (<c>render.skyQuality</c>).</param>
     /// <returns>The lights and the sky.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="mirror"/> is
     /// <see langword="null"/>.</exception>
-    public WorldResolvedEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null, WorldShadowSettings? shadows = null, WorldShadowSelection? shadowSelection = null) {
+    public WorldResolvedEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null, WorldShadowSettings? shadows = null, WorldShadowSelection? shadowSelection = null, SdfSkyTier? skyQuality = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
@@ -84,6 +91,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             m_revision = revision;
             m_lighting = WorldRenderKeys.Expand(lighting: definition.Render.Lighting);
             m_sky = WorldRenderKeys.Expand(sky: definition.Render.Sky);
+            m_skyLabels = WorldSkyLayers.LabelsOf(layers: (m_sky?.Layers ?? []));
             moved = true;
         }
 
@@ -120,6 +128,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         m_outputIndex ^= 1;
         lights.CopyFrom(source: m_resolvedLights);
         sky.CopyFrom(source: m_resolvedSky);
+        sky.Quality = (skyQuality ?? WorldSkyLayers.TierOf(tier: definition.Render.SkyQuality));
         ApplyAnchors(
             lighting: m_lighting,
             output: lights,
@@ -410,9 +419,6 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     // The one document-to-records writer. The lights seed from the pinned ones when the world authors no light list (the
     // pinned sun and hemisphere) and from nothing when it does, the sky from the unauthored one, and an absent field
     // takes its kind's default.
-    // The sky is enabled by any layer that draws (a gradient, the sun disc, stars, clouds), since each is miss-pixel
-    // content the shader composites only on the authored path; fog alone leaves the pinned branch, which renders
-    // bit-identically to a world with no sky.
     private void Write(WorldStateMirror mirror, WorldRenderLighting? lighting, WorldRenderSky? sky, WorldRenderEnvironment? environment) {
         var into = m_resolvedLights;
 
@@ -614,9 +620,25 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         var layers = (sky?.Layers ?? []);
 
+        // An authored gradient replaces the default look's; a stack with none draws over it.
         for (var index = 0; (index < layers.Count); index++) {
-            WriteLayer(
+            if (layers[index] is WorldRenderSkyLayer.Gradient) {
+                m_resolvedSky.ClearLayers();
+
+                break;
+            }
+        }
+
+        m_resolvedSky.FrameUp = ((sky?.Frame?.Up is { } up) ? ((Vector3)up) : Vector3.UnitY);
+
+        if (m_skyLayerIndex.Length < layers.Count) {
+            m_skyLayerIndex = new int[layers.Count];
+        }
+
+        for (var index = 0; (index < layers.Count); index++) {
+            m_skyLayerIndex[index] = WriteLayer(
                 into: m_resolvedSky,
+                label: m_skyLabels[index],
                 layer: layers[index],
                 lights: into,
                 mirror: mirror,
@@ -633,192 +655,340 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             mirror: mirror
         );
     }
-    private void WriteLayer(WorldStateMirror mirror, WorldRenderSkyLayer layer, SdfLights lights, SdfSky into, WorldValueSite site) {
+    // Writes one document layer into the stack, returning its index there: −1 for fog, which is the air rather than a
+    // layer, and for a layer past the stack's capacity, which the validator refuses.
+    private int WriteLayer(WorldStateMirror mirror, WorldRenderSkyLayer layer, string? label, SdfLights lights, SdfSky into, WorldValueSite site) {
         ref var block = ref into.Block;
 
-        switch (layer) {
-            case WorldRenderSkyLayer.Gradient gradient: {
-                    if (gradient.Stops is not { } stops) {
-                        break;
-                    }
+        if (layer is WorldRenderSkyLayer.Fog fog) {
+            block.FogDensity = Scalar(
+                fallback: block.FogDensity,
+                mirror: mirror,
+                scalar: fog.Density,
+                field: WorldValueFields.FogDensity,
+                site: site
+            );
 
-                    var count = Math.Min(
-                        val1: stops.Count,
-                        val2: SdfSky.MaxStops
-                    );
+            return -1;
+        }
+        if ((label is null) || (into.LayerCount >= SdfSky.MaxLayers)) {
+            return -1;
+        }
 
-                    var stopSite = site with { Inner = "stops" };
+        var blend = WorldSkyLayers.BlendOf(layer: layer);
+        var visibility = WorldSkyLayers.VisibilityOf(layer: layer);
+        var tier = WorldSkyLayers.TierOf(layer: layer);
+        var opacity = Scalar(fallback: 1f, field: WorldValueFields.SkyLayerOpacity, mirror: mirror, scalar: layer.Opacity, site: site);
+        var at = layer switch {
+            WorldRenderSkyLayer.Gradient gradient => into.Add(blend: blend, label: label, opacity: opacity, parameters: GradientOf(gradient: gradient, mirror: mirror, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.SunDisc disc => into.Add(blend: blend, label: label, opacity: opacity, parameters: DiscOf(disc: disc, lights: lights, mirror: mirror, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Stars stars => into.Add(blend: blend, label: label, opacity: opacity, parameters: StarsOf(mirror: mirror, site: site, stars: stars), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Clouds clouds => into.Add(blend: blend, label: label, opacity: opacity, parameters: CloudsOf(clouds: clouds, mirror: mirror, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Aurora aurora => into.Add(blend: blend, label: label, opacity: opacity, parameters: AuroraOf(aurora: aurora, mirror: mirror, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Noise noise => into.Add(blend: blend, label: label, opacity: opacity, parameters: NoiseOf(mirror: mirror, noise: noise, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Pattern pattern => into.Add(blend: blend, label: label, opacity: opacity, parameters: PatternOf(mirror: mirror, pattern: pattern), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Panorama panorama => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanoramaOf(mirror: mirror, panorama: panorama, site: site), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.View view => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: false, fallback: view.Fallback, mirror: mirror), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Far far => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: true, fallback: far.Fallback, mirror: mirror), tier: tier, visibility: visibility),
+            _ => -1,
+        };
 
-                    for (var index = 0; (index < count); index++) {
-                        var stop = stops[index];
+        if (at < 0) {
+            return -1;
+        }
 
-                        into.SetStop(
-                            index: index,
-                            stop: new SdfSkyStop(
-                                Color: Rgb(
-                                    color: stop?.Color,
-                                    fallback: Vector3.One,
-                                    mirror: mirror
-                                ),
-                                Elevation: Scalar(
-                                    fallback: 0f,
-                                    mirror: mirror,
-                                    scalar: stop?.Elevation,
-                                    field: WorldValueFields.StopElevation,
-                                    site: stopSite
-                                )
-                            )
-                        );
-                    }
+        ref var record = ref into.LayerAt(index: at);
 
-                    into.StopCount = count;
+        record.Phase = ClockPhase(clock: layer.Clock, mirror: mirror);
+        record.Rotation = SdfSkyLayer.RotationOf(
+            tilt: Angle(fallback: 0f, field: WorldValueFields.SkyLayerTilt, mirror: mirror, angle: layer.Transform?.Tilt, site: site),
+            turn: Angle(fallback: 0f, field: WorldValueFields.SkyLayerTurn, mirror: mirror, angle: layer.Transform?.Turn, site: site)
+        );
+        WriteMask(mask: layer.Mask, record: ref record);
 
-                    break;
-                }
-            case WorldRenderSkyLayer.Fog fog: {
-                    block.FogDensity = Scalar(
-                        fallback: block.FogDensity,
-                        mirror: mirror,
-                        scalar: fog.Density,
-                        field: WorldValueFields.FogDensity,
-                        site: site
-                    );
+        return at;
+    }
+    // A mask's record lanes: an elevation band as heights (the sines of its elevations) with its feather as a height, or
+    // a cone as its axis and the cosine of its spread with its feather as the cosine's fall over that angle.
+    private static void WriteMask(WorldRenderSkyMask? mask, ref SdfSkyLayer record) {
+        if (mask is null) {
+            return;
+        }
 
-                    break;
-                }
-            case WorldRenderSkyLayer.SunDisc disc: {
-                    block.DiscLight = (disc.Light ?? FirstDirectional(lights: lights));
-                    into.SunDiscRadians = Angle(
-                        angle: disc.Radius,
-                        fallback: into.SunDiscRadians,
-                        mirror: mirror,
-                        field: WorldValueFields.SunDiscRadius,
-                        site: site
-                    );
-                    block.DiscIntensity = Scalar(
-                        fallback: block.DiscIntensity,
-                        mirror: mirror,
-                        scalar: disc.Intensity,
-                        field: WorldValueFields.SunDiscIntensity,
-                        site: site
-                    );
+        var feather = Math.Max(val1: (mask.Feather ?? 0d), val2: 0d);
 
-                    break;
-                }
-            case WorldRenderSkyLayer.Stars stars: {
-                    block.StarDensity = (stars.Density ?? block.StarDensity);
-                    block.StarBrightness = Scalar(
-                        fallback: block.StarBrightness,
-                        mirror: mirror,
-                        scalar: stars.Brightness,
-                        field: WorldValueFields.StarBrightness,
-                        site: site
-                    );
-                    block.StarSeed = (stars.Seed ?? block.StarSeed);
+        if (mask.Band is [var low, var high]) {
+            record.Mask = SdfSkyMask.Elevation;
+            record.MaskBand = new Vector4(x: ((float)Math.Sin(a: low)), y: ((float)Math.Sin(a: high)), z: 0f, w: 0f);
+            record.MaskSoftness = ((float)Math.Sin(a: Math.Min(val1: feather, val2: (Math.PI / 2d))));
+        } else if (mask.Cone is { } cone) {
+            var spread = Math.Clamp(max: Math.PI, min: 0d, value: cone.Spread);
+            var axis = ((Vector3)cone.Toward);
 
-                    if (stars.Twinkle is not { } twinkle) {
-                        break;
-                    }
-
-                    var twinkleSite = site with { Inner = "twinkle" };
-
-                    block.TwinkleShare = Scalar(
-                        fallback: block.TwinkleShare,
-                        mirror: mirror,
-                        scalar: twinkle.Share,
-                        field: WorldValueFields.TwinkleShare,
-                        site: twinkleSite
-                    );
-                    block.TwinkleDepth = Scalar(
-                        fallback: block.TwinkleDepth,
-                        mirror: mirror,
-                        scalar: twinkle.Depth,
-                        field: WorldValueFields.TwinkleDepth,
-                        site: twinkleSite
-                    );
-
-                    var rate = (twinkle.Rate ?? new BindableScalar(literal: SdfSky.DefaultTwinkleRate));
-                    var visible = (
-                        (block.StarBrightness > 0f) &&
-                        (block.StarDensity > 0f) &&
-                        (block.TwinkleShare > 0f) &&
-                        (block.TwinkleDepth > 0f) &&
-                        (mirror.Scalar(
-                        fallback: 0f,
-                        scalar: in rate
-                    ) > 0f)
-                    );
-
-                    // A sky with no visible twinkle bakes phase zero, so a still frame's block repeats.
-                    if (visible) {
-                        var cycles = Integrate(
-                            mirror: mirror,
-                            modulus: 1d,
-                            rate: rate
-                        );
-
-                        block.TwinklePhase = ((float)((cycles < 0d)
-                            ? (cycles + 1d)
-                            : cycles));
-                    }
-
-                    break;
-                }
-            case WorldRenderSkyLayer.Clouds clouds: {
-                    block.CloudCoverage = Scalar(
-                        fallback: block.CloudCoverage,
-                        mirror: mirror,
-                        scalar: clouds.Coverage,
-                        field: WorldValueFields.CloudCoverage,
-                        site: site
-                    );
-                    block.CloudSoftness = Scalar(
-                        fallback: block.CloudSoftness,
-                        mirror: mirror,
-                        scalar: clouds.Softness,
-                        field: WorldValueFields.CloudSoftness,
-                        site: site
-                    );
-                    block.CloudScale = Scalar(
-                        fallback: block.CloudScale,
-                        mirror: mirror,
-                        scalar: clouds.Scale,
-                        field: WorldValueFields.CloudScale,
-                        site: site
-                    );
-                    block.CloudSeed = (clouds.Seed ?? block.CloudSeed);
-                    block.CloudColor = Rgb(
-                        color: clouds.Color,
-                        fallback: block.CloudColor,
-                        mirror: mirror
-                    );
-                    block.CloudCurl = Angle(
-                        angle: clouds.Curl,
-                        fallback: block.CloudCurl,
-                        mirror: mirror,
-                        field: WorldValueFields.CloudCurl,
-                        site: site
-                    );
-                    block.CloudDriftOffset = Integrate(
-                        mirror: mirror,
-                        modulus: SdfVolume.NoisePeriodCells,
-                        rate: clouds.Drift
-                    );
-                    block.CloudShearOffset = Integrate(
-                        mirror: mirror,
-                        modulus: SdfVolume.NoisePeriodCells,
-                        rate: clouds.Shear
-                    );
-                    block.CloudSpinAngle = ((float)Integrate(
-                        mirror: mirror,
-                        modulus: Math.Tau,
-                        rate: clouds.Spin
-                    ));
-
-                    break;
-                }
+            record.Mask = SdfSkyMask.Cone;
+            record.MaskBand = new Vector4(value: axis, w: ((float)Math.Cos(d: spread)));
+            record.MaskSoftness = ((float)(Math.Cos(d: spread) - Math.Cos(d: Math.Min(val1: (spread + feather), val2: Math.PI))));
         }
     }
+    // A layer clock's phase at the presented tick, in cycles in [0, 1), noting what it reads: a state clock's slot, or the
+    // tick for a tick clock.
+    private float ClockPhase(WorldStateMirror mirror, string? clock) {
+        if (clock is null) {
+            return 0f;
+        }
+
+        var slot = mirror.ClockSlotOf(name: clock);
+
+        if (slot >= 0) {
+            NoteSlot(mirror: mirror, slot: slot);
+        } else if (!mirror.ClockHoldsStill(name: clock)) {
+            m_readsTick = true;
+        }
+
+        return (mirror.TryPhase(clock: out _, name: clock, phase: out var phase) ? ((float)phase) : 0f);
+    }
+    private SdfSkyGradient GradientOf(WorldStateMirror mirror, WorldRenderSkyLayer.Gradient gradient, in WorldValueSite site) {
+        if (gradient.Stops is not { } stops) {
+            return SdfSky.DefaultGradient;
+        }
+
+        var parameters = new SdfSkyGradient();
+        var count = Math.Min(
+            val1: stops.Count,
+            val2: SdfSky.MaxStops
+        );
+        var stopSite = site with { Inner = "stops" };
+
+        for (var index = 0; (index < count); index++) {
+            var stop = stops[index];
+
+            parameters.SetStop(
+                color: Rgb(
+                    color: stop?.Color,
+                    fallback: Vector3.One,
+                    mirror: mirror
+                ),
+                elevation: Scalar(
+                    fallback: 0f,
+                    mirror: mirror,
+                    scalar: stop?.Elevation,
+                    field: WorldValueFields.StopElevation,
+                    site: stopSite
+                ),
+                index: index
+            );
+        }
+
+        parameters.Count = ((uint)count);
+
+        return parameters;
+    }
+    // A disc's light is its authored one, or the first directional; a disc that names none follows the first shadow slot
+    // once the frame's slots are known (ApplySunDiscLight).
+    private SdfSkyDisc DiscOf(WorldStateMirror mirror, WorldRenderSkyLayer.SunDisc disc, SdfLights lights, in WorldValueSite site) => new() {
+        Color = Rgb(color: disc.Color, fallback: Vector3.One, mirror: mirror),
+        Intensity = Scalar(
+            fallback: 0f,
+            mirror: mirror,
+            scalar: disc.Intensity,
+            field: WorldValueFields.SunDiscIntensity,
+            site: site
+        ),
+        Light = (disc.Light ?? FirstDirectional(lights: lights)),
+        Radius = Angle(
+            angle: disc.Radius,
+            fallback: SdfSkyDisc.DefaultRadius,
+            mirror: mirror,
+            field: WorldValueFields.SunDiscRadius,
+            site: site
+        ),
+        Screen = (disc.Texture?.Screen ?? -1),
+    };
+    private SdfSkyStars StarsOf(WorldStateMirror mirror, WorldRenderSkyLayer.Stars stars, in WorldValueSite site) {
+        var parameters = new SdfSkyStars();
+
+        parameters.Density = (stars.Density ?? parameters.Density);
+        parameters.Sparsity = (stars.Sparsity ?? parameters.Sparsity);
+        parameters.RadiusFraction = (stars.Size ?? parameters.RadiusFraction);
+        parameters.Brightness = Scalar(
+            fallback: 0f,
+            mirror: mirror,
+            scalar: stars.Brightness,
+            field: WorldValueFields.StarBrightness,
+            site: site
+        );
+        parameters.Seed = (stars.Seed ?? 0u);
+
+        if (stars.Twinkle is not { } twinkle) {
+            return parameters;
+        }
+
+        var twinkleSite = site with { Inner = "twinkle" };
+
+        parameters.TwinkleShare = Scalar(
+            fallback: 0f,
+            mirror: mirror,
+            scalar: twinkle.Share,
+            field: WorldValueFields.TwinkleShare,
+            site: twinkleSite
+        );
+        parameters.TwinkleDepth = Scalar(
+            fallback: 0f,
+            mirror: mirror,
+            scalar: twinkle.Depth,
+            field: WorldValueFields.TwinkleDepth,
+            site: twinkleSite
+        );
+
+        var rate = (twinkle.Rate ?? new BindableScalar(literal: SdfSky.DefaultTwinkleRate));
+        var visible = (
+            (parameters.Brightness > 0f) &&
+            (parameters.Density > 0f) &&
+            (parameters.TwinkleShare > 0f) &&
+            (parameters.TwinkleDepth > 0f) &&
+            (mirror.Scalar(
+            fallback: 0f,
+            scalar: in rate
+        ) > 0f)
+        );
+
+        // A sky with no visible twinkle bakes phase zero, so a still frame's record repeats.
+        if (visible) {
+            var cycles = Integrate(
+                mirror: mirror,
+                modulus: 1d,
+                rate: rate
+            );
+
+            parameters.TwinklePhase = ((float)((cycles < 0d)
+                ? (cycles + 1d)
+                : cycles));
+        }
+
+        return parameters;
+    }
+    private SdfSkyClouds CloudsOf(WorldStateMirror mirror, WorldRenderSkyLayer.Clouds clouds, in WorldValueSite site) {
+        var parameters = new SdfSkyClouds();
+
+        parameters.Coverage = Scalar(
+            fallback: 0f,
+            mirror: mirror,
+            scalar: clouds.Coverage,
+            field: WorldValueFields.CloudCoverage,
+            site: site
+        );
+        parameters.Softness = Scalar(
+            fallback: parameters.Softness,
+            mirror: mirror,
+            scalar: clouds.Softness,
+            field: WorldValueFields.CloudSoftness,
+            site: site
+        );
+        parameters.Scale = Scalar(
+            fallback: parameters.Scale,
+            mirror: mirror,
+            scalar: clouds.Scale,
+            field: WorldValueFields.CloudScale,
+            site: site
+        );
+        parameters.Seed = (clouds.Seed ?? 0u);
+        parameters.Color = Rgb(
+            color: clouds.Color,
+            fallback: parameters.Color,
+            mirror: mirror
+        );
+        parameters.Curl = Angle(
+            angle: clouds.Curl,
+            fallback: 0f,
+            mirror: mirror,
+            field: WorldValueFields.CloudCurl,
+            site: site
+        );
+        parameters.DriftOffset = Integrate(
+            mirror: mirror,
+            modulus: SdfVolume.NoisePeriodCells,
+            rate: clouds.Drift
+        );
+        parameters.ShearOffset = Integrate(
+            mirror: mirror,
+            modulus: SdfVolume.NoisePeriodCells,
+            rate: clouds.Shear
+        );
+        parameters.SpinAngle = ((float)Integrate(
+            mirror: mirror,
+            modulus: Math.Tau,
+            rate: clouds.Spin
+        ));
+        parameters.Octaves = (clouds.Octaves ?? parameters.Octaves);
+        parameters.Warp = (clouds.Warp ?? parameters.Warp);
+        parameters.Height = (clouds.Relief ?? parameters.Height);
+        parameters.Extinction = (clouds.Extinction ?? parameters.Extinction);
+
+        return parameters;
+    }
+    // An aurora's angles become the heights the kernel reads: the base's sine, the height its top rises to above it, and
+    // the fold's sway at the base's elevation.
+    private SdfSkyAurora AuroraOf(WorldStateMirror mirror, WorldRenderSkyLayer.Aurora aurora, in WorldValueSite site) {
+        var parameters = new SdfSkyAurora();
+        var baseAngle = Angle(angle: aurora.Base, fallback: 0.3f, field: WorldValueFields.AuroraBase, mirror: mirror, site: site);
+        var height = Angle(angle: aurora.Height, fallback: 0.35f, field: WorldValueFields.AuroraHeight, mirror: mirror, site: site);
+        var fold = Angle(angle: aurora.Fold, fallback: 0.08f, field: WorldValueFields.AuroraFold, mirror: mirror, site: site);
+        var baseHeight = Math.Sin(a: baseAngle);
+
+        parameters.Intensity = Scalar(fallback: 0f, field: WorldValueFields.AuroraIntensity, mirror: mirror, scalar: aurora.Intensity, site: site);
+        parameters.Color = Rgb(color: aurora.Color, fallback: parameters.Color, mirror: mirror);
+        parameters.TopColor = Rgb(color: aurora.Top, fallback: parameters.TopColor, mirror: mirror);
+        parameters.Base = ((float)baseHeight);
+        parameters.Height = ((float)Math.Max(val1: (Math.Sin(a: Math.Min(val1: (baseAngle + height), val2: (Math.PI / 2d))) - baseHeight), val2: 1e-3d));
+        parameters.Fold = ((float)(Math.Cos(d: baseAngle) * fold));
+        parameters.Rays = (aurora.Rays ?? parameters.Rays);
+        parameters.Waves = (aurora.Waves ?? parameters.Waves);
+        parameters.Seed = (aurora.Seed ?? 0u);
+
+        return parameters;
+    }
+    private SdfSkyNoise NoiseOf(WorldStateMirror mirror, WorldRenderSkyLayer.Noise noise, in WorldValueSite site) {
+        var parameters = new SdfSkyNoise();
+
+        parameters.ColorLow = Rgb(color: noise.Low, fallback: parameters.ColorLow, mirror: mirror);
+        parameters.ColorHigh = Rgb(color: noise.High, fallback: parameters.ColorHigh, mirror: mirror);
+        parameters.Coverage = Scalar(fallback: parameters.Coverage, field: WorldValueFields.NoiseCoverage, mirror: mirror, scalar: noise.Coverage, site: site);
+        parameters.Softness = (noise.Softness ?? parameters.Softness);
+        parameters.Scale = (noise.Scale ?? parameters.Scale);
+        parameters.Octaves = (noise.Octaves ?? parameters.Octaves);
+        parameters.Gain = (noise.Gain ?? parameters.Gain);
+        parameters.Seed = (noise.Seed ?? 0u);
+
+        return parameters;
+    }
+    private SdfSkyPattern PatternOf(WorldStateMirror mirror, WorldRenderSkyLayer.Pattern pattern) {
+        var parameters = new SdfSkyPattern();
+
+        parameters.Shape = (pattern.Shape switch {
+            WorldSkyPatternShape.Stripes => SdfSkyPatternShape.Stripes,
+            WorldSkyPatternShape.Grid => SdfSkyPatternShape.Grid,
+            _ => SdfSkyPatternShape.Checker,
+        });
+        parameters.ColorA = Rgb(color: ((pattern.Colors is [var first, ..]) ? first : null), fallback: parameters.ColorA, mirror: mirror);
+        parameters.ColorB = Rgb(color: ((pattern.Colors is [_, var second, ..]) ? second : null), fallback: parameters.ColorB, mirror: mirror);
+        parameters.Cells = (pattern.Cells ?? parameters.Cells);
+        parameters.Line = (pattern.Line ?? parameters.Line);
+        parameters.Softness = (pattern.Softness ?? parameters.Softness);
+
+        return parameters;
+    }
+    private SdfSkyPanorama PanoramaOf(WorldStateMirror mirror, WorldRenderSkyLayer.Panorama panorama, in WorldValueSite site) => new() {
+        Intensity = Scalar(fallback: 1f, field: WorldValueFields.PanoramaIntensity, mirror: mirror, scalar: panorama.Intensity, site: site),
+        Projection = ((panorama.Projection == WorldSkyProjection.Octahedral) ? SdfSkyProjection.Octahedral : SdfSkyProjection.Equirectangular),
+        Screen = (panorama.Screen ?? -1),
+    };
+    // An infinity view layer's static parameters: its fallback colour and whether its image alpha is coverage. The viewer's
+    // basis, the rectangle and the screen the instance's image arrives on belong to a frame, which the view's fit supplies
+    // (InfinityViewSampling.Describe); until then the layer's empty rectangle draws nothing.
+    private SdfSkyView ViewOf(WorldStateMirror mirror, BindableColor? fallback, bool coverage) => new() {
+        Coverage = (coverage ? 1u : 0u),
+        Fallback = Rgb(color: fallback, fallback: Vector3.Zero, mirror: mirror),
+    };
     private void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfSky into) {
         var count = Math.Min(
             val1: (environment?.Softboxes?.Count ?? 0),

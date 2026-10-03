@@ -343,12 +343,21 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
             actual: Assert.Single(collection: manifest.Composed).Name
         );
     }
+
+    // Whether the worlds-relative source names a module library, which emits no document.
+    private static bool IsModuleLibrary(string name) => (Puck.World.Transpiler.Composition.WorldSourceIndex.Declaration(path: Path.Combine(
+        path1: WorldsDirectory,
+        path2: name
+    )) is { EmitsDocument: false, Worlds.Count: 0 });
+
     [OfficialBuildFact]
     public void Build_PublishesEveryDocumentTheWorkspaceAuthors() {
         var manifest = ReadManifest();
         var authoring = manifest.Documents.Select(selector: static document => document.Source).ToHashSet(comparer: StringComparer.Ordinal);
 
-        foreach (var source in manifest.Sources.Where(predicate: static source => (WorldDocumentName.IsSourceFile(path: source.Name) || WorldDocumentName.IsDocumentFile(path: source.Name)))) {
+        // A module library carries no document name (WorldCompilation.EmittedNames): the sources importing it publish
+        // what it declares, so it is a source the workspace reads and authors no document of its own.
+        foreach (var source in manifest.Sources.Where(predicate: static source => ((WorldDocumentName.IsSourceFile(path: source.Name) && !IsModuleLibrary(name: source.Name)) || WorldDocumentName.IsDocumentFile(path: source.Name)))) {
             Assert.True(
                 condition: authoring.Contains(item: source.Name),
                 userMessage: $"'{source.Name}' authors no published document."

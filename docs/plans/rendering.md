@@ -6433,7 +6433,7 @@ packaging, and compiled worlds in the runtime and delivery programme.
   pass block holds the light count, `shadowSlots` int4, configured stable
   count, active fade count and curvature shading; the sky and light records are read only by the
   kernels that use them.
-- **The sky once, where it is seen.** `shade/sdf-sky.hlsli` holds the stars,
+- **The sky once, where it is seen.** `sky/sdf-sky.hlsli` holds the stars,
   the clouds and the gradient, grouped into the runs they compose in, over the
   periodic noise of `field/sdf-noise.hlsli`. Views shades hits only, into a lit
   image with its coverage; the `sky` pass evaluates the field runs on the
@@ -6457,12 +6457,12 @@ packaging, and compiled worlds in the runtime and delivery programme.
   the clouds' light when shadow slot 0 is empty; the HLSL `SdfSunDirection`, the
   fallback of `worldSunDirection` when slot 0 is empty; and `worldSunDirection`
   itself, slot 0's light direction. The sun disc is drawn about the light
-  `SdfSkyBlock.DiscLight` names, which need not be slot 0's light, while the
+  its disc layer names (`SdfSkyDisc.Light`), which need not be slot 0's light, while the
   clouds are lit by slot 0. The host allocator selects up to four named lights,
   each with its own shadow march and 8-bit visibility in the K row, and active
   handoffs add at most F incoming marches.
 - **Two cloud systems.** The sky's cloud layer (`sdfPeriodicNoise2` in
-  `shade/sdf-sky.hlsli`) and the bounded `SdfVolume` `Cloud` kind
+  `sky/kinds/clouds.hlsli`) and the bounded `SdfVolume` `Cloud` kind
   (`sdfPeriodicNoise3`, used in `shade/shade-volumes.hlsli`) shade their density
   separately, over one engine-tick clock family.
 - **Coverage.** The parity world's sky station, the `sky-layers`, `sky-cycle`,
@@ -7564,7 +7564,7 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      illumination remain separate from the delivered GPU shadow-slot path.
    - Deletes in the remaining body step: `WorldRenderSkyLayer.SunDisc`,
      `worldSunDirection`, `SdfSunDirection`, `DefaultSunDirection`, the pinned
-     directional and the `SdfSkyBlock.DiscLight` lane. Per-light penumbra
+     directional and the disc layer's `SdfSkyDisc.Light` lane. Per-light penumbra
      remains a property of each shadow-casting directional.
    - Touches: the sky records, `frame/sdf-visibility.hlsli` and
      `SdfWorldPackage` (the K row), `surface/sdf-shadow.hlsli`,
@@ -7617,7 +7617,65 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      buffer capacity grow until the graph is replaced. The ceilings key each
      count by node, pass, detail and kind, and apply the same device rules and
      required zeros to detail rows as to pass totals.
-8. **P18-8, the open layer stack.**
+8. **P18-8, the open layer stack.** Landed, but for the GPU legs below.
+   - Landed: the layer record (`SdfSkyLayer`, 192 bytes: kind, blend, detail
+     row, visibility, opacity, mask, mask softness, clock phase, mask band, a
+     unit-quaternion transform and a 128-byte kind payload), a World-group table
+     of `SdfSky.MaxLayers` (eight) records, `sdfSkyLayers`, in the region the
+     stops table held; the sky block (`SdfSkyBlock`, 96 bytes) carries the fog,
+     the layer count, the sky's tier, the sky frame's axes and the run structure.
+     A kind is an `ISdfSkyKind` parameter record and one module under
+     `Sdf/sky/kinds/` (`gradient`, `stars`, `clouds`, `aurora`, `noise`,
+     `pattern`, `panorama`, and `disc`, the sun disc's, whose `texture` shape draws
+     a screen's image across the disc), declared once in `SdfSkyKindsHlsl.Kinds`,
+     which `puck shaders generate` writes into `isa/sdf-sky-kinds.hlsli`
+     (constants, each record's struct and its payload decoder) and
+     `sky/sdf-sky-kind-table.hlsli` (the module includes and the evaluation
+     switch); the instruction set's fingerprint covers both, and the module tree
+     gains its `sky` layer. The stack composites in its authored order, a kind as
+     often as authored: the sky pass writes the lowest field run's offset and at
+     most two upper field runs as six half floats each across `skyUpper0` to
+     `skyUpper2` (one image more than the scale and offset pair it replaces), and
+     the composite applies them in order between the point layers it evaluates;
+     the validator refuses a stack whose camera layers cut into a third upper run,
+     and `SdfSky.Pack` writes no entry for it. A panorama and a textured disc
+     sample a declared screen's image through the screens the sky recorder binds
+     beside the views pass, under the lease that pass holds. The sky frame
+     (`render.sky.frame.up`) turns every layer but a disc; each layer's mask
+     (`band` or `cone`, `feather`), `transform` (`turn`, `tilt`) and `clock`
+     (whose phase moves an aurora, a noise field and a pattern) are its own. The
+     environment map draws the layers the lighting sees, but a disc, and
+     re-renders when they, the frame or the tier move (`SdfSkyEnvironment` is its
+     reference for gradient layers). Each kind takes its reduced form below
+     `high`: clouds one thickness tap and three octaves at `low`, shaded flat, and
+     three octaves at `medium`; stars no twinkle at `low`; an aurora and a noise
+     field fewer octaves. `world.sky-quality low|medium|high` (a session lever),
+     `render.skyQuality` (boot, folded by `world.save`) and the presets' `sky` row
+     in `quality.puck` set the tier; a layer above it writes no entry. The fractal
+     sum lives in `field/sdf-noise.hlsli` (`sdfPeriodicFbm2`, `sdfPeriodicFbm3`),
+     and the star and cloud constants are kind parameters. `skies.puck` holds the
+     `clearDay`, `starryNight`, `polarNight` and `overcast` templates. Detail rows
+     are `SdfSkyDetails`, one set a composition: `run0` to `run2`, then a row a
+     layer label (its name, or its kind's, `#2` and on for repeats), rows only
+     growing, at most 32. The fixed composite order and the one-per-kind rule are
+     gone; fog is the air and appears at most once.
+   - Laws: `SkyLayerTableLawTests` (every kind's packed record through its
+     generated decoder; red: a decoder whose two members trade offsets),
+     `SkyKindTableLawTests` (a fixture kind inserts only its own lines; no pass
+     names a kind), `SkyRunCompositionLawTests` (every kind's class, repeated
+     kinds, a disc between two cloud layers, the run cap),
+     `WorldRenderLightingSkyLawTests` (the stack's resolution, the tier, and the
+     field-run, mask, clock, panorama and fog refusals), the domain rows of the new
+     bindable fields, and `SdfWorkDetailLawTests` and `SdfSkySamplingLawTests`
+     over the counted sites.
+   - Open: the GPU legs — the `sky-layers` canary (every kind, a tilted frame and
+     each blend), the sky device laws, parity, and the sky counters ceilings
+     (`puck counters --record`, whose detail rows are now `run0` to `run2` and the
+     layers' labels) — and the layer kernels' register counts, read from the
+     driver's pipeline statistics on a device, which decide the light variant;
+     the heavy kinds compile only into `sky` and `composite`, never the views
+     kernel. `view`, `far` and `panel` layers and the bodies belong to their own
+     steps.
    - Delivers: the layer record (kind, blend, mask, transform, clock, opacity,
      visibility, tier), the generated kind table and one module per kind for
      `gradient`, `stars`, `clouds`, `aurora`, `noise`, `pattern` and
@@ -7729,13 +7787,33 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       `MaxViews` instances), the instance names (`WorldViewNames.Sky`,
       `NestedSky`), the scene (`WorldInfinityViewScene`, and far geometry as a
       `WorldSessionSceneEmitter` holding only named prototypes), each with CPU laws.
-      Still open: the `view` and `far` layer kinds, the body shapes and the
-      validator's cap refusal bind to the record when P18-8's layer record lands;
-      the composite's sampling of the instance image by the pixel's direction,
-      its shown-texel count (the demand's report) and its fallback colour sit in
-      that layer loop; the binder owns a `WorldInfinityViews` and registers the
-      scenes; `world.budget` reports `WorldInfinityViewPlan.Describe`; the
-      `sky-portal` canary, the ceilings and the GPU legs follow.
+      Landed on P18-8's record: the `view` layer kind (`SdfSkyView`, one GPU kind for
+      both document arms, with `sky/kinds/view.hlsli` and its `Kinds` entry), which
+      samples the instance image at the tangent the pixel's direction has on the
+      viewer's basis inside the rectangle the fit chose (`InfinityViewSampling`, the
+      CPU reference, held by `InfinityViewSamplingLawTests`), counts a shown texel
+      in its layer's detail row whether it reads the image or draws its fallback
+      colour, and is camera-only; the `view` and `far` document arms of
+      `render.sky.layers` (`WorldRenderSkyLayer.View`, `Far`, written
+      `view(name:, destination:, …)` and `far(name:, prototypes:, …)`) with their
+      validator refusals by name (an unnamed, unaimed or unbounded view, a band mask,
+      a cone of a quarter turn or more, lighting visibility, a duplicate name, a
+      prototype the world lacks) and the cap of `SdfSky.MaxInfinityViews` views
+      a world, refused at validation; their resolution to the GPU kind
+      (`WorldEnvironmentResolve`) and to the `InfinityViewSpec`s the host renders
+      (`WorldInfinityViewSpecs`, which carries a layer's sky-frame cone into the
+      viewer's frame); and the console echo.
+      Still open: the frame's fit written into the layer each frame (the viewer's
+      basis, the rectangle and the screen the instance's image arrives on, through
+      `InfinityViewSampling.Describe`) and the binder's routing of that image,
+      which are the binder's screen sources for the instances (`ISdfScreenSources`
+      entries past the declared screens) and its reading back of the shown-texel
+      counts into `InfinityViewDemand`; the binder owning a `WorldInfinityViews`,
+      registering the scenes and applying `WorldInfinityViewPlan`; the document
+      edit refusal at a live edit; `world.budget` reporting
+      `WorldInfinityViewPlan.Describe`; the `view` and `far` body shapes (no body
+      vocabulary exists to bind them to); the `sky-portal` canary, the ceilings and
+      the GPU legs. The `panel` kind belongs to P18-9.
     - Counted-cost gate: the infinity instance's rows at its dressed quality,
       zero when no uncovered pixel shows it, and its dispatches' extent within
       its rect; its residency's aperture bytes and the live count against the

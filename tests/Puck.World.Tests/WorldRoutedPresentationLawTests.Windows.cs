@@ -172,17 +172,17 @@ public sealed partial class WorldRoutedPresentationLawTests {
             revision: north.Mirror.DefinitionRevision
         );
 
-        Assert.Equal(actual: frame.Sky.Stops.ToArray(), expected: sky.Sky.Stops.ToArray());
+        Assert.Equal(actual: frame.Sky.Layers.ToArray(), expected: sky.Sky.Layers.ToArray());
         Assert.Equal(actual: frame.Sky.Block, expected: sky.Sky.Block);
-        Assert.NotEqual(expected: new SdfSky().Stops.ToArray(), actual: frame.Sky.Stops.ToArray());
+        Assert.NotEqual(expected: new SdfSky().Layers.ToArray(), actual: frame.Sky.Layers.ToArray());
 
-        var retained = frame.Sky.Stops.ToArray();
+        var retained = frame.Sky.Layers.ToArray();
 
         north.Mirror.DeliverDefinition(definition: AwayDocument(), version: default);
         _ = Capture(source: scene.FrameSource);
         var changed = Capture(source: scene.FrameSource);
 
-        Assert.NotEqual(expected: retained, actual: changed.Sky.Stops.ToArray());
+        Assert.NotEqual(expected: retained, actual: changed.Sky.Layers.ToArray());
     }
     // A routed view guards the values its destination binds as the viewer's own world does: a cloud scale that goes to
     // zero, which its field does not admit, holds the last value the view presented and is reported.
@@ -205,12 +205,12 @@ public sealed partial class WorldRoutedPresentationLawTests {
         using var north = Endpoint(definition: Scaled(value: 0.5d), identity: Away, position: AwayPose);
         var scene = new WorldRoutedScene(domains: domains, bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
 
-        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
 
         north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: default);
         _ = Capture(source: scene.FrameSource);
 
-        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
         Assert.Single(collection: reports);
         Assert.Contains(expectedSubstring: $"render.sky.layers[0].scale reads 0 from state.{WorldValueDomainLawTests.Row}", actualString: reports[0]);
     }
@@ -238,19 +238,19 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         north.Mirror.DeliverDefinition(definition: Scaled(value: 0.5d), version: first);
 
-        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
 
         // The same world, written out of range: the view keeps what it last presented.
         north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: new WorldDocumentVersion(Activation: first.Activation, Sequence: 1L));
         _ = Capture(source: scene.FrameSource);
 
-        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
 
         // Another world answers at the destination: it has presented nothing yet, so it shows the engine default.
         north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: second);
         _ = Capture(source: scene.FrameSource);
 
-        Assert.Equal(expected: new SdfSky().Block.CloudScale, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+        Assert.Equal(expected: SdfSkyClouds.DefaultScale, actual: Capture(source: scene.FrameSource).Sky.First<SdfSkyClouds>().Scale);
     }
     // A world's lifetime and its document are one publication: a reader of the destination's delivered document sees, in
     // one snapshot, the document and the number of replacements that brought it, so it can never pair a new world's

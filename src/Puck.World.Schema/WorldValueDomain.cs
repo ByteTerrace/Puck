@@ -96,6 +96,31 @@ public static class WorldValueFields {
     public static WorldValueField CloudSpin { get; } = new(typeof(WorldRenderSkyLayer.Clouds), nameof(WorldRenderSkyLayer.Clouds.Spin), WorldValueDomain.Finite);
     /// <summary>The clouds' curl, in radians.</summary>
     public static WorldValueField CloudCurl { get; } = new(typeof(WorldRenderSkyLayer.Clouds), nameof(WorldRenderSkyLayer.Clouds.Curl), WorldValueDomain.Finite);
+    /// <summary>A sky layer's opacity.</summary>
+    public static WorldValueField SkyLayerOpacity { get; } = new(typeof(WorldRenderSkyLayer), nameof(WorldRenderSkyLayer.Opacity), WorldValueDomain.Unit);
+    /// <summary>A sky layer's turn about the sky frame's up, in radians.</summary>
+    public static WorldValueField SkyLayerTurn { get; } = new(typeof(WorldRenderSkyTransform), nameof(WorldRenderSkyTransform.Turn), WorldValueDomain.Finite);
+    /// <summary>A sky layer's tilt about the sky frame's right axis, in radians.</summary>
+    public static WorldValueField SkyLayerTilt { get; } = new(typeof(WorldRenderSkyTransform), nameof(WorldRenderSkyTransform.Tilt), WorldValueDomain.Finite);
+    /// <summary>An aurora's brightness.</summary>
+    public static WorldValueField AuroraIntensity { get; } = new(typeof(WorldRenderSkyLayer.Aurora), nameof(WorldRenderSkyLayer.Aurora.Intensity), WorldValueDomain.NonNegative);
+    /// <summary>An aurora's base elevation, in radians, from the nadir to the zenith.</summary>
+    public static WorldValueField AuroraBase { get; } = new(typeof(WorldRenderSkyLayer.Aurora), nameof(WorldRenderSkyLayer.Aurora.Base), new WorldValueDomain(
+        Maximum: (MathF.PI / 2f),
+        Minimum: -(MathF.PI / 2f)
+    ));
+    /// <summary>An aurora's height above its base, in radians, above zero and up to a half turn.</summary>
+    public static WorldValueField AuroraHeight { get; } = new(typeof(WorldRenderSkyLayer.Aurora), nameof(WorldRenderSkyLayer.Aurora.Height), new WorldValueDomain(
+        Maximum: MathF.PI,
+        Minimum: 0f,
+        MinimumOpen: true
+    ), Why: "the kernel divides by a curtain's height");
+    /// <summary>How far an aurora's base wavers, in radians.</summary>
+    public static WorldValueField AuroraFold { get; } = new(typeof(WorldRenderSkyLayer.Aurora), nameof(WorldRenderSkyLayer.Aurora.Fold), WorldValueDomain.NonNegative);
+    /// <summary>A noise layer's coverage.</summary>
+    public static WorldValueField NoiseCoverage { get; } = new(typeof(WorldRenderSkyLayer.Noise), nameof(WorldRenderSkyLayer.Noise.Coverage), WorldValueDomain.Unit);
+    /// <summary>A panorama's brightness.</summary>
+    public static WorldValueField PanoramaIntensity { get; } = new(typeof(WorldRenderSkyLayer.Panorama), nameof(WorldRenderSkyLayer.Panorama.Intensity), WorldValueDomain.NonNegative);
     /// <summary>A scrim's alpha, at or above the floor its contrast needs.</summary>
     public static WorldValueField ScrimAlpha { get; } = new(typeof(WorldThemeScrim), nameof(WorldThemeScrim.Alpha), new WorldValueDomain(
         Maximum: 1f,
@@ -183,6 +208,15 @@ public static class WorldValueFields {
         CloudScale,
         CloudSpin,
         CloudCurl,
+        SkyLayerOpacity,
+        SkyLayerTurn,
+        SkyLayerTilt,
+        AuroraIntensity,
+        AuroraBase,
+        AuroraHeight,
+        AuroraFold,
+        NoiseCoverage,
+        PanoramaIntensity,
         ScrimAlpha,
         BloomHaloAlpha,
         BloomRingAlpha,

@@ -6,7 +6,8 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: the sky's environment map stands for the sky's gradient, which the composite's fog in-scatters,
+/// CONTRACT UNDER TEST: the sky's environment map stands for the layers its lighting sees (a gradient here), which the
+/// composite's fog in-scatters,
 /// within a stated bound, and its coefficients are the map's spherical harmonics, on the CPU reference
 /// (<see cref="SdfSkyEnvironment"/>) the kernels follow. The texels' solid angles total the sphere within 1e-6 of 4π. A
 /// constant sky projects to its colour times √(4π) in the first coefficient within 1e-6 and to under 2e-3 of its colour in
@@ -41,7 +42,7 @@ public sealed partial class SdfSkyEnvironmentLawTests {
     [Fact]
     public void AConstantSkyProjectsToItsColourTimesTheRootOfTheSphere() {
         var color = new Vector3(x: 0.5f, y: 0.25f, z: 1f);
-        var coefficients = Project(sky: Gradient(stops: [new SdfSkyStop(Color: color, Elevation: -1f), new SdfSkyStop(Color: color, Elevation: 1f)]));
+        var coefficients = Project(sky: Gradient(stops: [(color, -1f), (color, 1f)]));
 
         AssertNear(actual: coefficients[0], expected: (color * ((float)SphereRoot)), relative: 1e-6f);
         for (var index = 1; (index < SdfSkyEnvironment.CoefficientCount); index++) {
@@ -53,8 +54,8 @@ public sealed partial class SdfSkyEnvironmentLawTests {
         // The default look, ground at -1 and zenith at +1: f(y) = mean + half · y, whose projection is the mean times
         // Y00 · 4π and half times Y1-1's normalization times the integral of y², 4π/3, with nothing in any other harmonic.
         var sky = new SdfSky();
-        var ground = sky.Stops[0].Color;
-        var zenith = sky.Stops[1].Color;
+        var ground = SdfSky.DefaultGroundColor;
+        var zenith = SdfSky.DefaultZenithColor;
         var coefficients = Project(sky: sky);
         var mean = (0.5f * (ground + zenith));
         var half = (0.5f * (zenith - ground));
@@ -68,11 +69,11 @@ public sealed partial class SdfSkyEnvironmentLawTests {
     [Fact]
     public void ALookupReadsASmoothSkyWithinHalfADisplayCodeInEveryDirection() {
         var sky = new SdfSky();
-        var map = Render(block: out var block, sky: sky);
+        var map = Render(block: out _, sky: sky);
         var worst = 0f;
 
         foreach (var direction in Directions()) {
-            worst = MathF.Max(x: worst, y: Error(actual: SdfSkyEnvironment.Sample(direction: direction, map: map), expected: SdfSkyEnvironment.Gradient(direction: direction, stopCount: block.StopCount, stops: sky.Stops)));
+            worst = MathF.Max(x: worst, y: Error(actual: SdfSkyEnvironment.Sample(direction: direction, map: map), expected: SdfSkyEnvironment.Gradient(direction: direction, gradient: SdfSky.DefaultGradient)));
         }
 
         Assert.InRange(actual: worst, high: HalfDisplayCode, low: 0f);
@@ -123,12 +124,12 @@ public sealed partial class SdfSkyEnvironmentLawTests {
         // gradient's within the lookup's bound, so no texel holds the disc.
         var sky = new SdfSky();
 
-        sky.Block.DiscLight = 0;
-        sky.Block.DiscIntensity = 50f;
+        _ = sky.Add(blend: SdfSkyBlend.Add, label: "disc", parameters: new SdfSkyDisc { Intensity = 50f, Light = 0 }, visibility: SdfSkyVisibility.Both);
 
-        var map = Render(block: out var block, sky: sky);
+        var layers = new SdfSkyLayer[SdfSky.MaxLayers];
+        var map = Render(block: out _, layers: layers, sky: sky);
         var worst = 0f;
-        var disc = block.DiscDirection;
+        var disc = SdfSky.PayloadOf<SdfSkyDisc>(layer: ref layers[1]).Direction;
 
         Assert.NotEqual(expected: Vector3.Zero, actual: disc);
         foreach (var direction in Directions()) {
@@ -136,7 +137,7 @@ public sealed partial class SdfSkyEnvironmentLawTests {
                 continue;
             }
 
-            worst = MathF.Max(x: worst, y: Error(actual: SdfSkyEnvironment.Sample(direction: direction, map: map), expected: SdfSkyEnvironment.Gradient(direction: direction, stopCount: block.StopCount, stops: sky.Stops)));
+            worst = MathF.Max(x: worst, y: Error(actual: SdfSkyEnvironment.Sample(direction: direction, map: map), expected: SdfSkyEnvironment.Gradient(direction: direction, gradient: SdfSky.DefaultGradient)));
         }
 
         Assert.InRange(actual: worst, high: HalfDisplayCode, low: 0f);
@@ -152,24 +153,26 @@ public sealed partial class SdfSkyEnvironmentLawTests {
         Assert.Equal(expected: SdfSkyEnvironment.CoefficientCount.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), actual: CountPattern().Match(input: header).Groups[1].Value);
     }
 
-    // A sky of the default look but its stops.
-    private static SdfSky Gradient(SdfSkyStop[] stops) {
-        var sky = new SdfSky {
-            StopCount = stops.Length,
-        };
+    // A sky of the default look but its one gradient's stops.
+    private static SdfSky Gradient((Vector3 Color, float Elevation)[] stops) {
+        var sky = new SdfSky();
+        var gradient = new SdfSkyGradient { Count = ((uint)stops.Length) };
 
         for (var index = 0; (index < stops.Length); index++) {
-            sky.SetStop(index: index, stop: stops[index]);
+            gradient.SetStop(color: stops[index].Color, elevation: stops[index].Elevation, index: index);
         }
+
+        sky.ClearLayers();
+        _ = sky.Add(label: "gradient", parameters: gradient, visibility: SdfSkyVisibility.Both);
 
         return sky;
     }
-    private static Vector3[] Render(SdfSky sky, out SdfSkyBlock block) {
+    private static Vector3[] Render(SdfSky sky, out SdfSkyBlock block, SdfSkyLayer[]? layers = null) {
         var map = new Vector3[SdfSkyEnvironment.Texels];
-        var stops = new SdfSkyStop[SdfSky.MaxStops];
 
-        sky.Pack(block: out block, lights: SdfLights.Default(), softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes], stops: stops);
-        SdfSkyEnvironment.Render(block: in block, map: map, stops: stops);
+        layers ??= new SdfSkyLayer[SdfSky.MaxLayers];
+        sky.Pack(block: out block, details: new SdfSkyDetails(), layers: layers, lights: SdfLights.Default(), softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]);
+        SdfSkyEnvironment.Render(block: in block, layers: layers, map: map);
 
         return map;
     }

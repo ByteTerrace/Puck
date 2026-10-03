@@ -1917,15 +1917,19 @@ on the one world and proves them with `probe.status`, `body.channels`, and
 
 All render levers are live verbs with no-arg echoes of the current value:
 `world.quality`, `world.shadows`, `world.ao`, `world.render-scale`,
-`world.temporal`, `world.upscale-sharpness`,
+`world.temporal`, `world.upscale-sharpness`, `world.sky-quality`,
 `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
 shadow tier, a shadow-slot policy, an ambient-occlusion switch, a
-temporal-reconstruction switch, a dynamic-resolution switch and render-scale
-ceiling and floor tiers. Its four shadow-policy fields apply together as one
-settings change. The names are
+temporal-reconstruction switch, a dynamic-resolution switch, render-scale
+ceiling and floor tiers and a sky tier. Its four shadow-policy fields apply together as one
+settings change. `world.sky-quality low|medium|high` sets the sky's tier: a sky
+layer whose `tier` lies above it writes no entry and counts no work, and below
+`high` each kind draws its reduced form (clouds take one thickness tap and three
+octaves at `low`, shaded flat; stars stop twinkling at `low`). The render
+section's `skyQuality` sets it at boot, and `world.save` folds it back. The names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
