@@ -465,7 +465,7 @@ teardown's memory entries and the shader-visible heaps
 (`DirectXShaderVisibleHeapsLawTests`).
 Driver behavior is verified by running the engine on Direct3D 12 and by
 `puck parity`, which boots the authored parity world
-(`tests/Puck.Parity/parity.world.json`) offscreen once per backend and gives
+(`tests/Puck.Parity/parity.puck`) offscreen once per backend and gives
 each of the world's scheduled captures three verdicts: its content gate, its
 exact `stateHash`, and per-tile pixels under the contract versioned beside
 the world:

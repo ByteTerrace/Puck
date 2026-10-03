@@ -152,7 +152,7 @@ public sealed class CompiledWorldLawTests {
                 authored: out var authored,
                 catalog: Catalog,
                 catalogFingerprint: Catalog.CompositionFingerprint,
-                document: File.ReadAllBytes(path: path),
+                document: Puck.Testing.ShippedWorldDocuments.Read(path: path),
                 path: path,
                 reason: out var reason
             ),

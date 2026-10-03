@@ -1,12 +1,12 @@
 # Puck.Parity
 
-`parity.world.json` is the cross-backend parity check, authored as a world:
+`parity.puck` is the cross-backend parity check, authored as a world:
 `host.presentation: offscreen`, zero seats and zero input, a `station` state
 row advanced by rules on `$tick` thresholds, a `select` camera program
 dispatching one authored pose per station, and tick-scheduled `captures` rows
 that land the frames and write the `puck.parity.manifest.v1` the comparator
 consumes. `parity.sdf.json` is its companion `puck.sdf.v1` document
-(`world.sdf.load`), carrying the SDF-program stations. `parity.world.json`'s
+(`world.sdf.load`), carrying the SDF-program stations. `parity.puck`'s
 own `prototypes`/`placements` sections carry the `vocabulary` station's
 creation content directly (a `puck.creation.v1` document, not a raw SDF op
 stream). Its static creations draw their bakes, and the world ships them:
@@ -53,7 +53,7 @@ the frame each capture must be and fails a side that differs by one byte
 that reads a wrong config value or a wrong binding fails even when both
 backends make the same mistake. The census stays as the floor under it. The one
 reference kind, `binding`, is `ParityBindingReference`: it reads the config
-defaults from `binding.graph.json` and the step rate from `parity.world.json`,
+defaults from `binding.graph.json` and the step rate from `parity.puck`,
 and repeats the three passes' integer steps at the capture tick. A station whose
 row binds a scalar field states the steps of the bound row in the reference's
 `parameters`, keyed by pass and field as the row keys them, each step mapping
@@ -109,7 +109,7 @@ inside solid geometry, so every scheduled capture must refuse with
 `refusal: "cameraInside"` and no frame written. If it ever produces a frame,
 the camera-validity gate is broken.
 
-Editing a station: edit `parity.world.json`/`parity.sdf.json` directly (they
+Editing a station: edit `parity.puck`/`parity.sdf.json` directly (they
 are authored documents, not generated), re-run `puck parity`, and re-calibrate
 the station's contract entry from the run's observed deltas in the same
 change. Growing the shader interpreter also moves the deltas, because it
@@ -126,7 +126,7 @@ separate `--state-dir` and `--capture-dir` directories. Feed `world.wait 100`,
 `wire.errors`, and `quit` on separate stdin lines. Its captures occur at ticks
 60 and 90. Compare the capture directories with `puck parity compare <vulkan>
 <directx> --contract tests/Puck.Parity/paths.contract.json`. The default
-`puck parity` command continues to run `parity.world.json`. Its census palette
+`puck parity` command continues to run `parity.puck`. Its census palette
 uses observed shaded colors and a separate background entry: the red, gold,
 and cyan coverage was 11,993, 5,930, and 10,225 pixels on the verification frame.
 The floors retain roughly half that coverage; background cannot satisfy them.

@@ -1677,7 +1677,7 @@ law rather than by a directory sweep.
 
 ## `puck parity`—cross-backend parity over the authored parity world
 
-`puck parity` boots `tests/Puck.Parity/parity.world.json` once per graphics
+`puck parity` boots `tests/Puck.Parity/parity.puck` once per graphics
 backend (Vulkan, Direct3D 12) with `host.presentation: offscreen`—no window
 is shown—and lets the world's own `captures` rows land every tick-scheduled
 capture and write a `puck.parity.manifest.v1`. Because both backends capture

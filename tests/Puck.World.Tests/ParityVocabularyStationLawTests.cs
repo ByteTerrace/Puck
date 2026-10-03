@@ -5,7 +5,7 @@ using Puck.World.Authoring;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// THE LAW: <c>tests/Puck.Parity/parity.world.json</c> — the parity vocabulary station's authored world — validates
+/// THE LAW: <c>tests/Puck.Parity/parity.puck</c> — the parity vocabulary station's authored world — validates
 /// locally through the same pipeline every other world document does (<see cref="WorldDefinitionSerialization.Deserialize"/>,
 /// <see cref="WorldDefinitionValidator.TryValidateLocally(WorldDefinition, out string)"/>), and its <c>vocabRig</c>
 /// prototype's panelled shapes (the Prism and the Cylinder, each carrying a <see cref="ShapePanelDocument"/>)
@@ -16,8 +16,8 @@ public sealed class ParityVocabularyStationLawTests {
     private const string PrototypeId = "vocabRig";
 
     private static WorldDefinition LoadParityWorld() {
-        var path = RepositoryPaths.Resolve(relativePath: "tests/Puck.Parity/parity.world.json");
-        var bytes = File.ReadAllBytes(path: path);
+        var path = RepositoryPaths.Resolve(relativePath: "tests/Puck.Parity/parity.puck");
+        var bytes = Puck.Testing.ShippedWorldDocuments.Read(path: path);
 
         return WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
     }

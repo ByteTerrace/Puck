@@ -17,7 +17,9 @@ internal static class ParityCommand {
     private const string ContractPath = "tests/Puck.Parity/parity.contract.json";
     private const string ScratchPrefix = "puck-parity-";
     private const string SdfDocumentPath = "tests/Puck.Parity/parity.sdf.json";
-    private const string WorldPath = "tests/Puck.Parity/parity.world.json";
+    // The authored source of the parity world, and the name of the document the tree compile emits from it.
+    private const string ShippedWorldName = "parity.world.json";
+    private const string SourcePath = "tests/Puck.Parity/parity.puck";
     // The ticks a leg runs past the world's last scheduled capture, so the frame that serves it lands first.
     private const ulong WaitMarginTicks = 30;
     // The ticks the leg turns temporal reconstruction on before the world's first converging station, so every view's
@@ -212,7 +214,7 @@ internal static class ParityCommand {
     private static bool ShipWorld(string artifact, string repositoryRoot, string runDirectory, Stopwatch suiteClock, out string world) {
         var tree = Path.Combine(
             path1: repositoryRoot,
-            path2: Path.GetDirectoryName(path: WorldPath)!
+            path2: Path.GetDirectoryName(path: SourcePath)!
         );
         var output = Path.Combine(
             path1: runDirectory,
@@ -223,7 +225,7 @@ internal static class ParityCommand {
         _ = Directory.CreateDirectory(path: output);
         world = Path.Combine(
             path1: output,
-            path2: Path.GetFileName(path: WorldPath)
+            path2: ShippedWorldName
         );
 
         foreach (var file in Directory.EnumerateFiles(path: tree, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
@@ -429,7 +431,7 @@ internal static class ParityCommand {
         );
 
         command.Detail(detail: """
-            Boots tests/Puck.Parity/parity.world.json offscreen once per backend (vulkan, directx — no
+            Boots the world authored in tests/Puck.Parity/parity.puck offscreen once per backend (vulkan, directx — no
             window is shown), runs each leg until 30 ticks past the last tick its captures rows schedule,
             collects each run's tick-scheduled captures and puck.parity.manifest.v1, and compares the pair
             under tests/Puck.Parity/parity.contract.json.

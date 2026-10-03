@@ -389,7 +389,7 @@ public sealed class CreationBakeLawTests {
             );
         }
 
-        var path = directory.PathOf(name: "parity.world.json");
+        var path = directory.PathOf(name: "parity.puck");
 
         _ = CompileWithPack(path: path);
 
