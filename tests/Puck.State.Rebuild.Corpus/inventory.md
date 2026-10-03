@@ -12,7 +12,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `addState` | 82 | 3 | `games/arena`, `games/go`, `games/hiddenranks`, `games/paddleball`, `games/poker` and 5 more |
+| `addState` | 91 | 3 | `games/arena`, `games/go`, `games/hiddenranks`, `games/paddleball`, `games/poker` and 8 more |
 | `applyRigidImpulse` | 3 | 0 | `games/billiards`, `games/paddleball` |
 | `claim` | 1 | 0 | `games/arena` |
 | `claimPair` | 0 | 0 |  |
@@ -29,30 +29,30 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `release` | 0 | 0 |  |
 | `removeHudPanel` | 0 | 0 |  |
 | `removePlacement` | 0 | 0 |  |
-| `removeStateCell` | 32 | 0 | `games/hiddenranks` |
+| `removeStateCell` | 34 | 0 | `games/hiddenranks`, `modules/granaries` |
 | `rewindGroup` | 0 | 0 |  |
 | `save` | 0 | 0 |  |
 | `scaleVerticalVelocity` | 0 | 0 |  |
-| `scheduleState` | 15 | 1 | `avatars/moth`, `games/arena`, `games/paddleball`, `games/snake`, `games/tetromino` |
-| `setIdentityFact` | 0 | 0 |  |
-| `setState` | 769 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 14 more |
+| `scheduleState` | 22 | 1 | `avatars/moth`, `games/arena`, `games/paddleball`, `games/snake`, `games/tetromino`, `modules/arena` |
+| `setIdentityFact` | 1 | 0 | `modules/studio` |
+| `setState` | 822 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 21 more |
 | `setVerticalVelocity` | 0 | 0 |  |
 | `startTimer` | 0 | 0 |  |
-| `transaction` | 31 | 1 | `games/freecell`, `games/klondike`, `games/poker`, `games/spider`, `games/wordspy` |
+| `transaction` | 33 | 1 | `games/freecell`, `games/klondike`, `games/poker`, `games/spider`, `games/wordspy`, `modules/granaries` |
 | `transformState` | 88 | 5 | `games/freecell`, `games/go`, `games/hiddenranks`, `games/klondike`, `games/poker` and 4 more |
 | `upsertHudPanel` | 0 | 0 |  |
-| `upsertPlacement` | 0 | 0 |  |
+| `upsertPlacement` | 2 | 0 | `modules/arcade` |
 
 ## Predicates
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `all` | 190 | 1 | `avatars/moth`, `games/arena`, `games/billiards`, `games/freecell`, `games/go` and 12 more |
+| `all` | 215 | 1 | `avatars/moth`, `games/arena`, `games/billiards`, `games/freecell`, `games/go` and 18 more |
 | `any` | 24 | 0 | `games/arena`, `games/backgammon`, `games/freecell`, `games/go`, `games/hiddenranks` and 6 more |
-| `compareState` | 813 | 7 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 14 more |
+| `compareState` | 903 | 7 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 21 more |
 | `compareValue` | 49 | 1 | `games/arena`, `games/freecell`, `games/go`, `games/klondike`, `games/paddleball` and 4 more |
 | `held` | 0 | 0 |  |
-| `not` | 1 | 1 | `games/go` |
+| `not` | 5 | 1 | `games/go`, `modules/granaries` |
 | `now` | 0 | 0 |  |
 | `recently` | 0 | 0 |  |
 | `timerElapsed` | 0 | 0 |  |
@@ -80,7 +80,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `cellsOf` | 21 | 2 | `games/backgammon`, `games/go`, `games/hexlines`, `games/hiddenranks`, `games/mancala` and 3 more |
+| `cellsOf` | 22 | 2 | `games/backgammon`, `games/go`, `games/hexlines`, `games/hiddenranks`, `games/mancala` and 4 more |
 | `keys` | 0 | 0 |  |
 | `keysOf` | 62 | 2 | `games/backgammon`, `games/freecell`, `games/hiddenranks`, `games/klondike`, `games/poker`, `games/spider` |
 | `ring` | 5 | 0 | `games/go`, `games/poker`, `games/snake`, `games/tetromino` |
@@ -100,7 +100,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `overflow` | 1 | 2 | `games/tetromino` |
 | `phase` | 1 | 0 | `games/hiddenranks` |
 | `phaseOf` | 1 | 0 | `games/hiddenranks` |
-| `visibility` | 35 | 0 | `games/hiddenranks`, `games/poker`, `games/wordspy` |
+| `visibility` | 53 | 0 | `games/hiddenranks`, `games/poker`, `games/wordspy`, `modules/granaries` |
 
 ## Overflow
 
@@ -135,18 +135,22 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
 | `board` | 39 | 0 | `games/go`, `games/reversi`, `games/tictactoe` |
-| `cell` | 202 | 0 | `games/freecell`, `games/go`, `games/hiddenranks`, `games/klondike`, `games/mancala` and 5 more |
-| `channel` | 26 | 0 | `games/arena`, `games/billiards`, `games/hiddenranks`, `games/paddleball`, `games/snake` and 3 more |
-| `each` | 59 | 1 | `avatars/moth`, `games/klondike`, `games/mancala`, `games/poker`, `games/reversi` and 2 more |
-| `expr` | 265 | 0 | `games/mancala`, `games/poker`, `games/tetromino`, `games/wordspy` |
+| `cell` | 215 | 0 | `games/freecell`, `games/go`, `games/hiddenranks`, `games/klondike`, `games/mancala` and 6 more |
+| `channel` | 33 | 0 | `games/arena`, `games/billiards`, `games/hiddenranks`, `games/paddleball`, `games/snake` and 6 more |
+| `distance` | 4 | 0 | `modules/arena` |
+| `each` | 119 | 1 | `avatars/moth`, `games/klondike`, `games/mancala`, `games/poker`, `games/reversi` and 4 more |
+| `expr` | 267 | 0 | `games/mancala`, `games/poker`, `games/tetromino`, `games/wordspy`, `modules/granaries` |
 | `fact` | 2 | 0 | `avatars/moth` |
 | `history` | 6 | 0 | `games/go`, `games/snake` |
+| `influence` | 8 | 0 | `modules/granaries` |
 | `local` | 876 | 0 | `games/go`, `games/hiddenranks`, `games/mancala`, `games/poker`, `games/snake` and 2 more |
 | `match` | 58 | 0 | `games/freecell`, `games/hiddenranks`, `games/klondike`, `games/reversi`, `games/spider`, `games/tetromino` |
+| `nearest` | 2 | 0 | `modules/arena` |
 | `physics` | 1 | 0 | `games/paddleball` |
 | `reduce` | 69 | 0 | `games/freecell`, `games/klondike`, `games/poker`, `games/spider`, `games/wordspy` |
+| `region` | 14 | 0 | `modules/arcade`, `modules/dive`, `modules/jump`, `modules/kart`, `modules/studio` |
 | `search` | 2 | 0 | `games/go` |
-| `tick` | 15 | 0 | `avatars/moth`, `games/arena`, `games/paddleball`, `games/snake`, `games/tetromino` |
+| `tick` | 28 | 0 | `avatars/moth`, `games/arena`, `games/paddleball`, `games/snake`, `games/tetromino` and 2 more |
 | `zone` | 8 | 0 | `games/freecell`, `games/klondike`, `games/spider` |
 | `zones` | 21 | 0 | `games/freecell`, `games/klondike`, `games/spider` |
 
@@ -161,68 +165,68 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 
 | Construct | Shipped worlds | Fixtures | Used by |
 |---|---:|---:|---|
-| `AddCellStatementNode` | 74 | 1 | `games/arena`, `games/go`, `games/hiddenranks`, `games/paddleball`, `games/poker` and 5 more |
-| `AndPredicateNode` | 179 | 1 | `avatars/moth`, `games/arena`, `games/billiards`, `games/freecell`, `games/go` and 12 more |
-| `ArgumentNode` | 1526 | 53 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 20 more |
-| `ArrayExpressionNode` | 2213 | 16 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 19 more |
+| `AddCellStatementNode` | 83 | 1 | `games/arena`, `games/go`, `games/hiddenranks`, `games/paddleball`, `games/poker` and 8 more |
+| `AndPredicateNode` | 204 | 1 | `avatars/moth`, `games/arena`, `games/billiards`, `games/freecell`, `games/go` and 18 more |
+| `ArgumentNode` | 1700 | 53 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 27 more |
+| `ArrayExpressionNode` | 2720 | 16 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 26 more |
 | `BinaryExpressionNode` | 413 | 1 | `avatars/moth`, `games/backgammon`, `games/freecell`, `games/go`, `games/hiddenranks` and 5 more |
-| `BlockNode` | 1141 | 34 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 21 more |
-| `CallExpressionNode` | 697 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 19 more |
+| `BlockNode` | 1503 | 34 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 28 more |
+| `CallExpressionNode` | 751 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 26 more |
 | `CellSetDeclarationNode` | 5 | 0 | `games/go` |
 | `ClaimStatementNode` | 1 | 0 | `games/arena` |
 | `ColorExpressionNode` | 0 | 2 |  |
-| `ComparisonPredicateNode` | 831 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 13 more |
+| `ComparisonPredicateNode` | 921 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 20 more |
 | `ConditionalExpressionNode` | 5 | 0 | `games/backgammon`, `games/tetromino`, `moth-courtyard` |
 | `DealStatementNode` | 3 | 0 | `games/poker` |
 | `DecisionBlockNode` | 0 | 1 |  |
-| `DocumentNode` | 26 | 6 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 21 more |
+| `DocumentNode` | 33 | 6 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 28 more |
 | `DrawStatementNode` | 6 | 0 | `games/freecell`, `games/klondike`, `games/spider` |
 | `EmbeddedBlockNode` | 1 | 1 | `games/wordspy` |
 | `EnumDeclarationNode` | 6 | 0 | `games/arena`, `games/paddleball`, `games/spider` |
 | `EnumMemberNode` | 18 | 0 | `games/arena`, `games/paddleball`, `games/spider` |
-| `ExportNode` | 42 | 0 | `games/arena`, `games/billiards`, `games/bowling`, `games/dominoes`, `games/freecell` and 11 more |
-| `ExpressionStatementNode` | 68 | 1 | `avatars/moth`, `games/backgammon`, `games/billiards`, `games/go`, `games/mancala` and 5 more |
-| `FlagStatementNode` | 9 | 1 | `avatars/moth`, `games/billiards`, `games/bowling`, `games/hexlines`, `games/paddleball`, `moth-courtyard` |
+| `ExportNode` | 63 | 0 | `games/arena`, `games/billiards`, `games/bowling`, `games/dominoes`, `games/freecell` and 18 more |
+| `ExpressionStatementNode` | 88 | 1 | `avatars/moth`, `games/backgammon`, `games/billiards`, `games/go`, `games/mancala` and 10 more |
+| `FlagStatementNode` | 32 | 1 | `avatars/moth`, `games/billiards`, `games/bowling`, `games/hexlines`, `games/paddleball` and 8 more |
 | `ForStatementNode` | 40 | 0 | `avatars/moth`, `games/go`, `games/tetromino`, `moth-courtyard`, `tools/hgb-mirror` |
-| `IdentifierExpressionNode` | 1733 | 31 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 20 more |
+| `IdentifierExpressionNode` | 1930 | 31 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 27 more |
 | `IfStatementNode` | 51 | 1 | `games/go`, `games/hiddenranks`, `games/reversi`, `games/snake`, `games/tetromino`, `games/wordspy` |
 | `ImportNode` | 7 | 2 | `avatars/moth`, `games/solitaire`, `games/tetromino`, `tools/hgb-compare`, `tools/hgb-mirror` |
 | `IndexExpressionNode` | 205 | 2 | `avatars/moth`, `games/backgammon`, `games/freecell`, `games/go`, `games/hiddenranks` and 6 more |
 | `InterpolatedStringNode` | 84 | 0 | `avatars/moth`, `games/freecell`, `games/go`, `games/hiddenranks`, `games/klondike` and 6 more |
 | `LambdaExpressionNode` | 46 | 0 | `games/freecell`, `games/hiddenranks`, `games/klondike`, `games/reversi`, `games/spider` and 3 more |
 | `LetNode` | 173 | 8 | `avatars/moth`, `games/go`, `games/hiddenranks`, `games/paddleball`, `games/reversi` and 7 more |
-| `LiteralExpressionNode` | 12343 | 173 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 21 more |
+| `LiteralExpressionNode` | 14648 | 173 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 28 more |
 | `LocalStatementNode` | 131 | 1 | `games/go`, `games/hiddenranks`, `games/mancala`, `games/poker`, `games/snake` and 2 more |
-| `NotPredicateNode` | 0 | 1 |  |
-| `ObjectExpressionNode` | 1201 | 15 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 19 more |
-| `OperandExpressionNode` | 2955 | 39 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 16 more |
+| `NotPredicateNode` | 4 | 1 | `modules/granaries` |
+| `ObjectExpressionNode` | 1455 | 15 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 26 more |
+| `OperandExpressionNode` | 3256 | 39 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 23 more |
 | `OptionBlockNode` | 0 | 1 |  |
 | `OrPredicateNode` | 22 | 0 | `games/arena`, `games/backgammon`, `games/freecell`, `games/go`, `games/hiddenranks` and 6 more |
 | `PatternDeclarationNode` | 1 | 0 | `games/tetromino` |
 | `PatternSymbolDeclarationNode` | 1 | 0 | `games/tetromino` |
-| `PropertyNode` | 8249 | 115 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 20 more |
+| `PropertyNode` | 9952 | 115 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 27 more |
 | `PushStatementNode` | 18 | 0 | `games/go`, `games/poker`, `games/snake`, `games/tetromino` |
-| `RangeExpressionNode` | 153 | 3 | `games/arena`, `games/backgammon`, `games/go`, `games/hexlines`, `games/hiddenranks` and 6 more |
+| `RangeExpressionNode` | 174 | 3 | `games/arena`, `games/backgammon`, `games/go`, `games/hexlines`, `games/hiddenranks` and 12 more |
 | `RecordDeclarationNode` | 4 | 0 | `games/arena`, `games/paddleball` |
 | `RecordFieldNode` | 16 | 0 | `games/arena`, `games/paddleball` |
-| `RemoveCellStatementNode` | 32 | 0 | `games/hiddenranks` |
-| `RhsOperandNode` | 805 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 13 more |
-| `RhsTextNode` | 8 | 1 | `games/hiddenranks`, `games/poker` |
-| `RowRefNode` | 840 | 10 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 13 more |
-| `RuleBlockNode` | 219 | 6 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 13 more |
-| `ScheduleStatementNode` | 13 | 1 | `avatars/moth`, `games/arena`, `games/paddleball`, `games/snake`, `games/tetromino` |
+| `RemoveCellStatementNode` | 34 | 0 | `games/hiddenranks`, `modules/granaries` |
+| `RhsOperandNode` | 848 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 20 more |
+| `RhsTextNode` | 10 | 1 | `games/hiddenranks`, `games/poker`, `modules/arena` |
+| `RowRefNode` | 894 | 10 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 20 more |
+| `RuleBlockNode` | 269 | 6 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 20 more |
+| `ScheduleStatementNode` | 20 | 1 | `avatars/moth`, `games/arena`, `games/paddleball`, `games/snake`, `games/tetromino`, `modules/arena` |
 | `ScoreStatementNode` | 0 | 1 |  |
-| `SetCellStatementNode` | 608 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 13 more |
+| `SetCellStatementNode` | 644 | 8 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 20 more |
 | `ShuffleStatementNode` | 3 | 0 | `games/freecell`, `games/klondike`, `games/spider` |
 | `StabilizeGroupNode` | 1 | 0 | `games/go` |
-| `StateCellEntryNode` | 541 | 23 | `avatars/moth`, `games/backgammon`, `games/billiards`, `games/freecell`, `games/go` and 9 more |
+| `StateCellEntryNode` | 592 | 23 | `avatars/moth`, `games/backgammon`, `games/billiards`, `games/freecell`, `games/go` and 10 more |
 | `StateGridDeclarationNode` | 1 | 2 | `games/snake` |
-| `StateModifierNode` | 226 | 26 | `games/arena`, `games/backgammon`, `games/freecell`, `games/go`, `games/hexlines` and 12 more |
+| `StateModifierNode` | 266 | 26 | `games/arena`, `games/backgammon`, `games/freecell`, `games/go`, `games/hexlines` and 18 more |
 | `StatePileDeclarationNode` | 42 | 1 | `games/freecell`, `games/klondike`, `games/spider` |
 | `StatePileTokenNode` | 104 | 3 | `games/freecell`, `games/klondike` |
 | `StatePoolDeclarationNode` | 4 | 0 | `games/arena`, `games/paddleball` |
-| `StateSlotDeclarationNode` | 141 | 6 | `games/arena`, `games/backgammon`, `games/go`, `games/hexlines`, `games/hiddenranks` and 7 more |
-| `StateTableDeclarationNode` | 37 | 12 | `avatars/moth`, `games/backgammon`, `games/billiards`, `games/freecell`, `games/go` and 10 more |
+| `StateSlotDeclarationNode` | 154 | 6 | `games/arena`, `games/backgammon`, `games/go`, `games/hexlines`, `games/hiddenranks` and 12 more |
+| `StateTableDeclarationNode` | 67 | 12 | `avatars/moth`, `games/backgammon`, `games/billiards`, `games/freecell`, `games/go` and 11 more |
 | `TemplateNode` | 8 | 1 | `avatars/moth`, `games/go`, `games/tetromino` |
 | `TemplateParameterNode` | 21 | 3 | `avatars/moth`, `games/go`, `games/tetromino` |
 | `TestDeclarationNode` | 21 | 0 | `games/go`, `games/reversi`, `games/tetromino` |
@@ -233,9 +237,9 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `TestSeatStepNode` | 45 | 0 | `games/go`, `games/tetromino` |
 | `TestTicksStepNode` | 64 | 0 | `games/go`, `games/reversi`, `games/tetromino` |
 | `TestWhenBlockNode` | 21 | 0 | `games/go`, `games/reversi`, `games/tetromino` |
-| `TransactionStatementNode` | 31 | 1 | `games/freecell`, `games/klondike`, `games/poker`, `games/spider`, `games/wordspy` |
+| `TransactionStatementNode` | 33 | 1 | `games/freecell`, `games/klondike`, `games/poker`, `games/spider`, `games/wordspy`, `modules/granaries` |
 | `TransformStatementNode` | 52 | 5 | `games/freecell`, `games/go`, `games/hiddenranks`, `games/klondike`, `games/poker` and 4 more |
 | `UnaryExpressionNode` | 40 | 0 | `avatars/moth`, `moth-courtyard`, `tools/hgb-compare` |
-| `WhenStatementNode` | 213 | 6 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 13 more |
+| `WhenStatementNode` | 262 | 6 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/freecell` and 20 more |
 | `WorkflowNode` | 1 | 0 | `games/tetromino` |
 | `WorkflowStepNode` | 4 | 0 | `games/tetromino` |
