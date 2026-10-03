@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'sdf-film-grain' (sha256/ff13cb1d57bf0dd1e0b8a4a4efe70b31ce2a64c8336fa8c5aa29c590b88b06cf), generated from the interface; never edit it.
+// The echo pass of shader interface 'sdf-film-grain' (sha256/e90e3b431c83f547145e359c783172c0f36fe16ede0d6c9b74c3fdda4fa680fc), generated from the interface; never edit it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "sdf-film-grain.interface.hlsli"
 
@@ -25,5 +25,6 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(15, 0)] = ((asuint(passGroup.intensity) == 0x400043A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(16, 0)] = ((asuint(passGroup.seed) == 0x400053A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(17, 0)] = ((asuint(passGroup.size) == 0x400063A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(18, 0)] = ((asuint(passGroup.workCounterRow) == 0x400073A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(18, 0)] = ((asuint(passGroup.workCounterDetailRow) == 0x400073A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(19, 0)] = ((asuint(passGroup.workCounterRow) == 0x400083A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

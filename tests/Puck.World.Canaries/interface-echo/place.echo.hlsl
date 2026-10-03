@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'place' (sha256/eed2249c27cb521ec1aa9f21d405b8169e312edc2a414885b4d2ddebf574f570), generated from the interface; never edit it.
+// The echo pass of shader interface 'place' (sha256/84f134d4b91c98e1a23aea320b1f4a3c9dc351296a22e12c4ee4849424d3ae5a), generated from the interface; never edit it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "place.interface.hlsli"
 
@@ -28,5 +28,6 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(18, 0)] = ((asuint(passGroup.sharpness) == 0x4000A3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(19, 0)] = ((asuint(passGroup.tonemap) == 0x4000B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(20, 0)] = ((asuint(passGroup.wipe) == 0x4000C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(21, 0)] = ((asuint(passGroup.workCounterRow) == 0x4000D3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(21, 0)] = ((asuint(passGroup.workCounterDetailRow) == 0x4000D3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(22, 0)] = ((asuint(passGroup.workCounterRow) == 0x4000E3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

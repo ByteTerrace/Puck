@@ -144,6 +144,19 @@ public sealed class SdfFrameBlockLawTests {
             actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.Row))),
             expected: 6u
         );
+        // The detail row names the pass's first named row, which the recorder alone writes, so it starts at zero.
+        Assert.Equal(
+            actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.DetailRow))),
+            expected: 0u
+        );
+        SdfFrameBlock.WriteWorkCounterDetailRow(
+            block: block,
+            row: 7u
+        );
+        Assert.Equal(
+            actual: BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: ShaderWorkCounters.DetailRow))),
+            expected: 7u
+        );
         var pass = parameters.Layout.Groups.Single(predicate: static group => (group.Group == ShaderInterfaceGroup.Pass));
 
         foreach (var member in pass.BlockMembers.Where(predicate: static member => !member.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "_pad"))) {

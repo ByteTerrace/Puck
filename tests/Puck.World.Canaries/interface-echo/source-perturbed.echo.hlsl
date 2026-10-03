@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'source-perturbed' (sha256/73aa66ab463e037f086a01818350c5d88f3b3a44372cd953c588e97148768054), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'source-perturbed' (sha256/7dca9b874824ed6fb0c5c9bd405f15d6e8643cf3648fcad09e07f6f16abdd529), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "source-perturbed.interface.hlsli"
 
@@ -22,5 +22,6 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(12, 0)] = ((asuint(frameGroup.placedExtent.x) == 0x400190A5u) && (asuint(frameGroup.placedExtent.y) == 0x4001A0A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(13, 0)] = ((asuint(passGroup.extent.x) == 0x400013A5u) && (asuint(passGroup.extent.y) == 0x400023A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(14, 0)] = ((asuint(passGroup.paperWhiteNits) == 0x400033A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(15, 0)] = ((asuint(passGroup.workCounterRow) == 0x400053A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(15, 0)] = ((asuint(passGroup.workCounterDetailRow) == 0x400043A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(16, 0)] = ((asuint(passGroup.workCounterRow) == 0x400063A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

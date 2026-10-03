@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 22,
+        "width": 23,
         "height": 1
       }
     }
@@ -32,6 +32,7 @@
         "sharpness": { "type": "float", "default": 0, "min": 0, "max": 1, "description": "Reconstruction sharpness: 0 is bilinear, 1 clamped Catmull-Rom." },
         "tonemap": { "type": "uint", "default": 0, "min": 0, "max": 1, "description": "1 puts the reconstructed source through the filmic tonemap inside the rect; the base and the letterbox color are never tonemapped." },
         "wipe": { "type": "float", "default": 0.5, "min": 0, "max": 1, "description": "The held image's fraction of the rect in wipe mode." },
+        "workCounterDetailRow": { "type": "uint", "default": 0, "description": "The place pass's first named detail row of the work counters." },
         "workCounterRow": { "type": "uint", "default": 0, "description": "The place pass's row of the work counters." }
       }
     }
