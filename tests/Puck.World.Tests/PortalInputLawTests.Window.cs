@@ -140,7 +140,7 @@ public sealed partial class PortalInputLawTests {
                 width: 640
             );
 
-            var session = new WorldSessionSceneEmitter(
+            var session = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
                 effectiveCameraName: null,
                 mirror: new WorldSessionMirror(placeholder: beyond.Definition)
             );

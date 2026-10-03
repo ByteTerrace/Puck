@@ -115,6 +115,14 @@ public sealed class SdfSky {
     public const float DefaultCloudScale = 2f;
     /// <summary>The default cloud edge softness.</summary>
     public const float DefaultCloudSoftness = 0.25f;
+    /// <summary>The narrowest cloud edge band, as a share of density: the least softness a cloud layer or a cloud
+    /// volume admits. Both kernels read a band of this width beside a threshold in <c>[0, 1]</c> (a layer's
+    /// <c>[t, t + s]</c>, a volume's <c>[t - s, t + s]</c>) through <c>smoothstep</c>, which is defined only while its
+    /// two edges differ. An IEEE float addition is correctly rounded on both backends, and the spacing of floats in
+    /// <c>[0, 1]</c> is at most <c>2^-23</c> (one ULP of 1.0), so a band of at least <c>2^-23</c> keeps its edges
+    /// apart at every threshold; <c>1e-6</c> is about eight ULPs of 1.0, past what any rounding of the threshold or the
+    /// edges can close, and it is a normal float no device flushes to zero.</summary>
+    public const float MinCloudSoftness = 1e-6f;
     /// <summary>The default look's fog density.</summary>
     public const float DefaultFogDensity = 0.015f;
     /// <summary>The default star cell density.</summary>

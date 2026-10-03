@@ -64,7 +64,7 @@ public sealed record WorldReplaySetVerdict(WorldReplayVerdict Primary, IReadOnly
                             _ = authorities.Add(item: tape.Authority);
                             _ = authorities.Add(item: departure.Target);
                             break;
-                        case WorldReplayEntry.Arrival arrival:
+                        case WorldReplayEntry.Arrival { Outcome.RolledBack: false } arrival:
                             _ = authorities.Add(item: tape.Authority);
                             _ = authorities.Add(item: arrival.SourceAuthority);
                             break;
@@ -75,8 +75,8 @@ public sealed record WorldReplaySetVerdict(WorldReplayVerdict Primary, IReadOnly
         return authorities;
     }
     /// <summary>Pairs every crossing the tapes of one set carry. A departure is a source tape's committed transfer;
-    /// an arrival is a destination tape's landed cohort; the two halves share the source authority and the
-    /// source-scoped transfer id.</summary>
+    /// an arrival is a destination tape's landed cohort, whose commit stood; the two halves share the source authority
+    /// and the source-scoped transfer id. An arrival a commit rolled back is no crossing.</summary>
     /// <param name="tapes">Every tape in the set with its own verdict.</param>
     /// <returns>Every crossing's verdict: each departure in tape order, then each arrival no departure claimed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="tapes"/> is <see langword="null"/>.</exception>
@@ -117,7 +117,7 @@ public sealed record WorldReplaySetVerdict(WorldReplayVerdict Primary, IReadOnly
                     } else if (target < 0) {
                         reason = $"its arrival is on authority '{departure.Target}', which no tape in this set recorded";
                     } else if (!Carries(
-                        match: candidate => ((candidate is WorldReplayEntry.Arrival arrival) && (arrival.TransferId == departure.TransferId) && string.Equals(
+                        match: candidate => ((candidate is WorldReplayEntry.Arrival { Outcome.RolledBack: false } arrival) && (arrival.TransferId == departure.TransferId) && string.Equals(
                             a: arrival.SourceAuthority,
                             b: tape.Authority,
                             comparisonType: StringComparison.Ordinal
@@ -147,7 +147,7 @@ public sealed record WorldReplaySetVerdict(WorldReplayVerdict Primary, IReadOnly
             foreach (var tick in tape.Ticks) {
                 foreach (var entry in tick.Authority) {
                     if (
-                        (entry is not WorldReplayEntry.Arrival arrival) ||
+                        (entry is not WorldReplayEntry.Arrival { Outcome.RolledBack: false } arrival) ||
                         paired.Contains(item: (arrival.SourceAuthority, arrival.TransferId))
                     ) {
                         continue;

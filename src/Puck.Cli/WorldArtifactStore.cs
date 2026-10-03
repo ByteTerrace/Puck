@@ -191,7 +191,7 @@ internal sealed class WorldArtifactStore(string root) {
         if (Directory.Exists(path: entry)) {
             // The rename below never replaces a directory, so a key already published keeps the build every earlier
             // taker is running from, and this run's identical build is discarded.
-            CliScratchDirectories.TryDelete(path: staging);
+            RunDirectory.TryDelete(path: staging);
         } else {
             // A scanner can hold a just-written file open for a moment, and Windows refuses to rename a directory
             // while any file inside it is open.
@@ -272,7 +272,7 @@ internal sealed class WorldArtifactStore(string root) {
             ) {
                 try {
                     if ((DateTime.UtcNow - Directory.GetLastWriteTimeUtc(path: directory)) > AbandonedAge) {
-                        CliScratchDirectories.TryDelete(path: directory);
+                        RunDirectory.TryDelete(path: directory);
                     }
                 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                     // An unreadable leftover is retried by the next run.
@@ -333,7 +333,7 @@ internal sealed class WorldArtifactStore(string root) {
                     key: key,
                     suffix: ".used"
                 ));
-                CliScratchDirectories.TryDelete(path: pruned);
+                RunDirectory.TryDelete(path: pruned);
             }
 
             TryDeleteFile(path: leasePath);

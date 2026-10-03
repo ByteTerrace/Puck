@@ -133,7 +133,7 @@ give each type its full contract.
 | `UnitFraction32` | `readonly record struct` | UQ0.32—the same half-open contract at a resolution of `2⁻³²`, stored in a `uint`. This is the grid the samplers draw on. |
 | `UnitInterval32` | `readonly record struct` | The **closed** interval `[0, 1]`—one included this time—on that same `2⁻³²` grid, stored in a `ulong` under a single invariant: `Value ≤ 2³²`. The thirty-third bit buys a multiplicative identity, exact absorbing elements at both ends (an absorbing element swallows whatever it meets, the way zero times anything is zero), and closure of `Multiply`. There are no arithmetic operators at all; every combining operation is a named method. |
 | `FixedVector2` | `readonly record struct` | Two `FixedQ4816` components. `Dot` and `Wedge`—the signed area of the parallelogram the two vectors span, which is the winding test—accumulate wide and round once. |
-| `FixedVector3` | `readonly record struct` | Three components, with `Dot`, `Cross`, `Lerp`, a scale-free `Normalize`, and saturating `Length` / `LengthSquared` alongside `Try…` siblings. `IsWithin(radius)` answers exactly what `Length <= radius` answers, saturation included, by comparing the exact sum of squares with `R² + R`, so a distance check pays no square root. `TryIntersectPlane` meets a ray with a plane: the parameter is one ties-to-even rounding of the quotient of two `Dot`s, refused when the ray runs parallel, the plane lies behind it, or the parameter leaves the carrier. This is the world-space displacement type. |
+| `FixedVector3` | `readonly record struct` | Three components, with `Dot`, `Cross`, `Lerp`, a scale-free `Normalize`, and saturating `Length` / `LengthSquared` alongside `Try…` siblings. `IsWithin(radius)` answers exactly what `Length <= radius` answers, saturation included, by comparing the exact sum of squares with `R² + R`, so a distance check pays no square root. `CompareLengthTo(other)` orders two vectors by length on their exact sums of squares; the longer never reports the shorter `Length`, so the longer of two can be chosen first and rooted once. `TryIntersectPlane` meets a ray with a plane: the parameter is one ties-to-even rounding of the quotient of two `Dot`s, refused when the ray runs parallel, the plane lies behind it, or the parameter leaves the carrier. This is the world-space displacement type. |
 | `FixedInterval` | `readonly record struct` | A closed interval of `FixedQ4816` values with outward-rounded arithmetic: `+`, `−`, `×`, `÷`, `Abs`, `Square`, `Sqrt`, `Round`, `Floor`, `Clamp`, `Min`, `Max`, the box norm `Magnitude`, `Pow` over a non-negative base and a positive exponent, `Sin`, `Cos`, `Atan2`, `Asin` and `Acos`. Each result holds the exact real answer at every operand inside its inputs, and so every round-to-nearest point answer too; the arithmetic endpoints are the exact floor and ceiling of the exact extremes, and the transcendentals widen the shipped kernel by the envelope its law pins. An operation whose exact hull leaves the carrier answers `Entire`, the unbounded top (`IsUnbounded`), and the top absorbs: every operation given it answers it, a clamp, a minimum or a sine included. A bounded result therefore proves that no step of its computation overflowed, and the carrier's extremes are ordinary bounded values. It is what a certified bound over a region is computed in. |
 | `FixedComplex` | `readonly record struct` | The deterministic planar **rotation**, built on `i² = −1`. `FromAngle` is the 2D exponential map, `*` composes turns, `Rotate` applies one, and `Argument` is the logarithm. Division is full-range with exact rounding. |
 | `FixedDual` | `static` | The factory and derivative-lift surface for the dual construction: `Constant`, `Variable`, `Divide`, and the lifted `Log2`, `SinCos` and `Sqrt`. |
@@ -684,13 +684,20 @@ of 65534 raw, where `Log`'s screw division would amplify quantization by about
 
 **Precision.** For the representation and for composition, about `2⁻¹⁵`
 relative to translation magnitude, which is the Q16 unit-quaternion norm
-quantization, so sub-millimetre at ten world units. `ScLerp`'s screw path sits
-outside that envelope: the `1/sin` amplification of the delta's quantized
-operands reaches a measured ~2.7 mm per component at ten world units near the
-blend threshold, tightening as the relative rotation grows. That band belongs
-to the operands and to `Exp`—`Log`'s lanes each close in a single
-`DivideProductSum` rounding, and fusing them left the measured worst case
-unchanged.
+quantization, so sub-millimetre at ten world units. `ScLerp`'s screw path stays
+inside that envelope too: measured against a double-precision screw
+interpolation of the same inputs, its worst per-component translation error is
+about 0.45 mm at ten world units, flat across relative rotations from 0.001 to
+2.5 rad. That holds because both halves of the screw divide by the rotation's
+sine at more than Q16: `Exp` forms `sin θ/θ`, `cos θ − sin θ/θ` and the slide's
+`−(d/2)·sin θ` from the Q60 sine and cosine, and `Log` carries its sine and half
+angle at Q20 before its lanes close in a single `DivideProductSum` rounding.
+Rounding either of them to Q16 first put `2⁻¹⁷/sin` of relative error into
+every dual lane, about 3 mm at ten world units near a 0.08 rad relative
+rotation. `Log` still divides by the sine, so a rotation within a few raws of
+a full turn (`W` near −1, a vector part of a few raws) answers a screw whose
+lanes are as uncertain as that sine; `rigid.log-matches-the-series` states the
+bound.
 `Rotation` and `Translation` read the parts back out; `TransformPoint` rotates
 and then translates; `Inverse` conjugates both quaternion parts.
 

@@ -3,6 +3,7 @@ using Puck.Abstractions.Counting;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -133,59 +134,52 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
     }
     [Fact]
     public void FreshBootBindingTheSameIdentityReloadsTheLane() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-identity-facts-").FullName;
+        using var directory = new TemporaryDirectory(prefix: "puck-identity-facts-");
 
-        try {
-            using (var first = Boot(
-                definition: Document(rules: [WriteRule()]),
-                directory: directory
-            )) {
-                Join(
-                    fixture: first,
-                    identity: IdentityName
-                );
-                first.Step();
-
-                Assert.Equal(
-                    expected: 1L,
-                    actual: Lane(
-                        body: 0,
-                        fact: Fact,
-                        fixture: first
-                    )
-                );
-            }
-
-            using var second = Boot(
-                definition: Document(rules: []),
-                directory: directory
-            );
-
-            second.Step();
-
-            Assert.Empty(collection: LaneCells(fixture: second));
-
+        using (var first = Boot(
+            definition: Document(rules: [WriteRule()]),
+            directory: directory.RootPath
+        )) {
             Join(
-                fixture: second,
+                fixture: first,
                 identity: IdentityName
             );
-            second.Step();
+            first.Step();
 
             Assert.Equal(
                 expected: 1L,
                 actual: Lane(
                     body: 0,
                     fact: Fact,
-                    fixture: second
+                    fixture: first
                 )
             );
-            Assert.Empty(collection: second.Server.RuleRuntimeDiagnostics());
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
         }
+
+        using var second = Boot(
+            definition: Document(rules: []),
+            directory: directory.RootPath
+        );
+
+        second.Step();
+
+        Assert.Empty(collection: LaneCells(fixture: second));
+
+        Join(
+            fixture: second,
+            identity: IdentityName
+        );
+        second.Step();
+
+        Assert.Equal(
+            expected: 1L,
+            actual: Lane(
+                body: 0,
+                fact: Fact,
+                fixture: second
+            )
+        );
+        Assert.Empty(collection: second.Server.RuleRuntimeDiagnostics());
     }
     [Fact]
     public void WorldDeclaringNoLaneRefusesTheEffectAndTheChannelByName() {
@@ -332,6 +326,56 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         Assert.All(
             collection: fixture.Server.Profiles.All,
             action: identity => Assert.Null(@object: identity.Facts)
+        );
+    }
+    // THE LAW: a visitor's fact lands on its travelling row. A seat driving under an identity that arrived as a
+    // projection has no owned document here, yet it is no anonymous seat: the effect writes the lane and the visitor's
+    // travelling row, which its next crossing carries on, and nothing reaches this world's catalog. The red leg refuses
+    // the visitor as unbound, so a level could never award the visitor a fact.
+    [Fact]
+    public void AVisitorsFactLandsOnItsTravellingRowAndNeverOnThisCatalog() {
+        using var fixture = Fixtures.FreshServer(definition: Document(rules: [WriteRule()]));
+        var visitor = WorldIdentity.FromProjection(
+            defaults: fixture.Server.Definition.PlayerDefaults,
+            projection: new WorldIdentityProjection(
+                Id: "privacy-visitor",
+                Name: "Visitor",
+                ColorHex: "#123456",
+                MoveSpeed: null,
+                TurnSpeed: null
+            )
+        );
+
+        Join(
+            fixture: fixture,
+            identity: null
+        );
+        fixture.Server.Population.SetSeatProfile(
+            profile: visitor,
+            slot: 0
+        );
+        fixture.Step();
+        fixture.Step();
+
+        Assert.Empty(collection: fixture.Server.RuleRuntimeDiagnostics());
+        Assert.Equal(
+            expected: 1L,
+            actual: Lane(
+                body: 0,
+                fact: Fact,
+                fixture: fixture
+            )
+        );
+        Assert.Equal(
+            expected: 1L,
+            actual: Assert.Single(collection: Assert.IsType<WorldStateRow>(@object: visitor.Facts).Cells!).Value.AsInt
+        );
+        Assert.DoesNotContain(
+            collection: Directory.GetFiles(path: fixture.Server.Profiles.FilePath),
+            filter: static path => File.ReadAllText(path: path).Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "privacy-visitor"
+            )
         );
     }
     [Fact]
@@ -486,8 +530,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
 
         return new WorldFixture(
             machines: machines,
-            server: server,
-            stateDirectory: Directory.CreateTempSubdirectory(prefix: "puck-identity-facts-scratch-").FullName
+            server: server
         );
     }
     private static void Join(WorldFixture fixture, string? identity) {

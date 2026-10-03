@@ -128,6 +128,7 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
         if (m_anchors is WorldClient client) {
             registration.Rig = WorldCameraRigCompiler.Compile(
                 definition: client.Definition,
+                domains: m_domains,
                 mirror: client.StateMirror,
                 program: camera.Rig
             );
@@ -533,14 +534,21 @@ internal sealed partial class WorldScreenBinder : IWorldViewScenes {
         return (Ok: true, Message: $"screen {index} showing camera '{camera.Name}'");
     }
     /// <inheritdoc/>
-    /// <remarks>A camera view's camera is the one it last filmed from; a session's, the one its last frame rendered from
+    /// <remarks>A camera view's camera is the one it last filmed from, a camera of another world's in that world's space;
+    /// a session's, the one its last frame rendered from
     /// in the destination's space (<see cref="WorldSessionSceneEmitter.TryCamera"/>), so a hit on a portal's window
     /// continues into the destination along the ray the window rendered.</remarks>
     public bool TryCamera(string view, out CameraSnapshot camera) {
-        if (m_viewCameras.TryGetValue(
-            key: view,
-            value: out camera
-        )) {
+        if (
+            m_viewCameras.TryGetValue(
+                key: view,
+                value: out camera
+            ) ||
+            TryNestedCamera(
+                camera: out camera,
+                name: view
+            )
+        ) {
             return true;
         }
 

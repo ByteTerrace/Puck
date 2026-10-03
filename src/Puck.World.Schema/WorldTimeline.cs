@@ -14,7 +14,9 @@ public sealed record WorldTimelineSection(IReadOnlyList<WorldClock>? Clocks = nu
 }
 /// <summary>One named presentation clock: a tick clock, whose phase advances with the simulation's engine tick through a
 /// period, or a state clock, whose phase is the fractional part of a state row's presented value (an advancing row
-/// wraps once per unit).</summary>
+/// wraps once per unit). A projection carries a state clock as an anchored clock instead, whose phase its recipient
+/// predicts from the anchor at the tick it presents (<see cref="WorldClockAnchor"/>); a document never authors
+/// one.</summary>
 /// <param name="Name">The clock's name, unique within the section.</param>
 /// <param name="PeriodSeconds">A tick clock's period, in seconds: a whole number of engine ticks
 /// (<c>1/50400</c> s). Refused beside <paramref name="State"/>.</param>
@@ -24,17 +26,28 @@ public sealed record WorldTimelineSection(IReadOnlyList<WorldClock>? Clocks = nu
 /// <param name="StartSeconds">How far into its span a tick clock stands at engine tick zero, in
 /// <paramref name="SpanSeconds"/>' units, in <c>[0, span)</c>. Absent is zero. Refused on a state clock.</param>
 /// <param name="State">A state clock's Fixed or Int row. Refused beside <paramref name="PeriodSeconds"/>.</param>
+/// <param name="Anchor">An anchored clock's anchor: what a projection carries for a state clock it discloses, in place
+/// of the row. Refused in an authored document. An anchored clock carrying none reads no phase, as the state clock it
+/// stands for reads none while its row holds no number.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldClock(
     string Name,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? PeriodSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? SpanSeconds = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? StartSeconds = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldClockAnchor? Anchor = null
 ) {
     /// <summary>Gets whether the clock reads a state row rather than the tick.</summary>
     [JsonIgnore]
     public bool IsStateClock => (State is not null);
+    /// <summary>Gets whether the clock reads the tick alone: a period and no state row.</summary>
+    [JsonIgnore]
+    public bool IsTickClock => ((State is null) && (PeriodSeconds is not null));
+    /// <summary>Gets whether the clock is a projection's anchored clock: neither a period nor a state row, read from the
+    /// <see cref="Anchor"/> it carries, if any.</summary>
+    [JsonIgnore]
+    public bool IsAnchored => ((State is null) && (PeriodSeconds is null));
     /// <summary>Gets what one period reads as: <see cref="SpanSeconds"/>, or the period for a tick clock and one for a
     /// state clock when it is absent.</summary>
     [JsonIgnore]

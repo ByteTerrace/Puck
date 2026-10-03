@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Puck.Assets;
 using Puck.Cli.Parity;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -19,16 +20,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
     private const ulong Tick = 1205;
     private const string WorldPath = "tests/Puck.Parity/parity.world.json";
 
-    private readonly string m_root;
-
-    public ParityBindingReferenceLawTests() {
-        m_root = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-cli-tests-parity-reference-{Guid.NewGuid():N}"
-        );
-
-        Directory.CreateDirectory(path: m_root);
-    }
+    private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-cli-tests-parity-reference-");
 
     private static (ParityContract Contract, ParityBindingReference Reference) LoadContract(string station = Station) {
         Assert.True(
@@ -60,7 +52,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         }
 
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: $"contract-{Guid.NewGuid():N}.json"
         );
 
@@ -73,11 +65,11 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
     }
     private IReadOnlyList<ParityCaptureVerdict> Compare(ParityContract contract, byte[] left, byte[] right, int width, int height, string station = Station, ulong tick = Tick) {
         var leftDir = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: $"left-{Guid.NewGuid():N}"
         );
         var rightDir = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: $"right-{Guid.NewGuid():N}"
         );
 
@@ -146,7 +138,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         edit(obj: world);
 
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: $"world-{Guid.NewGuid():N}.json"
         );
 
@@ -260,7 +252,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
         contract["stations"]![Station]!["reference"]!["kind"] = "unknown";
 
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "contract.json"
         );
 
@@ -458,7 +450,7 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
     [Fact]
     public void AMalformedWorldIsRefusedByNameRatherThanThrown() {
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "malformed.world.json"
         );
 
@@ -478,13 +470,5 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
             expectedSubstring: "could not be read for its capture schedule"
         );
     }
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_root,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
 }

@@ -311,10 +311,10 @@ public static class FixedDynamicBodyContacts {
         foreach (ref readonly var volume in volumes) {
             var extent = volume.Kind switch {
                 FixedBodyColliderKind.Sphere => (volume.Center.Length + volume.Radius),
-                FixedBodyColliderKind.Capsule => (FixedQ4816.Max(
-                x: volume.Center.Length,
-                y: volume.Endpoint.Length
-            ) + volume.Radius),
+                // The longer endpoint, chosen on the exact squares and rooted once: Length is monotone in the sum.
+                FixedBodyColliderKind.Capsule => (((volume.Center.CompareLengthTo(other: volume.Endpoint) >= 0)
+                    ? volume.Center
+                    : volume.Endpoint).Length + volume.Radius),
                 FixedBodyColliderKind.Box => (volume.Center.Length + volume.HalfExtents.Length),
                 _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
             };

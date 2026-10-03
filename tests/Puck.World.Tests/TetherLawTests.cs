@@ -8,6 +8,7 @@ using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -19,18 +20,12 @@ public sealed class TetherLawTests {
     private const int ForwardOrdinal = 0;
     private const int ReelOrdinal = 5;
 
-    private sealed class RestoredCheckpoint(WorldServer server, WorldMachineHost machines, string stateDirectory) : IDisposable {
+    private sealed class RestoredCheckpoint(WorldServer server, WorldMachineHost machines, TemporaryDirectory stateDirectory) : IDisposable {
         public WorldServer Server { get; } = server;
 
         public void Dispose() {
             machines.Dispose();
-
-            if (Directory.Exists(path: stateDirectory)) {
-                Directory.Delete(
-                    path: stateDirectory,
-                    recursive: true
-                );
-            }
+            stateDirectory.Dispose();
         }
     }
 
@@ -247,9 +242,9 @@ public sealed class TetherLawTests {
             engines: [],
             screens: definition.Screens
         );
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-tether-checkpoint-").FullName;
+        var stateDirectory = new TemporaryDirectory(prefix: "puck-tether-checkpoint-");
         var profiles = new WorldOwnedWorlds(
-            directory: stateDirectory,
+            directory: stateDirectory.RootPath,
             machineId: Guid.NewGuid(),
             template: definition
         );

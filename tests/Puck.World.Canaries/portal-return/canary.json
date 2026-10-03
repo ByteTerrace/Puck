@@ -1,7 +1,7 @@
 {
   "id": "portal-return",
   "title": "A seat that crosses into a destination sees that world's own screens drawn, its return portal showing the world it left",
-  "binding": "portal-return.puck composes two rooms (rooms.puck) on the verdicts plot, offscreen at 256x144: the lobby, whose arch's glass shows a window session onto the garden with a mapped portal into it and stands an orange wall at its spawn's back, and the garden, whose arrival arch is the lobby arch's counterpart and whose return arch, ten units on and facing back, shows a window session onto the lobby with a mapped portal into it, magenta as its fallback colour, before a blue wall. Each room admits a traveller and observes the other whole. The seat walks forward through the lobby's arch: the portal mints a mapped transfer and the seat arrives behind the garden's arrival arch, while its camera, whose yaw is the world's, looks on along the walk at the return arch. world.nesting then names the garden as a world a seat is presented in, depth 0 (routed$15a0d017139f65b4, the digest of its authority 6~global6~garden), whose return arch's screen 24 shows routed$15a0d017139f65b4$24, a window one level deep onto the lobby: the garden's own screens bind for the seat presented there. The capture shows the return arch's glass orange on every pixel, the lobby's wall seen back through it from the seat's own eye, and nowhere magenta. The discriminating leg boots the same rooms with views.nestingDepth 0 (shallow.puck): the same walk crosses, since what is drawn never reaches the simulation, but the garden's screen shows its fallback colour's source instance instead, and the return arch's glass is magenta and nowhere orange.",
+  "binding": "portal-return.puck composes two rooms (rooms.puck) on the verdicts plot, offscreen at 256x144: the lobby, whose arch's glass shows a window session onto the garden with a mapped portal into it and stands an orange wall at its spawn's back, and the garden, whose arrival arch is the lobby arch's counterpart at the same yaw and whose return arch, eight units on and facing the lobby's arch, shows a window session onto the lobby with a mapped portal into it, magenta as its fallback colour, before a blue wall. Each room admits a traveller and observes the other whole. The seat walks forward through the lobby's arch: the portal mints a mapped transfer, the pair's shared yaw turns the traveller about, and the seat's view turns with it, so its camera looks along the turned walk at the return arch. world.nesting then names the garden as a world a seat is presented in, depth 0 (routed$15a0d017139f65b4, the digest of its authority 6~global6~garden), whose return arch's screen 24 shows routed$15a0d017139f65b4$24, a window one level deep onto the lobby: the garden's own screens bind for the seat presented there. The capture shows the return arch's glass orange on every pixel of a band across its upper half, the lobby's wall seen through it from the seat's own eye, and nowhere magenta; the band ends two rows above the lobby's ground edge, which the turned view sees through the glass's lower half. A seat whose view kept its heading through the turn would look away from the return arch, at the garden's open ground. The discriminating leg boots the same rooms with views.nestingDepth 0 (shallow.puck): the same walk crosses, since what is drawn never reaches the simulation, but the garden's screen shows its fallback colour's source instance instead, and the return arch's glass is magenta and nowhere orange.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -94,9 +94,9 @@
         ],
         "region": [
           0.48,
-          0.26,
+          0.25,
           0.52,
-          0.34
+          0.32
         ],
         "reduce": "every",
         "minimum": [
@@ -124,9 +124,9 @@
         ],
         "region": [
           0.48,
-          0.26,
+          0.25,
           0.52,
-          0.34
+          0.32
         ],
         "reduce": "every",
         "minimum": [
@@ -218,9 +218,9 @@
         ],
         "region": [
           0.48,
-          0.26,
+          0.25,
           0.52,
-          0.34
+          0.32
         ],
         "reduce": "every",
         "minimum": [
@@ -248,9 +248,9 @@
         ],
         "region": [
           0.48,
-          0.26,
+          0.25,
           0.52,
-          0.34
+          0.32
         ],
         "reduce": "every",
         "minimum": [

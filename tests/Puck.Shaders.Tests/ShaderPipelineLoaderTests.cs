@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -237,17 +238,11 @@ public sealed class ShaderPipelineLoaderTests {
     }
 
     private sealed class Fixture : IDisposable {
-        public string Directory { get; } = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-loader-tests-" + Guid.NewGuid().ToString(format: "N"))
-        );
+        private readonly TemporaryDirectory m_directory = new(prefix: "puck-loader-tests-");
 
-        public Fixture() => System.IO.Directory.CreateDirectory(path: Directory);
+        public string Directory => m_directory.RootPath;
 
-        public void Dispose() => System.IO.Directory.Delete(
-            Directory,
-            recursive: true
-        );
+        public void Dispose() => m_directory.Dispose();
     }
     private sealed class Runner : IShaderProcessRunner {
         private int m_calls;

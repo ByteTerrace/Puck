@@ -1,7 +1,7 @@
 {
   "id": "rulepush-overworld",
   "title": "A rulepush level cleared on the visitor's record opens the overworld's west gate",
-  "binding": "Boots the rulepush overworld with a fresh identity bound to the seat. The seat walks across the east border into Hedges and clears it with the puzzle presses, which writes 'pushCleared' onto its own identity; it walks back, north into Rewrite, clears it ('rewriteCleared'), and back again. The overworld's own rule reads both facts off the identity that arrived with the body, opens the west gate, and the respond facet swaps the solid gate for the open one; the seat then walks west into Sink and clears it too. Nothing crosses between the worlds but the body and its identity. The discriminating leg leaves Rewrite unsolved, so the record carries one clear, the gate stays shut, and the walk west ends at the gate.",
+  "binding": "Boots the rulepush overworld with a fresh identity bound to the seat. The seat walks across the east border into Hedges and clears it with the puzzle presses, which writes 'pushCleared' onto the travelling record its identity crossed with; it walks back, and the overworld, the authority its seat left, adopts the fact onto the identity it owns, where identity.facts reads it. It walks north into Rewrite, clears it ('rewriteCleared'), and back again. The overworld's own rule reads both facts off its owned identity, opens the west gate, and the respond facet swaps the solid gate for the open one; the seat then walks west into Sink, clears it too, and back. Abroad, each level reads the facts the identity carries through its own identity lane. Nothing crosses between the worlds but the body and its identity projection. The discriminating leg leaves Rewrite unsolved, so the record carries one clear after the walk home from Rewrite, the gate stays shut, and the walk west ends at the gate.",
   "bootShape": "headless",
   "requirements": [],
   "timeoutSeconds": 60,
@@ -219,11 +219,6 @@
         "occurrence": 13
       },
       {
-        "verb": "identity.facts",
-        "outcome": "accepted",
-        "occurrence": 1
-      },
-      {
         "verb": "body.fly",
         "outcome": "accepted",
         "occurrence": 2
@@ -232,6 +227,11 @@
         "verb": "world.wait",
         "outcome": "accepted",
         "occurrence": 14
+      },
+      {
+        "verb": "identity.facts",
+        "outcome": "accepted",
+        "occurrence": 1
       },
       {
         "verb": "world.state",
@@ -349,11 +349,6 @@
         "occurrence": 25
       },
       {
-        "verb": "identity.facts",
-        "outcome": "accepted",
-        "occurrence": 2
-      },
-      {
         "verb": "body.fly",
         "outcome": "accepted",
         "occurrence": 4
@@ -362,6 +357,11 @@
         "verb": "world.wait",
         "outcome": "accepted",
         "occurrence": 26
+      },
+      {
+        "verb": "identity.facts",
+        "outcome": "accepted",
+        "occurrence": 2
       },
       {
         "verb": "world.state",
@@ -474,6 +474,16 @@
         "occurrence": 36
       },
       {
+        "verb": "body.fly",
+        "outcome": "accepted",
+        "occurrence": 6
+      },
+      {
+        "verb": "world.wait",
+        "outcome": "accepted",
+        "occurrence": 37
+      },
+      {
         "verb": "identity.facts",
         "outcome": "accepted",
         "occurrence": 3
@@ -493,6 +503,14 @@
         "present": true,
         "match": "contains",
         "text": "facts=pushCleared:1]",
+        "stream": "stdout",
+        "type": "line"
+      },
+      {
+        "name": "rewrite-not-on-the-record",
+        "present": false,
+        "match": "contains",
+        "text": "rewriteCleared",
         "stream": "stdout",
         "type": "line"
       },
@@ -659,11 +677,6 @@
         "occurrence": 13
       },
       {
-        "verb": "identity.facts",
-        "outcome": "accepted",
-        "occurrence": 1
-      },
-      {
         "verb": "body.fly",
         "outcome": "accepted",
         "occurrence": 2
@@ -672,6 +685,11 @@
         "verb": "world.wait",
         "outcome": "accepted",
         "occurrence": 14
+      },
+      {
+        "verb": "identity.facts",
+        "outcome": "accepted",
+        "occurrence": 1
       },
       {
         "verb": "world.state",
@@ -729,11 +747,6 @@
         "occurrence": 19
       },
       {
-        "verb": "identity.facts",
-        "outcome": "accepted",
-        "occurrence": 2
-      },
-      {
         "verb": "body.fly",
         "outcome": "accepted",
         "occurrence": 4
@@ -742,6 +755,11 @@
         "verb": "world.wait",
         "outcome": "accepted",
         "occurrence": 20
+      },
+      {
+        "verb": "identity.facts",
+        "outcome": "accepted",
+        "occurrence": 2
       },
       {
         "verb": "world.state",

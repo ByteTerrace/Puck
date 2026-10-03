@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Maths;
+using Puck.Networking;
 using Puck.World.Protocol;
 using Puck.Physics;
 using Puck.Physics.Fields;
@@ -260,6 +261,13 @@ public sealed partial class WorldPopulation {
     private WorldPopulationVariation m_peerVariation = null!;
     private WorldPopulationVariation m_seatVariation = null!;
     private WorldSequence m_peerColors = null!;
+
+    // Scratch the continuation hash encodes its entry views through (AppendContinuationHash), reused from one fold to
+    // the next.
+    private WireWriter? m_continuationWriter;
+    private List<(WorldCapability, GrantSubject)>? m_viewRevokedKeys;
+    private List<int>? m_viewPath;
+
     // The definition's kit rows: the authored rows (body construction reads a row's tuning) and their fixed-point
     // compilations (producer programs read their parameter maps), plus the resolved seat row. Assigned by CompileFixedTables from
     // the constructor (the empty seeds satisfy definite-assignment across that helper call).
@@ -412,6 +420,10 @@ public sealed partial class WorldPopulation {
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can
         // override it, but an authority handoff preserves it.
         public required byte CatalogRig { get; set; }
+        // The occupant's accumulated arrival turn (WorldFrameIsometry.AccumulateTurn): zero for an occupant that has made
+        // no mapped arrival, carried and advanced by every authority transfer. A route describes it so an observer
+        // turns its view by the change.
+        public FixedQ4816 TravelTurn { get; set; }
         public required WorldTargetDesignation[] Designations { get; set; }
         // Bumped every time this peer slot transitions inactive -> active. Never reset on disconnect.
         public int Generation { get; set; }

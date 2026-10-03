@@ -18,7 +18,9 @@ namespace Puck.World.Protocol;
 /// the exact admission row; a committed destination admission starts without it.</param>
 /// <param name="CatalogRig">The occupant-owned procedural appearance rig, recorded so replay restores the same shape
 /// even when authority admission selected another population slot.</param>
-public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, Principal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred, string? PlacementId, byte CatalogRig);
+/// <param name="TravelTurn">The occupant's accumulated arrival turn (<see cref="WorldFrameIsometry.AccumulateTurn"/>),
+/// recorded so a replayed transferred occupant describes the same turn to an observer that follows it onward.</param>
+public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, Principal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred, string? PlacementId, byte CatalogRig, Puck.Maths.FixedQ4816 TravelTurn);
 /// <summary>Server-authored entries in the same ordered domain as submissions. They are not submission payloads and
 /// can never arrive from a client.</summary>
 public abstract record WorldServerEvent {

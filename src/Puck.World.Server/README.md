@@ -262,10 +262,12 @@ packages, then repeats the comparison over candidate-written continuation state.
 Receipts carry full evidence hashes and matching forward and reverse import
 hashes; the coordinator refuses mismatches. The receipt covers the states actually
 exercised, not every state a changed game might reach. Checkpoints preserve named
-handheld machine cores, held input, exact pacing, and instance generations after
-draining accepted work. Restore requires the same firmware, cartridge, and core
+handheld machine cores, held input, exact pacing, instance generations, and each
+named binding's on-change memo after draining accepted work. Restore requires the same firmware, cartridge, and core
 format identity. Pumped addon guests, applied screen operations, live coupled
 machine links, and enabled machine rewind history still refuse capture by name.
+Successful `screens[].memory` access also closes this gate, including access to
+a named machine: its screen-owned observations are outside the checkpoint.
 Worlds exercising those unsupported states cannot pass qualification yet.
 
 The coordinator's real-host tests cover two-row deployment, subsequent gameplay,
@@ -339,6 +341,15 @@ A re-declared row set (`WorldMutation.UpsertStateRow`, an addon-installed row)
 prepares its replacement arena before the mutation commits. The replacement
 carries the runtime key ledger plus the participant and identity lanes; a
 capacity refusal therefore leaves both the installed document and arena alone.
+A whole-document rebuild (`world.load`, `world.reload`, `world.reset`, and the
+load door a history seek restores through) prepares its replacement the same
+way, before anything moves, whenever the candidate's state catalog is not the
+live arena's (`WorldServer.ReloadsArenaInPlace`): the candidate's rows are the
+truth it installs, so a row it re-declares with another kind, shape or trait
+installs as declared, and a section no arena holds refuses the rebuild by name
+(`RowReshapeJumpLawTests`). `SyncArena`, which the doors that cannot refuse
+(an undo, a checkpoint's rule recompile) reach, installs the same replacement;
+it reloads the live columns in place only for the catalog they already hold.
 
 ### The action-state slot lanes (`WorldActionStateLane.cs`)
 
@@ -360,10 +371,9 @@ hands a body its address only; a restore marks the slot occupied before writing
 the registers it captured. A binding reconciles the roster against the live
 table, so a fresh arena re-joins every active ordinal.
 
-Replacing the arena does not lose what the lanes hold. A prepared mutation
-copies them before commit; reconstruction paths use `SyncArena`'s relayout and
-refuse without falling back to a fresh store. Replacement therefore cannot
-silently re-birth every live body's registers.
+Replacing the arena does not lose what the lanes hold. Every replacement, a
+prepared mutation's, a rebuild's or `SyncArena`'s, copies them before it is
+adopted, so replacement cannot silently re-birth every live body's registers.
 
 The values therefore fold into the `Arena` hash component with the rest of the
 store; `BodyActionState` folds the declaration and the per-lane trigger runtime
@@ -1259,6 +1269,10 @@ authority journal (`Puck.World.Silo`'s `WorldSiloHost.Crossings.cs`).
 An occupied source slot retains its pending recovery; a rollback-only checkpoint
 keeps only the remaining paired body/profile records and can never retry Commit.
 Restoration reinstalls the original mobility identity even if that slot was reused.
+A reservation only reads the traveler's mobility credential
+(`WorldPopulation.ReadMobility`); the departure's detach mints it
+(`DetachForTransfer`), the one step a replay's re-drive also runs, so a refused,
+retried or aborted reservation changes nothing the authoritative hash folds.
 A contradictory peer commit verdict after rollback leaves recovery held and
 reports once; it cannot create another body or stop unrelated worlds.
 Non-atomic parties split before reservation, so a parent lease cannot block its
@@ -1317,7 +1331,7 @@ the verdict the destination's tick applied, which the peer host awaits before it
 writes the completion back. On the traveler's side, `WorldFederatedServerLink`
 submits a mutation that carries a completion without waiting: the call returns at
 once, and the verdict, or the routed deadline's refusal
-(`world.transport.completion_unavailable`, naming the deadline), reaches the
+(`world.transport.completion-unavailable`, naming the deadline), reaches the
 completion when the lane answers (`WorldRemoteAuthority.AnswerAsync`). Other
 submissions still wait for their answer, bounded by the same deadline.
 
@@ -1329,6 +1343,22 @@ broken route forms a cycle. An accepted leave retires the traveled credentials
 and every retained branch for that incarnation in each forwarding host, without
 removing another traveler's routes. The final body still follows the world's
 authored reconnect-grace policy.
+
+A local seat that follows a traveler to a remote destination follows it through
+one route wrapper per seat (`WorldRemoteAuthority`), created at the seat's first
+such crossing and reused by every later one. When `PublishCommittedTransfer`
+creates the wrapper, it holds the commit's accumulated turn and publishes the
+seat's claim through `WorldRemoteAuthority.PublishClaim`, which runs the
+publication and then delivers the latest observed route, both under the wrapper's
+route gate. An onward route observed before the claim reaches the seat once the
+claim stands, and one observed while the claim is delivered waits on the gate, so
+the seat takes each onward turn once and an older route never overtakes a newer
+one. A claim published through a reused wrapper does not take the gate. The host
+constructor's optional `travelerRouteStarted` callback is told of each newly
+created wrapper before its claim is held and published, and every production
+composition passes none. The federated-hosts harness in `tests/Puck.World.Tests`
+(`FederatedHosts`, `RoutedSeats`) passes it to observe an onward route before,
+during and after the claim, across two hosts joined over QUIC.
 
 The console can move any active body through that same transfer path:
 `world.transfer <source-instance> body:<index> <target-instance>` uses a zero-based
@@ -1616,8 +1646,37 @@ existing shapes. Both arms hand back a document whose `state.<row>[.<key>]`
 values are resolved, so a delivered definition is indistinguishable from a
 file-loaded one and an arriving seat's binding recompose cannot fault on an
 unresolved identifier; a projection leaf that still names a state cell is
-refused as `PayloadMalformed`. The reservation leaf carries a
-`WorldIdentityProjection` instead of the traveler's owned document.
+refused as `PayloadMalformed`. A traveler's identity crosses as its
+`WorldIdentityProjection` alone (id, name, color, rates, selected records,
+facts), never its owned document: `WorldIdentityProjectionWire` is the one wire
+form the reservation and commit leaves, the crossing log, the arrival tape and
+the checkpoint all write, and a colocated crossing carries the same projection.
+The destination lands `WorldIdentity.FromProjection`; a local seat coming home
+rebinds to its owned identity, which adopts the carried facts and records
+(`WorldOwnedWorlds.TryAdopt`) after every landing succeeds and the arrival is
+durable, and `WorldOwnedWorlds.TrySave` refuses by name an identity its catalog
+does not own. A catalog file refusal is named without interrupting the home
+seat's binding or the arrival tap; the durable arrival retains the carried
+projection for recovery. A save with no caller to refuse to, such as a console
+write or a document submission, narrates its refusal on the catalog's hub. An
+empty facts row preserves the owner's authored capacity.
+Remote round trips do not adopt: the federation reservation leaf has no
+admission field, so a decoded reservation is always a peer admission, since a
+remote incarnation claim is unauthenticated. Offline replay uses a detached
+catalog (`WorldOwnedWorlds.CreateReplayCopy`), and a re-driven home arrival
+binds the projection its taped `WorldArrivalOutcome` records the live adoption
+bound, in a detached identity, and reports where the owned
+identity has drifted from it since the recording
+(`WorldReplaySnapshot.ReportAdoptionDrift`), so replay changes no live identity
+or saved document and takes nothing from the live catalog. Checkpoint restore and source rollback
+recovery rebind a home seat to its own restored catalog. Recovery applies a
+departure newer than the checkpoint before live writes resume; an abort saves
+the current identity, preserving writes made while its outcome was in doubt.
+A retained transfer already in a checkpoint uses that checkpoint's catalog.
+A visitor with a colliding id stays detached. One predicate,
+`WorldServer.HomeSeatIdentity`, decides what a home seat is for all three: a
+local seat whose incarnation, if it has crossed, this authority minted at that
+seat, carrying the id of an identity its catalog owns.
 
 An ordinary `Observe` stream attaches with the world's authored
 `bodies.disclosure` and no observer body index. A narrowed policy
@@ -1671,6 +1730,25 @@ board-enforcement latch and `WorldRuleHost` for the decision runtime, the
 latter through `IWorldPersistedDecisions`, which adds the checkpoint validation
 only the decision policies can answer. Both the fold and the capture walk the
 section in an order derived from its own entries, never from insertion order.
+
+A checkpoint is durable and crosses machines (silo recovery, federation,
+determinism attestation), so it names no machine-local path. An owned world's
+asset directory is written relative to a root the restoring host supplies
+(`WorldOwnedDocumentAnchor`): the owned-world catalog's directory, where a
+loaded owned document lives, or the hosting world's document directory, where
+a seeded one resolves its assets. The closer root wins. A capture refuses an
+owned world whose directory lies under neither root; the codec refuses a
+directory that is rooted or climbs out of its root; and a restore refuses by
+name, before restoring anything, an owned world whose directory does not
+resolve where it is restored. The journal base's origin (`WorldBaseOrigin`)
+carries the rebuild's typed `WorldRebuildOrigin`, which its producer states and
+nothing infers from a spelling. A base loaded from a `File` names that file
+relative to the world's document directory, which the loader set to the file's
+own, however the builder spelled the path; a restore resolves it against the
+restoring world's directory or refuses by name. A base read from a hosted
+world's `Store` names that store, which no machine keeps anywhere, so the
+checkpoint writes it as it is and a restore never resolves it.
+`CheckpointAssetAnchorLawTests` holds these rules.
 
 ## The tick (`WorldTick*.cs`)
 
@@ -1818,7 +1896,11 @@ use one coherent provider inspection for the whole scalar, retain the last accep
 world value on failure, and expose availability through `MachineBindingState`.
 Writes use the declared patch/bus semantics and checked/truncating conversion.
 On-change memoization includes generation and binding configuration, so a replaced
-device receives its first write even when the world value did not change. The
+device receives its first write even when the world value did not change. The memo
+decides whether the next tick pokes or mirrors, so it is simulation state: a
+checkpoint carries it ordered by machine and binding name, and every restore
+replaces the live memo with it rather than merging. A restored world therefore
+leaves alone a byte the machine's own program rewrote, as the uninterrupted run does. The
 screen-owned route described below remains during the output-reference migration.
 
 A booted `IMachineRuntime` (a diegetic screen's cartridge/cabinet—
@@ -1872,13 +1954,16 @@ before anything (re-)establishes), so a re-shape that moves a screen from
 one declared link to another within the SAME reconcile always succeeds
 rather than silently failing while the old link still owns the screen.
 Every op rides the replay tape (`WorldReplayEntry.ScreenOp`), and
-`replay.record`'s arm gate refuses on THREE latches, none sufficient alone:
+`replay.record`'s arm gate refuses on three latches, none sufficient alone:
 `WorldServer.AnyAddonEverPumped`, `AnyMachineEverPumped` (once any machine
 has stepped), and `AnyScreenOpEverApplied` (once any screen op has applied
 AT ALL, independent of stepping—screen ops apply synchronously, between
 fixed steps, so an insert/eject/select/options/link/unlink can change live
 host state before a single tick has run, which the other two latches would
-miss)—offline replay reconstructs a FRESH host from the tape's embedded
+miss). Successful screen memory access sets the screen-operation latch too.
+A world with named machines also refuses recording after its first world tick:
+paused machines still synchronize bindings, and neither their prior writes nor
+their memo belongs to the tape's boot image. Offline replay reconstructs a fresh host from the tape's embedded
 definition, so a machine's accumulated core state (or a screen op's effect)
 from before recording began can never be re-established, and the population
 hash covers no machine state to catch the divergence. `Puck.World.WorldScreenBinder`
@@ -1972,21 +2057,22 @@ key enumeration, and unchanged-value checks use its document-lane ordinal;
 installing another catalog refreshes the handle before the lane is read again.
 
 `setIdentityFact` (`WorldIdentityFactEffect`) resolves its body like `pose` does,
-refuses by name a body driving under no owned identity (`IdentityUnbound`—
+refuses by name a body driving under no identity (`IdentityUnbound`—
 an anonymous seat's fact is refused, never minted), a document declaring no
 lane, a faulted expression, or a lane write the row refuses
 (`IdentityFactUnwritable`, carrying the write's own reason; the lane cell is
 minted only when the lane holds none under the key), writes the lane cell
 when the value differs (`Applied`; an unchanged value is `Skipped` and costs a
-quiet tick what an unchanged ordinary write costs), and persists the fact on
-the identity's own row through `WorldOwnedWorlds.TrySetFact`—the one door
-the console's `identity.fact.set` shares—which saves the identity only when
-its row changed. Inside a transaction the persist waits on the commit: a
+quiet tick what an unchanged ordinary write costs), and writes the fact on
+the identity's row through `WorldOwnedWorlds.TrySetFact`—the one door
+the console's `identity.fact.set` shares—which saves an identity this catalog
+owns only when its row changed, and keeps a visitor's fact on the travelling
+row of the projection it arrived as, never saving the visitor here. Inside a transaction the persist waits on the commit: a
 preflight scope stacks its pending facts beside the frame's own journal marks
 and a discarded scope drops them. The identity's `FactsRevision` moves on
 every row change, so a console write reaches the lane on the next tick without
-a second mirror path; the replay tape pins an identity's projection and not its
-facts, so a re-drive of a tape recorded with a non-empty lane diverges at the
+a second mirror path; the replay tape pins a seat identity's name and rates and
+not its facts, so a re-drive of a tape recorded with a non-empty lane diverges at the
 lane the way it does at a durable identity slot.
 
 ## Owned worlds and storage
@@ -2147,7 +2233,8 @@ The `replay.*` verb surface (`WorldReplayCommandModule`) lives in
 [`Puck.World.Console`](../Puck.World.Console/README.md); it holds this
 project's `WorldReplayTape`, `WorldReplayInspector`, and
 `WorldReplayEntryDescriber` by their public surface, the same way every other
-moved module reaches a Server type it does not own.
+moved module reaches a Server type it does not own. The tape's per-tick capture
+also feeds the [in-session history](#in-session-history-worldhistorycs-worldreplaytapecapturecs).
 
 `replay.drive <name> [to <tick>]` re-drives a saved tape into the running
 session: a forced `world.load` of the embedded definition plus the complete
@@ -2212,6 +2299,125 @@ verification re-drives the tape and every companion a crossing involves and
 pairs each crossing's halves by handoff token (`WorldReplaySetVerdict.cs`),
 reporting a crossing whose other half is on a remote or untaped authority as not
 verified.
+
+## In-session history (`WorldHistory*.cs`, `WorldReplayTape.Capture.cs`)
+
+`world.history` (`WorldHistoryCommandModule` in
+[`Puck.World.Console`](../Puck.World.Console/README.md)) is deterministic time
+travel over the running boot world, built on the tape rather than beside it.
+The tape's capture (`WorldReplayTape.Capture.cs`) attaches its taps while a
+recording is armed or a `WorldHistory` is on, and closes one
+`WorldReplayTickInput` per tick for both, so the history holds the tape's own
+entries and never a second input format. A tick only the history captures
+reuses the capture's lists; a recording keeps them.
+
+The history is a ring of keyframe spans. Each span starts at an authority
+checkpoint (`TryCaptureCheckpoint`, encoded by `WorldAuthorityCheckpointCodec`)
+and holds each following tick's authority entries, intents, step width, and the
+authoritative hash the tick reached. Keyframes live in a
+`WorldHistoryChunkStore`: each encoded keyframe is cut into content-defined
+chunks (a gear rolling hash picks the boundaries, so an edit moves only the
+chunks around it) and each distinct chunk is held once, reference-counted, so a
+keyframe costs the regions that changed since the ones already held. The
+keyframe spacing is the bytes the last keyframe added over the mean recorded
+input per tick, never closer than one keyframe per `KeyframeWorkBytesPerTick`
+(64 KiB) of encoded checkpoint, and clamped between an eighth of a second and
+four seconds of simulation; the oldest span is evicted whenever the bytes held
+exceed the budget (64 MiB unless `world.history on <MiB>` names another). The
+checkpoint capture serializes the journal base only when the base object moved,
+and the codec writes a base byte-identical to the live document once. A span's per-tick arrays are sized for its interval on the keyframe
+tick, so a tick that captures no keyframe allocates nothing. A keyframe the
+boundary refuses (a buffered edit, an open arena scope, an engagement) is
+counted as deferred and retried at the next tick.
+
+`TrySeek` restores the latest keyframe at or before its target, or keeps the
+live state when the target lies ahead of the cursor in the same span, and
+re-simulates the recorded ticks through `WorldReplaySnapshot.ApplyRecordedTick`,
+`WorldServer.Advance`, and `EnforceJournalDepth`, the order the step shell takes.
+The restore's own proof is the keyframe tick's recorded hash; each re-simulated
+tick is proved against its recorded hash and mutation outcomes, and the first
+disagreement is reported by tick. A keyframe whose base, journal, and solid
+revision are the live document's restores in place and keeps the live base and
+journal by identity; otherwise the keyframe's document is installed through the
+forced load door first, as a replay drive does. Either way a prepared arena
+restores exactly the captured key ledger, including retained names absent from
+the authored rows, even when an intervening relayout reordered the live keys.
+Each keyframe keeps its asset directory, and its music checkpoint includes any
+armed transition. A machine host restores over its running machines
+(`IWorldMachineCheckpointHost`), and the named bindings' on-change memo is
+replaced by the keyframe's. Machine cores are outside the authoritative hash, so
+the proof covers what they fed into world state and not the cores themselves; the
+history keeps no per-tick machine digest, which would wait on every queued machine
+worker every tick. When the world has stepped a machine, the seek's verdict says
+its cores were not compared (`WorldHistorySeekReport.MachineCoresOutsideProof`). The capture
+is suspended for the re-simulation, and a seek delivers once: the output hub
+withholds every timeline delivery for the seek's span
+(`WorldOutputHub.WithholdsTimeline`, set and cleared beside `EnterReplay`), so
+neither the restore, nor a load-door install, nor any re-simulated tick's state
+or snapshot reaches a viewer, a session or a federation projection. A recorded
+composition a re-simulated tick re-applies is withheld too: a composition is a
+presentation override the history does not rewind, so the viewer keeps the one
+it holds. Session levers are not recorded, so a seek never re-applies one. The restored
+timeline is then delivered once, the definition and the target tick's snapshot
+(`WorldTick.PresentRestoredTimeline`), through both the in-place and the
+load-door restore, and `TimelineRestored` refreshes the local route epochs
+(`HistorySeekDeliveryLawTests`). A re-simulated step sets `ReplaysInput`, so nothing is
+forwarded through a portal to a world that is not rewinding. Save effects are
+suppressed during the seek. Providers from the abandoned timeline are retired;
+an explicit extension epoch admits fresh providers when the host is ready.
+
+The first live tick taken while the cursor sits behind the head replaces the
+recorded future: it is discarded, or kept as a named `WorldHistoryBranch` (the
+tape's tick groups and their hashes from the fork) when `TryArmBranch` named one.
+
+`TryDiff` and `TryReplayEdit` never touch the live world. Each opens a
+`WorldHistoryShadow` — `WorldServer.FromCheckpoint` over a keyframe, its own
+machine host, and a scratch owned-world catalog under the state root — and
+re-simulates there. A diff images both ticks (`WorldHistoryImage`: every
+authoritative component's digest folded alone, every active body's pose lanes,
+every stored cell's resolved value through `WorldStateExport.VisitResolvedCells`,
+and every field cell) and reports exactly what differs (`WorldHistoryDiff`, with
+a one-line JSON machine form). A replay-edit runs an unedited control shadow and
+an edited one in lockstep; the edits — the document changes submitted since the
+cursor's tick closed, or those recorded at the cursor's tick — land ahead of the
+first tick of the span, and the first tick whose authoritative hash leaves the
+recording is reported with the diff there. `OpenShadow`, `Resimulate` (with an
+input rewrite), `RecordedInput`, and `RecordedHash` are public, so a tool
+composes its own what-if over the window.
+
+A seek is refused by name while a recording captures the timeline or a drive
+holds it, while input submitted since the cursor's tick closed has not run, while
+a buffered edit, ordered submission or provider contribution is pending, across
+a crossing, an arrival, a session event, a federated traveler or a remote peer in
+the window, and while a remote occupant, transfer obligation or engagement
+depends on the timeline. The checks and restore share the authority gate. Live
+sessions, mounted or previously pumped addon guests, applied screen operations,
+and stepped machines without checkpoint support refuse both capture and seek.
+A keyframe also refuses when the document's score differs from the running boot
+music plan. Owned documents retain their individual asset directories in the
+checkpoint, and shadow machine hosts resolve beside the keyframe's directory.
+Recorded spans refuse addon edits and require load/reload content to match its
+recorded hash before seek, diff or replay-edit begins. A live neighbour linked
+through an adjacency is
+re-read as it stands now: seam contact with a neighbour that has moved since
+shows up as the divergence the per-tick proof names.
+
+`tests/Puck.World.Tests/InSessionHistoryLawTests.cs` holds the laws: a seek to every
+tick of the window, then a seeded scatter of jumps, reproduces the hash the live
+run reached, across seeds on the fixture, `snake`, and the shipped island; a
+keyframe from the wrong span and input fed in the wrong order each fail the
+proof; a branch resumed behind the head is the run that took that path; a diff
+reports exactly the changed cells; a replay-edit names its landing tick and a
+no-op edit names none; the budget holds and counts its evictions; a later
+keyframe adds only what changed; and a steady recorded tick allocates nothing.
+`HistoryBoundaryLawTests.cs` holds the boundary laws, and
+`HistoryRefusalLawTests.cs` the read-once rule and the refusals: a recorded
+reload is read once, by the preflight, and a live seek, a diff's shadow and
+both of a replay-edit's runs re-apply those verified bytes, so a file that
+changes after the read can neither refuse from inside a step nor reach the
+world; a live tick behind the head cuts the future before it appends; a replay-edit
+refuses a span it cannot re-simulate and an edit it cannot move; and a live
+session at the keyframe and a recorded session event each refuse on their own.
 
 ## Verifying a change here
 

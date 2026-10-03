@@ -2,6 +2,8 @@ using System.Buffers.Binary;
 
 using Microsoft.Data.Sqlite;
 
+using Puck.Testing;
+
 using Xunit;
 
 using static Puck.Attestation.Tests.AttestationTestSupport;
@@ -146,21 +148,11 @@ public sealed class DurableReplayTransactionTests {
 /// <summary>A file-backed receiver used to prove one real replay/effect transaction.</summary>
 internal sealed class DurableReplayDatabase : IDisposable {
     private readonly string m_connectionString;
-    private readonly string m_directory;
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-attestation-replay-");
 
     internal DurableReplayDatabase() {
-        m_directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-attestation-replay-{Guid.NewGuid():N}"
-        );
-
-        Directory.CreateDirectory(path: m_directory);
-
         m_connectionString = new SqliteConnectionStringBuilder {
-            DataSource = Path.Combine(
-            path1: m_directory,
-            path2: "receiver.sqlite3"
-        ),
+            DataSource = m_directory.PathOf(name: "receiver.sqlite3"),
             DefaultTimeout = 30,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Pooling = false,
@@ -352,9 +344,6 @@ internal sealed class DurableReplayDatabase : IDisposable {
         );
     }
 
-    public void Dispose() => Directory.Delete(
-        path: m_directory,
-        recursive: true
-    );
+    public void Dispose() => m_directory.Dispose();
 }
 internal sealed class InjectedCommitFailureException : Exception;

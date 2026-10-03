@@ -100,8 +100,14 @@ public readonly partial record struct FixedQ4816 {
         ));
     /// <summary>Evaluates a nonnegative Q16 angle over the full unsigned raw range.</summary>
     internal static (FixedQ4816 Sin, FixedQ4816 Cos) SinCosRaw(ulong rawAngle) =>
-        SinCosFromTurns(fractionalTurns: unchecked((long)((ulong)(unchecked((((UInt128)rawAngle) * SinCosInvTwoPiQ96)) >> 48))));
+        SinCosFromTurns(fractionalTurns: RawAngleTurns(rawAngle: rawAngle));
+    /// <summary>The Q60 sine and cosine <see cref="SinCosRaw"/> narrows, for a caller that divides by the angle and
+    /// so needs the guard bits a Q16 sine has already lost.</summary>
+    internal static (long SinQ60, long CosQ60) SinCosRawQ60(ulong rawAngle) =>
+        SinCosCore(fractionalTurns: RawAngleTurns(rawAngle: rawAngle));
 
+    private static long RawAngleTurns(ulong rawAngle) =>
+        unchecked((long)((ulong)(unchecked((((UInt128)rawAngle) * SinCosInvTwoPiQ96)) >> 48)));
     // C = round(2^96/2π). Only product bits [32+f, 95+f] are needed; f is 16, 17 or 32, so wrapping the
     // UInt128 product discards no contributing bit. Its modulo is exact; the irrational reciprocal is approximate.
     // At the unsigned Q16 maximum the reciprocal error contributes < 2π/2^33 raw ULP. Magnitude-first reduction
@@ -252,10 +258,11 @@ public readonly partial record struct FixedQ4816 {
 
         return (high << 4) | ((long)(((ulong)low) >> 60));
     }
+
     // Add half minus one plus the retained parity: below half never carries, above half always carries, and a
     // tie carries exactly when the retained integer is odd. Magnitude + bias fits ulong even for |long.MinValue|.
     [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-    private static long NarrowSinCosQ60(long value) {
+    internal static long NarrowSinCosQ60(long value) {
         const int Shift = (SinCosFractionBitCount - FractionBitCount);
         var sign = (value >> 63);
         var magnitude = unchecked((ulong)((value ^ sign) - sign));

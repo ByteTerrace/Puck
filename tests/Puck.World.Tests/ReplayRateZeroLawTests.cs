@@ -86,25 +86,14 @@ public sealed class ReplayRateZeroLawTests {
 /// loudly rather than let the header and a later span of ticks silently disagree about what rate produced them.
 /// </summary>
 public sealed class ReplayRateStampLawTests {
-    private static void TryDeleteFile(string path) {
-        try {
-            File.Delete(path: path);
-        } catch (IOException) {
-        }
-    }
-    // Serializes a definition to a fresh temp file and returns its path plus content hash — the shape a live
-    // world.load needs (WorldReplayEntry.Rebuild carries no embedded document for Load/Reload, only a path hint the
-    // tape and its own re-drive both re-read fresh).
-    private static (string Path, string ContentHash) WriteTempWorldFile(WorldDefinition definition) {
+    // Serializes a definition to a fresh file under the law's directory and returns its path plus content hash — the
+    // shape a live world.load needs (WorldReplayEntry.Rebuild carries no embedded document for Load/Reload, only a path
+    // hint the tape and its own re-drive both re-read fresh).
+    private static (string Path, string ContentHash) WriteTempWorldFile(TemporaryDirectory directory, WorldDefinition definition) {
         var bytes = WorldDefinitionSerialization.Serialize(definition: definition);
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-world-tests-rebuild-{Guid.NewGuid():N}.json"
-        );
-
-        File.WriteAllBytes(
+        var path = directory.WriteBytes(
             bytes: bytes,
-            path: path
+            name: $"rebuild-{Guid.NewGuid():N}.json"
         );
 
         return (path, WorldDefinitionFileSource.ComputeContentHash(content: bytes));
@@ -149,52 +138,47 @@ public sealed class ReplayRateStampLawTests {
         // at all; it only needs to disagree with the record-start rate. A real on-disk path is required: a live
         // world.load is CAS-pinned against a re-readable file (WorldReplayEntry.Rebuild carries no document, only a
         // path hint + content hash, on both the live tape write and the replay re-drive).
-        var (path, contentHash) = WriteTempWorldFile(definition: (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 120) }));
+        var (path, contentHash) = WriteTempWorldFile(directory: stateDirectory, definition: (Fixtures.BuildDocument() with { Simulation = new WorldSimulationDefaults(RateHz: 120) }));
+        fixture.Server.EnqueueRebuild(
+            request: new WorldRebuildRequest(
+                ContentHash: contentHash,
+                Definition: null,
+                Force: false,
+                Kind: WorldRebuildKind.Load,
+                Origin: new WorldRebuildOrigin.File(Path: path)
+            ),
+            principal: Principal.Console
+        );
 
-        try {
-            fixture.Server.EnqueueRebuild(
-                request: new WorldRebuildRequest(
-                    ContentHash: contentHash,
-                    Definition: null,
-                    Force: false,
-                    Kind: WorldRebuildKind.Load,
-                    PathHint: path
-                ),
-                principal: Principal.Console
-            );
+        // Drains the rebuild (WorldServer.Step -> DrainPendingOps -> ApplyRebuild swaps the live definition to
+        // 120 Hz) and closes the tick it landed on.
+        fixture.Step();
+        tape.NoteTick();
 
-            // Drains the rebuild (WorldServer.Step -> DrainPendingOps -> ApplyRebuild swaps the live definition to
-            // 120 Hz) and closes the tick it landed on.
-            fixture.Step();
-            tape.NoteTick();
+        // NoteTick's own mid-capture rate-change check fires the instant the live rate (120) disagrees with the
+        // rate snapshotted at record-start (240) — auto-stopping rather than leaving the recording open to
+        // silently mix rates under one header.
+        Assert.Equal(
+            expected: WorldReplayMode.Idle,
+            actual: tape.Mode
+        );
 
-            // NoteTick's own mid-capture rate-change check fires the instant the live rate (120) disagrees with the
-            // rate snapshotted at record-start (240) — auto-stopping rather than leaving the recording open to
-            // silently mix rates under one header.
-            Assert.Equal(
-                expected: WorldReplayMode.Idle,
-                actual: tape.Mode
-            );
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
+        var persisted = WorldReplaySnapshot.Read(stream: stream);
 
-            using var stream = File.OpenRead(path: tape.PathFor(name: name));
-            var persisted = WorldReplaySnapshot.Read(stream: stream);
-
-            // THE DISCRIMINATOR: before this fix the header stamped the LIVE rate at stop time (120, the
-            // post-rebuild rate) even though the recorded span actually ran at 240 — an internally inconsistent
-            // tape that would then report RateMismatch against its OWN embedded (still-240) definition the moment
-            // it was driven. After this fix the header keeps the RECORD-START rate.
-            Assert.Equal(
-                expected: 240U,
-                actual: persisted.SimulationRate
-            );
-            // Both ticks closed before the auto-stop — the rebuild's own tick is still captured, just as the LAST one.
-            Assert.Equal(
-                expected: 2,
-                actual: persisted.Ticks.Count
-            );
-        } finally {
-            TryDeleteFile(path: path);
-        }
+        // THE DISCRIMINATOR: before this fix the header stamped the LIVE rate at stop time (120, the
+        // post-rebuild rate) even though the recorded span actually ran at 240 — an internally inconsistent
+        // tape that would then report RateMismatch against its OWN embedded (still-240) definition the moment
+        // it was driven. After this fix the header keeps the RECORD-START rate.
+        Assert.Equal(
+            expected: 240U,
+            actual: persisted.SimulationRate
+        );
+        // Both ticks closed before the auto-stop — the rebuild's own tick is still captured, just as the LAST one.
+        Assert.Equal(
+            expected: 2,
+            actual: persisted.Ticks.Count
+        );
     }
     [Fact]
     public void MidCaptureRebuildKeepingTheSameRate_KeepsRecording() {
@@ -227,42 +211,37 @@ public sealed class ReplayRateStampLawTests {
         tape.NoteTick();
 
         // A same-rate rebuild — same 240 Hz, otherwise identical document.
-        var (path, contentHash) = WriteTempWorldFile(definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz));
+        var (path, contentHash) = WriteTempWorldFile(directory: stateDirectory, definition: Fixtures.BuildDocumentAtRate(rateHz: Fixtures.RecordedTraceRateHz));
+        fixture.Server.EnqueueRebuild(
+            request: new WorldRebuildRequest(
+                ContentHash: contentHash,
+                Definition: null,
+                Force: false,
+                Kind: WorldRebuildKind.Load,
+                Origin: new WorldRebuildOrigin.File(Path: path)
+            ),
+            principal: Principal.Console
+        );
 
-        try {
-            fixture.Server.EnqueueRebuild(
-                request: new WorldRebuildRequest(
-                    ContentHash: contentHash,
-                    Definition: null,
-                    Force: false,
-                    Kind: WorldRebuildKind.Load,
-                    PathHint: path
-                ),
-                principal: Principal.Console
-            );
+        fixture.Step();
+        tape.NoteTick();
 
-            fixture.Step();
-            tape.NoteTick();
+        Assert.Equal(
+            expected: WorldReplayMode.Recording,
+            actual: tape.Mode
+        );
 
-            Assert.Equal(
-                expected: WorldReplayMode.Recording,
-                actual: tape.Mode
-            );
+        var result = tape.StopRecording();
 
-            var result = tape.StopRecording();
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(@object: result.Verdict);
 
-            Assert.Null(@object: result.VerifyFault);
-            Assert.NotNull(@object: result.Verdict);
+        using var stream = File.OpenRead(path: tape.PathFor(name: name));
 
-            using var stream = File.OpenRead(path: tape.PathFor(name: name));
-
-            Assert.Equal(
-                expected: 240U,
-                actual: WorldReplaySnapshot.Read(stream: stream).SimulationRate
-            );
-        } finally {
-            TryDeleteFile(path: path);
-        }
+        Assert.Equal(
+            expected: 240U,
+            actual: WorldReplaySnapshot.Read(stream: stream).SimulationRate
+        );
     }
 }
 /// <summary>

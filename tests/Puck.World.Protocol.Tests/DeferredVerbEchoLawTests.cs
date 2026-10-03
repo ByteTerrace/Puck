@@ -307,7 +307,7 @@ public sealed class DeferredVerbEchoLawTests {
 
         Settled(link.Submit(new WorldMutation.RemoveKit(Principal.Console, oversized), new WorldDeferredVerbEchoes(), "edit"), verdict => result = verdict);
         Assert.True(condition: result!.Value.IsError);
-        Assert.Contains("codec_refused", result.Value.Output, StringComparison.Ordinal);
+        Assert.Contains("codec-refused", result.Value.Output, StringComparison.Ordinal);
         Assert.Null(@object: host.Completion);
     }
     [InlineData(false)]
@@ -387,7 +387,7 @@ public sealed class DeferredVerbEchoLawTests {
         var answer = Assert.Single(collection: answers);
 
         Assert.True(condition: answer.IsError);
-        Assert.Contains(actualString: answer.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "world.transport.codec_refused the submission could not be encoded or decoded: PayloadTooLarge");
+        Assert.Contains(actualString: answer.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "world.transport.codec-refused the submission could not be encoded or decoded: PayloadTooLarge");
     }
 
     // Submits one Simulation-routed line the way the stdin driver does and applies its tick, returning every result

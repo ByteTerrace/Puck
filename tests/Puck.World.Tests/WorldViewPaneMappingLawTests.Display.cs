@@ -42,7 +42,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
         );
         Assert.Equal(
             actual: walk.Steps[1].Mapping.Source,
-            expected: WorldSourceInstances.Of(shown: [pattern]).HandleOf(screen: 0)
+            expected: WorldSourceInstances.Of(shown: [pattern], world: WorldDefinitionLoader.BootInstanceName).HandleOf(screen: 0)
         );
 
         // A pane over the view is topmost where it stands, and the view is beneath it everywhere else.
@@ -75,7 +75,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
                 Width: ScreenSourceWidth
             )
         );
-        var screens = new WorldScreenMappingSet();
+        var screens = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
 
         screens.Reconcile(
             cameras: [],

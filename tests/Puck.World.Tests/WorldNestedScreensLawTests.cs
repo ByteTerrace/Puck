@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Abstractions.Cameras;
 using Puck.Assets.Documents;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -38,7 +39,8 @@ public sealed class WorldNestedScreensLawTests {
             definition: () => worlds[root],
             depth: 0,
             head: "routed$root",
-            shares: static _ => true
+            shares: static _ => true,
+            world: root
         );
         var levels = new Dictionary<string, WorldNestedScreens<Level>>(comparer: StringComparer.Ordinal) {
             [screens.Head] = screens,
@@ -192,11 +194,13 @@ public sealed class WorldNestedScreensLawTests {
             expectedStartString: "source$color$"
         );
     }
-    // THE LAW: only what a world shown through a screen may show is shown. A session, a producer whose content is a
-    // function of its settings and an empty screen keep their sources; a producer of the local device's content (a
-    // camera), a machine, a probe and a camera view show nothing.
+    // THE LAW: a world shown through a screen shows its own sources and nothing of the local device. A producer whose
+    // content is a function of its settings shows its shared instance; a machine and a probe show a source instance of
+    // that world's own host, which another world's equal row never shares; a camera view shows a view of that world
+    // through its own camera, named under the level; a producer of the local device's content (a camera) shows nothing.
+    // The red leg is the boot world's machine row, whose instance is another.
     [Fact]
-    public void AWorldShownThroughAScreenOpensNothingOfTheLocalDevice() {
+    public void AWorldShownThroughAScreenShowsItsOwnSourcesAndNothingOfTheLocalDevice() {
         WorldScreenSource[] sources = [
             WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.TestPatternId, settings: new WorldTestPatternSettings(Height: 4, Width: 4)),
             WorldImageProducerSettings.SourceOf(id: WorldImageProducerSettings.CameraId, settings: new WorldCameraSettings()),
@@ -205,13 +209,16 @@ public sealed class WorldNestedScreensLawTests {
             new WorldScreenSource.View(CameraName: "billboard"),
         ];
         var world = (Fixtures.BuildDocument() with {
+            CamerasRaw = [Camera(name: "billboard")],
+            MachinesRaw = [Machine()],
             ScreensRaw = [.. sources.Select(selector: static (source, index) => (Screen(source: source) with { Index = index }))],
         });
         var screens = new WorldNestedScreens<Level>(
             definition: () => world,
             depth: 1,
             head: "session$0",
-            shares: static id => (id == WorldImageProducerSettings.TestPatternId)
+            shares: static id => (id == WorldImageProducerSettings.TestPatternId),
+            world: "garden"
         );
 
         _ = screens.Reconcile(
@@ -223,11 +230,117 @@ public sealed class WorldNestedScreensLawTests {
             actualString: screens.InstanceOf(screen: 0),
             expectedStartString: "source$testPattern$"
         );
-
-        for (var index = 1; (index < sources.Length); index++) {
-            Assert.Null(@object: screens.InstanceOf(screen: index));
-        }
+        Assert.Null(@object: screens.InstanceOf(screen: 1));
+        Assert.StartsWith(
+            actualString: screens.InstanceOf(screen: 2),
+            expectedStartString: "source$machine$"
+        );
+        Assert.NotEqual(
+            actual: screens.InstanceOf(screen: 2),
+            expected: WorldViewNames.Source(
+                producer: WorldImageProducerSettings.MachineId,
+                settings: RenderGraphSettingsOf(source: new WorldScreenSource.Machine(Instance: "cabinet", Output: "video"))
+            )
+        );
+        Assert.StartsWith(
+            actualString: screens.InstanceOf(screen: 3),
+            expectedStartString: "source$probe$"
+        );
+        Assert.Equal(
+            actual: screens.InstanceOf(screen: 4),
+            expected: "session$0$camera$billboard"
+        );
+        Assert.Equal(
+            actual: screens.Sources.Where(predicate: static source => (source.SourceProducer is WorldImageProducerSettings.MachineId or WorldImageProducerSettings.ProbeId)).Select(selector: WorldSourceInstances.WorldOf),
+            expected: ["garden", "garden"]
+        );
+        // The camera view is filmed under the level, and a camera view reads it, and every camera view, at its previous
+        // frame, never within one.
+        Assert.Equal(
+            actual: screens.Cameras.Select(selector: static camera => (camera.Name, camera.Camera.Name)),
+            expected: [("session$0$camera$billboard", "billboard")]
+        );
+        Assert.Contains(collection: screens.Reads, expected: "session$0$camera$billboard");
+        Assert.DoesNotContain(collection: screens.FilmReads, expected: "session$0$camera$billboard");
+        Assert.Equal(actual: screens.CameraReads, expected: ["session$0$camera$billboard"]);
     }
+
+    private static WorldMachine Machine() => new(
+        Configuration: System.Text.Json.JsonSerializer.SerializeToElement(value: new { schema = "puck.gaming-brick.configuration.v1" }),
+        Engine: "gaming-brick",
+        Name: "cabinet"
+    );
+
+    // THE LAW: a session cannot read an undisclosed machine merely because its screen row names that machine.
+    // A presentation projection keeps the screen but withholds the machine table; the replica control opens its own
+    // reader. Re-delivery into the same level revokes that reader and its reads, then restores it with the declaration.
+    [Fact]
+    public void AScreenCannotOpenAReaderForAMachineItsSessionDoesNotDisclose() {
+        var replica = (Fixtures.BuildDocument() with {
+            MachinesRaw = [Machine()],
+            ScreensRaw = [Screen(source: new WorldScreenSource.Machine(Instance: "cabinet", Output: "video"))],
+        });
+        var projection = Fixtures.Project(
+            authority: "garden",
+            definition: replica,
+            revision: 1,
+            tier: WorldDisclosureTier.Presentation
+        );
+
+        Assert.True(condition: WorldProjection.TryToDefinition(
+            definition: out var presentation,
+            projection: projection!,
+            reason: out var reason
+        ), userMessage: reason);
+        var disclosed = Assert.IsType<WorldDefinition>(@object: presentation);
+
+        Assert.Empty(collection: disclosed.Machines);
+        Assert.IsType<WorldScreenSource.Machine>(@object: disclosed.Screens[0].Source);
+
+        var delivered = replica;
+        var screens = new WorldNestedScreens<Level>(
+            definition: () => delivered,
+            depth: 1,
+            head: "session$0",
+            shares: static _ => true,
+            world: "garden"
+        );
+        var sessions = new Sessions(worlds: new Dictionary<string, WorldDefinition>());
+
+        _ = screens.Reconcile(nestingDepth: 3, sessions: sessions);
+        var reader = Assert.Single(collection: screens.Sources).Name;
+
+        Assert.Equal(expected: reader, actual: screens.InstanceOf(screen: 3));
+        delivered = disclosed;
+        _ = screens.Reconcile(nestingDepth: 3, sessions: sessions);
+
+        Assert.IsType<WorldScreenSource.None>(@object: screens.RowOf(screen: 3)!.Source);
+        Assert.Null(@object: screens.InstanceOf(screen: 3));
+        Assert.Empty(collection: screens.Sources);
+        Assert.Empty(collection: screens.Reads);
+        Assert.Empty(collection: screens.FilmReads);
+
+        delivered = replica;
+        _ = screens.Reconcile(nestingDepth: 3, sessions: sessions);
+
+        Assert.Equal(expected: reader, actual: Assert.Single(collection: screens.Sources).Name);
+    }
+
+    private static WorldCamera Camera(string name) => new(
+        Anchor: null,
+        Name: name,
+        RenderHeight: 72U,
+        RenderWidth: 96U,
+        Rig: new WorldCameraProgram(
+            Name: "fixed",
+            Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9f))],
+            Version: WorldCameraProgram.CurrentVersion
+        )
+    );
+    // The settings the boot world's own row of a source reads its source instance through.
+    private static IReadOnlyDictionary<string, System.Text.Json.JsonElement>? RenderGraphSettingsOf(WorldScreenSource source) =>
+        WorldSourceInstances.Of(shown: [source], world: WorldDefinitionLoader.BootInstanceName).Instances[0].Settings;
+
     // THE LAW: a sampled slab can be seen from either side; only a slab wholly outside the frustum is culled.
     [Fact]
     public void AFaceIsSeenFromEitherSideWithinTheFrustum() {
@@ -286,7 +399,8 @@ public sealed class WorldNestedScreensLawTests {
             definition: () => world,
             depth: 1,
             head: "session$3",
-            shares: static _ => true
+            shares: static _ => true,
+            world: "a"
         );
 
         Assert.True(condition: screens.Reconcile(nestingDepth: 3, sessions: sessions));
@@ -322,7 +436,8 @@ public sealed class WorldNestedScreensLawTests {
                     definition: () => destination,
                     depth: (screens.Depth + 1),
                     head: name,
-                    shares: static _ => true
+                    shares: static _ => true,
+                    world: source.Destination
                 )
             )
             : null);

@@ -18,7 +18,5 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
-        <Compile Include="../Shared/TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
-        <Compile Include="../Shared/TestLiveness.cs" Link="TestLiveness.cs" />
     </ItemGroup>
 </Project>

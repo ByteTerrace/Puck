@@ -18,6 +18,30 @@
       "prompt": "A Codex-written lane needs its review. Who reviews it, and when does the loop end?",
       "expected_output": "A Claude agent (Sonnet or Opus) runs round 1 over the lane with fixes enabled. A Claude verifier checks its fixes so verification repairs stay Claude-written. If round 1 makes blocker fixes, including documentation fixes, the companion's Codex task --write pass runs round 2 over round 1's fix diff alone. The loop ends when a pass reports no blockers, and after round 2 at the latest; non-blocking findings and their fixes never trigger another review. An unchanged pass skips WIP creation and fix verification; unresolved blockers go to the lead. The lead rules on what round 2 still raises (a scoped fix, an open item, or a dismissal with its reason); subsequent verification runs no fresh hunt or third review round.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Scoping a review: `git log --oneline A..B` lists three commits, so you write the scope as `git diff A..B` and call them the lane's commits. Is the scope right?",
+      "expected_output": "Checks `git merge-base --is-ancestor A B` rather than inferring ancestry from the log. Explains that the two-dot log selects commits reachable from B but not A, while the two-dot diff compares endpoint trees, so a divergent A can contribute reversed changes to the review diff. When A is an ancestor, pins A as a commit for the exact range; otherwise pins the merge base and reviews its diff to B (`git diff A...B` has that meaning). Lists each lane commit by commit and subject and names any already-reviewed merge work as an exclusion; exclusions do not turn a divergent tip-to-tip diff into the lane's change.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "A Codex review-and-fix pass returns fixes and two new laws, and reports that its build exited 1 with access denied to an SDK directory, so it ran no tests, and that format passed with a CLI copy it found in the tree. What do you accept?",
+      "expected_output": "Accepts nothing it claims to have run: a sandbox that could not reach the SDK proved nothing, and a format result from a stale CLI copy does not judge the head's rules. Commits the pass as a local WIP, then builds outside the sandbox, proves each new law red with its fix withheld and green with it (through `puck laws prove`), runs the touched test classes, and reruns the format and link checks from a fresh copy of the head's own CLI, before replacing the WIP.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "A Codex implementation pass ended with a question and no edits: may it temporarily remove a project reference so the prescribed build does not also build another project? How do you proceed?",
+      "expected_output": "Treats the pass as not done. Answers from the brief and the repository rules (here: keep the prescribed command and the project file unchanged, since a transitive build through an existing reference is expected), writes the answer to a prompt file, and continues the same thread with the companion's `task --resume-last`, telling it to finish without further questions. Tightens future briefs so the pass answers its own questions from the code and the brief.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "A qualification run is building from a clean worktree while executing canary, counters and parity legs serially. A review-and-fix pass is ready to launch with --write, and its edits seem unrelated to those workloads. Where and when do you launch it?",
+      "expected_output": "Does not launch a writing pass into the tree supplying the active run, even for apparently unrelated edits. Waits until that run finishes or uses a separate review worktree at the intended head. Recognizes that a mid-run edit changes the source state the run reuses, so the clean starting tree does not make concurrent writes safe.",
+      "files": []
     }
   ]
 }

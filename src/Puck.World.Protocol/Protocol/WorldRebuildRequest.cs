@@ -24,9 +24,9 @@ public enum WorldRebuildKind {
 /// <param name="Definition">The document to install — required for <see cref="WorldRebuildKind.Load"/>/
 /// <see cref="WorldRebuildKind.Reload"/>, always <see langword="null"/> for <see cref="WorldRebuildKind.Reset"/>
 /// (the server supplies its own base).</param>
-/// <param name="PathHint">The origin path this request names, for the completion echo and (on
-/// <see cref="WorldRebuildKind.Load"/>/<see cref="WorldRebuildKind.Reload"/> success) the new save/reload target —
-/// required for those two kinds, always <see langword="null"/> for <see cref="WorldRebuildKind.Reset"/>.</param>
+/// <param name="Origin">Where the document came from — a file, or a hosted world's store — for the completion echo
+/// and (on a <see cref="WorldRebuildKind.Load"/>/<see cref="WorldRebuildKind.Reload"/> of a file) the new save/reload
+/// target; required for those two kinds, always <see langword="null"/> for <see cref="WorldRebuildKind.Reset"/>.</param>
 /// <param name="Force">For <see cref="WorldRebuildKind.Load"/> only: overrides the dirty-journal guard (a live edit
 /// since the last save/reset would otherwise be silently discarded). Ignored by <see cref="WorldRebuildKind.Reset"/>
 /// (reset is the discard) and by <see cref="WorldRebuildKind.Reload"/> (the artist external-edit loop is expected
@@ -36,6 +36,6 @@ public enum WorldRebuildKind {
 /// same read that produced <see cref="Definition"/>), always <see langword="null"/> for
 /// <see cref="WorldRebuildKind.Reset"/> (there is no file; the server computes the base's own canonical-bytes hash
 /// at apply time — see <c>WorldServer.ApplyRebuild</c>). This is the replay tape's CAS pin: a re-drive refuses by
-/// name when a re-read of the same path (or a re-hash of the re-driven run's own base) disagrees with what was
+/// name when a re-read of the same file (or a re-hash of the re-driven run's own base) disagrees with what was
 /// recorded, rather than silently reproducing a base or file that has moved since the recording was made.</param>
-public sealed record WorldRebuildRequest(WorldRebuildKind Kind, WorldDefinition? Definition, string? PathHint, bool Force, string? ContentHash = null);
+public sealed record WorldRebuildRequest(WorldRebuildKind Kind, WorldDefinition? Definition, WorldRebuildOrigin? Origin, bool Force, string? ContentHash = null);

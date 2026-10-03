@@ -556,7 +556,7 @@ pending, from any submitter, with `world.authority.stopped`, so an edit in
 flight there rolls back by name. The queue keeps nothing once its last endpoint
 is gone. Every edit carries the activation of the world whose document its base
 came from, and a world refuses one composed on another's
-(`world.mutation.activation_mismatch`), so an edit sent while a traveler's link
+(`world.mutation.activation-mismatch`), so an edit sent while a traveler's link
 has already moved on to the next world rolls back instead of landing there. The
 row doors that read a row before writing it (`world.row.add`, `.remove`, the
 literal `.set`, `.step`) and `creation.sculpt` carry it too.
@@ -1418,16 +1418,16 @@ the drawn image, none exists:
 | Arm | Reproduced by | Held by |
 |---|---|---|
 | `none` | no instance: `WorldSourceInstances` names none, and the engine shades the screen as unbound glass | `WorldSourceInstanceLawTests`; `world.screens` echoes `unbound`; the `uploaded-sources` canary captures the dark glass |
-| `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), the `uploaded-sources` and `instrument-clock-source` canaries |
+| `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick, read from the host of the world instance its `world` setting names | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), `WorldNestedScreensLawTests` (a presented world's machine is its own instance), the `uploaded-sources`, `instrument-clock-source` and `portal-sources` canaries |
 | `producer`, `testPattern` | `WorldTestPatternProducer`, uploaded | `ImageProducerLawTests.ATestPatternFeedStatesTheExactPatternItShowsAndTheVerdictHoldsIt`, `WorldSourceInstanceLawTests`, the `uploaded-sources` canary |
 | `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
 | `producer`, `color` | `WorldColorProducer`, uploaded | `WorldNestedScreensLawTests` (a face past the nesting depth shows its fallback colour's instance), the `portal-nested` and `portal-return` canaries' discriminating legs |
 | `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, `WorldCaptureFillLawTests.ACapturedFrameAnswersFromItsConversionNeverFromItsPixels` (camera conversion refusal), the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
 | `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed`, whose answer delegates to `WorldCaptureFrame.Answer` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests` (CPU conversion, quiet sources, GPU publication, source loss); the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
-| `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it | `WorldViewPaneMappingLawTests.Views`, the `view-screens` canary |
+| `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it; in a presented world, a view of the residency that world renders through, named under its level (`WorldViewNames.NestedCamera`) | `WorldViewPaneMappingLawTests.Views`, `WorldNestedScreensLawTests`, `WorldPresentedSourcesLawTests` (a presented world's cameras read each other at their previous frame), the `view-screens` and `portal-sources` canaries |
 | `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source, or its endpoint's shared one; the destination's own screens show to `views.nestingDepth` (`WorldNestedScreens`, `WorldViewNames.Nested`) | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`, `WorldNestedScreensLawTests`; the `uploaded-sources` canary shows and captures one, `portal-nested` a third world two levels deep and `portal-return` a destination's return portal |
-| `text` | no image: the decal tier draws its lines (`WorldScreenTextDecal`, through `TextSourceAt`) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`); the `uploaded-sources` canary checks its glyphs' ink |
-| `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`) | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
+| `text` | no image: the decal tier draws its lines (`WorldScreenDecals` over `WorldScreenTextDecal`, through `TextSourceAt`, or a presented world's own rows and font catalog in its session emitter) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`), `WorldPresentedSourcesLawTests` (a destination's text through its own fonts); the `uploaded-sources` and `portal-sources` canaries check its glyphs' ink |
+| `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`); only the boot world runs a probe host, so a presented world's probe opens with a fault naming its world | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
 
 A producer a host adds needs no schema, planner or runtime change:
 `ImageProducerLawTests.AThirdProducerRegistersWithNoChangeToTheDocumentModel`
@@ -2086,11 +2086,38 @@ rates the tick integrates in closed form, so a key changing one never jumps
 the layer; a rate keys only on a tick clock and binds no state row. Keys are
 presentation: a clock reads the tick or a state row and nothing keyed feeds
 the simulation. A presentation-tier projection carries the tick clocks, which
-the recipient evaluates at the tick it presents, and no state clock, so a
-projection whose values key on a state clock refuses to hydrate by name. `world.timeline` echoes each clock's source, its period and
+the recipient evaluates at the tick it presents, and each state clock a value
+keys on as an anchor of its phase, re-sent only at the ticks the recipient's
+prediction misses the authority's phase. `world.timeline` echoes each clock's source, its period and
 start in engine ticks, its phase and reading at the authority's tick, and how
 many keyed values the presentation has resolved, which rises only while a
 clock a key reads moves.
+
+Every scalar or angle a presentation section authors declares one domain
+(`WorldValueFields`): a light's weight, radius, power and angular radius, the
+curvature gains and ink band, a stop's elevation, the fog's density, the sun
+disc's radius and intensity, the stars' brightness and twinkle, the clouds'
+coverage, softness and scale, the theme's bloom and scrim alphas, a marker's
+chip and ring alphas, and a camera program's operands (blend weight, path
+fraction, orbit angles, field of view, select key). The validator refuses a literal or a key outside
+its field's domain by name, and a load refuses a field bound to a state row
+whose starting value, the one the binding presents (the eased follower, or the
+stored value for `.$target`), lies outside it. A row a rule or a console write later
+moves outside the domain refuses nothing: a finite value beyond a closed end is
+clamped to it, and a value that is not finite or lies at or beyond an open end holds
+the last value the binding presented from a valid one. A cloud's softness, a layer's
+or a volume's, lies in `[SdfSky.MinCloudSoftness, 1]`: its floor, 1e-6, keeps the
+kernel's `smoothstep` band two distinct edges wide at every threshold, so a
+softness written to 0 presents 1e-6. A camera's field of view lies in
+`[CameraSnapshot.MinFieldOfViewRadians, π)`, the angles a camera is built with. A
+held value is the one thing that makes the mapping depend on history: a
+presentation rebuilt from state alone (a seek, a replay, a capture) has no last valid
+value yet and presents the field's engine default until the row is valid. Each
+binding is reported twice at most per excursion, once when it leaves its domain and
+once when it returns, on stderr, the console and a toast, as
+`[world.value: render.sky.layers[3].softness reads 0 from state.cloudSoft,
+outside [1E-06, 1]; presenting 1E-06]` and `[world.value: … within [1E-06, 1];
+recovered]`.
 
 ## Engine boundaries worth knowing
 

@@ -55,6 +55,8 @@ namespace Puck.World;
 // one strictness policy, one enum regime, one Vector3 spelling for both document families.
 [JsonSerializable(typeof(WorldProjectionDocument))]
 [JsonSerializable(typeof(WorldProjectedKit))]
+// A projection's timeline travels alone in the delta that re-anchors its state clocks.
+[JsonSerializable(typeof(WorldTimelineSection))]
 // The row shapes the runtime mutation verbs parse as ONE inline-JSON argument — the same wire shape as the document
 // section, so an editor/agent speaks one grammar. Every one is reachable from WorldDefinition already; these entries
 // only expose the typed WorldJsonContext.Default.<Type> accessors the verbs deserialize through.
@@ -367,8 +369,10 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<BindingProfileDocument> BindingProfileDocument => Get<BindingProfileDocument>();
     /// <summary>Gets the type info for <see cref="BodyMotionProgram"/>.</summary>
     public JsonTypeInfo<BodyMotionProgram> BodyMotionProgram => Get<BodyMotionProgram>();
+
     /// <summary>Gets the one shared instance.</summary>
-    public static WorldJsonContext Default { get; } = new();
+    public static WorldJsonContext Default { get; } = new(untrusted: false);
+
     /// <summary>Gets the type info for <see cref="Draw"/>.</summary>
     public JsonTypeInfo<Draw> Draw => Get<Draw>();
     /// <summary>Gets the type info for <see cref="DynamicsRow"/>.</summary>
@@ -377,6 +381,12 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<LatticeTopology> LatticeTopology => Get<LatticeTopology>();
     /// <summary>Gets the read-only options carrying the extended resolver.</summary>
     public JsonSerializerOptions Options { get; }
+
+    /// <summary>Gets the instance a payload from an untrusted peer is read through: it refuses a duplicated member and
+    /// a null where the model declares a non-nullable reference, besides everything <see cref="Default"/> refuses.
+    /// Only reads go through it; the authority writes through <see cref="Default"/>.</summary>
+    public static WorldJsonContext Untrusted { get; } = new(untrusted: true);
+
     /// <summary>Gets the type info for <see cref="StateAdvance"/>.</summary>
     public JsonTypeInfo<StateAdvance> StateAdvance => Get<StateAdvance>();
     /// <summary>Gets the type info for <see cref="StateCycle"/>.</summary>
@@ -478,6 +488,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldStateFieldTrait> WorldStateFieldTrait => Get<WorldStateFieldTrait>();
     /// <summary>Gets the type info for <see cref="WorldStateRow"/>.</summary>
     public JsonTypeInfo<WorldStateRow> WorldStateRow => Get<WorldStateRow>();
+    /// <summary>Gets the type info for <see cref="WorldTimelineSection"/>.</summary>
+    public JsonTypeInfo<WorldTimelineSection> WorldTimelineSection => Get<WorldTimelineSection>();
     /// <summary>Gets the type info for <see cref="WorldTune"/>.</summary>
     public JsonTypeInfo<WorldTune> WorldTune => Get<WorldTune>();
     /// <summary>Gets the type info for <see cref="WorldViewGraph"/>.</summary>
@@ -487,8 +499,10 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     /// <summary>Gets the type info for the <see cref="WorldViewDefaults.Post"/> list.</summary>
     public JsonTypeInfo<IReadOnlyList<WorldViewPostPass>> WorldViewPostPassList => Get<IReadOnlyList<WorldViewPostPass>>();
 
-    private WorldJsonContext() {
+    private WorldJsonContext(bool untrusted) {
         var options = new JsonSerializerOptions(options: WorldJsonSourceContext.Default.Options) {
+            AllowDuplicateProperties = !untrusted,
+            RespectNullableAnnotations = untrusted,
             TypeInfoResolver = WorldJsonSourceContext.Default
                 .WithAddedModifier(modifier: WorldJsonVocabulary.Extend)
                 .WithAddedModifier(modifier: StateSpace.ExtendJson),
@@ -1555,7 +1569,7 @@ public static partial class WorldDefinitionSerialization {
         );
     }
     /// <summary>Serializes a definition to its compact canonical UTF-8 bytes: <see cref="Serialize"/>'s document with
-    /// no whitespace, the form a compiled world stores.</summary>
+    /// no whitespace, the form a compiled world stores and every definition travels on the wire in.</summary>
     /// <param name="definition">The definition to serialize.</param>
     /// <returns>The compact canonical UTF-8 byte form.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>

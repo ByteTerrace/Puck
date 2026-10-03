@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Text;
 using System.Text.Json;
 using Puck.Assets;
+using Puck.Testing;
 
 namespace Puck.Text.Tests;
 
@@ -98,61 +99,47 @@ public sealed class TextContractTests {
                 MaxAtlasPixels = (128 * 128),
             },
         });
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-font-atlas-{Guid.NewGuid():N}"
+        using var directory = new TemporaryDirectory(prefix: "puck-font-atlas-");
+
+        var jsonPath = directory.PathOf(name: "atlas.json");
+
+        FontAtlasArtifactWriter.Write(
+            atlas: atlas,
+            jsonPath: jsonPath
         );
-        var jsonPath = Path.Combine(
-            path1: directory,
-            path2: "atlas.json"
+
+        var imagePath = Path.ChangeExtension(
+            extension: ".png",
+            path: jsonPath
+        );
+        var imageData = new FontAtlasImageDataLoader().Load(
+            imageIdentifier: imagePath,
+            pngBytes: File.ReadAllBytes(path: imagePath)
+        );
+        var loaded = new FontAtlasLoader().Load(
+            atlasIdentifier: jsonPath,
+            imageIdentifier: imagePath,
+            imageData: imageData,
+            jsonContent: File.ReadAllBytes(path: jsonPath)
         );
 
-        try {
-            FontAtlasArtifactWriter.Write(
-                atlas: atlas,
-                jsonPath: jsonPath
-            );
-
-            var imagePath = Path.ChangeExtension(
-                extension: ".png",
-                path: jsonPath
-            );
-            var imageData = new FontAtlasImageDataLoader().Load(
-                imageIdentifier: imagePath,
-                pngBytes: File.ReadAllBytes(path: imagePath)
-            );
-            var loaded = new FontAtlasLoader().Load(
-                atlasIdentifier: jsonPath,
-                imageIdentifier: imagePath,
-                imageData: imageData,
-                jsonContent: File.ReadAllBytes(path: jsonPath)
-            );
-
-            Assert.True(condition: loaded.TryGetGlyph(
-                glyph: out var glyph,
-                unicode: 'A'
-            ));
-            Assert.NotNull(value: glyph.AtlasBounds);
-            Assert.True(condition: loaded.TryGetGlyphById(
-                glyphId: glyph.GlyphId,
-                glyph: out var byId
-            ));
-            Assert.Same(
-                actual: byId,
-                expected: glyph
-            );
-            Assert.Equal(
-                atlas.ImageData!.RgbaPixels,
-                loaded.ImageData!.RgbaPixels
-            );
-        } finally {
-            if (Directory.Exists(path: directory)) {
-                Directory.Delete(
-                    path: directory,
-                    recursive: true
-                );
-            }
-        }
+        Assert.True(condition: loaded.TryGetGlyph(
+            glyph: out var glyph,
+            unicode: 'A'
+        ));
+        Assert.NotNull(value: glyph.AtlasBounds);
+        Assert.True(condition: loaded.TryGetGlyphById(
+            glyphId: glyph.GlyphId,
+            glyph: out var byId
+        ));
+        Assert.Same(
+            actual: byId,
+            expected: glyph
+        );
+        Assert.Equal(
+            atlas.ImageData!.RgbaPixels,
+            loaded.ImageData!.RgbaPixels
+        );
     }
     [Fact]
     public void AtlasRetainsGlyphIdOnlyRowsForFutureShapingResults() {

@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 
@@ -24,7 +23,18 @@ public enum HiddenCells : byte {
 /// narrows by clearing one. Either list alone, or both, keeps the row private; neither makes it public.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateVisibility(IReadOnlyList<string>? Readers = null, HiddenCells Hidden = HiddenCells.Omit,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReadersFrom = null) {
+    string? ReadersFrom = null) {
+    /// <summary>Canonical authenticated principal tokens; no seat or peer identity comes from the request payload.
+    /// </summary>
+    public IReadOnlyList<string>? Readers { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Readers);
+    /// <summary>What an observer who may read the row learns about the cells it may not.</summary>
+    public HiddenCells Hidden { get; init; } = Hidden;
+    /// <summary>A keyed text row whose cell texts are principal tokens admitted beside <see cref="Readers"/>: the
+    /// live audience a rule widens by writing a token (a showdown reveals a hand) or narrows by clearing one. Either
+    /// list alone, or both, keeps the row private; neither makes it public.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ReadersFrom { get; init; } = ReadersFrom;
+
     /// <summary>Gets a value indicating whether the policy admits the public observer: no reader list of either kind.</summary>
     public bool IsPublic => ((Readers is null) && (ReadersFrom is null));
 
@@ -163,37 +173,19 @@ public static class StateVisibilityHash {
         hash.Add(value: value);
 }
 
-// The arena owns the collection it retains. Recognizing this marker makes a visibility already admitted by an
-// arena reusable without another copy, while arbitrary IReadOnlyList implementations are copied at the boundary.
-internal sealed class ArenaVisibilityReaders(string[] items) : IReadOnlyList<string> {
-    public int Count => items.Length;
-
-    public string this[int index] => items[index];
-
-    public IEnumerator<string> GetEnumerator() => ((IEnumerable<string>)items).GetEnumerator();
-
-    IEnumerator IEnumerable.GetEnumerator() => items.GetEnumerator();
-}
+// A visibility owns its reader list (StateVisibility.Readers copies whatever it is handed), so the arena retains the
+// instance it admits as it is: no caller holds an alias that could change it afterwards.
 internal static class StateVisibilityStorage {
     private const long ObjectBytes = 32L;
     private const long VisibilityBytes = 64L;
 
     internal static bool TryMeasure(StateVisibility? value, out long bytes, out string reason) => TryNormalize(
         bytes: out bytes,
-        copy: false,
         normalized: out _,
         reason: out reason,
         value: value
     );
-    internal static bool TryNormalize(StateVisibility? value, out StateVisibility? normalized, out long bytes, out string reason) => TryNormalize(
-        bytes: out bytes,
-        copy: true,
-        normalized: out normalized,
-        reason: out reason,
-        value: value
-    );
-
-    private static bool TryNormalize(StateVisibility? value, bool copy, out StateVisibility? normalized, out long bytes, out string reason) {
+    internal static bool TryNormalize(StateVisibility? value, out StateVisibility? normalized, out long bytes, out string reason) {
         normalized = value;
         bytes = 0L;
         reason = string.Empty;
@@ -226,22 +218,11 @@ internal static class StateVisibilityStorage {
                     return false;
                 }
             }
-
-            if (copy && (readers is not ArenaVisibilityReaders)) {
-                var copied = new string[readers.Count];
-
-                for (var index = 0; (index < copied.Length); index++) {
-                    copied[index] = readers[index];
-                }
-
-                normalized = value with { Readers = new ArenaVisibilityReaders(items: copied) };
-            }
         }
 
         bytes = RetainedBytes(value: normalized!);
         return true;
     }
-
     internal static long RetainedBytes(StateVisibility? value) {
         if (value is null) {
             return 0L;
@@ -253,7 +234,7 @@ internal static class StateVisibilityStorage {
             bytes += StringBytes(text: readersFrom);
         }
         if (value.Readers is { } readers) {
-            // The normalized representation owns one wrapper and one tightly sized reference array.
+            // The owned representation is one boxed immutable array over one tightly sized reference array.
             bytes += ((2L * ObjectBytes) + (((long)readers.Count) * sizeof(long)));
 
             for (var index = 0; (index < readers.Count); index++) {

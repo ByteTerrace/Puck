@@ -27,6 +27,7 @@ public sealed class CanaryFederatedCompositionLawTests {
         File.WriteAllText(contents: "source remains present", path: source);
 
         Assert.False(condition: WorldStaging.TryStageComposition(
+            catalog: CliWorldVocabulary.EnsureInstalled(),
             directory: (ancestor ? files.RootPath : directory),
             entry: null,
             entryName: out _,

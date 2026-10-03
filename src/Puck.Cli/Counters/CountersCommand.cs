@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.World;
 
 namespace Puck.Cli.Counters;
@@ -119,6 +120,52 @@ internal static class CountersCommand {
         ));
     }
 
+    /// <summary>Records a report's counts as the ceilings in a file, writing nothing unless the whole record is sound: the
+    /// backends agree on every deterministic count and pass state, and the recorded ceilings hold the report they were
+    /// recorded from. A refused record leaves an existing file as it was.</summary>
+    /// <param name="report">The report.</param>
+    /// <param name="path">The ceilings file to write.</param>
+    /// <param name="reason">Why nothing was written, or empty.</param>
+    /// <returns><see langword="true"/> when the ceilings were written.</returns>
+    internal static bool TryRecord(WorldCountersReport report, string path, out string reason) {
+        var disagreements = CountersComparison.AcrossBackends(
+            left: report.Runs[0],
+            right: report.Runs[1]
+        );
+
+        if (disagreements.Count > 0) {
+            reason = $"the backends disagree on {disagreements.Count} deterministic count(s) or pass state(s), so no ceilings are recorded";
+
+            return false;
+        }
+
+        var ceilings = CountersCeilings.Record(report: report);
+        var verdict = CountersCeilings.Check(
+            ceilings: ceilings,
+            report: report
+        );
+
+        if (verdict.Failures.Count > 0) {
+            reason = $"the recorded ceilings fail their own run ({verdict.Failures[0]}), so no ceilings are recorded";
+
+            return false;
+        }
+
+        try {
+            CountersCeilings.Write(
+                ceilings: ceilings,
+                path: path
+            );
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            reason = $"could not write the ceilings: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+        reason = string.Empty;
+
+        return true;
+    }
+
     private static int Report(IReadOnlyList<string> differences) {
         foreach (var difference in differences) {
             Console.Out.WriteLine(value: $"{Verb}: {difference}");
@@ -145,6 +192,22 @@ internal static class CountersCommand {
             : Path.GetFullPath(path: ceilingsPath)
         );
         WorldCountersCeilings? ceilings = null;
+
+        if (
+            (check || record) &&
+            (output is not null) &&
+            PuckPaths.Comparer.Equals(x: PuckPaths.Normalize(path: output), y: PuckPaths.Normalize(path: ceilingsFile))
+        ) {
+            const string Reason = "the report output names the ceilings file; --output must name a different file";
+
+            if (record) {
+                Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)} not written: {Reason}");
+
+                return CliExit.Failed;
+            }
+
+            return CliExit.Refuse(verb: Verb, what: "--output", why: Reason);
+        }
 
         // The ceilings are read before the workload runs, so a missing or damaged file refuses before any GPU work.
         if (
@@ -191,9 +254,8 @@ internal static class CountersCommand {
         var compiler = new Puck.Shaders.ShaderToolchain().Identity;
         var suiteClock = Stopwatch.StartNew();
 
-        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
-
-        var runDirectory = Directory.CreateTempSubdirectory(prefix: ScratchPrefix).FullName;
+        using var scratch = RunDirectory.Create(prefix: ScratchPrefix);
+        var runDirectory = scratch.Path;
 
         Console.Error.WriteLine(value: $"{Verb}: artifacts {CliPaths.ToDisplay(fullPath: runDirectory)}");
 
@@ -277,11 +339,19 @@ internal static class CountersCommand {
         ));
 
         if (record) {
-            CountersCeilings.Write(
-                ceilings: CountersCeilings.Record(report: report),
-                path: ceilingsFile
-            );
-            Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)}");
+            if (TryRecord(
+                path: ceilingsFile,
+                reason: out var refusal,
+                report: report
+            )) {
+                Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)}");
+            } else {
+                Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)} not written: {refusal}");
+
+                if (differences.Count == 0) {
+                    differences.Add(item: refusal);
+                }
+            }
         }
         if (ceilings is not null) {
             var verdict = CountersCeilings.Check(
@@ -297,7 +367,12 @@ internal static class CountersCommand {
             Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)} {((verdict.Failures.Count == 0) ? "hold" : $"fail {verdict.Failures.Count}")}");
         }
 
-        return Report(differences: differences);
+        var exit = Report(differences: differences);
+
+        // With no --output the report is written into the run directory, which is then the run's product and kept.
+        scratch.Conclude(passed: ((exit == CliExit.Success) && (output is not null)));
+
+        return exit;
     }
 
     public static Command Create() {
@@ -342,11 +417,17 @@ internal static class CountersCommand {
             per-backend-deterministic, pass by pass and outside every pass, the march steps and texels written the
             SDF kernels count among them: each reads at most its ceiling, and a ceiling of zero is a required zero.
             A per-backend-deterministic count is judged only on the device the backend's ceilings were recorded on,
-            and a line says how many were not judged elsewhere. Every ceiling must have been measured, of the class
+            except a ceiling marked requiredZero (a zero of a kernel kind, which its pass never counts, a structural
+            contract), which is judged on every device; a line says how many counts were not judged elsewhere and
+            how many required zeros still were. Every ceiling must have been measured, of the class
             it was recorded as, or its pass reported and not executed. One line names each count over its ceiling,
             each required zero broken, each ceiling not measured or measured as another class, and each count no
             ceiling was recorded for. --record writes the report's counts as the ceilings instead, each reading its
-            own ceiling, and every kind of a pass that did not execute as a required zero.
+            own ceiling, every kind of a pass that did not execute as a zero, and each zero of a kernel kind as a
+            required zero. A record writes nothing, and leaves an existing ceilings file as it was, when the
+            backends disagree on a deterministic count or pass state, the recorded ceilings fail their own run, or the
+            atomic replacement fails. It prints 'not written: ...' and exits 1. --output must name a different file
+            from the ceilings when --check or --record is selected.
 
             Performance is judged by these counts, never by time; 'puck bench' is the only wall-clock tool.
 

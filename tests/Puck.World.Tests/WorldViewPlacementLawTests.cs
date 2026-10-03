@@ -21,20 +21,20 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
     private static readonly NormalizedRect Whole = new(Height: 1f, Width: 1f, X: 0f, Y: 0f);
     private static readonly WorldViewDefaults Views = new();
 
-    private readonly string m_directory = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-world-view-placement-{Guid.NewGuid():N}"
+    // The runtime may still hold a file here as it is disposed, so the delete is best-effort.
+    private readonly TemporaryDirectory m_directory = new(
+        bestEffortDelete: true,
+        prefix: "puck-world-view-placement-"
     );
     private readonly WorldViewGraphHost m_host;
     private readonly FakeGraphInstances m_instances;
     private readonly IReadOnlyList<string> m_viewPasses;
 
     public WorldViewPlacementLawTests() {
-        Directory.CreateDirectory(path: m_directory);
         m_host = new WorldViewGraphHost(
-            documentDirectory: m_directory,
+            documentDirectory: m_directory.RootPath,
             packager: new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: Path.Combine(
-                path1: m_directory,
+                path1: m_directory.RootPath,
                 path2: "cache"
             )))
         );
@@ -89,14 +89,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
     public void Dispose() {
         m_host.Dispose();
         m_instances.Dispose();
-
-        try {
-            Directory.Delete(
-                path: m_directory,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
+        m_directory.Dispose();
     }
     [Fact]
     public void EveryPlacedViewsFootprintIsAddedWhetherOrNotItIsShown() {

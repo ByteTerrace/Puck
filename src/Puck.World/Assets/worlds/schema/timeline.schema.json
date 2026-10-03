@@ -11,7 +11,7 @@
         "null"
       ],
       "items": {
-        "description": "One named presentation clock: a tick clock, whose phase advances with the simulation\u0027s engine tick through a period, or a state clock, whose phase is the fractional part of a state row\u0027s presented value (an advancing row wraps once per unit).",
+        "description": "One named presentation clock: a tick clock, whose phase advances with the simulation\u0027s engine tick through a period, or a state clock, whose phase is the fractional part of a state row\u0027s presented value (an advancing row wraps once per unit). A projection carries a state clock as an anchored clock instead, whose phase its recipient predicts from the anchor at the tick it presents (WorldClockAnchor); a document never authors one.",
         "type": [
           "object",
           "null"
@@ -52,6 +52,40 @@
               "null"
             ],
             "default": null
+          },
+          "anchor": {
+            "description": "An anchored clock\u0027s anchor: what a projection carries for a state clock it discloses, in place of the row. Refused in an authored document. An anchored clock carrying none reads no phase, as the state clock it stands for reads none while its row holds no number.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "tick": {
+                "description": "The engine tick the anchor stands at.",
+                "type": "integer"
+              },
+              "phase": {
+                "description": "The phase at Tick, a whole turn being 2^64.",
+                "type": "integer"
+              },
+              "rate": {
+                "description": "The phase one authoritative tick adds, wrapping; zero for a clock held still.",
+                "type": "integer",
+                "default": 0
+              },
+              "step": {
+                "description": "The engine ticks one authoritative tick spans; zero exactly when Rate is.",
+                "type": "integer",
+                "default": 0
+              }
+            },
+            "required": [
+              "tick",
+              "phase"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldClockAnchor"
           }
         },
         "required": [

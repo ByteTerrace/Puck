@@ -40,10 +40,6 @@ public sealed record SdfBake(SdfBakedMesh Mesh, IReadOnlyList<SdfBakedTexture> T
 /// simulation state.</para>
 /// </summary>
 public static class SdfBaker {
-    /// <summary>The baker's version. It moves whenever a change to the baker changes the bytes a bake produces, and it is
-    /// part of every bake's key and the version of the compiled-world chunk that names bakes.</summary>
-    public const uint Version = 9;
-
     /// <summary>Bakes <paramref name="program"/> at <paramref name="tier"/>.</summary>
     /// <param name="program">The program.</param>
     /// <param name="materials">The materials the program's material ids index, in id order; each id bakes to its

@@ -18,7 +18,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     // The boot world's one screen shows a session; a world a seat is presented in stands a screen at the same place
     // showing a session of its own. Both sessions are views a screen of a world the display shows directly shows.
     private WorldScreenMappingSet ShowTwoWorlds() {
-        var screens = new WorldScreenMappingSet();
+        var screens = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
 
         screens.Reconcile(
             cameras: [],

@@ -63,10 +63,10 @@ public sealed partial class WorldBody {
     // from a seconds-rounded value would drift the restored segment's remaining duration from the exact tick count
     // that was live at capture. Always called on a freshly constructed restore body (RestoreDetachedSeat never calls
     // ApplyTransferState on a live one), so there is never an existing segment to preserve or lose.
-    private void RestoreTape(PlayerIntent[] intents, ulong[] remainingTicks) {
+    private void RestoreTape(IReadOnlyList<PlayerIntent> intents, IReadOnlyList<ulong> remainingTicks) {
         var count = Math.Min(
-            val1: intents.Length,
-            val2: remainingTicks.Length
+            val1: intents.Count,
+            val2: remainingTicks.Count
         );
 
         while (m_tape.Length < count) {

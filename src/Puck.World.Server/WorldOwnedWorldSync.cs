@@ -669,7 +669,16 @@ public sealed class WorldOwnedWorldSync {
 
         // Live state, not stale disk state: re-save (basis-preserving) before resolving the chain, so the file on
         // disk and identity.Document agree — a push must publish what is LIVE, never what was last saved.
-        m_worlds.Save(identity: identity);
+        if (!m_worlds.TrySave(
+            identity: identity,
+            reason: out var saveReason
+        )) {
+            return new WorldSyncOutcome(
+                Id: identity.Id,
+                Ok: false,
+                Detail: saveReason
+            );
+        }
 
         var safe = identitySection.Id;
         var path = Path.Combine(

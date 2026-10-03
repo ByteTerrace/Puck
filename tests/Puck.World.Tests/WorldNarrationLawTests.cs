@@ -13,6 +13,7 @@ namespace Puck.World.Tests;
 /// have produced — and, with no sink attached, the narration goes undelivered rather than falling back to
 /// <c>Console.Error</c>.
 /// </summary>
+[Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class WorldNarrationLawTests {
     [Fact]
     public void AttachedSink_ObservesOneMutationsNarrationRecordAndFormattedLine() {
@@ -90,24 +91,38 @@ public sealed class WorldNarrationLawTests {
         // Still exactly one — the lease's own dispose stopped this sink from observing the second grant's line.
         Assert.Single(collection: sink.Narrations);
     }
+    // With no sink attached, not even the fixture's console sink, a mutation's narration reaches neither console
+    // stream: the hub has no fallback writer. Swapping both streams is why this class runs in the console-redirection
+    // collection.
     [Fact]
     public void NoSinkAttached_MutationsNarrationGoesUndelivered() {
-        using var fixture = Fixtures.FreshServer();
-        var sink = new RecordingNarrationSink();
-
+        using var fixture = Fixtures.FreshServer(consoleNarration: false);
         var grant = new WorldGrant(
             Grantee: Principal.Seat(slot: 0),
             Capability: WorldCapability.Drive,
             Subject: GrantSubject.Body(index: 0),
             Exclusive: false
         );
+        var originalError = Console.Error;
+        var originalOut = Console.Out;
+        using var error = new StringWriter();
+        using var output = new StringWriter();
 
-        fixture.Server.Grant(
-            grant: grant,
-            actor: Principal.Console
-        );
+        try {
+            Console.SetError(newError: error);
+            Console.SetOut(newOut: output);
+            fixture.Server.Grant(
+                grant: grant,
+                actor: Principal.Console
+            );
+        } finally {
+            Console.SetError(newError: originalError);
+            Console.SetOut(newOut: originalOut);
+        }
 
-        Assert.Empty(collection: sink.Narrations);
+        Assert.Contains(expected: (grant.Capability, grant.Subject), collection: fixture.Server.Grants.Held(grantee: grant.Grantee));
+        Assert.Equal(expected: string.Empty, actual: error.ToString());
+        Assert.Equal(expected: string.Empty, actual: output.ToString());
     }
 }
 

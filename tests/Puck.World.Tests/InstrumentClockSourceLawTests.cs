@@ -6,6 +6,7 @@ using Puck.Assets.Documents;
 using Puck.World.Authoring;
 using Puck.HumbleGamingBrick.Forge.Tune;
 using Puck.World.Protocol;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -179,73 +180,49 @@ public sealed class InstrumentClockSourceLawTests {
 
     [Fact]
     public void EngagingTheInstrumentCommitsTheTransition_UnengagedControlLeavesItArmed() {
-        var engagedDirectory = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-engaged-").FullName;
-        var controlDirectory = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-control-").FullName;
+        using var engagedDirectory = new TemporaryDirectory(prefix: "puck-instrument-clock-law-engaged-");
+        using var controlDirectory = new TemporaryDirectory(prefix: "puck-instrument-clock-law-control-");
+        var engaged = RunAndReadMusicState(
+            assetDirectory: engagedDirectory.RootPath,
+            engage: true
+        );
+        var control = RunAndReadMusicState(
+            assetDirectory: controlDirectory.RootPath,
+            engage: false
+        );
 
-        try {
-            var engaged = RunAndReadMusicState(
-                assetDirectory: engagedDirectory,
-                engage: true
-            );
-            var control = RunAndReadMusicState(
-                assetDirectory: controlDirectory,
-                engage: false
-            );
-
-            Assert.Contains(
-                actualString: engaged,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "segment=driven"
-            );
-            Assert.Contains(
-                actualString: control,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "segment=idle"
-            );
-            Assert.Contains(
-                actualString: control,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "pending=driven"
-            );
-        } finally {
-            Directory.Delete(
-                path: engagedDirectory,
-                recursive: true
-            );
-            Directory.Delete(
-                path: controlDirectory,
-                recursive: true
-            );
-        }
+        Assert.Contains(
+            actualString: engaged,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "segment=driven"
+        );
+        Assert.Contains(
+            actualString: control,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "segment=idle"
+        );
+        Assert.Contains(
+            actualString: control,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "pending=driven"
+        );
     }
     [Fact]
     public void TwoIndependentEngagedBootsReDeriveTheIdenticalMusicState() {
-        var directoryA = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-a-").FullName;
-        var directoryB = Directory.CreateTempSubdirectory(prefix: "puck-instrument-clock-law-b-").FullName;
+        using var directoryA = new TemporaryDirectory(prefix: "puck-instrument-clock-law-a-");
+        using var directoryB = new TemporaryDirectory(prefix: "puck-instrument-clock-law-b-");
+        var a = RunAndReadMusicState(
+            assetDirectory: directoryA.RootPath,
+            engage: true
+        );
+        var b = RunAndReadMusicState(
+            assetDirectory: directoryB.RootPath,
+            engage: true
+        );
 
-        try {
-            var a = RunAndReadMusicState(
-                assetDirectory: directoryA,
-                engage: true
-            );
-            var b = RunAndReadMusicState(
-                assetDirectory: directoryB,
-                engage: true
-            );
-
-            Assert.Equal(
-                actual: b,
-                expected: a
-            );
-        } finally {
-            Directory.Delete(
-                path: directoryA,
-                recursive: true
-            );
-            Directory.Delete(
-                path: directoryB,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: b,
+            expected: a
+        );
     }
 }

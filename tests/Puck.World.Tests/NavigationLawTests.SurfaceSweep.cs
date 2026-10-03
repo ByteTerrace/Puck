@@ -32,7 +32,7 @@ public sealed partial class NavigationLawTests {
         );
         Assert.Equal(
             expected: 4,
-            actual: route.Path.Length
+            actual: route.Path.Count
         );
     }
 }

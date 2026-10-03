@@ -15,8 +15,4 @@
     <ItemGroup>
         <ProjectReference Include="../../src/Puck.Recording/Puck.Recording.csproj" />
     </ItemGroup>
-    <ItemGroup>
-        <Compile Include="../Shared/TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
-        <Compile Include="../Shared/TestLiveness.cs" Link="TestLiveness.cs" />
-    </ItemGroup>
 </Project>

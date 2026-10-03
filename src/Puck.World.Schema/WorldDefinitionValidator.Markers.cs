@@ -73,9 +73,10 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
-            RequireBindableUnitScalar(
+            JudgeScalar(
                 definition: definition,
                 errors: errors,
+                field: WorldValueFields.MarkerChipAlpha,
                 path: $"{path}.style.chipAlpha",
                 scalar: marker.Style.ChipAlpha
             );
@@ -95,9 +96,10 @@ public static partial class WorldDefinitionValidator {
             }
 
             if (marker.Style.RingAlpha is { } ringAlpha) {
-                RequireBindableUnitScalar(
+                JudgeScalar(
                     definition: definition,
                     errors: errors,
+                    field: WorldValueFields.MarkerRingAlpha,
                     path: $"{path}.style.ringAlpha",
                     scalar: ringAlpha
                 );

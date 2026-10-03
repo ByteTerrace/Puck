@@ -24,7 +24,7 @@ public sealed class WorldSessionViewLawTests {
     // The frame a session view of a destination renders, composed as WorldScreenBinder.RegisterSessionView composes it.
     private static SdfFrame SessionFrame(WorldDefinition definition) {
         var mirror = new WorldSessionMirror(placeholder: definition);
-        var emitter = new WorldSessionSceneEmitter(
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: mirror
         );
@@ -45,7 +45,7 @@ public sealed class WorldSessionViewLawTests {
     [InlineData(2048, 256)]
     [Theory]
     public void AuthoredSessionResolutionDeterminesTheFirstCameraAspect(int width, int height) {
-        var emitter = new WorldSessionSceneEmitter(effectiveCameraName: null,
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(), effectiveCameraName: null,
             mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: SessionWorld)));
         var source = new WorldSessionFrameSource(inner: new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]),
             captureHostFirst: static () => { }, resolution: new WorldScreenResolution(Height: height, Width: width));

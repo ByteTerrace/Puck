@@ -104,7 +104,7 @@ public sealed class WorldSessionFollowLawTests {
     public void AStateWriteMovingABakedColorMovesTheSessionEmittersRevision() {
         var session = Session(definition: Document(bump: "#3FAF6F"));
         // Held as the presenter holds it, so the material-scope default below is the one the composition reads.
-        ISdfSceneEmitter emitter = new WorldSessionSceneEmitter(
+        ISdfSceneEmitter emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: session
         );

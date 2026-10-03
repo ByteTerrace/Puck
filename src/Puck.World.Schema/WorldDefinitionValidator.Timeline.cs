@@ -37,6 +37,10 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name {reservedReason}");
             }
 
+            if (clock.Anchor is not null) {
+                errors.Add(item: $"{path}.anchor is what a projection carries for a state clock it discloses; a document authors a tick clock or a state clock.");
+            }
+
             if ((clock.SpanSeconds is { } span) && (!double.IsFinite(d: span) || (span <= 0d))) {
                 errors.Add(item: $"{path}.spanSeconds must be finite and positive.");
             }

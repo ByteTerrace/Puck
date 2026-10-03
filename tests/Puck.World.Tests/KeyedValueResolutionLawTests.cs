@@ -119,7 +119,7 @@ public sealed class KeyedValueResolutionLawTests {
     [Fact]
     public void The_courtyard_environment_toggles_between_its_night_and_day_keys() {
         var courtyard = AuthoredGameFixtures.Load(relativePath: "src/Puck.World/Assets/worlds/moth-courtyard.puck");
-        var night = new WorldEnvironmentResolve().Resolve(
+        var night = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(
             definition: WithRow(definition: courtyard, row: "skyMode", value: 0d),
             mirror: ClientFixtures.StateMirror(definition: WithRow(definition: courtyard, row: "skyMode", value: 0d)),
             revision: 0
@@ -130,7 +130,7 @@ public sealed class KeyedValueResolutionLawTests {
         Assert.Equal(expected: (0xB6 / 255f), actual: night.Sky.Stops[3].Color.X, precision: 6);
 
         var dayDefinition = WithRow(definition: courtyard, row: "skyMode", value: 0.5d);
-        var day = new WorldEnvironmentResolve().Resolve(
+        var day = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(
             definition: dayDefinition,
             mirror: ClientFixtures.StateMirror(definition: dayDefinition),
             revision: 0
@@ -145,7 +145,7 @@ public sealed class KeyedValueResolutionLawTests {
 
         Assert.Equal(
             expected: 0.002f,
-            actual: new WorldEnvironmentResolve().Resolve(definition: dusk, mirror: ClientFixtures.StateMirror(definition: dusk), revision: 0).Sky.Block.FogDensity,
+            actual: new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: dusk, mirror: ClientFixtures.StateMirror(definition: dusk), revision: 0).Sky.Block.FogDensity,
             precision: 6
         );
     }
@@ -168,7 +168,7 @@ public sealed class KeyedValueResolutionLawTests {
 
         Assert.DoesNotContain(actualString: (reason ?? string.Empty), expectedSubstring: "theme.color.surfaceBase");
 
-        var theme = new WorldThemeResolve();
+        var theme = new WorldThemeResolve(domains: new WorldValueDomainGuard());
         var dark = theme.Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: EngineTicks.PerSecond), revision: 0);
         var light = theme.Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: (EngineTicks.PerSecond / 2UL)), revision: 0);
 
@@ -189,7 +189,7 @@ public sealed class KeyedValueResolutionLawTests {
             new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.1f),
         ])));
         var mirror = ClientFixtures.StateMirror(definition: keyed);
-        var environment = new WorldEnvironmentResolve();
+        var environment = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
         for (var frame = 0; (frame < 4); frame++) {
             _ = environment.Resolve(definition: keyed, mirror: mirror, revision: 0);
@@ -206,7 +206,7 @@ public sealed class KeyedValueResolutionLawTests {
         // Red leg: a still literal sky never resolves again while the tick moves.
         var still = TickClockFog(density: new BindableScalar(literal: 0.1f));
         var stillMirror = ClientFixtures.StateMirror(definition: still);
-        var stillEnvironment = new WorldEnvironmentResolve();
+        var stillEnvironment = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
         for (var tick = 1UL; (tick < 5UL); tick++) {
             stillMirror.Advance(engineTick: (tick * 1680UL), tick: tick);
@@ -225,8 +225,8 @@ public sealed class KeyedValueResolutionLawTests {
             ])),
         };
         const ulong Wrap = (1UL << 32);
-        var before = new WorldEnvironmentResolve().Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: (Wrap - 1UL)), revision: 0);
-        var after = new WorldEnvironmentResolve().Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: Wrap), revision: 0);
+        var before = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: (Wrap - 1UL)), revision: 0);
+        var after = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: definition, mirror: ClientFixtures.StateMirror(definition: definition, engineTick: Wrap), revision: 0);
         (float Before, float After, double Rate, double Modulus)[] lanes = [
             (before.Sky.Block.CloudDriftOffset.X, after.Sky.Block.CloudDriftOffset.X, 0.02d, SdfVolume.NoisePeriodCells),
             (before.Sky.Block.CloudDriftOffset.Y, after.Sky.Block.CloudDriftOffset.Y, -0.01d, SdfVolume.NoisePeriodCells),
@@ -250,6 +250,6 @@ public sealed class KeyedValueResolutionLawTests {
             ])),
         };
 
-        Assert.Equal(expected: 0f, actual: new WorldEnvironmentResolve().Resolve(definition: dark, mirror: ClientFixtures.StateMirror(definition: dark, engineTick: (Wrap + 1234UL)), revision: 0).Sky.Block.TwinklePhase);
+        Assert.Equal(expected: 0f, actual: new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: dark, mirror: ClientFixtures.StateMirror(definition: dark, engineTick: (Wrap + 1234UL)), revision: 0).Sky.Block.TwinklePhase);
     }
 }

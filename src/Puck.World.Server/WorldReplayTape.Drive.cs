@@ -24,6 +24,9 @@ public sealed partial class WorldReplayTape {
     /// local route epochs so input deduplication and presentation do not retain the replaced timeline's cursor.</summary>
     public event Action? TimelineRestored;
 
+    // The history's seek installs a past timeline through the same subscribers a drive's boot image reaches.
+    internal void RaiseTimelineRestored() => TimelineRestored?.Invoke();
+
     // One live drive's whole mutable state — dropped the instant the drive ends, so no field of it can leak into
     // the recording a fork hands over to.
     private sealed class DriveState {
@@ -108,6 +111,7 @@ public sealed partial class WorldReplayTape {
             (drive.ForkName is not { } forkName)
         ) {
             m_mode = WorldReplayMode.Idle;
+            RefreshCapture();
 
             return;
         }
@@ -137,8 +141,8 @@ public sealed partial class WorldReplayTape {
             ParentName: drive.SourceName,
             Tick: drive.Target
         );
-        AttachTaps();
         m_mode = WorldReplayMode.Recording;
+        RefreshCapture();
         if (m_liveServer.Output.HasNarrationSink) {
             m_liveServer.Output.Narrate(
                 channel: "replay.fork",
@@ -151,7 +155,7 @@ public sealed partial class WorldReplayTape {
     // running session, and the hash comparison that follows reports the resulting divergence honestly.
     private string? NarrateRebuildContentPin(WorldReplayEntry.Rebuild rebuild) {
         if (
-            (rebuild.PathHint is { } path) &&
+            (rebuild.Origin is WorldRebuildOrigin.File { Path: var path }) &&
             (m_drive is { } drive)
         ) {
             if (!WorldDefinitionFileSource.TryReadContentPin(
@@ -284,7 +288,9 @@ public sealed partial class WorldReplayTape {
                 request: new WorldRebuildRequest(
                     Kind: WorldRebuildKind.Load,
                     Definition: definition,
-                    PathHint: documentPath,
+                    Origin: ((documentPath is null)
+                        ? null
+                        : new WorldRebuildOrigin.File(Path: documentPath)),
                     Force: true,
                     ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: source.DefinitionJson)
                 ),
@@ -298,7 +304,7 @@ public sealed partial class WorldReplayTape {
                 m_liveServer.Extensions.CompleteReplay();
                 return "the boot-image rebuild of the tape's embedded definition was refused (the [world.definition rejected: …] line above names why)";
             }
-            m_liveServer.RestoreCheckpoint(checkpoint: checkpoint!);
+            m_liveServer.Persistence.RestoreCheckpoint(checkpoint: checkpoint!, restoreOwnedIdentities: false);
             return null;
         });
     }
@@ -344,7 +350,7 @@ public sealed partial class WorldReplayTape {
             expectedMutationOutcomes: drive.ExpectedMutationOutcomes,
             input: drive.Source.Ticks[drive.Cursor],
             population: m_liveServer.Population,
-            rebuildContentPin: NarrateRebuildContentPin,
+            rebuildSource: rebuild => (null, NarrateRebuildContentPin(rebuild: rebuild)),
             replayedMutationOutcomes: drive.ReplayedMutationOutcomes,
             server: m_liveServer
         );
@@ -434,10 +440,10 @@ public sealed partial class WorldReplayTape {
         }
 
         if (
-            (definition.Screens.Count > 0) &&
-            (m_liveServer.AnyMachineEverPumped || m_liveServer.AnyScreenOpEverApplied)
+            m_liveServer.AnyScreenOpEverApplied ||
+            ((definition.Screens.Count > 0) && m_liveServer.AnyMachineEverPumped)
         ) {
-            refusal = "the tape's world declares screens and a live screen machine has already stepped or a screen op has already applied — the rebuild door reconciles screens but never resets a booted cartridge's core state, so the boot image cannot be reached in this session";
+            refusal = "a screen or machine operation has applied, or the tape declares screens and a live machine has stepped — screen-owned state and memory observations are outside the checkpoint inventory, so the boot image cannot be reached in this session";
             return false;
         }
 
@@ -484,6 +490,7 @@ public sealed partial class WorldReplayTape {
         };
         m_transport.InputMasked = true;
         m_mode = WorldReplayMode.Replaying;
+        RefreshCapture();
         TimelineRestored?.Invoke();
         refusal = "";
 

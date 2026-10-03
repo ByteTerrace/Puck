@@ -20,7 +20,7 @@ public sealed class CrossingRecoveryLawTests {
         using var world = CrossingWorld.Build();
 
         _ = world.Cross();
-        var arrival = world.DestinationLog.Read(defaults: world.Destination.Server.Definition.PlayerDefaults);
+        var arrival = world.DestinationLog.Read();
         using var restarted = world.Restart(sourceDied: true, destinationDied: true, destinationLogLost: true);
         var server = restarted.Destination.Server;
 

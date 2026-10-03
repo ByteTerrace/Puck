@@ -121,6 +121,7 @@ internal sealed partial class WorldScreenBinder {
     // per-slot teardown.
     private void RegisterSessionView(SessionFeed feed) {
         var emitter = new WorldSessionSceneEmitter(
+            domains: m_domains,
             mirror: feed.Mirror,
             effectiveCameraName: feed.EffectiveCamera
         );
@@ -134,6 +135,10 @@ internal sealed partial class WorldScreenBinder {
 
         feed.FrameSource = frameSource;
         feed.Emitter = emitter;
+        emitter.Film = views => FilmFeed(
+            feed: feed,
+            views: views
+        );
         feed.WindowFit = (isWindow
             ? FitWindow(feed: feed)
             : null);

@@ -18,7 +18,10 @@ public abstract record ActionStateEnvelope {
     public sealed record Range(float Minimum, float Maximum) : ActionStateEnvelope;
     /// <summary>A closed numeric set. Values are authored labels encoded in the slot's deterministic numeric domain.</summary>
     /// <param name="Values">The admitted values.</param>
-    public sealed record Set(IReadOnlyList<float> Values) : ActionStateEnvelope;
+    public sealed record Set(IReadOnlyList<float> Values) : ActionStateEnvelope {
+        /// <summary>The admitted values.</summary>
+        public IReadOnlyList<float> Values { get => field; init => field = StateLists.Freeze(items: value)!; } = StateLists.Freeze(items: Values)!;
+    }
 }
 /// <summary>Declares one named body-state slot shared by every kit action in the world. The carrying
 /// <see cref="WorldStateSection"/> lane selects whether it belongs to the body or its identity.</summary>

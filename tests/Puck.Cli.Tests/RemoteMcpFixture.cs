@@ -39,7 +39,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
 
     private bool m_appDisposed;
     private X509Certificate2? m_certificate;
-    private string? m_certificatePath;
+    private TemporaryDirectory? m_certificateDirectory;
     private RealWorldHost? m_realWorldHost;
 
     internal readonly Channel<string> Entered = Channel.CreateUnbounded<string>();
@@ -134,13 +134,16 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
                 DateTimeOffset.UtcNow.AddMinutes(minutes: -1),
                 DateTimeOffset.UtcNow.AddHours(hours: 1)
             );
-            m_certificatePath = Path.GetTempFileName();
+            m_certificateDirectory = new TemporaryDirectory(prefix: "puck-remote-mcp-certificate-");
+
+            var certificatePath = m_certificateDirectory.PathOf(name: "certificate.pfx");
+
             await File.WriteAllBytesAsync(
-                m_certificatePath,
+                certificatePath,
                 m_certificate.Export(contentType: X509ContentType.Pfx),
                 token
             );
-            options = options with { ListenUrl = "https://127.0.0.1:0", CertificatePath = m_certificatePath };
+            options = options with { ListenUrl = "https://127.0.0.1:0", CertificatePath = certificatePath };
         }
         if (entra) { options = options with { SubjectClaim = "oid", AuthorizationScope = "api://test-api/user_impersonation" }; }
         if (proxy) { options = options with { TrustedProxy = new() { Audience = Audience, Issuer = Issuer, Subject = "front-door", SubjectClaim = "sub", TenantId = Tenant } }; }
@@ -251,7 +254,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
         m_realWorldHost?.Dispose();
         m_key.Dispose();
         m_certificate?.Dispose();
-        if (m_certificatePath is not null) { File.Delete(path: m_certificatePath); }
+        m_certificateDirectory?.Dispose();
     }
 
     private sealed class IssuerHandler(RemoteMcpFixture owner) : HttpMessageHandler {
@@ -339,7 +342,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
         private readonly CancellationTokenSource m_pumpLifetime = new();
         private readonly Task m_pump;
         private readonly TextCommandSource m_source;
-        private readonly string m_stateDirectory;
+        private readonly TemporaryDirectory m_stateDirectory;
 
         internal RealWorldHost(RemoteMcpFixture owner) {
             m_owner = owner;
@@ -354,9 +357,9 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             ));
             var population = new WorldPopulation(definition: definition);
 
-            m_stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-remote-mcp-tests-").FullName;
+            m_stateDirectory = new TemporaryDirectory(bestEffortDelete: true, prefix: "puck-remote-mcp-tests-");
 
-            var profiles = new WorldOwnedWorlds(template: definition, directory: m_stateDirectory, machineId: Guid.NewGuid());
+            var profiles = new WorldOwnedWorlds(template: definition, directory: m_stateDirectory.RootPath, machineId: Guid.NewGuid());
             var machines = new WorldMachineHost(screens: definition.Screens, engines: []);
             var server = new WorldServer(definition: definition, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines);
 
@@ -452,12 +455,7 @@ internal sealed class RemoteMcpFixture : IAsyncDisposable {
             m_pump.Wait();
             m_pumpLifetime.Dispose();
             m_instance.Dispose();
-
-            try {
-                Directory.Delete(path: m_stateDirectory, recursive: true);
-            } catch (IOException) {
-                // Best-effort scratch cleanup.
-            }
+            m_stateDirectory.Dispose();
         }
     }
     private sealed class TrackedSession(IControlSession inner, RemoteMcpFixture owner) : IControlSession {

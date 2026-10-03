@@ -1,4 +1,5 @@
 using Puck.Cli.Transpiler;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -31,42 +32,32 @@ public sealed class ShippedSourceLintLawTests {
     // The control: a root with a seat and no kit to embody it, the fault a shared basis once carried, is red.
     [Fact]
     public void ARootWithASeatAndNoKitFailsTheLint() {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-lint-gate-" + Guid.NewGuid().ToString(format: "N"))
+        using var scratch = new TemporaryDirectory(prefix: "puck-lint-gate-");
+        var directory = scratch.RootPath;
+
+        var path = Path.Combine(
+            path1: directory,
+            path2: "seat.puck"
         );
 
-        Directory.CreateDirectory(path: directory);
-        try {
-            var path = Path.Combine(
-                path1: directory,
-                path2: "seat.puck"
-            );
+        File.WriteAllText(
+            contents: "schema: \"puck.world.definition.v1\"\n\nbodies {\n  localSeats: 1\n}\n",
+            path: path
+        );
 
-            File.WriteAllText(
-                contents: "schema: \"puck.world.definition.v1\"\n\nbodies {\n  localSeats: 1\n}\n",
-                path: path
-            );
+        var (exitCode, output) = ConsoleCapture.Run(run: () => LintCommand.Execute(
+            path: path,
+            strict: true
+        ));
 
-            var (exitCode, output) = ConsoleCapture.Run(run: () => LintCommand.Execute(
-                path: path,
-                strict: true
-            ));
-
-            Assert.Equal(
-                actual: exitCode,
-                expected: 1
-            );
-            Assert.Contains(
-                actualString: output,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "PUCK030"
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: exitCode,
+            expected: 1
+        );
+        Assert.Contains(
+            actualString: output,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "PUCK030"
+        );
     }
 }

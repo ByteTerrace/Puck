@@ -8786,6 +8786,7 @@
     {
       "CoveredBy": [
         "rigid.exp-log-seam",
+        "rigid.exp-matches-the-series",
         "rigid.round-trip-ladder-self-consistency",
         "rigid.sclerp-endpoints-and-screw"
       ],
@@ -8842,6 +8843,7 @@
     {
       "CoveredBy": [
         "rigid.exp-log-seam",
+        "rigid.log-matches-the-series",
         "rigid.round-trip-ladder-self-consistency",
         "rigid.sclerp-endpoints-and-screw"
       ],
@@ -9397,6 +9399,13 @@
         "vector.componentwise-helpers-vs-oracle"
       ],
       "Id": "Puck.Maths.FixedVector3.Clamp(Puck.Maths.FixedVector3,Puck.Maths.FixedVector3,Puck.Maths.FixedVector3)",
+      "State": "covered"
+    },
+    {
+      "CoveredBy": [
+        "vector.compare-length-matches-the-squares"
+      ],
+      "Id": "Puck.Maths.FixedVector3.CompareLengthTo(Puck.Maths.FixedVector3)",
       "State": "covered"
     },
     {

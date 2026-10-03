@@ -132,6 +132,8 @@ internal static class BaselinesCommand {
             return CliExit.Refuse(verb: path, what: artifact.Project, why: (build.TimedOut ? "the build timed out" : $"the build exited {build.ExitCode}"));
         }
 
+        // The first run's records, held for comparison: a run that refuses keeps them beside its own, named.
+        using var copies = RunDirectory.Create(prefix: "puck-baselines-");
         Dictionary<string, string>? first = null;
 
         for (var run = 1; (run <= artifact.Runs); run++) {
@@ -174,9 +176,9 @@ internal static class BaselinesCommand {
 
             if (first is null) {
                 first = written.ToDictionary(
-                    elementSelector: static entry => Path.Combine(
-                        path1: Path.GetTempPath(),
-                        path2: $"puck-baselines-{Environment.ProcessId}-{entry.Key}"
+                    elementSelector: entry => Path.Combine(
+                        path1: copies.Path,
+                        path2: entry.Key
                     ),
                     keySelector: static entry => entry.Key,
                     comparer: StringComparer.Ordinal
@@ -204,9 +206,7 @@ internal static class BaselinesCommand {
             }
         }
 
-        foreach (var copy in first!.Values) {
-            File.Delete(path: copy);
-        }
+        copies.Conclude(passed: true);
 
         var names = Directory.EnumerateFiles(path: records).Select(selector: static file => Path.GetFileName(path: file)!).Order(comparer: StringComparer.Ordinal).ToArray();
 

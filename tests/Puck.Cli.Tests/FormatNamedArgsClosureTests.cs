@@ -1,4 +1,5 @@
 using Puck.Cli.Format;
+using Puck.Testing;
 
 using Xunit;
 
@@ -58,12 +59,24 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         """;
     private const string NamedForTheObjectOverload = "Xunit.Assert.NotNull(@object: found);";
 
-    private readonly string m_root = CliScratchDirectories.CreateProject(prefix: "puck-cli-tests-named-args-");
+    private readonly TemporaryDirectory m_directory = PinnedScratch(prefix: "puck-cli-tests-named-args-");
 
     private string Source => Path.Combine(
-        path1: m_root,
+        path1: m_directory.RootPath,
         path2: "Probe.cs"
     );
+
+    /// <summary>Creates a scratch directory that resolves the repository SDK, so a project built in it binds the same
+    /// compiler the suite runs under.</summary>
+    /// <param name="prefix">The directory-name prefix.</param>
+    /// <returns>The directory; the caller disposes it.</returns>
+    internal static TemporaryDirectory PinnedScratch(string prefix) {
+        var directory = new TemporaryDirectory(prefix: prefix);
+
+        CliScratchDirectories.PinSdk(directory: directory.RootPath);
+
+        return directory;
+    }
 
     // Names `root`'s source in `configuration` and returns the exit code alongside everything the run reported, so a
     // case can pin both the refusal and the fact that it was announced.
@@ -97,7 +110,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         Build(
             configuration: configuration,
             project: Path.Combine(
-                path1: m_root,
+                path1: m_directory.RootPath,
                 path2: "Sample.csproj"
             )
         );
@@ -213,14 +226,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
     }
     /// <summary>Removes the scratch project directory.</summary>
     public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_root,
-                recursive: true
-            );
-        } catch (DirectoryNotFoundException) {
-        }
-
+        m_directory.Dispose();
         GC.SuppressFinalize(obj: this);
     }
     /// <summary>
@@ -232,11 +238,11 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
     [Fact]
     public void AStaleProjectReferenceIsRefusedRatherThanBoundAround() {
         var library = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "Library"
         );
         var sample = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "Sample"
         );
 
@@ -318,7 +324,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
             ("Sample", """<ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>""", sampleSource),
         ])) {
             var directory = Path.Combine(
-                path1: m_root,
+                path1: m_directory.RootPath,
                 path2: name
             );
             var project = Path.Combine(
@@ -408,7 +414,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
     public void ABatchIsPartitionedByTheGlobalJsonEachProjectSelectsItsSdkFrom() {
         string Project(string relative) {
             var project = Path.Combine(
-                path1: m_root,
+                path1: m_directory.RootPath,
                 path2: relative
             );
 
@@ -422,10 +428,10 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
         }
 
         foreach (var pinned in ((string[])["Alpha", "Beta"])) {
-            Directory.CreateDirectory(path: Path.Combine(path1: m_root, path2: pinned));
+            Directory.CreateDirectory(path: Path.Combine(path1: m_directory.RootPath, path2: pinned));
             File.Copy(
-                destFileName: Path.Combine(path1: m_root, path2: pinned, path3: "global.json"),
-                sourceFileName: Path.Combine(path1: m_root, path2: "global.json")
+                destFileName: Path.Combine(path1: m_directory.RootPath, path2: pinned, path3: "global.json"),
+                sourceFileName: Path.Combine(path1: m_directory.RootPath, path2: "global.json")
             );
         }
 
@@ -455,12 +461,12 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
 
         Assert.Null(@object: RepositoryPaths.Ascend(
             probe: static directory => (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx")) ? directory.FullName : null),
-            start: m_root
+            start: m_directory.RootPath
         ));
 
         var (code, report) = Format(
             configuration: "Release",
-            root: m_root
+            root: m_directory.RootPath
         );
 
         Assert.Equal(
@@ -522,7 +528,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
     [Fact]
     public void ASharedSourceIsFormattedInTheProjectThatLinksIt() {
         var shared = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "Shared",
             path3: "Helper.cs"
         );
@@ -555,7 +561,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
             configuration: "Release",
             namedArgs: true,
             nullPattern: false,
-            rootArgument: m_root,
+            rootArgument: m_directory.RootPath,
             targets: [shared],
             check: false
         ));
@@ -581,75 +587,67 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
     /// </summary>
     [Fact]
     public void ASourceLinkedInFromOutsideTheProjectDirectoryBinds() {
-        var shared = $"{m_root}-shared";
+        using var sharedDirectory = new TemporaryDirectory(prefix: "puck-cli-tests-named-args-shared-");
+        var shared = sharedDirectory.RootPath;
 
-        Directory.CreateDirectory(path: shared);
+        File.WriteAllText(
+            contents: """
+                namespace Sample;
 
-        try {
-            File.WriteAllText(
-                contents: """
-                    namespace Sample;
+                internal static class Shared {
+                    public static string Join(string left, string right) => (left + right);
+                }
 
-                    internal static class Shared {
-                        public static string Join(string left, string right) => (left + right);
-                    }
+                """,
+            path: Path.Combine(
+                path1: shared,
+                path2: "Shared.cs"
+            )
+        );
+        File.WriteAllText(
+            contents: $"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                    <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+                    <ItemGroup><Compile Include="{Path.Combine(path1: shared, path2: "Shared.cs")}" Link="Shared.cs" /></ItemGroup>
+                </Project>
+                """,
+            path: Path.Combine(
+                path1: m_directory.RootPath,
+                path2: "Sample.csproj"
+            )
+        );
+        File.WriteAllText(
+            contents: """
+                namespace Sample;
 
-                    """,
-                path: Path.Combine(
-                    path1: shared,
-                    path2: "Shared.cs"
-                )
-            );
-            File.WriteAllText(
-                contents: $"""
-                    <Project Sdk="Microsoft.NET.Sdk">
-                        <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
-                        <ItemGroup><Compile Include="{Path.Combine(path1: shared, path2: "Shared.cs")}" Link="Shared.cs" /></ItemGroup>
-                    </Project>
-                    """,
-                path: Path.Combine(
-                    path1: m_root,
-                    path2: "Sample.csproj"
-                )
-            );
-            File.WriteAllText(
-                contents: """
-                    namespace Sample;
+                internal static class Probe {
+                    public static string Use() => Shared.Join("a", "b");
+                }
 
-                    internal static class Probe {
-                        public static string Use() => Shared.Join("a", "b");
-                    }
+                """,
+            path: Source
+        );
+        Build(configuration: "Release");
 
-                    """,
-                path: Source
-            );
-            Build(configuration: "Release");
+        var (code, report) = Format(
+            configuration: "Release",
+            root: m_directory.RootPath
+        );
 
-            var (code, report) = Format(
-                configuration: "Release",
-                root: m_root
-            );
-
-            Assert.Equal(
-                actual: code,
-                expected: 0
-            );
-            Assert.DoesNotContain(
-                actualString: report,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "could not be resolved"
-            );
-            Assert.Contains(
-                actualString: File.ReadAllText(path: Source),
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "Shared.Join(left: \"a\", right: \"b\")"
-            );
-        } finally {
-            Directory.Delete(
-                path: shared,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: code,
+            expected: 0
+        );
+        Assert.DoesNotContain(
+            actualString: report,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "could not be resolved"
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: Source),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "Shared.Join(left: \"a\", right: \"b\")"
+        );
     }
     /// <summary>
     /// With both configurations built, the requested one decides which assemblies resolve. The same source is named
@@ -717,8 +715,10 @@ public sealed class BuiltSampleProject : IDisposable {
     /// <summary>A configuration name this project is never built in.</summary>
     public const string NeverBuilt = "Checked";
 
+    private readonly TemporaryDirectory m_directory = FormatNamedArgsClosureTests.PinnedScratch(prefix: "puck-cli-tests-named-args-sample-");
+
     /// <summary>Gets the project directory.</summary>
-    public string Root { get; } = CliScratchDirectories.CreateProject(prefix: "puck-cli-tests-named-args-sample-");
+    public string Root => m_directory.RootPath;
     /// <summary>Gets the one source file the cases rewrite.</summary>
     public string Source => Path.Combine(
         path1: Root,
@@ -759,13 +759,5 @@ public sealed class BuiltSampleProject : IDisposable {
     }
 
     /// <summary>Removes the project directory.</summary>
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: Root,
-                recursive: true
-            );
-        } catch (DirectoryNotFoundException) {
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
 }

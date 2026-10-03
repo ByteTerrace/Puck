@@ -189,7 +189,7 @@ internal static class GateRun {
                 }
             }
         } finally {
-            CliScratchDirectories.TryDelete(path: cliDirectory);
+            _ = RunDirectory.TryDelete(path: cliDirectory);
             File.Delete(path: fileList);
         }
 

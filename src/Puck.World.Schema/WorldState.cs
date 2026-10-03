@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 
 namespace Puck.World;
@@ -37,34 +36,34 @@ public sealed record WorldStateSection(
 ) : IStateSection {
     /// <inheritdoc cref="World"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = Freeze(items: MarkHostOwned(rows: value)); } = Freeze(items: MarkHostOwned(rows: World));
+    public IReadOnlyList<WorldStateRow>? World { get => field; init => field = StateLists.Freeze(items: MarkHostOwned(rows: value)); } = StateLists.Freeze(items: MarkHostOwned(rows: World));
     /// <inheritdoc cref="Body"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = Freeze(items: value); } = Freeze(items: Body);
+    public IReadOnlyList<ActionStateSlot>? Body { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Body);
     /// <inheritdoc cref="Identity"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<ActionStateSlot>? Identity { get => field; init => field = Freeze(items: value); } = Freeze(items: Identity);
+    public IReadOnlyList<ActionStateSlot>? Identity { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Identity);
     /// <inheritdoc cref="Lattices"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = Freeze(items: value); } = Freeze(items: Lattices);
+    public IReadOnlyList<LatticeTopology>? Lattices { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Lattices);
     /// <inheritdoc cref="Spaces"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateSpace>? Spaces { get => field; init => field = Freeze(items: value); } = Freeze(items: Spaces);
+    public IReadOnlyList<StateSpace>? Spaces { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Spaces);
     /// <inheritdoc cref="Enums"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateEnum>? Enums { get => field; init => field = Freeze(items: value); } = Freeze(items: Enums);
+    public IReadOnlyList<StateEnum>? Enums { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Enums);
     /// <inheritdoc cref="Families"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateFamily>? Families { get => field; init => field = Freeze(items: value); } = Freeze(items: Families);
+    public IReadOnlyList<StateFamily>? Families { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Families);
     /// <inheritdoc cref="Records"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StateRecord>? Records { get => field; init => field = Freeze(items: value); } = Freeze(items: Records);
+    public IReadOnlyList<StateRecord>? Records { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Records);
     /// <inheritdoc cref="Pools"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StatePool>? Pools { get => field; init => field = Freeze(items: value); } = Freeze(items: Pools);
+    public IReadOnlyList<StatePool>? Pools { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Pools);
     /// <summary>Gets the bounded pools of endpoint pairs.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IReadOnlyList<StatePairPool>? PairPools { get => field; init => field = Freeze(items: value); } = Freeze(items: PairPools);
+    public IReadOnlyList<StatePairPool>? PairPools { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: PairPools);
 
     IReadOnlyList<StateEnum>? IStateSection.Enums => Enums;
     IReadOnlyList<StateFamily>? IStateSection.Families => Families;
@@ -112,15 +111,6 @@ public sealed record WorldStateSection(
             : marked
         );
     }
-    // The one freeze site every construction and every `with` routes through — a section can never expose a list
-    // the caller still holds a live, writable reference to. A list that is already an immutable array is handed
-    // straight back, box and all: copying it would produce an equal value, and re-boxing it would allocate on
-    // every `with` for each of the three members the caller did not change.
-    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? items) => (items switch {
-        null => null,
-        ImmutableArray<T> => items,
-        _ => items.ToImmutableArray(),
-    });
 }
 /// <summary>
 /// One row of the document's <c>state</c> section: a <see cref="StateRow"/> plus the three traits only a world

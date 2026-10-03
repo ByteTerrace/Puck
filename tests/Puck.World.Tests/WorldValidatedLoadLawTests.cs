@@ -211,7 +211,7 @@ public sealed class WorldValidatedLoadLawTests : IDisposable {
 
         // The world is admitted once. Each owned-world identity the restore rehydrates is its own document and
         // carries its own validation, which retains no programs.
-        Assert.Equal((1L + checkpoint.OwnedWorlds.IdentityDocumentsJson.Count), (after.Validations - before.Validations));
+        Assert.Equal((1L + checkpoint.OwnedWorlds.Documents.Count), (after.Validations - before.Validations));
         Assert.Equal(actual: (after.Compilations - before.Compilations), expected: 1L);
         Assert.Equal(
             expected: captured,
