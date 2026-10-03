@@ -230,11 +230,12 @@ internal static class CountersCommand {
         try {
             script = File.ReadAllText(path: workloadScriptPath).ReplaceLineEndings(replacementText: "\n");
 
-            using var document = JsonDocument.Parse(utf8Json: File.ReadAllBytes(path: worldPath));
-            var host = document.RootElement.GetProperty(propertyName: "host");
+            if (!Puck.Cli.Determinism.DeterminismRecorder.TryLoadWorld(path: worldPath, authored: out var authored, definition: out _, error: out var worldError)) {
+                return CliExit.Refuse(verb: Verb, what: "the counters workload", why: worldError.ReplaceLineEndings(replacementText: " "));
+            }
 
-            width = host.GetProperty(propertyName: "width").GetInt32();
-            height = host.GetProperty(propertyName: "height").GetInt32();
+            width = authored!.Host.Width;
+            height = authored.Host.Height;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or KeyNotFoundException or InvalidOperationException or FormatException)) {
             return CliExit.Refuse(verb: Verb, what: "the counters workload", why: exception.Message.ReplaceLineEndings(replacementText: " "));
         }
@@ -385,7 +386,7 @@ internal static class CountersCommand {
             Description = $"The ceilings file --check reads and --record writes; {CountersCeilings.CeilingsPath} when omitted.",
         };
         var worldOption = new Option<string>(name: "--world") {
-            Description = $"The authored JSON workload; {WorldPath} when omitted.",
+            Description = $"The authored workload world; {WorldPath} when omitted.",
         };
         var scriptOption = new Option<string>(name: "--script") {
             Description = $"The console script containing one counters reading; {ScriptPath} when omitted.",
