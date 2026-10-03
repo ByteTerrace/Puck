@@ -43,7 +43,7 @@ public abstract class RatchetAnalyzer : DiagnosticAnalyzer {
         var ledgerFileName = LedgerFileName;
         var candidates = context.Options.AdditionalFiles
             .Where(predicate: file => string.Equals(
-            a: Path.GetFileName(path: file.Path),
+            a: AnalyzerPaths.FileName(path: file.Path),
             b: ledgerFileName,
             comparisonType: StringComparison.OrdinalIgnoreCase
         ))
@@ -93,7 +93,7 @@ public abstract class RatchetAnalyzer : DiagnosticAnalyzer {
             return;
         }
 
-        var ledgerDirectory = (Path.GetDirectoryName(path: ledgerFile.Path) ?? "");
+        var ledgerDirectory = AnalyzerPaths.DirectoryName(path: ledgerFile.Path);
         var parsed = ledger!;
 
         context.RegisterSyntaxTreeAction(action: treeContext => AnalyzeTree(
