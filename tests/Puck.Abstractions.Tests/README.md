@@ -15,6 +15,11 @@ wrapper laws, counts each call. `GpuStandingPassLawTests` distinguishes a
 retained pass from an inactive pass in text and JSON, and keeps both from
 inventing executed zero counts.
 
+`GpuWorkDetailLawTests` combines plain and named rows through modeled kernel
+readback, including a 64-bit count and detail growth across pending frames.
+It holds grow-only identities and slot capacity, text and JSON detail output,
+and the absence of counts on skipped details.
+
 `GpuResidencyLawTests` covers residency without a device. It fills memory
 profiles from fixture Vulkan types and heaps and Direct3D 12 values, pins one
 policy for each of four synthetic devices, and reads one `GpuRegion`'s bytes

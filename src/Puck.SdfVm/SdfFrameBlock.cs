@@ -75,6 +75,7 @@ public static class SdfFrameBlock {
     private static readonly int ViewUp = Offset(member: SdfWorldPackage.ViewUp);
     private static readonly int ViewportCount = Offset(member: SdfWorldPackage.ViewportCount);
     private static readonly int WorkCounterRow = Offset(member: ShaderWorkCounters.Row);
+    private static readonly int WorkCounterDetailRow = Offset(member: ShaderWorkCounters.DetailRow);
 
     /// <summary>Gets the bytes of the pass block, a multiple of 16.</summary>
     public static int SizeBytes => ((int)Layout.SizeBytes);
@@ -121,6 +122,11 @@ public static class SdfFrameBlock {
     /// <param name="row">The pass's row.</param>
     public static void WriteWorkCounterRow(Span<byte> block, uint row) =>
         WriteUInt32(block: block, offset: WorkCounterRow, value: row);
+    /// <summary>Writes the first named detail row. Zero disables named detail counting.</summary>
+    /// <param name="block">The pass block.</param>
+    /// <param name="row">The first named detail row.</param>
+    public static void WriteWorkCounterDetailRow(Span<byte> block, uint row) =>
+        WriteUInt32(block: block, offset: WorkCounterDetailRow, value: row);
     /// <summary>Returns the forward distance of the plane a view's surfaces are rendered from: the camera's own
     /// <see cref="CameraSnapshot.Near"/>, or <see cref="SdfWorldPackage.MinimumNear"/> when that is nearer. The kernels start every
     /// surface march where its ray crosses this plane and the mesh pass clips there

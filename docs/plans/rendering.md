@@ -7186,8 +7186,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      is the two-stop gradient and fog `SdfSky` starts from, as data. The CPU
      reference for the run composition is `SdfSkyRuns`. `gpu.sky.evaluations` is a
      kernel-counted kind beside the march steps and texels written; the field
-     runs' texels are the `sky` pass's row, and per-run and per-layer rows wait for
-     the detail labels P18-7 adds. A pixel covered with all its neighbours reads
+     runs' texels are the `sky` pass's plain row, and each evaluated layer has
+     its detail row through P18-7's counter foundation. A pixel covered with all its neighbours reads
      zero field evaluations in the sky pass (`SdfSkyEvaluationDeviceLawTests`).
      Composite counts each gradient evaluation for surface fog and each in-place
      field fallback; both can occur at one pixel. Zero fog density evaluates no
@@ -7224,8 +7224,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      leg: composing the field runs before the point layers dims no star); a
      `sky-coverage` canary holds a silhouette edge's blend to the sky at its
      pixel; parity holds on both backends after its explained re-record.
-   - Counted-cost gate: `gpu.sky.evaluations` includes about (1 − h) × P field
-     evaluations per view, the dilated edge, composite fallbacks and fog gradients
+   - Counted-cost gate: `gpu.sky.evaluations` includes each evaluated field layer
+     at about (1 − h) × P pixels per view, the dilated edge, composite fallbacks and fog gradients
      at output resolution. The committed ceilings require a recording that
      includes the composite's fog work; each pass reports its own row. The
      surface transport adds no storage: its word replaces the surface distance's,
@@ -7309,6 +7309,14 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      marched on any frame (0 at `low`, 2 at `medium`, 3 at `high`), fade slots'
      steps only while a fade runs, and required zeros past K + F; at `low`
      every shadow row is zero, as today.
+     The counter ledger publishes `GpuWorkDetail` rows within each pass;
+     `shadow` names its current slot `slot:0`. Each detailed pass also has a
+     `plain` row for work outside named details. These rows sum to every pass
+     total, including a pass that mixes plain kernel work and slot work.
+     Submission snapshots retain their own labels across frame boundaries;
+     identities and frame-slot buffer capacity grow until the graph is replaced.
+     The ceilings key each count by node, pass, detail and kind, and apply the
+     same device rules and required zeros to slot rows as to pass totals.
 8. **P18-8, the open layer stack.**
    - Delivers: the layer record (kind, blend, mask, transform, clock, opacity,
      visibility, tier), the generated kind table and one module per kind for
@@ -7334,6 +7342,16 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      zero for an absent or zero-opacity layer, a zero for a layer below its
      tier, and clouds at `low` at a quarter or less of their `high` hashes per
      covered pixel.
+     The current sky and composite passes expose `gradient`, `disc`, `stars`
+     and `clouds` detail rows. `gpu.sky.evaluations` counts each layer evaluation,
+     including the gradient used by surface fog and a field fallback.
+     `gpu.sky.hashes` counts each star hash and each noise lattice corner hash;
+     `gpu.sky.texture-loads` counts the field-run loads, including an invalid
+     base tap. These two kinds are per-backend-deterministic, with required
+     zeros judged on every device. Skipped or standing passes retain detail
+     identities and publish no counts, so recording gives their rows zero
+     ceilings. Reports, comparisons and generated schemas carry detail labels;
+     an absent measured detail or a detail without a ceiling fails the gate.
 9. **P18-9, lighting derived from the sky.**
    - Delivers: `sky.environment` (the environment map and its coefficients,
      re-rendered only on a lighting-visible change larger than one display
@@ -7497,7 +7515,7 @@ fraction in live tiles, at least h.
   two fractal sums of four octaves, four lattice corners) and 32 per clear one.
   At `low`, 24 per covered pixel, a fall of 81%.
 - **Unauthored layers.** Today, once any sky layer draws, the star field hashes
-  every upper-hemisphere pixel even at zero brightness, and the disc pays a
+  every upper-hemisphere pixel at positive brightness, and the disc pays a
   `pow` at zero intensity. After P18-8 an absent, zero-opacity or zero-brightness
   layer counts zero.
 - **Shadows.** One slot costs what the one shadow light costs today, each more

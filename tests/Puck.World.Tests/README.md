@@ -4,6 +4,13 @@ These tests check the document, protocol, authoritative simulation, and the
 shipped games' state programs. Rendering and complete game interaction still
 need verification by running Puck.World.
 
+`GpuWorkDetailDeviceLawTests` runs the generated counting functions on Vulkan
+and Direct3D 12, crossing the low-word boundary in both a plain row and a named
+row. It submits two frames before waiting, grows the detail labels between
+them, and holds every detail sum to its pass total and each frame to its own
+labels. `SdfSkyEvaluationDeviceLawTests` binds the sky's named rows and checks
+that covered pixels evaluate no layer.
+
 `WorldCompilationAnalysisLawTests` checks that ticks retain installed cost and
 hazard analysis, while a rule-order edit replaces it even with the same state catalog.
 It also checks loader-to-server admission handoff, mismatched definition/catalog refusals, and

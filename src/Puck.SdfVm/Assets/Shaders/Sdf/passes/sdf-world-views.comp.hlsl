@@ -84,5 +84,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 #endif
 
     // A hit pass counts a pixel whose visibility record it stored and views a pixel whose texel it wrote.
+#ifdef SDF_SHADOW_PASS
+    puckCountDetail(0u, sdfWorkSteps, sdfWorkTexels, 0u, 0u, 0u);
+#else
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+#endif
 }

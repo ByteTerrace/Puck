@@ -24,7 +24,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     float4 litColor = sdfSkyPassLit(int2(id.xy));
     float3 color = litColor.rgb;
-    uint evaluations = 0u;
 
     if (passGroup.debugMode == 0u) {
         ViewportData view = sdfSkyPassView();
@@ -38,7 +37,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         sdfSkyPassSurface(id.xy, coverage, fog, t);
         if (fog > 0.0) {
             surface += (sdfSkyGradient(direction) * fog);
-            evaluations += 1u;
         }
         if (coverage < 1.0) {
             float3 scale;
@@ -46,7 +44,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
             if (!sdfSkyPassRuns(id.xy, sky, scale, offset)) {
                 sky = sdfSkyGradient(direction);
-                evaluations += 1u;
                 sdfSkyCloudRun(direction, scale, offset);
             }
             sky += sdfSkyPoints(direction);
@@ -63,5 +60,4 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     output[id.xy] = float4(color, 1.0);
     sdfWorkTexels = 1u;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
-    puckCountSky(evaluations);
 }

@@ -34,14 +34,10 @@ public sealed partial class SdfSkySamplingLawTests {
             .ToArray();
 
         Assert.Equal(expected: 2, actual: sources.Length);
-        foreach (var source in sources) {
-            Assert.Equal(expected: GradientCallPattern().Matches(input: source.Code).Count,
-                actual: CountedGradientPattern().Matches(input: source.Code).Count);
-            Assert.Contains(actualString: source.Code, expectedSubstring: "puckCountSky(evaluations);");
-            // A fogged partial hit may also need the in-place fallback. An assignment of one loses the fog's count.
-            Assert.Equal(expected: ["evaluations = 0u;"],
-                actual: CounterAssignmentPattern().Matches(input: source.Code).Select(selector: static match => match.Value));
-        }
+        // Counting at the callee records both a fog gradient and a fallback at the same pixel, once each.
+        Assert.Matches(expectedRegexPattern: @"float3 sdfSkyGradient\(float3 direction\) \{\s*puckCountDetail\(0u, 0u, 0u, 1u, 0u, 0u\);",
+            actualString: CodeOf(path: "shade/sdf-sky.hlsli"));
+        foreach (var source in sources) { Assert.DoesNotContain(actualString: source.Code, expectedSubstring: "puckCountSky("); }
     }
     [Fact]
     public void DisabledFogDoesNotEvaluateTheGradient() {
@@ -56,12 +52,8 @@ public sealed partial class SdfSkySamplingLawTests {
         LineCommentPattern().Replace(input: File.ReadAllText(path: Path.Combine(path1: Root, path2: path)), replacement: string.Empty);
     [GeneratedRegex(pattern: @"//[^\n]*")]
     private static partial Regex LineCommentPattern();
-    [GeneratedRegex(pattern: @"float4 runBase = skyBase.Load\(tap\);\s*if \(runBase.a <= 0.0\) \{\s*continue;\s*\}\s*weight \*= runBase.a;")]
+    [GeneratedRegex(pattern: @"float4 runBase = skyBase.Load\(tap\);\s*puckCountDetail\(0u, 0u, 0u, 0u, 0u, 1u\);\s*if \(runBase.a <= 0.0\) \{\s*continue;\s*\}\s*weight \*= runBase.a;")]
     private static partial Regex ValidTapPattern();
     [GeneratedRegex(pattern: @"\bsdfSkyGradient\(")]
     private static partial Regex GradientCallPattern();
-    [GeneratedRegex(pattern: @"\bsdfSkyGradient\([^;]+;\s*evaluations \+= 1u;")]
-    private static partial Regex CountedGradientPattern();
-    [GeneratedRegex(pattern: @"\bevaluations\s*=[^;]+;")]
-    private static partial Regex CounterAssignmentPattern();
 }

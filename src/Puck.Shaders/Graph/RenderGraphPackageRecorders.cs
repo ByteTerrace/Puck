@@ -59,7 +59,10 @@ public readonly record struct RenderGraphPackageResource(string Version, ShaderP
 /// or reading it, including through held consumer outputs.
 /// It moves only while the instance is parked, so a recording whose output depends on its preceding renders starts anew
 /// when it differs from its preceding render's.</param>
-public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0, uint RenderWidth = 0, uint RenderHeight = 0, long UnreadFrames = 0) {
+/// <param name="WorkDetailRow">The first named detail row in WorkCounters, or zero when none.</param>
+public readonly ref struct RenderGraphPackageRecording(nint CommandBuffer, IGpuRecorder Recorder, int Slot, uint Width, uint Height, ReadOnlySpan<RenderGraphPackageResource> Inputs, ReadOnlySpan<RenderGraphPackageResource> Outputs, Span<byte> PassBlock, LeaseRetireList Leases, FrameContext Context, bool MayStandIn, IGpuBuffer? Arguments = null, RenderGraphExternalReads? Reads = null, GpuKernelCounterRow? WorkCounters = null, uint FrameWidth = 0, uint FrameHeight = 0, uint RenderWidth = 0, uint RenderHeight = 0, long UnreadFrames = 0, uint WorkDetailRow = 0) {
+    /// <summary>Gets the first named detail row, or zero for no details.</summary>
+    public uint WorkDetailRow { get; } = WorkDetailRow;
     /// <summary>Gets the command buffer to record into.</summary>
     public nint CommandBuffer { get; } = CommandBuffer;
     /// <summary>Gets the instance's counting recorder.</summary>
@@ -116,6 +119,11 @@ public enum RenderGraphPackageOutcome : byte {
 /// disposes it with that graph: when a replacement retires it, on device loss and at disposal, always after the
 /// submissions that recorded it are done with and before the device it recorded on is released.</summary>
 public interface IRenderGraphPackageRecorder : IDisposable {
+    /// <summary>Returns the ordered, grow-only labels its kernels count into this frame, excluding the reserved
+    /// plain remainder. Once a label appears, its index is retained until this recorder is disposed.</summary>
+    /// <param name="context">The frame being prepared, before any pass records.</param>
+    /// <returns>The named detail labels in kernel index order.</returns>
+    IReadOnlyList<string> WorkDetails(in FrameContext context) => [];
     /// <summary>Records the pass's work for one frame. It must not submit, wait, create a pipeline or record a barrier:
     /// the instance submits the command buffer with the rest of its frame, the pipelines were built off the frame thread
     /// (<see cref="IRenderGraphPackageFactory.BuildAsync"/>), and the planned barriers the instance recorded before it left

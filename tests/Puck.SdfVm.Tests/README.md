@@ -6,6 +6,10 @@ deterministic follower helpers in `Puck.SdfVm`.
 These tests exercise CPU-side contracts and packed data; GPU parity and live
 world rendering use the rendering workflow.
 
+`SdfWorkDetailLawTests` holds sky and shadow labels to the packed detail row
+address and checks that sky evaluations, hashes and texture loads count beside
+their kernel operations. Device execution remains with the GPU counter gates.
+
 ## Verification
 
 ```powershell

@@ -1055,27 +1055,35 @@ These are one-line cautions; the owning pages hold the derivations.
   added by the first active lane) for a compute kernel and
   `puckCountFragmentWork` (the same over the lanes that are not helper lanes)
   for a fragment stage, laid out from `GpuKernelCounters`' constants. Every
-  other generated include, a document pass's among them, declares the same two
+  other generated include, a document pass's among them, declares the same
   functions empty, so a kernel counts unguarded and a package's kernel compiles
   as a document pass naming its source; never guard a count with a macro.
   `DocumentPassPackageKernelLawTests` compiles every package kernel that way.
   Its node keeps
   `GpuKernelCounters`: per frame slot a device-local counter
-  buffer and a readback buffer (`IGpuBufferFactory.CreateReadback`), one row a
-  planned pass. The node records the clear and its barrier ahead of the first
+  buffer and a readback buffer (`IGpuBufferFactory.CreateReadback`), rows for
+  planned passes and their grow-only named details (`IRenderGraphPackageRecorder.WorkDetails`).
+  A completed frame slot grows through `EnsureRows` before its next clear,
+  under the node's peak memory budget. Detail indices stay in their recorder's
+  order; a detailed pass's `plain` row holds CPU and kernel work outside its
+  named details. The ledger sums plain and named rows once at completion,
+  retaining that submission's label snapshot. The node records the clear and its barrier ahead of the first
   pass, and behind the last the barrier from the compute and fragment stages,
   the copy (`IGpuRecorder.CopyBuffer`) and the barrier to the host
   (`GpuStage.Host`, `GpuAccess.HostRead`), outside every pass, and names the
   slot to its ledger (`GpuWorkLedger.ReadOnCompletion`), which adds each row to
-  its pass as `gpu.march.steps` and `gpu.texels.written` once the submission
+  its pass as the kinds in `GpuWork.KernelKinds`, including sky evaluations,
+  hashes and texture loads, once the submission
   completes. A package pass that skips the frame is counted skipped
   (`GpuWorkLedger.SkipPass`), never executed with zeros. A
   recording gets its row in `RenderGraphPackageRecording.WorkCounters`; a
   package recorder writes it through `RenderGraphPackageWorkCounters`, which
   binds the buffer at `workCounters` and writes the row into the pass
-  block (`workCounterRow`), and every SDF compute kernel ends with
+  block (`workCounterRow`, and `workCounterDetailRow` for named rows), and SDF compute kernels end with
   `puckCountWork(sdfWorkSteps, sdfWorkTexels)` (`frame/sdf-work.hlsli`), after
-  every lane that did work. A new march, query or volume sample adds to
+  every lane that did work. A shadow uses `puckCountDetail` for its slot, and sky
+  layers count evaluations, hashes and field-run loads at their own operations.
+  A new march, query or volume sample adds to
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
   counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
   and `SdfWorkCountingLawTests` hold both. Vulkan devices are created with

@@ -12,7 +12,7 @@ namespace Puck.Abstractions.Tests;
 /// builder with room for the text allocates nothing.
 /// </summary>
 public sealed class GpuWorkReportLawTests {
-    private const string Columns = " dispatches={0} dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants={1} descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0";
+    private const string Columns = " dispatches={0} dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants={1} descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0 sky.hashes=0 sky.texture-loads=0";
 
     [Fact]
     public void ASampleWritesItsSubmissionEveryPassAndTheOutsideRow() {
@@ -107,9 +107,9 @@ public sealed class GpuWorkReportLawTests {
         Assert.Equal(
             expected: string.Concat(
                 "{\"name\":\"world\",\"sample\":{\"submission\":1,\"revision\":7,\"passes\":[",
-                $"{{\"label\":\"alpha\",\"class\":\"per-backend-deterministic\",\"state\":\"executed\",\"counts\":{{\"gpu.dispatches\":2,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":0,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0,\"gpu.copies\":0,\"gpu.march.steps\":0,\"gpu.texels.written\":0,\"gpu.copies.buffer-bytes\":0,\"gpu.sky.evaluations\":0}}}},",
-                "{\"label\":\"beta\",\"class\":\"deterministic\",\"state\":\"skipped\"},{\"label\":\"gamma\",\"class\":\"deterministic\",\"state\":\"not-reached\"}],",
-                $"\"outside\":{{\"gpu.dispatches\":0,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":8,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0,\"gpu.copies\":0,\"gpu.march.steps\":0,\"gpu.texels.written\":0,\"gpu.copies.buffer-bytes\":0,\"gpu.sky.evaluations\":0}}}},",
+                $"{{\"label\":\"alpha\",\"class\":\"per-backend-deterministic\",\"state\":\"executed\",\"details\":[],\"counts\":{{\"gpu.dispatches\":2,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":0,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0,\"gpu.copies\":0,\"gpu.march.steps\":0,\"gpu.texels.written\":0,\"gpu.copies.buffer-bytes\":0,\"gpu.sky.evaluations\":0,\"gpu.sky.hashes\":0,\"gpu.sky.texture-loads\":0}}}},",
+                "{\"label\":\"beta\",\"class\":\"deterministic\",\"state\":\"skipped\",\"details\":[]},{\"label\":\"gamma\",\"class\":\"deterministic\",\"state\":\"not-reached\",\"details\":[]}],",
+                $"\"outside\":{{\"gpu.dispatches\":0,\"gpu.dispatches.indirect\":0,{Zeros},\"gpu.push-constants\":8,\"gpu.descriptor-writes\":0,\"gpu.uploads.host-visible\":0,\"gpu.clears\":0,\"gpu.copies\":0,\"gpu.march.steps\":0,\"gpu.texels.written\":0,\"gpu.copies.buffer-bytes\":0,\"gpu.sky.evaluations\":0,\"gpu.sky.hashes\":0,\"gpu.sky.texture-loads\":0}}}},",
                 "\"lifetime\":{\"gpu.created.pipelines\":0,\"gpu.created.shader-modules\":1,\"gpu.created.images\":0,\"gpu.created.buffers\":0,\"gpu.created.descriptor-pools\":0,\"gpu.created.descriptor-sets\":0,\"gpu.created.timestamp-pools\":0},\"owned-bytes\":4096}"
             ),
             actual: Encoding.UTF8.GetString(bytes: buffer.WrittenSpan)

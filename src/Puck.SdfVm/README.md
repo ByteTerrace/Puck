@@ -96,7 +96,10 @@ pixels and resampling them otherwise. The residency counts its upload as three
 passes, `fillers`, `bricks` and `upload` (`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
 counts the view's passes as `sdf.world$mask` through `sdf.world$composite`, their
-kernels' march steps, texels written and sky evaluations among them. The views
+kernels' march steps, texels written and sky evaluations, hashes and texture
+loads among them. The sky and composite expose per-layer detail rows, and the
+shadow exposes its slot; the ledger reconciles these with the plain remainder
+into each pass's totals. The views
 kernel ships in three compiled variants
 (`SdfViewsKernelVariant.Full`/`.Folds`/`.CoreOps`). Folds strips heavy operations;
 CoreOps also strips the remaining exotic cases. The program selects the smallest

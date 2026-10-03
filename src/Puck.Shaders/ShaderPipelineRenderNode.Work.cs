@@ -87,6 +87,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         WriteFrameGroup(slot: slot);
 
         try {
+            PrepareWorkDetails(context: in context, counters: counters, slot: slot);
             counters?.RecordClear(
                 commandBuffer: command,
                 recorder: m_gpu.Recorder,

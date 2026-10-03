@@ -6,7 +6,7 @@ namespace Puck.Shaders.Tests;
 /// <summary>
 /// An interface declaring the work counters (<see cref="ShaderWorkCounters"/>) generates the functions its kernels count
 /// their own work through, laid out as <see cref="GpuKernelCounters"/> reads the rows back; an interface declaring neither
-/// or only one of the two members declares the same functions empty, so a counting kernel compiles under it and counts
+/// or an incomplete set of members declares the same functions empty, so a counting kernel compiles under it and counts
 /// nothing. Every interface whose passes count their kernels' work declares them: the SDF
 /// engine's compute passes and mesh pass, and the placement pass.
 /// </summary>
@@ -35,7 +35,7 @@ public sealed class ShaderWorkCountersLawTests {
         Assert.Contains(actualString: generated, expectedSubstring: $"uint {ShaderWorkCounters.Row};");
         Assert.Equal(
             actual: GpuWork.KernelKinds.ToArray(),
-            expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations]
+            expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations, GpuWork.SkyHashes, GpuWork.SkyTextureLoads]
         );
     }
     [Fact]
@@ -60,5 +60,18 @@ public sealed class ShaderWorkCountersLawTests {
         Assert.True(condition: RenderGraphPackageCatalog.Engine.TryGet(id: RenderGraphPackageCatalog.Place, package: out var place));
         Assert.True(condition: place.CountsKernelWork);
         Assert.True(condition: ShaderWorkCounters.Members.All(predicate: member => place.Members.Contains(value: member)));
+    }
+    [Fact]
+    public void NamedRowsUseEveryKernelColumnAndTheSameAtomicCarryAsPlainRows() {
+        var generated = ShaderInterfaceHlsl.Generate(shaderInterface: Interface(members: [.. ShaderWorkCounters.Members]));
+
+        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkRowWords = 10u;");
+        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyHashesWord = 6u;");
+        Assert.Contains(actualString: generated, expectedSubstring: "static const uint PuckWorkSkyTextureLoadsWord = 8u;");
+        Assert.Contains(actualString: generated, expectedSubstring: "uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);");
+        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkSkyHashesWord), hashes);");
+        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);");
+        Assert.Contains(actualString: generated, expectedSubstring: "if (before > (0xFFFFFFFFu - amount))");
+        Assert.Contains(actualString: generated, expectedSubstring: "InterlockedAdd(workCounters[word + 1u], 1u);");
     }
 }

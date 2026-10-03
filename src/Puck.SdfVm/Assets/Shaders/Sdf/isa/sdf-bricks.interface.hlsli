@@ -45,6 +45,8 @@ void puckCountWork(uint steps, uint texels) {
 }
 void puckCountSky(uint evaluations) {
 }
+void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
+}
 void puckCountFragmentWork(uint steps, uint texels) {
 }
 

@@ -137,6 +137,10 @@ public sealed partial class ShaderPipelineRenderNode {
         // (ShaderPipelinePlan.CountsKernelWork) and null on every other.
         public GpuKernelCounters? KernelCounters;
 
+        public IReadOnlyList<string> WorkDetails = [];
+
+        public uint WorkDetailRow;
+
         public bool Grouped => (PortBindings is not null);
 
         // Why a package pass's outputs cannot stand for its inputs when it draws nothing, or null when they can.

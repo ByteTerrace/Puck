@@ -1,4 +1,4 @@
-// Generated from shader interface 'source-nv12' (sha256/5605a8ab0ad1c25c2771e952194dd6b4cfaa534ba4d8530ab3481410e07ef459). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'source-nv12' (sha256/f75e837f426cdadd78284e0ec85e4311b92e7950316542b6ad745b5625b7ee5b). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SOURCE_NV12
 #define PUCK_SHADER_INTERFACE_SOURCE_NV12
 
@@ -28,7 +28,8 @@ struct SourceNv12Frame {
 struct SourceNv12Pass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] float paperWhiteNits;
-    [[vk::offset(12)]] uint workCounterRow;
+    [[vk::offset(12)]] uint workCounterDetailRow;
+    [[vk::offset(16)]] uint workCounterRow;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SourceNv12Pass> passGroup : register(b0, space3);
 [[vk::binding(1, 3)]] ByteAddressBuffer region : register(t1, space3);
@@ -36,13 +37,15 @@ struct SourceNv12Pass {
 [[vk::binding(3, 3)]] RWStructuredBuffer<uint> workCounters : register(u3, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, then sky evaluations, as a
+// back): each counted kind in GpuWork.KernelKinds order, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 6u;
+static const uint PuckWorkRowWords = 10u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
+static const uint PuckWorkSkyHashesWord = 6u;
+static const uint PuckWorkSkyTextureLoadsWord = 8u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -77,6 +80,19 @@ void puckCountSky(uint evaluations) {
     if (WaveIsFirstLane()) {
         puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
     }
+}
+// Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
+// Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
+void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
+    if (passGroup.workCounterDetailRow == 0u) {
+        return;
+    }
+    uint row = ((passGroup.workCounterDetailRow + detail) * PuckWorkRowWords);
+    puckAddWork((row + PuckWorkStepsWord), steps);
+    puckAddWork((row + PuckWorkTexelsWord), texels);
+    puckAddWork((row + PuckWorkSkyWord), evaluations);
+    puckAddWork((row + PuckWorkSkyHashesWord), hashes);
+    puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
 }
 // Adds a fragment's march steps and texels written to its pass's row: the wave sums its lanes that are not helper
 // lanes, and the first of them adds each sum. A helper lane counts nothing and never adds, whether or not the
