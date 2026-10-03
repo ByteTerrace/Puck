@@ -3,7 +3,7 @@
     "scenarios": [
         {
             "name": "body-dynamics",
-            "world": "../Puck.World.Canaries/body-dynamics/fixture.world.json",
+            "world": "../Puck.World.Canaries/body-dynamics/fixture.puck",
             "ticks": 240,
             "seats": [0],
             "intents": [
