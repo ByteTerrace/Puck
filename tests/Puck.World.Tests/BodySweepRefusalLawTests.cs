@@ -142,7 +142,7 @@ public sealed class BodySweepRefusalLawTests {
 
         Assert.NotEqual(actual: secondBefore, expected: firstBefore);
         _ = Assert.Single(collection: first.CaptureTransferState().TapeIntents);
-        Assert.Equal(expected: 3, actual: second.CaptureTransferState().TapeIntents.Length);
+        Assert.Equal(expected: 3, actual: second.CaptureTransferState().TapeIntents.Count);
 
         for (var tick = 0; (tick < 2); tick++) {
             fixture.Step();
