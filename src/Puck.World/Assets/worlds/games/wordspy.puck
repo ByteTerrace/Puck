@@ -23,7 +23,7 @@
 // vector, its key-card identity and its reveal state under one key.
 //
 // This is a module fragment, not a bootable world: a host supplies the four
-// seats. tests/Puck.World.Tests/Fixtures/minimal-wordspy-host.world.json is
+// seats. tests/Puck.World.Tests/Fixtures/minimal-wordspy-host.puck is
 // that host.
 //
 // The array order is the schedule. Every pending flag is consumed by a rule

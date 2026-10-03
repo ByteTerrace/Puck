@@ -759,7 +759,7 @@ conceding side serves, the points alternate and the recorded game ends 11-10 wit
 [wordspy.puck](wordspy.puck) is a module fragment, not a bootable world: a
 5x5 word grid, a key card the two spymasters alone may read, and the rules for
 touching cards.
-[minimal-wordspy-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-wordspy-host.world.json)
+[minimal-wordspy-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-wordspy-host.puck)
 is the smallest host that completes it—four local seats and nothing else, since
 this module reads no channel and owns no placement. The seats are the four
 roles: 1 red spymaster, 2 red guesser, 3 blue spymaster, 4 blue guesser.

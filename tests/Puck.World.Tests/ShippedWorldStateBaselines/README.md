@@ -122,7 +122,7 @@ with — optionally adding rows a sibling district would have supplied
 | spider | `games/spider.puck` | spliced | 810 | yes |
 | tetromino | `games/tetromino.puck` | document | 130 | yes |
 | tictactoe | `games/tictactoe.puck` | fixture `twin-tictactoe-host.world.json` | 600 | yes |
-| wordspy | `games/wordspy.puck` | fixture `minimal-wordspy-host.world.json` | 162 | yes |
+| wordspy | `games/wordspy.puck` | fixture `minimal-wordspy-host.puck` | 162 | yes |
 
 "Moves state" is asserted both ways: a sequence declared to move the world-scope
 state hash must move it, and one declared not to must leave it exactly as it
