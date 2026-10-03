@@ -106,11 +106,11 @@ public sealed class StateAddressingBaselineLawTests(ITestOutputHelper output) {
         // Compound contact selection retains sub-millimetre corrections at raw precision; pose hashes pin that result.
         Assert.Equal(
             actual: hash31,
-            expected: 0x30ca3bd4f821436eUL
+            expected: 0x596f7845a42145b1UL
         );
         Assert.Equal(
             actual: hash151,
-            expected: 0x3c01dc7f46b6561cUL
+            expected: 0x133a019175db6441UL
         );
         Assert.True(condition: (fixedLiteralCellOps > 0));
     }

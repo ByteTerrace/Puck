@@ -21,7 +21,7 @@ public sealed partial class WorldDocument {
     // what was reset to"). Set at construction (the boot document), replaced by Compact (world.save — "the last
     // world.save") and by ApplyRebuild's Load/Reload arm (a new base replaces the old one, exactly like a swap
     // always has). Reset itself never writes this: reset targets the base WITHOUT moving it.
-    private string m_baseOrigin = "the boot document";
+    private WorldBaseOrigin m_baseOrigin = WorldBaseOrigin.Boot;
 
     private WorldDefinition m_base;
     private WorldDefinition m_definition;
@@ -42,9 +42,10 @@ public sealed partial class WorldDocument {
 
     /// <summary>Gets the loaded base definition the journal is an edit history over.</summary>
     internal WorldDefinition Base => m_base;
-    /// <summary>Gets a human-readable description of the base's origin — the completion echo names what a reset
-    /// targets.</summary>
-    internal string BaseOrigin => m_baseOrigin;
+
+    /// <summary>Gets where the journal base came from — what a reset lands on, as its completion echo names it.</summary>
+    public WorldBaseOrigin BaseOrigin => m_baseOrigin;
+
     /// <summary>Gets the live world definition, swapped in place as buffered edits apply.</summary>
     internal WorldDefinition Definition => m_definition;
     /// <summary>Gets the install ordinal of the live definition within this activation: zero for the boot document,
@@ -68,11 +69,6 @@ public sealed partial class WorldDocument {
     internal string? LastMutationFailureDetail {
         get => m_lastMutationFailureDetail;
         set => m_lastMutationFailureDetail = value;
-    }
-    /// <summary>Gets or sets whether a definition delivery is pending for the next step.</summary>
-    internal bool PendingDefinitionDelivery {
-        get => m_pendingDefinitionDelivery;
-        set => m_pendingDefinitionDelivery = value;
     }
     /// <summary>Gets the buffered live-edit ops, drained FIFO at the step boundary before intents.</summary>
     internal Queue<WorldPendingOp> Pending => m_pending;
@@ -100,7 +96,7 @@ public sealed partial class WorldDocument {
     /// <summary>Replaces the journal base and names its new origin, without touching the live definition.</summary>
     /// <param name="definition">The new base.</param>
     /// <param name="origin">A human-readable description of where it came from.</param>
-    internal void AdoptBase(WorldDefinition definition, string origin) {
+    internal void AdoptBase(WorldDefinition definition, WorldBaseOrigin origin) {
         m_base = definition;
         m_baseOrigin = origin;
     }
@@ -121,7 +117,7 @@ public sealed partial class WorldDocument {
     /// <summary>Compacts the journal: the live definition becomes the new base and the edit history is cleared.</summary>
     internal void Compact() {
         m_base = m_definition;
-        m_baseOrigin = "the last world.save";
+        m_baseOrigin = new WorldBaseOrigin(Kind: WorldBaseOriginKind.Save);
         m_journal.Clear();
     }
     /// <summary>Restores the solid field and its revision verbatim from a checkpoint.</summary>

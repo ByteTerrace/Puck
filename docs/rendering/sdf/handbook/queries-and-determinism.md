@@ -177,6 +177,126 @@ an unproven gap and later claim the sweep was clear. For the same reason,
 hierarchical position into Q48.16; failure to represent a sample is not proof
 that a placement is clear.
 
+## Certified bounds over a region
+
+A sampled query answers about the points it sampled. `SdfFieldEvaluator` also
+answers about a whole region, by proof. `TryDistanceBounds` takes a box and
+returns a `FixedInterval` (`Puck.Maths`) that holds the field at every point of
+the box. It holds both the exact field of the program's fixed-point constants
+and every `TryDistance` answer there. It is a third reading of the same
+compiled stream, rule for rule:
+- each point step is a faithful rounding of an exact expression;
+- each rule encloses that expression over the box with outward rounding;
+- where the point code branches, the bounds take every branch the box reaches.
+
+Every shape and op the point evaluator accepts has a rule. Two enclose rather
+than mirror:
+- A `Superellipsoid` at an exponent other than 2 raises through the interval
+  power `FixedInterval.Pow`. Its ratios are clamped to [0, 1], and the largest
+  axis's power is exactly one, so the sum is taken as at least one.
+- A `Sweep` finds its closest parameter by a sample-and-refine search a box
+  cannot follow, so its rule holds every parameter the search could pick. The
+  lower bound is the distance to the curve's whole hull less the largest
+  radius and the margin. The upper bound is the distance to the curve's start,
+  the search's first candidate, which it leaves only for a nearer point. That
+  is sound and loose: a sweep's bounds are wide, never wrong.
+
+A shape without a rule would answer `FixedInterval.Entire`, never an
+approximation, so it could only shrink the frame below.
+
+No step of an evaluation leaves the carrier unseen. An interval whose exact
+hull leaves the carrier is the unbounded `FixedInterval.Entire`, and every
+interval operation given it answers it. So a bounded result proves that no step
+overflowed. The evaluator uses that proof once, at construction, to find its
+**frame** (`Frame`): the widest power-of-two cube about the origin over which
+the whole program's bounds stay bounded.
+- Inside the frame, every point step's value lies inside a bounded interval, so
+  no point step can wrap.
+- Outside it, `TryDistance` refuses the position rather than wrapping it into a
+  wrong answer, and `TryDistanceBounds` refuses any box reaching past it.
+- A program that overflows everywhere (dilated by the carrier's whole range,
+  say) has a negative frame and answers nowhere.
+- Typical programs reach 2⁶⁰ raws or more. A polygon's or trapezoid's squared
+  distance leaves the carrier near 2³⁹ raws, so its frame is a few million
+  units. A sweep's search compares squared distances too, so its frame is about
+  2²² units.
+
+Every point answer therefore lies inside its box's bounds, or both refuse. Every
+instruction joins the proof, so adding an instruction to a program can only
+shrink its frame.
+
+A bounds query pays only for what its box can reach. The walk skips a hard-union
+instance whose bound sphere lies, from every point of the box, at or beyond the
+running interval's upper end: the box form of `TryDistance`'s own instance cull,
+resting on the same sphere containment. A box near one object of many walks a
+fraction of the program, and the overload taking `instructionsWalked` reports
+the instructions it visited. A rotation reads each coordinate once per axis:
+the exact rotation is linear in the point, so its enclosure is that matrix over
+the box, widened by the four raws the point code's two rounded stages can miss
+it by, and met with the step-by-step enclosure. The matrix assumes neither
+stage wraps, and a stage can leave the carrier while the rotated point stays
+inside it, so the two meet only where the step-by-step enclosure is bounded,
+which proves both stages representable; where it is not, the rotation is
+unbounded and the frame stops short of it. A half turn, which the creation
+emitter writes, then bounds a box as tightly as the unrotated program bounds the
+box's image, where the step-by-step enclosure alone triples its width.
+
+Two certified queries are built on it:
+- **`TryCertifiedSweep`** moves a sphere along a displacement by conservative
+  advancement. Each step is the certified clearance times the field's step
+  scale (the inverse of its Lipschitz bound), and the step's whole segment is
+  then proved clear by one bounds query over its box expanded by the radius,
+  with a positive lower field bound throughout. The centre's field alone cannot
+  prove a sphere clear when the field's gradient exceeds one. A sphere swept
+  this way never passes through a surface, however thin the surface or however
+  long the step. A step that only
+  samples the field at its ends tunnels through such a surface.
+  The fraction it returns is a `UnitInterval32` on the 2⁻³² grid it advances
+  on, never rounded coarser, so two sweeps of one displacement compare by how
+  far each proved.
+  If the initial sphere cannot be proved clear, the result is `Contact` at zero
+  travel with the original centre. A box whose bounds are unbounded (it reaches
+  past the frame) proves nothing, so the sweep stops `Exhausted` there, never
+  `Clear` and never `Contact`.
+  A positive contact tolerance ends the sweep in `Contact` once the proved
+  clearance is that small. Conservative advancement nears a face ever more
+  slowly, so without one a body pressed against a wall spends its whole budget
+  on the last sliver every tick.
+- **`TryCertifiedLineOfSight`** splits a segment into boxes until each is proved
+  clear, or a point of it is proved inside. Anything it cannot prove within its
+  budget is `Undecided`, and so is a segment reaching past the frame.
+
+Both take a bounds-query budget and report the queries they spent, each one
+walk of the program over one box, so a caller counts its cost. A run under a
+smaller budget is a prefix of the run under a larger one. A cut-short sweep keeps
+the ground it proved, and a cut-short line of sight is `Undecided`. A line of
+sight also has a ceiling whatever its budget,
+`CertifiedLineOfSightMaximumBoundsQueries` (2·(2¹⁷ − 1)). The segment splits
+on the Q16 grid of its own length, so no piece lies deeper than sixteen
+halvings, and each costs at most two queries.
+
+The sweep is written once, as `CertifiedFieldSweep`, over the `IFieldBounds`
+seam in `Puck.Maths`: a step scale and a bounds query over a box.
+`SdfFieldEvaluator` implements it, and so can any field that encloses its own
+answers over a box. `FieldBoundsUnion` encloses the lesser of two fields and
+refuses a box either part refuses, so a body is swept clear of a program and a
+field lattice at once. The seam's `ICertifiedSweepQuery`, `CertifiedSweep` and
+`CertifiedSweepOutcome` are what a consumer, such as the physics contact solver,
+reads.
+
+`SdfFieldBoundsLawTests` sweeps every op, shape and blend's point answers
+through boxes against the bounds, and holds the bounds interpreter's rule sets
+to the point interpreter's. `SdfCertifiedQueryLawTests` holds the sweep to a
+thin wall at speeds up to 100,000 units a step, with the fixed-step stepper as
+the red leg, and holds a contact tolerance to ending the approach in a few
+queries just off the face, and a large clearance times a large step scale to
+proposing the whole step. `SdfBoundsTightnessLawTests` holds a half turn's
+bounds to the unrotated program's over the box's image, and the box cull to
+walking under half of a twelve-object row while still enclosing every point
+answer. `SdfFieldOverflowLawTests` sweeps programs whose constants and
+positions reach the carrier's ends, and holds every point answer inside its
+bounds or both refusing.
+
 ## What determinism means here
 
 Puck's determinism contract is a single sentence: **display is a pure function

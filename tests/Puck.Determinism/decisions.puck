@@ -1,0 +1,28 @@
+// One reconsidered choice between two scored options over a level the scenario's cell writes push around, so the
+// decision runtime (selection, commitment and its draw stream) moves on its own period through the whole run.
+
+schema: "puck.world.definition.v1"
+
+rule "steer-level" {
+  decision {
+    periodSeconds: 0.25s
+    commitmentSeconds: 0.5s
+    seed: 7
+    option "raise" {
+      when level < 4
+      score: 1.0
+      level += 1
+    }
+    option "lower" {
+      when level > 0
+      score: 0.5
+      level = level - 1
+    }
+  }
+}
+
+state {
+  world {
+    slot level = 0 bounds(0..4)
+  }
+}

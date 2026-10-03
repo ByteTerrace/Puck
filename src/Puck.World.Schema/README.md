@@ -990,8 +990,9 @@ of `player.bind` and `player.bindings` documents the console surface.
 
 `WorldHud.cs` holds the `hud` section: panels of elements, each element bound
 to a value through `HudBindingVocabulary`—a closed vocabulary (`world.tick`,
-`world.fps`, `seat.<n>.position.*`, `population.active`, `state.<row>`,
-`state.<row>.<key>`), refused by name outside it—and each panel carrying its
+`world.fps`, `seat.<n>.position.*`, `population.active`, `history.cursor`,
+`history.window`, `state.<row>`, `state.<row>.<key>`), refused by name outside
+it—and each panel carrying its
 draw band (`WorldHudLayer`: under, over, or replace) as a document property.
 `state.<row>` binds the row's own SLOT cell (unchanged); `state.<row>.<key>`
 binds one named cell in ANY row shape, with a gauge's fraction still read from
@@ -1513,7 +1514,9 @@ since a slot's one cell has no separate default of its own to override.
 Timing state — the epoch, a dynamics follower's sampled position/velocity, a
 cycle's carried substep remainder — lives on the CELL, in `clock`
 (`StateCellClock`, `{epochTick?, epochEngineTick?, y0?, v0?, substepTicks?}`,
-every field optional), never on the trait: a key a write mints later starts
+every field optional, a zero field left out, and the same form wherever a
+clock travels: a row's cell, a pool value, a disclosed observation), never on
+the trait: a key a write mints later starts
 its own clock from the tick (and engine tick) it was created, and a slot
 row's timing state is authored as a `clock` object beside its bare `value`
 sugar. The two epochs are independent: `epochTick` is a simulation tick, read
@@ -3071,7 +3074,13 @@ carries the projection's `observations` into the hydrated document as plain
 rows as state. A disclosed vector row names its space, and the projection's
 `spaces` carries the declaration of every space a disclosed vector row names (a
 model, a revision, and a dimension count) and no other, so the row hydrates as a
-vector row of that space.
+vector row of that space. The projection's `timeline` carries the tick clocks and,
+for each state clock a carried value keys on, an anchored clock holding a
+`WorldClockAnchor` in place of the row; `WorldClockAnchorLedger` and
+`WorldProjectionFeed` keep one recipient's anchors and deltas, and
+`WorldProjectionHold` is the receiving half. The
+[worlds manual](../../docs/architecture/worlds.md#observation-and-display) states
+the anchor rule.
 
 `WorldCounterpartAttestation` is a neighbour's statement of its seam edges plus
 the five `WorldOverlapTerms` the overlap derivation reads from its side.
@@ -3087,9 +3096,16 @@ corner (`WorldDefinitionValidator.ValidateDerivedAdjacencyCorners`) names a
 third authority, so it accepts only `Resolved` or `VerifiedAttested`—never a
 plain `Attested` outcome, which proves an ordinary two-document adjacency only.
 
-`WorldIdentityProjection` (`WorldIdentity.cs`) is what an identity discloses
-when it walks into another authority: id, name, colour, and the two motion
-rates. `WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
+`WorldIdentityProjection` (`WorldIdentity.cs`) is everything an identity
+discloses when it walks into another authority: id, name, colour, the two
+motion rates, the records `identity.records` selects, and the facts row
+(`WorldIdentityFacts.Validate` admits a carried one). An empty row preserves
+the owner's authored row name and capacity before its first fact. An identity rebuilt from
+it (`WorldIdentity.FromProjection`) has no document; its records and facts are
+its travelling state, and `WorldIdentity.TryAdopt` folds them back into the
+owned identity on a durable colocated home arrival. Remote home adoption is
+deferred because a remote incarnation claim is unauthenticated.
+`WorldObserverDisclosure` (`bodies.disclosure`) is the per-observer
 snapshot policy—the record lives here (document data); the evaluation over a
 live `EntitySnapshot` (`WorldObserverDisclosureEvaluation.Discloses`) lives in
 `Puck.World.Protocol`, since it operates on the wire snapshot shape. Its

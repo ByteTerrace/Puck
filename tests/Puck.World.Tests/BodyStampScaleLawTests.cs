@@ -74,7 +74,7 @@ public sealed class BodyStampScaleLawTests {
             Tick: 1UL
         ));
 
-        var emitter = new WorldSessionSceneEmitter(
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: session
         );

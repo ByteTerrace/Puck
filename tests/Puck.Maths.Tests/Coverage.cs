@@ -498,6 +498,58 @@ internal static class Coverage {
             Name: "TryFieldGradient",
             Type: typeof(IFieldEvaluator)
         ), FieldSeamReason),
+        // The certified-bounds seam: the region reading of a field and the sweep built on it, declared here so a field
+        // provider and the body solver that proves motion with it sit in libraries that never reference each other.
+        // SdfFieldEvaluator, FieldLatticeSolid and FieldBoundsUnion provide them, gated at tests/Puck.SignedDistance.Tests
+        // and tests/Puck.Physics.Tests; CertifiedSweep and CertifiedSweepOutcome are the carriers the sweep hands back.
+        (new CoverRef(
+            Name: "StepScale",
+            Type: typeof(IFieldBounds)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "TryDistanceBounds",
+            Type: typeof(IFieldBounds)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: "TryCertifiedSweep",
+            Type: typeof(ICertifiedSweepQuery)
+        ), FieldSeamReason),
+        (new CoverRef(
+            Name: ".ctor",
+            Type: typeof(CertifiedSweep)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "BoundsQueries",
+            Type: typeof(CertifiedSweep)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Fraction",
+            Type: typeof(CertifiedSweep)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Outcome",
+            Type: typeof(CertifiedSweep)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Reached",
+            Type: typeof(CertifiedSweep)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Clear",
+            Type: typeof(CertifiedSweepOutcome)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Contact",
+            Type: typeof(CertifiedSweepOutcome)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "Exhausted",
+            Type: typeof(CertifiedSweepOutcome)
+        ), FieldSeamCarrierReason),
+        (new CoverRef(
+            Name: "value__",
+            Type: typeof(CertifiedSweepOutcome)
+        ), EnumStorageReason),
         (new CoverRef(
             Name: ".ctor",
             Type: typeof(FieldEvaluatorCapabilities)

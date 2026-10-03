@@ -156,7 +156,7 @@ public sealed class DeferredVerbAnswerLawTests {
         }
 
         Assert.True(condition: answered.IsError);
-        Assert.Contains(actualString: answered.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "world.transport.codec_refused");
+        Assert.Contains(actualString: answered.Output, comparisonType: StringComparison.Ordinal, expectedSubstring: "world.transport.codec-refused");
         Assert.DoesNotContain(actualString: captured.ToString(), comparisonType: StringComparison.Ordinal, expectedSubstring: "codec refused");
     }
     /// <summary>The control: a submission whose caller takes no verdict has no answer, so stderr is its one report.</summary>

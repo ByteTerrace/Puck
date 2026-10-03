@@ -58,6 +58,20 @@ whose command no longer breaks its rule, until the row is deleted.
 10. **Startup is cheap.** `puck --help` and `puck <verb> --help` load no Roslyn
     (`Microsoft.CodeAnalysis*`), no MSBuild, no BenchmarkDotNet, and no GPU
     assembly; the law counts the assemblies help loads.
+11. **A run directory outlives only a failure.** A verb that needs scratch space
+    for one run (canary legs and packages, parity, counters, test, qualify,
+    docs citations, affected `--record`, firmware, `compile --check`, the
+    formatter's closure evaluation, the NuGet smoke install) creates a uniquely
+    named `puck-<verb>-…` directory under the temporary directory through one
+    policy, `RunDirectory` (`build/RunDirectory.cs`). A run that passes deletes
+    it. A run that fails, or stops before it reaches a verdict, keeps it and
+    prints `run directory kept: <absolute path>` on standard error, so the
+    evidence survives. The first directory a process creates under a prefix
+    deletes that prefix's directories older than six hours, which is how a
+    killed run's leftovers and old kept evidence go away. A directory that holds
+    no evidence or holds credentials (release staging, the bench state root) is
+    deleted however the run ends. A directory the caller names (`--keep`,
+    `--output`, `--out-dir`) is the caller's and is never deleted.
 
 ## Verbs
 
@@ -80,6 +94,8 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck creation`](#puck-creationcode-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
 | [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror; optionally resolves companion vector locks with `--embeddings`. |
+| [`puck derivations`](#puck-derivationscode-provenance-keys) | generate or check bake fingerprints from their transitive source dependencies, and list the reach by assembly. |
+| [`puck determinism`](#puck-determinismcross-host-determinism-attestation) | boots the scenarios of a determinism manifest headless in-process and records per-tick, per-system state hashes and document-level hashes into a strict stream; `determinism compare` names the first tick and system, or document hash, where two hosts' streams differ. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
 | [`puck embed`](#the-puck-dsl-verbs) | resolves authored `embed(...)` text into committed `.embeddings.json` lock files, or probes cosine similarity rankings. |
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
@@ -216,7 +232,8 @@ Each image uses its lowercase revision name, such as `dmg0.bin` or `cgbd.bin`.
 The AGB command builds the maintained freestanding C and ARM sources with Clang's `armv4t-none-eabi` target
 and links them with the source directory's `firmware.ld`. Supply native compiler and ELF-linker executable paths;
 no shell, downloaded toolchain, or system C library is involved. Object files and the linked candidate live in a
-fresh temporary directory that the command removes after either success or failure. The candidate must be exactly 16 KiB.
+fresh run directory that a successful build deletes and a failed one keeps and names (see
+[Conventions](#conventions)). The candidate must be exactly 16 KiB.
 
 Both commands report SHA-256 hashes. `--verify` rebuilds and compares bytes without creating or repairing the output;
 missing files or different bytes exit 1, and invalid command syntax exits 2. A successful comparison proves reproducible
@@ -564,6 +581,60 @@ generated atlases preserve source glyph IDs for it.
 
 ---
 
+## `puck derivations`—code provenance keys
+
+```text
+puck derivations [--check]
+```
+
+A bake's cache key contains the SHA-256 fingerprint of the code that produces
+it. The `[Derivation(name: "bake")]` entry points include creation baking and
+outcome encoding. The command reads the solution manifest and loads
+`Puck.World.Authoring` and its complete Release project reference graph through
+the same MSBuild workspace as `references`, follows calls and reads transitively,
+and resolves referenced repository assemblies back to their source. A
+per-project analyzer sees metadata across that boundary and cannot compute this
+reach on its own. The producer project is the bake slice's registered root;
+unrelated executables and their platform workloads are outside this load.
+
+The command writes
+`src/Puck.SignedDistance/Baking/DerivationFingerprint.cs` and lists one reached
+symbol per line, grouped by assembly. It reuses `TokenFingerprint`'s
+`csharp-tokens-v1` framing, ordering assembly-qualified declaration ids and
+partial declaration fragments canonically. Each fragment includes its ordered
+symbol and type bindings, so rebinding aliases changes the hash even when the
+set of reached declarations stays the same. Type headers and member bodies are
+separate: an uncalled sibling method does not move the key. Enum members and
+executable field/property initializers retain their source order because it
+determines implicit values and initialization effects. Initializers across partial
+type declarations retain their compilation order. Constructors,
+initializers, implicit conversions and virtual/interface implementations in the
+producer's dependency graph are included. Reached types also contribute their
+interface implementations and virtual members, including callbacks invoked inside
+external code. Concrete generic arguments contribute their public parameterless
+constructors because the operation for `new T()` does not name the concrete constructor. Base constructors and compiler pattern
+members for disposal, iteration, awaiting and deconstruction are included
+conservatively because the public operation tree does not expose every lowered
+call. External identities participate in the hash without external bodies.
+The generated fingerprint declaration is excluded
+from its own reach. External symbols stop the walk and are listed with their
+assembly identity; their implementation is outside the source hash. Reflection,
+dynamic dispatch and configurations other than Release remain outside this
+slice.
+
+`--check` writes no generated file and exits 1 naming a stale derivation. As with
+`references`, workspace loading can write design-time build intermediates under
+`obj/`. Regenerate after changing reached code, then rebuild consumers. Bake
+keys use the complete fingerprint. The `BAKE` chunk and pack entry version fields
+use its first four bytes as an unsigned big-endian integer; their content keys
+retain all 256 bits.
+
+The artifact producer runs this check after its Release build, before packaging,
+using the built candidate CLI and the restored source graph.
+
+The next slices cover other compiled-world chunk versions, shader packages,
+`GpuPipelineCacheStore` content keys and kernel sets.
+
 ## `puck shaders`—shader compilation
 
 ```sh
@@ -764,6 +835,12 @@ carries the recorder), runs the full canary set on it, and maps each leg's
 methods to their source files through the build's portable PDBs. It is a full
 run, so it happens when the owner asks for one; between recordings a new or
 moved source shows up as `unmapped`.
+The recording runs in one run directory that holds the recording World and
+`canary.transcript.txt`, the inner canary run's exit code, standard output and
+standard error. The inner run keeps its legs (`--keep-transcripts`) until the
+recording has read them. When the recording and the inner run both pass, the
+legs and the run directory are deleted; when either fails, all of them are kept
+and named (see [Conventions](#conventions)).
 
 ## `puck gate`—the change-scoped gate
 
@@ -992,9 +1069,12 @@ whose stderr holds a validation message, naming the first: a
 `[vulkan-debug] validation` line or any `[d3d12-debug]` line, a teardown
 live-object report included. The Vulkan loader's `general` notices do not
 count, and the Direct3D 12 drain never prints the one message the layer raises
-by design, a pipeline-library miss. A Direct3D 12 leg that prints
-`[d3d12] debug layer requested but not loaded` fails too, since nothing
-validated it. The runner keeps stdout and stderr
+by design, a pipeline-library miss. A leg must also say its backend's layer is
+live: a Vulkan World prints `[vulkan] validation layer live` and a Direct3D 12
+World `[d3d12] debug layer live`. A leg that never prints its backend's live
+line, or prints `[vulkan] validation layer requested but not live` or
+`[d3d12] debug layer requested but not loaded`, fails, since nothing validated
+it. The runner keeps stdout and stderr
 separate, pins BOM-less UTF-8 stdin, closes the pipe, drains both streams,
 checks the absolute `--world` boot-origin line, enforces per-leg and
 whole-suite budgets, and kills the process tree on timeout.
@@ -1155,7 +1235,17 @@ puck canary --merge                 run the merge gate: the automatic set plus e
 puck canary --backend <name> ...    run every backend-declaring proof on vulkan or directx only
 puck canary --jobs <n>              run at most n World processes at once (n ≥ 1)
 puck canary --plan                  print a selection's counts and ceiling without building or running
+puck canary --keep-transcripts ...  keep every leg's run directory whatever its verdict
 ```
+
+Each leg runs in its own run directory under the temporary directory, which
+the leg's `canary <id> <leg>: transcripts <path>` line names. A proof that
+holds deletes both legs' directories once its report prints; a proof that fails
+keeps both and names each with a `run directory kept:` line, as does a run that
+stops before every proof reported (see [Conventions](#conventions)). The run's
+shader packages follow the run's verdict the same way. `--keep-transcripts`
+leaves every leg's directory in place for a caller that reads the transcripts
+afterwards and removes them itself, as `puck affected --record` does.
 
 `puck canary --merge` is the merge gate. The automatic set alone skips every
 offscreen GPU proof, because each requires `gpu`; `--merge` runs the union of
@@ -1507,6 +1597,10 @@ puck test <path> --reproduce           rerun every world and require byte-identi
 puck test -h / --help                  this text
 ```
 
+Without `--keep`, the run uses a run directory under the temporary directory
+that a passing run deletes and a failing run keeps and names (see
+[Conventions](#conventions)).
+
 Each collected world owns a numbered directory under `<dir>/worlds`, starting
 at `000000/run1`. Its `state` persistence, `out` exports and manifests, and
 transcripts are isolated even when input files share a basename. Each report
@@ -1615,9 +1709,20 @@ refused by name before a leg starts.
 The two manifest directories are then compared by `puck parity compare` under
 the contract versioned beside the world
 (`tests/Puck.Parity/parity.contract.json`).
+With `--debug-layers` each leg boots its World under its backend's validation
+layer, with the same arguments and the same rule as `puck canary
+--debug-layers`: a `[vulkan-debug] validation` line, any `[d3d12-debug]` line,
+the statement that the layer is not live, or no live line for its backend fails
+the leg. Each
+leg prints one line, `parity: <backend> VALIDATION-OK` or `VALIDATION-FAIL`
+naming the first such line, including when its World process fails or cannot start.
+A refused leg keeps its refusal exit code. A leg's messages cannot be attributed to one
+capture, so a `VALIDATION-FAIL` fails the run (exit 1) after every capture's
+verdicts are printed.
 
 ```text
 puck parity                                            full run: both backends, then compare
+puck parity --debug-layers                             the same, each leg under its backend's validation layer
 puck parity compare <leftDir> <rightDir> --contract <file> [--output <dir>]   compare two captured runs
 ```
 
@@ -1649,7 +1754,8 @@ Per capture, these independent verdicts, in order:
 
 Failures write both frames, a per-pixel delta heatmap, and a per-verdict
 summary into the run's `evidence/` directory—a red names its tile and shows
-its pixels. There are no stored baselines: both runs come from the same build,
+its pixels. A run whose captures all hold deletes its run directory; a run
+with a red keeps it and names it (see [Conventions](#conventions)). There are no stored baselines: both runs come from the same build,
 and a reference is computed from the documents the run renders, so a content
 change fails only where it and its reference disagree.
 The runner resolves the `Puck.World` build for the checkout's current sources,
@@ -1733,8 +1839,10 @@ kinds; the collector records them as `pacing`.
 
 The run prints the report's path, then one line for each deterministic count or
 pass state that differs between the two backends, naming its kind, pass and
-node. `--output` names the report file; without it, the report stays in the
-run's scratch directory beside the leg transcripts.
+node. `--output` names the report file, and a passing run then deletes its run
+directory; without it, the report stays in the run directory beside the leg
+transcripts, and the run keeps that directory and names it (see
+[Conventions](#conventions)).
 
 `counters compare` holds each backend's run in the right report to the same
 backend's run in the left. Deterministic and per-backend-deterministic counts
@@ -1760,15 +1868,30 @@ nothing) and a pass the floor tier skips (the shadow and ambient passes, and
 the mesh pass of a meshless frame) hold required zeros. Every recorded ceiling must
 have been measured: its count read, of the class it was recorded as, or its pass
 reported and not executed, which reads zero. A per-backend-deterministic count's
-value is judged only on the device the backend's ceilings were recorded on; on
-any other, one line says how many were not judged. The run prints one line for
+value is judged only on the device the backend's ceilings were recorded on, with
+one exception: a ceiling that carries `requiredZero` is a zero of a kernel kind
+(march steps, texels written, sky evaluations), a magnitude that follows the
+device, that its pass never counts, so zero is a structural contract and is
+judged on every device and backend. On any other device, one line says how many
+per-backend-deterministic counts were not judged and how many required zeros
+were still judged. A zero of a deterministic kind loosened to a device-following
+pass's class (the SDF `upload` and `bricks` passes) is one device's policy, not
+a required zero, and is not judged elsewhere. The run prints one line for
 each count over its ceiling, each required zero broken, each ceiling not measured
 or measured as another class, and each count no ceiling was recorded for, naming
 its backend, class, kind, pass and node, then whether the ceilings hold.
 
 `--record` writes the run's counts as the ceilings instead, each reading its own
-ceiling, and every submission kind of a pass that did not execute as a required
-zero. A ceiling is re-recorded only in the change that explains why its count
+ceiling, and every submission kind of a pass that did not execute as a zero. A
+zero of a per-backend-deterministic kind is written with `requiredZero` set. A
+record is all or nothing: when the backends disagree on a deterministic count or
+a pass state, or the recorded ceilings would fail their own run, the verb writes
+no file, leaves an existing one byte for byte as it was, prints `not written: …`
+and exits 1. The write uses a flushed temporary file and atomic replacement;
+a write failure also leaves the existing ceilings unchanged, prints the reason
+and exits 1. `--output` names a different file from the ceilings when `--check`
+or `--record` is selected; a collision refuses before the workload runs.
+A ceiling is re-recorded only in the change that explains why its count
 moved, never from wall-clock or GPU timing. `--ceilings <file>` names another
 ceilings file for either option.
 
@@ -1784,6 +1907,92 @@ device or shader tool, or a ceilings file that is missing or not a ceilings
 document. `counters compare`
 exits 0 when every comparable count agrees, 1 on a difference, and 2 for a usage
 error or a file that is not a readable report.
+
+---
+
+## `puck determinism`—cross-host determinism attestation
+
+```text
+puck determinism record <manifest> --output <stream>   record what each scenario hashes to on this host
+puck determinism compare <left> <right>                 name the first divergence of each scenario
+```
+
+The simulation contract says the same document and the same input give
+bit-identical state on every machine. `determinism record` measures that for
+one host. It boots each scenario of a `puck.determinism.manifest.v1` manifest in
+this process the way the game boots it, headless and with no presentation. It
+joins the scenario's seats, then steps the world for its ticks, writing the
+scenario's state cells and submitting its held intents before the ticks they
+name. The shipped manifest is
+[tests/Puck.Determinism/determinism.json](../../tests/Puck.Determinism/determinism.json).
+It covers body dynamics and action state, flocks, rule latches and state
+writes, flow conservation, a kart lap, a billiards host, navigation, the chess
+AI's search, rule groups, decisions, board enforcement and interactions. Two
+small worlds beside it, `decisions.puck` and `board-enforcement.puck`, exist
+for the scenarios no shipped world reaches.
+
+A manifest holds `schema` and `scenarios`. Each scenario holds `name` (ASCII
+letters, digits and `-`, unique), `world` (a document or `.puck` source,
+forward-slashed and relative to the manifest), `ticks` (1 to 100000), `seats`
+(0-based seat slots joined before the first tick), `intents`, `cells` and
+`exercises`. An intent holds `body`, `from`, `through` (ticks counted from one)
+and `channels`, which maps a declared channel name to a decimal string parsed
+exactly as `FixedQ4816`. A cell holds `tick`, `row`, `key` and `value`, applied through the
+mutation `world.state.cell.set` submits; a write the authority refuses, or does
+not answer by the end of its tick, fails the scenario with its tick and cell
+rather than recording a run the script did not describe. `exercises` names the per-tick
+components the scenario exists to move, by their names on the stream's
+`components` line, aggregates excluded. `record` refuses a scenario whose run
+leaves any of them unchanged, so a scenario cannot go vacuous unnoticed. Any
+other member, a repeated member or another schema is refused by name.
+
+The stream (`puck.determinism.stream.v1`) is text with LF line breaks and
+nothing that depends on the host:
+
+```text
+puck.determinism.stream.v1
+manifest <the manifest's content pin>
+components <one name per per-tick hash>
+scenario <name> <ticks>
+document <name> <hash>             one per document-level hash
+tick <n> <16 hex digits> ...       one per tick, in components order
+end
+```
+
+A scenario's document hashes are the world's fingerprint, the compiled world's
+definition hash and catalog fingerprint, in that order and always present, then
+each asset row's canonical hash (`patch:`, `tune:`, `music:`, `table:`) and each
+creation's canonical hash and bake key (`creation:`, `bake:`). A stream missing
+one of the first three, or naming a document of another family, is refused. A
+tick's vector holds each authoritative state component on its own (population
+pose, arena, host-owned rows, declarations, topologies, latches, rule groups,
+decisions, board enforcement, body action state, body continuation, navigation,
+flocks and search), then the population pose hash, then the authoritative state
+hash the replay tape verifies. Body continuation is every active body's
+simulation checkpoint fields in the checkpoint's own encoding, excluding rendered
+color and rig, so two runs whose bodies share a
+pose but differ in a velocity, a remainder or a timer diverge at that tick. The aggregates come last, so
+the first differing hash of a tick names the system that split.
+
+`determinism compare` compares two streams of one manifest. For each scenario it
+compares the document hashes first, then the ticks in order until the first
+divergence. It reports that divergence with the tick (or the document hash), the
+component and both values; whatever follows it is a consequence and is not
+reported. It prints the scenarios, ticks and hashes it compared and the
+divergences it found. It refuses rather than compares two streams of different
+versions, manifests (by pin), scenario lists or tick counts.
+
+Exit codes: `record` exits 0 when it has written the stream and 2 when the
+manifest or a scenario cannot be read or run, or a scenario moves a component it
+exercises nowhere. `compare` exits 0 with no
+divergence, 1 on a divergence and 2 on a refusal. The shipped manifest records
+13 scenarios, 1,480 ticks and about 24,000 hashes in under ten seconds. Every
+per-tick component but the topologies is exercised by some scenario. The
+topologies are declaration that nothing at run time changes, so no scenario can
+move them; a law holds instead that a world declaring one folds it and that the
+fold holds still. CI records it
+on Windows and on Linux and compares the two streams
+([CI](../development/ci.md)).
 
 ---
 
@@ -1804,7 +2013,8 @@ through the same leg machinery as `puck counters`. Each cell is a workload at
 one resolution on one backend, booted from a fresh state root. `--list` checks
 the package and prints the matrix and every cell's script without booting
 anything. The run writes a `puck.qualification.report.v1` report to `--output`
-or its scratch directory.
+or its run directory, which a run without `--output` keeps and names (see
+[Conventions](#conventions)).
 
 [Qualifying a package](../development/qualification.md) owns what the profile
 records, what each cell checks, what each verdict means, and which thresholds

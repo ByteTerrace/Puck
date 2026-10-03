@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -166,45 +167,41 @@ public sealed class ShaderFrameBlockLawTests {
             reason: "DXC is required to compile the shipped pipeline sources."
         );
 
-        var cache = Directory.CreateTempSubdirectory(prefix: "puck-frame-block-");
+        using var cache = new TemporaryDirectory(prefix: "puck-frame-block-");
 
-        try {
-            var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache.FullName)).Load(
-                cancellationToken: TestContext.Current.CancellationToken,
-                name: Path.GetFileNameWithoutExtension(path: source),
-                path: RepositoryPaths.Resolve(relativePath: source)
-            );
+        var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache.RootPath)).Load(
+            cancellationToken: TestContext.Current.CancellationToken,
+            name: Path.GetFileNameWithoutExtension(path: source),
+            path: RepositoryPaths.Resolve(relativePath: source)
+        );
 
-            Assert.True(
-                condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
-                userMessage: result.Message
-            );
+        Assert.True(
+            condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
+            userMessage: result.Message
+        );
 
-            foreach (var pass in result.Pipeline!.Plan.Passes) {
-                var layout = pass.Parameters;
-                var blocks = HostBlocks(layout: layout);
-                var shader = result.Pipeline.Shaders[pass.Name];
+        foreach (var pass in result.Pipeline!.Plan.Passes) {
+            var layout = pass.Parameters;
+            var blocks = HostBlocks(layout: layout);
+            var shader = result.Pipeline.Shaders[pass.Name];
 
-                foreach (var (_, module) in shader.SpirvByStage) {
-                    var reflected = SpirvInterfaceReader.Read(module: module.Span);
+            foreach (var (_, module) in shader.SpirvByStage) {
+                var reflected = SpirvInterfaceReader.Read(module: module.Span);
 
-                    Assert.Null(@object: layout.Layout.Mismatch(reflected: reflected));
-                    AssertHostBlocks(
-                        blocks: blocks,
-                        reflected: reflected
-                    );
-                }
+                Assert.Null(@object: layout.Layout.Mismatch(reflected: reflected));
+                AssertHostBlocks(
+                    blocks: blocks,
+                    reflected: reflected
+                );
+            }
 
-                if (OperatingSystem.IsWindows()) {
-                    using var dxil = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
+            if (OperatingSystem.IsWindows()) {
+                using var dxil = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
 
-                    foreach (var (_, container) in shader.DxilByStage) {
-                        Assert.Null(@object: layout.Layout.Mismatch(reflected: dxil.Read(container: container.Span)));
-                    }
+                foreach (var (_, container) in shader.DxilByStage) {
+                    Assert.Null(@object: layout.Layout.Mismatch(reflected: dxil.Read(container: container.Span)));
                 }
             }
-        } finally {
-            cache.Delete(recursive: true);
         }
     }
     [Fact]

@@ -241,15 +241,17 @@ keyed `int` row named `identity` it declares in `state.world`
 (`WorldIdentityFactLane`; cells keyed `<bodyIndex>-<fact>`), loaded into a
 body's cells when a seat binds the identity and zeroed when it unbinds. A rule
 writes one with the `setIdentityFact` effect (`{key: <body>, fact, value |
-expression}` — lane and identity row together, the identity persisted through
-`WorldOwnedWorlds.TrySetFact`) and reads one through `$identity:<bodyRef>:<fact>`
+expression}` — lane and identity row together through `WorldOwnedWorlds.TrySetFact`,
+which persists an identity the catalog owns and keeps a visitor's fact on the
+travelling row of the projection it arrived as; the visitor's own authority
+adopts it when the seat comes home) and reads one through `$identity:<bodyRef>:<fact>`
 (0 when never written or no identity drives the body); a world declaring no
 lane refuses both by name at compile (`IdentityLaneUndeclared`). The lane is
 trait-free: an `advance`, `dynamics` or `cycle` on the row or any cell is
 refused by name at validation and at compile (`IdentityLaneTraited`, one check,
 `WorldIdentityFactLane.TryAdmitTraits`), because the server compares and
 persists the stored value while the operand reads the live one. A body driving
-under no owned identity refuses the write at fire time (`IdentityUnbound`), and
+under no identity refuses the write at fire time (`IdentityUnbound`), and
 a lane write the row refuses (its envelope, say) reports that write's own
 reason under `IdentityFactUnwritable`; the lane mints a cell only when it holds
 none under the key (`StateArena.TryWriteOrMint`). `identity.facts [player]` echoes the identity's row;

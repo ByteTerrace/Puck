@@ -62,11 +62,11 @@ public enum WorldEditEchoKind {
 /// <param name="CorrelationId">The submitting envelope's correlation id, or <c>0</c> when none (see
 /// <see cref="ConnectionId"/>'s own remarks for why direct callers default here).</param>
 /// <param name="RebuildOrigin">For a successful <see cref="WorldEditEchoKind.Rebuild"/> outcome that replaced the
-/// base (<c>world.load</c>/<c>world.reload</c>), the new origin path — the seam <c>Puck.World</c>'s composition root
+/// base (<c>world.load</c>/<c>world.reload</c>), the new origin — the seam <c>Puck.World</c>'s composition root
 /// uses to keep the console's tracked document origin (<c>world.save</c>'s default target, <c>world.status</c>'s
 /// reported source, <c>world.reload</c>'s re-read target) truthful after a runtime rebuild. <see langword="null"/>
 /// for every other outcome, including a successful <c>world.reset</c> (reset targets the base without moving it).</param>
-public readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false, int ConnectionId = SubmissionEnvelope.LocalConnectionId, long CorrelationId = 0, string? RebuildOrigin = null);
+public readonly record struct WorldEditEcho(string Message, bool Rejected, WorldEditEchoKind Kind, WorldMutation? Mutation = null, bool Denied = false, int ConnectionId = SubmissionEnvelope.LocalConnectionId, long CorrelationId = 0, WorldRebuildOrigin? RebuildOrigin = null);
 /// <summary>
 /// The authoritative world server — one logical instance owning the live <see cref="WorldDefinition"/>, the entity
 /// table (<see cref="WorldPopulation"/>), the profile catalog, and the mutation journal. Every non-intent submission
@@ -221,8 +221,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// registers) once real ticks have run it. A world with a boot-declared cartridge means recording must arm
     /// before its first step, same as a world that mounts an addon must arm before its first tick.</summary>
     public bool AnyMachineEverPumped => m_machines.AnyEverPumped;
-    /// <summary>Gets whether a screen operation reached host dispatch or a named provider operation reached its
-    /// runtime commit barrier. This conservative, irreversible latch closes boot-only replay and checkpoint
+    /// <summary>Gets whether a screen operation reached host dispatch, a screen memory binding accessed hardware,
+    /// or a named provider operation reached its runtime commit barrier. This conservative, irreversible latch closes boot-only replay and checkpoint
     /// reconstruction even when a runtime operation faults after changing hardware. Screen operations before
     /// recording are absent from its authority tape; generic provider operations have no entry in the current
     /// replay format and are refused while its screen-operation tap is attached.</summary>
@@ -237,8 +237,19 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// name, in the same family as the boot-allocated population capacity, rather than seating faces at indices no
     /// renderer holds.</summary>
     public int BootDerivedFaceScreens { get; }
+    /// <summary>Gets the phases this world's state clocks read as it was admitted at boot
+    /// (<see cref="WorldClockAnchors.Seeds"/>): what a presentation-tier recipient that joins while a clock's row holds
+    /// no number seeds the clock from.</summary>
+    public IReadOnlyDictionary<string, ulong> ClockSeeds { get; }
     /// <summary>Gets the exact engine-time boundary completed by the latest authoritative step.</summary>
     public ulong CompletedEngineTicks => m_tick.CompletedEngineTicks;
+    /// <summary>Gets the authoritative tick a delivery stands at: the tick and engine tick the step in progress
+    /// produces, which its snapshot will carry, while one runs, and the completed ones between steps. A delivery
+    /// composed mid-step (a drained mutation's, a rule's) reads values as of it, never as of the tick before.</summary>
+    public ArenaTime DeliveryTime => (Time with {
+        EngineTick = m_tick.CompletedEngineTicks,
+        Tick = m_tick.DeliveryTick,
+    });
     /// <summary>Gets the live world definition this server runs — swapped in place as buffered edits apply.</summary>
     public WorldDefinition Definition => m_document.Definition;
     /// <summary>Gets the version of <see cref="Definition"/>: this server's activation, minted once at construction,
@@ -474,8 +485,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="instanceIdentity"/> is empty, admission or machine
     /// preparation refuses, or the supplied admission names a different definition or machine catalog.</exception>
+    /// <param name="landingRefusal">Optional transfer admission policy fixed at composition; null admits each reserved member.</param>
     public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, IWorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null,
-        WorldDefinitionAdmission? admission = null) {
+        WorldDefinitionAdmission? admission = null, Func<int, string?>? landingRefusal = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: profiles);
@@ -516,6 +528,7 @@ public sealed partial class WorldServer : IWorldServerHost {
             : instanceIdentity
         );
         BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
+        ClockSeeds = WorldClockAnchors.Seeds(definition: definition);
         m_machines = machines;
         if (!machines.TryPrepare(
             admission: admission,
@@ -591,7 +604,7 @@ public sealed partial class WorldServer : IWorldServerHost {
             capacity: population.Capacity
         );
         m_profiles = profiles;
-        m_transferEscrow = new WorldTransferEscrow(server: this);
+        m_transferEscrow = new WorldTransferEscrow(landingRefusal: landingRefusal, server: this);
         m_envelope = envelope;
         // Adopt the population's boot-built field (the field provider compiled it once for the bodies it minted at
         // construction) — the server owns it from here without a second build.

@@ -101,7 +101,7 @@ public sealed class AdmissionArrivalLawTests {
         Members: [new WorldTransferReservationMember(
                 Principal: Principal.Console,
                 PreferredSlot: WorldBodiesLimits.LocalSeatCount,
-                Identity: identity,
+                Identity: identity?.Project(),
                 Source: IntentSource.Live,
                 BodyColor: default,
                 CatalogRig: 0,

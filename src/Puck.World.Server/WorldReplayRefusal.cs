@@ -60,11 +60,17 @@ internal enum ReplayRefusal {
     [Refusal(door: "replay.tape", condition: "a recorded mutation's accept/refuse outcome disagrees with what the replay's own apply pipeline produced for it", kind: RefusalKind.Verdict)]
     MutationOutcomeMismatch,
 
-    /// <summary>A recorded arrival that landed live does not land again through the re-drive's own escrow in the
-    /// body indices it landed in — the destination's own state at that tick no longer admits the cohort the source
-    /// handed over.</summary>
-    [Refusal(door: "replay.tape", condition: "a recorded arrival does not land again through the re-drive's own escrow in the body indices it landed in live", kind: RefusalKind.Verdict)]
+    /// <summary>A recorded arrival the re-drive's own escrow does not reproduce: a traveler that does not land again
+    /// in the body index or at the generation it landed at live, or a commit that does not roll back where the live
+    /// one did.</summary>
+    [Refusal(door: "replay.tape", condition: "a recorded arrival does not land again through the re-drive's own escrow at the body indices and generations, and to the outcome, it landed at live", kind: RefusalKind.Verdict)]
     ArrivalRefused,
+
+    /// <summary>A recorded departure or its rollback the re-drive cannot reproduce: a departure from an index that
+    /// holds no active body, the same body departing twice, or a rollback with no departure before it on the tape or
+    /// into an occupied index.</summary>
+    [Refusal(door: "replay.tape", condition: "a recorded departure or its rollback cannot be reproduced against the re-drive's own population", kind: RefusalKind.Verdict)]
+    DepartureRefused,
 }
 /// <summary>Constructs this door's <see cref="InvalidDataException"/>s tagged with the <see cref="ReplayRefusal"/>
 /// each throw site names. <see cref="InvalidDataException"/> is sealed (unlike <c>SdfDocumentException</c> elsewhere

@@ -34,22 +34,43 @@ public sealed class WorldScreenMappingSet {
 
     private readonly List<SourceMapping> m_published = [];
     private Row[] m_rows = [];
+
     // The source instances the rows show, before the routed worlds' are joined to them (Sources), and those routed
     // worlds' instances as ReconcileRouted last set them.
-    private WorldSourceInstances m_rowSources = WorldSourceInstances.Of(shown: []);
+    private WorldSourceInstances m_rowSources;
+
     private IReadOnlyList<RenderGraphInstance> m_routedSources = [];
 
+    /// <summary>Initializes a new instance of the <see cref="WorldScreenMappingSet"/> class for one world's screens.</summary>
+    /// <param name="world">The name of the world instance the screens stand in, whose own hosts run the machines and
+    /// probes they show (<see cref="WorldSourceInstances.Of"/>).</param>
+    /// <exception cref="ArgumentException"><paramref name="world"/> is empty.</exception>
+    public WorldScreenMappingSet(string world) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: world);
+
+        World = world;
+        m_rowSources = WorldSourceInstances.Of(
+            shown: [],
+            world: world
+        );
+        Sources = m_rowSources;
+    }
+
+    /// <summary>Gets the name of the world instance the screens stand in.</summary>
+    public string World { get; }
     /// <summary>Gets the mapping of every screen that publishes one, in row order, as <see cref="Publish"/> last
     /// published them. The set rewrites the list in place.</summary>
     public IReadOnlyList<SourceMapping> Mappings => m_published;
 
     /// <summary>Gets the screen rows the set last reconciled, in order.</summary>
     public IReadOnlyList<WorldScreen> Screens { get; private set; } = [];
+
     /// <summary>Gets the source instances the screens show, then those the screens of the worlds seats are presented in
     /// show (<see cref="ReconcileRouted"/>), a new value on every <see cref="Reconcile"/> and whenever the routed worlds'
     /// change: the render graph runs them, every view of a world the display shows reads them, and each screen showing
     /// one samples its image.</summary>
-    public WorldSourceInstances Sources { get; private set; } = WorldSourceInstances.Of(shown: []);
+    public WorldSourceInstances Sources { get; private set; }
+
     /// <summary>Gets the view instances the world renders beside its own, a new value whenever
     /// <see cref="ReconcileViews"/> replaces them: the render graph runs them, and each screen showing one samples its
     /// image.</summary>
@@ -58,7 +79,7 @@ public sealed class WorldScreenMappingSet {
     private const string AwaitsSession = "the session awaits its authority";
 
     // The row a screen's source names: its handle and document extent, or why it names none.
-    private static Row RowOf(WorldScreen screen, int position, WorldSourceInstances sources, IReadOnlyList<WorldCamera> cameras, Func<int, string?> sessionView, bool sessionsPastDepth) {
+    private static Row RowOf(WorldScreen screen, int position, WorldSourceInstances sources, IReadOnlyList<WorldCamera> cameras, Func<WorldCamera, string> cameraView, Func<int, string?> sessionView, bool sessionsPastDepth) {
         switch (screen.Source) {
             case WorldScreenSource.View view:
                 foreach (var camera in cameras) {
@@ -69,10 +90,7 @@ public sealed class WorldScreenMappingSet {
                     )) {
                         return new Row(
                             extent: (((int)camera.RenderWidth), ((int)camera.RenderHeight)),
-                            handle: SourceHandle.Instance(name: WorldSeatAnchors.RegistrationName(
-                                camera: camera,
-                                seat: 1
-                            )),
+                            handle: SourceHandle.Instance(name: cameraView(arg: camera)),
                             refusal: null,
                             screen: screen
                         );
@@ -170,9 +188,12 @@ public sealed class WorldScreenMappingSet {
     /// <param name="sessionsPastDepth">Whether the screens' world is as many screens deep as the presentation nests, so
     /// every session screen shows its fallback colour's source instance (<see cref="WorldPortalFallback"/>) instead of a
     /// view.</param>
+    /// <param name="cameraView">Names the view a camera a view screen names renders under, or <see langword="null"/>
+    /// for the boot world's (<see cref="WorldSeatAnchors.RegistrationName"/> for seat 1). The set reads it only while it
+    /// reconciles.</param>
     /// <exception cref="ArgumentNullException"><paramref name="screens"/> or <paramref name="cameras"/> is
     /// <see langword="null"/>.</exception>
-    public void Reconcile(IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldCamera> cameras, IReadOnlyDictionary<int, WorldScreenSource>? live = null, Func<int, string?>? sessionView = null, bool sessionsPastDepth = false) {
+    public void Reconcile(IReadOnlyList<WorldScreen> screens, IReadOnlyList<WorldCamera> cameras, IReadOnlyDictionary<int, WorldScreenSource>? live = null, Func<int, string?>? sessionView = null, bool sessionsPastDepth = false, Func<WorldCamera, string>? cameraView = null) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         ArgumentNullException.ThrowIfNull(argument: cameras);
 
@@ -189,13 +210,20 @@ public sealed class WorldScreenMappingSet {
                 : screen);
         }
 
-        var sources = WorldSourceInstances.Of(shown: [.. shown.Select(selector: screen => ((sessionsPastDepth && (screen.Source is WorldScreenSource.Session session))
-            ? WorldPortalFallback.SourceOf(session: session)
-            : screen.Source))]);
+        var sources = WorldSourceInstances.Of(
+            shown: [.. shown.Select(selector: screen => ((sessionsPastDepth && (screen.Source is WorldScreenSource.Session session))
+                ? WorldPortalFallback.SourceOf(session: session)
+                : screen.Source))],
+            world: World
+        );
         var rows = new Row[shown.Length];
 
         for (var position = 0; (position < shown.Length); position++) {
             rows[position] = RowOf(
+                cameraView: (cameraView ?? (static camera => WorldSeatAnchors.RegistrationName(
+                    camera: camera,
+                    seat: 1
+                ))),
                 cameras: cameras,
                 position: position,
                 screen: shown[position],

@@ -4,7 +4,7 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldDocument {
     /// <summary>The refusal code of a mutation composed on another world activation's document.</summary>
-    public const string ActivationMismatchCode = "world.mutation.activation_mismatch";
+    public const string ActivationMismatchCode = "world.mutation.activation-mismatch";
 
     // Refuses, by name and before anything is recorded or applied, a mutation composed on the document of another world
     // activation than this one (a traveler link that reached this world before its sender saw it had): its base is not

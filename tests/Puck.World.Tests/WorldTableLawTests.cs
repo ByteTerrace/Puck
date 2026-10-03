@@ -2,24 +2,24 @@ using System.Text.Json;
 
 using Puck.Assets.Documents;
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
 /// <summary>A static table is a referenced, hash-pinned document read through <c>$table:</c>: a literal key is
 /// proven present at compile, a dynamic key reads at evaluation and a missing one never holds a gate, a stale hash or
 /// a duplicate key refuses at validation, and the table is not simulation state.</summary>
-public sealed class WorldTableLawTests {
+public sealed class WorldTableLawTests : IDisposable {
     // The directory every document here is read from, so each row's relative source resolves beside it.
-    private static readonly string TableDirectory = Directory.CreateTempSubdirectory(prefix: "puck-world-table-law-").FullName;
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-world-table-law-");
 
-    private static (string Source, string Hash) Write(TableDocument document) {
+    public void Dispose() => m_directory.Dispose();
+
+    private (string Source, string Hash) Write(TableDocument document) {
         var source = $"tables-{Guid.NewGuid():N}.table.json";
 
         File.WriteAllBytes(
-            Path.Combine(
-                path1: TableDirectory,
-                path2: source
-            ),
+            m_directory.PathOf(name: source),
             JsonSerializer.SerializeToUtf8Bytes(
                 document,
                 DocumentJsonOptions.Shared
@@ -29,7 +29,7 @@ public sealed class WorldTableLawTests {
             ? TableCanonicalizer.Canonicalize(document).Hash
             : string.Empty));
     }
-    private static (string Source, string Hash) WriteColumns(string kind, string[] columns, params (long Key, decimal[] Values)[] entries) =>
+    private (string Source, string Hash) WriteColumns(string kind, string[] columns, params (long Key, decimal[] Values)[] entries) =>
         Write(document: new TableDocument(
             TableDocument.CurrentSchema,
             kind,
@@ -39,7 +39,7 @@ public sealed class WorldTableLawTests {
                 ))],
             Columns: columns
         ));
-    private static (string Source, string Hash) WriteTable(string kind, params (long Key, decimal Value)[] entries) =>
+    private (string Source, string Hash) WriteTable(string kind, params (long Key, decimal Value)[] entries) =>
         Write(document: new TableDocument(
             TableDocument.CurrentSchema,
             kind,
@@ -64,7 +64,7 @@ public sealed class WorldTableLawTests {
             (201, 0m)
         );
         var document = Fixtures.BuildDocument() with {
-            DocumentDirectory = TableDirectory,
+            DocumentDirectory = m_directory.RootPath,
             Tables = [new TableRow(
                 Hash: hash,
                 Name: "moves",
@@ -179,7 +179,7 @@ public sealed class WorldTableLawTests {
             (250, 5m)
         );
         var document = Fixtures.BuildDocument() with {
-            DocumentDirectory = TableDirectory,
+            DocumentDirectory = m_directory.RootPath,
             Tables = [new TableRow(
                 Hash: hash,
                 Name: "power",
@@ -292,7 +292,7 @@ public sealed class WorldTableLawTests {
             (7, 1.5m)
         );
         var baseline = Fixtures.BuildDocument() with {
-            DocumentDirectory = TableDirectory,
+            DocumentDirectory = m_directory.RootPath,
             Tables = [new TableRow(
                 Hash: hash,
                 Name: "rates",

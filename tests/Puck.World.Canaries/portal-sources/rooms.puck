@@ -1,0 +1,377 @@
+// The two rooms the portal-sources canary joins: the lobby, whose arch shows a window onto the gallery with a mapped
+// portal into it, and the gallery, a room of screens showing its own sources, as modules each composition instantiates.
+
+import "../../Puck.World.Verdicts/composition/plot.puck"
+
+module room(wall, there, nesting) {
+  use plot(centre: [0m, 0m, 0m], landingAt: [0, 0, 0], threshold: 3)
+
+  host {
+    authority: null
+    backend: auto
+    exitAfterSeconds: 0
+    fullscreen: false
+    genlock: null
+    height: 144
+    journalDepth: 2000
+    listen: null
+    presentMode: Immediate
+    presentation: offscreen
+    surfaceFormat: r8g8b8a8
+    targetHertz: 0
+    width: 256
+  }
+
+  // A traveller from the other room arrives here, and the other room's window observes all of this one with its whole
+  // replica.
+  bodies {
+    capacity: 5
+    localSeats: 1
+    networkPlayers: 4
+    seatSpawns [
+      "arrival"
+    ]
+    sleepAfterSeconds: 0
+  }
+
+  admission [
+    {
+      algorithm: ""
+      disclosure: Replica
+      domain: "*"
+      grants [
+        {
+          budget: 8
+          capability: "Drive"
+          exclusive: true
+        }
+        {
+          budget: 64
+          capability: "Observe"
+          subject: "all"
+        }
+      ]
+      mode: "FederatedAuthority"
+      publicKey: ""
+      subject: null
+    }
+  ]
+
+  references [
+    {
+      document: there
+      name: there
+    }
+  ]
+
+  destinations [
+    {
+      durability: "persisted"
+      name: there
+      reference: there
+      scope: "global"
+    }
+  ]
+
+  views {
+    nestingDepth: nesting
+  }
+
+  // One derived face a room: its arch's glass.
+  placements {
+    policy {
+      authoringHeadroomPlacements: 0
+      authoringHeadroomScreens: 0
+      candidateCap: 1
+      candidateRadius: 1
+      derivedFaceScreens: 1
+      maxPlacementScale: 1
+      minPlacementScale: 1
+      previewDeadlineFrames: 1
+    }
+  }
+
+  prototypes {
+    prototype "arch" {
+      document {
+        behavior {
+          faces [
+            {
+              name: "glass"
+              shapeId: 0
+            }
+          ]
+        }
+        name: "arch"
+        palette [
+          {
+            color: "#303030"
+            roughness: 0.8
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Box "rim" {
+          material: 0
+          position [0, 0, 0]
+          scale [1.5, 1.5, 0.05]
+        }
+        shape Box "opening" {
+          blend: Subtraction
+          material: 0
+          position [0, 0, 0]
+          scale [1.45, 1.45, 0.3]
+        }
+      }
+    }
+    prototype "wall" {
+      document {
+        name: "wall"
+        palette [
+          {
+            color: wall
+            emissive: 0.5
+            roughness: 0.8
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Box "wall" {
+          material: 0
+          position [0, 0, 0]
+          scale [12, 8, 0.1]
+        }
+      }
+    }
+  }
+}
+
+module lobby(there, nesting) {
+  use room(wall: "#FF8000", there: there, nesting: nesting)
+
+  placements {
+    placement "arch" {
+      faceSources [
+        {
+          face: "glass"
+          portal {
+            arrival: "mapped"
+            counterpart: "arrival/glass"
+            destination: there
+            travel: "body"
+          }
+          source {
+            $type: "session"
+            destination: there
+            projection: window
+            resolution [192, 192]
+          }
+        }
+      ]
+      position [0, 1.5, -6]
+      prototype: "arch"
+      yawDegrees: 180
+    }
+    placement "wall" {
+      position [0, 1.5, 14]
+      prototype: "wall"
+    }
+  }
+}
+
+// The gallery without its screens: its arrival arch, the lobby arch's counterpart, facing it so the pair maps as the
+// identity and the lobby's window looks along the walk; a grey wall far ahead of a traveller
+// who arrives; a green lamp behind the arrival, which no seat looking on along the walk sees; the camera that films
+// the lamp; the light-gun cartridge, whose picture's left half is lit and right half dark; and the font its text draws
+// with.
+module galleryRoom(nesting) {
+  use room(wall: "#404040", there: "lobby", nesting: nesting)
+
+  machines [
+    {
+      name: "cabinet"
+      engine: "gaming-brick"
+      configuration {
+        schema: "puck.gaming-brick.configuration.v1"
+        model: "cgb"
+        boot: "fast"
+        content { path: "../../../src/Puck.World/Assets/cartridges/light-gun.cgb.cartridge.json" }
+      }
+    }
+  ]
+
+  cameras [
+    {
+      anchor: null
+      name: "lamp"
+      renderHeight: 72
+      renderWidth: 96
+      rig {
+        name: "lamp"
+        operations [
+          anchor(subject: worldPoint(point: [0, 1.5, 4]))
+          lookAt(subject: worldPoint(point: [0, 1.5, 12]))
+          fieldOfView(fieldOfViewRadians: 0.9)
+        ]
+        version: "puck.camera.program.v1"
+      }
+    }
+  ]
+
+  text {
+    defaultFont: "inter"
+    fonts [
+      {
+        name: "inter"
+        source: "../../../src/Puck.World/Assets/worlds/fonts/inter-regular.ttf"
+        hash: "sha256-64/47e488e1fc92d640"
+        codePointRanges [
+          "U+0020-U+007E"
+        ]
+      }
+    ]
+  }
+
+  prototypes {
+    prototype "lamp" {
+      document {
+        name: "lamp"
+        palette [
+          {
+            color: "#00FF40"
+            emissive: 1
+            roughness: 0.8
+          }
+        ]
+        schema: "puck.creation.v1"
+        shape Box "lamp" {
+          material: 0
+          position [0, 0, 0]
+          scale [12, 8, 0.1]
+        }
+      }
+    }
+  }
+
+  placements {
+    placement "arrival" {
+      faceSources [
+        {
+          face: "glass"
+          source {
+            $type: "none"
+          }
+        }
+      ]
+      position [0, 1.5, -6]
+      prototype: "arch"
+      yawDegrees: 0
+    }
+    placement "wall" {
+      position [0, 1.5, -26]
+      prototype: "wall"
+    }
+    placement "lamp" {
+      position [0, 1.5, 12]
+      prototype: "lamp"
+    }
+  }
+}
+
+// Three screens facing a traveller who arrives, ten units on: two lines of text, the cabinet's picture in the middle,
+// where the lobby's window sees it whole, and the lamp camera's view.
+module gallery(nesting) {
+  use galleryRoom(nesting: nesting)
+
+  screens [
+    {
+      index: 0
+      origin [0, 1.5, -16]
+      right [1, 0, 0]
+      up [0, 1, 0]
+      halfWidth: 1
+      halfHeight: 0.9
+      halfDepth: 0.03
+      round: 0
+      source: machine(instance: cabinet, output: "video")
+      route { engageable: false, engageRadius: 0 }
+    }
+    {
+      index: 1
+      origin [-2.4, 1.5, -16]
+      right [1, 0, 0]
+      up [0, 1, 0]
+      halfWidth: 1
+      halfHeight: 0.9
+      halfDepth: 0.03
+      round: 0
+      source {
+        $type: "text"
+        lines [
+          "##"
+          "##"
+        ]
+        foreground: "#FFFFFF"
+        background: "#000000"
+      }
+      route { engageable: false, engageRadius: 0 }
+    }
+    {
+      index: 2
+      origin [2.4, 1.5, -16]
+      right [1, 0, 0]
+      up [0, 1, 0]
+      halfWidth: 1
+      halfHeight: 0.9
+      halfDepth: 0.03
+      round: 0
+      source {
+        $type: "view"
+        cameraName: "lamp"
+      }
+      route { engageable: false, engageRadius: 0 }
+    }
+  ]
+}
+
+// The same three screens showing nothing: the discriminating leg's gallery.
+module darkGallery(nesting) {
+  use galleryRoom(nesting: nesting)
+
+  screens [
+    {
+      index: 0
+      origin [0, 1.5, -16]
+      right [1, 0, 0]
+      up [0, 1, 0]
+      halfWidth: 1
+      halfHeight: 0.9
+      halfDepth: 0.03
+      round: 0
+      source { $type: "none" }
+      route { engageable: false, engageRadius: 0 }
+    }
+    {
+      index: 1
+      origin [-2.4, 1.5, -16]
+      right [1, 0, 0]
+      up [0, 1, 0]
+      halfWidth: 1
+      halfHeight: 0.9
+      halfDepth: 0.03
+      round: 0
+      source { $type: "none" }
+      route { engageable: false, engageRadius: 0 }
+    }
+    {
+      index: 2
+      origin [2.4, 1.5, -16]
+      right [1, 0, 0]
+      up [0, 1, 0]
+      halfWidth: 1
+      halfHeight: 0.9
+      halfDepth: 0.03
+      round: 0
+      source { $type: "none" }
+      route { engageable: false, engageRadius: 0 }
+    }
+  ]
+}

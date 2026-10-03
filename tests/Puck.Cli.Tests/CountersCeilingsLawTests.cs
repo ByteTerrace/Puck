@@ -2,6 +2,7 @@ using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Cli.Counters;
+using Puck.Testing;
 using Puck.World;
 
 using Xunit;
@@ -16,7 +17,9 @@ namespace Puck.Cli.Tests;
 /// class, kind, pass and node, fails a recorded expectation the run did not measure or measured as another class, fails a
 /// count no ceiling was recorded for, and judges a
 /// per-backend-deterministic count only on the device its backend's ceilings were recorded on, reporting it as not judged
-/// on any other.
+/// on any other, except a required zero: a zero of a kernel kind (a magnitude that follows the device), recorded as such,
+/// is a structural contract that holds on every device and is judged on every one, and the report says how many zeros it
+/// still judged.
 /// </summary>
 public sealed class CountersCeilingsLawTests {
     private static GpuDeviceIdentity Device(string backend, string driver = "566.36") => new(
@@ -58,6 +61,11 @@ public sealed class CountersCeilingsLawTests {
 
     private static WorldCountersCeilings Recorded { get; } = CountersCeilings.Record(report: Report(vulkan: Run(backend: "vulkan")));
 
+    private static WorldCountersRun WithUpload(WorldCountersRun run, long dispatches, GpuPassState state = GpuPassState.Executed) => run with {
+        Counts = [.. run.Counts, new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.Dispatches.Name, Node: "world", Pass: "upload", Source: "gpu", Value: dispatches)],
+        Passes = [.. run.Passes, new WorldCountersPass(Class: WorkClass.PerBackendDeterministic, Label: "upload", Node: "world", State: state)],
+    };
+
     [Fact]
     public void RecordingHoldsEveryGpuSubmissionCountOfANodeAtItsReading() {
         var vulkan = Assert.Single(collection: Recorded.Runs, predicate: static run => (run.Backend == "vulkan"));
@@ -75,6 +83,29 @@ public sealed class CountersCeilingsLawTests {
                 (null, GpuWork.Clears.Name, 1L),
             ]
         );
+    }
+    // A zero of a kernel kind is a structural contract and is recorded as a required zero; a nonzero reading, a deterministic
+    // zero and a deterministic kind's zero loosened to a device-following pass's class are not.
+    [Fact]
+    public void RecordingMarksAKernelKindsZeroAsARequiredZeroAndNothingElse() {
+        var run = WithUpload(dispatches: 0L, run: Run(backend: "vulkan"));
+        var vulkan = Assert.Single(collection: CountersCeilings.Record(report: Report(vulkan: run)).Runs, predicate: static run => (run.Backend == "vulkan"));
+
+        Assert.Equal(
+            actual: vulkan.Ceilings.Where(predicate: static ceiling => ceiling.RequiredZero).Select(selector: static ceiling => (ceiling.Pass, ceiling.Kind)),
+            expected: [
+                ("sdf.world$cull-args", GpuWork.MarchSteps.Name),
+                ("sdf.world$ambient", GpuWork.TexelsWritten.Name),
+            ]
+        );
+        Assert.All(
+            collection: vulkan.Ceilings.Where(predicate: static ceiling => (ceiling.RequiredZero)),
+            action: static ceiling => Assert.Equal(actual: (ceiling.Ceiling, ceiling.Class), expected: (0L, WorkClass.PerBackendDeterministic))
+        );
+
+        var loosened = Assert.Single(collection: vulkan.Ceilings, predicate: static ceiling => (ceiling.Pass == "upload"));
+
+        Assert.Equal(actual: (loosened.Class, loosened.Ceiling, loosened.RequiredZero), expected: (WorkClass.PerBackendDeterministic, 0L, false));
     }
     [Fact]
     public void TheRecordingRunHoldsItsCeilings() {
@@ -131,14 +162,14 @@ public sealed class CountersCeilingsLawTests {
             expected: "vulkan: deterministic kind=gpu.dispatches pass=sdf.world$resolve node=world reads 1 with no ceiling recorded"
         );
     }
-    // On another device the per-backend-deterministic counts, however far they move, are not judged, and a line says so;
-    // the deterministic counts still are.
+    // On another device the per-backend-deterministic magnitudes, however far they move, are not judged, and a line says
+    // how many were not and how many required zeros still were; the deterministic counts are judged as on any device.
     [Fact]
-    public void APerBackendCountIsJudgedOnlyOnTheDeviceItWasRecordedOn() {
+    public void APerBackendMagnitudeIsJudgedOnlyOnTheDeviceItWasRecordedOn() {
         var elsewhere = Device(backend: "vulkan", driver: "580.01");
         var verdict = CountersCeilings.Check(
             ceilings: Recorded,
-            report: Report(vulkan: Run(backend: "vulkan", cullSteps: 9L, device: elsewhere, dispatches: 2L, steps: 9999L))
+            report: Report(vulkan: Run(backend: "vulkan", device: elsewhere, dispatches: 2L, steps: 9999L))
         );
 
         Assert.Equal(
@@ -147,8 +178,191 @@ public sealed class CountersCeilingsLawTests {
         );
         Assert.Equal(
             actual: Assert.Single(collection: verdict.Notes),
-            expected: "vulkan: 3 per-backend-deterministic count(s) not judged: the ceilings were recorded on Example GPU (driver 566.36), this run's device is Example GPU (driver 580.01)"
+            expected: "vulkan: 1 per-backend-deterministic count(s) not judged, 2 required zero(s) still judged: the ceilings were recorded on Example GPU (driver 566.36), this run's device is Example GPU (driver 580.01)"
         );
+
+        // A magnitude that only moves is no failure on the other device, however far.
+        Assert.Empty(collection: CountersCeilings.Check(
+            ceilings: Recorded,
+            report: Report(vulkan: Run(backend: "vulkan", device: elsewhere, steps: 9999L))
+        ).Failures);
+    }
+    // A required zero is a structural contract, so a nonzero reading where one is required fails on a device the ceilings
+    // were not recorded on, in the same line as on the recording device.
+    [Fact]
+    public void ARequiredZeroBrokenOnAnotherDeviceFailsNamingItsKindPassAndNode() {
+        var verdict = CountersCeilings.Check(
+            ceilings: Recorded,
+            report: Report(vulkan: Run(ambientTexels: 12L, backend: "vulkan", cullSteps: 3L, device: Device(backend: "vulkan", driver: "580.01")))
+        );
+
+        Assert.Equal(
+            actual: verdict.Failures,
+            expected: [
+                "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$cull-args node=world breaks its required zero: reads 3",
+                "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient node=world breaks its required zero: reads 12",
+            ]
+        );
+    }
+    // A zero loosened to a device-following pass's class is one device's policy, not a structural contract: it is not
+    // judged elsewhere, while the same pass's kernel-kind zeros are.
+    [Fact]
+    public void AZeroLoosenedToADeviceFollowingPassIsNotJudgedOnAnotherDevice() {
+        var recorded = CountersCeilings.Record(report: Report(vulkan: WithUpload(dispatches: 0L, run: Run(backend: "vulkan"))));
+        var elsewhere = Device(backend: "vulkan", driver: "580.01");
+
+        Assert.Empty(collection: CountersCeilings.Check(
+            ceilings: recorded,
+            report: Report(vulkan: WithUpload(dispatches: 5L, run: Run(backend: "vulkan", device: elsewhere)))
+        ).Failures);
+
+        // On the recording device the same reading breaks the zero.
+        Assert.Equal(
+            actual: Assert.Single(collection: CountersCeilings.Check(
+                ceilings: recorded,
+                report: Report(vulkan: WithUpload(dispatches: 5L, run: Run(backend: "vulkan")))
+            ).Failures),
+            expected: "vulkan: per-backend-deterministic kind=gpu.dispatches pass=upload node=world breaks its required zero: reads 5"
+        );
+    }
+    // A pass the recording skipped holds a required zero for each kernel kind everywhere: executing and counting work on
+    // another device fails, while the pass still skipped there is judged without a failure.
+    [Fact]
+    public void ASkippedPassKernelZeroIsJudgedOnAnotherDevice() {
+        var skipped = new WorldCountersPass(Class: WorkClass.Deterministic, Label: "sdf.world$shadow", Node: "world", State: GpuPassState.Skipped);
+        var recordingRun = Run(backend: "vulkan") with { Passes = [skipped] };
+        var recorded = CountersCeilings.Record(report: Report(vulkan: recordingRun));
+        var elsewhere = Device(backend: "vulkan", driver: "580.01");
+
+        var verdict = CountersCeilings.Check(
+            ceilings: recorded,
+            report: Report(vulkan: recordingRun with { Device = elsewhere })
+        );
+
+        Assert.Empty(collection: verdict.Failures);
+        Assert.Equal(
+            actual: Assert.Single(collection: verdict.Notes),
+            expected: "vulkan: 1 per-backend-deterministic count(s) not judged, 5 required zero(s) still judged: the ceilings were recorded on Example GPU (driver 566.36), this run's device is Example GPU (driver 580.01)"
+        );
+
+        var executing = recordingRun with {
+            Counts = [.. recordingRun.Counts, new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.MarchSteps.Name, Node: "world", Pass: "sdf.world$shadow", Source: "gpu", Value: 7L)],
+            Device = elsewhere,
+            Passes = [skipped with { State = GpuPassState.Executed }],
+        };
+
+        Assert.Contains(
+            collection: CountersCeilings.Check(ceilings: recorded, report: Report(vulkan: executing)).Failures,
+            expected: "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$shadow node=world breaks its required zero: reads 7"
+        );
+    }
+    // The recorded files state a required zero exactly where the recorder would: every zero of a kernel kind is marked, so a
+    // file recorded or edited without the mark, and a mark on anything else, fails here and not on a foreign device.
+    [Fact]
+    public void EveryCommittedCeilingsFileMarksExactlyItsKernelKindZerosAsRequired() {
+        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
+
+        var files = Directory.GetFiles(path: Path.Combine(path1: repositoryRoot, path2: "tests", path3: "Puck.Counters"), searchPattern: "*.ceilings.json");
+
+        Assert.NotEmpty(collection: files);
+
+        foreach (var file in files) {
+            Assert.True(condition: CountersCeilings.TryRead(ceilings: out var ceilings, path: file, reason: out var reason), userMessage: $"{file}: {reason}");
+
+            foreach (var ceiling in ceilings.Runs.SelectMany(selector: static run => run.Ceilings)) {
+                var kind = GpuWork.SubmissionKinds.ToArray().Single(predicate: kind => (kind.Name == ceiling.Kind));
+
+                Assert.True(
+                    condition: (ceiling.RequiredZero == CountersCeilings.IsRequiredZero(ceiling: ceiling.Ceiling, kind: kind, recorded: ceiling.Class)),
+                    userMessage: $"{Path.GetFileName(path: file)}: kind={ceiling.Kind} pass={(ceiling.Pass ?? "outside")} node={ceiling.Node} ceiling {ceiling.Ceiling} has requiredZero={ceiling.RequiredZero}"
+                );
+            }
+        }
+    }
+    // A record is all or nothing: when the backends disagree on a deterministic count the ceilings are not written, so a
+    // failed re-record leaves the committed ledger as it was and creates none where there was none.
+    [Fact]
+    public void ADisagreeingRecordWritesNothingAndLeavesTheExistingFileByteIdentical() {
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-ceilings-law-");
+
+        var path = Path.Combine(path1: directory.RootPath, path2: "counters.ceilings.json");
+        var absent = Path.Combine(path1: directory.RootPath, path2: "absent.ceilings.json");
+        var disagreeing = Report(directx: Run(backend: "directx", dispatches: 2L), vulkan: Run(backend: "vulkan"));
+
+        CountersCeilings.Write(ceilings: Recorded, path: path);
+
+        var before = File.ReadAllBytes(path: path);
+
+        Assert.False(condition: CountersCommand.TryRecord(path: path, reason: out var reason, report: disagreeing));
+        Assert.Contains(actualString: reason, expectedSubstring: "the backends disagree on 1 deterministic count(s) or pass state(s)");
+        Assert.Equal(actual: File.ReadAllBytes(path: path), expected: before);
+
+        Assert.False(condition: CountersCommand.TryRecord(path: absent, reason: out _, report: disagreeing));
+        Assert.False(condition: File.Exists(path: absent));
+
+        // Agreeing backends record, and the file is what the recorder writes.
+        Assert.True(condition: CountersCommand.TryRecord(path: absent, reason: out var agreed, report: Report(vulkan: Run(backend: "vulkan"))), userMessage: agreed);
+        Assert.Equal(actual: File.ReadAllBytes(path: absent), expected: before);
+    }
+    [Fact]
+    public void AFailedAtomicReplacementLeavesTheExistingCeilingsByteIdentical() {
+        Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "Windows file sharing can forbid replacement while allowing direct writes.");
+
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-ceilings-law-");
+
+        var path = Path.Combine(path1: directory.RootPath, path2: "counters.ceilings.json");
+        var report = Report(vulkan: Run(backend: "vulkan", steps: 4000L));
+
+        CountersCeilings.Write(ceilings: Recorded, path: path);
+
+        var before = File.ReadAllBytes(path: path);
+
+        // Direct writing is allowed, but replacing the directory entry is not.
+        using (var held = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.ReadWrite)) {
+            Assert.False(condition: CountersCommand.TryRecord(path: path, reason: out var reason, report: report));
+            Assert.Contains(actualString: reason, expectedSubstring: "could not write the ceilings:");
+            Assert.Equal(actual: File.ReadAllBytes(path: path), expected: before);
+            Assert.Equal(actual: Directory.GetFiles(path: directory.RootPath).Select(selector: Path.GetFileName), expected: ["counters.ceilings.json"]);
+        }
+
+        Assert.True(condition: CountersCommand.TryRecord(path: path, reason: out var written, report: report), userMessage: written);
+        Assert.True(condition: CountersCeilings.TryRead(ceilings: out var ceilings, path: path, reason: out var read), userMessage: read);
+        Assert.Equal(actual: ceilings.Runs[0].Ceilings.Single(predicate: static ceiling => ((ceiling.Pass == "sdf.world$primary") && (ceiling.Kind == GpuWork.MarchSteps.Name))).Ceiling, expected: 4000L);
+        Assert.Empty(collection: CountersCeilings.Check(ceilings: ceilings, report: report).Failures);
+    }
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [Theory]
+    public void AReportOutputNamingTheCeilingsRefusesBeforeReadingTheWorkload(bool check, bool defaultCeilings) {
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-ceilings-law-");
+
+        var path = Path.Combine(path1: directory.RootPath, path2: "counters.ceilings.json");
+        var missing = Path.Combine(path1: directory.RootPath, path2: "missing.world.json");
+
+        if (defaultCeilings) {
+            Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
+            path = Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: CountersCeilings.CeilingsPath));
+        } else {
+            CountersCeilings.Write(ceilings: Recorded, path: path);
+        }
+
+        var alias = Path.Combine(path1: Path.GetDirectoryName(path: path)!, path2: ".", path3: Path.GetFileName(path: path));
+        string[] ceilingsArguments = (defaultCeilings ? [] : ["--ceilings", path]);
+        var before = File.ReadAllBytes(path: path);
+
+        var (exitCode, output, error) = ConsoleCapture.RunSplit(run: () => PuckRootCommand.Invoke(args: [
+            "counters", (check ? "--check" : "--record"), .. ceilingsArguments, "--output", alias,
+            "--world", missing, "--script", missing,
+        ]));
+
+        Assert.Contains(actualString: (check ? error : output), expectedSubstring: "the report output names the ceilings file; --output must name a different file");
+        Assert.Equal(actual: exitCode, expected: (check ? CliExit.Refused : CliExit.Failed));
+        if (!check) {
+            Assert.Contains(actualString: output, expectedSubstring: "not written:");
+        }
+        Assert.Equal(actual: File.ReadAllBytes(path: path), expected: before);
     }
     [Fact]
     public void AnotherWorkloadOrExtentIsRefusedByName() {
@@ -184,45 +398,41 @@ public sealed class CountersCeilingsLawTests {
             width: 1920
         ), userMessage: reason);
 
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-ceilings-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-ceilings-law-");
 
-        try {
-            var path = Path.Combine(path1: directory.FullName, path2: "report.json");
+        var path = Path.Combine(path1: directory.RootPath, path2: "report.json");
 
-            CountersCommand.WriteReport(path: path, report: Report(directx: (run with { Backend = "directx", Device = Device(backend: "directx") }), vulkan: run));
-            Assert.True(condition: CountersCommand.TryReadReport(path: path, reason: out var readReason, report: out var report), userMessage: readReason);
+        CountersCommand.WriteReport(path: path, report: Report(directx: (run with { Backend = "directx", Device = Device(backend: "directx") }), vulkan: run));
+        Assert.True(condition: CountersCommand.TryReadReport(path: path, reason: out var readReason, report: out var report), userMessage: readReason);
 
-            var ceilings = CountersCeilings.Record(report: report);
-            var ambient = ceilings.Runs[0].Ceilings.Where(predicate: static ceiling => (ceiling.Pass == "sdf.world$ambient")).ToArray();
+        var ceilings = CountersCeilings.Record(report: report);
+        var ambient = ceilings.Runs[0].Ceilings.Where(predicate: static ceiling => (ceiling.Pass == "sdf.world$ambient")).ToArray();
 
-            Assert.Equal(
-                actual: ambient.Select(selector: static ceiling => ceiling.Kind),
-                expected: GpuWork.SubmissionKinds.ToArray().Select(selector: static kind => kind.Name)
-            );
-            Assert.All(collection: ambient, action: static ceiling => Assert.Equal(actual: ceiling.Ceiling, expected: 0L));
-            Assert.Equal(
-                actual: ambient.Single(predicate: static ceiling => (ceiling.Kind == GpuWork.TexelsWritten.Name)).Class,
-                expected: WorkClass.PerBackendDeterministic
-            );
-            Assert.Equal(
-                actual: ambient.Single(predicate: static ceiling => (ceiling.Kind == GpuWork.Dispatches.Name)).Class,
-                expected: WorkClass.Deterministic
-            );
-            Assert.Empty(collection: CountersCeilings.Check(ceilings: ceilings, report: report).Failures);
+        Assert.Equal(
+            actual: ambient.Select(selector: static ceiling => ceiling.Kind),
+            expected: GpuWork.SubmissionKinds.ToArray().Select(selector: static kind => kind.Name)
+        );
+        Assert.All(collection: ambient, action: static ceiling => Assert.Equal(actual: ceiling.Ceiling, expected: 0L));
+        Assert.Equal(
+            actual: ambient.Single(predicate: static ceiling => (ceiling.Kind == GpuWork.TexelsWritten.Name)).Class,
+            expected: WorkClass.PerBackendDeterministic
+        );
+        Assert.Equal(
+            actual: ambient.Single(predicate: static ceiling => (ceiling.Kind == GpuWork.Dispatches.Name)).Class,
+            expected: WorkClass.Deterministic
+        );
+        Assert.Empty(collection: CountersCeilings.Check(ceilings: ceilings, report: report).Failures);
 
-            // The pass executing and writing texels breaks its recorded zero.
-            var executing = report.Runs[0] with {
-                Counts = [.. report.Runs[0].Counts, new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.TexelsWritten.Name, Node: "world", Pass: "sdf.world$ambient", Source: "gpu", Value: 5L)],
-                Passes = [.. report.Runs[0].Passes.Select(selector: static pass => (pass with { State = GpuPassState.Executed }))],
-            };
+        // The pass executing and writing texels breaks its recorded zero.
+        var executing = report.Runs[0] with {
+            Counts = [.. report.Runs[0].Counts, new WorldCount(Class: WorkClass.PerBackendDeterministic, Kind: GpuWork.TexelsWritten.Name, Node: "world", Pass: "sdf.world$ambient", Source: "gpu", Value: 5L)],
+            Passes = [.. report.Runs[0].Passes.Select(selector: static pass => (pass with { State = GpuPassState.Executed }))],
+        };
 
-            Assert.Contains(
-                collection: CountersCeilings.Check(ceilings: ceilings, report: report with { Runs = [executing, report.Runs[1]] }).Failures,
-                expected: "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient node=world breaks its required zero: reads 5"
-            );
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Contains(
+            collection: CountersCeilings.Check(ceilings: ceilings, report: report with { Runs = [executing, report.Runs[1]] }).Failures,
+            expected: "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient node=world breaks its required zero: reads 5"
+        );
     }
     // Every recorded expectation must be measured: a node the run no longer reports fails each of its ceilings.
     [Fact]
@@ -266,25 +476,70 @@ public sealed class CountersCeilingsLawTests {
         );
     }
     [Fact]
-    public void WrittenCeilingsReadBackAsWrittenAndAForeignFileIsRefused() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-ceilings-law-");
+    public void ADeviceFollowingKindsZeroCannotBeReadAsARequiredZero() {
+        var recorded = CountersCeilings.Record(report: Report(vulkan: WithUpload(dispatches: 0L, run: Run(backend: "vulkan"))));
+        var run = recorded.Runs[0];
+        var upload = Assert.Single(collection: run.Ceilings, predicate: static ceiling => (ceiling.Pass == "upload"));
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-ceilings-law-");
 
-        try {
-            var path = Path.Combine(path1: directory.FullName, path2: "counters.ceilings.json");
+        var path = Path.Combine(path1: directory.RootPath, path2: "counters.ceilings.json");
 
-            CountersCeilings.Write(ceilings: Recorded, path: path);
+        CountersCeilings.Write(ceilings: recorded with { Runs = [run with { Ceilings = [upload with { RequiredZero = true }] }] }, path: path);
 
-            Assert.True(condition: CountersCeilings.TryRead(ceilings: out var read, path: path, reason: out var reason), userMessage: reason);
-            Assert.Equal(
-                actual: JsonSerializer.Serialize(value: read, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings),
-                expected: JsonSerializer.Serialize(value: Recorded, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings)
+        Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var reason));
+        Assert.Contains(actualString: reason, expectedSubstring: "kind=gpu.dispatches pass=upload node=world requiredZero does not match its kind, class and ceiling");
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AKernelZeroCannotBeReadWithoutItsRequiredZeroMark(bool explicitFalse) {
+        var run = Recorded.Runs[0];
+        var zero = run.Ceilings.First(predicate: static ceiling => ceiling.RequiredZero);
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-ceilings-law-");
+
+        var path = Path.Combine(path1: directory.RootPath, path2: "counters.ceilings.json");
+
+        CountersCeilings.Write(ceilings: Recorded with { Runs = [run with { Ceilings = [zero with { RequiredZero = false }] }] }, path: path);
+
+        if (explicitFalse) {
+            File.WriteAllText(
+                contents: File.ReadAllText(path: path).Replace(comparisonType: StringComparison.Ordinal, newValue: "\"ceiling\": 0, \"requiredZero\": false", oldValue: "\"ceiling\": 0"),
+                path: path
             );
-
-            File.WriteAllText(contents: "{\"schema\":\"puck.counters.report.v1\",\"workload\":\"w\",\"script\":\"s\",\"runs\":[]}", path: path);
-            Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var foreign));
-            Assert.Contains(actualString: foreign, expectedSubstring: "a foreign document");
-        } finally {
-            directory.Delete(recursive: true);
         }
+
+        Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var reason));
+        Assert.Contains(actualString: reason, expectedSubstring: "kind=gpu.march.steps pass=sdf.world$cull-args node=world requiredZero does not match its kind, class and ceiling");
+    }
+    [Fact]
+    public void WrittenCeilingsReadBackAsWrittenAndAForeignFileIsRefused() {
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-ceilings-law-");
+
+        var path = Path.Combine(path1: directory.RootPath, path2: "counters.ceilings.json");
+
+        CountersCeilings.Write(ceilings: Recorded, path: path);
+
+        Assert.True(condition: CountersCeilings.TryRead(ceilings: out var read, path: path, reason: out var reason), userMessage: reason);
+        Assert.Equal(
+            actual: JsonSerializer.Serialize(value: read, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings),
+            expected: JsonSerializer.Serialize(value: Recorded, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings)
+        );
+
+        // A required zero is written as such, and a ceiling that is not a zero of a per-backend class cannot be one.
+        Assert.Contains(actualString: File.ReadAllText(path: path), expectedSubstring: "\"requiredZero\": true");
+        Assert.DoesNotContain(actualString: File.ReadAllText(path: path), expectedSubstring: "\"requiredZero\": false");
+
+        var vulkan = Recorded.Runs[0];
+        var raised = Recorded with {
+            Runs = [vulkan with { Ceilings = [vulkan.Ceilings.First(predicate: static ceiling => ceiling.RequiredZero) with { Ceiling = 1L }] }],
+        };
+
+        CountersCeilings.Write(ceilings: raised, path: path);
+        Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var malformed));
+        Assert.Contains(actualString: malformed, expectedSubstring: "requiredZero does not match its kind, class and ceiling");
+
+        File.WriteAllText(contents: "{\"schema\":\"puck.counters.report.v1\",\"workload\":\"w\",\"script\":\"s\",\"runs\":[]}", path: path);
+        Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var foreign));
+        Assert.Contains(actualString: foreign, expectedSubstring: "a foreign document");
     }
 }

@@ -13,7 +13,7 @@ namespace Puck.World.Server;
 /// Committed journal entries permit the canonical world actor through the trusted-storage entry point; pending
 /// external submissions retain the live actor restriction. Every embedded document (the definition, the base definition, an escrow lease's destination definition)
 /// reuses <see cref="WorldDefinitionSerialization.Serialize"/> bytes verbatim — this codec never re-serializes a
-/// document itself. Every read is bounded; every decoder — the outer envelope, the body, and each of the
+/// document itself — and a base byte-identical to the definition is written once, behind a flag. Every read is bounded; every decoder — the outer envelope, the body, and each of the
 /// sections — asks its own <see cref="WireReader.TryFinish"/> exactly once, so a truncated or trailing-byte payload
 /// refuses by name at the scope that actually owns the leftover bytes.</summary>
 public static partial class WorldAuthorityCheckpointCodec {
@@ -32,8 +32,10 @@ public static partial class WorldAuthorityCheckpointCodec {
 
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader.</summary>
-    // Version 16 carries the escrow's crossing sequence, the watermark crossing-log recovery redoes from.
-    public const ushort SupportedVersion = 16;
+    // Version 21 carries, besides the time-travel and determinism shapes, the escrow's crossing sequence, the watermark
+    // crossing-log recovery redoes from, each occupant's, each committed traveler's and each peer event entry's
+    // accumulated arrival turn, and every identity projection's facts row.
+    public const ushort SupportedVersion = 21;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>
@@ -79,8 +81,9 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <param name="bytes">The encoded blob.</param>
     /// <param name="checkpoint">The decoded checkpoint on success.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <param name="documentDirectory">The captured definition's asset directory, when its paths are relative.</param>
     /// <returns><see langword="true"/> when the blob decoded exactly.</returns>
-    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityCheckpoint? checkpoint, out string reason) {
+    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityCheckpoint? checkpoint, out string reason, string? documentDirectory = null) {
         checkpoint = null;
 
         var reader = new WireReader(bytes: bytes);
@@ -202,17 +205,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             return false;
         }
 
-        WorldDefinition definition;
-
         try {
-            definition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
+            _ = WorldDefinitionSerialization.Deserialize(documentDirectory: documentDirectory, utf8Json: server.DefinitionJson);
         } catch (Exception exception) when ((exception is ArgumentException or InvalidDataException or NotSupportedException)) {
             reason = $"server section: definition failed to parse — {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
 
-        var defaults = definition.PlayerDefaults;
 
         if (!TryDecodePopulation(
             bytes: populationBytes,
@@ -230,7 +230,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
         if (!TryDecodeEscrow(
             bytes: escrowBytes,
-            defaults: defaults,
             reason: out reason,
             section: out var escrow
         )) {
@@ -259,7 +258,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
         if (!TryDecodeHostRow(
             bytes: hostRowBytes,
-            defaults: defaults,
             reason: out reason,
             section: out var hostRow
         )) {

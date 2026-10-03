@@ -86,7 +86,6 @@ public sealed partial class WorldReplayTape {
         foreach (var (row, companion, owned) in m_companions) {
             if (companion.Mode == WorldReplayMode.Recording) {
                 tapes.Add(item: companion.SnapshotRecording());
-                companion.DetachTaps();
                 companion.ResetRecordingState();
             }
             if (owned && ReferenceEquals(

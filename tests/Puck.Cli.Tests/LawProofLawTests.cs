@@ -405,10 +405,11 @@ public sealed partial class LawProofLawTests {
         _ = checkout.Git("worktree", "add", "--detach", "--quiet", otherTree, "HEAD");
         Directory.Delete(path: otherTree, recursive: true);
         _ = checkout.Git("config", "gc.worktreePruneExpire", "now");
-        var before = checkout.Git("worktree", "list", "--porcelain");
-
         checkout.Write(name: FixPath, text: "fixed");
         _ = checkout.Commit(message: "lib: fix");
+
+        // Read last before the proof, so the registration it must keep is shown to exist when the proof starts.
+        var before = checkout.Git("worktree", "list", "--porcelain");
 
         var (exitCode, _, error) = Prove(checkout: checkout, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: new FakeRunner(), scratch: scratch);
 

@@ -349,11 +349,9 @@ public sealed class GpuRegion : IDisposable {
                     copySets = m_ownedCopyPool.Region(index: 0);
                 }
 
+                // No slot's copy set is written here: RecordCopy writes a slot's set the first time that slot records a
+                // copy, inside the pass that records it, so the writes are counted where the upload's work is.
                 m_copySets = copySets;
-
-                for (var slot = 0; (slot < slotCount); slot++) {
-                    WriteCopySet(slot: slot);
-                }
             }
         } catch {
             Dispose();
@@ -507,6 +505,7 @@ public sealed class GpuRegion : IDisposable {
 
         m_disposed = true;
 
+        m_copySets?.ForgetWriter(region: this);
         m_ownedCopyPool?.Dispose();
 
         foreach (var buffer in m_ownedBuffers) {
@@ -597,8 +596,8 @@ public sealed class GpuRegion : IDisposable {
             throw new InvalidOperationException(message: $"The region owes words slot {slot}'s staging buffer does not hold; flush the slot after the last write and before recording its copy.");
         }
 
-        // Another region its owner's reserved sets serve wrote the slot's set since this one did, as a replacement the
-        // owner abandoned does; the slot's last submission has retired, so the set is rewritten before it is bound.
+        // The set is unwritten, or another region its owner's reserved sets serve wrote it since this one did; the
+        // slot's last submission has retired, so the set is written before it is bound.
         if (!m_copySets!.IsWrittenBy(
             region: this,
             slot: slot
@@ -660,7 +659,10 @@ public sealed class GpuRegion : IDisposable {
             );
         }
 
-        m_copySets = copySets;
+        if (!ReferenceEquals(objA: m_copySets, objB: copySets)) {
+            m_copySets?.ForgetWriter(region: this);
+            m_copySets = copySets;
+        }
     }
     /// <summary>Moves an external destination's landing point: the region's word 0 lands at
     /// <paramref name="destinationWord"/> from the next copy on, and since what the destination holds there is

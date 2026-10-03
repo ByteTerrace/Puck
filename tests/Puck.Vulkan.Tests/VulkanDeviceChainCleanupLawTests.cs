@@ -239,7 +239,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             }
         }
 
-        public nint CreateDebugMessenger(VulkanInstanceCommands instance) {
+        public nint CreateDebugMessenger(VulkanInstanceCommands instance, nint userData) {
             Reach(link: "debug messenger");
             Log(entry: "create debug messenger");
 

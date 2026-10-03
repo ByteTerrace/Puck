@@ -217,7 +217,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
         }
 
         if (tier == WorldDisclosureTier.Replica) {
-            return $"replica: {WorldDefinitionSerialization.Serialize(definition: definition).Length} bytes, the whole {WorldDefinition.SchemaVersion} document";
+            return $"replica: {WorldDefinitionSerialization.SerializeCompact(definition: definition).Length} bytes, the whole {WorldDefinition.SchemaVersion} document";
         }
 
         var time = server.Time;
@@ -229,7 +229,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             revision: server.Population.Revision,
             time: in time
         )!;
-        var bytes = WorldProjection.Serialize(projection: projection);
+        var bytes = WorldProjection.SerializeCompact(projection: projection);
 
         return $"presentation: {bytes.Length} bytes, {WorldProjectionDocument.SchemaVersion} carrying {string.Join(
             separator: ",",

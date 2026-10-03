@@ -1,4 +1,5 @@
 using Puck.Cli.Canary;
+using Puck.Testing;
 
 using Xunit;
 
@@ -11,16 +12,11 @@ namespace Puck.Cli.Tests;
 /// load the good manifest; the strict (<c>--list</c>) shape must refuse the whole discovery on the orphan alone.
 /// </summary>
 public sealed class CanaryManifestLoaderLawTests : IDisposable {
-    private readonly string m_root;
+    private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-cli-tests-canary-loader-");
 
     public CanaryManifestLoaderLawTests() {
-        m_root = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-cli-tests-canary-loader-{Guid.NewGuid():N}"
-        );
-
         var canaryRoot = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "tests",
             path3: "Puck.World.Canaries"
         );
@@ -109,13 +105,13 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
     [InlineData("1", null)]
     [Theory]
     public void AScheduledLegIsAnExplicitBooleanAndOrdinaryLegsStayUnarmed(string spelling, bool? armed) {
-        var directory = Path.Combine(path1: m_root, path2: "tests", path3: "Puck.World.Canaries", path4: "good-one");
+        var directory = Path.Combine(path1: m_directory.RootPath, path2: "tests", path3: "Puck.World.Canaries", path4: "good-one");
 
         File.WriteAllText(path: Path.Combine(path1: directory, path2: "canary.json"), contents: LegManifest(
             id: "good-one", relaunch: $"\n\"runSchedule\": {spelling},",
             worldPrefix: "tests/Puck.World.Canaries/good-one/"));
         var loaded = CanaryManifestLoader.TryLoadAll(error: out _, manifests: out var manifests,
-            refused: out var refused, repositoryRoot: m_root, strict: false);
+            refused: out var refused, repositoryRoot: m_directory.RootPath, strict: false);
 
         Assert.Equal(expected: armed.HasValue, actual: loaded);
         if (armed is { } expected) {
@@ -180,15 +176,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
             )
         );
     }
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_root,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
     // A relaunch names the document the first boot writes by its bare file name in the run directory, or names none and
     // boots the leg's own world again; a path, which could reach outside that directory, is refused by name.
     [InlineData("saved.world.json", true)]
@@ -198,7 +186,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
     [Theory]
     public void ARelaunchBootsABareNamedSavedDocumentOrItsOwnWorld(string? world, bool loads) {
         var goodDirectory = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "tests",
             path3: "Puck.World.Canaries",
             path4: "good-one"
@@ -206,7 +194,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
 
         Directory.Delete(
             path: Path.Combine(
-                path1: m_root,
+                path1: m_directory.RootPath,
                 path2: "tests",
                 path3: "Puck.World.Canaries",
                 path4: "orphan-one"
@@ -231,7 +219,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
             error: out var error,
             manifests: out var manifests,
             refused: out _,
-            repositoryRoot: m_root,
+            repositoryRoot: m_directory.RootPath,
             strict: true
         );
 
@@ -264,7 +252,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
     [Theory]
     public void APackageIsPreparedUnderABareNameAndAltersOnlyItsOwnFiles(string members, string? refusal) {
         var goodDirectory = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "tests",
             path3: "Puck.World.Canaries",
             path4: "good-one"
@@ -272,7 +260,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
 
         Directory.Delete(
             path: Path.Combine(
-                path1: m_root,
+                path1: m_directory.RootPath,
                 path2: "tests",
                 path3: "Puck.World.Canaries",
                 path4: "orphan-one"
@@ -297,7 +285,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
             error: out var error,
             manifests: out var manifests,
             refused: out _,
-            repositoryRoot: m_root,
+            repositoryRoot: m_directory.RootPath,
             strict: true
         );
 
@@ -327,7 +315,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
     [Theory]
     public void AFixtureTreeHoldsOnlyDeclaredFixtures(string fixture, string? extra, string? refusal) {
         var goodDirectory = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "tests",
             path3: "Puck.World.Canaries",
             path4: "good-one"
@@ -335,7 +323,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
 
         Directory.Delete(
             path: Path.Combine(
-                path1: m_root,
+                path1: m_directory.RootPath,
                 path2: "tests",
                 path3: "Puck.World.Canaries",
                 path4: "orphan-one"
@@ -378,7 +366,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
             error: out var error,
             manifests: out _,
             refused: out _,
-            repositoryRoot: m_root,
+            repositoryRoot: m_directory.RootPath,
             strict: true
         );
 
@@ -400,7 +388,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
             error: out var error,
             manifests: out var manifests,
             refused: out var refused,
-            repositoryRoot: m_root,
+            repositoryRoot: m_directory.RootPath,
             strict: false
         );
 
@@ -430,7 +418,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
             error: out var error,
             manifests: out _,
             refused: out _,
-            repositoryRoot: m_root,
+            repositoryRoot: m_directory.RootPath,
             strict: true
         );
 

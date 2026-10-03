@@ -133,6 +133,8 @@ public sealed class MusicDirector {
     /// <summary>Gets the segment id a currently armed transition will switch to, or <see langword="null"/> when
     /// nothing is armed.</summary>
     public string? PendingSegmentId => m_armed?.ToSegmentId;
+    /// <summary>Gets the armed transition, including the boundary a checkpoint must preserve.</summary>
+    public MusicTransition? ArmedTransition => m_armed;
     /// <summary>Gets how many transitions have committed since construction.</summary>
     public ulong TransitionCount { get; private set; }
 

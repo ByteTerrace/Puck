@@ -182,33 +182,29 @@ public sealed class VectorStateLawTests {
 
         var restoredDef = WorldDefinitionSerialization.Deserialize(utf8Json: checkpoint.Server.DefinitionJson);
         using var restoredMachines = new WorldMachineHost(engines: [], screens: restoredDef.Screens);
-        var tempDir = Directory.CreateTempSubdirectory(prefix: "puck-checkpoint-vector-").FullName;
+        using var tempDir = new TemporaryDirectory(prefix: "puck-checkpoint-vector-");
 
-        try {
-            var (restoredServer, _) = WorldServer.FromCheckpoint(
-                checkpoint: checkpoint,
-                instanceIdentity: "boot",
-                machines: restoredMachines,
-                profiles: new WorldOwnedWorlds(directory: tempDir, machineId: Guid.NewGuid(), template: restoredDef)
-            );
+        var (restoredServer, _) = WorldServer.FromCheckpoint(
+            checkpoint: checkpoint,
+            instanceIdentity: "boot",
+            machines: restoredMachines,
+            profiles: new WorldOwnedWorlds(directory: tempDir.RootPath, machineId: Guid.NewGuid(), template: restoredDef)
+        );
 
-            Assert.NotNull(@object: restoredServer.Definition.Spaces);
-            Assert.Single(collection: restoredServer.Definition.Spaces);
-            Assert.Equal("lore", restoredServer.Definition.Spaces[0].Name.Value);
-            Assert.Equal(8, restoredServer.Definition.Spaces[0].Identity.Dimensions);
+        Assert.NotNull(@object: restoredServer.Definition.Spaces);
+        Assert.Single(collection: restoredServer.Definition.Spaces);
+        Assert.Equal("lore", restoredServer.Definition.Spaces[0].Name.Value);
+        Assert.Equal(8, restoredServer.Definition.Spaces[0].Identity.Dimensions);
 
-            var restoredRow = WorldDefinitionRows.FindStateRow(rows: restoredServer.Definition.State, name: "memories");
+        var restoredRow = WorldDefinitionRows.FindStateRow(rows: restoredServer.Definition.State, name: "memories");
 
-            Assert.NotNull(@object: restoredRow);
-            Assert.NotNull(@object: restoredRow.Cells);
-            Assert.Single(collection: restoredRow.Cells);
-            var restoredCell = restoredRow.Cells[0];
+        Assert.NotNull(@object: restoredRow);
+        Assert.NotNull(@object: restoredRow.Cells);
+        Assert.Single(collection: restoredRow.Cells);
+        var restoredCell = restoredRow.Cells[0];
 
-            Assert.Equal("m1", restoredCell.Key.Value);
-            Assert.True(condition: restoredCell.Value.AsVector.Span.SequenceEqual(other: vector.Components));
-        } finally {
-            Directory.Delete(path: tempDir, recursive: true);
-        }
+        Assert.Equal("m1", restoredCell.Key.Value);
+        Assert.True(condition: restoredCell.Value.AsVector.Span.SequenceEqual(other: vector.Components));
     }
     [Fact]
     public void Vector_WorldSaveAndReload() {
@@ -224,31 +220,26 @@ public sealed class VectorStateLawTests {
         var definition = BuildDocumentWithState(spaces: [space], rows: [memoriesRow]);
         using var fixture = Fixtures.FreshServer(definition: definition);
 
-        var tempPath = Path.Combine(path1: Path.GetTempPath(), path2: $"{Guid.NewGuid():N}.world.json");
+        using var tempDirectory = new TemporaryDirectory(prefix: "puck-vector-save-");
+        var tempPath = tempDirectory.PathOf(name: "vector.world.json");
 
-        try {
-            _ = WorldDefinitionSerialization.Save(definition: fixture.Server.Definition, path: tempPath);
-            var reloadedDef = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: tempPath));
+        _ = WorldDefinitionSerialization.Save(definition: fixture.Server.Definition, path: tempPath);
+        var reloadedDef = WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: tempPath));
 
-            Assert.NotNull(@object: reloadedDef.Spaces);
-            Assert.Single(collection: reloadedDef.Spaces);
-            Assert.Equal("lore", reloadedDef.Spaces[0].Name.Value);
-            Assert.Equal(8, reloadedDef.Spaces[0].Identity.Dimensions);
+        Assert.NotNull(@object: reloadedDef.Spaces);
+        Assert.Single(collection: reloadedDef.Spaces);
+        Assert.Equal("lore", reloadedDef.Spaces[0].Name.Value);
+        Assert.Equal(8, reloadedDef.Spaces[0].Identity.Dimensions);
 
-            var reloadedRow = WorldDefinitionRows.FindStateRow(rows: reloadedDef.State, name: "memories");
+        var reloadedRow = WorldDefinitionRows.FindStateRow(rows: reloadedDef.State, name: "memories");
 
-            Assert.NotNull(@object: reloadedRow);
-            Assert.NotNull(@object: reloadedRow.Cells);
-            Assert.Single(collection: reloadedRow.Cells);
-            var reloadedCell = reloadedRow.Cells[0];
+        Assert.NotNull(@object: reloadedRow);
+        Assert.NotNull(@object: reloadedRow.Cells);
+        Assert.Single(collection: reloadedRow.Cells);
+        var reloadedCell = reloadedRow.Cells[0];
 
-            Assert.Equal("m1", reloadedCell.Key.Value);
-            Assert.True(condition: reloadedCell.Value.AsVector.Span.SequenceEqual(other: vector.Components));
-        } finally {
-            if (File.Exists(path: tempPath)) {
-                File.Delete(path: tempPath);
-            }
-        }
+        Assert.Equal("m1", reloadedCell.Key.Value);
+        Assert.True(condition: reloadedCell.Value.AsVector.Span.SequenceEqual(other: vector.Components));
     }
     [Fact]
     public void Vector_EvictingTableReplayDeterminism() {

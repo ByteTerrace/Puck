@@ -13,6 +13,12 @@ internal static partial class LawRegistry {
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
     );
+    private static readonly Domain VectorCompareLength = new(
+        Key: "vector-compare-length",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
     private static readonly Domain QuaternionArc = new(
         Key: "quaternion-arc",
         Block: 512,
@@ -21,6 +27,18 @@ internal static partial class LawRegistry {
     );
     private static readonly Domain QuaternionAntiparallel = new(
         Key: "quaternion-antiparallel",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
+    private static readonly Domain RigidExpSeries = new(
+        Key: "rigid-exp-series",
+        Block: 512,
+        EdgeFraction: 0.4,
+        NeighborhoodFraction: 0.3
+    );
+    private static readonly Domain RigidLogSeries = new(
+        Key: "rigid-log-series",
         Block: 512,
         EdgeFraction: 0.4,
         NeighborhoodFraction: 0.3
@@ -68,9 +86,27 @@ internal static partial class LawRegistry {
             width: 3
         ),
         SweptCase(
+            claim: Subjects.FixedRigidExpMatchesTheSeries,
+            domain: RigidExpSeries,
+            id: "rigid.exp-matches-the-series",
+            width: 3
+        ),
+        SweptCase(
+            claim: Subjects.FixedRigidLogMatchesTheSeries,
+            domain: RigidLogSeries,
+            id: "rigid.log-matches-the-series",
+            width: 4
+        ),
+        SweptCase(
             claim: Subjects.FixedVectorIsWithinMatchesLength,
             domain: VectorWithin,
             id: "vector.is-within-matches-length",
+            width: 3
+        ),
+        SweptCase(
+            claim: Subjects.FixedVectorCompareLengthMatchesTheSquares,
+            domain: VectorCompareLength,
+            id: "vector.compare-length-matches-the-squares",
             width: 3
         ),
         Case(

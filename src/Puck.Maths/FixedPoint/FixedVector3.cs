@@ -600,6 +600,25 @@ public readonly record struct FixedVector3(FixedQ4816 X, FixedQ4816 Y, FixedQ481
             y: Y.Value,
             z: Z.Value
         );
+    /// <summary>Compares this vector's length with <paramref name="other"/>'s on the exact sums of squares, without
+    /// a square root.</summary>
+    /// <param name="other">The vector to compare with.</param>
+    /// <returns>−1, 0 or 1 as this vector is shorter than, exactly as long as, or longer than
+    /// <paramref name="other"/>.</returns>
+    /// <remarks>Each raw sum of squares is at most <c>3·2¹²⁶</c>, so both fit 128 bits and the compare is exact for
+    /// every pair. Two vectors the compare tells apart may still report the same <see cref="Length"/>, which rounds;
+    /// the one it calls longer never reports the shorter <see cref="Length"/>, because <see cref="Length"/> is a
+    /// rounded, saturating, monotone root of the same sum. So the longer of two vectors can be chosen first and
+    /// rooted once.</remarks>
+    public int CompareLengthTo(FixedVector3 other) =>
+        FixedVectorMath.CompareMagnitude(
+            otherX: other.X.Value,
+            otherY: other.Y.Value,
+            otherZ: other.Z.Value,
+            x: X.Value,
+            y: Y.Value,
+            z: Z.Value
+        );
     /// <summary>Tries to get the full-width vector length.</summary>
     public bool TryLength(out FixedQ4816 length) =>
         FixedVectorMath.TryMagnitude(

@@ -226,7 +226,7 @@ public sealed class KeyedValueLawTests {
     public void A_keyed_value_is_judged_at_each_of_its_keys() {
         // A negative fog density is refused at the key that states it, not only as a literal.
         Assert.Contains(
-            expectedSubstring: "render.sky.layers[0].density.keys[1].value must be finite and non-negative",
+            expectedSubstring: "render.sky.layers[0].density.keys[1].value -0.1 must be finite and within [0, inf)",
             actualString: Validate(definition: Definition(sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: new BindableScalar(keys: Track(
                 (2d, 0f, WorldEase.Linear),
                 (4d, -0.1f, WorldEase.Linear)

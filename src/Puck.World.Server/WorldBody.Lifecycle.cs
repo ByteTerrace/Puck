@@ -63,10 +63,10 @@ public sealed partial class WorldBody {
     // from a seconds-rounded value would drift the restored segment's remaining duration from the exact tick count
     // that was live at capture. Always called on a freshly constructed restore body (RestoreDetachedSeat never calls
     // ApplyTransferState on a live one), so there is never an existing segment to preserve or lose.
-    private void RestoreTape(PlayerIntent[] intents, ulong[] remainingTicks) {
+    private void RestoreTape(IReadOnlyList<PlayerIntent> intents, IReadOnlyList<ulong> remainingTicks) {
         var count = Math.Min(
-            val1: intents.Length,
-            val2: remainingTicks.Length
+            val1: intents.Count,
+            val2: remainingTicks.Count
         );
 
         while (m_tape.Length < count) {
@@ -212,7 +212,7 @@ public sealed partial class WorldBody {
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}{tetherSuffix}{asleepSuffix}]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}{tetherSuffix}{asleepSuffix}{DescribeSweepRefusal()}]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with

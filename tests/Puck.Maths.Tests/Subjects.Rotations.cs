@@ -168,4 +168,110 @@ internal static partial class Subjects {
 
         return null;
     }
+    /// <summary>The screw exponential matches the series: rotation lanes within two raws (the Q16 axis, sine and
+    /// norm each carry half a raw), dual lanes within <c>2 + 2⁻¹⁶·|dual|</c> raw of the exact screw at the exact
+    /// inputs.</summary>
+    /// <param name="left">Three raws for the rotation part, folded below 2¹⁷ (two radians a lane).</param>
+    /// <param name="right">Three raws for the dual part, folded below 2²⁴ (256 world units a lane).</param>
+    /// <returns>The counterexample, or <see langword="null"/>.</returns>
+    public static string? FixedRigidExpMatchesTheSeries(long[] left, long[] right) {
+        long[] real = [(left[0] >> 46), (left[1] >> 46), (left[2] >> 46)];
+        long[] dual = [(right[0] >> 39), (right[1] >> 39), (right[2] >> 39)];
+
+        if (Oracles.RigidExp(
+            dual: dual,
+            real: real
+        ) is not { } ideal) {
+            return null;
+        }
+
+        var actual = FixedRigidTransform.Exp(
+            dual: new FixedVector3(
+                X: Raw(value: dual[0]),
+                Y: Raw(value: dual[1]),
+                Z: Raw(value: dual[2])
+            ),
+            real: new FixedVector3(
+                X: Raw(value: real[0]),
+                Y: Raw(value: real[1]),
+                Z: Raw(value: real[2])
+            )
+        ).Value;
+        long[] lanes = [actual.Real.X.Value, actual.Real.Y.Value, actual.Real.Z.Value, actual.Real.W.Value, actual.Dual.X.Value, actual.Dual.Y.Value, actual.Dual.Z.Value, actual.Dual.W.Value];
+        var dualBound = (2L + (Math.Max(val1: Math.Abs(value: dual[0]), val2: Math.Max(val1: Math.Abs(value: dual[1]), val2: Math.Abs(value: dual[2]))) >> 16));
+
+        return RigidLanesWithin(
+            actual: lanes,
+            ideal: ideal,
+            name: $"Exp(({real[0]}, {real[1]}, {real[2]}), ({dual[0]}, {dual[1]}, {dual[2]}))",
+            tolerance: (lane => ((lane < 4)
+                ? 2L
+                : dualBound))
+        );
+    }
+    /// <summary>The screw logarithm matches the series: rotation lanes within <c>1 + |lane|/(16·s_raw)</c> raw, dual
+    /// lanes within <c>2 + 2⁻¹⁶·|dual| + (|dual| + σ)/(16·s_raw)</c> raw of the exact screw at the exact inputs, σ the
+    /// oracle's sensitivity of the lane to the sine. The sine-relative terms are the Q20 sine and half angle's
+    /// half-unit error carried through the divisions by the sine (once for a rotation lane, up to three times for a
+    /// dual lane); only a near-half-turn rotation with a vector part of a few raws makes them large.</summary>
+    /// <param name="left">Four raws for the rotation, normalized.</param>
+    /// <param name="right">Three raws for the translation, folded below 2²⁴ (256 world units a lane).</param>
+    /// <returns>The counterexample, or <see langword="null"/>.</returns>
+    public static string? FixedRigidLogMatchesTheSeries(long[] left, long[] right) {
+        var transform = FixedRigidTransform.FromRotationTranslation(
+            rotation: new FixedQuaternion(
+                X: Raw(value: left[0]),
+                Y: Raw(value: left[1]),
+                Z: Raw(value: left[2]),
+                W: Raw(value: left[3])
+            ).Normalize(),
+            translation: new FixedVector3(
+                X: Raw(value: (right[0] >> 39)),
+                Y: Raw(value: (right[1] >> 39)),
+                Z: Raw(value: (right[2] >> 39))
+            )
+        );
+        var value = transform.Value;
+        long[] real = [value.Real.X.Value, value.Real.Y.Value, value.Real.Z.Value, value.Real.W.Value];
+        long[] dual = [value.Dual.X.Value, value.Dual.Y.Value, value.Dual.Z.Value, value.Dual.W.Value];
+
+        if (Oracles.RigidLog(
+            dual: dual,
+            real: real,
+            sineSensitivity: out var sineSensitivity
+        ) is not { } ideal) {
+            return null;
+        }
+
+        var (logReal, logDual) = transform.Log();
+        long[] lanes = [logReal.X.Value, logReal.Y.Value, logReal.Z.Value, logDual.X.Value, logDual.Y.Value, logDual.Z.Value];
+        var dualMagnitude = Math.Max(val1: Math.Abs(value: dual[0]), val2: Math.Max(val1: Math.Abs(value: dual[1]), val2: Math.Max(val1: Math.Abs(value: dual[2]), val2: Math.Abs(value: dual[3]))));
+        var sineRaw = Math.Max(val1: 1L, val2: ((long)Oracles.IntegerSquareRoot(value: (((((System.Numerics.BigInteger)real[0]) * real[0]) + (((System.Numerics.BigInteger)real[1]) * real[1])) + (((System.Numerics.BigInteger)real[2]) * real[2])))));
+        var dualBound = ((2L + (dualMagnitude >> 16)) + (dualMagnitude / (16L * sineRaw)));
+
+        long SensitivityRaw(int lane) => ((long)System.Numerics.BigInteger.Min(left: (sineSensitivity[lane] / (ideal[(3 + lane)].Denominator * (16L * sineRaw))), right: (long.MaxValue >> 2)));
+        long LaneMagnitude(int lane) => ((long)System.Numerics.BigInteger.Min(left: System.Numerics.BigInteger.Abs(value: (ideal[lane].Numerator / ideal[lane].Denominator)), right: (long.MaxValue >> 2)));
+
+        return RigidLanesWithin(
+            actual: lanes,
+            ideal: ideal,
+            name: $"Log of rotation ({real[0]}, {real[1]}, {real[2]}, {real[3]}) and dual ({dual[0]}, {dual[1]}, {dual[2]}, {dual[3]})",
+            tolerance: (lane => ((lane < 3)
+                ? (1L + (LaneMagnitude(lane: lane) / (16L * sineRaw)))
+                : (dualBound + SensitivityRaw(lane: (lane - 3)))))
+        );
+    }
+
+    private static string? RigidLanesWithin(long[] actual, (System.Numerics.BigInteger Numerator, System.Numerics.BigInteger Denominator)[] ideal, string name, Func<int, long> tolerance) {
+        for (var lane = 0; (lane < actual.Length); lane++) {
+            var (numerator, denominator) = ideal[lane];
+            var deviation = System.Numerics.BigInteger.Abs(value: ((actual[lane] * denominator) - numerator));
+
+            if (deviation > (tolerance(lane) * denominator)) {
+                return $"{name} lane {lane} = {actual[lane]}, the series gives {(numerator / denominator)} (tolerance {tolerance(lane)} raw)";
+            }
+        }
+
+        return null;
+    }
 }

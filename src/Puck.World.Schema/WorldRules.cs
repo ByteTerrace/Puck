@@ -174,7 +174,7 @@ public enum WorldRuleEffectRefusal : byte {
     [Refusal(door: "world.rule.effect", condition: "a rule's 'removePlacement' effect targets a placement whose inhabited body a concrete drive grant currently possesses", kind: RefusalKind.Verdict)]
     CarrierPossessed,
 
-    [Refusal(door: "world.rule.effect", condition: "a 'setIdentityFact' effect addresses a body driving under no owned identity, so there is no document to carry the fact", kind: RefusalKind.Verdict)]
+    [Refusal(door: "world.rule.effect", condition: "a 'setIdentityFact' effect addresses a body driving under no identity, so nothing carries the fact", kind: RefusalKind.Verdict)]
     IdentityUnbound,
 
     [Refusal(door: "world.rule.effect", condition: "a 'setIdentityFact' effect finds no 'identity' lane row in the installed document, or the lane or the identity's own facts row refuses the write", kind: RefusalKind.Verdict)]

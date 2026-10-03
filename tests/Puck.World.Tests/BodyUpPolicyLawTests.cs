@@ -123,7 +123,7 @@ public sealed class BodyUpPolicyLawTests {
                 Definition: candidate,
                 Force: true,
                 Kind: WorldRebuildKind.Load,
-                PathHint: "body-up-policy-rebuild-probe.world.json"
+                Origin: new WorldRebuildOrigin.File(Path: "body-up-policy-rebuild-probe.world.json")
             ),
             principal: Principal.Console
         );

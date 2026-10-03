@@ -275,85 +275,84 @@ public sealed class McpAdversarialTests {
     [Fact]
     public async Task FollowingADirectoryAttachesTheNewestWorldThatAnswers() {
         if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Windows capability ACLs are required."); return; }
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-follow-").FullName;
+        using var scratch = new TemporaryDirectory(prefix: "puck-follow-");
+        var directory = scratch.RootPath;
         var entered = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
-        try {
-            using var older = new LocalControlServer(
-                clock: new VirtualClock(),
-                createSession: () => new ScriptedSession(entered: null, name: "older"),
-                directory: directory
-            );
-            await using var adapter = new InProcessAdapter(
-                createSession: () => new ScriptedSession(entered: entered, name: "newer"),
-                directory: directory
-            );
-            var stale = Path.Combine(
-                path1: directory,
-                path2: "puck-control-stale.json"
-            );
-            // The stale capability names a port this law holds bound, exclusively and without listening, for the whole
-            // law: every connect to it is refused, and no other process can start listening on it and answer in the
-            // gone World's place, as a port freed by a stopped listener could be taken again on a busy machine.
-            using var closed = new Socket(
-                addressFamily: AddressFamily.InterNetwork,
-                protocolType: ProtocolType.Tcp,
-                socketType: SocketType.Stream
-            ) { ExclusiveAddressUse = true };
+        using var older = new LocalControlServer(
+            clock: new VirtualClock(),
+            createSession: () => new ScriptedSession(entered: null, name: "older"),
+            directory: directory
+        );
+        await using var adapter = new InProcessAdapter(
+            createSession: () => new ScriptedSession(entered: entered, name: "newer"),
+            directory: directory
+        );
+        var stale = Path.Combine(
+            path1: directory,
+            path2: "puck-control-stale.json"
+        );
+        // The stale capability names a port this law holds bound, exclusively and without listening, for the whole
+        // law: every connect to it is refused, and no other process can start listening on it and answer in the
+        // gone World's place, as a port freed by a stopped listener could be taken again on a busy machine.
+        using var closed = new Socket(
+            addressFamily: AddressFamily.InterNetwork,
+            protocolType: ProtocolType.Tcp,
+            socketType: SocketType.Stream
+        ) { ExclusiveAddressUse = true };
 
-            closed.Bind(localEP: new IPEndPoint(
-                address: IPAddress.Loopback,
-                port: 0
-            ));
-            var port = ((IPEndPoint)closed.LocalEndPoint!).Port;
+        closed.Bind(localEP: new IPEndPoint(
+            address: IPAddress.Loopback,
+            port: 0
+        ));
+        var port = ((IPEndPoint)closed.LocalEndPoint!).Port;
 
-            new LocalEndpointCapability(port: port).WriteDescriptor(path: stale).Dispose();
-            File.SetLastWriteTimeUtc(
-                lastWriteTimeUtc: DateTime.UtcNow.AddMinutes(value: -2),
-                path: older.AttachmentPath
-            );
-            File.SetLastWriteTimeUtc(
-                lastWriteTimeUtc: DateTime.UtcNow.AddMinutes(value: -1),
-                path: adapter.Host.AttachmentPath
-            );
-            File.SetLastWriteTimeUtc(
-                lastWriteTimeUtc: DateTime.UtcNow,
-                path: stale
-            );
-            Assert.Equal(
-                "newer",
-                Output(result: await adapter.ExecAsync(
-                    command: "who",
-                    id: 1
-                ))
-            );
-            await adapter.StallAsync(
-                entered: entered,
-                id: 2
-            );
-            await adapter.AdapterClock.WhenArmedAsync(
-                count: 1,
-                ct: Token,
-                dueTime: TimeSpan.FromMilliseconds(value: StallMilliseconds)
-            );
-            adapter.AdapterClock.Advance(by: TimeSpan.FromMilliseconds(value: StallMilliseconds));
-            Assert.Equal(
-                "unknown",
-                Status(result: await adapter.ResultAsync(id: 2))
-            );
-            adapter.Host.Dispose();
-            Assert.Equal(
-                "older",
-                Output(result: await adapter.ExecAsync(
-                    command: "who",
-                    id: 3
-                ))
-            );
-            Assert.Equal(
-                actual: adapter.Attachments,
-                expected: 1
-            );
-        } finally { Directory.Delete(path: directory, recursive: true); }
+        new LocalEndpointCapability(port: port).WriteDescriptor(path: stale).Dispose();
+        File.SetLastWriteTimeUtc(
+            lastWriteTimeUtc: DateTime.UtcNow.AddMinutes(value: -2),
+            path: older.AttachmentPath
+        );
+        File.SetLastWriteTimeUtc(
+            lastWriteTimeUtc: DateTime.UtcNow.AddMinutes(value: -1),
+            path: adapter.Host.AttachmentPath
+        );
+        File.SetLastWriteTimeUtc(
+            lastWriteTimeUtc: DateTime.UtcNow,
+            path: stale
+        );
+        Assert.Equal(
+            "newer",
+            Output(result: await adapter.ExecAsync(
+                command: "who",
+                id: 1
+            ))
+        );
+        await adapter.StallAsync(
+            entered: entered,
+            id: 2
+        );
+        await adapter.AdapterClock.WhenArmedAsync(
+            count: 1,
+            ct: Token,
+            dueTime: TimeSpan.FromMilliseconds(value: StallMilliseconds)
+        );
+        adapter.AdapterClock.Advance(by: TimeSpan.FromMilliseconds(value: StallMilliseconds));
+        Assert.Equal(
+            "unknown",
+            Status(result: await adapter.ResultAsync(id: 2))
+        );
+        adapter.Host.Dispose();
+        Assert.Equal(
+            "older",
+            Output(result: await adapter.ExecAsync(
+                command: "who",
+                id: 3
+            ))
+        );
+        Assert.Equal(
+            actual: adapter.Attachments,
+            expected: 1
+        );
     }
 
     private static FragmentStream Fragments(string text) => new(data: Encoding.UTF8.GetBytes(s: text));

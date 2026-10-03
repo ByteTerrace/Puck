@@ -193,7 +193,28 @@ public sealed class SdfCurvePath {
     /// <c>Puck.World.Server.WorldBody</c>'s <c>SnapYawToPlanarIntent</c> reads a commanded direction's yaw from):
     /// <c>yaw = atan2(-tangentX, -tangentZ)</c>, so a subject built from it via
     /// <c>Quaternion.CreateFromYawPitchRoll(yaw, 0, 0)</c> faces exactly along the sampled tangent.</returns>
-    public (Vector3 Position, float TangentYaw) Sample(float arcLength) {
+    public (Vector3 Position, float TangentYaw) Sample(float arcLength) => SampleAt(arcLength: arcLength);
+    /// <summary>Samples the curve at a fraction of its total length.</summary>
+    /// <param name="fraction">The fraction of <see cref="TotalLength"/> — wrapped (closed) or clamped to <c>[0, 1]</c>
+    /// (open) first, in fraction space, so any finite input is accepted whatever the curve's length: a fraction near
+    /// the largest float scaled by a length above one would otherwise leave <see cref="Sample"/>'s finite range. A
+    /// number that is not a number samples the start.</param>
+    /// <returns>The sampled world position and tangent yaw, as <see cref="Sample"/> returns them.</returns>
+    public (Vector3 Position, float TangentYaw) SampleFraction(float fraction) {
+        var wrapped = (Closed
+            ? (fraction - Math.Floor(d: fraction))
+            : Math.Clamp(
+            max: 1.0,
+            min: 0.0,
+            value: fraction
+        ));
+
+        return SampleAt(arcLength: (double.IsNaN(d: wrapped)
+            ? 0.0
+            : (wrapped * m_totalLength)));
+    }
+
+    private (Vector3 Position, float TangentYaw) SampleAt(double arcLength) {
         var segments = m_segments;
         var totalLength = m_totalLength;
         var local = (Closed

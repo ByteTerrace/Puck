@@ -1,6 +1,6 @@
 ---
 name: verification
-description: Routes the verification of a Puck change and defines what a finished lane proves. Covers the gate route (`puck gate`), running gates from a private copy of the head's own CLI, ledgers and generated files checked with `--check`, `puck affected` against the lane's merge base, never testing binaries a failed build left behind, red legs proved by withholding the fix (`puck laws prove`), GPU legs one at a time per GPU under a grant, and flake versus failure. Use before calling any change verified, before handing back or merging a lane, when writing a law or canary, when running parity, canaries or GPU tests, and when a gate fails. Subsystem commands belong to their owners: maths-laws for the Maths law suite, gaming-bricks for the emulator batteries, rendering for GPU, parity and capture specifics, puck-world for World runs and stdin scripts. review-passes owns briefing and verifying a cross-family review-and-fix pass.
+description: Routes the verification of a Puck change and defines what a finished lane proves. Covers the gate route (`puck gate`), running gates from a private copy of the head's own CLI, `--check` forms of ledgers and generated files, `puck affected` against the lane's merge base, never testing binaries a failed build left behind, red legs proved by withholding the fix (`puck laws prove`), GPU legs one at a time per GPU under a grant, and flake versus failure. Use before calling a change verified or handing back or merging a lane; when writing, mutating, restoring or proving a law or canary; when running parity, canaries, GPU tests, docs checks or a GPU-idle process check; when a gate fails; when judging whether one branch contains another; and when a test builds a scratch repository. Owners: maths-laws (Maths suite), gaming-bricks (emulator batteries), rendering (GPU, parity, captures), puck-world (World runs), review-passes (cross-family review passes).
 ---
 
 # Verification
@@ -16,25 +16,28 @@ same change. The user's current instruction outranks it.
 
 ## The route
 
-- **`puck gate`** builds the solution and runs the affected selection and
-  repository checks against the merge base. Run it on the lane's final head
-  with `--merge-base origin/<integration-branch>`, naming the branch in the
-  brief, from a CLI copy outside the checkout. Report its verdict and do not
-  repeat by hand a step it ran; its `--help` lists the steps. Its `--gpu` adds
-  the GPU legs and runs only under a GPU grant.
-- **`puck laws prove`** proves red legs: use it for every new or changed law,
-  with `--fix <commit>` or with `--file-list` for an uncommitted fix. It
-  withholds the fix in a proof tree of its own (a persistent clone it builds
-  incrementally, never the shared tree), and refuses a proof in which a
-  selected test was skipped.
+`puck gate` and `puck laws prove` are the routes. Run both from a CLI copy
+(below) outside the checkout.
+
+- **`puck gate --merge-base origin/<integration-branch>`** is the route for
+  verifying a lane. Run it on the lane's final head against the integration
+  branch the brief names, report its verdict, and read its `--help` for what it
+  already covers; do not repeat by hand a step it ran. Without `--gpu` it runs
+  no canary or parity, so with no grant run it without `--gpu` and list the
+  plan's canary and parity lines as GPU legs owed.
+- **`puck laws prove`** is the route for proving red legs. Use it for every new
+  or changed law, with `--fix <commit>` or with `--file-list` for an
+  uncommitted fix, instead of the manual withholding below: it withholds the
+  fix in a persistent proof clone of its own that it builds incrementally,
+  never in your tree or a shared one (a cold scratch worktree only when that
+  clone is busy or unusable), and refuses a proof when a build fails, a selected test is skipped or the two
+  legs ran different tests.
 
 Run covered steps by hand only where a brief rules a verb out, for example a
 machine that must not build the solution. Complete checks the gate omits:
 `puck baselines <artifact> --check` for affected committed baselines, explicit
 `puck docs links <document>...` for changed documents outside its default set,
-and `puck docs citations` when required below, under the GPU rules. The law
-prover supplies build and run evidence; inspect the withheld change and the
-failure messages before accepting a red leg.
+and `puck docs citations` when required below, under the GPU rules.
 
 ## Run gates from your own CLI copy
 
@@ -94,6 +97,13 @@ changing canary cost, a baseline whose movement the change explains. Review
 the rewritten file's diff and commit it in the same change. A ledger rewritten
 during verification hides the drift the check exists to report.
 
+A recording verb that exits nonzero has not recorded, whatever file it wrote.
+`puck counters --record` writes no file and exits 1 when the backends disagree
+on a deterministic count or pass state, when the recorded ceilings fail their
+own check, or when it cannot write them; the existing ledger stays as it was.
+Read the refusal, find and fix its cause, and record again only once the exit
+status is 0.
+
 ## Choose what to run
 
 - Use the lane's real base: `puck affected --merge-base
@@ -137,16 +147,20 @@ brief requires a manual proof, use these steps:
    `cd <tree>; git ...`, a `cd` line followed by Git lines, or
    `cd <tree> && git a; git b`, a failed `cd` leaves the later Git commands
    running against the real repository.
-2. Rebuild, and confirm the build exited 0 after the withholding: a failed
-   build leaves the previous binaries, and a run against them tests the fix.
-3. Run the law. It must fail at the assertion it was written for, with the
-   intended message. A failure anywhere else (a compile error, a setup throw, a
-   different assertion) is not a red leg. The outcome must be **Failed**; a
-   **Skipped** run, or one that selected no test, is not a red leg: read the
-   counts.
+2. Build the withheld tree until the build exits 0, repairing even an unrelated
+   compile error in it: a failed build leaves the previous binaries, and a run
+   against them tests the fix.
+3. Run the law where it executes, or report the leg as unproved. It must fail
+   at the assertion it was written for, with the intended message. A failure
+   anywhere else (a compile error, a setup throw, a different assertion) is
+   not a red leg. Read the Total, Failed and Skipped counts of every leg, not
+   the exit code: the outcome must be **Failed**, and a **Skipped** or
+   unselected test executed nothing, so it is not a red leg.
 4. Confirm the withheld tree differs from the fixed one exactly where you
-   meant it to (diff it): a mutation tool can produce a different mutant, and
-   a red leg against it proves nothing about the fix.
+   meant it to (diff it). A mutation made by text substitution, or by a
+   mutation tool, can produce a different mutant, and a red leg against it
+   proves nothing about the fix. Make the change as an exact edit, and record
+   how it was withheld in the commit message.
 5. Restore the fix, then touch the restored files before rebuilding and running
    the law again. It must pass. Restoring an older timestamp can let MSBuild
    keep the mutated assembly, so a run without this rebuild can test the
@@ -171,11 +185,12 @@ GPU work is `puck parity`, `puck counters`, any canary requiring `gpu`
 (including `--merge`), a windowed or offscreen `Puck.World` run, any verb that
 boots one in those modes, and any test that opens a device. This includes a
 full `Puck.World.Tests` run: its device-law classes open the GPU. `puck docs
-citations` without `--enumeration` builds `Puck.World` and boots it headless
-and windowed to read its help vocabulary, so it waits for the GPU like any
-other GPU leg. A World run with effective `host.presentation: none` uses no
-GPU; the `puck-world` skill owns the presentation modes and deployment
-overrides.
+citations` builds `Puck.World` and boots it headless and windowed to read its
+help vocabulary, so it waits for the GPU like any other GPU leg; given
+`--enumeration <file>`, a saved `help` listing, it boots nothing and may run
+beside a GPU leg. `puck docs links` only reads files and runs at any time. A
+World run with effective `host.presentation: none` uses no GPU; the
+`puck-world` skill owns the presentation modes and deployment overrides.
 
 - A GPU runs one GPU leg at a time. Legs compete for the device, the ports and
   the frame budget, and a contended leg times out.
@@ -201,22 +216,25 @@ overrides.
 - Treat `puck counters --check` on a non-recording device as partial ledger
   evidence under the
   [rules](../../../docs/reference/cli.md#puck-counterswork-counter-collector).
-  It judges `deterministic` ceilings, including required zeros, but skips
-  `per-backend-deterministic` values, including zero ceilings. Require each
+  On every device it judges `deterministic` ceilings and the required zeros of
+  kernel kinds (`requiredZero`: march steps, texels written, sky evaluations).
+  It skips `per-backend-deterministic` magnitudes and device-following zeros
+  (the SDF `upload` and `bricks` passes), and its note says how many counts
+  were not judged and how many required zeros still were. Require each
   backend's recorded device identity to match before claiming the whole ledger
   was judged; use the recording device (the floor GPU) for a re-record.
-- Stop a counters re-record when a `deterministic` count disagrees between
-  backends. Find and fix the cause before recording again or committing the
-  ledger. Inspect the differences and exit status even when `--record` writes
-  a file: it writes the ceilings before returning a backend-mismatch failure.
 
 ### GPU process checks and script runs
 
 A detector that waits for the GPU to go idle by matching process command lines
 excludes the matching shell (`powershell`, `pwsh` or `bash`). The query's own
 command line contains the strings it searches for; without this exclusion it
-waits on itself forever. Run such a detector once by hand on an idle machine
-before trusting it.
+waits on itself forever. A search that always reports exactly one match is
+suspect, not proof of a busy GPU: exclude the search's own process by process
+id, or use a pattern that cannot match its own command line (a bracketed first
+letter), then confirm whether a real process remains. Never skip or postpone a
+granted GPU leg because of a match that was the search itself. Run such a
+detector once by hand on an idle machine before trusting it.
 
 On Windows, stopping a background task can kill a wrapper shell and leave the
 script's own bash running. Before relaunching a GPU script, find every instance
@@ -237,6 +255,16 @@ Re-run a failed leg once, alone, with nothing else running on the machine.
   content failure hoping for green.
 
 The same rule applies to load-sensitive CPU tests.
+
+## Tests that create a repository
+
+A test that creates a scratch git repository under the temporary directory
+disables automatic maintenance in it (`maintenance.auto=false` and `gc.auto=0`
+in its configuration). Maintenance that a scratch repository's own commands
+start in the background outlives the test and has removed files from other
+worktrees on the machine. A lane that sees files vanish from an unrelated
+worktree while such a test runs suspects this first and checks whether the two
+repositories share an object store, alternates or a common directory.
 
 ## What a finished lane proves
 

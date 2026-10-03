@@ -11,6 +11,7 @@ using Puck.HumbleGamingBrick.Forge;
 using Puck.Launcher;
 using Puck.Mcp;
 using Puck.Mcp.Azure;
+using Puck.Testing;
 using Puck.World.Machines;
 using Puck.World.Server;
 using Puck.World.Silo;
@@ -167,10 +168,6 @@ public sealed class ExtensionModelLawTests {
             sourceFileName: assembly
         );
         return directory.FullName;
-    }
-    private static void Remove(DirectoryInfo root) {
-        // Installed assemblies stay mapped for the process lifetime on Windows; their directories may outlive the test.
-        try { root.Delete(recursive: true); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) { }
     }
 
     [MemberData(memberName: nameof(Refusals))]
@@ -422,333 +419,342 @@ public sealed class ExtensionModelLawTests {
     }
     [Fact]
     public async Task InstalledMcpExtensionsShareTheirSeamAcrossLoadContexts() {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-ext-mcp-");
+        // Installed assemblies stay mapped for the process lifetime on Windows; their directories may outlive the law.
+        using var directory = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-ext-mcp-"
+        );
+        var root = new DirectoryInfo(path: directory.RootPath);
+        var configuration = Path.Combine(
+            path1: root.FullName,
+            path2: "remote.json"
+        );
+        var withAzure = Directory.CreateDirectory(path: Path.Combine(
+            path1: root.FullName,
+            path2: "azure"
+        ));
+        var withoutAzure = Directory.CreateDirectory(path: Path.Combine(
+            path1: root.FullName,
+            path2: "bare"
+        ));
 
-        try {
-            var configuration = Path.Combine(
-                path1: root.FullName,
-                path2: "remote.json"
-            );
-            var withAzure = Directory.CreateDirectory(path: Path.Combine(
-                path1: root.FullName,
-                path2: "azure"
+        await File.WriteAllTextAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            contents: $$"""
+                {"target":"row","publicUrl":"https://mcp.example.test/mcp","listenUrl":"http://127.0.0.1:8080",
+                 "issuer":"https://login.microsoftonline.com/{{Tenant}}/v2.0","audience":"{{Application}}","scope":"user_impersonation",
+                 "subjectClaim":"oid","tenantId":"{{Tenant}}","allowedSubjects":[],"services":{{DelegatedSettings}}}
+                """,
+            path: configuration
+        );
+        Install(
+            name: "Puck.Mcp",
+            root: withAzure
+        );
+        Install(
+            name: "Puck.Mcp.Azure",
+            root: withAzure
+        );
+        Install(
+            name: "Puck.Mcp",
+            root: withoutAzure
+        );
+
+        IPuckHostedService Start(DirectoryInfo directory) {
+            var extensions = WorldSiloApplication.ComposeExtensions(directories: [directory.FullName]);
+            var services = new ServiceCollection().AddSingleton(implementationInstance: extensions).BuildServiceProvider();
+
+            Assert.True(condition: extensions.TryGet<HostedControl>(
+                contribution: out var control,
+                key: HostedControl.Key
             ));
-            var withoutAzure = Directory.CreateDirectory(path: Path.Combine(
-                path1: root.FullName,
-                path2: "bare"
-            ));
+            return control.Create(
+                arg1: services,
+                arg2: new ProbeControlHost(),
+                arg3: configuration
+            );
+        }
 
-            await File.WriteAllTextAsync(
-                cancellationToken: TestContext.Current.CancellationToken,
-                contents: $$"""
-                    {"target":"row","publicUrl":"https://mcp.example.test/mcp","listenUrl":"http://127.0.0.1:8080",
-                     "issuer":"https://login.microsoftonline.com/{{Tenant}}/v2.0","audience":"{{Application}}","scope":"user_impersonation",
-                     "subjectClaim":"oid","tenantId":"{{Tenant}}","allowedSubjects":[],"services":{{DelegatedSettings}}}
-                    """,
-                path: configuration
-            );
-            Install(
-                name: "Puck.Mcp",
-                root: withAzure
-            );
-            Install(
-                name: "Puck.Mcp.Azure",
-                root: withAzure
-            );
-            Install(
-                name: "Puck.Mcp",
-                root: withoutAzure
-            );
-
-            IPuckHostedService Start(DirectoryInfo directory) {
-                var extensions = WorldSiloApplication.ComposeExtensions(directories: [directory.FullName]);
-                var services = new ServiceCollection().AddSingleton(implementationInstance: extensions).BuildServiceProvider();
-
-                Assert.True(condition: extensions.TryGet<HostedControl>(
-                    contribution: out var control,
-                    key: HostedControl.Key
-                ));
-                return control.Create(
-                    arg1: services,
-                    arg2: new ProbeControlHost(),
-                    arg3: configuration
-                );
-            }
-
-            // The Azure provider, loaded in its own context, registers the McpServicesProvider type the installed
-            // Puck.Mcp reads: the seam resolves across contexts instead of reading as absent.
-            using (Start(directory: withAzure)) { }
-            Assert.Contains(
-                actualString: Assert.Throws<ArgumentException>(testCode: () => Start(directory: withoutAzure)).Message,
-                expectedSubstring: "no installed extension provides a McpServicesProvider"
-            );
-        } finally { Remove(root: root); }
+        // The Azure provider, loaded in its own context, registers the McpServicesProvider type the installed
+        // Puck.Mcp reads: the seam resolves across contexts instead of reading as absent.
+        using (Start(directory: withAzure)) { }
+        Assert.Contains(
+            actualString: Assert.Throws<ArgumentException>(testCode: () => Start(directory: withoutAzure)).Message,
+            expectedSubstring: "no installed extension provides a McpServicesProvider"
+        );
     }
     [Fact]
     public async Task AnInstalledAgentHarnessSelectsAnInstalledChatProviderAcrossLoadContexts() {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-ext-agents-");
+        using var directory = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-ext-agents-"
+        );
+        var root = new DirectoryInfo(path: directory.RootPath);
 
-        try {
-            Install(
-                name: "Puck.World.AgentHarness",
-                root: root
-            );
-            Install(
-                name: "Puck.World.AgentHarness.Azure",
-                root: root
-            );
-            using var fixture = Fixtures.FreshServer();
-            var extensions = WorldSiloApplication.ComposeExtensions(directories: [root.FullName]);
-            // The Azure provider, loaded in its own context, registers the ChatClientProvider type the installed
-            // harness selects: named or not, the seam resolves across contexts instead of reading as absent.
-            await using var participant = extensions.Select<Puck.World.Protocol.WorldParticipantType>(
-                key: "agent.harness",
-                purpose: "Participant type"
-            ).Create(
-                arg1: new Puck.World.Protocol.WorldParticipantContext {
-                    BodyIndex = 0,
-                    Channels = () => fixture.Server.Population.Channels,
-                    Clock = TimeProvider.System,
-                    Extensions = extensions,
-                    Link = new Puck.World.Protocol.LoopbackTransport(server: fixture.Server),
-                    Name = "guide",
-                    Principal = Puck.Commands.Principal.Addon(name: "guide"),
-                },
-                arg2: JsonDocument.Parse(json: """{ "objective": "Greet visitors.", "providerSettings": { "endpoint": "https://example.openai.azure.com/", "deployment": "chat" } }""").RootElement.Clone()
-            );
+        Install(
+            name: "Puck.World.AgentHarness",
+            root: root
+        );
+        Install(
+            name: "Puck.World.AgentHarness.Azure",
+            root: root
+        );
+        using var fixture = Fixtures.FreshServer();
+        var extensions = WorldSiloApplication.ComposeExtensions(directories: [root.FullName]);
+        // The Azure provider, loaded in its own context, registers the ChatClientProvider type the installed
+        // harness selects: named or not, the seam resolves across contexts instead of reading as absent.
+        await using var participant = extensions.Select<Puck.World.Protocol.WorldParticipantType>(
+            key: "agent.harness",
+            purpose: "Participant type"
+        ).Create(
+            arg1: new Puck.World.Protocol.WorldParticipantContext {
+                BodyIndex = 0,
+                Channels = () => fixture.Server.Population.Channels,
+                Clock = TimeProvider.System,
+                Extensions = extensions,
+                Link = new Puck.World.Protocol.LoopbackTransport(server: fixture.Server),
+                Name = "guide",
+                Principal = Puck.Commands.Principal.Addon(name: "guide"),
+            },
+            arg2: JsonDocument.Parse(json: """{ "objective": "Greet visitors.", "providerSettings": { "endpoint": "https://example.openai.azure.com/", "deployment": "chat" } }""").RootElement.Clone()
+        );
 
-            Assert.Contains(
-                actualString: participant.Describe(),
-                expectedSubstring: "provider=azure.openai state=idle"
-            );
-        } finally { Remove(root: root); }
+        Assert.Contains(
+            actualString: participant.Describe(),
+            expectedSubstring: "provider=azure.openai state=idle"
+        );
     }
     [Fact]
     public void DiscoveryRefusesEveryMalformedInstallationByPath() {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-ext-malformed-");
+        using var directory = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-ext-malformed-"
+        );
+        var root = new DirectoryInfo(path: directory.RootPath);
 
-        try {
-            DirectoryInfo Case(string name) => Directory.CreateDirectory(path: Path.Combine(
+        DirectoryInfo Case(string name) => Directory.CreateDirectory(path: Path.Combine(
+            path1: root.FullName,
+            path2: name
+        ));
+        // Every refusal also disposes the built-in the host handed over before discovery failed.
+        string Refusal(params DirectoryInfo[] directories) {
+            var disposed = new List<string>();
+            var message = Assert.Throws<PuckExtensionException>(testCode: () => PuckExtensionDiscovery.Compose(
+                builtIns: [new DisposableExtension(
+                    disposed: disposed,
+                    name: "built-in"
+                )],
+                directories: directories.Select(selector: static directory => directory.FullName)
+            )).Message;
+
+            Assert.Equal(
+                actual: disposed,
+                expected: ["built-in"]
+            );
+            return message;
+        }
+
+        var stray = Case(name: "stray");
+
+        File.Copy(
+            destFileName: Path.Combine(
+                path1: stray.FullName,
+                path2: "Puck.Text.dll"
+            ),
+            sourceFileName: Assembly(name: "Puck.Text")
+        );
+        Assert.Contains(
+            actualString: Refusal(stray),
+            expectedSubstring: "sits directly in an extensions directory"
+        );
+
+        var unnamed = Case(name: "unnamed");
+
+        Install(
+            assembly: Assembly(name: "Puck.Text"),
+            name: "Puck.Text",
+            root: unnamed
+        );
+        File.Move(
+            destFileName: Path.Combine(
+                path1: unnamed.FullName,
+                path2: "Puck.Text",
+                path3: "Other.dll"
+            ),
+            sourceFileName: Path.Combine(
+                path1: unnamed.FullName,
+                path2: "Puck.Text",
+                path3: "Puck.Text.dll"
+            )
+        );
+        Assert.Contains(
+            actualString: Refusal(unnamed),
+            expectedSubstring: "carries no 'Puck.Text.dll'"
+        );
+
+        var undeclared = Case(name: "undeclared");
+
+        Install(
+            name: "Puck.Text",
+            root: undeclared
+        );
+        Assert.Contains(
+            actualString: Refusal(undeclared),
+            expectedSubstring: "declares no [PuckExtension] entry type"
+        );
+
+        var corrupt = Case(name: "corrupt");
+        var corruptDirectory = Directory.CreateDirectory(path: Path.Combine(
+            path1: corrupt.FullName,
+            path2: "Broken"
+        ));
+
+        File.WriteAllText(
+            contents: "not an assembly",
+            path: Path.Combine(
+                path1: corruptDirectory.FullName,
+                path2: "Broken.dll"
+            )
+        );
+        Assert.Contains(
+            actualString: Refusal(corrupt),
+            expectedSubstring: "could not load"
+        );
+
+        var left = Case(name: "left");
+        var right = Case(name: "right");
+
+        Install(
+            name: "Puck.World.Embeddings",
+            root: left
+        );
+        Install(
+            name: "Puck.World.Embeddings",
+            root: right
+        );
+        Assert.Contains(
+            actualString: Refusal(left, right),
+            expectedSubstring: "Extension 'Puck.World.Embeddings' is installed twice"
+        );
+        Assert.Empty(collection: PuckExtensionDiscovery.Compose(
+            builtIns: [],
+            directories: [Path.Combine(
                 path1: root.FullName,
-                path2: name
-            ));
-            // Every refusal also disposes the built-in the host handed over before discovery failed.
-            string Refusal(params DirectoryInfo[] directories) {
-                var disposed = new List<string>();
-                var message = Assert.Throws<PuckExtensionException>(testCode: () => PuckExtensionDiscovery.Compose(
-                    builtIns: [new DisposableExtension(
-                        disposed: disposed,
-                        name: "built-in"
-                    )],
-                    directories: directories.Select(selector: static directory => directory.FullName)
-                )).Message;
-
-                Assert.Equal(
-                    actual: disposed,
-                    expected: ["built-in"]
-                );
-                return message;
-            }
-
-            var stray = Case(name: "stray");
-
-            File.Copy(
-                destFileName: Path.Combine(
-                    path1: stray.FullName,
-                    path2: "Puck.Text.dll"
-                ),
-                sourceFileName: Assembly(name: "Puck.Text")
-            );
-            Assert.Contains(
-                actualString: Refusal(stray),
-                expectedSubstring: "sits directly in an extensions directory"
-            );
-
-            var unnamed = Case(name: "unnamed");
-
-            Install(
-                assembly: Assembly(name: "Puck.Text"),
-                name: "Puck.Text",
-                root: unnamed
-            );
-            File.Move(
-                destFileName: Path.Combine(
-                    path1: unnamed.FullName,
-                    path2: "Puck.Text",
-                    path3: "Other.dll"
-                ),
-                sourceFileName: Path.Combine(
-                    path1: unnamed.FullName,
-                    path2: "Puck.Text",
-                    path3: "Puck.Text.dll"
-                )
-            );
-            Assert.Contains(
-                actualString: Refusal(unnamed),
-                expectedSubstring: "carries no 'Puck.Text.dll'"
-            );
-
-            var undeclared = Case(name: "undeclared");
-
-            Install(
-                name: "Puck.Text",
-                root: undeclared
-            );
-            Assert.Contains(
-                actualString: Refusal(undeclared),
-                expectedSubstring: "declares no [PuckExtension] entry type"
-            );
-
-            var corrupt = Case(name: "corrupt");
-            var corruptDirectory = Directory.CreateDirectory(path: Path.Combine(
-                path1: corrupt.FullName,
-                path2: "Broken"
-            ));
-
-            File.WriteAllText(
-                contents: "not an assembly",
-                path: Path.Combine(
-                    path1: corruptDirectory.FullName,
-                    path2: "Broken.dll"
-                )
-            );
-            Assert.Contains(
-                actualString: Refusal(corrupt),
-                expectedSubstring: "could not load"
-            );
-
-            var left = Case(name: "left");
-            var right = Case(name: "right");
-
-            Install(
-                name: "Puck.World.Embeddings",
-                root: left
-            );
-            Install(
-                name: "Puck.World.Embeddings",
-                root: right
-            );
-            Assert.Contains(
-                actualString: Refusal(left, right),
-                expectedSubstring: "Extension 'Puck.World.Embeddings' is installed twice"
-            );
-            Assert.Empty(collection: PuckExtensionDiscovery.Compose(
-                builtIns: [],
-                directories: [Path.Combine(
-                    path1: root.FullName,
-                    path2: "missing"
-                )]
-            ).Extensions);
-        } finally { Remove(root: root); }
+                path2: "missing"
+            )]
+        ).Extensions);
     }
     [Fact]
     public void DiscoveredExtensionsShareHostContractsAndLiveForTheProcess() {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-ext-identity-");
+        using var directory = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-ext-identity-"
+        );
+        var root = new DirectoryInfo(path: directory.RootPath);
 
-        try {
-            Install(
-                name: "Puck.HumbleGamingBrick.Forge",
-                root: root
-            );
-            var extensions = PuckExtensionDiscovery.Compose(
-                builtIns: [],
-                directories: [root.FullName]
-            );
-            var discovered = Assert.Single(collection: extensions.Extensions);
-            var context = AssemblyLoadContext.GetLoadContext(assembly: discovered.GetType().Assembly)!;
+        Install(
+            name: "Puck.HumbleGamingBrick.Forge",
+            root: root
+        );
+        var extensions = PuckExtensionDiscovery.Compose(
+            builtIns: [],
+            directories: [root.FullName]
+        );
+        var discovered = Assert.Single(collection: extensions.Extensions);
+        var context = AssemblyLoadContext.GetLoadContext(assembly: discovered.GetType().Assembly)!;
 
-            Assert.NotSame(
-                AssemblyLoadContext.Default,
-                context
-            );
-            Assert.False(condition: context.IsCollectible);
-            Assert.NotEqual(
-                typeof(HumbleGamingBrickExtension),
-                discovered.GetType()
-            );
+        Assert.NotSame(
+            AssemblyLoadContext.Default,
+            context
+        );
+        Assert.False(condition: context.IsCollectible);
+        Assert.NotEqual(
+            typeof(HumbleGamingBrickExtension),
+            discovered.GetType()
+        );
 
-            var catalog = WorldMachineCatalog.From(extensions: extensions);
+        var catalog = WorldMachineCatalog.From(extensions: extensions);
 
-            // The catalog found the contributions under the host's own IMachineEngine and IMachineContentProvider, so
-            // the extension's context shared those contracts rather than loading its own copies.
-            Assert.True(condition: catalog.IsRegistered(engineId: "gaming-brick"));
-            Assert.True(condition: catalog.ContentProviders.ContainsKey(key: "gaming-brick"));
-        } finally { Remove(root: root); }
+        // The catalog found the contributions under the host's own IMachineEngine and IMachineContentProvider, so
+        // the extension's context shared those contracts rather than loading its own copies.
+        Assert.True(condition: catalog.IsRegistered(engineId: "gaming-brick"));
+        Assert.True(condition: catalog.ContentProviders.ContainsKey(key: "gaming-brick"));
     }
     [Fact]
     public void TheWorldAndTheSiloComposeOneInstallationIdentically() {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-ext-hosts-");
+        using var directory = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-ext-hosts-"
+        );
+        var root = new DirectoryInfo(path: directory.RootPath);
+        var silo = Directory.CreateDirectory(path: Path.Combine(
+            path1: root.FullName,
+            path2: "silo"
+        ));
+        var world = Directory.CreateDirectory(path: Path.Combine(
+            path1: root.FullName,
+            path2: "world"
+        ));
 
-        try {
-            var silo = Directory.CreateDirectory(path: Path.Combine(
-                path1: root.FullName,
-                path2: "silo"
-            ));
-            var world = Directory.CreateDirectory(path: Path.Combine(
-                path1: root.FullName,
-                path2: "world"
-            ));
-
-            foreach (var name in new[] { "Puck.Mcp", "Puck.Mcp.Azure", "Puck.World.AgentHarness", "Puck.World.AgentHarness.Azure", "Puck.World.Azure", "Puck.World.Embeddings" }) {
-                Install(
-                    name: name,
-                    root: silo
-                );
-                Install(
-                    name: name,
-                    root: world
-                );
-            }
-            // The silo installs the Gaming Brick forges; the World carries them as built-ins.
+        foreach (var name in new[] { "Puck.Mcp", "Puck.Mcp.Azure", "Puck.World.AgentHarness", "Puck.World.AgentHarness.Azure", "Puck.World.Azure", "Puck.World.Embeddings" }) {
             Install(
-                name: "Puck.AdvancedGamingBrick.Forge",
+                name: name,
                 root: silo
             );
             Install(
-                name: "Puck.HumbleGamingBrick.Forge",
-                root: silo
-            );
-
-            var siloSet = WorldSiloApplication.ComposeExtensions(directories: [silo.FullName]);
-            var worldSet = PuckExtensionDiscovery.Compose(
-                builtIns: [new AdvancedGamingBrickExtension(), new HumbleGamingBrickExtension(), new WorldServerExtension()],
-                directories: [world.FullName]
-            );
-
-            Assert.Equal(
-                worldSet.Describe(),
-                siloSet.Describe()
-            );
-            Assert.Equal(
-                WorldMachineCatalog.From(extensions: worldSet).CompositionFingerprint,
-                WorldMachineCatalog.From(extensions: siloSet).CompositionFingerprint
-            );
-            Assert.Contains(
-                collection: siloSet.Describe(),
-                expected: "Puck.World.Azure: WorldAuthenticationProvider azure.api-users, WorldExtensionProviderType azure.resource, WorldHealthCheck /livez/azure, WorldSiloRetirementProvider azure.scheduled-events, WorldSiloStorageProvider azure.blob"
-            );
-            // The agent participant and its identity-authenticated model provider compose the same way in both hosts.
-            Assert.Contains(
-                collection: siloSet.Describe(),
-                expected: "Puck.World.AgentHarness: WorldParticipantType agent.harness"
-            );
-            Assert.Contains(
-                collection: siloSet.Describe(),
-                expected: "Puck.World.AgentHarness.Azure: ChatClientProvider azure.openai"
-            );
-            // Installing a copy of a built-in beside a host is a conflict, never a silent second registration.
-            Install(
-                name: "Puck.HumbleGamingBrick.Forge",
+                name: name,
                 root: world
             );
-            Assert.Contains(
-                actualString: Assert.Throws<PuckExtensionException>(testCode: () => PuckExtensionDiscovery.Compose(
-                    builtIns: [new HumbleGamingBrickExtension()],
-                    directories: [world.FullName]
-                )).Message,
-                expectedSubstring: "share one name"
-            );
-        } finally { Remove(root: root); }
+        }
+        // The silo installs the Gaming Brick forges; the World carries them as built-ins.
+        Install(
+            name: "Puck.AdvancedGamingBrick.Forge",
+            root: silo
+        );
+        Install(
+            name: "Puck.HumbleGamingBrick.Forge",
+            root: silo
+        );
+
+        var siloSet = WorldSiloApplication.ComposeExtensions(directories: [silo.FullName]);
+        var worldSet = PuckExtensionDiscovery.Compose(
+            builtIns: [new AdvancedGamingBrickExtension(), new HumbleGamingBrickExtension(), new WorldServerExtension()],
+            directories: [world.FullName]
+        );
+
+        Assert.Equal(
+            worldSet.Describe(),
+            siloSet.Describe()
+        );
+        Assert.Equal(
+            WorldMachineCatalog.From(extensions: worldSet).CompositionFingerprint,
+            WorldMachineCatalog.From(extensions: siloSet).CompositionFingerprint
+        );
+        Assert.Contains(
+            collection: siloSet.Describe(),
+            expected: "Puck.World.Azure: WorldAuthenticationProvider azure.api-users, WorldExtensionProviderType azure.resource, WorldHealthCheck /livez/azure, WorldSiloRetirementProvider azure.scheduled-events, WorldSiloStorageProvider azure.blob"
+        );
+        // The agent participant and its identity-authenticated model provider compose the same way in both hosts.
+        Assert.Contains(
+            collection: siloSet.Describe(),
+            expected: "Puck.World.AgentHarness: WorldParticipantType agent.harness"
+        );
+        Assert.Contains(
+            collection: siloSet.Describe(),
+            expected: "Puck.World.AgentHarness.Azure: ChatClientProvider azure.openai"
+        );
+        // Installing a copy of a built-in beside a host is a conflict, never a silent second registration.
+        Install(
+            name: "Puck.HumbleGamingBrick.Forge",
+            root: world
+        );
+        Assert.Contains(
+            actualString: Assert.Throws<PuckExtensionException>(testCode: () => PuckExtensionDiscovery.Compose(
+                builtIns: [new HumbleGamingBrickExtension()],
+                directories: [world.FullName]
+            )).Message,
+            expectedSubstring: "share one name"
+        );
     }
 
     private sealed class ProbeControlHost : IControlSessionHost {

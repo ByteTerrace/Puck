@@ -21,11 +21,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             writeItem: WriteCommitMember
         );
     }
-    private static WorldCrossingArrival ReadCrossingArrival(ref WireReader reader, WorldPlayerDefaults defaults) {
-        var request = ReadReservationRequest(
-            defaults: defaults,
-            reader: ref reader
-        );
+    private static WorldCrossingArrival ReadCrossingArrival(ref WireReader reader) {
+        var request = ReadReservationRequest(reader: ref reader);
         var slots = reader.ReadArray(
             field: "arrival slots",
             readItem: static (ref WireReader r) => r.ReadInt32(),
@@ -33,28 +30,58 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var members = reader.ReadArray(
             field: "arrival members",
-            readItem: (ref WireReader r) => ReadCommitMember(
-                defaults: defaults,
-                reader: ref r
-            ),
+            readItem: static (ref WireReader r) => ReadCommitMember(reader: ref r),
             maximum: WorldBodiesLimits.CapacityCeiling
         );
-
-        if (
-            !reader.Failed &&
-            ((slots.Length != request.Members.Count) || (members.Length != request.Members.Count))
-        ) {
-            reader.Fail(
-                detail: $"arrival binds {request.Members.Count} traveler(s) but carries {slots.Length} slot(s) and {members.Length} member(s)",
-                refusal: WireRefusal.PayloadMalformed
-            );
-        }
-
-        return new WorldCrossingArrival(
+        var arrival = new WorldCrossingArrival(
             Members: members,
             Request: request,
             Slots: slots
         );
+
+        if (!reader.Failed && (ArrivalFault(arrival: arrival) is { } fault)) {
+            reader.Fail(
+                detail: fault,
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return arrival;
+    }
+    // Refuses an arrival no commit could have landed: a cohort whose body indices and members do not pair with its
+    // travelers, an index outside every world's capacity or named twice, a traveler with no mobility identity, or a
+    // member whose carried motion has no sound shape.
+    private static string? ArrivalFault(WorldCrossingArrival arrival) {
+        var count = arrival.Request.Members.Count;
+
+        if (count == 0) {
+            return "arrival binds no traveler";
+        }
+        if (
+            (arrival.Slots.Count != count) ||
+            (arrival.Members.Count != count)
+        ) {
+            return $"arrival binds {count} traveler(s) but carries {arrival.Slots.Count} slot(s) and {arrival.Members.Count} member(s)";
+        }
+        for (var index = 0; (index < count); index++) {
+            var slot = arrival.Slots[index];
+
+            if (((uint)slot) >= WorldBodiesLimits.CapacityCeiling) {
+                return $"arrival traveler {(index + 1)} lands at body:{slot}, outside 0..{(WorldBodiesLimits.CapacityCeiling - 1)}";
+            }
+            for (var earlier = 0; (earlier < index); earlier++) {
+                if (arrival.Slots[earlier] == slot) {
+                    return $"arrival lands two travelers at body:{slot}";
+                }
+            }
+            if (arrival.Request.Members[index].Mobility is null) {
+                return $"arrival traveler {(index + 1)} carries no mobility identity";
+            }
+            if (WorldTransferEscrow.CommitMemberFault(member: arrival.Members[index]) is { } fault) {
+                return $"arrival traveler {(index + 1)} {fault}";
+            }
+        }
+        return null;
     }
 
     /// <summary>Encodes one destination arrival — the leaf a destination tape and a crossing-log arrival record
@@ -76,19 +103,12 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     /// <summary>Decodes one destination arrival encoded by <see cref="EncodeCrossingArrival"/>.</summary>
     /// <param name="bytes">The encoded arrival.</param>
-    /// <param name="defaults">The destination's player defaults, which a carried identity projection hydrates
-    /// against.</param>
     /// <param name="arrival">The decoded arrival on success.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the bytes decoded exactly.</returns>
-    public static bool TryDecodeCrossingArrival(ReadOnlySpan<byte> bytes, WorldPlayerDefaults defaults, out WorldCrossingArrival? arrival, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: defaults);
-
+    public static bool TryDecodeCrossingArrival(ReadOnlySpan<byte> bytes, out WorldCrossingArrival? arrival, out string reason) {
         var reader = new WireReader(bytes: bytes);
-        var decoded = ReadCrossingArrival(
-            defaults: defaults,
-            reader: ref reader
-        );
+        var decoded = ReadCrossingArrival(reader: ref reader);
 
         if (!reader.TryFinish(failure: out var failure)) {
             arrival = null;
@@ -145,13 +165,10 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
     /// <summary>Decodes one crossing-log entry encoded by <see cref="EncodeCrossingEntry"/>.</summary>
     /// <param name="bytes">The encoded entry.</param>
-    /// <param name="defaults">The authority's player defaults, which a carried identity projection hydrates
-    /// against.</param>
     /// <param name="entry">The decoded entry on success.</param>
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <returns><see langword="true"/> when the bytes decoded exactly.</returns>
-    public static bool TryDecodeCrossingEntry(ReadOnlySpan<byte> bytes, WorldPlayerDefaults defaults, out WorldCrossingEntry entry, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: defaults);
+    public static bool TryDecodeCrossingEntry(ReadOnlySpan<byte> bytes, out WorldCrossingEntry entry, out string reason) {
 
         var reader = new WireReader(bytes: bytes);
         var sequence = reader.ReadUInt64();
@@ -162,14 +179,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         if (!reader.Failed) {
             switch (tag) {
                 case CrossingArrivalTag:
-                    record = new WorldCrossingRecord.Arrival(Value: ReadCrossingArrival(
-                        defaults: defaults,
-                        reader: ref reader
-                    ));
+                    record = new WorldCrossingRecord.Arrival(Value: ReadCrossingArrival(reader: ref reader));
                     break;
                 case CrossingDepartureTag:
                     record = new WorldCrossingRecord.Departure(Transfer: ReadInDoubtTransfer(
-                        defaults: defaults,
                         reader: ref reader
                     ));
                     break;

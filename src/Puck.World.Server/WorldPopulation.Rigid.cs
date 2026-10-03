@@ -173,7 +173,21 @@ public sealed partial class WorldPopulation {
         // choose to contact. Routed through the rigid-aware correction (never the locomotion one, whose planar/
         // vertical-velocity channels a rigid body does not use) so a body this displaces wakes rather than keeping a
         // stale resting latch while it is visibly being pushed.
+        // A body whose sweep was refused this tick is immovable until the tick ends: its partner, rigid or
+        // kinematic, is resolved against it as static and takes the whole correction.
         if (
+            left.SweepRefusedThisTick ||
+            right.SweepRefusedThisTick
+        ) {
+            var (leftShare, rightShare) = SplitPairCorrection(
+                correction: correction,
+                left: left,
+                right: right
+            );
+
+            ApplyPairShare(body: left, share: leftShare);
+            ApplyPairShare(body: right, share: rightShare);
+        } else if (
             left.IsRigid &&
             right.IsRigid
         ) {
@@ -185,6 +199,14 @@ public sealed partial class WorldPopulation {
             left.ApplyRigidPositionalCorrection(correction: correction);
         } else if (right.IsRigid) {
             right.ApplyRigidPositionalCorrection(correction: -correction);
+        }
+    }
+    // A pair share through the body's own door: the rigid-aware correction for a rigid body, the locomotion one otherwise.
+    private static void ApplyPairShare(WorldBody body, FixedVector3 share) {
+        if (body.IsRigid) {
+            body.ApplyRigidPositionalCorrection(correction: share);
+        } else {
+            body.ApplyDynamicContact(correction: share);
         }
     }
     /// <summary>Applies a Coulomb-style tangential impulse at a just-resolved rigid pair's contact point: the

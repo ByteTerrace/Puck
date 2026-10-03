@@ -73,9 +73,10 @@
         >false</RestorePackagesWithLockFile>
     </PropertyGroup>
 
-    <!-- File apps share the runtime repository lookup by source, so a bootstrap program needs no CLI build. -->
+    <!-- File apps share the runtime repository lookup and run-directory policy by source, so a bootstrap program needs no CLI build. -->
     <ItemGroup Condition="'$(IsFileBasedProgram)' == 'true'">
         <Compile Include="$(MSBuildThisFileDirectory)build/RepositoryPaths.cs" Link="RepositoryPaths.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/RunDirectory.cs" Link="RunDirectory.cs" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(IsFileBasedProgram)' != 'true' AND ('@(Compile)' == '' OR !$([System.String]::Copy('@(Compile)').Contains('VerifiedCodeAttribute.cs')))">
@@ -86,6 +87,7 @@
              MSBuild reports as an error under the repo-wide TreatWarningsAsErrors/CodeAnalysisTreatWarningsAsErrors
              gate. -->
         <Compile Include="$(MSBuildThisFileDirectory)build/VerifiedCodeAttribute.cs" Link="Properties/VerifiedCodeAttribute.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/DerivationAttribute.cs" Link="Properties/DerivationAttribute.cs" />
         <!-- The brand ledger Puck.Analyzers reads at RegisterCompilationStartAction time; see VerifiedCode.json
              itself for the schema and the analyzer's VerifiedCodeManifest.cs for the reader. -->
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)VerifiedCode.json" />

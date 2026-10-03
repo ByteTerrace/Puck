@@ -43,7 +43,9 @@ long CorrelationId, Principal Principal, WorldSubmissionPayload Payload)`.
 `Command(WorldCommand)`, `Grant(WorldGrant)`, `Revoke(WorldGrant)`,
 `Session(SessionRequest)`, `Rebuild(WorldRebuildRequest)` (`world.reset`/
 `world.load`/`world.reload` — one closed `WorldRebuildKind` union carrying an
-optional document, path hint, and CAS `sha256-64` content-hash pin, see
+optional document, a typed `WorldRebuildOrigin` (a `File` the console read
+or a hosted world's `Store` the silo read, stated by the producer and never
+inferred from a spelling), and a CAS `sha256-64` content-hash pin, see
 [documents.md](documents.md); the replay tape covers the
 trio, see [replay.md](replay.md)),
 `Mutation(WorldMutation)` (mounting/unmounting/reloading/enabling/disabling
@@ -177,7 +179,7 @@ rejection and on stdout for an acceptance.
   both carrying the definition's `WorldDocumentVersion` (activation plus install
   ordinal, also on every `WorldMutationOutcome`; a mutation payload composed on a
   read carries that activation as `ExpectedActivation`, refused on mismatch as
-  `world.mutation.activation_mismatch`),
+  `world.mutation.activation-mismatch`),
   `DeliverComposition`, `DeliverSessionLever`.
 - `AttachSink` is a subscribe (multi-sink via `WorldOutputHub`, with a primer
   snapshot to the newly attached sink only).

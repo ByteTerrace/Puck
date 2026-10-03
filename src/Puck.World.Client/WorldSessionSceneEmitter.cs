@@ -7,6 +7,7 @@ using Puck.SdfVm;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
+using Puck.Text;
 using Puck.World.Protocol;
 
 namespace Puck.World.Client;
@@ -18,7 +19,10 @@ namespace Puck.World.Client;
 /// into one <see cref="SdfFrame"/> framed through the destination's chosen camera — the
 /// <see cref="ISdfSceneEmitter"/>/<see cref="ISdfFrameDresser"/> split <c>WorldFramePresenter</c> and
 /// <c>WorldSceneEmitter</c> already establish, collapsed into one type here because a session
-/// projection has exactly one content source and needs no second host to own presentation separately.
+/// projection has exactly one content source and needs no second host to own presentation separately. The destination's
+/// text screens draw their lines through the destination's own font catalog, resolved beside its own document
+/// (<see cref="GlyphAtlas"/>, <see cref="ScreenDecals"/>), and every camera of the destination a screen shows is filmed
+/// into the frame after the session's own view (<see cref="Film"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -59,7 +63,17 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     // The color each avatar is painted with: the mirror's, unless the host paints some bodies its own way.
     private readonly Func<int, Vector3> m_bodyColor;
 
-    private readonly SdfViewSnapshot[] m_views = new SdfViewSnapshot[1];
+    // The frame's views: the session's own, then the destination's cameras Film adds.
+    private readonly List<SdfViewSnapshot> m_views = [];
+    // The destination's own font catalog and its text screens' decals, followed from its delivered definition (FollowText):
+    // the rows, its screens then its seated faces, a text screen's lines are read from.
+    private readonly WorldTextCatalog m_text = new();
+
+    private readonly WorldScreenDecals m_decals;
+
+    private WorldDefinition? m_textDefinition;
+
+    private IReadOnlyList<WorldScreen> m_textRows = [];
 
     /// <summary>Gets the quality a session screen's view renders at: a budgeted panel image skips soft shadows, ambient
     /// occlusion and the far bound, whose cost buys little in a small screen-space result.</summary>
@@ -119,7 +133,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
     // The mirrored world's environment, resolved each dressed frame. The track double-buffers its output, so the frame
     // the residency holds keeps its environment through the next dress, as the boot presentation's does.
-    private readonly WorldEnvironmentResolve m_environment = new();
+    private readonly WorldValueDomainGuard m_domains;
+    private readonly WorldEnvironmentResolve m_environment;
+
     // Per-avatar movement-driven gait state, scratch reused across frames to keep packing allocation-free — the SAME
     // distance-driven approach Client.WorldSceneEmitter.PackDynamicTransforms uses, over this emitter's own
     // interpolated (not host-supplied) positions.
@@ -141,8 +157,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <param name="bodyColor">The color each avatar is painted with by body index, or <see langword="null"/> for the
     /// mirror's own (<see cref="WorldSessionMirror.BodyColor"/>).</param>
     /// <param name="castsAvatarShadows">Whether avatar transforms participate in soft shadows when the host enables them.</param>
-    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false) {
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
+    public WorldSessionSceneEmitter(WorldSessionMirror mirror, string? effectiveCameraName, WorldValueDomainGuard domains, float fieldOfViewRadians = (MathF.PI / 3f), Func<int, Vector3>? bodyColor = null, bool castsAvatarShadows = false) {
         ArgumentNullException.ThrowIfNull(argument: mirror);
+        ArgumentNullException.ThrowIfNull(argument: domains);
+
+        m_domains = domains;
+        m_environment = new WorldEnvironmentResolve(domains: domains);
 
         m_mirror = mirror;
         m_bodyColor = (bodyColor ?? mirror.BodyColor);
@@ -152,8 +173,79 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_fieldOfViewRadians = fieldOfViewRadians;
         m_meshDraws = new WorldSceneMeshDraws(pool: m_pool);
         m_source = new WorldSessionStampSource(mirror: mirror);
+        m_decals = new WorldScreenDecals(
+            catalog: TextCatalog,
+            colors: new WorldBakedColors(mirror: mirror.FollowState()),
+            textAt: TextAt
+        );
     }
 
+    /// <summary>Gets or sets what films the destination's cameras into each dressed frame: handed the frame's views, the
+    /// session's own first, it adds a view of each camera of the destination a screen shows, at an index the caller
+    /// records. <see langword="null"/>, the default, films none.</summary>
+    public Action<List<SdfViewSnapshot>>? Film { get; set; }
+    /// <inheritdoc/>
+    /// <remarks>The destination's own font atlas, resolved beside its own document.</remarks>
+    public SdfGlyphAtlas? GlyphAtlas {
+        get {
+            FollowText();
+
+            return ((TextFault is null) ? m_text.GlyphAtlas : null);
+        }
+    }
+    /// <inheritdoc/>
+    /// <remarks>The destination's text screens', drawn through its own font catalog.</remarks>
+    public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_decals.Providers;
+    /// <summary>Gets why the destination's font catalog does not resolve, which leaves its text screens blank: a
+    /// document that names no directory its fonts resolve beside (a world delivered from a remote authority), a font
+    /// asset that fails its pin, or text its fonts cannot draw; <see langword="null"/> while it resolves or the
+    /// destination declares no text.</summary>
+    public string? TextFault { get; private set; }
+
+    // The destination's font catalog, followed from its delivered definition.
+    private PackedFontAtlasCatalog? TextCatalog() {
+        FollowText();
+
+        return ((TextFault is null) ? m_text.Catalog : null);
+    }
+    // The text a screen of the destination shows, or null.
+    private WorldScreenSource.Text? TextAt(int screen) {
+        FollowText();
+
+        for (var index = 0; (index < m_textRows.Count); index++) {
+            if (m_textRows[index].Index == screen) {
+                return (m_textRows[index].Source as WorldScreenSource.Text);
+            }
+        }
+
+        return null;
+    }
+    // Follows the destination's delivered definition: its text rows and its font catalog, which every decal rebakes
+    // against. A catalog that does not resolve leaves the text blank and says why (TextFault), never stopping the frame.
+    private void FollowText() {
+        var definition = m_mirror.Definition;
+
+        if (ReferenceEquals(
+            objA: definition,
+            objB: m_textDefinition
+        )) {
+            return;
+        }
+
+        m_textDefinition = definition;
+        m_textRows = [
+            .. definition.Screens,
+            .. WorldPrototypeFacets.Seated(definition: definition),
+        ];
+        m_decals.Invalidate();
+
+        try {
+            m_text.Reconcile(definition: definition);
+            TextFault = null;
+        } catch (Exception exception) when ((exception is ArgumentException or InvalidDataException or IOException or KeyNotFoundException or UnauthorizedAccessException or NotSupportedException or OverflowException)) {
+            TextFault = exception.Message.ReplaceLineEndings(replacementText: " ");
+        }
+    }
     // Registers the avatar palette and emits the hybrid catalog range — the probe branch (largest detailed rigs plus
     // the full coarse band at unit scale) and the live branch (only mirrored-active avatars, each sourcing its look's pinned rig and uniform
     // scale) both flow through the ONE WorldRigCatalog.Emit call, exactly like Client.WorldSceneEmitter.Compose's
@@ -198,20 +290,36 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             picks: (probeWorstCase ? null : m_picks)
         );
     }
-    // The camera row's anchor pose, restricted to what a STATIC-geometry-only mirror can resolve: a Placement anchor
-    // reads the destination's own authored transform (real data, no pose mirror needed); Entity/EntityPart/Group
-    // anchors have no live body pose to read this wave (see WorldSessionMirror's own staged-boundary remarks) and
-    // resolve to the world origin rather than reaching into state that was never mirrored.
-    private static (Vector3 Position, Quaternion Orientation) ResolveAnchorPose(WorldDefinition definition, WorldAnchor? anchor) {
-        if (anchor is WorldAnchor.Placement placement) {
-            return (WorldAnchorGeometry.StaticPlacementPosition(
-                definition: definition,
-                placementId: placement.PlacementId,
-                shapeId: placement.ShapeId
-            ), Quaternion.Identity);
-        }
+    // The camera row's anchor pose as the destination's mirror resolves it: a Placement anchor reads the destination's
+    // own authored transform, and an Entity anchor its mirrored body's interpolated pose while the body is active. Any
+    // other anchor (a body part, a group, a seat) resolves to the world origin: the mirror carries no part poses, and the
+    // presentation seats no one in the destination.
+    private static (Vector3 Position, Quaternion Orientation) ResolveAnchorPose(WorldSessionMirror mirror, WorldDefinition definition, WorldAnchor? anchor) {
+        switch (anchor) {
+            case WorldAnchor.Placement placement:
+                return (WorldAnchorGeometry.StaticPlacementPosition(
+                    definition: definition,
+                    placementId: placement.PlacementId,
+                    shapeId: placement.ShapeId
+                ), Quaternion.Identity);
+            case WorldAnchor.Entity entity when (
+                (((uint)entity.Index) < WorldBodiesLimits.CapacityCeiling) &&
+                mirror.IsActive(index: entity.Index)
+            ):
+                var alpha = mirror.InterpolationAlpha;
 
-        return (Vector3.Zero, Quaternion.Identity);
+                return (Vector3.Lerp(
+                    amount: alpha,
+                    value1: mirror.PreviousPosition(index: entity.Index),
+                    value2: mirror.CurrentPosition(index: entity.Index)
+                ), Quaternion.Lerp(
+                    amount: alpha,
+                    quaternion1: mirror.PreviousOrientation(index: entity.Index),
+                    quaternion2: mirror.CurrentOrientation(index: entity.Index)
+                ));
+            default:
+                return (Vector3.Zero, Quaternion.Identity);
+        }
     }
 
     /// <summary>Resolves the camera a session's ordinary projection renders a destination through this frame: the named
@@ -223,9 +331,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// default projection.</param>
     /// <param name="width">The view's width, in pixels.</param>
     /// <param name="height">The view's height, in pixels.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound camera operand and reports its transitions.</param>
     /// <returns>The camera, in the destination's space.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mirror"/> is <see langword="null"/>.</exception>
-    public static CameraSnapshot ResolveCamera(WorldSessionMirror mirror, string? cameraName, uint width, uint height) {
+    public static CameraSnapshot ResolveCamera(WorldSessionMirror mirror, string? cameraName, uint width, uint height, WorldValueDomainGuard domains) {
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
         var definition = mirror.Definition;
@@ -236,11 +346,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         if (row is { } cameraRow) {
             var (position, orientation) = ResolveAnchorPose(
+                anchor: cameraRow.Anchor,
                 definition: definition,
-                anchor: cameraRow.Anchor
+                mirror: mirror
             );
             var rig = WorldCameraRigCompiler.Compile(
                 definition: definition,
+                domains: domains,
                 mirror: mirror.FollowState(),
                 program: cameraRow.Rig
             );
@@ -368,6 +480,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         var camera = (m_windowFit?.Invoke() ?? ResolveCamera(
             cameraName: m_effectiveCameraName,
+            domains: m_domains,
             height: height,
             mirror: m_mirror,
             width: width
@@ -375,12 +488,14 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         m_dressedCamera = camera;
         m_dressedFarDistance = WorldRenderFarDistance.Resolve(defaults: m_mirror.Definition.Render);
-        m_views[0] = new SdfViewSnapshot(
+        m_views.Clear();
+        m_views.Add(item: new SdfViewSnapshot(
             Camera: camera,
             Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
         ) {
             Quality = ReducedQuality,
-        };
+        });
+        Film?.Invoke(obj: m_views);
 
         // The mirrored world's own sky and lighting, its keys on the mirrored world's own clocks.
         var environment = m_environment.Resolve(
@@ -434,8 +549,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             var colors = BakedColors();
 
             colors.Begin();
-            // A remote session mirror carries its document but no font asset origin/bytes. Its creation text stays
-            // omitted until session delivery transports pinned assets and this view can share the merged glyph atlas.
+            // The destination's creations' text runs are not emitted: only its text screens draw text, as decals
+            // (ScreenDecals).
             var meshDraws = new List<SdfMeshDraw>();
 
             // The pool reconciles first on every rebuild: animated placements root statically, attached ones on

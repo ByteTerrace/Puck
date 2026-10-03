@@ -153,6 +153,10 @@ internal sealed partial class WorldScreenBinder {
 
         var identity = scene.Endpoint.Identity;
 
+        scene.Film = views => FilmScene(
+            scene: scene,
+            views: views
+        );
         CountRoutedResidency(
             created: 1,
             identity: identity,

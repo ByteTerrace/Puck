@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.DirectX.Tests;
@@ -12,12 +13,9 @@ namespace Puck.DirectX.Tests;
 /// only. No device is created; the file is the one <see cref="Interop.DirectXDeviceContext"/> hands the library.</summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXPipelineCacheFileLawTests : IDisposable {
-    private readonly string m_directory = Directory.CreateTempSubdirectory(prefix: "puck-directx-pipeline-cache-").FullName;
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-directx-pipeline-cache-");
 
-    public void Dispose() => Directory.Delete(
-        path: m_directory,
-        recursive: true
-    );
+    public void Dispose() => m_directory.Dispose();
     [Fact]
     public void ADriverVersionTheAdapterWillNotReportStillPersistsTheLibrary() {
         // What GetDeviceIdentity returns when CheckInterfaceSupport throws: no display version, and a raw version of zero.
@@ -34,13 +32,13 @@ public sealed class DirectXPipelineCacheFileLawTests : IDisposable {
             identity: identity,
             store: new GpuPipelineCacheStore(
                 contentKey: "0123456789abcdef",
-                directory: m_directory
+                directory: m_directory.RootPath
             ),
             work: new GpuPipelineCacheWork(backend: "directx")
         );
 
         Assert.Equal(
-            expected: $"{m_directory.Replace(newChar: '/', oldChar: '\\')}/directx/10de-2786-0000000000000000/0123456789abcdef.bin",
+            expected: $"{m_directory.RootPath.Replace(newChar: '/', oldChar: '\\')}/directx/10de-2786-0000000000000000/0123456789abcdef.bin",
             actual: file.Path
         );
 

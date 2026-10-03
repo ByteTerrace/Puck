@@ -509,7 +509,7 @@ public sealed class WorldStateReadRoutingLawTests {
             PresentationSeconds: 0f
         );
 
-        var (routedEye, _, _) = WorldCameraRigCompiler.Compile(
+        var (routedEye, _, _) = WorldCameraRigCompiler.Compile(domains: new WorldValueDomainGuard(),
             definition: remote,
             mirror: routed,
             program: program
@@ -517,7 +517,7 @@ public sealed class WorldStateReadRoutingLawTests {
             anchor: in anchor,
             clock: in clock
         );
-        var (localEye, _, _) = WorldCameraRigCompiler.Compile(
+        var (localEye, _, _) = WorldCameraRigCompiler.Compile(domains: new WorldValueDomainGuard(),
             definition: remote,
             mirror: client.StateMirror,
             program: program

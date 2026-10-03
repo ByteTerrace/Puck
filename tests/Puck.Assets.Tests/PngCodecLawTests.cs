@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.IO.Hashing;
 using System.Text;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Assets.Tests;
@@ -78,44 +79,34 @@ public sealed class PngCodecLawTests {
         return buffer.ToArray();
     }
     private static byte[] EncodeAnimationToBytes(IReadOnlyList<ReadOnlyMemory<byte>> frames, int width, int height) {
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: Path.GetRandomFileName()
+        using var directory = new TemporaryDirectory(prefix: "puck-png-");
+
+        var path = directory.PathOf(name: "animation.png");
+
+        PngEncoder.WriteAnimation(
+            path: path,
+            frames: frames,
+            width: width,
+            height: height,
+            delayNumerator: 1,
+            delayDenominator: 30
         );
 
-        try {
-            PngEncoder.WriteAnimation(
-                path: path,
-                frames: frames,
-                width: width,
-                height: height,
-                delayNumerator: 1,
-                delayDenominator: 30
-            );
-
-            return File.ReadAllBytes(path: path);
-        } finally {
-            File.Delete(path: path);
-        }
+        return File.ReadAllBytes(path: path);
     }
     private static byte[] EncodeToBytes(byte[] rgba, int width, int height) {
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: Path.GetRandomFileName()
+        using var directory = new TemporaryDirectory(prefix: "puck-png-");
+
+        var path = directory.PathOf(name: "image.png");
+
+        PngEncoder.Write(
+            height: height,
+            path: path,
+            rgba: rgba,
+            width: width
         );
 
-        try {
-            PngEncoder.Write(
-                height: height,
-                path: path,
-                rgba: rgba,
-                width: width
-            );
-
-            return File.ReadAllBytes(path: path);
-        } finally {
-            File.Delete(path: path);
-        }
+        return File.ReadAllBytes(path: path);
     }
     // The forward filters, independent of the decoder's inverse; row index selects the filter type, so five
     // rows exercise all five filters.

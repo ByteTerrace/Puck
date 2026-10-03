@@ -199,7 +199,7 @@ internal static class WorldArtifactBuild {
             );
 
             if (!built) {
-                CliScratchDirectories.TryDelete(path: staging);
+                RunDirectory.TryDelete(path: staging);
 
                 return false;
             }

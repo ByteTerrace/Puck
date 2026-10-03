@@ -249,6 +249,6 @@ public readonly record struct WorldBodyTransferState(
     ulong[] DurableInputTimers,
     string[] DurableInputWriters,
     ulong DurableInputTick,
-    PlayerIntent[] TapeIntents,
-    ulong[] TapeRemainingTicks,
+    IReadOnlyList<PlayerIntent> TapeIntents,
+    IReadOnlyList<ulong> TapeRemainingTicks,
     WorldContinuumTrajectory? PendingContinuum);

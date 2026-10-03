@@ -89,7 +89,14 @@ over `RotatePlane`). A new instruction touches every partner in one change:
 6. **CPU interpreter** — `SdfFieldEvaluator` either interprets the instruction
    (its blend switch and `ResolveWinner` included) or refuses it by name. Its
    blend switch falls through to union for an unknown value, so a missing arm
-   silently turns the new blend into a union in contact and queries.
+   silently turns the new blend into a union in contact and queries. An
+   interpreted instruction also gets its inclusion rule in the bounds
+   interpreter (`SdfFieldEvaluator.Bounds.cs`, `BoundedOps`/`BoundedShapes`).
+   `SdfFieldBoundsLawTests` fails an accepted op or shape without one, and
+   sweeps a new shape's or blend's point answers against its bounds. A rule may
+   enclose rather than mirror (`Sweep` does), but it is never missing: a shape
+   with no rule answers the unbounded interval, which empties its program's
+   frame.
 7. **Document surface** — enum values are nameable in creation documents and
    `.puck` as soon as they exist, and their XML docs feed the generated world
    schemas. Either carry the new parameters through `CreationCanonicalizer` and
@@ -229,12 +236,17 @@ These are one-line cautions; the owning pages hold the derivations.
   (`SdfBakeField` counts each evaluation); never add a second interpreter or
   march for baking. A program the evaluator refuses has no bake, and a creation
   bakes only its contact emission (`CreationStampEmitter.EmitFixed`).
-- **The version moves with the bytes.** `SdfBaker.Version` keys every bake and is
-  the `BAKE` chunk's version; any change to what the baker, `CreationBaker` or
-  `CreationBakeCodec` produces bumps it and re-records the product pin in
-  `CreationBakeLawTests`. A held bake is keyed by the version, never by the code that wrote it, so
-  two lanes that change the bytes must not share a number; a held bake this baker cannot
-  decode draws the field, counted and named (`sdf.bakes.undecodable`).
+- **The fingerprint follows the code.** `[Derivation(name: "bake")]` marks
+  `CreationBaker.TryBake`, `CreationBakeCodec.Encode` and `EncodeRefusal`.
+  `puck derivations` follows their transitive source dependencies across
+  assemblies and regenerates `DerivationFingerprint.Bake`; every bake key
+  carries that full fingerprint. The `BAKE` chunk and bake-pack entries use
+  its first eight hexadecimal digits as an unsigned integer. Regenerate after
+  changing any reached declaration, re-record the product pin in
+  `CreationBakeLawTests`, and verify with `puck derivations --check`. A held
+  bake is keyed by the code that wrote it, so two lanes that change the bytes
+  never share a key; a held bake this baker cannot decode draws the field,
+  counted and named (`sdf.bakes.undecodable`).
 - **Portable bytes.** A bake is content-addressed and one build's pack stands in
   for any device's bake, so its bytes must not depend on the machine: scalar
   IEEE arithmetic in a written order, no transcendental function, no `Vector3`
@@ -252,9 +264,10 @@ These are one-line cautions; the owning pages hold the derivations.
   each usage's source format, stored format, color space and mip filter; the
   codecs, mip filters and octahedral normal pair live in `Puck.Assets.Textures`,
   where a GPU upload also reaches them. An encoder's bytes are pinned by
-  `TextureCodecLawTests`, so an encoder change re-records those pins, moves
-  `SdfBaker.Version` and regenerates `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
-  (`BakeSamplingFixtureLawTests` writes the fresh one to the temporary directory).
+  `TextureCodecLawTests`, so an encoder change re-records those pins, regenerates
+  `DerivationFingerprint.Bake` and `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
+  (`BakeSamplingFixtureLawTests` writes the fresh one into its law directory, which a failing
+  law keeps and names).
   Material identity is never blended or compressed.
 - **A bake reaches the GPU through the one image upload.** `GpuPixelFormat`
   carries `Bc4Unorm`, `Bc5Unorm`, `Bc6hUfloat` and `Bc7Unorm` (sampled only:
@@ -850,8 +863,9 @@ These are one-line cautions; the owning pages hold the derivations.
   (`SdfWorldTables.Regions.cs`, created by `CreateRegion` under
   `GpuResidency.Select` with a reader in flight), and brick staging is a staged
   region whose destination is the brick pool (`Target` names the brick's slot).
-  Each region, brick staging included,
-  writes copy sets the tables reserved for it at construction, its
+  Each staged region, brick staging included, writes a slot's copy set at its
+  first recorded copy and again only after another region writes that set. The
+  tables reserve the copy sets at construction, each region taking its
   `GpuRegionCopySets` slice of the tables' one `GpuRegionCopyPool` (whatever
   policy the device selects), so the tables create and admit two pools, their
   own and the copy pool, and no region the frame thread creates or grows takes
@@ -1212,8 +1226,17 @@ per-backend-deterministic submission counts, pass by pass and outside every
 pass, to `tests/Puck.Counters/counters.ceilings.json`
 (`puck.counters.ceilings.v1`): a count reads at most its ceiling, a ceiling of
 zero is a required zero, and a per-backend-deterministic count is judged only
-on the device its backend was recorded on. `--record` rewrites the file, only
-in the change that explains the move. It needs a GPU on both backends, so it
+on the device its backend was recorded on, except a ceiling carrying
+`requiredZero` (a zero of a kernel kind such as the march steps or sky
+evaluations, which the recorder sets and the reader validates), a structural
+contract that is judged on every device; the foreign-device note says how many
+counts were not judged and how many zeros still were. `--record` rewrites the file, only
+in the change that explains the move, and writes nothing when the backends
+disagree on a deterministic count or pass state, or the recorded ceilings fail
+their own run. It uses atomic replacement; a write failure leaves the existing
+ceilings unchanged. A refused record prints `not written: …` and exits 1.
+`--output` names a different file from the ceilings with `--check` or `--record`.
+It needs a GPU on both backends, so it
 runs with the other GPU checks, never beside a build.
 
 **Qualification judges a published package, not a change.** `puck qualify
@@ -1258,8 +1281,18 @@ block carries offsets and a phase, never a rate),
 definition every frame, so a `world.row.set render …` lands on the next frame
 without a program rebuild; `render.tonemap` reaches the root graph
 (`WorldViewGraphHost.BeginFrame`), which it recomposes, never an SDF kernel. Creation volumes become `SdfFrame.Volumes`, not
-instructions. Validation ranges live in `WorldDefinitionValidator`; a new render
-field needs its validator bound, its field on the record that carries it (a
+instructions. A bindable scalar's domain is its row in `WorldValueFields`, which
+the validator judges and the resolve maps every resolved value through
+(`WorldValueDomain.Map`, applied by `WorldValueDomainGuard.Resolve`): a finite
+value beyond a closed end clamps to it, and a value that is not finite or lies at
+or beyond an open end holds the binding's last valid value, so no value a bound
+row strays to reaches a record. A domain a kernel needs away from zero (a
+`smoothstep` width, a divisor) is closed at a floor proved for the kernel, such
+as `SdfSky.MinCloudSoftness` for both cloud bands and
+`CameraSnapshot.MinFieldOfViewRadians` for a camera, never open at zero, whose
+clamp target the GPU may flush, so the kernel names no bound of its own. Plain-float ranges live
+in `WorldDefinitionValidator`. A new render field needs its domain or validator
+bound, its field on the record that carries it (a
 light's on `SdfLight`, the sky's on `SdfSkyBlock`, `SdfSkyStop` or `SdfSoftbox`,
 whose declarations `puck shaders generate` writes into `sdf-world.interface.hlsli`
 from the C# type) or else its pass-block value (`SdfWorldPackage.Values`, written
@@ -1755,8 +1788,11 @@ the destination's own frame source on its own clock, released in
 `ReconcileViewResidencies` once the session is gone. A camera view reads every
 source within the frame and every view a screen of its world shows, itself
 included, at its previous frame; a session reads, within the frame, what its own
-world's screens show one level deeper (`WorldView.Reads`: sessions, and source
-instances only nested worlds show, `WorldViewInstances.NestedSources`); the
+world's screens show one level deeper (`WorldView.Reads`: sessions, camera views of
+that world, and source instances only nested worlds show,
+`WorldViewInstances.NestedSources`); a camera of a presented world reads the same
+but its world's camera views, which it reads at their previous frame
+(`WorldView.PreviousReads`); the
 world's instance reads every view a screen of a world the display shows directly
 shows (`WorldViewInstances.IsShownDirectly`) within the frame, so the reads grow
 with the views shown, never with the square of every view. `WorldViewGraphHost.TryCompose` puts the views
@@ -1837,12 +1873,33 @@ depth 0 (`routed$<digest>`, a digest of its authority, `WorldViewNames.Routed`) 
 whose session screens open session feeds of their own while the world is
 shallower than the nesting depth, named `WorldViewNames.Nested`
 (`session$<screen>$<screen>…`). A screen at the depth shows its session's
-`fallback` colour through the `color` producer (`WorldPortalFallback`); a world
-shown through a screen shows only sessions and producers whose content is
-deterministic. Views of one residency render one world at different levels, so
+`fallback` colour through the `color` producer (`WorldPortalFallback`). Every
+other screen of a presented world shows that world's own source, through the
+one mechanism the boot world's screens use (`WorldScreenMappingSet`, one per
+world, named by its world instance): a machine or a probe source instance carries
+a `world` setting (`WorldSourceInstances.WorldOf`), so the binder's
+`MachineSource` reads that world's host (`WorldScreenBinder.MachinesOf`, null for
+a world another authority runs). A session's level opens no machine source, reads
+no framebuffer extent and casts no machine light while its delivered definition
+withholds that machine's declaration. `ProbeSource` opens a fault for any world but
+the boot world, which alone runs a probe host; a camera view is a view of that
+world filmed under the level (`WorldViewNames.NestedCamera`,
+`WorldNestedScreens.Cameras`) into the residency the level renders through, after
+its own views, by the dresser's `Film` hook (`WorldSessionSceneEmitter.Film`,
+`WorldRoutedScene.Film`; `WorldScreenBinder.NestedCameras.cs` records each
+index in a `WorldFilmedViews`, which drops a view its residency's dress no
+longer films and, on a nesting move, every view no live level shows), reading the level's sessions and sources within the frame and its camera
+views at their previous frame (`WorldView.PreviousReads`); text draws through
+the world's own font catalog (`WorldTextCatalog` resolved beside the delivered
+definition's `DocumentDirectory`), whose decals the dresser hands the residency
+(`ISdfFrameDresser.GlyphAtlas`/`ScreenDecals`, forwarded by
+`SdfCompositionFrameSource`; `WorldScreenDecals` serves the boot presenter and
+every session emitter alike). Only a producer of the local device's content shows
+nothing. Views of one residency render one world at different levels, so
 `ISdfScreenSources.ReadOf` takes the view: a routed scene's seat views read the
-routed world's level, each window view its feed's (`RoutedScreenSources`), and
-the residency's bound flag holds while any view of its frame reads the screen.
+routed world's level, each window view its feed's, each camera view the level
+that films it (`RoutedScreenSources`), and the residency's bound flag holds
+while any view of its frame reads the screen.
 A window fits to the eye of the view one level up and starts its rays past the
 counterpart's own glass (`WorldPrototypeFacets.GlassSpan`). A session's
 footprint holds only while its consumer's last camera sees its glass

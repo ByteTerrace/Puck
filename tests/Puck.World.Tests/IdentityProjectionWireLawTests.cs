@@ -109,7 +109,7 @@ public sealed class IdentityProjectionWireLawTests {
                 new WorldTransferReservationMember(
                     Principal: Principal.Console,
                     PreferredSlot: 0,
-                    Identity: identity,
+                    Identity: identity.Project(),
                     Source: default,
                     BodyColor: new Vector3(
                         x: 0.1f,
@@ -139,17 +139,18 @@ public sealed class IdentityProjectionWireLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeReservation(
                 body: encoded,
-                defaults: defaults,
                 failure: out var failure,
                 request: out var decoded
             ),
             userMessage: failure.ToString()
         );
 
-        var arrived = decoded!.Members[0].Identity;
+        var arrived = WorldIdentity.FromProjection(
+            defaults: defaults,
+            projection: decoded!.Members[0].Identity!.Value
+        );
 
-        Assert.NotNull(@object: arrived);
-        Assert.Null(value: arrived!.FixedMoveSpeed);
+        Assert.Null(value: arrived.FixedMoveSpeed);
         Assert.Null(value: arrived.FixedTurnSpeed);
     }
     [Fact]
@@ -174,7 +175,7 @@ public sealed class IdentityProjectionWireLawTests {
                 new WorldTransferReservationMember(
                     Principal: Principal.Console,
                     PreferredSlot: 0,
-                    Identity: identity,
+                    Identity: identity.Project(),
                     Source: default,
                     BodyColor: new Vector3(
                         x: 0.1f,
@@ -227,7 +228,6 @@ public sealed class IdentityProjectionWireLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeReservation(
                 body: encoded,
-                defaults: defaults,
                 failure: out var failure,
                 request: out var decoded
             ),
@@ -235,12 +235,14 @@ public sealed class IdentityProjectionWireLawTests {
         );
         Assert.NotNull(@object: decoded);
 
-        var arrived = decoded!.Members[0].Identity;
+        var arrived = WorldIdentity.FromProjection(
+            defaults: defaults,
+            projection: decoded!.Members[0].Identity!.Value
+        );
 
-        Assert.NotNull(@object: arrived);
         Assert.Equal(
             expected: identity.Id,
-            actual: arrived!.Id
+            actual: arrived.Id
         );
         Assert.Equal(
             expected: identity.Name,
