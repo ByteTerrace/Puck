@@ -1,4 +1,7 @@
 #define SDF_INDIRECT_PASS
+#define SDF_SCREEN_SOURCES
+#define SDF_GROUP_SHADOW_GATHER
+#define SDF_DYNAMIC_TRANSFORMS
 #include "../indirect/sdf-indirect-cache.hlsli"
 
 [numthreads(64, 1, 1)]
@@ -62,9 +65,12 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     DeviceMemoryBarrierWithGroupSync();
     if (lane == 0u) { InterlockedOr(indirectCacheRW[index * SdfIndirectProbeWords + 3u], 1u << (SdfIndirectTracedShift + update.y)); }
     uint detail = passGroup.indirectTier == SdfIndirectTierHigh ? level : level + 1u;
-    puckCountDetail(detail, sdfIndirectEvaluations - sdfIndirectLaunchEvaluations - sdfIndirectProofEvaluations, 1u, 0u, 0u, 0u);
+    sdfWorkTexels = 1u;
+    puckCountDetail(detail, sdfIndirectEvaluations - sdfIndirectLaunchEvaluations - sdfIndirectProofEvaluations, sdfWorkTexels, 0u, 0u, 0u);
     puckCountDetail(3u, sdfIndirectLaunchEvaluations, 0u, 0u, 0u, 0u);
     puckCountDetail(4u, sdfIndirectProofEvaluations, 0u, 0u, 0u, 0u);
     puckCountIndirect(detail, 0u, 0u, ray.kind == SdfIndirectKindUnresolved ? 1u : 0u);
-    if (passGroup.workCounterRowDetail == 0u) { puckCountWork(sdfWorkSteps, 1u); }
+    // A detail row holds this lane's work when the pass has detail rows; the plain row then adds none of it.
+    if (passGroup.workCounterRowDetail != 0u) { sdfWorkSteps = 0u; sdfWorkTexels = 0u; }
+    puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

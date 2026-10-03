@@ -1,4 +1,7 @@
 #define SDF_INDIRECT_PASS
+#define SDF_SCREEN_SOURCES
+#define SDF_GROUP_SHADOW_GATHER
+#define SDF_DYNAMIC_TRANSFORMS
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-cache.hlsli"
 
 // Each case binds its program and asks the production helpers for one ray, placement, cell, launch or finite proof.

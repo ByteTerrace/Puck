@@ -1,10 +1,5 @@
 #ifndef SDF_INDIRECT_FIELD_HLSLI
 #define SDF_INDIRECT_FIELD_HLSLI
-#ifdef SDF_INDIRECT_PASS
-#define SDF_SCREEN_SOURCES
-#define SDF_GROUP_SHADOW_GATHER
-#define SDF_DYNAMIC_TRANSFORMS
-#endif
 #include "../field/sdf-vm.hlsli"
 #include "../frame/sdf-work.hlsli"
 #include "../march/sdf-grid-walk.hlsli"

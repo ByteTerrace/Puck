@@ -1,6 +1,7 @@
 #define SDF_INDIRECT_PASS
 #define SDF_SCREEN_SOURCES
 #define SDF_GROUP_SHADOW_GATHER
+#define SDF_DYNAMIC_TRANSFORMS
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-field.hlsli"
 #include "../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/indirect/sdf-indirect-march.hlsli"
 

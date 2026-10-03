@@ -1,4 +1,7 @@
 #define SDF_INDIRECT_PASS
+#define SDF_SCREEN_SOURCES
+#define SDF_GROUP_SHADOW_GATHER
+#define SDF_DYNAMIC_TRANSFORMS
 #include "../indirect/sdf-indirect-cache.hlsli"
 
 [numthreads(64, 1, 1)]
@@ -33,6 +36,9 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         sdfIndirectStoreCell(cell, proof, partition);
     }
     uint detail = passGroup.indirectTier == SdfIndirectTierHigh ? level : level + 1u;
-    puckCountDetail(detail, sdfWorkSteps, 1u, 0u, 0u, 0u);
-    if (passGroup.workCounterRowDetail == 0u) { puckCountWork(sdfWorkSteps, 1u); }
+    sdfWorkTexels = 1u;
+    puckCountDetail(detail, sdfWorkSteps, sdfWorkTexels, 0u, 0u, 0u);
+    // A detail row holds this lane's work when the pass has detail rows; the plain row then adds none of it.
+    if (passGroup.workCounterRowDetail != 0u) { sdfWorkSteps = 0u; sdfWorkTexels = 0u; }
+    puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }
