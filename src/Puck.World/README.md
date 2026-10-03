@@ -412,12 +412,12 @@ stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes
 orbit/look and never write `Turn`. Authors can pair `player.move` with
 `player.look` for movement-facing/free-orbit alternatives, or use
 `player.move.strafe` with `player.look.steer` for the standard action scheme.
-Pressing the left stick toggles the `run` channel; West and Left Shift retain
-hold-to-run behavior. Holding LT and pressing the left stick toggles autorun
-through the `forward` channel; the chord consumes that press, so it does not
-also flip the bare-stick run toggle.
-Holding LT + RB temporarily makes the standard right stick camera-only free
-look; left-stick movement remains relative to character heading while held.
+The island binds the left stick to `player.move.strafe`, the right stick to
+`player.look.steer`, mouse buttons 1 and 2 to `player.orbit` and `player.steer`,
+and South and Space to `jump`; East and West switch the view layout. It binds
+no run channel, no autorun and no free-look chord. An author gets autorun from
+a channel binding in `toggle` mode (`BindingEntryMode.Toggle`), and the held
+`player.look.free` command suppresses body steering while camera look continues.
 `views.seatRig` authors framing, `views.seatControl` authors the
 world's `World|Body` yaw reference and pitch envelope, and
 `seatDefaults.seatCameraFeel` authors portable sensitivity/inversion/arming/rate.

@@ -17,14 +17,16 @@ public sealed record WorldGenerationDefaults(ulong WorldSeed = 0UL) {
 /// from a site's class.
 /// </summary>
 /// <remarks>
-/// <para>A boot-only site is a document field read exactly once at composition (<c>population.capacity</c>,
-/// <c>host.backend</c>): the boot resolver draws it, writes the settled value into the ordinary literal field, and
-/// clears the facet — a settled field is indistinguishable from an authored one thereafter, so stderr narration at
-/// settlement time is the only surface that can say the value was random at all. A state site is a
+/// <para>A boot-only site is a document field read exactly once at composition (<c>bodies.capacity</c>,
+/// <c>host.backend</c>): the boot resolver reads the named state row (<c>bodies.capacityRow</c>,
+/// <c>host.backendRow</c>) after the rows first-fill, writes the settled value into the ordinary literal field and
+/// narrates it, so stderr narration at settlement time is the surface that says the value came from a draw.
+/// Settling <c>host.backendRow</c> clears it; <c>bodies.capacityRow</c> stays declared, because the row itself is
+/// the persisted evidence and a reload reads the same value. A state site is a
 /// <see cref="WorldStateRow"/>: its facet is never cleared, its cursor and drawn masks persist in the document, and a
 /// save/reload resumes the sequence exactly where it stopped.</para>
 /// <para>A descriptor is an identity, never a position: a positional ordinal would renumber under ordinary
-/// operation (a settled facet clearing, a <c>world.row.remove state</c> retiring a row, an <c>UpsertStateRow</c>
+/// operation (a settled row name clearing, a <c>world.row.remove state</c> retiring a row, an <c>UpsertStateRow</c>
 /// adding one), silently re-pointing a live site's stream while its cursor kept counting.</para>
 /// </remarks>
 public static class WorldDrawSites {
@@ -34,7 +36,7 @@ public static class WorldDrawSites {
     public const string PopulationCapacity = "bodies.capacity";
 
     /// <summary>Determines whether <paramref name="site"/> is a BOOT-ONLY document field — drawn once at composition, settled
-    /// into an ordinary literal, and cleared (see this type's remarks).</summary>
+    /// into an ordinary literal (see this type's remarks for which sites then clear their row name).</summary>
     /// <param name="site">The site descriptor.</param>
     /// <returns><see langword="true"/> for a boot-only field site.</returns>
     public static bool IsBootOnly(string site) =>

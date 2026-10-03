@@ -11,7 +11,12 @@ inert section. The boot levers (`shadows`, `shadowCrowdRadius`,
 `ambientOcclusion`, `renderScale`, `upscaleSharpness`, `temporal`,
 `dynamicResolution`, the `low`/`medium`/`high` presets, each also carrying a
 `renderScaleFloor` tier) seed `WorldRenderSettings` once at boot and move only
-through their verbs afterwards; `world.save` folds a moved lever back into the
+through their verbs afterwards; `views.quality` rows (`WorldViewQuality`; [views.md](views.md) owns them) hold a
+render view's durable quality, each by instance `name` (or `*` for the player
+views' defaults): `renderScale` (a scalar ceiling), `renderScaleFloor` (the lowest
+dynamic-resolution tier) and `tier` (a quality preset), and a camera or session
+view takes only a row that names it. They override these boot levers for that
+view; session pins have no document member. `world.save` folds a moved lever back into the
 section when the world authors one (`WorldSessionLevers.Fold`), creates the
 section when the world omits it and the render-scale ceiling moved, and
 otherwise leaves an absent `render` section absent. Three members are read off the LIVE definition every frame instead,

@@ -823,7 +823,7 @@ public sealed partial class WorldPopulation {
         : string.Empty
     );
     /// <summary>Refreshes the cached body color of every active seat currently seated on <paramref name="profile"/> —
-    /// the server half of a live <c>SetPlayerSection(identity)</c> color edit. The seat renders its color live off the
+    /// the server half of a live identity color edit. The seat renders its color live off the
     /// shared handle client-side, but the per-entry <see cref="BodyColor"/> cache is the snapshot's source of truth, so
     /// it must not lie after an identity change. Bumps the revision when a seat's color actually moves.</summary>
     /// <param name="profile">The edited profile handle.</param>

@@ -142,6 +142,18 @@ facing into channels claiming the `FaceX`/`FaceY`/`FaceZ` roles and the sim's
 facing snap turns the body, so binding it needs those three channels declared and
 `seatControl.yawReference: World` (the validator refuses otherwise).
 
+`seatControl.follow` (`{ "rate": <per second>, "whileIdle": false }`, optional) makes
+the camera yaw ease in behind the body's heading when there is no look input:
+`rate` is the exponential closing rate (about 63% of the remaining angle per
+`1/rate` seconds; larger is stiffer) and the validator refuses a rate that is not
+positive. Any look input (a deflected look stick, a held orbit or steer) is
+free look and the follow yields while it lasts. By default the follow runs only
+while the body has movement input, so after a free look the camera stays where
+it was left until the body moves; `whileIdle: true` also follows an idle body.
+The validator refuses `follow` unless `yawReference` is `World`, because a
+body-relative yaw already rides the body. Absent `follow` is a still camera that
+goes only where look input sends it.
+
 `seatControl.yawReference` is `World` for standard camera-relative movement or
 `Body` for an explicitly body-relative camera. A mapped arrival turns a followed seat's
 view by the door's turn (`WorldSeatViewState.Cross`): a `World` yaw turns, a
@@ -393,6 +405,13 @@ Free Cam do not alter the logical movement basis.
   viewport mapping (`WorldSeatViewports.Locate`, which the pointer-ray capture
   shares), visibility, arming reason, buttons, hover (a HUD panel, else the
   display pane the picker hovers), and system-release generation.
+- `world.view.pick <instance> [<x> <y>]` — the presentation automation seam to
+  an SDF view's GPU pick. With normalized coordinates in [0, 1) it requests a
+  pick at that point of the instance's image and echoes the request id as
+  `pending`; without them it echoes the latest result (`request`, `pixel`,
+  `kind`, `source`, `material`, and the hit's `placement`, `body` and `slot`,
+  each `none` when absent) or `pending`. It refuses an instance that is not a
+  rendered SDF view.
 - `world.view.panes [<x> <y>]` — reads the panes the root's `place` passes
   draw, in drawing order, each as its published `SourceMapping`
   (`WorldViewGraphHost.PublishPanes`); given a display point, it echoes the
