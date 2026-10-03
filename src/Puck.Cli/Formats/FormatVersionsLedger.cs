@@ -211,7 +211,7 @@ internal static partial class FormatVersionsLedger {
             comparer: StringComparer.Ordinal,
             keySelector: static pair => pair.Id
         ).ToArray();
-        var closures = new FormatShapeClosure(files: files).Of(formats: [.. named.Select(selector: static pair => (pair.Item.Source, pair.Item.Owner, pair.Item.Member))]);
+        var closures = new FormatShapeClosure(files: files).Of(formats: [.. named.Select(selector: static pair => new FormatRef(Id: pair.Id, Member: pair.Item.Member, Owner: pair.Item.Owner, Source: pair.Item.Source))], allIds: [.. found.Select(selector: item => (shared.Contains(item: item.Id) ? $"{item.Id}@{item.Source}" : item.Id))]);
 
         return [.. named.Select(selector: (pair, index) => (new FormatEntry(
             Id: pair.Id,

@@ -30,7 +30,7 @@ public sealed class CreationBakeLawTests {
         ],
         """;
     // The bake pack of this file's world. Regenerating DerivationFingerprint.Bake re-records this pin.
-    private const string PinnedProduct = "sha256-64/196c9b4d5119ce7c";
+    private const string PinnedProduct = "sha256-64/8e2ad00f04b63522";
 
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 
