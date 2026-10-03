@@ -1,8 +1,10 @@
 using System.Buffers.Binary;
 using System.Runtime.Versioning;
+using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
 using Puck.Shaders;
+using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
 
@@ -75,6 +77,8 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         using var constants = services.BufferFactory.CreateHostVisible(data: padded, name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBlock = services.BufferFactory.CreateHostVisible(data: new byte[padded.Length], name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
+        using var skyBuffer = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(new[] { new SdfSky().Block }.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
+        using var stopBuffer = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(new SdfSky().Stops), name: default, usage: GpuBufferUsage.Storage);
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
         const int Rows = 6; // The pass, its plain detail, then gradient, disc, stars and clouds.
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)(Rows * GpuKernelCounters.RowBytes)), usage: GpuBufferUsage.Storage);
@@ -128,7 +132,9 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
                                 services.Bindings.WriteSampler(descriptorSetHandle: set, binding: binding.Binding, arrayElement: element, samplerHandle: sampler);
                                 break;
                             default:
-                                var storage = ((pass && (binding.Binding == counterBinding)) ? counters : fillerBuffer);
+                                var storage = ((pass && (binding.Binding == counterBinding)) ? counters
+                                    : (!pass && binding.Binding == Binding(SdfKernelInterfaces.Sky) ? skyBuffer
+                                    : (!pass && binding.Binding == Binding(SdfKernelInterfaces.SkyStops) ? stopBuffer : fillerBuffer)));
 
                                 services.Bindings.WriteBuffer(descriptorSetHandle: set, binding: binding.Binding, bufferHandle: storage.BufferHandle,
                                     bufferSize: storage.SizeBytes, kind: binding.Kind, elementStride: binding.ElementStride);

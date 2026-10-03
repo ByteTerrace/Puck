@@ -105,6 +105,7 @@ public sealed partial class WorldEnvironmentResolve {
     private void ApplySunDiscLight(SdfLights lights, SdfSky sky) {
         if (m_sky?.Layers is not { } layers) { return; }
         for (var index = 0; (index < layers.Count); index++) {
+            if (m_layers is { } audition && !audition.Includes(index)) { continue; }
             if (layers[index] is WorldRenderSkyLayer.SunDisc { Light: null }) {
                 sky.Block.DiscLight = ((lights.ShadowSlots[0] >= 0) ? lights.ShadowSlots[0] : FirstDirectional(lights: lights));
                 return;

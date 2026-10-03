@@ -7724,7 +7724,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       its rect; its residency's aperture bytes and the live count against the
       cap in `world.budget`.
 12. **P18-12, the artist's surface in the running World.**
-    - Delivers: the sky, air and timeline in the editor's inspector
+    - Delivered for the current gradient, fog, disc, stars and clouds rows:
+      the sky, air and timeline in the editor's inspector
       ([E5](editor.md#e5--the-inspector), through its one formatter); clock
       levers `world.timeline hold|run|at|rate <clock>` (presentation-only, never
       saved, like `pipeline.time`); layer solo and mute and a per-pixel sky-cost
@@ -7736,11 +7737,34 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       ([E9](editor.md#e9--cost-per-object-and-gpu-pass-timing)).
     - Touches: `WorldLightingCommandModule`, `WorldRenderLeverCommandModule`,
       `WorldSessionLevers`, `DebugViewModes`, the editor's formatter.
-    - Done when: `WorldTimelineLeverLawTests` hold a scrubbed clock's
-      presentation to the tick it names and the simulation untouched (red leg:
-      a held clock that advances the state row); the inspector's sky text
-      equals `world.lighting`'s echo.
-    - Counted-cost gate: a held clock renders nothing new after one frame.
+    - The presentation mirror owns clock previews; cached environment and
+      theme reads follow their presented phases. `WorldLightingText` owns
+      the lighting echo and the inspector's sky text before panel wrapping.
+      `world.sky-layer solo <index>|solo off|mute <index> on|off` uses the
+      session-lever sink and never folds into a save. `world.debug-view
+      sky-cost` carries field-run evaluations and hashes with their pixels
+      and adds the output pixel's work. `world.cost sky` uses the existing
+      GPU report formatter for completed sky, composite and environment rows.
+    - CPU laws: `WorldTimelineLeverLawTests` keep held and scrubbed clock
+      readings fixed while authoritative state advances;
+      `WorldSkyInspectorLawTests` holds the shared sky echo and steady
+      allocation; `WorldSkyLayerLawTests` covers the command, sink, resolve,
+      save exclusion and debug-mode registration; `WorldSkyCostLawTests`
+      holds completed detail rows and skipped status; `WorldSkyEditLawTests`
+      reloads, compares the reference environment map through the ordinary
+      capture path, and saves the edited `.puck` rows with unrelated text
+      intact. Each CPU law has a withheld-fix red leg.
+    - Owed on the 4070: both backends of `WorldTimelineLeverGpuLawTests`
+      (nothing new renders after the held sky's first frame),
+      `WorldSkyCostGpuLawTests` (muting removes the pixel's evaluation),
+      `WorldSkyEditGpuLawTests` (reloaded rendered pixels differ and save),
+      and the touched `SdfSkyEvaluationDeviceLawTests`; their GPU red legs,
+      the editor and sky canaries, parity and the real World run. Fog-map
+      texture reads are counted, so any affected counted ceilings need the
+      same GPU pass. No GPU result is established by the CPU laws.
+    - P18-8's open stack and P18-10's atmosphere rows are absent on this head.
+      Their inspector and audition extensions remain with those deliveries;
+      the current surface exposes fog as air and the current sky layer rows.
 13. **P18-13, temporal amortization of secondary shadows.** After P15-5.
     - Delivers: with reconstruction on, each shadow slot after the first marches
       a quarter of its pixels per frame, interleaved by the jitter index, and

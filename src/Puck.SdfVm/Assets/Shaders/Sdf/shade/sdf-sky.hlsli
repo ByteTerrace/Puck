@@ -8,6 +8,13 @@
 #include "../field/sdf-octahedral.hlsli"
 #include "../field/sdf-hash.hlsli"
 #include "../field/sdf-noise.hlsli"
+// The same evaluation sites feed the completed ledger and the per-pixel diagnostic. Field-run cost is carried in
+// the unused run alphas, then filtered with its color; it is attribution per output pixel, not a second evaluation.
+static float3 sdfSkyCost = float3(0.0, 0.0, 0.0);
+void sdfCountSky(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
+    sdfSkyCost += float3(evaluations, hashes, loads);
+    puckCountDetail(detail, steps, texels, evaluations, hashes, loads);
+}
 // The procedural star field: a per-cell PCG3D hash (seed folded in) over the octahedral sky projection picks
 // StarSparsity of the cells to carry a star; two hash channels place the star inside its cell (kept StarInset from
 // the walls so a disc never straddles a cell it is not tested in). A second hash of the first, paid only by the
@@ -42,7 +49,7 @@ float3 sdfStarField(float3 direction, float density, float brightness, uint seed
     float2 cellF = (((sdfOctEncode(direction) * 0.5) + 0.5) * density);
     float2 cellId = floor(cellF);
     uint3 h = sdfPcg3d(uint3(asuint(cellId.x), asuint(cellId.y), seed));
-    puckCountDetail(2u, 0u, 0u, 0u, 1u, 0u);
+    sdfCountSky(2u, 0u, 0u, 0u, 1u, 0u);
     float existence = ((float)h.x * SDF_INV_2POW32);
 
     if (existence > StarSparsity) {
@@ -50,7 +57,7 @@ float3 sdfStarField(float3 direction, float density, float brightness, uint seed
     }
 
     uint3 h2 = sdfPcg3d(h);
-    puckCountDetail(2u, 0u, 0u, 0u, 1u, 0u);
+    sdfCountSky(2u, 0u, 0u, 0u, 1u, 0u);
     float luminosity = min(1.0, (StarLuminosityFloor * pow(max(((float)h2.x * SDF_INV_2POW32), 1e-6), -0.6666667)));
     float spectrum = (((float)h2.y * SDF_INV_2POW32) * 6.0);
     uint spectrumIndex = min((uint)spectrum, 5u);
@@ -60,7 +67,7 @@ float3 sdfStarField(float3 direction, float density, float brightness, uint seed
         // Two sines at distinct small harmonics of the period, phase-offset per star, multiplied: an irregular dip
         // pattern that still closes exactly at the period boundary, so the phase's wrap never shows a seam.
         uint3 h3 = sdfPcg3d(h2);
-        puckCountDetail(2u, 0u, 0u, 0u, 1u, 0u);
+        sdfCountSky(2u, 0u, 0u, 0u, 1u, 0u);
         float phase = twinklePhase;
         float harmonicA = (float)(1u + (h3.x % 3u));
         float harmonicB = (float)(2u + (h3.y % 3u));
@@ -88,7 +95,7 @@ float sdfCloudFbm(float2 p, uint seed) {
     [unroll]
     for (uint octave = 0u; (octave < 4u); octave++) {
         value += (amplitude * sdfPeriodicNoise2(p, (seed + octave)));
-        puckCountDetail(3u, 0u, 0u, 0u, 4u, 0u);
+        sdfCountSky(3u, 0u, 0u, 0u, 4u, 0u);
         p = ((p * 2.0) + 17.0);
         amplitude *= 0.5;
     }
@@ -172,8 +179,9 @@ float4 sdfCloudLayer(float3 direction, float3 color, float coverage, float softn
 // them and requires two). It is the sky's lowest field run, and the colour distance fog blends a surface toward, which
 // the environment map holds (sdf-sky-environment.comp.hlsl) and the composite reads.
 float3 sdfSkyGradient(float3 direction) {
-    puckCountDetail(0u, 0u, 0u, 1u, 0u, 0u);
     uint stops = sdfSky[0].StopCount;
+    if (stops == 0u) { return float3(0.0, 0.0, 0.0); }
+    sdfCountSky(0u, 0u, 0u, 1u, 0u, 0u);
     float elevation = direction.y;
     SdfSkyStop previous = sdfSkyStops[0];
 
@@ -205,11 +213,11 @@ float3 sdfSkyPoints(float3 direction) {
     float3 color = float3(0.0, 0.0, 0.0);
 
     if (sky.DiscLight >= 0) {
-        puckCountDetail(1u, 0u, 0u, 1u, 0u, 0u);
+        sdfCountSky(1u, 0u, 0u, 1u, 0u, 0u);
         color += (sky.DiscIntensity * pow(saturate(dot(direction, sky.DiscDirection)), sky.DiscExponent)).xxx;
     }
     if ((direction.y > 0.0) && (sky.StarBrightness > 0.0)) {
-        puckCountDetail(2u, 0u, 0u, 1u, 0u, 0u);
+        sdfCountSky(2u, 0u, 0u, 1u, 0u, 0u);
         color += sdfStarField(direction, sky.StarDensity, sky.StarBrightness, sky.StarSeed, sky.TwinkleShare, sky.TwinkleDepth, sky.TwinklePhase);
     }
 
@@ -222,7 +230,7 @@ float3 sdfSkyPoints(float3 direction) {
 void sdfSkyCloudRun(float3 direction, out float3 scale, out float3 offset) {
     SdfSkyBlock sky = sdfSky[0];
     if ((sky.CloudCoverage > 0.0) && (direction.y > 0.0)) {
-        puckCountDetail(3u, 0u, 0u, 1u, 0u, 0u);
+        sdfCountSky(3u, 0u, 0u, 1u, 0u, 0u);
     }
     float4 clouds = sdfCloudLayer(direction, sky.CloudColor, sky.CloudCoverage, sky.CloudSoftness, sky.CloudScale, sky.CloudSeed, sky.CloudDriftOffset, sky.CloudShearOffset, sky.CloudSpinAngle, sky.CloudCurl, sky.CloudLightDirection, sky.CloudLightColor);
 

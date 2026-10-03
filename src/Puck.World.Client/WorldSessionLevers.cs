@@ -10,6 +10,10 @@ namespace Puck.World.Client;
 /// <remarks>The tokens are the verb names without their <c>world.</c> prefix, so a reader who knows the verb knows the
 /// wire name. A verb submits <see cref="WorldSessionLever"/> carrying one of these; nothing else may.</remarks>
 public static partial class WorldSessionLevers {
+    /// <summary>Sky solo row, -1 to restore all rows.</summary>
+    public const string SkySolo = "sky-layer.solo";
+    /// <summary>Sky mute row in A and on/off in B.</summary>
+    public const string SkyMute = "sky-layer.mute";
     /// <summary>The ambient-occlusion toggle (<c>world.ao</c>), folding into <c>render</c>.</summary>
     public const string AmbientOcclusion = "ao";
     /// <summary>The ambient-occlusion quality tier ordinal (<c>world.ao-quality</c>).</summary>
@@ -70,6 +74,8 @@ public static partial class WorldSessionLevers {
         ArgumentNullException.ThrowIfNull(bindingBar);
 
         var sink = new WorldSessionLeverSink();
+        sink.Register(name: SkySolo, setter: lever => settings.SkyLayers.SetSolo((int)lever.A));
+        sink.Register(name: SkyMute, setter: lever => settings.SkyLayers.SetMuted((int)lever.A, lever.B != 0d));
 
         sink.Register(
             name: MasterVolume,

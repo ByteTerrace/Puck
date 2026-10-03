@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Hosting;
 using Puck.Overlays;
 
 namespace Puck.World.Client;
@@ -8,8 +7,8 @@ namespace Puck.World.Client;
 /// Resolves the document's authored <c>theme</c> section (<see cref="WorldDefinition.Theme"/>) against live state
 /// into the mechanism-side <see cref="OverlayThemeValues"/> Puck.Overlays reads — the theme's counterpart to
 /// <see cref="WorldEnvironmentResolve"/>: recomputed only when the definition revision or its timeline moves, a
-/// <see cref="WorldStateMirror"/> slot one of its own <c>state.&lt;row&gt;</c> tokens or state clocks reads changes, or
-/// the presented tick moves while one of its tokens is keyed on a tick clock or a moving anchor; never for a slot some
+/// <see cref="WorldStateMirror"/> slot one of its own <c>state.&lt;row&gt;</c> tokens reads changes, or
+/// a clock phase one of its keyed tokens reads moves; never for a slot some
 /// other consumer binds. A keyed token resolves through the mirror as every keyed value does. Every bindable scalar is
 /// mapped into its field's declared domain (<see cref="WorldValueFields"/>), which holds a scrim alpha a live write
 /// moves below <see cref="WorldThemeCapacity.ScrimMinAlpha"/> at that floor.
@@ -21,7 +20,6 @@ public sealed class WorldThemeResolve {
     private int m_generation;
     private OverlayThemeValues m_resolved;
     private int m_resolvedAt;
-    private PresentedTick m_resolvedTick;
     private int m_resolutions;
     private int m_revision = -1;
     private WorldTimelineSection? m_timeline;
@@ -31,9 +29,7 @@ public sealed class WorldThemeResolve {
     private sealed class ThemeReads(WorldStateMirror mirror, WorldValueDomainGuard domains) {
         public List<(int Slot, double Value)> Bound { get; } = [];
         public WorldStateMirror Mirror { get; } = mirror;
-
-        // Whether a keyed token reads a tick clock, whose phase moves with the presented tick.
-        public bool ReadsTick { get; set; }
+        public WorldClockReads Clocks { get; } = new();
 
         public Vector4 Color(in BindableColor color, Vector4 fallback) {
             Note(
@@ -67,20 +63,13 @@ public sealed class WorldThemeResolve {
             );
         }
 
-        // A keyed token re-resolves when its clock moves: a state clock's slot, the presented tick a tick clock or a
-        // moving anchor moves with, and for an anchor held still only the definition.
+        // A keyed token re-resolves when its presented phase moves, including a session preview.
         private void NoteKeys(IWorldKeyTrack? keys) {
             if (keys is null) {
                 return;
             }
 
-            var slot = Mirror.ClockSlotOf(name: keys.Clock);
-
-            if (slot >= 0) {
-                NoteSlot(slot: slot);
-            } else if (!Mirror.ClockHoldsStill(name: keys.Clock)) {
-                ReadsTick = true;
-            }
+            Clocks.Note(Mirror, keys.Clock);
         }
         private void Note(StateBinding? binding, WorldStateConversion conversion) {
             if (binding is { } bound) {
@@ -525,7 +514,7 @@ public sealed class WorldThemeResolve {
             objB: mirror
         ) ||
             (mirror.Generation != m_generation) ||
-            ((m_reads?.ReadsTick == true) && (mirror.Presented != m_resolvedTick)) ||
+            (m_reads?.Clocks.Moved(mirror: mirror) == true) ||
             BoundSlotMoved()
         ) {
             if (!ReferenceEquals(
@@ -539,7 +528,7 @@ public sealed class WorldThemeResolve {
             }
 
             m_reads!.Bound.Clear();
-            m_reads.ReadsTick = false;
+            m_reads.Clocks.Clear();
             m_revision = revision;
             m_timeline = definition.TimelineRaw;
             m_resolved = ResolveCore(
@@ -547,7 +536,6 @@ public sealed class WorldThemeResolve {
                 mirror: m_reads
             );
             m_resolvedAt = mirror.Revision;
-            m_resolvedTick = mirror.Presented;
             m_generation = mirror.Generation;
             m_resolutions++;
         }
