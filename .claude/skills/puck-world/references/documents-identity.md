@@ -205,6 +205,15 @@ back with `WorldOwnedWorlds.Discarded` + `identity.list`'s `discarded=` column
 `WorldOwnedWorlds.Refused` + `identity.list`'s `refused=` column (everything
 left in place, whatever the class).
 
+Storage narration is path-free, built so at its source. A refusal or narration may name what a document says, such as
+its authored `basis` reference exactly as written, and a document by its file name; it never names what the host
+resolved: an absolute path, the catalog root, a probe file, or an exception message that quotes either. The loader and
+composers (`WorldDefinitionFileSource`, `PuckDocumentComposer`, the push chain walk, the save-flat note) name documents
+through `WorldDocumentLabel.Of` and failures through `WorldDocumentLabel.Failure` (access denied, file in use, no
+space left, ...), and a host that must not even show the file's directory passes `displayName` to the loader
+(`TryLoadFileForAdmission`; the catalog passes the file name). `NarrationPaths.AssertNone` holds that over the save, discard,
+refusal, save-flat and push narration by asserting the test's own paths are absent.
+
 **Seeding.** When the identity directory holds zero admitted documents,
 `WorldOwnedWorlds` seeds one owned world per `playerDefaults.identities` row
 (`WorldIdentitySeed(Id, Name, Color)`, validated non-empty, ids and names both

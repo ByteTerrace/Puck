@@ -24,7 +24,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 ResolveImage(
                     selected,
                     selected.Spec.Name,
-                    slot
+                    HistoryIndex(previous: false, resource: selected, slot: slot)
                 ),
                 slot,
                 command

@@ -123,7 +123,7 @@ public sealed class WorldOwnedWorlds {
             ) {
                 unloadable.Add(item: (path, ((document is null)
                     ? reason
-                    : $"{path} is not a valid {WorldDefinition.SchemaVersion} document: it declares no identity section, so it is not an owned world")
+                    : $"{Path.GetFileName(path: path)} is not a valid {WorldDefinition.SchemaVersion} document: it declares no identity section, so it is not an owned world")
                 ));
 
                 continue;
@@ -535,7 +535,7 @@ public sealed class WorldOwnedWorlds {
 
                 moved = true;
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                detail = $"{detail} — and it could not be moved aside ({exception.Message.ReplaceLineEndings(replacementText: " ")}), so its bytes stay where they are and it will be named again on the next boot";
+                detail = $"{detail} — and it could not be moved aside into {QuarantineDirectoryName}/ ({WorldDocumentLabel.Failure(exception: exception)}), so its bytes stay where they are and it will be named again on the next boot";
             }
 
             m_discarded.Add(item: new WorldOwnedWorldDisposal(
@@ -558,7 +558,7 @@ public sealed class WorldOwnedWorlds {
             if (m_narrationHub is { HasNarrationSink: true }) {
                 m_narrationHub?.Narrate(
                     channel: "identity",
-                    text: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{quarantine}' — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))])}"
+                    text: $"[identity] discarded {m_discarded.Count} unloadable owned world(s) into '{QuarantineDirectoryName}' (beside the catalog's documents) — a document shape this catalog no longer reads is disposed of, never migrated: {Narrate(entries: [.. m_discarded.Select(selector: entry => (entry.FileName, entry.Reason))])}"
                 );
             }
         }
@@ -581,13 +581,16 @@ public sealed class WorldOwnedWorlds {
     /// <param name="catalogFingerprint">The selected catalog's composition identity.</param>
     /// <param name="document">The drawn, admitted document, or <see langword="null"/> on refusal.</param>
     /// <param name="reason">The loader's classed refusal, or empty on success.</param>
+    /// <param name="displayName">What the refusal calls the document, or <see langword="null"/> for the file's own name. A
+    /// refusal never names the directory the file is in.</param>
     /// <returns><see langword="true"/> when the file loaded, drew, and was admitted.</returns>
-    internal static bool TryLoadOwned(string path, string id, IWorldNeighbourResolver? neighbours, IMachineValidationCatalog? catalog, string catalogFingerprint, out WorldDefinition? document, out string reason) {
+    internal static bool TryLoadOwned(string path, string id, IWorldNeighbourResolver? neighbours, IMachineValidationCatalog? catalog, string catalogFingerprint, out WorldDefinition? document, out string reason, string? displayName = null) {
         var loaded = WorldDefinitionLoader.TryLoadFileForAdmission(
             admission: out var admission,
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             contentHash: out _,
+            displayName: (displayName ?? Path.GetFileName(path: path)),
             instanceIdentity: id,
             neighbours: neighbours,
             path: path,
@@ -616,11 +619,11 @@ public sealed class WorldOwnedWorlds {
     private static bool IsTerminalDocumentShape(string path, string reason) => (
         reason.StartsWith(
         comparisonType: StringComparison.Ordinal,
-        value: $"{path} is not a valid {WorldDefinition.SchemaVersion} document:"
+        value: $"{Path.GetFileName(path: path)} is not a valid {WorldDefinition.SchemaVersion} document:"
     ) ||
         reason.StartsWith(
         comparisonType: StringComparison.Ordinal,
-        value: $"cannot decode {path}:"
+        value: $"cannot decode {Path.GetFileName(path: path)}:"
     )
     );
     private static string Narrate(IReadOnlyList<(string FileName, string Reason)> entries) => string.Join(
@@ -724,13 +727,14 @@ public sealed class WorldOwnedWorlds {
     // becomes one file-independent placeholder so two files failing the same way share a key, a leading placeholder
     // then drops because the file name is already carried beside the reason, and no absolute path — the player's
     // state directory — reaches the console.
+
     private static string Strip(string path, string reason) {
         const string Placeholder = "the file";
 
         var text = (reason ?? string.Empty).Replace(
             comparisonType: StringComparison.Ordinal,
             newValue: Placeholder,
-            oldValue: path
+            oldValue: Path.GetFileName(path: path)
         ).Trim();
 
         return (text.StartsWith(
@@ -1156,7 +1160,7 @@ public sealed class WorldOwnedWorlds {
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             // An arrival may already be durable. Report the file refusal so its caller can finish binding the owned
             // identity and recording the arrival, rather than stranding a committed seat on its travelling copy.
-            reason = $"could not save identity '{identity.Id}': {exception.Message}";
+            reason = $"could not save identity '{identity.Id}' ('{Path.GetFileName(path: path)}'): {WorldDocumentLabel.Failure(exception: exception)}";
             return false;
         }
 
@@ -1201,7 +1205,7 @@ public sealed class WorldOwnedWorlds {
     /// <returns><see langword="true"/> when the catalog owns it.</returns>
     public bool Owns(WorldIdentity identity) => m_identities.Contains(item: identity);
 
-    private string NotOwned(WorldIdentity identity) => $"identity '{identity.Id}' is not owned by this catalog, so it is never saved into '{m_directory}'";
+    private string NotOwned(WorldIdentity identity) => $"identity '{identity.Id}' is not owned by this catalog, so it is never saved there";
 
     /// <summary>Asks an owned world to apply one tick-stamped durable-state operation.</summary>
     public WorldDocumentSubmissionReceipt Submit(WorldDocumentSubmission submission) {

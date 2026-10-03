@@ -13,6 +13,7 @@
 #include "../frame/sdf-visibility.hlsli"
 #include "../frame/sdf-work.hlsli"
 #include "../shade/sdf-sky.hlsli"
+#include "../shade/sdf-sky-environment.hlsli"
 #include "../shade/sdf-transport.hlsli"
 
 // Whether the lit image and the surface transport at a pixel were written this frame.
@@ -104,6 +105,20 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scale, out float3 o
     offset /= total;
 
     return true;
+}
+// The sky the fog in-scatters in a direction: the residency's environment map (sdfSkyEnvironment), the gradient with no
+// body, filtered bilinearly over the four texels about the direction. It evaluates no sky.
+float3 sdfSkyPassEnvironment(float3 direction) {
+    uint taps[4];
+    float weights[4];
+    float3 color = float3(0.0, 0.0, 0.0);
+
+    sdfSkyEnvironmentTaps(direction, taps, weights);
+    [unroll] for (uint i = 0u; i < 4u; i++) {
+        color += (weights[i] * sdfSkyEnvironmentUnpack(sdfSkyEnvironment[taps[i]]));
+    }
+
+    return color;
 }
 // The pixel's unjittered sky direction.
 float3 sdfSkyPassDirection(ViewportData view, uint2 pixel) {

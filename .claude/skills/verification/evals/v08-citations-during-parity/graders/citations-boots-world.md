@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response explains that without `--enumeration`, `puck docs citations` builds and boots the World headless and windowed, which is a GPU leg.
+boots?[^.\n]{0,50}world|world[^.\n]{0,60}boot

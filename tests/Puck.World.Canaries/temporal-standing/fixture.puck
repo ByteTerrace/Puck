@@ -1,0 +1,108 @@
+schema: "puck.world.definition.v1"
+documentId: "temporal-standing"
+
+host {
+  backend: auto
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  exitAfterSeconds: 0
+  presentation: offscreen
+  width: 128
+  height: 128
+  targetHertz: 0
+  presentMode: Immediate
+}
+
+simulation {
+  rateHz: 30
+}
+
+cameras [
+  {
+    name: "standing-cam"
+    anchor: null
+    renderWidth: 128
+    renderHeight: 128
+    rig {
+      name: "standing-cam"
+      version: "puck.camera.program.v1"
+      operations [
+        anchor(subject: placement(placementId: `camera-anchor`))
+        offset(value: [0, 2.5, 7], worldAxes: true)
+        lookAt(subject: placement(placementId: `camera-anchor`), targetOffset: [0, 0.8, 0], worldAxes: true)
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+    }
+  }
+]
+
+placements {
+  placement "camera-anchor" {
+    prototype: "camera-anchor"
+    position [0, 0, 0]
+  }
+  placement "left" {
+    prototype: "block"
+    position [-1.5, 0, 0]
+  }
+  placement "right" {
+    prototype: "block"
+    position [1.5, 0, 0]
+    yawDegrees: 30deg
+  }
+}
+
+prototypes {
+  prototype "camera-anchor" {
+    document {
+      schema: "puck.creation.v1"
+      name: "camera-anchor"
+      palette [{ color: "#FFFFFF" }]
+      shape Sphere "hidden" {
+        material: 0
+        position [0, -30, 0]
+        scale [0.01, 0.01, 0.01]
+      }
+    }
+  }
+  prototype "block" {
+    document {
+      schema: "puck.creation.v1"
+      name: "block"
+      palette [{ color: "#8C7A5D", roughness: 0.55, specular: 0.25 }]
+      shape Box "base" {
+        chamfer: 0.2
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.6, 0.6, 0.6]
+      }
+      shape Sphere "cap" {
+        material: 0
+        position [0, 1.5, 0]
+        scale [0.4, 0.4, 0.4]
+      }
+    }
+  }
+}
+
+views {
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+  layout "standing" {
+    seatCount: 0
+    slots [{ camera: "standing-cam", x: 0, y: 0, width: 1, height: 1 }]
+    transitionSeconds: 0
+    transitionRenderScale: 1
+  }
+  seatRig "standing" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}

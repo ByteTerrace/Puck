@@ -1,4 +1,5 @@
 using Puck.Hosting;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Shaders;
 
@@ -14,6 +15,10 @@ public sealed partial class RenderGraphRuntime {
     // Repeated producer answers reuse their named diagnostic, even after a rendered frame clears the standing.
     private string?[] m_productionReasons = [];
     private string?[] m_productionMessages = [];
+    private bool[] m_historySucceeded = [];
+
+    private RenderGraphHistory? m_historyPrior;
+    private RenderGraphSchedule? m_historySchedule;
 
     /// <summary>Gets whether the latest produced frame's root image shows that frame:
     /// <see cref="FrameCompletion.Rendered"/> when the root rendered it over inputs current for it (or stands unchanged),
@@ -28,6 +33,27 @@ public sealed partial class RenderGraphRuntime {
         m_staleRefused = new bool[count];
         m_productionReasons = new string?[count];
         m_productionMessages = new string?[count];
+        m_historySucceeded = new bool[count];
+    }
+    // Scheduling predicts writes for same-frame reads. Keep only writers that actually succeeded, including when a
+    // later instance throws; a failed frame must not advance unattempted writers or keep a speculative allocation.
+    private void FinishHistory() {
+        if ((m_historySchedule is not { } schedule) || (m_historyPrior is not { } prior)) { return; }
+        for (var position = 0; (position < schedule.Renders.Count); position++) {
+            var index = schedule.Renders[position];
+
+            if (!m_historySucceeded[index]) { schedule.Next.Withdraw(index: index, previous: prior); }
+        }
+        m_historySchedule = null;
+        m_historyPrior = null;
+    }
+    private void RememberOutput(int index, ShaderPipelineRenderNode node, RenderGraphSchedule schedule, in Surface surface) {
+        m_previous[index] = m_current[index];
+        m_current[index] = new Output(
+            Buffer: node.LatestOutputBuffer(), Frame: schedule.Frame, Image: surface, Layout: node.PublishedLayout,
+            StateTick: node.PublishedStateTick,
+            StandsFor: StandingOf(index: index, node: node, schedule: schedule, surface: in surface),
+            Tainted: (m_taintedReads[index] is not null));
     }
     private void MarkCurrent(int index) {
         m_stale[index] = null;

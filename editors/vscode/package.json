@@ -245,18 +245,18 @@
         ]
     },
     "dependencies": {
-        "vscode-languageclient": "9.0.1",
+        "vscode-languageclient": "10.1.2",
         "vscode-oniguruma": "^2.0.1",
         "vscode-textmate": "^9.3.2"
     },
     "description": "IntelliSense, diagnostics, hover, formatting, and syntax highlighting for the Puck DSL (.puck).",
     "devDependencies": {
-        "@vscode/vsce": "3.9.2",
+        "@vscode/vsce": "4.0.0",
         "esbuild": "0.28.2"
     },
     "displayName": "Puck Authoring Language",
     "engines": {
-        "vscode": "^1.90.0"
+        "vscode": "^1.91.0"
     },
     "extensionKind": [
         "workspace"

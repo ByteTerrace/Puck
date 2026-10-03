@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/cc890f26f90329d417effa5488e454ac85659207f26e32d8159146ed8ef51655). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/a14232a52d94d4602ca187c71a62392c984ce26ef515e6a342ca9a5d67bda24c). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -116,6 +116,7 @@ struct SdfWorldFrame {
 #define sdfSkyStops sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224
 [[vk::binding(28, 1)]] StructuredBuffer<SdfSoftbox> sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf : register(t28, space1);
 #define sdfSoftboxes sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf
+[[vk::binding(29, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t29, space1);
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfWorldPass {

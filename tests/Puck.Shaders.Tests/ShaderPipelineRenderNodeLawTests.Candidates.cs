@@ -291,7 +291,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     }
     [Fact]
     public void AResizeRebuildsBesideTheInstalledGraphAndZeroInitializesTheHistoryTheNextFrameReads() {
-        var gpu = new FakePipelineGpu();
+        var gpu = new FakePipelineGpu { Recording = true };
         using var node = InstalledNode(
             gpu: gpu,
             pipeline: Feedback(historyDimensions: FrameRelative)
@@ -321,8 +321,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             actual: node.Extent
         );
 
-        var frame = node.FrameCounter;
         var submissions = gpu.Submissions;
+
+        gpu.DescriptorWrites.Clear();
 
         _ = Produce(node: node);
 
@@ -344,16 +345,16 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             expected: (submissions + 1),
             actual: gpu.Submissions
         );
-        // The first frame at the new extent reads the history slot the previous frame would have written, and that slot
-        // alone was cleared: every other slot is written before anything reads it. The old ring retires exactly once.
+        // No history survives the changed extent. The first read binds the one cleared instance of the new ring,
+        // independently of the submission phase. Every other instance is written before it is read.
         Assert.Equal(
             expected: ((int)InFlight),
             actual: newHistory.Length
         );
-        Assert.Equal(
-            expected: [newHistory[((int)(((frame + InFlight) - 1UL) % InFlight))].Handle],
-            actual: gpu.ClearedImages
-        );
+        var cleared = Assert.Single(collection: gpu.ClearedImages);
+
+        Assert.Contains(collection: newHistory, filter: image => (image.Handle == cleared));
+        Assert.Contains(collection: gpu.DescriptorWrites, filter: write => (write.Handle == (cleared + 1)));
         Produce(
             frames: 2,
             node: node

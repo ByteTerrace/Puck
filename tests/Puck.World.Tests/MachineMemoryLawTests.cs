@@ -13,7 +13,7 @@ using Puck.World.Server;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// The contract under test: a <c>screens[].memory</c> Read binding mirrors a shipped cartridge machine's own bus
+/// The contract under test: a <c>machines[].memory</c> Read binding mirrors a shipped cartridge machine's own bus
 /// byte into an ordinary Int cell every tick, writing only when the peeked value changed; a Write
 /// binding pokes a cell's value into the machine's bus when the cell's value has moved, landing before the machine's
 /// own next step; an address outside the engine's addressable bus refuses at validation by name; and a Write
@@ -62,24 +62,8 @@ public sealed class MachineMemoryLawTests {
 
         return (variables[ordinal].Name, checked((byte)variables[ordinal].Initial));
     }
-    private static WorldDefinition WithMachineScreen(IReadOnlyList<WorldScreenMemory>? memory) {
+    private static WorldDefinition WithMachineScreen(IReadOnlyList<WorldMachineMemory>? memory) {
         var document = Fixtures.BuildDocument();
-        var namedMemory = memory?.Select(selector: (binding, index) => new WorldMachineMemory(
-            Name: $"binding{index}",
-            Direction: ((binding.Direction == WorldScreenMemoryDirection.Read)
-            ? WorldMachineMemoryDirection.Read
-            : WorldMachineMemoryDirection.Write),
-            Space: "bus",
-            Format: ((binding.Width == 1)
-            ? "u8"
-            : "u16"),
-            Row: binding.Row,
-            Address: checked((ulong)binding.Address),
-            Key: binding.Key,
-            Access: ((binding.Direction == WorldScreenMemoryDirection.Read)
-            ? "inspect"
-            : "patch")
-        )).ToArray();
 
         document = document.WithWorldState(rows: [
             .. document.State,
@@ -106,7 +90,7 @@ public sealed class MachineMemoryLawTests {
                 "cabinet",
                 CgbEngine,
                 JsonSerializer.SerializeToElement(new { schema = "puck.gaming-brick.configuration.v1", model = "cgb", boot = "fast", content = new { path = CartridgePath() } }),
-                Memory: namedMemory
+                Memory: memory
             )],
             ScreensRaw = [
                 .. document.Screens,
@@ -135,8 +119,7 @@ public sealed class MachineMemoryLawTests {
                     Instance: "cabinet",
                     Output: "video"
                 ),
-                Route: WorldScreenRoute.Passive,
-                Memory: null
+                Route: WorldScreenRoute.Passive
             ),
             ],
         };
@@ -170,12 +153,14 @@ public sealed class MachineMemoryLawTests {
         var (readName, readInitial) = Variable(ordinal: 0);
         var xAddress = VariableAddress(name: readName);
         var document = WithMachineScreen(memory: [
-            new WorldScreenMemory(
-                Address: xAddress,
-                Direction: WorldScreenMemoryDirection.Read,
+            new WorldMachineMemory(
+                Name: "binding0",
+                Space: "bus",
+                Address: checked((ulong)xAddress),
+                Direction: WorldMachineMemoryDirection.Read,
                 Key: null,
                 Row: "pipX",
-                Width: 1
+                Format: "u8"
             ),
         ]);
         using var fixture = Fixtures.FreshServer(
@@ -221,12 +206,15 @@ public sealed class MachineMemoryLawTests {
         var (writeName, writeInitial) = Variable(ordinal: 1);
         var yAddress = VariableAddress(name: writeName);
         var document = WithMachineScreen(memory: [
-            new WorldScreenMemory(
-                Address: yAddress,
-                Direction: WorldScreenMemoryDirection.Write,
+            new WorldMachineMemory(
+                Name: "binding0",
+                Space: "bus",
+                Address: checked((ulong)yAddress),
+                Direction: WorldMachineMemoryDirection.Write,
+                Access: "patch",
                 Key: null,
                 Row: "pipY",
-                Width: 1
+                Format: "u8"
             ),
         ]);
         using var fixture = Fixtures.FreshServer(
@@ -311,21 +299,25 @@ public sealed class MachineMemoryLawTests {
     [Fact]
     public void AnAddressOutsideTheEnginesMemoryRefusesByName() {
         var denied = WithMachineScreen(memory: [
-            new WorldScreenMemory(
+            new WorldMachineMemory(
+                Name: "binding0",
+                Space: "bus",
                 Address: 0xFFFF,
-                Direction: WorldScreenMemoryDirection.Read,
+                Direction: WorldMachineMemoryDirection.Read,
                 Key: null,
                 Row: "pipX",
-                Width: 2
+                Format: "u16"
             ),
         ]);
         var admitted = WithMachineScreen(memory: [
-            new WorldScreenMemory(
+            new WorldMachineMemory(
+                Name: "binding0",
+                Space: "bus",
                 Address: 0xFFFE,
-                Direction: WorldScreenMemoryDirection.Read,
+                Direction: WorldMachineMemoryDirection.Read,
                 Key: null,
                 Row: "pipX",
-                Width: 2
+                Format: "u16"
             ),
         ]);
 
@@ -366,12 +358,15 @@ public sealed class MachineMemoryLawTests {
     public void AQuietMachineAllocatesNothing() {
         var yAddress = VariableAddress(name: Variable(ordinal: 1).Name);
         var document = WithMachineScreen(memory: [
-            new WorldScreenMemory(
-                Address: yAddress,
-                Direction: WorldScreenMemoryDirection.Write,
+            new WorldMachineMemory(
+                Name: "binding0",
+                Space: "bus",
+                Address: checked((ulong)yAddress),
+                Direction: WorldMachineMemoryDirection.Write,
+                Access: "patch",
                 Key: null,
                 Row: "pipY",
-                Width: 1
+                Format: "u8"
             ),
         ]);
 

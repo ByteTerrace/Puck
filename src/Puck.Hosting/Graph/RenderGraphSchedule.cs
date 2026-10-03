@@ -168,6 +168,8 @@ public sealed class RenderGraphHistory {
 
         Latest[index] = previous.Latest[index];
         Ticks[index] = previous.Ticks[index];
+        Width[index] = previous.Width[index];
+        Height[index] = previous.Height[index];
     }
     /// <summary>Forgets an instance whose targets were released, such as one nothing names any more: it reads as never
     /// rendered and never allocated, so it is due, at the extent its consumers demand, the next frame something shows it,

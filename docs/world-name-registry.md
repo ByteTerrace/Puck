@@ -96,8 +96,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.environment.horizon.high` | State | Binding | Binding | `WorldRenderHorizon.High` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
-| `screens[].memory[].row` | State | Names | Read | `WorldScreenMemory.Row` |
-| `screens[].memory[].key` | State | Key | Read | `WorldScreenMemory.Key` |
 | `cameras[].rig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][lookAt].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `cameras[].rig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
@@ -2771,6 +2769,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.graphs[].name` | `WorldViewGraph.Name` | a view graph instance name |
 | `views.graphs[].source` | `WorldViewGraph.Source` | a view graph's source is a document path |
 | `views.post[].name` | `WorldViewPostPass.Name` | a post pass name |
+| `views.quality[].name` | `WorldViewQuality.Name` | a render view instance name or the default selector * |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `hud.panels[].id` | `WorldHudPanel.Id` | a HUD panel id |

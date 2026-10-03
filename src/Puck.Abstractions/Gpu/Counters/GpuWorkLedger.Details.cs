@@ -7,12 +7,13 @@ public sealed partial class GpuWorkLedger {
     /// <param name="details">Rows after the physical pass rows, in GPU row order; copied on change.</param>
     /// <exception cref="ArgumentException">A label is empty, duplicated, names an unknown pass, lacks a plain row,
     /// or removes an existing identity.</exception>
-    /// <exception cref="InvalidOperationException">A pass has already started, skipped or stood.</exception>
+    /// <exception cref="InvalidOperationException">A pass has already started, skipped or stood and the rows differ from the
+    /// configured ones; an unchanged configuration is a no-op, so a retried frame may state its rows again.</exception>
     public void ConfigureDetails(ReadOnlySpan<GpuWorkDetail> details) {
+        if (details.SequenceEqual(other: m_details)) { return; }
         if (m_open is { HasPassActivity: true }) {
             throw new InvalidOperationException(message: "Details cannot change after pass activity.");
         }
-        if (details.SequenceEqual(other: m_details)) { return; }
         for (var index = 0; (index < details.Length); index++) {
             var detail = details[index];
 

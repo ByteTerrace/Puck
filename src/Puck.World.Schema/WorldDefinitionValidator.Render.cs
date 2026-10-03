@@ -4,6 +4,46 @@ using Puck.SignedDistance;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
+        RequireRange(definition.Render.RenderScale, 0.125f, 1f, "render.renderScale", errors);
+        foreach (var tier in Enum.GetValues<Puck.Abstractions.Presentation.QualityTier>()) {
+            if (definition.Render.Preset(tier: tier) is { } preset) {
+                RequireRange(preset.RenderScale, 0.125f, 1f, $"render.{tier.ToString().ToLowerInvariant()}.renderScale", errors);
+            }
+        }
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var quality in (definition.Views.Quality ?? [])) {
+            if ((quality is null) || string.IsNullOrWhiteSpace(value: quality.Name)) {
+                errors.Add(item: "views.quality row requires a view name.");
+                continue;
+            }
+            if (!names.Add(item: quality.Name)) {
+                errors.Add(item: $"views.quality repeats view '{quality.Name}'.");
+            }
+            if (!NamesRenderView(definition: definition, name: quality.Name)) {
+                errors.Add(item: $"views.quality row '{quality.Name}' names no render view: use *, world, a camera, a view graph or a generated view name.");
+            }
+            if (quality.RenderScale is { } scale) {
+                RequireRange(scale, 0.125f, 1f, $"views.quality[{quality.Name}].renderScale", errors);
+            }
+            if ((quality.Tier is { } selected) && (definition.Render.Preset(tier: selected) is null)) {
+                errors.Add(item: $"views.quality[{quality.Name}].tier names no {selected} preset.");
+            }
+        }
+    }
+    // A row applies to the view it names when that view renders: the default selector, the primary world, an authored
+    // camera or view graph, or a view the engine names itself (a generated name, which carries the joiner).
+    private static bool NamesRenderView(WorldDefinition definition, string name) {
+        if ((name == "*") || (name == WorldViewGraphs.WorldInstance) || name.Contains(value: GeneratedName.Joiner)) { return true; }
+        foreach (var camera in definition.Cameras) {
+            if (camera.Name == name) { return true; }
+        }
+        foreach (var graph in (definition.Views.Graphs ?? [])) {
+            if (graph.Name == name) { return true; }
+        }
+        return false;
+    }
     // The far distance is the depth every camera march ends at; the band is the representable one (see the constants'
     // remarks), refused by name so a world authoring 0, a negative, or a depth past float's epsilon reach never boots
     // into a renderer whose cone proofs would rest on rounding. Absent resolves to the engine's pinned default.

@@ -17,6 +17,8 @@ namespace Puck.SdfVm;
 /// and the same frame values. Its common values copy by declared member offsets; the native pass block stays unchanged.</para>
 /// <para><see cref="SkyParameters"/> serves the sky's field runs and the composite, with their own resource bindings and the
 /// same frame values, copied by declared member offsets as the resolve's are.</para>
+/// <para><see cref="EnvironmentParameters"/> serves the sky's environment map and its reduction, which the residency's
+/// upload dispatches when the sky's gradient changes (<see cref="SdfSkyEnvironment"/>).</para>
 /// <para><see cref="World"/> serves the native per-view dispatches: mask, beam, cull-args, primary, surface, ambient,
 /// shadow and the three views variants. Its members are the <c>sdf.world</c> package's (<see cref="SdfWorldPackage.Members"/>)
 /// and the lights and sky tables (<see cref="LightAndSkyTables"/>): its World group is the residency's tables
@@ -49,10 +51,19 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The lights table: <see cref="SdfLights.MaxLights"/> <see cref="SdfLight"/> records, read by the shadow
     /// and views passes.</summary>
     public const string Lights = "sdfLights";
-    /// <summary>The sky block: one <see cref="SdfSkyBlock"/> record, read by the sky and composite passes.</summary>
+    /// <summary>The sky block: one <see cref="SdfSkyBlock"/> record, read by the sky and composite passes and by the
+    /// environment map's kernel (<see cref="EnvironmentParameters"/>).</summary>
     public const string Sky = "sdfSky";
+    /// <summary>The sky's environment map as the composite reads it: <see cref="SdfSkyEnvironment.Texels"/> texels of two
+    /// words, four half floats each (<see cref="SdfSkyEnvironment"/>), a World-group table the residency renders.</summary>
+    public const string SkyEnvironment = "sdfSkyEnvironment";
+    /// <summary>The sky's environment map as its kernel writes it and its reduction reads it.</summary>
+    public const string SkyEnvironmentWritten = "sdfSkyEnvironmentRW";
+    /// <summary>The environment map's coefficients as its reduction writes them: <see cref="SdfSkyEnvironment.CoefficientCount"/>
+    /// records of four floats, the three channels and a zero.</summary>
+    public const string SkyCoefficientsWritten = "sdfSkyCoefficientsRW";
     /// <summary>The sky gradient's stops: <see cref="SdfSky.MaxStops"/> <see cref="SdfSkyStop"/> records, read by the sky
-    /// and views passes.</summary>
+    /// and composite passes and the environment map's kernel.</summary>
     public const string SkyStops = "sdfSkyStops";
     /// <summary>The studio reflection's softboxes: <see cref="SdfSky.MaxSoftboxes"/> <see cref="SdfSoftbox"/> records, read
     /// by the views pass.</summary>
@@ -82,6 +93,21 @@ public sealed class SdfKernelInterfaces {
             config: null,
             members: [.. SdfWorldPackage.SkyMembers, .. LightAndSkyTables],
             package: "sdf-sky"
+        ).Stamped(stamp: stamp);
+        // The environment map's kernel and its reduction bind no World set: the residency's upload binds the sky block and
+        // stops of its ring slot in their pass group beside the map, the coefficients and the work counters.
+        EnvironmentParameters = ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            members: [
+                ShaderWorkCounters.RowMember,
+                ShaderWorkCounters.DetailRowMember,
+                ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
+                ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: SkyStops, structure: ShaderInterfaceStructure.From<SdfSkyStop>()),
+                Written(element: ShaderValueType.Uint2, name: SkyEnvironmentWritten),
+                Written(element: ShaderValueType.Float4, name: SkyCoefficientsWritten),
+                ShaderWorkCounters.BufferMember,
+            ],
+            package: "sdf-sky-environment"
         ).Stamped(stamp: stamp);
         BrickBakeParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
@@ -116,18 +142,20 @@ public sealed class SdfKernelInterfaces {
             (IncludePath(shaderInterface: Mesh), Mesh),
             (IncludePath(shaderInterface: ResolveParameters.Interface), ResolveParameters.Interface),
             (IncludePath(shaderInterface: SkyParameters.Interface), SkyParameters.Interface),
+            (IncludePath(shaderInterface: EnvironmentParameters.Interface), EnvironmentParameters.Interface),
         ];
     }
 
     /// <summary>Gets the World-group tables <see cref="World"/> adds to the <c>sdf.world</c> package's members: the lights
     /// table and the sky's block and tables, each a structured buffer of a record whose declaration is generated from
-    /// its C# type (<see cref="ShaderInterfaceStructure.From{T}"/>). The residency writes each as a region of its
-    /// tables, and a kernel binds one only when it reads it.</summary>
+    /// its C# type (<see cref="ShaderInterfaceStructure.From{T}"/>), which the residency writes as a region of its
+    /// tables, and the sky's environment map, which its upload renders. A kernel binds one only when it reads it.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> LightAndSkyTables { get; } = [
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Lights, structure: ShaderInterfaceStructure.From<SdfLight>()),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: SkyStops, structure: ShaderInterfaceStructure.From<SdfSkyStop>()),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Softboxes, structure: ShaderInterfaceStructure.From<SdfSoftbox>()),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint2, group: ShaderInterfaceGroup.World, name: SkyEnvironment),
     ];
     /// <summary>Gets the instruction set's stamp the interfaces carry.</summary>
     public string Stamp { get; }
@@ -141,6 +169,10 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Gets the interface the sky and composite passes read, with the same frame values as the traversal passes
     /// (<see cref="SdfWorldPackage.SkyMembers"/>).</summary>
     public ShaderPipelineParameterLayout SkyParameters { get; }
+    /// <summary>Gets the interface the environment map's kernel and its reduction read: the standard frame group, and a
+    /// pass group whose block holds the map's extent and the pass's work-counter row, followed by the sky block and stops
+    /// of the upload's ring slot, the map and the coefficients they write, and the work counters.</summary>
+    public ShaderPipelineParameterLayout EnvironmentParameters { get; }
     /// <summary>Gets the interface every per-view SDF dispatch reads.</summary>
     public ShaderInterface World => WorldParameters.Interface;
     /// <summary>Gets the frame data of the carve-bake baker, the <c>sdf.bricks</c> pass: the standard frame group, and a

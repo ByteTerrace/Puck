@@ -138,7 +138,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         TestLiveness.Until(
             reason: () => "The view never stood for the camera's output.",
             step: () => {
-                _ = scene.Produce(footprints: filmed, roots: MainRoot);
+                _ = scene.Produce(footprints: filmed, roots: [.. MainRoot, Full(instance: "mid")]);
 
                 return (
                     scene.Runtime.IsSettled &&
@@ -359,7 +359,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         TestLiveness.Until(
             reason: () => "The view never published the camera's image in its output's place.",
             step: () => {
-                _ = scene.Produce(footprints: filmed, named: [], roots: MainRoot);
+                _ = scene.Produce(footprints: filmed, named: [], roots: [.. MainRoot, Full(instance: "mid")]);
 
                 return (
                     scene.Runtime.IsSettled &&
@@ -369,7 +369,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
                 );
             }
         );
-        _ = scene.Produce(footprints: filmed, named: [], roots: MainRoot);
+        _ = scene.Produce(footprints: filmed, named: [], roots: [.. MainRoot, Full(instance: "mid")]);
 
         var camera = scene.Recorders.Of(instance: "camera").OutputImage;
 
@@ -377,7 +377,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         // The view publishes the camera's image until its own renders displace it, and holds it until then.
         for (var frame = 0; (frame < 8); frame++) {
-            _ = scene.Produce(footprints: [shown], named: [], roots: MainRoot);
+            _ = scene.Produce(footprints: [shown], named: [], roots: [.. MainRoot, Full(instance: "mid")]);
         }
 
         Assert.True(condition: scene.Gpu.IsReleased(handle: camera));

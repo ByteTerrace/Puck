@@ -33,12 +33,15 @@ reasoning behind every decision is in
   [the worlds manual](../architecture/worlds.md#compiled-worlds)); `BAKE` is the
   rendering programme's creation bakes.
 - **Not started:** the product tree, the rest of the ledger, the rest of the
-  compiled-world chunks, release-pair qualification, and the evidence package.
+  compiled-world chunks, and the evidence package. Release-pair qualification
+  (`puck world release qualify`) exists; only metadata-only definition deltas
+  pass it, other sections refuse, and Azure acceptance is open.
 - **Not started, and partly defective where it exists:** the presentation view.
   `WorldProjection` composes and hydrates a document for a federated neighbour,
-  but `Compose` never sets `Fields` and `TryToDefinition` never reads
-  `Observations`, and the primary client is fed the authority's own definition
-  by reference.
+  but `Compose` never sets `Fields`, so a presentation-tier peer sees no field
+  lattice, and the primary client is fed the authority's own definition by
+  reference. `TryToDefinition` rebuilds the observed rows as plain `state.world`
+  rows.
 
 ## The forcing artifact
 
@@ -204,9 +207,9 @@ projections and neighbour solids, and the live scene program are never stored.
 | `AUDI` | voice patches, tune ROMs | patch and tune files |
 
 `puck compile` writes one beside a document's JSON, `build/WorldAssets.targets`
-produces them for shipped worlds, the runtime writes one into the state root on
-a miss, and checkpoints, replay tapes, and instance starts reference one by its
-header hash. Four packages, each with the same law: for every shipped world,
+produces them for shipped worlds, the runtime writes one into the per-user
+compiled-world cache on a miss. Checkpoints, replay tapes, and instance starts do
+not yet reference one by its header hash. Four packages, each with the same law: for every shipped world,
 every product derived fresh equals the product loaded from the compiled world
 byte for byte; a deliberate change to a derivation moves the chunk version and
 re-records the compiled worlds in the same change.
@@ -391,7 +394,7 @@ executable.
 **The primary client onto the view.** Owns `WorldOutputHub`'s fan-out,
 `WorldClient.DeliverDefinition` and `DeliverState`, and the colocated view.
 Delivers the delivery seam handing out a view rather than the live definition
-`WorldDocument.Apply` passes today, with the colocated view a zero-copy filtered
+`WorldDocument.DeliverPending` passes today, with the colocated view a zero-copy filtered
 view over the authority's export so the floor device serialises nothing, and the
 tools that legitimately read everything — the console modules,
 `WorldCaptureScheduler`, `world.save`, and host boot — taking the named

@@ -306,11 +306,13 @@ public sealed partial class RenderGraphRuntimeLawTests : IDisposable {
         public readonly Dictionary<string, (nint Input, nint Output, bool MayStandIn)> PassRecords = new(comparer: StringComparer.Ordinal);
 
         public long Records;
+        public bool RefuseRecording;
         public uint Width;
     }
     private sealed class FakeRecorder(Counter counter, string pass) : IRenderGraphPackageRecorder {
         public void Dispose() => counter.Disposed++;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
+            if (counter.RefuseRecording) { throw new InvalidOperationException(message: "Injected history writer recording refusal."); }
             counter.Records++;
             counter.MayStandIn = recording.MayStandIn;
             recording.Leases.Hold(lease: in counter.Lease);

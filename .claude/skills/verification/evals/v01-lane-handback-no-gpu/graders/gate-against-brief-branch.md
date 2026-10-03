@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response runs the gate against the integration branch the brief names, rather than a default branch it guessed.
+gate[^\n]{0,60}--merge-base

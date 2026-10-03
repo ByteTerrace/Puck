@@ -42,6 +42,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
     private readonly bool m_temporal;
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
+    private readonly (nint ColorRead, nint SurfaceRead, nint ColorWrite, nint SurfaceWrite)[] m_portHistory;
 
     private SdfWorldView m_view;
     private bool m_disposed;
@@ -52,6 +53,7 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         m_view = view;
         m_temporal = ReferenceEquals(objA: owner.FragmentOf(instance: context.Instance), objB: SdfWorldPackage.TemporalFragment);
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
+        m_portHistory = new (nint, nint, nint, nint)[context.InFlightFrames];
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: SdfKernel.Resolve).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
     }
@@ -112,13 +114,16 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         return RenderGraphPackageOutcome.Drew;
     }
 
-    // Writes, once per slot and tables, every port at its member, and the tables' fillers at each temporal member a
-    // spatial resolve leaves unbound. A slot's ports, the history of the slot before it included, stay the same storages
-    // for the recorder's life.
+    // Ordinary ports follow the slot. History follows its writer, so refresh cached bindings whenever the resolved
+    // history handles change, even on a slot whose tables stay the same.
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
+        var history = (m_temporal
+            ? (recording.Inputs[4].Image.ImageViewHandle, recording.Inputs[5].Buffer!.BufferHandle,
+                recording.Outputs[2].Image.ImageViewHandle, recording.Outputs[3].Buffer!.BufferHandle)
+            : default);
 
-        if (ReferenceEquals(objA: m_portTables[slot], objB: tables)) {
+        if (ReferenceEquals(objA: m_portTables[slot], objB: tables) && (m_portHistory[slot] == history)) {
             return;
         }
 
@@ -153,5 +158,6 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
             }
         }
         m_portTables[slot] = tables;
+        m_portHistory[slot] = history;
     }
 }

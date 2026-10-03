@@ -1289,4 +1289,147 @@ public sealed class StorageCompositionLawTests {
             return accepted;
         }
     }
+
+    /// <summary>A pulled cloud document the local document gate refuses reports why without naming the local probe file
+    /// it was written to: the outcome's detail carries no rooted path.</summary>
+    [Fact]
+    public void RefusedCloudDocument_PullDetailCarriesNoAbsolutePath() {
+        using var dir = new TemporaryDirectory();
+        var worlds = new WorldOwnedWorlds(
+            directory: dir.RootPath,
+            machineId: Guid.NewGuid(),
+            template: Fixtures.BuildDocument()
+        );
+        var store = new FakeObjectBlobStore();
+
+        store.Seed(
+            bytes: Encoding.UTF8.GetBytes(s: "{}"),
+            key: TipKey(id: "amber"),
+            objectId: ContainerId
+        );
+
+        var sync = new WorldOwnedWorldSync(
+            containerId: ContainerId,
+            stateFilePath: Path.Combine(
+                path1: dir.RootPath,
+                path2: "sync-state.json"
+            ),
+            store: store,
+            target: Target,
+            worlds: worlds
+        );
+
+        var outcome = Assert.Single(collection: sync.Pull(id: "amber"));
+
+        Assert.False(
+            condition: outcome.Ok,
+            userMessage: outcome.Detail
+        );
+        Assert.Contains(
+            expectedSubstring: "refused by the document gate",
+            actualString: outcome.Detail
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: outcome.Detail
+        );
+    }
+    /// <summary>A save that falls back to a flat document, because the basis it derived from no longer composes, says so
+    /// without naming the basis file or the document by path.</summary>
+    [Fact]
+    public void SaveFlatNote_CarriesNoAbsolutePath() {
+        using var dir = new TemporaryDirectory();
+
+        BuildGraftedCatalog(dir: dir);
+
+        var hub = new WorldOutputHub();
+        var sink = new RecordingNarrationSink();
+
+        using var attached = hub.AttachNarrationSink(sink: sink);
+        var reloaded = new WorldOwnedWorlds(
+            directory: dir.RootPath,
+            machineId: Guid.NewGuid(),
+            narrationHub: hub,
+            template: Fixtures.BuildDocument()
+        );
+        var amber = reloaded.FindById(id: "amber")!;
+
+        File.Delete(path: Path.Combine(
+            path1: dir.RootPath,
+            path2: "basis",
+            path3: "shared.world.json"
+        ));
+
+        Assert.True(condition: reloaded.TrySave(identity: amber, reason: out var reason), userMessage: reason);
+
+        var note = Assert.Single(collection: sink.Narrations, predicate: static narration => narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: "saved flat"));
+
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: note.Text
+        );
+    }
+    /// <summary>A push whose chain has an ancestor outside the owned world's <c>basis/</c> directory is refused without
+    /// naming that ancestor or the directory it belongs in by path.</summary>
+    [Fact]
+    public void PushChainRefusal_CarriesNoAbsolutePath() {
+        using var dir = new TemporaryDirectory();
+        var worlds = new WorldOwnedWorlds(
+            directory: dir.RootPath,
+            machineId: Guid.NewGuid(),
+            template: Fixtures.BuildDocument()
+        );
+        var tip = Path.Combine(
+            path1: dir.RootPath,
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: "amber"))
+        );
+        var templates = Path.Combine(
+            path1: dir.RootPath,
+            path2: "templates"
+        );
+
+        _ = Directory.CreateDirectory(path: templates);
+        File.Copy(
+            destFileName: Path.Combine(
+                path1: templates,
+                path2: "shared.world.json"
+            ),
+            sourceFileName: tip
+        );
+        File.WriteAllText(
+            contents: /*lang=json*/ """{ "basis": "templates/shared" }""",
+            path: tip
+        );
+
+        var reloaded = new WorldOwnedWorlds(
+            directory: dir.RootPath,
+            machineId: Guid.NewGuid(),
+            template: Fixtures.BuildDocument()
+        );
+        var sync = new WorldOwnedWorldSync(
+            containerId: ContainerId,
+            stateFilePath: Path.Combine(
+                path1: dir.RootPath,
+                path2: "sync-state.json"
+            ),
+            store: new FakeObjectBlobStore(),
+            target: Target,
+            worlds: reloaded
+        );
+
+        var outcome = Assert.Single(collection: sync.Push(id: "amber"));
+
+        Assert.False(
+            condition: outcome.Ok,
+            userMessage: outcome.Detail
+        );
+        Assert.Contains(
+            expectedSubstring: "does not live directly under",
+            actualString: outcome.Detail
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: outcome.Detail
+        );
+    }
 }

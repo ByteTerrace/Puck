@@ -140,16 +140,15 @@ public sealed partial class RenderGraphCadenceLawTests {
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (2, 2));
     }
     [InlineData("zero")]
-    [InlineData("history")]
     [InlineData("external")]
     [Theory]
     public void InputsWithoutARetainedContentVersionAlwaysExecute(string kind) {
         var gpu = new FakePipelineGpu();
         var model = new Model();
         var input = new ShaderPipelineResource(Name: "source", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16,
-            History: (kind == "history"), Initialization: ((kind == "external") ? ShaderPipelineInitialization.External : ShaderPipelineInitialization.Zero));
+            Initialization: ((kind == "external") ? ShaderPipelineInitialization.External : ShaderPipelineInitialization.Zero));
         using var external = gpu.CreateDeviceLocal(16, GpuBufferUsage.Storage, new GpuObjectName("test", "external"));
-        using var node = Node(gpu, model, input: input, previous: (kind == "history"));
+        using var node = Node(gpu, model, input: input);
 
         if (kind == "external") { node.BindBuffer(buffer: external, name: "source"); }
         node.ProduceUntilInstalled();
@@ -174,6 +173,18 @@ public sealed partial class RenderGraphCadenceLawTests {
         Assert.True(condition: node.TryWriteParameter(field: "gain", passName: "write", value: 2));
         node.ProduceFrame(context: default);
         Assert.Equal(actual: (model.Writes, model.Shades), expected: (2, 2));
+    }
+    [Fact]
+    public void APreviousReadOfUnwrittenHistoryDoesNotDemandARetainedWriter() {
+        var gpu = new FakePipelineGpu();
+        var model = new Model();
+        var input = new ShaderPipelineResource(Name: "source", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: 16,
+            History: true, Initialization: ShaderPipelineInitialization.Zero);
+        using var node = Node(gpu, model, input: input, previous: true);
+
+        node.ProduceUntilInstalled();
+        for (var frame = 0; (frame < 9); frame++) { node.ProduceFrame(context: default); }
+        Assert.Equal(actual: (model.Writes, model.Shades), expected: (1, 1));
     }
     [Fact]
     public void AFailedFrameCannotPublishAContentIdentityThatNeverSubmitted() {

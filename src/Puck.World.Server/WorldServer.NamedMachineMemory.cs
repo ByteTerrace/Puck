@@ -105,9 +105,11 @@ public sealed partial class WorldServer {
 
         return null;
     }
-    // Same phase as the original mirror: rules, ordered bindings, then machine advance. Each hardware scalar
-    // crosses the provider barrier once, so a word cannot combine bytes from different guest steps.
-    private void SyncNamedMachineMemory(ulong tick) {
+    /// <summary>Synchronizes the ordered <c>machines[].memory</c> bindings after rules and before machine advance.
+    /// Each hardware scalar crosses the provider barrier once, so a word cannot combine bytes from different guest
+    /// steps. Read bindings mirror through the ordinary world-state mutation door.</summary>
+    /// <param name="tick">The current simulation tick.</param>
+    public void SyncNamedMachineMemory(ulong tick) {
         if (!ReferenceEquals(
             objA: m_namedMemoryRows,
             objB: m_document.Definition.MachinesRaw
@@ -187,6 +189,7 @@ public sealed partial class WorldServer {
             }
         }
     }
+
     private static void Observe(BindingObservation observation, MachineAccessResult result, long? accepted = null) =>
         observation.State = observation.State with {
             Status = result.Status,

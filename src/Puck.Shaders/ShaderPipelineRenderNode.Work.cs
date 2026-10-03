@@ -115,6 +115,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                     continue;
                 }
                 m_work.EnterPass(pass: index);
+                PrepareHistoryWrites(pass: pass);
                 BeginTiming(command: command, pass: index, slot: slot);
                 Record(
                     command: command,
@@ -125,6 +126,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                 EndTiming(command: command, pass: index, slot: slot);
                 m_work.LeavePass();
                 RecordedCadence(pass: pass, signature: signature);
+                pass.Recorded = true;
             }
             if (counters is not null) {
                 counters.RecordCopy(

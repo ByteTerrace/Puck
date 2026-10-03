@@ -223,17 +223,21 @@ public sealed class ShadersGenerateLawTests {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
 
         var listed = CliGit.Run(repositoryRoot, "ls-files", "--", "*.interface.hlsli");
+        var tracked = listed.Stdout.Split(separator: '\n').Select(selector: static line => line.TrimEnd(trimChar: '\r')).Where(predicate: static line => (line.Length > 0)).ToList();
         var problems = new List<string>();
         var includes = GenerateCommand.Includes(
-            files: [.. listed.Stdout.Split(separator: '\n').Select(selector: static line => line.TrimEnd(trimChar: '\r')).Where(predicate: static line => (line.Length > 0))],
+            files: tracked,
             packages: RenderGraphPackageCatalog.Engine,
             problems: problems
         );
 
         Assert.Empty(collection: problems);
+        // The checked set is the tracked interface includes plus the three generated files that are not named
+        // *.interface.hlsli: the tree and the generator's own declaration are the two sources, so a new interface
+        // needs no edit here, and one the generator skips or one nobody tracked fails.
         Assert.Equal(
-            actual: includes.Select(selector: static include => include.Path),
-            expected: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, OverlayPath, "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-bricks.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-mesh.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-resolve.interface.hlsli", "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-sky.interface.hlsli", WorldPath, FilmGrainPath, PlacePath, .. SourceIncludes.Select(selector: static include => include.Path), ShaderCompiler.BuildRecipePath]
+            actual: includes.Select(selector: static include => include.Path).Order(comparer: StringComparer.Ordinal),
+            expected: tracked.Concat(second: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, ShaderCompiler.BuildRecipePath]).Order(comparer: StringComparer.Ordinal)
         );
     }
 }

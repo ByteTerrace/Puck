@@ -38,7 +38,7 @@ public sealed partial class ShaderPipelineRenderNode {
             return null;
         }
 
-        return buffers[((int)((m_frame - 1) % m_inFlight))];
+        return buffers[HistoryIndex(previous: false, resource: resource, slot: ((int)((m_frame - 1) % m_inFlight)))];
     }
 
     // What a package pass's factory builds and creates its recorder for, captured on the frame thread's request and read
@@ -343,9 +343,10 @@ public sealed partial class ShaderPipelineRenderNode {
     // The image an output publishes in its place: its own, or the input it stands for this frame.
     private (RuntimeResource Resource, string Name, int Instance) PublicationOf(RuntimeResource selected, int slot) => ((selected.Alias.Target is { } target)
         ? (target, selected.Alias.Name!, selected.Alias.Instance)
-        : (selected, selected.Spec.Name, InstanceAt(
-            index: slot,
-            resource: selected
+        : (selected, selected.Spec.Name, HistoryIndex(
+            previous: false,
+            resource: selected,
+            slot: slot
         )));
 
     // An output a package that drew nothing leaves standing for one of its inputs: the input's storage, name and the
@@ -379,7 +380,7 @@ public sealed partial class ShaderPipelineRenderNode {
             var output = pass.Outputs[index];
 
             outputs[index] = Resolve(
-                index: slot,
+                index: HistoryIndex(resource: m_resourceLookup[output.Name], slot: slot, previous: false),
                 layout: pass.PackageOutputLayouts![index],
                 name: output.Name,
                 resource: m_resourceLookup[output.Name]
@@ -402,9 +403,15 @@ public sealed partial class ShaderPipelineRenderNode {
             slot: slot
         );
         var outcome = pass.Package!.Record(recording: new RenderGraphPackageRecording(
+            // The arguments resolve as their access's barrier did (InstanceIndex), so a history buffer's dispatch reads
+            // the instance its writer last wrote, not the submission slot's.
             Arguments: ((pass.PackageArguments is { } arguments)
                 ? ResolveBuffer(
-                    index: slot,
+                    index: InstanceIndex(
+                        previous: false,
+                        resource: m_resourceLookup[arguments],
+                        slot: slot
+                    ),
                     name: arguments,
                     resource: m_resourceLookup[arguments]
                 )

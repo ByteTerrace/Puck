@@ -52,13 +52,15 @@ public sealed partial class SdfWorldTables {
         RegionCopyPoolSizes(brickPool: brickPool),
     ];
     /// <summary>Returns the one descriptor pool the tables create themselves, the statement their construction creates the
-    /// pool from: the World set per ring slot, holding the World group of <see cref="SdfWorldInterfaces.World"/>, and with
+    /// pool from: the sky environment's frame set and its pass set per ring slot, holding the groups of
+    /// <see cref="SdfWorldInterfaces.EnvironmentParameters"/>, the World set per ring slot, holding the World group of
+    /// <see cref="SdfWorldInterfaces.World"/>, and with
     /// a brick pool the baker's frame set, holding the frame group of <see cref="SdfWorldInterfaces.BrickBake"/>, and one
     /// bake set per brick slot holding its pass group.</summary>
     /// <param name="brickPool">Whether the tables keep a brick pool.</param>
     /// <returns>The pool's sizes.</returns>
     public static GpuDescriptorPoolSizes DescriptorPoolSizes(bool brickPool) {
-        var sizes = default(GpuDescriptorPoolSizes);
+        var sizes = SkyEnvironmentPoolSizes();
         var world = GpuDescriptorPoolSizes.ForGroups(groups: PipelineLayouts.World.Groups.Where(predicate: static group => (group.Ordinal == WorldGroup)).ToArray());
 
         for (var slot = 0; (slot < FrameRingSize); slot++) {

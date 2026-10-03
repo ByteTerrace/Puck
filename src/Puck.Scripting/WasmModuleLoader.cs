@@ -17,7 +17,7 @@ public sealed class WasmModuleLoader {
 
     private readonly IAssetSource m_assetSource;
     private readonly ScriptingEngine m_engine;
-    private readonly ContentAddressedLruCache<Module> m_moduleCache;
+    private readonly ContentAddressedLruCache<CompiledModule> m_moduleCache;
 
     /// <summary>Initializes a loader over the given engine and asset source with a default cache capacity.</summary>
     /// <param name="engine">The engine compiled modules bind to.</param>
@@ -49,25 +49,35 @@ public sealed class WasmModuleLoader {
 
         m_assetSource = assetSource;
         m_engine = engine;
-        m_moduleCache = new ContentAddressedLruCache<Module>(capacity: maxCachedModules);
+        m_moduleCache = new ContentAddressedLruCache<CompiledModule>(capacity: maxCachedModules);
     }
 
-    private Module Compile(ReadOnlyMemory<byte> content, string name) {
-        var span = content.Span;
+    // A compiled module beside the memories its binary declares, cached together under the bytes' content hash.
+    private sealed record CompiledModule(Module Module, IReadOnlyList<WasmMemoryDeclaration> Memories);
 
-        // A module that does not begin with the binary preamble is read as WAT text.
-        if (span.StartsWith(value: WasmBinaryFormat.Magic)) {
-            return Module.FromBytes(
-                bytes: span,
-                engine: m_engine.Engine,
-                name: name
-            );
+    // Reads the binary's declarations before Wasmtime sees it, so a malformed memory section is refused here by name
+    // and a memory past the store's ceiling is known without instantiating anything. WAT text is converted to its
+    // binary first, which parses but neither compiles nor instantiates.
+    private CompiledModule Compile(ReadOnlyMemory<byte> content, string name) {
+        var binary = (content.Span.StartsWith(value: WasmBinaryFormat.Magic)
+            ? content.ToArray()
+            : Module.ConvertText(wat: Encoding.UTF8.GetString(bytes: content.Span)));
+
+        if (!WasmModuleDeclarations.TryRead(
+            declarations: out var declarations,
+            error: out var error,
+            module: binary
+        )) {
+            throw new InvalidDataException(message: $"The addon module {name} is malformed: {error}.");
         }
 
-        return Module.FromText(
-            engine: m_engine.Engine,
-            name: name,
-            text: Encoding.UTF8.GetString(bytes: span)
+        return new CompiledModule(
+            Memories: declarations.Memories,
+            Module: Module.FromBytes(
+                bytes: binary,
+                engine: m_engine.Engine,
+                name: name
+            )
         );
     }
 
@@ -76,7 +86,8 @@ public sealed class WasmModuleLoader {
     /// <returns>The compiled module and its content identity.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty, or whitespace.</exception>
     /// <exception cref="FileNotFoundException">No module exists at <paramref name="path"/>.</exception>
-    /// <exception cref="InvalidDataException">The module is empty.</exception>
+    /// <exception cref="InvalidDataException">The module is empty, or its binary is malformed in a section the host reads
+    /// before compiling (its imports, memories or exports); the message names the section and entry.</exception>
     /// <exception cref="Wasmtime.WasmtimeException">The bytes are not valid wasm/WAT.</exception>
     public ScriptingModuleInfo Load(string path) {
         if (string.IsNullOrWhiteSpace(value: path)) {
@@ -104,7 +115,7 @@ public sealed class WasmModuleLoader {
 
         var contentHash = AssetContentHash.Compute(content: content.Span);
         var moduleName = Path.GetFileNameWithoutExtension(path: fullPath);
-        var module = m_moduleCache.GetOrAdd(
+        var compiled = m_moduleCache.GetOrAdd(
             hash: contentHash,
             valueFactory: () => Compile(
                 content: content,
@@ -115,7 +126,8 @@ public sealed class WasmModuleLoader {
         return new ScriptingModuleInfo(
             ByteLength: byteLength,
             ContentHash: contentHash,
-            Module: module,
+            Memories: compiled.Memories,
+            Module: compiled.Module,
             Path: fullPath
         );
     }

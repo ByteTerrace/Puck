@@ -36,7 +36,8 @@ namespace Puck.World.Protocol;
 /// <param name="B">The secondary value for the knobs that carry two (shadow crowd radius); otherwise zero.</param>
 /// <param name="Seat">The 0-based local seat a per-seat knob writes, or <c>-1</c> for a session-wide knob. A setter
 /// registered for a session-wide name ignores it.</param>
-public readonly record struct WorldSessionLever(WorldSection Section, string Name, double A, double B = 0.0, int Seat = -1) {
+/// <param name="View">The render view target, or null for every view.</param>
+public readonly record struct WorldSessionLever(WorldSection Section, string Name, double A, double B = 0.0, int Seat = -1, string? View = null) {
     /// <summary>The <see cref="Seat"/> value a session-wide lever carries.</summary>
     public const int NoSeat = -1;
 }

@@ -92,8 +92,10 @@ from the render-grid color, which is one transient allocation, and the sky and
 composite follow it, so the sky is never resampled or kept in history. The graph
 planner decides every barrier. `place` then places the output in its seat rect,
 copying the texels exactly when the output's scheduled extent equals the rect's
-pixels and resampling them otherwise. The residency counts its upload as three
-passes, `fillers`, `bricks` and `upload` (`SdfWorldTables.PassLabels`), in a
+pixels and resampling them otherwise. The residency counts its upload as four
+passes, `fillers`, `bricks`, `upload` and `environment`, the sky's environment
+map and its coefficients, rendered only when its gradient changes
+(`SdfWorldTables.PassLabels`), in a
 ledger it owns, so counts survive a rebuild of its tables, and each view's node
 counts the view's passes as `sdf.world$mask` through `sdf.world$composite`, their
 kernels' march steps, texels written and sky evaluations, hashes and texture
