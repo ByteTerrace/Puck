@@ -9,7 +9,6 @@ using Puck.Shaders;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
-using Puck.Text;
 using Puck.World.Client.Sdf;
 using Puck.World.Server;
 
@@ -135,7 +134,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // This frame's bounded volumes: the static placements' baked ones, then the stamp pool's slot-riding ones, in
     // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames.
     private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
-    private readonly WorldEnvironmentResolve m_environment = new();
+
+    private readonly WorldValueDomainGuard m_domains;
+    private readonly WorldEnvironmentResolve m_environment;
+
     // Per-frame scratch for the listener policy: each joined seat's resolved view-camera pose, slot-indexed.
     private readonly WorldSeatCameraPose[] m_seatCameraPoses = new WorldSeatCameraPose[PlayerRoster.MaxSlots];
     private readonly Vector3[] m_lastSeatAnchorPosition = new Vector3[PlayerRoster.MaxSlots];
@@ -161,16 +163,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // The frame's views: the presentation's own (m_views), which it places, then the camera views filming the frame.
     private readonly List<SdfViewSnapshot> m_frameViews = new(capacity: PlayerRoster.MaxSlots);
     private DynamicTransform[] m_transforms = [];
-    // One provider per ENGINE screen index (rebuilt each delivery): the closure re-reads the binder's live source every
-    // produced frame, so a slot rotating away from text clears its decal the same frame, a slot whose live source
-    // becomes text (a magazine selection, a live source verb) lights it without a definition revision, and removing a
-    // declared text screen clears its descriptor before authoring headroom can reuse that index. The bake is cached per
-    // index by (text, catalog) identity — SetScreenDecal change-detects, but the bake itself should not re-run per frame.
-    private readonly Dictionary<int, Func<SdfScreenDecalFrame?>> m_screenDecals = new();
-    private readonly Dictionary<int, (WorldScreenSource.Text Text, PackedFontAtlasCatalog Catalog, SdfScreenDecalFrame Frame)> m_screenDecalCache = new();
 
-    // The ink colors the cached decals baked, read through the state mirror; a bound one moving rebakes every decal.
-    private readonly WorldBakedColors m_decalColors;
+    // The text screens' decals: each provider re-reads the binder's live source every produced frame, so a slot rotating
+    // away from text clears its decal the same frame and a slot whose live source becomes text (a magazine selection, a
+    // live source verb) lights it without a definition revision.
+    private readonly WorldScreenDecals m_decals;
     // The colors the presentation query field's build resolves; the query reads no material, so nothing follows them.
     private readonly WorldBakedColors m_queryColors;
 
@@ -238,9 +235,12 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         for (var index = 0; (index < markers.Count); index++) {
             var marker = markers[index];
             var icon = m_resolveIcon(marker.Icon);
-            var chipAlpha = mirror.Scalar(
-                fallback: 0f,
-                scalar: marker.Style.ChipAlpha
+
+            var (chipAlpha, ringAlpha) = WorldMarkerAlphas.Resolve(
+                domains: m_domains,
+                index: index,
+                marker: marker,
+                mirror: mirror
             );
             var wantsRing = (marker.Ring is not null);
             var ringColor = (wantsRing
@@ -249,13 +249,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     mirror: mirror
                 )
                 : default
-            );
-            var ringAlpha = ((wantsRing && (marker.Style.RingAlpha is { } authoredRingAlpha))
-                ? mirror.Scalar(
-                    fallback: 0f,
-                    scalar: authoredRingAlpha
-                )
-                : 0f
             );
 
             if (marker.Source is WorldMarkerSource.Speakers) {
@@ -527,21 +520,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_audio.ReconcileSpeakers(definition: m_client.Definition);
         m_text.Reconcile(definition: m_client.Definition);
 
-        // Keep one provider for EVERY engine slot, not only currently declared screens. A removed text screen can be
-        // replaced immediately by an authoring-headroom slab at the same index; retaining the null-returning provider
-        // is what clears the old decal descriptor instead of letting stale text shade the replacement surface.
-        m_screenDecals.Clear();
-
-        for (var index = 0; (index < SdfProgramBuilder.MaxScreenSurfaces); index++) {
-            var capturedIndex = index;
-
-            m_screenDecals[index] = () => ResolveScreenDecal(index: capturedIndex);
-        }
-
-        // Every decal rebakes on delivery, which may have changed its text; a bound ink color moving in the state mirror
-        // rebakes them too (ResolveScreenDecal).
-        m_screenDecalCache.Clear();
-        m_decalColors.Begin();
+        // Every decal rebakes on delivery, which may have changed its text.
+        m_decals.Invalidate();
         // The SAME facets.Faces the binder just reconciled its sources against, threaded to the emitter so the
         // ScreenSlab geometry it composes and the binder's bound sources never disagree about which face maps to
         // which placement — one WorldPrototypeFacets.Derive call per delivery, never two.
@@ -603,6 +583,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         var chase = view.ResolveChase(
             bodyOrientation: bodyOrientation,
             definition: definition,
+            domains: m_domains,
             mirror: state,
             views: views
         );
@@ -817,6 +798,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     private IWorldCameraProgramRig ResolveCameraModeRig(WorldCameraProgram cameraRig, WorldDefinition definition, WorldStateMirror mirror, int slot) =>
         (m_cameraModeRigCache[slot] ??= new WorldCameraRigCompiler.Cache()).Resolve(
             definition: definition,
+            domains: m_domains,
             mirror: mirror,
             program: cameraRig
         );
@@ -948,6 +930,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         return cache.Resolve(
             definition: definition,
+            domains: m_domains,
             mirror: m_client.StateMirror,
             program: program
         );
@@ -1011,47 +994,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         entry.PointerWasDown = sample.Pressed;
-    }
-    private SdfScreenDecalFrame? ResolveScreenDecal(int index) {
-        if (
-            (m_binder.TextSourceAt(index: index) is not { } text) ||
-            (m_text.Catalog is not { } catalog)
-        ) {
-            _ = m_screenDecalCache.Remove(key: index);
-
-            return null;
-        }
-
-        if (m_decalColors.TryTakeMove()) {
-            m_screenDecalCache.Clear();
-            m_decalColors.Begin();
-        }
-        if (
-            m_screenDecalCache.TryGetValue(
-            key: index,
-            value: out var cached
-        ) &&
-            ReferenceEquals(
-            objA: cached.Text,
-            objB: text
-        ) &&
-            ReferenceEquals(
-            objA: cached.Catalog,
-            objB: catalog
-        )
-        ) {
-            return cached.Frame;
-        }
-
-        var frame = WorldScreenTextDecal.Bake(
-            catalog: catalog,
-            colors: m_decalColors,
-            text: text
-        );
-
-        m_screenDecalCache[index] = (Text: text, Catalog: catalog, Frame: frame);
-
-        return frame;
     }
     // The no-local-seats fallback's own camera (see Dress's tail) — a fixed overview anchored to the plaza's own
     // bounds: the centroid of the world's authored local-seat spawn positions, which every world declares
@@ -1482,7 +1424,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
                         Quality = quality,
                         RenderScale = m_settings.RenderCeiling,
-                        ResolvedRenderScale = (RenderGrid() * transitionScale),
+                        ResolvedRenderScale = transitionScale,
                         UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
@@ -1539,7 +1481,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // passes: native renders its output grid directly, a lower tier reconstructs a reduced grid inside the view's
             // own package. A layout transition dips only the grid inside that ceiling (ResolvedRenderScale), which
             // allocates and rebuilds nothing, so a view at a native ceiling, which reconstructs nothing, does not dip.
-            m_views.Add(item: new SdfViewSnapshot(
+            var seatView = new SdfViewSnapshot(
                 Camera: camera,
                 Region: region
             ) {
@@ -1547,9 +1489,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
                 RenderScale = m_settings.RenderCeiling,
-                ResolvedRenderScale = (RenderGrid() * transitionScale),
+                ResolvedRenderScale = transitionScale,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
-            });
+            };
+
+            if (presentedElsewhere is not null) {
+                seatView = DressResolution(seatView, ViewProducerName(view: m_views.Count),
+                    ((uint)Math.Max(val1: 1, val2: (width * region.Width))), ((uint)Math.Max(val1: 1, val2: (height * region.Height))));
+                seatView = seatView with { ResolvedRenderScale = (seatView.ResolvedRenderScale * transitionScale) };
+            }
+            m_views.Add(item: seatView);
             // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
             // is latched into the scene of the world it is presented in, which renders it instead.
             if (m_continuum.PresentedElsewhere(slot: slot) is { } elsewhere) {
@@ -1640,13 +1589,23 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
                 Quality = quality,
                 RenderScale = m_settings.RenderCeiling,
-                ResolvedRenderScale = (m_settings.DynamicResolution ? RenderGrid() : 0f),
+                ResolvedRenderScale = 1f,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
         } else {
             m_noLocalSeatsNarrated = false;
         }
 
+        for (var viewIndex = 0; (viewIndex < m_views.Count); viewIndex++) {
+            var snapshot = m_views[viewIndex];
+            // Routed snapshots are dressed before the scene latches them; advance each policy once per frame.
+            if ((viewIndex < m_viewRoutes.Count) && (m_viewRoutes[viewIndex].Scene is not null)) { continue; }
+            var dip = ((snapshot.ResolvedRenderScale > 0f) ? snapshot.ResolvedRenderScale : 1f);
+
+            snapshot = DressResolution(snapshot, ViewProducerName(view: viewIndex),
+                ((uint)Math.Max(val1: 1, val2: (width * snapshot.Region.Width))), ((uint)Math.Max(val1: 1, val2: (height * snapshot.Region.Height))));
+            m_views[viewIndex] = snapshot with { ResolvedRenderScale = (snapshot.ResolvedRenderScale * dip) };
+        }
         m_outputRegions.Views(
             cameras: m_client.Definition.Cameras,
             composer: m_composer,
@@ -1774,8 +1733,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <param name="bakes">The schedule pumped once per captured frame to keep the definition's creation bakes current,
     /// or <see langword="null"/> for a presentation that bakes nothing.</param>
     /// <param name="editor">Each seat's editor state, or <see langword="null"/> for a fresh one with nothing moved.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldBakeSchedule? bakes = null, WorldEditorSeats? editor = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, WorldValueDomainGuard domains, IOverlayPredicateEvaluator? overlayFacts = null, WorldViewGraphHost? graphs = null, WorldBakeSchedule? bakes = null, WorldEditorSeats? editor = null) {
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         Editor = (editor ?? new WorldEditorSeats());
         ArgumentNullException.ThrowIfNull(argument: client);
@@ -1800,6 +1761,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         m_markers = markers;
         m_resolveIcon = resolveIcon;
+        m_domains = domains;
+        m_environment = new WorldEnvironmentResolve(domains: domains);
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             m_markerChips[slot] = [];
@@ -1819,7 +1782,11 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         audio.MachineSourceResolver = binder.AudioOutput;
         m_frameRate = frameRate;
         m_client = client;
-        m_decalColors = new WorldBakedColors(mirror: client.StateMirror);
+        m_decals = new WorldScreenDecals(
+            catalog: () => m_text.Catalog,
+            colors: new WorldBakedColors(mirror: client.StateMirror),
+            textAt: binder.TextSourceAt
+        );
         m_queryColors = new WorldBakedColors(mirror: client.StateMirror);
         m_anchor = anchor;
         m_speech = speech;
@@ -1966,8 +1933,5 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// <summary>The worst-case (all avatars active) program word count — the spec's <c>ProgramWordCapacity</c> floor.</summary>
     public int ProgramWordCapacity { get; }
     /// <inheritdoc/>
-    public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => ((m_screenDecals.Count > 0)
-        ? m_screenDecals
-        : null
-    );
+    public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_decals.Providers;
 }

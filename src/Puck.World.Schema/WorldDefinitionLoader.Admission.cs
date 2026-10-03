@@ -116,18 +116,22 @@ public static partial class WorldDefinitionLoader {
     /// <param name="documents">The source the root and every basis/import reference read through, or
     /// <see langword="null"/> for <see cref="WorldDefinitionFileSource.LocalDocuments"/>. A source that lowers
     /// <c>.puck</c> makes <paramref name="contentHash"/> pin the lowered document.</param>
+    /// <param name="displayName">What every refusal calls the document, or <see langword="null"/> to call it by its path. A
+    /// host that must not name the file's directory (the owned-world catalog) passes the file name.</param>
     /// <returns>Whether the document loaded and validated.</returns>
     public static bool TryLoadFileForAdmission(string path, out WorldDefinitionAdmission? admission, out string contentHash, out string reason,
         string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, bool proveNeighbours = true,
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
-        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, IWorldDocumentSource? documents = null) {
+        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, IWorldDocumentSource? documents = null, string? displayName = null) {
+        var shown = (displayName ?? path);
+
         admission = null;
         contentHash = string.Empty;
         try {
             if (!WorldDefinitionFileSource.TryLoadParsed(catalog: catalog, catalogFingerprint: catalogFingerprint, contentHash: out var parsedHash,
-                    definition: out var parsed, documents: documents, path: path, reason: out reason) ||
+                    definition: out var parsed, displayName: displayName, documents: documents, path: path, reason: out reason) ||
                 !TryPrepareAndAdmit(catalog: catalog, compiled: compiled, definition: parsed!, instanceIdentity: instanceIdentity, neighbours: neighbours,
-                    overrides: overrides, proveNeighbours: proveNeighbours, reason: out reason, resolved: out admission, sourceName: path)) {
+                    overrides: overrides, proveNeighbours: proveNeighbours, reason: out reason, resolved: out admission, sourceName: shown)) {
                 return false;
             }
 
@@ -135,7 +139,7 @@ public static partial class WorldDefinitionLoader {
             return true;
         } catch (Exception exception) {
             admission = null;
-            reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {WorldJsonPayload.Reason(exception: exception)}";
+            reason = $"{shown} is not a valid {WorldDefinition.SchemaVersion} document: {WorldJsonPayload.Reason(exception: exception)}";
             return false;
         }
     }

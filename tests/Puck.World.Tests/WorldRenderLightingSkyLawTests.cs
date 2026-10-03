@@ -26,7 +26,7 @@ public sealed class WorldRenderLightingSkyLawTests {
     private static WorldResolvedEnvironment Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldEnvironmentResolve? track = null, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
         var definition = (Fixtures.BuildDocument().WithWorldState(rows: (state ?? [])) with { RenderRaw = defaults });
 
-        return (track ?? new WorldEnvironmentResolve()).Resolve(
+        return (track ?? new WorldEnvironmentResolve(domains: new WorldValueDomainGuard())).Resolve(
             definition: definition,
             mirror: ClientFixtures.StateMirror(definition: definition),
             resolveLightAnchor: resolveLightAnchor,
@@ -731,7 +731,7 @@ public sealed class WorldRenderLightingSkyLawTests {
             )
         ]),
         };
-        var track = new WorldEnvironmentResolve();
+        var track = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
         var missing = Resolve(
             defaults,
             track: track
@@ -1075,7 +1075,7 @@ public sealed class WorldRenderLightingSkyLawTests {
     }
     [Fact]
     public void SunColor_BoundToStateTextCell_ResolvesToTheCell_AndFollowsItsRowWithoutARevisionMove() {
-        var track = new WorldEnvironmentResolve();
+        var track = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
         var lighting = SunAndSky(sunColor: new BindableColor(Raw: "state.colors.sun"));
         var definition = (Fixtures.BuildDocument().WithWorldState(rows: [ColorsRow(hex: "#FFD9A6")]) with { RenderRaw = BaseDefaults() with { Lighting = lighting } });
         var mirror = new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition));

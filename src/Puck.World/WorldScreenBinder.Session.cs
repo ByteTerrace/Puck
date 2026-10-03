@@ -121,6 +121,7 @@ internal sealed partial class WorldScreenBinder {
     // per-slot teardown.
     private void RegisterSessionView(SessionFeed feed) {
         var emitter = new WorldSessionSceneEmitter(
+            domains: m_domains,
             mirror: feed.Mirror,
             effectiveCameraName: feed.EffectiveCamera
         );
@@ -134,6 +135,10 @@ internal sealed partial class WorldScreenBinder {
 
         feed.FrameSource = frameSource;
         feed.Emitter = emitter;
+        emitter.Film = views => FilmFeed(
+            feed: feed,
+            views: views
+        );
         feed.WindowFit = (isWindow
             ? FitWindow(feed: feed)
             : null);
@@ -366,6 +371,16 @@ internal sealed partial class WorldScreenBinder {
                     Quality = WorldSessionSceneEmitter.ReducedQuality,
                 }
                 : null);
+            // The fitted camera and the default-projection fallback take the same named policy.
+            var width = ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth));
+            var height = ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight));
+
+            if (window.View is { } view) {
+                window.View = ResolveResolution(view, feed.RegistrationName, width, height);
+            }
+            window.FallbackResolution ??= (fallback => ResolveResolution(fallback, feed.RegistrationName,
+                ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth)),
+                ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight))));
         }
     }
     // The routed window a session view renders through this frame, once the presenter's latch includes it.

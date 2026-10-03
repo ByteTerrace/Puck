@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text.Json;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -149,88 +150,84 @@ public sealed class EchoCanaryFixtureTests {
             reason: "DXC is required to compile the echo passes."
         );
 
-        var cache = Directory.CreateTempSubdirectory(prefix: "puck-echo-");
+        using var cache = new TemporaryDirectory(prefix: "puck-echo-");
 
-        try {
-            var loader = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache.FullName));
-            var result = loader.Load(
-                cancellationToken: TestContext.Current.CancellationToken,
-                name: "echo",
-                path: FixturePath(fileName: "echo.graph.json")
-            );
+        var loader = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache.RootPath));
+        var result = loader.Load(
+            cancellationToken: TestContext.Current.CancellationToken,
+            name: "echo",
+            path: FixturePath(fileName: "echo.graph.json")
+        );
 
-            Assert.True(
-                condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
-                userMessage: result.Message
-            );
+        Assert.True(
+            condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
+            userMessage: result.Message
+        );
 
-            var pass = Assert.Single(collection: result.Pipeline!.Plan.Passes);
-            var shader = result.Pipeline.Shaders[pass.Name];
+        var pass = Assert.Single(collection: result.Pipeline!.Plan.Passes);
+        var shader = result.Pipeline.Shaders[pass.Name];
 
-            Assert.Null(@object: pass.Parameters.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: shader.SpirvByStage[ShaderStage.Compute].Span)));
-            if (OperatingSystem.IsWindows()) {
-                using var dxil = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
+        Assert.Null(@object: pass.Parameters.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: shader.SpirvByStage[ShaderStage.Compute].Span)));
+        if (OperatingSystem.IsWindows()) {
+            using var dxil = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
 
-                Assert.Null(@object: pass.Parameters.Layout.Mismatch(reflected: dxil.Read(container: shader.DxilByStage[ShaderStage.Compute].Span)));
-            }
-
-            // Declarations that misplace a member, the generator's with time and timeDelta at each other's offset, beside
-            // an echo that includes them: the module reads the frame block somewhere the interface does not lay it out,
-            // so the load refuses it by name before any device sees it.
-            var shaderInterface = pass.Parameters.Interface;
-            var perturbed = cache.CreateSubdirectory(path: "perturbed");
-
-            File.Copy(
-                destFileName: Path.Combine(
-                    path1: perturbed.FullName,
-                    path2: "echo.graph.json"
-                ),
-                sourceFileName: FixturePath(fileName: "echo.graph.json")
-            );
-            File.WriteAllText(
-                contents: ShaderInterfaceEcho.Generate(shaderInterface: shaderInterface).Replace(
-                    newValue: "#include \"swapped.hlsli\"",
-                    oldValue: $"#include \"{ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name)}\""
-                ),
-                path: Path.Combine(
-                    path1: perturbed.FullName,
-                    path2: "frame.echo.hlsl"
-                )
-            );
-            File.WriteAllText(
-                contents: ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface)
-                    .Replace(newValue: "\0", oldValue: "[[vk::offset(16)]] float time;")
-                    .Replace(newValue: "[[vk::offset(20)]] float time;", oldValue: "[[vk::offset(20)]] float timeDelta;")
-                    .Replace(newValue: "[[vk::offset(16)]] float timeDelta;", oldValue: "\0"),
-                path: Path.Combine(
-                    path1: perturbed.FullName,
-                    path2: "swapped.hlsli"
-                )
-            );
-
-            var refused = loader.Load(
-                cancellationToken: TestContext.Current.CancellationToken,
-                name: "echo",
-                path: Path.Combine(
-                    path1: perturbed.FullName,
-                    path2: "echo.graph.json"
-                )
-            );
-
-            Assert.Equal(
-                actual: refused.Status,
-                expected: ShaderPipelineLoadStatus.Failed
-            );
-            Assert.StartsWith(
-                actualString: refused.Message,
-                expectedStartString: "[SHADERPIPE_INTERFACE] Pass 'frame' Compute: "
-            );
-            Assert.Contains(
-                actualString: refused.Message,
-                expectedSubstring: "timeDelta@16"
-            );
-        } finally {
-            cache.Delete(recursive: true);
+            Assert.Null(@object: pass.Parameters.Layout.Mismatch(reflected: dxil.Read(container: shader.DxilByStage[ShaderStage.Compute].Span)));
         }
+
+        // Declarations that misplace a member, the generator's with time and timeDelta at each other's offset, beside
+        // an echo that includes them: the module reads the frame block somewhere the interface does not lay it out,
+        // so the load refuses it by name before any device sees it.
+        var shaderInterface = pass.Parameters.Interface;
+        var perturbed = Directory.CreateDirectory(path: cache.PathOf(name: "perturbed"));
+
+        File.Copy(
+            destFileName: Path.Combine(
+                path1: perturbed.FullName,
+                path2: "echo.graph.json"
+            ),
+            sourceFileName: FixturePath(fileName: "echo.graph.json")
+        );
+        File.WriteAllText(
+            contents: ShaderInterfaceEcho.Generate(shaderInterface: shaderInterface).Replace(
+                newValue: "#include \"swapped.hlsli\"",
+                oldValue: $"#include \"{ShaderFrameInterface.IncludeFileName(interfaceName: shaderInterface.Name)}\""
+            ),
+            path: Path.Combine(
+                path1: perturbed.FullName,
+                path2: "frame.echo.hlsl"
+            )
+        );
+        File.WriteAllText(
+            contents: ShaderInterfaceHlsl.Generate(shaderInterface: shaderInterface)
+                .Replace(newValue: "\0", oldValue: "[[vk::offset(16)]] float time;")
+                .Replace(newValue: "[[vk::offset(20)]] float time;", oldValue: "[[vk::offset(20)]] float timeDelta;")
+                .Replace(newValue: "[[vk::offset(16)]] float timeDelta;", oldValue: "\0"),
+            path: Path.Combine(
+                path1: perturbed.FullName,
+                path2: "swapped.hlsli"
+            )
+        );
+
+        var refused = loader.Load(
+            cancellationToken: TestContext.Current.CancellationToken,
+            name: "echo",
+            path: Path.Combine(
+                path1: perturbed.FullName,
+                path2: "echo.graph.json"
+            )
+        );
+
+        Assert.Equal(
+            actual: refused.Status,
+            expected: ShaderPipelineLoadStatus.Failed
+        );
+        Assert.StartsWith(
+            actualString: refused.Message,
+            expectedStartString: "[SHADERPIPE_INTERFACE] Pass 'frame' Compute: "
+        );
+        Assert.Contains(
+            actualString: refused.Message,
+            expectedSubstring: "timeDelta@16"
+        );
     }
 }

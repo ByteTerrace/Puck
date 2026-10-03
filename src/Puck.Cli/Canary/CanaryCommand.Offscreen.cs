@@ -96,7 +96,7 @@ internal static partial class CanaryCommand {
                 debugLayers: debugLayers
             ))],
     };
-    private static string[] BackendArguments(string backend, bool debugLayers) => ["--backend", backend, .. (debugLayers ? [WorldOffscreenLeg.DebugLayersFlag] : Array.Empty<string>())];
+    private static string[] BackendArguments(string backend, bool debugLayers) => ["--backend", backend, .. DebugLayerOutput.Arguments(debugLayers: debugLayers)];
 
     // A pipeline.wait outcome narrated through the World's pipeline report: "[pipeline: <name> wait <phase> <outcome>".
     [GeneratedRegex(pattern: @"^\[pipeline: (?<name>\S+) wait (?<phase>compiled|installed|captured|submitted \d+|counted \d+|resized \d+ \d+) (?<outcome>reached|failed|unsupported|timed out)")]

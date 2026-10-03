@@ -5,8 +5,9 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>A presentation-tier projection carries the world's tick clocks, so a value keyed on one resolves on the
-/// recipient as it does on the authority, and carries no state clock: a projection whose values key on a state clock
-/// refuses to hydrate by name rather than resolving them to their fallbacks.</summary>
+/// recipient as it does on the authority, and each state clock a value keys on as an anchor of its phase, never its
+/// row; a projection that carries a row, a malformed anchor or no clock a value keys on refuses to hydrate by
+/// name.</summary>
 public sealed class ProjectionTimelineLawTests {
     private static readonly WorldClock Day = new(Name: "day", PeriodSeconds: 60d, SpanSeconds: 24d, StartSeconds: 6d);
     private static readonly WorldClock Mode = new(Name: "mode", State: "phase");
@@ -62,18 +63,49 @@ public sealed class ProjectionTimelineLawTests {
             );
         }
     }
-    [InlineData(false, "render.sky.layers[0].density")]
-    [InlineData(true, "render.sky")]
+    [InlineData(false)]
+    [InlineData(true)]
     [Theory]
-    public void A_value_keyed_on_a_state_clock_refuses_to_hydrate_by_name(bool section, string path) {
-        var projection = Project(definition: Keyed(clock: "mode", section: section));
+    public void A_value_keyed_on_a_state_clock_crosses_as_an_anchor_and_resolves_as_on_the_authority(bool section) {
+        var definition = Keyed(clock: "mode", section: section).WithWorldState(rows: [new WorldStateRow(
+            Name: CellName.Parse(candidate: "phase"),
+            Kind: CellKind.Fixed,
+            Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Fixed(rawBits: (3L << 14)))]
+        )]);
+        var projection = Project(definition: definition);
+        var carried = Assert.Single(collection: projection.Timeline!.Clocks!, predicate: static clock => (clock.Name == "mode"));
 
-        // The state clock never crosses: neither its name nor the row it reads.
-        Assert.DoesNotContain(collection: projection.Timeline!.Clocks!, filter: static clock => clock.IsStateClock);
-        Assert.False(condition: WorldProjection.TryToDefinition(definition: out _, projection: projection, reason: out var reason));
-        Assert.Equal(
-            actual: reason,
-            expected: $"projection keys {path} on clock 'mode', which it does not carry: a state clock does not cross to a presentation-tier recipient, which receives no anchor of its phase."
-        );
+        // The row never crosses: the clock carries an anchor of its phase, three quarters of a turn, held still.
+        Assert.True(condition: carried.IsAnchored);
+        Assert.Null(@object: carried.State);
+        Assert.Equal(expected: new WorldClockAnchor(Phase: (3UL << 62), Tick: 0UL), actual: carried.Anchor);
+        Assert.True(condition: WorldProjection.TryToDefinition(definition: out var hydrated, projection: projection, reason: out var reason), userMessage: reason);
+
+        var host = ClientFixtures.StateMirror(definition: definition);
+        var recipient = ClientFixtures.StateMirror(definition: hydrated);
+
+        Assert.True(condition: host.TryPhase(clock: out _, name: "mode", phase: out var hostPhase));
+        Assert.True(condition: recipient.TryPhase(clock: out _, name: "mode", phase: out var recipientPhase));
+        Assert.Equal(actual: hostPhase, expected: 0.75d);
+        Assert.Equal(actual: recipientPhase, expected: hostPhase);
+    }
+    [Fact]
+    public void A_projection_that_carries_a_state_clocks_row_or_a_malformed_anchor_refuses_to_hydrate_by_name() {
+        var projection = Project(definition: Keyed(clock: "mode"));
+
+        foreach (var (clock, refusal) in new[] {
+            (Mode, "projection carries clock 'mode' over state row 'phase'; a projection carries a state clock as an anchor of its phase, never its row."),
+            (new WorldClock(Anchor: new WorldClockAnchor(Phase: 0UL, Rate: 5L, Tick: 0UL), Name: "mode"), "projection anchors clock 'mode' with rate 5 over 0 engine ticks; a rate names the ticks it is per, and only a rate does."),
+        }) {
+            var forged = projection with { Timeline = new WorldTimelineSection(Clocks: [Day, clock]) };
+
+            Assert.False(condition: WorldProjection.TryToDefinition(definition: out _, projection: forged, reason: out var reason));
+            Assert.Equal(actual: reason, expected: refusal);
+        }
+
+        var uncarried = projection with { Timeline = new WorldTimelineSection(Clocks: [Day]) };
+
+        Assert.False(condition: WorldProjection.TryToDefinition(definition: out _, projection: uncarried, reason: out var uncarriedReason));
+        Assert.Equal(actual: uncarriedReason, expected: "projection keys render.sky.layers[0].density on clock 'mode', which it does not carry.");
     }
 }

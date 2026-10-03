@@ -307,7 +307,7 @@ public sealed class WorldOwnedWorldSync {
             if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
                 m_worlds.NarrationHub?.Narrate(
                     channel: "storage",
-                    text: $"[storage] sync state unreadable, starting untracked ({exception.Message})"
+                    text: $"[storage] sync state unreadable, starting untracked ({WorldDocumentLabel.Failure(exception: exception)})"
                 );
             }
             m_basisTokens.Clear();
@@ -472,6 +472,7 @@ public sealed class WorldOwnedWorldSync {
                 !WorldOwnedWorlds.TryLoadOwned(
                 catalog: null,
                 catalogFingerprint: string.Empty,
+                displayName: WorldDocumentName.For(id: safe),
                 document: out var document,
                 id: safe.Value,
                 neighbours: neighbours,
@@ -545,7 +546,7 @@ public sealed class WorldOwnedWorldSync {
             return new WorldSyncOutcome(
                 Id: id,
                 Ok: false,
-                Detail: $"local write failed — {exception.Message}"
+                Detail: $"local write failed — {WorldDocumentLabel.Failure(exception: exception)}"
             );
         } finally {
             try { File.Delete(path: probePath); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
@@ -669,7 +670,16 @@ public sealed class WorldOwnedWorldSync {
 
         // Live state, not stale disk state: re-save (basis-preserving) before resolving the chain, so the file on
         // disk and identity.Document agree — a push must publish what is LIVE, never what was last saved.
-        m_worlds.Save(identity: identity);
+        if (!m_worlds.TrySave(
+            identity: identity,
+            reason: out var saveReason
+        )) {
+            return new WorldSyncOutcome(
+                Id: identity.Id,
+                Ok: false,
+                Detail: saveReason
+            );
+        }
 
         var safe = identitySection.Id;
         var path = Path.Combine(
@@ -866,7 +876,7 @@ public sealed class WorldOwnedWorldSync {
             if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
                 m_worlds.NarrationHub?.Narrate(
                     channel: "storage",
-                    text: $"[storage] sync state not persisted ({exception.Message})"
+                    text: $"[storage] sync state not persisted ({WorldDocumentLabel.Failure(exception: exception)})"
                 );
             }
         }
@@ -936,7 +946,7 @@ public sealed class WorldOwnedWorldSync {
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException)) {
-            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+            reason = WorldDocumentLabel.Failure(exception: exception);
 
             return false;
         }

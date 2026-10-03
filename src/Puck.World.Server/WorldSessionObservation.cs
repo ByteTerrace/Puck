@@ -59,7 +59,11 @@ public sealed class WorldSessionObservation : IDisposable {
     internal WorldDefinition? ReadDefinition() => (AllowsQuery(query: new WorldQuery.StateObservations())
         ? m_sink!.Disclose(definition: m_server.Definition)
         : null);
-    internal void MarkEnded() => m_ended = true;
+    // An ended observation is delivered nothing further, so its sink's feed lets go of what it held for it.
+    internal void MarkEnded() {
+        m_ended = true;
+        m_sink?.Release();
+    }
 
     /// <summary>Discloses a candidate definition as it would reach this observation's renderer, for a consumer that
     /// measures a world document for that renderer on the observed world's side (a render envelope sizing the
@@ -96,7 +100,7 @@ public sealed class WorldSessionObservation : IDisposable {
         // upper bound: every reader restriction admitted, and every dealt child showing the costliest prototype its
         // deal can deal to some reader. Any failure to lay out or compose it is the candidate's
         // refusal, never a throw through the envelope or the step.
-        var time = m_server.Time;
+        var time = m_server.DeliveryTime;
 
         try {
             if (!StateArena.TryCreate(

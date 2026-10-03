@@ -21,6 +21,7 @@ public sealed unsafe class VulkanInstanceCreateChainLawTests {
         VulkanInstanceCreateChain chain = default;
         var head = VulkanNativeInstanceApi.LinkCreateChain(
             chain: &chain,
+            debugUserData: 0x5EED,
             enableValidation: true
         );
         var features = ((VkValidationFeaturesExt*)head);
@@ -52,6 +53,11 @@ public sealed unsafe class VulkanInstanceCreateChainLawTests {
             actual: messenger->UserCallback,
             expected: 0
         );
+        // The writer the instance's messages go to rides as the callback's pUserData.
+        Assert.Equal(
+            actual: messenger->UserData,
+            expected: 0x5EED
+        );
         Assert.Equal(
             actual: messenger->Next,
             expected: 0
@@ -64,6 +70,7 @@ public sealed unsafe class VulkanInstanceCreateChainLawTests {
         Assert.Equal(
             actual: VulkanNativeInstanceApi.LinkCreateChain(
                 chain: &chain,
+                debugUserData: 0,
                 enableValidation: false
             ),
             expected: 0
@@ -102,7 +109,7 @@ public sealed unsafe class VulkanInstanceCreateChainLawTests {
     private sealed class RequestRecordingApi : IVulkanInstanceApi {
         public VulkanInstanceCreateRequest? Request { get; private set; }
 
-        public nint CreateDebugMessenger(VulkanInstanceCommands instance) => throw new NotSupportedException();
+        public nint CreateDebugMessenger(VulkanInstanceCommands instance, nint userData) => throw new NotSupportedException();
         public VkResult CreateInstance(VulkanInstanceCreateRequest request, out VulkanInstanceCommands? instance) {
             Request = request;
             instance = null;

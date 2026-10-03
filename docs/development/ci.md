@@ -25,7 +25,9 @@ holds a shell script only to glue a container or a step summary.
 workload, and a versioned, checksum-checked DXC archive on Windows. The SDK goes into a directory of its
 own: installing `wasm-tools` moves the workload set, and in the image's shared SDK directory that would
 also reinstall every workload the image ships. It restores
-the solution in locked mode and compiles Release with warnings as errors. It
+the solution in locked mode and compiles Release with warnings as errors. The
+built candidate CLI runs `puck derivations --check` against the restored producer
+graph, so a stale bake fingerprint stops artifact production before packaging. It
 packages those assemblies with `puck nuget pack --no-build`, publishes the
 Functions and WebAssembly payloads without rebuilding managed assemblies, and
 publishes `Puck.World` as a framework-dependent ReadyToRun artifact. World's
@@ -117,6 +119,14 @@ solution, so a test project's kernels are in that artifact beside the engine's,
 and the Linux job compiles them too: every tracked project outside
 `experimental/` that owns a vertex, fragment or compute stage source, test
 projects included, is in the compare.
+Its `determinism` job is the simulation's cross-host leg. The artifacts job
+records every scenario of
+[the determinism manifest](../../tests/Puck.Determinism/determinism.json) on
+Windows with `puck determinism record` into the `determinism-windows` artifact;
+the Linux job records the same manifest with the same verb and runs
+`puck determinism compare` on the two streams, which fails on the first tick and
+system, or the first document hash, where the hosts differ and prints the
+scenarios, ticks and hashes it compared.
 HGB and AGB share a job matrix while retaining their separate lanes, timeouts,
 corpus caches, and `hgb` and `agb` report artifacts.
 Linux world verification invokes each compiled assembly's portable xUnit

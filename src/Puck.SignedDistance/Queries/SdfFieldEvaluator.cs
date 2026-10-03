@@ -131,6 +131,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                 break;
             }
         }
+
+        m_frameRaw = FindFrame(evaluator: this);
     }
 
     // StepScale is a lower-bound multiplier: rounding it upward would make a later advance larger than the program's
@@ -163,9 +165,9 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
     /// <inheritdoc/>
     public FieldEvaluatorCapabilities Capabilities => new(WarpFree: true);
+    /// <summary>Gets a value indicating whether the compiled stream declares any shape: without one, every query answers nothing.</summary>
+    public bool HasShape => m_hasShape;
 
-    // Whether the compiled stream declares any shape — the march's "nothing to answer" branch.
-    internal bool HasShape => m_hasShape;
     // The exact march's sample budget, the budget a banded march spends on its exact samples.
     internal int MarchIterations => m_marchIterations;
 
@@ -185,8 +187,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         }
     }
 
-    // The program's step scale (1/L) in fixed point, floored so it stays a lower-bound multiplier.
-    internal FixedQ4816 StepScale => m_stepScale;
     // The program's Lipschitz bound L in fixed point, rounded up from the floored step scale so L * StepScale never
     // reads below one; the largest representable value when the step scale floored to zero.
     internal FixedQ4816 LipschitzBound {
@@ -685,47 +685,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             strandOffset: instruction.Data0W
         ),
             _ => throw new UnreachableException(message: $"The constructor validated every shape is supported; shape {((SdfShapeType)instruction.Shape)} reached EvaluateShape unvalidated."),
-        };
-    }
-    private static bool IsSupportedOp(SdfOp op) {
-        return op switch {
-            SdfOp.ResetPoint or
-            SdfOp.Translate or
-            SdfOp.Rotate or
-            SdfOp.Scale or
-            SdfOp.Elongate or
-            SdfOp.ShapeBlend or
-            SdfOp.Repeat or
-            SdfOp.RepeatLimited or
-            SdfOp.Onion or
-            SdfOp.Dilate or
-            SdfOp.CellDisplace or
-            SdfOp.SymmetryPlane or
-            SdfOp.PushField or
-            SdfOp.PopField => true,
-            _ => false,
-        };
-    }
-    private static bool IsSupportedShape(SdfShapeType shape) {
-        return shape switch {
-            SdfShapeType.Box or
-            SdfShapeType.Capsule or
-            SdfShapeType.Sphere or
-            SdfShapeType.Torus or
-            SdfShapeType.Cylinder or
-            SdfShapeType.Plane or
-            SdfShapeType.Vesica or
-            SdfShapeType.RoundedRectangle or
-            SdfShapeType.Trapezoid or
-            SdfShapeType.ChamferedRectangle or
-            SdfShapeType.RoundCone or
-            SdfShapeType.ScreenSlab or
-            SdfShapeType.Superellipsoid or
-            SdfShapeType.ConvexPolygon or
-            // strands > 1 is refused separately, at Compile time (see Compile's isSweep check) — this type-keyed
-            // gate cannot see the instruction's own strand count.
-            SdfShapeType.Sweep => true,
-            _ => false,
         };
     }
     // The shared sphere-trace march over this evaluator's own exact samples — see SdfFieldMarch for the accept and
@@ -1631,19 +1590,21 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     /// alone would alias the whole field with the 2^<see cref="FixedPosition.CellSizeLog2"/>-unit cell period and
     /// answer for the wrong copy; <see cref="FixedPosition.FromLocal"/> creates a nonzero cell on its own past half a
     /// cell, so no caller has to opt in to reach that. Rebasing is exact integer arithmetic and is the identity for a
-    /// position already in cell <c>(0,0,0)</c>. Returns <see langword="false"/> when the program declares no shape, or
-    /// when the displacement is outside signed Q48.16 (past ~1.4e14 units from the origin), which no authored program
-    /// can hold geometry at.</remarks>
+    /// position already in cell <c>(0,0,0)</c>. Returns <see langword="false"/> when the program declares no shape, when
+    /// the displacement is outside signed Q48.16 (past ~1.4e14 units from the origin), or when it lies outside
+    /// <see cref="Frame"/>, where some step of the evaluation could leave the carrier and wrap.</remarks>
     public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
         distance = FixedQ4816.Zero;
         material = 0;
 
+        // Outside the frame some step of the evaluation can leave the carrier, so the position is refused, never wrapped.
         if (
             !m_hasShape ||
             !position.TryDelta(
             delta: out var worldPosition,
             origin: FixedPosition.Zero
-        )
+        ) ||
+            !IsInFrame(point: worldPosition)
         ) {
             return false;
         }

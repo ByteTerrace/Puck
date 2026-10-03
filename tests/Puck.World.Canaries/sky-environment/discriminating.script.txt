@@ -1,0 +1,8 @@
+# The same view with the fog gone, so the sphere in front of the disc shows its own black.
+world.cadence off
+world.wait ready 180
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#808080"},{"elevation":1,"color":"#808080"}]},{"$type":"fog","density":0},{"$type":"sunDisc","light":0,"radius":0.3,"intensity":16}]}
+world.wait 30
+world.counters gpu
+world.screenshot {run}/fog.png
+world.wait captures 30

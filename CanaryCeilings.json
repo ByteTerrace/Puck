@@ -2,12 +2,12 @@
     "format": 1,
     "ceilings": {
         "automatic": {
-            "legBudgetSeconds": 3010,
-            "worldBoots": 78
+            "legBudgetSeconds": 3070,
+            "worldBoots": 80
         },
         "merge": {
-            "legBudgetSeconds": 18770,
-            "worldBoots": 340
+            "legBudgetSeconds": 19790,
+            "worldBoots": 358
         }
     }
 }

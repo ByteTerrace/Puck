@@ -50,7 +50,7 @@
         }
       ]
     },
-    "renderScale": "Half"
+    "renderScale": 0.5
   },
   "schema": "puck.world.definition.v1",
   "views": {

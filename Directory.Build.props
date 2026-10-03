@@ -8,6 +8,14 @@
         <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <ImplicitUsings>enable</ImplicitUsings>
+        <!-- A new commit recompiles only what reads the commit. The SDK's "+<commit>" informational-version suffix and
+             SourceLink's *.sourcelink.json (whose URL names the commit) are compiler inputs of every project, so either
+             one recompiles the whole tree on every commit. The suffix is off everywhere; SourceLink stays on for CI and
+             official builds (ContinuousIntegrationBuild), which publish symbols, and is off for local builds. The one
+             reader of the commit, Puck.World.Schema, embeds it as a resource of its own (WorldSchema.SourceRevision);
+             git queries stay on, so SourceRevisionId is still known. -->
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+        <EnableSourceLink Condition="'$(ContinuousIntegrationBuild)' != 'true'">false</EnableSourceLink>
         <InvariantGlobalization>true</InvariantGlobalization>
         <!-- Nothing packs unless it opts in. A "blessed" project sets <IsPackable>true</IsPackable>
              in its own csproj, which turns on the shared version and NuGet metadata in
@@ -65,9 +73,10 @@
         >false</RestorePackagesWithLockFile>
     </PropertyGroup>
 
-    <!-- File apps share the runtime repository lookup by source, so a bootstrap program needs no CLI build. -->
+    <!-- File apps share the runtime repository lookup and run-directory policy by source, so a bootstrap program needs no CLI build. -->
     <ItemGroup Condition="'$(IsFileBasedProgram)' == 'true'">
         <Compile Include="$(MSBuildThisFileDirectory)build/RepositoryPaths.cs" Link="RepositoryPaths.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/RunDirectory.cs" Link="RunDirectory.cs" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(IsFileBasedProgram)' != 'true' AND ('@(Compile)' == '' OR !$([System.String]::Copy('@(Compile)').Contains('VerifiedCodeAttribute.cs')))">
@@ -81,6 +90,8 @@
         <!-- The format boundary markers `puck formats` reads from syntax; linked as source for the same reason. -->
         <Compile Include="$(MSBuildThisFileDirectory)build/FormatLeafAttribute.cs" Link="Properties/FormatLeafAttribute.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)build/FormatSeamAttribute.cs" Link="Properties/FormatSeamAttribute.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/FormatPartAttribute.cs" Link="Properties/FormatPartAttribute.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build/DerivationAttribute.cs" Link="Properties/DerivationAttribute.cs" />
         <!-- The brand ledger Puck.Analyzers reads at RegisterCompilationStartAction time; see VerifiedCode.json
              itself for the schema and the analyzer's VerifiedCodeManifest.cs for the reader. -->
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)VerifiedCode.json" />

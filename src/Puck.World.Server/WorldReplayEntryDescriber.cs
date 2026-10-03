@@ -88,8 +88,8 @@ public static class WorldReplayEntryDescriber {
 
         return text.ToString();
     }
-    private static string DescribeRebuild(WorldReplayEntry.Rebuild rebuild) => $"rebuild {rebuild.Kind.ToString().ToLowerInvariant()}{((rebuild.PathHint is { } path)
-        ? $" '{path}'"
+    private static string DescribeRebuild(WorldReplayEntry.Rebuild rebuild) => $"rebuild {rebuild.Kind.ToString().ToLowerInvariant()}{((rebuild.Origin is { } origin)
+        ? $" '{origin}'"
         : "")} {rebuild.ContentHash}{(rebuild.Force
         ? " force"
         : "")} by {rebuild.Actor.Describe()}";
@@ -165,11 +165,13 @@ public static class WorldReplayEntryDescriber {
             values: transfer.DepartedSlots
         )}]",
             WorldReplayEntry.Arrival arrival => DescribeArrival(arrival: arrival),
+            WorldReplayEntry.Departure departure => $"{(departure.Restored ? "restore" : "departure")} #{departure.TransferId} body:{departure.Slot}",
             WorldReplayEntry.FederatedIntents federated => $"federated [{string.Join(
             separator: ",",
             values: federated.Held.Select(selector: static held => $"body:{held.Index}")
         )}]",
             WorldReplayEntry.LinkDelivery link => $"link '{link.Adjacency}' delivered",
+            WorldReplayEntry.SeatIdentity seatIdentity => $"seat body:{seatIdentity.Slot} continues as '{seatIdentity.Profile.Id}'",
             _ => entry.GetType().Name,
         };
     }
@@ -178,12 +180,14 @@ public static class WorldReplayEntryDescriber {
         (Server.WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(
             arrival: out var decoded,
             bytes: arrival.Encoded,
-            defaults: WorldPlayerDefaults.Default,
             reason: out _
         )
             ? $"arrival #{arrival.TransferId} from '{arrival.SourceAuthority}' body:[{string.Join(
                 separator: ",",
                 values: decoded!.Slots
-            )}]"
-            : $"arrival #{arrival.TransferId} from '{arrival.SourceAuthority}'");
+            )}]{Outcome(arrival: arrival)}"
+            : $"arrival #{arrival.TransferId} from '{arrival.SourceAuthority}'{Outcome(arrival: arrival)}");
+    private static string Outcome(WorldReplayEntry.Arrival arrival) => (arrival.Outcome.RolledBack
+        ? $" rolled back after {arrival.Outcome.Generations.Count} landing(s)"
+        : string.Empty);
 }

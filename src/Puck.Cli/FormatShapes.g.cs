@@ -17,7 +17,7 @@ namespace Puck.Cli.Affected {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AffectedCoverage.Schema</c>, declared in <c>src/Puck.Cli/Affected/AffectedCoverage.cs</c>.</summary>
-        public const string AffectedCoverageSchema = "953c5445f994228b";
+        public const string AffectedCoverageSchema = "49e5734f8eda2830";
     }
 }
 
@@ -26,7 +26,7 @@ namespace Puck.Cli.Automation {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReleaseExerciseResult.CurrentSchema</c>, declared in <c>src/Puck.Cli/Automation/WorldReleaseExerciseCommand.cs</c>.</summary>
-        public const string WorldReleaseExerciseResultCurrentSchema = "d7e54493362b8d4c";
+        public const string WorldReleaseExerciseResultCurrentSchema = "65ccf8df499f7ad6";
         /// <summary>The shape fingerprint of <c>WorldReleaseQualificationRunner.Marker</c>, declared in <c>src/Puck.Cli/Automation/WorldReleaseQualificationRunner.cs</c>.</summary>
         public const string WorldReleaseQualificationRunnerMarker = "2edc0a60cac45177";
     }
@@ -59,6 +59,17 @@ namespace Puck.Cli.Canary {
     }
 }
 
+namespace Puck.Cli.Determinism {
+    /// <summary>The shape fingerprint of each format this namespace declares: the digest <c>puck formats</c> records for it.
+    /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
+    internal static class FormatShapes {
+        /// <summary>The shape fingerprint of <c>DeterminismManifest.Schema</c>, declared in <c>src/Puck.Cli/Determinism/DeterminismManifest.cs</c>.</summary>
+        public const string DeterminismManifestSchema = "5ec83ee1b8ac9f0f";
+        /// <summary>The shape fingerprint of <c>DeterminismStream.Version</c>, declared in <c>src/Puck.Cli/Determinism/DeterminismStream.cs</c>.</summary>
+        public const string DeterminismStreamVersion = "1322d9ae38aea843";
+    }
+}
+
 namespace Puck.Cli.Formats {
     /// <summary>The shape fingerprint of each format this namespace declares: the digest <c>puck formats</c> records for it.
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
@@ -82,8 +93,8 @@ namespace Puck.Cli.Qualification {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>QualificationReport.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/QualificationReport.cs</c>.</summary>
-        public const string QualificationReportSchemaVersion = "890f040d35672b35";
+        public const string QualificationReportSchemaVersion = "d38ccf63aeb317b9";
         /// <summary>The shape fingerprint of <c>ReleaseProfile.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/ReleaseProfile.cs</c>.</summary>
-        public const string ReleaseProfileSchemaVersion = "c54858e3c3f3f0f7";
+        public const string ReleaseProfileSchemaVersion = "63419c074d8a1095";
     }
 }

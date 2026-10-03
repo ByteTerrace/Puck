@@ -23,153 +23,141 @@ public sealed class SdfWorldResidencyShaderReloadLawTests {
 
     [Fact]
     public void AReloadWhoseKernelsDoNotReadTheHostsInterfaceFailsAndTheResidencyKeepsItsKernels() {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
+        using var scratch = new TemporaryDirectory(prefix: "puck-test-");
+        var root = scratch.RootPath;
 
-        try {
-            var context = Context(gpu: new FakeGpuDevice());
-            var changed = SdfTestPipelines.Kernels(beam: 2);
-            using var node = Node();
+        var context = Context(gpu: new FakeGpuDevice());
+        var changed = SdfTestPipelines.Kernels(beam: 2);
+        using var node = Node();
 
-            node.ProduceFirstFrame(context: in context);
+        node.ProduceFirstFrame(context: in context);
 
-            foreach (var (kernels, reason) in ((ReadOnlySpan<(SdfKernelSet, string)>)[
-                (changed.With(
-                    bytecode: SpirvEdits.Renamed(
-                        from: ("passGroup" + SdfWorldInterfaces.Stamp),
-                        module: changed[SdfKernel.Beam].Span,
-                        to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value ^ 1U))
-                    ),
-                    kernel: SdfKernel.Beam
-                ), "stamped"),
-                (changed.With(
-                    bytecode: SpirvEdits.BindingsSwapped(
-                        first: SdfWorldPackage.ProgramWords,
-                        module: changed[SdfKernel.InstanceCull].Span,
-                        second: SdfWorldPackage.FrameInstanceGrid
-                    ),
-                    kernel: SdfKernel.InstanceCull
-                ), SdfWorldPackage.ProgramWords),
-                (changed.With(
-                    bytecode: SpirvEdits.BindingsSwapped(
-                        first: SdfWorldPackage.CullBoundsWritten,
-                        module: changed[SdfKernel.CullArgs].Span,
-                        second: SdfWorldPackage.ViewsArgsWritten
-                    ),
-                    kernel: SdfKernel.CullArgs
-                ), SdfWorldPackage.CullBoundsWritten),
-            ])) {
-                Tree(
-                    kernels: kernels,
-                    root: root
-                );
-
-                var refused = Reload(
-                    context: in context,
-                    node: node,
-                    root: root
-                );
-
-                Assert.Equal(expected: ("failed", 0L, 0), actual: (refused.State, refused.Generation, refused.ChangedPipelines));
-                Assert.Contains(actualString: refused.Error, expectedSubstring: reason);
-                Assert.True(condition: node.Produce(context: in context));
-            }
-
+        foreach (var (kernels, reason) in ((ReadOnlySpan<(SdfKernelSet, string)>)[
+            (changed.With(
+                bytecode: SpirvEdits.Renamed(
+                    from: ("passGroup" + SdfWorldInterfaces.Stamp),
+                    module: changed[SdfKernel.Beam].Span,
+                    to: ("passGroup" + SdfIsaHlsl.StampOf(fingerprint: SdfIsaFingerprint.Value ^ 1U))
+                ),
+                kernel: SdfKernel.Beam
+            ), "stamped"),
+            (changed.With(
+                bytecode: SpirvEdits.BindingsSwapped(
+                    first: SdfWorldPackage.ProgramWords,
+                    module: changed[SdfKernel.InstanceCull].Span,
+                    second: SdfWorldPackage.FrameInstanceGrid
+                ),
+                kernel: SdfKernel.InstanceCull
+            ), SdfWorldPackage.ProgramWords),
+            (changed.With(
+                bytecode: SpirvEdits.BindingsSwapped(
+                    first: SdfWorldPackage.CullBoundsWritten,
+                    module: changed[SdfKernel.CullArgs].Span,
+                    second: SdfWorldPackage.ViewsArgsWritten
+                ),
+                kernel: SdfKernel.CullArgs
+            ), SdfWorldPackage.CullBoundsWritten),
+        ])) {
             Tree(
-                kernels: changed,
+                kernels: kernels,
                 root: root
             );
 
-            var applied = Reload(
+            var refused = Reload(
                 context: in context,
                 node: node,
                 root: root
             );
 
-            Assert.Equal(expected: ("applied", 1L, 1), actual: (applied.State, applied.Generation, applied.ChangedPipelines));
+            Assert.Equal(expected: ("failed", 0L, 0), actual: (refused.State, refused.Generation, refused.ChangedPipelines));
+            Assert.Contains(actualString: refused.Error, expectedSubstring: reason);
             Assert.True(condition: node.Produce(context: in context));
-        } finally {
-            Directory.Delete(
-                path: root,
-                recursive: true
-            );
         }
+
+        Tree(
+            kernels: changed,
+            root: root
+        );
+
+        var applied = Reload(
+            context: in context,
+            node: node,
+            root: root
+        );
+
+        Assert.Equal(expected: ("applied", 1L, 1), actual: (applied.State, applied.Generation, applied.ChangedPipelines));
+        Assert.True(condition: node.Produce(context: in context));
     }
     [Fact]
     public void ATreeCarriesTheKernelsItReplacesAsBytecodeOrAsSourcesTheReloadCompiles() {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-test-").FullName;
+        using var scratch = new TemporaryDirectory(prefix: "puck-test-");
+        var root = scratch.RootPath;
 
-        try {
-            var context = Context(gpu: new FakeGpuDevice());
-            var passes = SdfKernelSet.PassesDirectory(tree: root);
-            var cullArgs = Path.Combine(
+        var context = Context(gpu: new FakeGpuDevice());
+        var passes = SdfKernelSet.PassesDirectory(tree: root);
+        var cullArgs = Path.Combine(
+            path1: passes,
+            path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.CullArgs)}.comp.hlsl"
+        );
+        using var node = Node();
+
+        node.ProduceFirstFrame(context: in context);
+        Directory.CreateDirectory(path: passes);
+
+        var empty = Reload(
+            context: in context,
+            node: node,
+            root: root
+        );
+
+        Assert.Equal(expected: ("failed", 0L), actual: (empty.State, empty.Generation));
+        Assert.Contains(actualString: empty.Error, expectedSubstring: "carries no kernel");
+
+        // The changed beam alone: every other kernel keeps its bytecode.
+        File.WriteAllBytes(
+            bytes: SdfTestPipelines.Kernels(beam: 2)[SdfKernel.Beam].ToArray(),
+            path: Path.Combine(
                 path1: passes,
-                path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.CullArgs)}.comp.hlsl"
-            );
-            using var node = Node();
+                path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.Beam)}.comp.spv"
+            )
+        );
 
-            node.ProduceFirstFrame(context: in context);
-            Directory.CreateDirectory(path: passes);
+        var bytecode = Reload(
+            context: in context,
+            node: node,
+            root: root
+        );
 
-            var empty = Reload(
-                context: in context,
-                node: node,
-                root: root
-            );
+        Assert.Equal(expected: ("applied", 1L, 1), actual: (bytecode.State, bytecode.Generation, bytecode.ChangedPipelines));
 
-            Assert.Equal(expected: ("failed", 0L), actual: (empty.State, empty.Generation));
-            Assert.Contains(actualString: empty.Error, expectedSubstring: "carries no kernel");
+        // A cull-args source beside it: the reload compiles it, and the beam it already installed is unchanged.
+        File.WriteAllText(
+            contents: CullArgsSource(body: "viewsArgsRW[0] = passGroup.extent.x;"),
+            path: cullArgs
+        );
 
-            // The changed beam alone: every other kernel keeps its bytecode.
-            File.WriteAllBytes(
-                bytes: SdfTestPipelines.Kernels(beam: 2)[SdfKernel.Beam].ToArray(),
-                path: Path.Combine(
-                    path1: passes,
-                    path2: $"{SdfKernelSet.StemOf(kernel: SdfKernel.Beam)}.comp.spv"
-                )
-            );
+        var compiled = Reload(
+            context: in context,
+            node: node,
+            root: root
+        );
 
-            var bytecode = Reload(
-                context: in context,
-                node: node,
-                root: root
-            );
+        Assert.Equal(expected: ("applied", 2L, 1), actual: (compiled.State, compiled.Generation, compiled.ChangedPipelines));
 
-            Assert.Equal(expected: ("applied", 1L, 1), actual: (bytecode.State, bytecode.Generation, bytecode.ChangedPipelines));
+        File.WriteAllText(
+            contents: CullArgsSource(body: "viewsArgsRW[0] = passGroup.extent.w;"),
+            path: cullArgs
+        );
 
-            // A cull-args source beside it: the reload compiles it, and the beam it already installed is unchanged.
-            File.WriteAllText(
-                contents: CullArgsSource(body: "viewsArgsRW[0] = passGroup.extent.x;"),
-                path: cullArgs
-            );
+        var broken = Reload(
+            context: in context,
+            node: node,
+            root: root
+        );
 
-            var compiled = Reload(
-                context: in context,
-                node: node,
-                root: root
-            );
-
-            Assert.Equal(expected: ("applied", 2L, 1), actual: (compiled.State, compiled.Generation, compiled.ChangedPipelines));
-
-            File.WriteAllText(
-                contents: CullArgsSource(body: "viewsArgsRW[0] = passGroup.extent.w;"),
-                path: cullArgs
-            );
-
-            var broken = Reload(
-                context: in context,
-                node: node,
-                root: root
-            );
-
-            Assert.Equal(expected: ("failed", 2L), actual: (broken.State, broken.Generation));
-            Assert.Contains(actualString: broken.Error, expectedSubstring: $"{Path.GetFileName(path: cullArgs)}:5:");
-            Assert.True(condition: node.Produce(context: in context));
-        } finally {
-            Directory.Delete(
-                path: root,
-                recursive: true
-            );
-        }
+        Assert.Equal(expected: ("failed", 2L), actual: (broken.State, broken.Generation));
+        Assert.Contains(actualString: broken.Error, expectedSubstring: $"{Path.GetFileName(path: cullArgs)}:5:");
+        Assert.True(condition: node.Produce(context: in context));
     }
 
     // A cull-args kernel that reads this host's world interface and runs one statement, on its fifth line.

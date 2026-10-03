@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Puck.Abstractions.Gpu;
 using Puck.Assets.Textures;
 using Puck.SignedDistance.Baking;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SignedDistance.Tests;
@@ -16,7 +17,7 @@ namespace Puck.SignedDistance.Tests;
 /// reads there. The probe is the level's texel with the largest channel sum, the first in scan order on a tie.
 /// <para>These laws hold the fixture to a fresh bake, byte for byte, and each probe to the decoder, so the fixture is a
 /// real bake of the current baker and its expectations are the oracle's. When the baker moves, the first law writes the
-/// regenerated fixture to the temporary directory and names it.</para>
+/// regenerated fixture into a run directory under the temporary directory, which a failing law keeps, and names it.</para>
 /// <para>The device half (<c>BakeSamplingDeviceLawTests</c> in <c>tests/Puck.World.Tests</c>) uploads each texture as an image of its format (<c>BC7_UNORM</c> sampled without sRGB decode,
 /// <c>BC5_UNORM</c>, <c>BC6H_UFLOAT</c>) with every level, samples each probe's texel center at its level through a
 /// point sampler (<c>SampleLevel</c>), and compares on both backends: BC7 within half a code of the expected code over
@@ -108,21 +109,21 @@ public sealed class BakeSamplingFixtureLawTests {
         }
 
         return new JsonObject {
-            ["bakerVersion"] = SdfBaker.Version,
             ["textures"] = textures,
         };
     }
 
     [Fact]
     public void TheFixtureIsAFreshBakeOfTheCurrentBaker() {
+        using var directory = new TemporaryDirectory(prefix: "puck-bake-sampling-");
         var fresh = Record(bake: Bake()).ToJsonString(options: new JsonSerializerOptions { WriteIndented = true });
         var recorded = File.ReadAllText(path: FixturePath).ReplaceLineEndings(replacementText: "\n").TrimEnd();
 
         if (recorded != fresh.ReplaceLineEndings(replacementText: "\n").TrimEnd()) {
-            var regenerated = Path.Combine(path1: Path.GetTempPath(), path2: "bake-sampling.json");
+            var regenerated = directory.PathOf(name: "bake-sampling.json");
 
             File.WriteAllText(contents: (fresh + "\n"), path: regenerated);
-            Assert.Fail(message: $"tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json is not a fresh bake at baker version {SdfBaker.Version}; the regenerated fixture is at {regenerated}.");
+            Assert.Fail(message: $"tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json is not a fresh bake; the regenerated fixture is at {regenerated}.");
         }
     }
     [Fact]

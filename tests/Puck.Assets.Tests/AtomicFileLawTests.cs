@@ -1,5 +1,6 @@
 using System.IO.MemoryMappedFiles;
 using System.Text;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Assets.Tests;
@@ -7,18 +8,15 @@ namespace Puck.Assets.Tests;
 // AtomicFile is the one temp-then-rename writer. A write either lands whole or leaves the directory as it found it:
 // the destination keeps its old bytes and no temporary file survives the failure.
 public sealed class AtomicFileLawTests : IDisposable {
-    private readonly DirectoryInfo m_directory = Directory.CreateTempSubdirectory(prefix: "puck-atomic-file-");
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-atomic-file-");
 
     private string PathOf(string name) =>
-        Path.Combine(
-            path1: m_directory.FullName,
-            path2: name
-        );
+        m_directory.PathOf(name: name);
     private string[] Entries() =>
-        [.. Directory.EnumerateFileSystemEntries(path: m_directory.FullName).Select(selector: static entry => Path.GetFileName(path: entry)).Order(comparer: StringComparer.Ordinal)];
+        [.. Directory.EnumerateFileSystemEntries(path: m_directory.RootPath).Select(selector: static entry => Path.GetFileName(path: entry)).Order(comparer: StringComparer.Ordinal)];
 
     public void Dispose() =>
-        m_directory.Delete(recursive: true);
+        m_directory.Dispose();
     [Fact]
     public void ReadAllBytesReadsAFileAnotherHandleHoldsWithDeleteAccess() {
         var path = PathOf(name: "published.bin");

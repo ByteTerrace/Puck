@@ -294,7 +294,7 @@ public sealed class FormatVersionsLedgerLawTests {
             recordedText: text
         ));
 
-        foreach (var id in new[] { "SdfBaker.Version", "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldFederationCodec.WireKey", "WorldProtocol.WireProtocolKey", "PeerWireProtocol.ProtocolKey", "WorldReplaySnapshot.ShapeToken", "LocalEndpointCapability.Revision", "RatchetLedger.Format" }) {
+        foreach (var id in new[] { "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldFederationCodec.WireKey", "WorldProtocol.WireProtocolKey", "PeerWireProtocol.ProtocolKey", "WorldReplaySnapshot.ShapeToken", "LocalEndpointCapability.Revision", "RatchetLedger.Format" }) {
             Assert.Contains(
                 collection: current,
                 filter: entry => (entry.Id == id)
@@ -820,5 +820,23 @@ public sealed class FormatVersionsLedgerLawTests {
         Assert.NotEqual(actual: doubled, expected: text);
         Assert.False(condition: FormatVersionsLedger.TryParse(entries: out _, error: out var refusal, json: doubled));
         Assert.Contains(actualString: refusal, comparisonType: StringComparison.OrdinalIgnoreCase, expectedSubstring: "open");
+    }
+    [InlineData("Wire.FormatVersion", true)]
+    [InlineData("Other.FormatVersion", false)]
+    [Theory]
+    public void ACodecDeclaredPartOfAFormatMovesItsShapeThoughNoCodeOfTheFormatCallsIt(string format, bool moves) {
+        var sources = Codec(
+            wire: "public static int Version() => 3;",
+            ("Payload.cs", $$"""
+                [FormatPart("{{format}}")]
+                public static class Payload {
+                    public static int Write(byte[] bytes) => (bytes.Length + 1);
+                }
+                """)
+        );
+        var shape = Format(sources: sources).Shape;
+        var edited = Format(sources: Edited(sources: sources, path: "Payload.cs", from: "+ 1", to: "+ 2")).Shape;
+
+        Assert.Equal(expected: moves, actual: (shape != edited));
     }
 }

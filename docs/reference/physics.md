@@ -184,6 +184,82 @@ that field through `Puck.Maths`'s `IFieldEvaluator` and `IWorldQuery`. That is
 why neither this library nor a distance-field library needs to reference the
 other.
 
+`FixedFieldContactSolver.ResolveSweep` proves a moving body's travel before it
+solves contact at the endpoint, so a body never passes through geometry,
+however fast it moves, however thin the geometry, and however close to it the
+step starts. It sweeps every core sphere of every collider volume through
+`Puck.Maths`'s `ICertifiedSweepQuery`, a certified conservative advancement:
+- a sphere or box sweeps its centre at half its least radius;
+- a capsule sweeps one core sphere per piece of its segment, one more piece
+  than the segment's length in radii, so the pieces cover the whole core. A
+  capsule sweeps at most `MaximumCapsuleSweepPieces` pieces, one per bounds
+  query a single core may spend at `DefaultSweepBoundsQueryBudget` (64), so its
+  sweep costs at most that budget squared. Collider validation refuses a kit
+  capsule whose core needs more, measured at the longest length any body
+  orientation rounds it to (`CapsuleCoreFitsSweep`), and any volume whose
+  radius or least half extent quantizes under `MinimumColliderRadiusRaws` (2
+  raws), whose half-raw core would round to a point (`VolumeCoreSweeps`);
+- the least fraction any core proves is the body's, and the body moves that far.
+  The fractions compare on the sweep's own 2⁻³² grid (`UnitInterval32`), since
+  a long step's cores can differ by less than 2⁻¹⁶ of it;
+- the endpoint solve then runs unchanged, so a body that would have crossed a
+  face stops on it and resolves against the face it reached.
+
+A step the sweep cannot run is refused before anything moves, by the same rule
+for a program's solids and a lattice's alike: a displacement, or a core
+sphere's start, that the Q48.16 carrier cannot hold, and a capsule core past its
+piece ceiling (which only a body's runtime scale reaches once validation has
+admitted it). The resolution names it in `ContactRefusal`, the body keeps the
+position it started the step from, its velocity comes back as it came, and no
+sweep or endpoint push runs; nothing is wrapped or clamped. In the World a
+refused sweep is a full block: the body does not move this tick. `WorldBody`
+captures everything the step writes before the step begins and restores it on a
+refusal, for a walking, rigid or carried body alike: its whole transfer state
+and integration residue (velocities, attitude, frame, rate accumulators, input
+tape, timers, action state, sleep, hold and tether) with its pose and contact
+facts, so a field added to either record is covered without a change. A
+walking body's refused step also withdraws the effects, designations and
+generator firings it emitted, so a tick the body did not take fires nothing.
+An arriving body keeps the pose and velocity it was installed with. A body
+refused this tick is immovable for the rest of it: a body pair resolves the
+other side against it as static (the other side takes the whole correction,
+and a rigid partner meets it with no velocity and no mass), a tether does not
+pull it, and no carrier is corrected through it. A carrier is corrected only by
+a proven contact: a sweep that held its body for want of proof (out of budget,
+or at a box its field could not bound) marks the resolution `Unproved`, and
+hands the carrier nothing either. The population narrates each transition once
+on the `body.sweep` channel, refused and recovered, and `body.where` reads
+`sweep=refused(...)` while the refusal holds.
+A body approaching the carrier's end is ordinarily held a step sooner by its
+sweep, whose box reaches the end before any core's start does and proves no
+ground there; the refusal is met by a body already past that point, posed or
+arriving there.
+
+Each sweep takes an explicit bounds-query budget
+(`DefaultSweepBoundsQueryBudget`, 64) and the contact skin as its contact
+tolerance, so a body pressed against a wall spends a handful of queries a tick.
+A sweep that runs out of budget, reaches a box the field cannot bound (one past
+its frame), or is refused outright keeps only the ground it proved: a body never
+moves through space no sweep proved clear. A solver built with no sweep, for a
+field with no geometry, resolves at the endpoint alone. `FixedContactSweepWork`
+counts the sweeps, their bounds queries, and how many ended in contact or
+exhausted, as the deterministic `physics.sweep` work source; the World registers
+its `Process` ledger, and a law hands its solver a ledger of its own.
+
+A step-sampling sweep has two tunnelling classes the certified sweep closes. A
+field that overstates its distance (a gradient above one) lets a sample-trusting
+step jump a surface. A body that starts within its radius of a thin wall and
+moves less than its radius is only resolved at its endpoint, already past the
+wall. A step long enough that its fraction rounds to the Q16 grid also jumps a
+thin wall between samples. `CertifiedContactSweepLawTests` holds each with a
+radius stepper as its red leg, along with the budget's prefix property, the
+frame, the capsule core and its piece ceiling, a compound body whose cores'
+fractions agree on the Q16 grid, the lattice's bounds out to the carrier's ends,
+and a lattice step refused at them with its state unchanged;
+`CapsuleSweepCeilingLawTests` holds the validation refusal; the
+`thin-wall-sweep` canary
+holds it in the running World.
+
 `FixedSurfaceQuery` is the nearest-surface-point primitive over the same
 collider vocabulary—the analytic anchor query climbing (surface attach) and
 grappling (tether anchor selection) both resolve against, distinct from
@@ -424,9 +500,19 @@ slab a bare inside test would refuse. `IsInsideMedium`/`IsSegmentInsideMedium`
 give navigation's medium domain the same free-surface reach as a point test,
 proven over a swept clearance box rather than sample points alone.
 
-`FieldLatticeSolid` (an `IFieldEvaluator`) turns a lattice's height columns
-into a contact field—exact within two cells of a column, a conservative
-lower bound beyond—and `UnionField` composes it with another field
+`FieldLatticeSolid` (an `IFieldEvaluator` and an `IFieldBounds`) turns a
+lattice's height columns into a contact field—exact within two cells of a
+column, a conservative lower bound beyond—and encloses its answers over a box
+by the nearest column within reach, so a certified sweep proves a body clear of
+it. Its column indices are taken in a wide type and clamped before they narrow
+to the lattice's own index, and the point query and its bounds read every
+column's box and gap in one exact wide arithmetic, so a coordinate anywhere in
+the carrier, its ends included, reads the columns it lies near and neither
+answer wraps where the other does not. A lattice whose cell puts the solid's
+two-cell reach past the carrier (`FieldLatticeSolid.CellFits`) is refused by
+world validation, and the solid's constructor throws for one that reaches it
+unvalidated.
+`UnionField` composes it with another field
 (a world's authored solids) by nearest distance, so a glacier or a filled pond
 is real geometry a body's contact resolve reaches through the ordinary field
 seam. `Checkpoint`/`Capture`/`Restore`/`AppendStateHash` and the delta stream

@@ -1,6 +1,6 @@
 ---
 name: review-passes
-description: Briefs, runs and closes cross-family review-and-fix passes in at most two rounds. Codex reviews Claude-written work; a Claude agent reviews Codex-written work, including Codex review fixes. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verification and red legs, fast-forward landing on the author's branch, round 2 over round 1's fix diff alone, and the lead's ruling on remaining findings. Use when briefing or launching a pass, receiving its result, or verifying and landing its fixes. Does not choose models, effort or concurrency. verification owns gates, red-leg proofs and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
+description: Briefs, runs and closes cross-family review-and-fix passes in at most two rounds. Codex reviews Claude-written work; a Claude agent reviews Codex-written work, including Codex review fixes. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verification and red legs, fast-forward landing on the author's branch, round 2 over round 1's fix diff alone, and the lead's ruling on remaining findings. Use when briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result (including a pass that changed nothing or raised a compatibility finding) or a claim it makes, verifying and landing its fixes, closing a round, or removing a review worktree. Does not choose models, effort or concurrency. verification owns gates, red-leg proofs and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
 ---
 
 # Review passes
@@ -38,17 +38,33 @@ stale and is corrected in the same change.
   Keep a detached worktree under the checkout's `.claude/worktrees/<name>`.
   Pause other edits and commits on the author's branch until the pass lands;
   preserve any existing dirty work and clear it before the fast-forward.
+- Never launch a `--write` pass into a tree a canary, counters or parity run
+  builds from: an edit mid-run changes the source state that run reuses. Wait
+  for the run to finish or give the pass a separate worktree.
 - For a code pass, restore and build that worktree first so `obj/` and `bin/`
   exist. The Codex sandbox has no network: fetch corpora and packages before
-  the run. A documentation-only pass needs no build unless XML comments change.
+  the run, and have the brief tell the pass to build with `--no-restore`, since
+  a restore inside the sandbox fails. A documentation-only pass needs no build unless XML comments change.
 - Launch a Codex pass as the companion's `task --write`. The subcommand takes
-  `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file` and `--background`.
+  `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file`, `--background`
+  and `--resume-last` (with `--resume` and `--fresh`).
   Set `--cwd` to the review worktree and use the model and effort the lead
   names. Pass the brief with `--prompt-file <path>`, never as command-line
   prompt text. `task` has no `--help`: `task --help` is sent to the model as a
   prompt. Launch a Claude pass as an agent working in that worktree. A pass
   cannot read this conversation, message a session or ask a question, so the
-  brief carries every string, decision and path it needs.
+  brief carries every string, decision and path it needs, and tells it to answer
+  its own questions from the code and the brief. A Codex pass that ends on a
+  question has done nothing: answer it in a prompt file and continue the same
+  thread with `task --resume-last`.
+- Preserve the launch's working-directory spelling for `status`, `result` and
+  `cancel`: the companion keys job state by that spelling. A Git Bash `/c/...`
+  launch is invisible to a PowerShell `C:/...` query, and the reverse.
+- Cancel from PowerShell with the launch's path form, or use
+  `MSYS_NO_PATHCONV=1` under Git Bash: MSYS path conversion turns taskkill's
+  `/PID` into a path and makes `cancel` fail. Then stop the companion's
+  app-server broker for that working directory before removing the worktree;
+  the broker can outlive the job and hold the worktree open.
 - Write the brief to a lane-named file (`<scratchpad>/rb/<lane>.md`) so the
   second review and the verifier can reuse it.
 - Name a scratch directory outside the tree in the brief for any CLI copy or
@@ -66,8 +82,12 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    tree; don't commit." For a detached tree, name its head and the author's
    working branch that will receive its commits.
 3. **Scope.** An exact range, `git diff <base> <head>`, with the base as a
-   commit when the integration branch may move. List each lane commit by
-   commit and subject and say "read each message". Name exclusions exactly: a
+   commit when the integration branch may move. Two dots compare the two tips
+   (`git diff A..B` is `git diff A B`), three dots start at their merge base,
+   and `git log A..B` lists what B has that A lacks; none of them says A is an
+   ancestor of B, so check that with `git merge-base --is-ancestor A B` before
+   calling the range the lane's own. List each lane commit by commit and
+   subject and say "read each message". Name exclusions exactly: a
    merge of already-reviewed work is reviewed only for its conflict
    resolutions, in the files you name.
 4. **Contract.** What the change claims, in the code's own names: the types,
@@ -126,7 +146,10 @@ no brief, so it raises compatibility findings and tries to run tests.
 
 1. **Read the result.** Check every finding against the current files. A
    finding is evidence, not a verdict. Dismiss a compatibility finding under
-   `AGENTS.md` rule 5 once nothing checked in uses the old shape.
+   `AGENTS.md` rule 5 once nothing checked in uses the old shape. A pass's
+   build, test and format claims count only when its own environment could
+   run them: a sandbox that could not reach the SDK proved nothing, so step 3
+   builds and proves every law outside it.
    Record the round and fix range before continuing. If the pass changes
    nothing, skip steps 2 to 5; report remaining blockers to the lead in step 6,
    or go to step 7 when it reports none. Never create an empty WIP.
@@ -171,10 +194,6 @@ no brief, so it raises compatibility findings and tries to run tests.
    under the lead's grant or report them as owed. Once the required gates
    pass, push the working branch, fast-forward only. Only the lead merges it
    into the integration branch the lead's brief names.
-
-A Codex companion job's app-server broker can outlive the job and hold its
-worktree open. Stop that job's broker process before removing the review
-worktree.
 
 ## Route adjacent work
 

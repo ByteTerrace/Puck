@@ -53,7 +53,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeHostRow(byte[] bytes, WorldPlayerDefaults defaults, out string reason, out WorldAuthorityHostRowCheckpoint section) {
+    private static bool TryDecodeHostRow(byte[] bytes, out string reason, out WorldAuthorityHostRowCheckpoint section) {
         var reader = new WireReader(bytes: bytes);
         var scheduleAccumulatorTicks = reader.ReadUInt64();
         var elapsedEngineTicks = reader.ReadUInt64();
@@ -79,7 +79,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         var inDoubtTransfers = reader.ReadArray(
             field: "host row in-doubt transfers",
             readItem: (ref WireReader r) => ReadInDoubtTransfer(
-                defaults: defaults,
                 reader: ref r
             ),
             maximum: MaxCollectionCount

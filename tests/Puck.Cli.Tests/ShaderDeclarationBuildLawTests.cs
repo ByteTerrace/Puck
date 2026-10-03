@@ -1,6 +1,7 @@
 using System.Xml.Linq;
 using Puck.SdfVm;
 using Puck.Shaders;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -30,43 +31,42 @@ public sealed class ShaderDeclarationBuildLawTests {
     }
 
     private static void WithProject(Action<string, string, ShaderDeclaration> action) {
-        var root = CliScratchDirectories.CreateProject(prefix: "puck-declaration-build-");
+        using var scratch = new TemporaryDirectory(prefix: "puck-declaration-build-");
+        var root = scratch.RootPath;
 
-        try {
-            var declarations = ShaderDeclarations.Of(files: ShaderDeclarations.InterfaceFiles(repositoryRoot: RepositoryPaths.RequireRoot()), packages: RenderGraphPackageCatalog.Engine, problems: []);
+        CliScratchDirectories.PinSdk(directory: root);
 
-            foreach (var declaration in declarations) {
-                var path = Path.Combine(path1: root, path2: declaration.Path);
+        var declarations = ShaderDeclarations.Of(files: ShaderDeclarations.InterfaceFiles(repositoryRoot: RepositoryPaths.RequireRoot()), packages: RenderGraphPackageCatalog.Engine, problems: []);
 
-                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
-                File.WriteAllText(path: path, contents: declaration.Generate());
-            }
+        foreach (var declaration in declarations) {
+            var path = Path.Combine(path1: root, path2: declaration.Path);
 
-            var directory = Path.Combine(path1: root, path2: "src/Puck.Shaders.Generator");
-            var intermediate = Directory.CreateDirectory(path: Path.Combine(path1: directory, path2: "obj"));
-            var stamp = Path.Combine(path1: intermediate.FullName, path2: "declarations.stamp");
-
-            File.WriteAllText(contents: string.Empty, path: stamp);
-            File.SetLastWriteTimeUtc(path: stamp, lastWriteTimeUtc: new DateTime(day: 1, hour: 0, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2099));
-
-            var configuration = new DirectoryInfo(path: AppContext.BaseDirectory).Parent!.Name;
-            var host = RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders.Generator/bin/{configuration}/net10.0/Puck.Shaders.Generator.dll");
-            var targets = XDocument.Load(uri: RepositoryPaths.Resolve(relativePath: "src/Puck.Shaders.Generator/Puck.Shaders.Generator.csproj")).Root!.Elements(name: "Target");
-            var project = new XElement(name: "Project", content: [
-                new XElement(name: "PropertyGroup", content: [
-                    new XElement(content: host, name: "TargetPath"),
-                    new XElement(name: "IntermediateOutputPath", content: (intermediate.FullName + "/")),
-                ]),
-                new XElement(name: "Target", content: new XAttribute(name: "Name", value: "Build")),
-                .. targets.Select(selector: static target => new XElement(other: target)),
-            ]);
-            var projectPath = Path.Combine(path1: directory, path2: "fixture.proj");
-
-            File.WriteAllText(path: projectPath, contents: project.ToString());
-            action(root, projectPath, declarations.Single(predicate: static declaration => declaration.Path.EndsWith(comparisonType: StringComparison.Ordinal, value: SdfIsaHlsl.FileName)));
-        } finally {
-            CliScratchDirectories.TryDelete(path: root);
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
+            File.WriteAllText(path: path, contents: declaration.Generate());
         }
+
+        var directory = Path.Combine(path1: root, path2: "src/Puck.Shaders.Generator");
+        var intermediate = Directory.CreateDirectory(path: Path.Combine(path1: directory, path2: "obj"));
+        var stamp = Path.Combine(path1: intermediate.FullName, path2: "declarations.stamp");
+
+        File.WriteAllText(contents: string.Empty, path: stamp);
+        File.SetLastWriteTimeUtc(path: stamp, lastWriteTimeUtc: new DateTime(day: 1, hour: 0, kind: DateTimeKind.Utc, minute: 0, month: 1, second: 0, year: 2099));
+
+        var configuration = new DirectoryInfo(path: AppContext.BaseDirectory).Parent!.Name;
+        var host = RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders.Generator/bin/{configuration}/net10.0/Puck.Shaders.Generator.dll");
+        var targets = XDocument.Load(uri: RepositoryPaths.Resolve(relativePath: "src/Puck.Shaders.Generator/Puck.Shaders.Generator.csproj")).Root!.Elements(name: "Target");
+        var project = new XElement(name: "Project", content: [
+            new XElement(name: "PropertyGroup", content: [
+                new XElement(content: host, name: "TargetPath"),
+                new XElement(name: "IntermediateOutputPath", content: (intermediate.FullName + "/")),
+            ]),
+            new XElement(name: "Target", content: new XAttribute(name: "Name", value: "Build")),
+            .. targets.Select(selector: static target => new XElement(other: target)),
+        ]);
+        var projectPath = Path.Combine(path1: directory, path2: "fixture.proj");
+
+        File.WriteAllText(path: projectPath, contents: project.ToString());
+        action(root, projectPath, declarations.Single(predicate: static declaration => declaration.Path.EndsWith(comparisonType: StringComparison.Ordinal, value: SdfIsaHlsl.FileName)));
     }
     private static CliProcessResult Run(string project, string target, bool continuousIntegration) => CliProcess.RunCaptured(
         arguments: ["msbuild", "--disable-build-servers", project, "-nologo", "-v:q", $"-t:{target}", $"-p:ContinuousIntegrationBuild={continuousIntegration}"],

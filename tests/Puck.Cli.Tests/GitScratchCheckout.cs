@@ -10,9 +10,36 @@ internal sealed class GitScratchCheckout : IDisposable {
     private readonly TemporaryDirectory m_directory = new(prefix: "puck-git-law-");
 
     /// <summary>Initializes a new instance of the <see cref="GitScratchCheckout"/> class: an empty repository on
-    /// branch <c>main</c>.</summary>
+    /// branch <c>main</c> that git never maintains on its own.</summary>
     public GitScratchCheckout() {
-        _ = Git("init", "--quiet", "--initial-branch=main");
+        _ = Directory.CreateDirectory(path: Root);
+        Initialize(repository: Root);
+    }
+
+    /// <summary>Makes <paramref name="repository"/> an empty git repository on branch <c>main</c> that git never
+    /// maintains on its own: the one way a law creates a scratch repository.</summary>
+    /// <param name="repository">The existing directory to initialize.</param>
+    public static void Initialize(string repository) {
+        // A commit otherwise starts `git maintenance run --auto --detach`, which on recent git prunes worktree
+        // registrations and repacks in the background: it changes what a law observes by git version and races the
+        // directory's teardown.
+        string[][] commands = [
+            ["init", "--quiet", "--initial-branch=main"],
+            ["config", "maintenance.auto", "false"],
+            ["config", "gc.auto", "0"],
+        ];
+
+        foreach (var arguments in commands) {
+            var result = CliGit.Run(
+                arguments: arguments,
+                repository: repository
+            );
+
+            Assert.True(
+                condition: (result.ExitCode == 0),
+                userMessage: $"git {string.Join(separator: ' ', values: arguments)} exited {result.ExitCode}: {result.Stderr}"
+            );
+        }
     }
 
     /// <summary>Gets the checkout's absolute root.</summary>

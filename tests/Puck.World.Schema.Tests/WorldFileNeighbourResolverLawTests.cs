@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;
@@ -10,13 +11,12 @@ namespace Puck.World.Schema.Tests;
 /// re-express what it authored against the base. A sibling's bare spelling is unchanged.
 /// </summary>
 public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
+    // Best-effort: a file still closing under the directory does not fail a law about locator spelling.
+    private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-neighbour-resolver-");
     private readonly string m_root;
 
     public WorldFileNeighbourResolverLawTests() {
-        m_root = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-neighbour-resolver-{Guid.NewGuid():N}"
-        );
+        m_root = m_directory.RootPath;
         Directory.CreateDirectory(path: Path.Combine(
             path1: m_root,
             path2: "shards"
@@ -162,13 +162,5 @@ public sealed class WorldFileNeighbourResolverLawTests : IDisposable {
             expected: "a"
         );
     }
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_root,
-                recursive: true
-            );
-        } catch (IOException) {
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
 }

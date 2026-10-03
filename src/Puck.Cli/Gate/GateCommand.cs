@@ -19,7 +19,7 @@ internal static class GateCommand {
             return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: running), why: "the gate rebuilds the checkout this CLI runs from; run it from a copy of the CLI outside the checkout.");
         }
 
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-gate-").FullName;
+        var directory = RunDirectory.CreatePath(prefix: "puck-gate-");
 
         return GateRun.Run(
             directory: directory,

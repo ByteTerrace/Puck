@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Cli.Automation;
 using Puck.Storage;
+using Puck.Testing;
 using Puck.World;
 using Puck.World.Server;
 using Xunit;
@@ -57,7 +58,7 @@ public sealed class WorldReleasePackagedHostTests {
 
         if (await CandidateWorldImage.TryResolveIdAsync(cancellationToken: token) is null) { Assert.Skip(reason: $"Build the candidate silo image as {CandidateWorldImage.Tag} to run this law."); return; }
         var image = CandidateWorldImage.Tag;
-        var temporary = Directory.CreateTempSubdirectory(prefix: "puck-packaged-host-");
+        using var temporary = new TemporaryDirectory(prefix: "puck-packaged-host-");
         var container = ("puck-packaged-host-" + Guid.NewGuid().ToString(format: "N"));
         var started = false;
 
@@ -69,7 +70,7 @@ public sealed class WorldReleasePackagedHostTests {
             var blobs = provider.GetRequiredService<IObjectBlobStore>();
             var owner = Guid.NewGuid();
             var remote = new DirectoryObjectStorageTarget(Path.Combine(
-                path1: temporary.FullName,
+                path1: temporary.RootPath,
                 path2: "archive"
             ));
             var archive = new WorldReleaseArchive(
@@ -100,7 +101,7 @@ public sealed class WorldReleasePackagedHostTests {
                     )]
             ));
             var package = Directory.CreateDirectory(path: Path.Combine(
-                path1: temporary.FullName,
+                path1: temporary.RootPath,
                 path2: "package"
             )).FullName;
 
@@ -132,7 +133,7 @@ public sealed class WorldReleasePackagedHostTests {
                 packageDirectory: package
             );
             var fixture = Path.Combine(
-                path1: temporary.FullName,
+                path1: temporary.RootPath,
                 path2: "fixture"
             );
 
@@ -301,7 +302,6 @@ public sealed class WorldReleasePackagedHostTests {
                     token: CancellationToken.None
                 );
             }
-            temporary.Delete(recursive: true);
         }
     }
 }

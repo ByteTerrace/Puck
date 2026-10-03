@@ -7,6 +7,7 @@ using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -900,54 +901,45 @@ public sealed class HoldLawTests {
         ), userMessage: decodeRefusal);
 
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: decoded!.Server.DefinitionJson);
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-hold-checkpoint-").FullName;
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-hold-checkpoint-");
 
         using var machines = new WorldMachineHost(engines: [], screens: definition.Screens);
 
-        try {
-            var (restoredServer, _) = WorldServer.FromCheckpoint(
-                checkpoint: decoded,
-                instanceIdentity: "hold-checkpoint",
-                machines: machines,
-                profiles: new WorldOwnedWorlds(
-                    directory: stateDirectory,
-                    machineId: Guid.NewGuid(),
-                    template: definition
-                )
-            );
-            var restored = restoredServer.Body(index: 0)!;
+        var (restoredServer, _) = WorldServer.FromCheckpoint(
+            checkpoint: decoded,
+            instanceIdentity: "hold-checkpoint",
+            machines: machines,
+            profiles: new WorldOwnedWorlds(
+                directory: stateDirectory.RootPath,
+                machineId: Guid.NewGuid(),
+                template: definition
+            )
+        );
+        var restored = restoredServer.Body(index: 0)!;
 
-            Assert.Equal(expected: "wall", actual: restored.HoldName);
-            Assert.Equal(expected: uninterrupted.HoldNormal, actual: restored.HoldNormal);
-            Assert.Equal(expected: uninterrupted.HoldAnchor, actual: restored.HoldAnchor);
-            Assert.Equal(expected: uninterrupted.HoldSpendRemaining, actual: restored.HoldSpendRemaining);
-            // The whole integrator continues from the restore, not merely the hold identity: the spend remainder and
-            // every accumulator ride the same residue.
+        Assert.Equal(expected: "wall", actual: restored.HoldName);
+        Assert.Equal(expected: uninterrupted.HoldNormal, actual: restored.HoldNormal);
+        Assert.Equal(expected: uninterrupted.HoldAnchor, actual: restored.HoldAnchor);
+        Assert.Equal(expected: uninterrupted.HoldSpendRemaining, actual: restored.HoldSpendRemaining);
+        // The whole integrator continues from the restore, not merely the hold identity: the spend remainder and
+        // every accumulator ride the same residue.
+        Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
+
+        var elapsed = 0UL;
+        var nextTick = fixture.Server.NextInputTick;
+
+        for (var step = 0; (step < 1); step++) {
+            uninterrupted.SubmitIntent(intent: Ascend());
+            restored.SubmitIntent(intent: Ascend());
+            elapsed = checked((elapsed + Fixtures.StepTicks));
+
+            var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicks, Tick: nextTick++);
+
+            fixture.Server.Step(context: in context);
+            restoredServer.Step(context: in context);
+
+            Assert.Equal(expected: WorldReplaySnapshot.HashState(population: fixture.Server.Population), actual: WorldReplaySnapshot.HashState(population: restoredServer.Population));
             Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
-
-            var elapsed = 0UL;
-            var nextTick = fixture.Server.NextInputTick;
-
-            for (var step = 0; (step < 1); step++) {
-                uninterrupted.SubmitIntent(intent: Ascend());
-                restored.SubmitIntent(intent: Ascend());
-                elapsed = checked((elapsed + Fixtures.StepTicks));
-
-                var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicks, Tick: nextTick++);
-
-                fixture.Server.Step(context: in context);
-                restoredServer.Step(context: in context);
-
-                Assert.Equal(expected: WorldReplaySnapshot.HashState(population: fixture.Server.Population), actual: WorldReplaySnapshot.HashState(population: restoredServer.Population));
-                Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
-            }
-        } finally {
-            if (Directory.Exists(path: stateDirectory)) {
-                Directory.Delete(
-                    path: stateDirectory,
-                    recursive: true
-                );
-            }
         }
     }
     [Fact]
@@ -1950,86 +1942,77 @@ public sealed class HoldLawTests {
         ), userMessage: decodeRefusal);
 
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: decoded!.Server.DefinitionJson);
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-lean-checkpoint-").FullName;
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-lean-checkpoint-");
 
         using var machines = new WorldMachineHost(engines: [], screens: definition.Screens);
 
-        try {
-            var (restoredServer, _) = WorldServer.FromCheckpoint(
-                checkpoint: decoded,
-                instanceIdentity: "lean-checkpoint",
-                machines: machines,
-                profiles: new WorldOwnedWorlds(
-                    directory: stateDirectory,
-                    machineId: Guid.NewGuid(),
-                    template: definition
-                )
-            );
-            var restored = restoredServer.Body(index: 0)!;
+        var (restoredServer, _) = WorldServer.FromCheckpoint(
+            checkpoint: decoded,
+            instanceIdentity: "lean-checkpoint",
+            machines: machines,
+            profiles: new WorldOwnedWorlds(
+                directory: stateDirectory.RootPath,
+                machineId: Guid.NewGuid(),
+                template: definition
+            )
+        );
+        var restored = restoredServer.Body(index: 0)!;
 
-            // The flag rides the residue, so the restored body is leaned before it takes a single step.
+        // The flag rides the residue, so the restored body is leaned before it takes a single step.
+        Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
+
+        // Let go on both and watch the axis come back: the live body turns over its own span, and the restored
+        // body must turn through the same arc rather than seating.
+        var elapsed = 0UL;
+        var nextTick = fixture.Server.NextInputTick;
+        var seated = 0;
+
+        for (var step = 0; (step < 12); step++) {
+            var release = Channel(
+                ordinal: ReleaseOrdinal,
+                value: FixedQ4816.One
+            );
+
+            uninterrupted.SubmitIntent(intent: release);
+            restored.SubmitIntent(intent: release);
+            elapsed = checked((elapsed + Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz)));
+
+            var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz), Tick: nextTick++);
+
+            fixture.Server.Step(context: in context);
+            restoredServer.Step(context: in context);
+
             Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
 
-            // Let go on both and watch the axis come back: the live body turns over its own span, and the restored
-            // body must turn through the same arc rather than seating.
-            var elapsed = 0UL;
-            var nextTick = fixture.Server.NextInputTick;
-            var seated = 0;
-
-            for (var step = 0; (step < 12); step++) {
-                var release = Channel(
-                    ordinal: ReleaseOrdinal,
-                    value: FixedQ4816.One
-                );
-
-                uninterrupted.SubmitIntent(intent: release);
-                restored.SubmitIntent(intent: release);
-                elapsed = checked((elapsed + Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz)));
-
-                var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicksAt(rateHz: Fixtures.RecordedTraceRateHz), Tick: nextTick++);
-
-                fixture.Server.Step(context: in context);
-                restoredServer.Step(context: in context);
-
-                Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
-
-                if (((double)Up(body: restored).Y) > 0.999) {
-                    seated++;
-                }
-            }
-
-            // The turn takes longer than the twelve ticks watched, which is what makes it a turn and not a seat.
-            Assert.Equal(actual: seated, expected: 0);
-            Assert.True(
-                condition: (((double)Up(body: restored).Y) < 0.999),
-                userMessage: $"the restored body must still be turning its axis back; it read {Up(body: restored)}"
-            );
-
-            // The control: a body in the same world that never leaned. Its drawn axis is seated to ambient, so it
-            // reads upright on the very first tick the same release is submitted.
-            using var never = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: 1f), Ground(), Air()]));
-            var flat = never.JoinSeat();
-
-            Hold(
-                body: flat,
-                fixture: never,
-                intent: default,
-                ticks: 1
-            );
-
-            Assert.Null(@object: ((flat.HoldName is "wall") ? "wall" : null));
-            Assert.True(
-                condition: (((double)Up(body: flat).Y) > 0.999),
-                userMessage: $"a body that never leaned is drawn upright at once; it read {Up(body: flat)}"
-            );
-        } finally {
-            if (Directory.Exists(path: stateDirectory)) {
-                Directory.Delete(
-                    path: stateDirectory,
-                    recursive: true
-                );
+            if (((double)Up(body: restored).Y) > 0.999) {
+                seated++;
             }
         }
+
+        // The turn takes longer than the twelve ticks watched, which is what makes it a turn and not a seat.
+        Assert.Equal(actual: seated, expected: 0);
+        Assert.True(
+            condition: (((double)Up(body: restored).Y) < 0.999),
+            userMessage: $"the restored body must still be turning its axis back; it read {Up(body: restored)}"
+        );
+
+        // The control: a body in the same world that never leaned. Its drawn axis is seated to ambient, so it
+        // reads upright on the very first tick the same release is submitted.
+        using var never = Fixtures.FreshServer(definition: BuildHoldDocument(holds: [Wall(upLean: 1f), Ground(), Air()]));
+        var flat = never.JoinSeat();
+
+        Hold(
+            body: flat,
+            fixture: never,
+            intent: default,
+            ticks: 1
+        );
+
+        Assert.Null(@object: ((flat.HoldName is "wall") ? "wall" : null));
+        Assert.True(
+            condition: (((double)Up(body: flat).Y) > 0.999),
+            userMessage: $"a body that never leaned is drawn upright at once; it read {Up(body: flat)}"
+        );
     }
 
     private static FixedVector3 Up(WorldBody body) => body.FixedOrientation.Rotate(vector: new FixedVector3(

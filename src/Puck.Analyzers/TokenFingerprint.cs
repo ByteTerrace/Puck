@@ -19,6 +19,7 @@ namespace Puck.Analyzers;
 /// entry naming something the walk cannot find.
 /// </param>
 internal sealed record TokenFingerprintResult(string? Hash, string? Refusal, string? DependencyId);
+
 /// <summary>
 /// Computes the <c>csharp-tokens-v1</c> fingerprint: a SHA-256 over every non-trivia token of a declaration's
 /// syntax, across all of its declaring syntax references, with the branding <c>[VerifiedCode(...)]</c> attribute's
@@ -48,7 +49,7 @@ internal sealed record TokenFingerprintResult(string? Hash, string? Refusal, str
 /// contributing nothing is the hole the list exists to close.
 /// </para>
 /// </remarks>
-internal static class TokenFingerprint {
+public static class TokenFingerprint {
     /// <summary>
     /// Opens the dependency section. <see cref="SyntaxKind"/> is a <see cref="ushort"/>-valued enum, so no token's
     /// raw kind can ever be negative and no token stream can be mistaken for the start of this section.
@@ -153,19 +154,9 @@ internal static class TokenFingerprint {
                 return DependencyWalk.Refused(reason: "its declaration contains a preprocessor directive, so its compiled tokens can depend on symbols this fingerprint does not read");
             }
 
-            var tokens = new List<SyntaxToken>();
-
-            foreach (var attributeList in fieldDeclaration.AttributeLists) {
-                tokens.AddRange(collection: attributeList.DescendantTokens(descendIntoTrivia: false));
-            }
-
-            tokens.AddRange(collection: fieldDeclaration.Modifiers);
-            tokens.AddRange(collection: variableDeclaration.Type.DescendantTokens(descendIntoTrivia: false));
-            tokens.AddRange(collection: declarator.DescendantTokens(descendIntoTrivia: false));
-
             return new DependencyWalk(
                 Refusal: null,
-                Tokens: tokens
+                Tokens: DeclarationTokens(declaration: declarator)
             );
         }
 
@@ -219,7 +210,7 @@ internal static class TokenFingerprint {
     /// <param name="dependencies">The documentation-comment ids the manifest entry declares this brand's proof rests on; empty when the entry declares none, or when no entry records this brand yet.</param>
     /// <param name="cancellationToken">Cancels the walk, which visits every token of every declaring reference.</param>
     /// <returns>The fingerprint, or a refusal when a declaration is a shape <c>csharp-tokens-v1</c> cannot handle.</returns>
-    public static TokenFingerprintResult Compute(ISymbol symbol, AttributeData brand, Compilation compilation, IReadOnlyList<string> dependencies, CancellationToken cancellationToken) {
+    internal static TokenFingerprintResult Compute(ISymbol symbol, AttributeData brand, Compilation compilation, IReadOnlyList<string> dependencies, CancellationToken cancellationToken) {
         // The brand is excluded by identity — the exact syntax Roslyn bound to this AttributeData — rather than by
         // matching the name it was spelled with. A name match cannot tell the brand from an unrelated attribute of
         // the same short name, and cannot recognize the brand through a using alias.
@@ -351,6 +342,81 @@ internal static class TokenFingerprint {
             Refusal: null,
             DependencyId: null
         );
+    }
+
+    private static bool IsTypePart(SyntaxNode? node) => node switch {
+        EnumMemberDeclarationSyntax => true,
+        BaseFieldDeclarationSyntax field => (!field.Modifiers.Any(kind: SyntaxKind.ConstKeyword) && field.Declaration.Variables.Any(predicate: variable => (variable.Initializer is not null))),
+        PropertyDeclarationSyntax { Initializer: not null } => true,
+        MemberDeclarationSyntax => false,
+        _ => true,
+    };
+
+    /// <summary>Returns a declaration's own syntax. Type syntax retains ordered initializers and enum members,
+    /// whose execution or implicit values depend on source order, but excludes other member bodies.</summary>
+    /// <param name="declaration">A resolved source declaration.</param>
+    /// <returns>The syntax roots whose tokens and bindings belong to the declaration.</returns>
+    public static IEnumerable<SyntaxNode> DeclarationParts(SyntaxNode declaration) {
+        if (declaration is BaseTypeDeclarationSyntax type) {
+            return type.ChildNodes().Where(predicate: IsTypePart);
+        }
+        if (declaration is VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax { Parent: BaseFieldDeclarationSyntax field } variable }) {
+            return field.AttributeLists.Cast<SyntaxNode>().Concat(second: new SyntaxNode[] { variable.Type, declaration });
+        }
+        return new[] { declaration };
+    }
+
+    private static SyntaxToken[] DeclarationTokens(SyntaxNode declaration) {
+        if (declaration is BaseTypeDeclarationSyntax type) {
+            return type.ChildNodesAndTokens()
+                .Where(predicate: child => IsTypePart(node: child.AsNode()))
+                .SelectMany(selector: child => (child.IsToken ? new[] { child.AsToken() } : child.AsNode()!.DescendantTokens(descendIntoTrivia: false)))
+                .ToArray();
+        }
+        if (declaration is VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax { Parent: BaseFieldDeclarationSyntax field } variable }) {
+            return field.AttributeLists.SelectMany(selector: list => list.DescendantTokens(descendIntoTrivia: false))
+                .Concat(second: field.Modifiers)
+                .Concat(second: variable.Type.DescendantTokens(descendIntoTrivia: false))
+                .Concat(second: declaration.DescendantTokens(descendIntoTrivia: false)).ToArray();
+        }
+        return declaration.DescendantTokens(descendIntoTrivia: false).ToArray();
+    }
+
+    /// <summary>Hashes a source reach with the csharp-tokens-v1 token framing. Declaration identities and partial
+    /// fragments are ordered ordinally, independent of source paths, declaration order and traversal order.</summary>
+    /// <param name="declarations">Assembly-qualified declaration ids and all their source declarations.</param>
+    /// <param name="bindings">Ordered semantic identities for each fragment, paired with its tokens before canonical sorting.</param>
+    /// <param name="cancellationToken">Cancels token enumeration.</param>
+    /// <returns>The lowercase SHA-256 fingerprint.</returns>
+    public static string ComputeDeclarations(IEnumerable<KeyValuePair<string, IReadOnlyList<SyntaxNode>>> declarations, IReadOnlyDictionary<SyntaxNode, IReadOnlyList<string>> bindings, CancellationToken cancellationToken = default) {
+        using var sha256 = SHA256.Create();
+        using var stream = new CryptoStream(mode: CryptoStreamMode.Write, stream: Stream.Null, transform: sha256);
+        var ordered = declarations.OrderBy(keySelector: pair => pair.Key, comparer: StringComparer.Ordinal).ToArray();
+
+        WriteInt32(stream: stream, value: DependencySectionMarker);
+        WriteInt32(stream: stream, value: ordered.Length);
+        foreach (var declaration in ordered) {
+            WriteUtf8(stream: stream, text: declaration.Key);
+            var fragments = declaration.Value.Select(selector: node => {
+                using var bytes = new MemoryStream();
+                var tokens = DeclarationTokens(declaration: node);
+
+                WriteInt32(stream: bytes, value: tokens.Length);
+                AppendTokens(cancellationToken: cancellationToken, excludedSpan: null, stream: bytes, tokens: tokens);
+                var identities = bindings[node];
+
+                WriteInt32(stream: bytes, value: identities.Count);
+                foreach (var identity in identities) { WriteUtf8(stream: bytes, text: identity); }
+                return bytes.ToArray();
+            }).OrderBy(keySelector: bytes => Convert.ToBase64String(inArray: bytes), comparer: StringComparer.Ordinal).ToArray();
+
+            WriteInt32(stream: stream, value: fragments.Length);
+            foreach (var fragment in fragments) {
+                stream.Write(buffer: fragment, offset: 0, count: fragment.Length);
+            }
+        }
+        stream.FlushFinalBlock();
+        return string.Concat(values: sha256.Hash!.Select(selector: value => value.ToString(format: "x2")));
     }
 
     /// <summary>The tokens one declared dependency contributes, or why it contributes none.</summary>

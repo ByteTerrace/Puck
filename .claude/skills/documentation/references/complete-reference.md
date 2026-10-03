@@ -11,6 +11,7 @@ Read the relevant section when `SKILL.md` routes here.
 - [Agent-facing material](#5-agent-facing-material)
 - [Mechanics](#6-mechanics)
 - [Verification](#7-verifying-a-documentation-change)
+- [Evaluating a skill](#8-evaluating-a-skill)
 
 Factual and procedural only: which surface you are on, which register that
 surface takes, who owns each fact, and how to prove a documentation change is
@@ -452,3 +453,88 @@ document under `docs/` that names the skill.
    documentation — required for a changed `cref`, and the only check that the
    structural diagnostics in §4 still pass. A pure Markdown edit does not owe a
    build.
+
+---
+
+## 8. Evaluating a skill
+
+An agent runs this procedure by hand with `claude plugin eval`; no `puck` verb
+wraps it. Work in the skill's own `evals/` directory, one directory per case.
+
+**A case** is `prompt.md` (frontmatter `max_turns` and `allowed_tools`, then a
+realistic task written as a question) beside `graders/*.md`. A grader's
+frontmatter names its `type`: `regex` (`match`, `flags`, the pattern as body),
+`llm` (the criterion as body) or `tool_used` (`tool: Skill`, which also shows
+whether the skill fired at all). Write every criterion from the grade side, as a
+statement about what the reply contains ("The response states …"), one fact per
+grader. Phrase a step as what the answer says or lists ("The response says the lead checks …"): a criterion that asks the answer to have performed an action fails a correct answer that describes it, under every judge tried. A criterion phrased as a pass/fail instruction ("Pass only when … fail
+if …") fails correct answers.
+
+**Decide what a token can decide.** Use a `regex` grader (with `match:
+not_contains` for "does not name X"), `tool_used` or `tool_order` for anything a
+token or a tool call settles: a command, flag or verb named in the answer, a
+file read, an order of calls. Keep `llm` graders for judgement, such as whether
+a reason is right or a step is skipped.
+
+**Split before running.** `split.json` records a random 32-bit seed and the
+rule: a case is `train` when the first byte of `sha256("<seed>:<case name>")` is
+below 154, else `test`. Adding a case never moves another. Redraw the seed only
+on case counts, before any case has run, and record that. Until the test split
+holds about 10 cases, assign each new case to test by hand and record it; after
+that, by the rule.
+
+**Calibrate the judge.** `calibration/samples.json` holds fixed answers labelled
+good, bad or borderline, with the expected verdict of each LLM grader. Replay
+them through the real graders as echo cases, twice, and read the run-to-run
+agreement and the accuracy against the labels. Calibration on short answers is
+not enough: a cheaper judge can fail correct long answers, so score a sample of
+real runs under a stronger judge (`--judge-model`) whenever the case set
+changes materially, and treat a gap as a grader fault.
+
+**Never score an invalid run.** A reply that starts with "API Error" is not an
+answer. Re-run it, and report the number re-run.
+
+**Judge with sonnet for any result you act on.** Use `--judge-model sonnet`
+for every run whose score decides a change or goes in a report; use haiku only
+for smoke checks, such as whether a case parses and a grader can pass. A cheaper
+judge fails correct long answers that a stronger judge passes, and the
+calibration set cannot show it.
+
+**Measure the noise floor before changing anything.** Run the unchanged skill
+at least three times, each with at least five runs per case, over the same case
+set and judge. For each split, take the spread of its mean score (highest minus
+lowest) across those repeats: that spread is the noise floor of that split. A
+change smaller than the floor is not a result. Measure again after the case set
+or a grader changes, since either moves the floor.
+
+**Hill-climb one change at a time.**
+
+1. Take the failures of the train cases only, and name each one's cause: the
+   skill lacks the rule, the grader asks for more than the task raises, or the
+   judge misreads a correct answer.
+2. Change the skill by one rule, stated generally; never paste a failing
+   case's content into it. A rule that names one case's situation, or only makes
+   sense for one prompt, is that case's answer key: generalise it into a
+   practice or drop it, and audit every kept rule for this before reporting. A grader or task at fault is fixed in the case, not
+   worked around in the skill.
+3. Evaluate train and test. Keep a step only when both splits improve by more
+   than their noise floors. A train-only gain is not evidence of generalisation:
+   revert the step, or generalise the rule and measure again.
+4. Revert a step that fails the keep rule.
+5. Read `git diff` before every measurement: an edit that did not apply makes
+   the run a repeat of the old skill, which is also how to see that one case
+   alone can swing by 0.2 between identical runs.
+
+**Never aim a step at a test case.** The test split is held out: a step written
+to lift a test case spends it. When a test case exposes a gap worth closing, move
+that case to train by hand, record the move, and add a fresh harder case to test.
+
+**A small test split gives weak evidence.** With fewer than about 10 test cases
+and a swing of 0.2 on a single case between identical runs, a split mean moves
+by chance more than a rule moves it. Send each new case to the test split first
+until it holds about 10, and read a gain on a small split as a hint, not a
+result.
+
+At a plateau, write the root cause of each remaining failure as skill, grader
+or task, and stop.
+

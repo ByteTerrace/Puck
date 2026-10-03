@@ -85,17 +85,19 @@ public sealed record WorldCaptureManifest(string Schema, string Backend, string 
 /// state the entry's state hash describes. A frame that served the capture after a later tick had completed is
 /// refused as <see cref="WorldCaptureRefusal.Stale"/>, naming the armed tick and the tick shown.
 /// <para>
-/// A host that holds its clock (the offscreen host) goes further: <see cref="HoldsClock"/> withholds every step while
+/// A host that holds its clock (both rendered hosts, windowed and offscreen) goes further: <see cref="HoldsClock"/> withholds every step while
 /// a capture armed at the last published tick is neither served nor refused, whatever keeps the render chain from
 /// serving it, so no tick past the armed one runs before the capture is decided. The capture hold counts from
 /// readiness: host time held while the engine is not ready (<see cref="IWorldEngineReadiness"/>: its pipeline set not
 /// yet installed, or no frame produced from it) is spent from <see cref="BuildHoldBudgetSeconds"/>, and only time held
 /// while it is ready from <see cref="HoldBudgetSeconds"/>. Past either budget the capture is refused by name, naming
-/// the build when the build spent it, and the run steps on. <see cref="Drain"/> decides whatever is still
-/// owed a frame as the run ends, before the render chain is disposed. The scheduler counts what it sees
-/// under <see cref="WorkSourceName"/>: <see cref="TicksWhileArmed"/>, the ticks published while a capture armed at an
-/// earlier tick was still unserved, which a holding host keeps at zero, and <see cref="HeldTicks"/>, the host time
-/// withheld.
+/// the build when the build spent it, and the run steps on. A capture a script arms on the render chain
+/// (<c>world.screenshot</c>, <see cref="ArmUnscheduled"/>) is held for the same way, from the same budgets, at the tick
+/// it was armed after, so a script's tick-counted wait after it has the capture's frame behind it. <see cref="Drain"/>
+/// decides whatever is still owed a frame as the run ends, before the render chain is disposed. The scheduler counts
+/// what it sees under <see cref="WorkSourceName"/>: <see cref="TicksWhileArmed"/>, the ticks published while a
+/// scheduled capture armed at an earlier tick was still unserved, which a holding host keeps at zero, and
+/// <see cref="HeldTicks"/>, the host time withheld.
 /// </para>
 /// <para>
 /// A capture of a source instance (a row naming a screen, or an instance that is an uploaded source) whose source states
@@ -117,6 +119,8 @@ public sealed record WorldCaptureManifest(string Schema, string Backend, string 
 /// </remarks>
 public sealed class WorldCaptureScheduler {
     private readonly record struct Pending(CellName Station, ulong Tick, string Path, string FrameName, FrameCaptureRequest Request, ulong StateHash, IReadOnlyList<WorldCapturePaletteEntry> Palette, string? Instance, IImageSourceReference? Reference);
+    // A capture armed outside the schedule, and the last published tick when it was armed, whose frame serves it.
+    private readonly record struct Unscheduled(FrameCaptureRequest Request, ulong? Tick);
 
     private static readonly JsonSerializerOptions ManifestSerializerOptions = new() {
         Converters = { new JsonStringEnumConverter(namingPolicy: JsonNamingPolicy.CamelCase) },
@@ -151,6 +155,7 @@ public sealed class WorldCaptureScheduler {
     private ulong m_heldTicks;
     private ulong? m_lastPublishedTick;
     private Pending? m_pending;
+    private Unscheduled? m_unscheduled;
 
     /// <summary>Initializes a new instance of the <see cref="WorldCaptureScheduler"/> class over the server's
     /// authored <c>captures</c> rows.</summary>
@@ -203,22 +208,54 @@ public sealed class WorldCaptureScheduler {
         }
     }
 
-    /// <summary>Gets whether a capture armed at the last published tick still waits for the frame that shows it.
-    /// The fixed-step host composes a frame before its next step while this holds.</summary>
-    public bool AwaitsFrame => (
+    /// <summary>Gets whether a capture armed at the last published tick, scheduled or armed outside the schedule
+    /// (<see cref="ArmUnscheduled"/>), still waits for the frame that shows it. The fixed-step host composes a frame
+    /// before its next step while this holds.</summary>
+    public bool AwaitsFrame => (ScheduledAwaitsFrame || UnscheduledAwaitsFrame);
+
+    private bool ScheduledAwaitsFrame => (
         (m_pending is { } pending) &&
         (m_lastPublishedTick == pending.Tick) &&
         !pending.Request.Completion.IsCompleted
     );
+    private bool UnscheduledAwaitsFrame => (
+        (m_unscheduled is { } unscheduled) &&
+        (m_lastPublishedTick == unscheduled.Tick) &&
+        !unscheduled.Request.Completion.IsCompleted
+    );
+
     /// <summary>Gets every capture outcome recorded so far, in the order each was decided.</summary>
     public IReadOnlyList<WorldCaptureManifestEntry> Entries => m_landed;
+
+    /// <summary>Arms a capture requested outside the schedule (<c>world.screenshot</c>) on the render chain's target, for
+    /// the frame of the last published tick. The host holds for it as for a scheduled capture (<see cref="AwaitsFrame"/>,
+    /// <see cref="HoldsClock"/>, from the same budgets), and <see cref="Drain"/> refuses it by name when the run ends
+    /// before a frame serves it. It writes no manifest entry: its outcome is its request's own, a refusal an
+    /// <see cref="OperationCanceledException"/> naming why no frame served it.</summary>
+    /// <param name="request">The unserved request.</param>
+    /// <param name="target">The render chain's capture target.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> or <paramref name="target"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The target already holds a capture, or the request is
+    /// terminal.</exception>
+    public void ArmUnscheduled(FrameCaptureRequest request, ICaptureRequestTarget target) {
+        ArgumentNullException.ThrowIfNull(argument: request);
+        ArgumentNullException.ThrowIfNull(argument: target);
+
+        target.RequestCapture(request: request);
+        m_unscheduled = new Unscheduled(
+            Request: request,
+            Tick: m_lastPublishedTick
+        );
+    }
 
     /// <summary>Gets the kind counting the host time a holding host withheld steps for while a capture was owed, in
     /// engine ticks: <c>world.captures.held</c>. Paced by the wall clock, so two runs may differ.</summary>
     public static WorkKind HeldTicks { get; } = new(name: "world.captures.held", unit: "engine-ticks", workClass: WorkClass.Pacing);
-    /// <summary>Gets the kind counting ticks published while a capture armed at an earlier tick was still neither
-    /// served nor refused: <c>world.captures.ticks-while-armed</c>. A holding host keeps it at zero; a host paced to a
-    /// display steps on and counts whatever its frames were late for.</summary>
+    /// <summary>Gets the kind counting ticks published while a scheduled capture armed at an earlier tick was still
+    /// neither served nor refused: <c>world.captures.ticks-while-armed</c>. A host that holds its clock, as both rendered
+    /// hosts do, keeps it at zero; a pump that does not hold steps on and counts whatever its frames were late
+    /// for.</summary>
     public static WorkKind TicksWhileArmed { get; } = new(name: "world.captures.ticks-while-armed", unit: "count", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the scheduler's counters, under <see cref="WorkSourceName"/>.</summary>
@@ -245,25 +282,24 @@ public sealed class WorldCaptureScheduler {
     /// <see cref="BuildHoldBudgetSeconds"/>, and time withheld while it is ready from <see cref="HoldBudgetSeconds"/>, each
     /// summed over the run. Once the budget the current hold draws on is spent, the capture is refused as
     /// <see cref="WorldCaptureRefusal.Unserved"/>, naming the engine's pipeline build when it was the build that held
-    /// it, and withdrawn from the chain, so the host steps on and a later capture can arm. A capture that cannot be
-    /// served after its budget is spent is refused the same way at once.</summary>
+    /// it, and withdrawn from the chain, so the host steps on and a later capture can arm; a capture armed outside the
+    /// schedule is refused through its request, with the same detail. A capture that cannot be served after its budget
+    /// is spent is refused the same way at once.</summary>
     /// <param name="withheldTicks">The host time withheld when the answer is <see langword="true"/>, counted under
     /// <see cref="HeldTicks"/>.</param>
     /// <returns><see langword="true"/> to withhold the step.</returns>
     public bool HoldsClock(ulong withheldTicks) {
-        if (
-            !AwaitsFrame ||
-            (m_pending is not { } pending)
-        ) {
+        if (!AwaitsFrame) {
             return false;
         }
 
+        var tick = (ScheduledAwaitsFrame
+            ? m_pending!.Value.Tick
+            : m_unscheduled!.Value.Tick);
+
         if (m_readiness is { IsReady: false } readiness) {
             if (m_buildHeldTicks >= BuildHoldBudgetTicks) {
-                Withdraw(
-                    detail: $"{(readiness.NotReadyReason ?? "the engine was not ready")} (the host held its clock at tick {pending.Tick} while the engine's pipeline set built, until its {BuildHoldBudgetSeconds}-second pipeline-build hold budget was spent)",
-                    pending: pending
-                );
+                WithdrawAwaited(detail: $"{(readiness.NotReadyReason ?? "the engine was not ready")} (the host held its clock at tick {TickText(tick: tick)} while the engine's pipeline set built, until its {BuildHoldBudgetSeconds}-second pipeline-build hold budget was spent)");
 
                 return false;
             }
@@ -275,10 +311,7 @@ public sealed class WorldCaptureScheduler {
             );
         } else {
             if (m_heldTicks >= HoldBudgetTicks) {
-                Withdraw(
-                    detail: $"no frame served it (the host held its clock at tick {pending.Tick} until its {HoldBudgetSeconds}-second capture hold budget was spent)",
-                    pending: pending
-                );
+                WithdrawAwaited(detail: $"no frame served it (the host held its clock at tick {TickText(tick: tick)} until its {HoldBudgetSeconds}-second capture hold budget was spent)");
 
                 return false;
             }
@@ -301,6 +334,28 @@ public sealed class WorldCaptureScheduler {
         return true;
     }
 
+    // Spells a tick a capture was armed at; a capture armed before the first published tick names none.
+    private static string TickText(ulong? tick) => (tick?.ToString(provider: CultureInfo.InvariantCulture) ?? "none");
+    // Withdraws the capture the host holds for once its budget is spent: the scheduled one, which the manifest records as
+    // Unserved, or the one armed outside the schedule, whose request carries the refusal.
+    private void WithdrawAwaited(string detail) {
+        if (ScheduledAwaitsFrame) {
+            Withdraw(
+                detail: detail,
+                pending: m_pending!.Value
+            );
+        } else {
+            WithdrawUnscheduled(detail: detail);
+        }
+    }
+    // Refuses the capture armed outside the schedule and withdraws its request from the render chain, which then drops
+    // it, so no later frame writes it and the disposal of the node holding it refuses nothing.
+    private void WithdrawUnscheduled(string detail) {
+        if (m_unscheduled is { } unscheduled) {
+            m_unscheduled = null;
+            _ = unscheduled.Request.TryFail(error: new OperationCanceledException(message: detail));
+        }
+    }
     // Adds withheld host time to a hold budget's spent time, saturating at the budget.
     private static ulong Spend(ulong budget, ulong held, ulong withheld) =>
         (((budget - held) > withheld)
@@ -960,8 +1015,18 @@ public sealed class WorldCaptureScheduler {
     /// <summary>Settles the outstanding capture as the run ends: after the host's last produced frame, and before it
     /// disposes the render chain, so the capture is decided while the chain that would have served it is alive. A
     /// served request is recorded exactly as a later step boundary would record it; an unserved one is refused as
-    /// <see cref="WorldCaptureRefusal.Unserved"/> and withdrawn, since no frame will ever serve it.</summary>
+    /// <see cref="WorldCaptureRefusal.Unserved"/> and withdrawn, since no frame will ever serve it. An unserved capture
+    /// armed outside the schedule is refused through its request and withdrawn the same way, so the disposal of the node
+    /// holding it refuses nothing.</summary>
     public void Drain() {
+        if (m_unscheduled is { } unscheduled) {
+            if (unscheduled.Request.Completion.IsCompleted) {
+                m_unscheduled = null;
+            } else {
+                WithdrawUnscheduled(detail: $"the run ended before any frame served it (armed after tick {TickText(tick: unscheduled.Tick)}, last completed tick {TickText(tick: m_lastPublishedTick)}){NotReadyText()}");
+            }
+        }
+
         if (m_pending is not { } pending) {
             return;
         }
@@ -973,16 +1038,26 @@ public sealed class WorldCaptureScheduler {
         }
 
         Withdraw(
-            detail: $"the run ended before any frame served it (last completed tick {(m_lastPublishedTick?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}){((m_readiness is { IsReady: false } readiness) ? $"; {readiness.NotReadyReason}" : "")}",
+            detail: $"the run ended before any frame served it (last completed tick {TickText(tick: m_lastPublishedTick)}){NotReadyText()}",
             pending: pending
         );
     }
+
+    // The engine's not-ready reason a refusal at the run's end appends, or nothing while it is ready.
+    private string NotReadyText() => ((m_readiness is { IsReady: false } readiness)
+        ? $"; {readiness.NotReadyReason}"
+        : "");
+
     /// <summary>The authority tick-complete hook: settles the outstanding capture against the frames composed since
     /// the previous tick, then arms every row scheduled at <paramref name="tick"/>. A tick published twice (a rewound
     /// authority timeline) arms nothing the second time.</summary>
     /// <param name="tick">The just-completed simulation tick.</param>
     public void PublishTick(ulong tick) {
         Settle();
+
+        if (m_unscheduled is { Request.Completion.IsCompleted: true }) {
+            m_unscheduled = null;
+        }
 
         // Still armed after settling: this tick was stepped while an earlier tick's capture was owed its frame.
         if (m_pending is not null) {

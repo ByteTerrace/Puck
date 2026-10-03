@@ -38,12 +38,13 @@ public sealed partial class SdfWorldTables {
         _ = m_skyStopRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyStopRecords.AsSpan()), offset: 0);
         _ = m_softboxRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_softboxRecords.AsSpan()), offset: 0);
     }
-    // Writes the four regions' buffers in a ring slot into a World set.
+    // Writes the four regions' buffers in a ring slot, and the sky's environment map every slot shares, into a World set.
     private void WriteLightAndSkySet(nint set, int slot) {
         WriteWorldBuffer(buffer: m_lightRegion.Buffer(slot: slot), member: SdfKernelInterfaces.Lights, set: set);
         WriteWorldBuffer(buffer: m_skyRegion.Buffer(slot: slot), member: SdfKernelInterfaces.Sky, set: set);
         WriteWorldBuffer(buffer: m_skyStopRegion.Buffer(slot: slot), member: SdfKernelInterfaces.SkyStops, set: set);
         WriteWorldBuffer(buffer: m_softboxRegion.Buffer(slot: slot), member: SdfKernelInterfaces.Softboxes, set: set);
+        WriteWorldBuffer(buffer: m_skyEnvironment.Map, member: SdfKernelInterfaces.SkyEnvironment, set: set);
     }
     // The bytes of a whole table of records.
     private static int RecordBytes<T>(T[] records) where T : unmanaged =>

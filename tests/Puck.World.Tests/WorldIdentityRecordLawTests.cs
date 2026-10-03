@@ -56,7 +56,7 @@ public sealed class WorldIdentityRecordLawTests {
         var request = new WorldTransferReservationRequest(TransferId: 1, SourceAuthority: "source", SourceRateHz: 240,
             SourceTick: 0, DeadlineSourceTick: 60, Border: "east", BorderCapacity: null,
             PartyAllOrNothing: true, PeerAdmission: true, Members: [new WorldTransferReservationMember(
-                Principal: Principal.Console, PreferredSlot: 0, Identity: identity, Source: default,
+                Principal: Principal.Console, PreferredSlot: 0, Identity: identity.Project(), Source: default,
                 BodyColor: Vector3.One, CatalogRig: 0,
                 Mobility: new WorldMobilityIdentity(DepartedFrom: address, Epoch: 0, Incarnation: address)
             )]);
@@ -64,9 +64,9 @@ public sealed class WorldIdentityRecordLawTests {
 
         Assert.DoesNotContain("private-secret-row", Encoding.UTF8.GetString(bytes: bytes));
         Assert.DoesNotContain("private-payload", Encoding.UTF8.GetString(bytes: bytes));
-        Assert.True(condition: WorldFederationCodec.TryDecodeReservation(body: bytes, defaults: Fixtures.BuildDocument().PlayerDefaults,
-            request: out var decoded, failure: out var failure), userMessage: failure.ToString());
-        var arrived = decoded!.Members[0].Identity!;
+        Assert.True(condition: WorldFederationCodec.TryDecodeReservation(body: bytes,
+            failure: out var failure, request: out var decoded), userMessage: failure.ToString());
+        var arrived = WorldIdentity.FromProjection(defaults: Fixtures.BuildDocument().PlayerDefaults, projection: decoded!.Members[0].Identity!.Value);
 
         Assert.Null(@object: arrived.Document);
         Assert.True(condition: arrived.TryReadRecord(Name(value: "stats"), Name(value: "badge"), out var badge));

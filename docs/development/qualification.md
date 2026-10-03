@@ -25,7 +25,7 @@ another profile, and `--output` says where the report goes.
 
 A run first checks that the package's entry assembly exists and is in the
 profile's publish mode, then installs a clean copy of the package in the run's
-scratch directory and qualifies that copy. It runs in two halves:
+run directory and qualifies that copy. It runs in two halves:
 
 1. **The functional canaries** the profile names, run on the copy's World
    through `puck canary --world-artifact`. These are every `pipeline-*`
@@ -39,10 +39,13 @@ scratch directory and qualifies that copy. It runs in two halves:
    offscreen presentation and the cell's extent.
 
 Each cell's script, transcripts, state root and captures stay in the run's
-scratch directory beside the report, a `puck.qualification.report.v1`
+run directory beside the report, a `puck.qualification.report.v1`
 document. The report records the package, the profile, and for each cell the
 backend, extent, workload lengths, device and driver, memory profile, peak
 pipeline bytes against the threshold, validation-message count, and verdict.
+A run that passes with `--output` deletes the run directory; any other run
+keeps it and prints `run directory kept: <path>`, so the report and its
+evidence survive (see [the CLI conventions](../reference/cli.md#conventions)).
 
 ## The release profile
 
@@ -83,11 +86,14 @@ is valid. Both layers also judge teardown. The Vulkan validation layer reports
 every object still alive when the device is destroyed. On Direct3D 12, the
 device context releases its own objects, asks the debug layer for every
 object the device still holds, and prints each as a `[d3d12-debug] live`
-line, which fails the cell like any other debug message. A Direct3D 12 device
-created with the layer prints `[d3d12] debug layer live` on standard error, or
-`[d3d12] debug layer requested but not loaded` when it has no info queue, so a
-run with no `[d3d12-debug]` message can be told from one the layer never
-watched. The Direct3D 12 recorder corrects a stated old layout from its tracked
+line, which fails the cell like any other debug message. A device created with
+the layer says whether it is live on standard error: a Direct3D 12 device prints
+`[d3d12] debug layer live`, or `[d3d12] debug layer requested but not loaded`
+when it has no info queue, and a Vulkan instance prints
+`[vulkan] validation layer live`, or `[vulkan] validation layer requested but
+not live` when it has no debug messenger. A cell on a listed backend that never
+prints its backend's live line fails, so a run with no validation message can be
+told from one the layer never watched. The Direct3D 12 recorder corrects a stated old layout from its tracked
 resource state, so a wrongly declared layout shows only on Vulkan. On a machine where
 the Direct3D 12 debug layer stops the device from being created, the
 Direct3D 12 cells are blocked and name the reason.

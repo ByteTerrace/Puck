@@ -469,7 +469,7 @@ public sealed class TransferAbortKitWideningLawTests {
         // point an abort could ever observe it; capturing it is still correct (harmless, round-trips whatever it
         // holds) but does not prove a live gap the way the fields above do — round-tripped below regardless.
         Assert.True(
-            condition: (capturedState.TapeIntents.Length > 0),
+            condition: (capturedState.TapeIntents.Count > 0),
             userMessage: "the scripted tape must still hold the enqueued segment"
         );
         Assert.True(condition: (capturedState.TapeRemainingTicks[0] > 0));
@@ -872,7 +872,7 @@ public sealed class TransferAbortKitWideningLawTests {
         // ActionStateDirty/DirtyKind/DirtyOperand — see the drive law's own remarks on why these legitimately read
         // false/default at any capture point in this engine's real architecture (WorldPopulation.CompleteStep's own
         // unconditional per-tick drain). Round-tripped below regardless.
-        Assert.True(condition: (capturedState.TapeIntents.Length > 0));
+        Assert.True(condition: (capturedState.TapeIntents.Count > 0));
         Assert.True(condition: (capturedState.TapeRemainingTicks[0] > 0));
 
         Assert.True(condition: population.TryDetachSeatForTransfer(

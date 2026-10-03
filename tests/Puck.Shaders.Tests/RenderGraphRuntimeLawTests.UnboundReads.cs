@@ -1,5 +1,4 @@
 using Puck.Abstractions.Sources;
-using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Testing;
 
@@ -128,7 +127,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             }
         );
 
-        var request = new FrameCaptureRequest(path: Path.Combine(path1: Path.GetTempPath(), path2: $"{Guid.NewGuid():N}.png"));
+        var request = CaptureRequest();
 
         runtime.RequestCapture(request: request);
         _ = frames.Next();

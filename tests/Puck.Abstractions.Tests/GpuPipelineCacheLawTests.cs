@@ -1,5 +1,6 @@
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 
 namespace Puck.Abstractions.Tests;
 
@@ -50,9 +51,9 @@ public sealed class GpuPipelineCacheLawTests : IDisposable {
     private const string OldKeyFormat = "10de-2786-8d8d8000";
     private const string OldDriver = "10de-2786-000000008d8d7000";
 
-    private readonly string m_directory = Directory.CreateTempSubdirectory(prefix: "puck-pipeline-cache-").FullName;
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-pipeline-cache-");
 
-    private string Root => m_directory.Replace(
+    private string Root => m_directory.RootPath.Replace(
         newChar: '/',
         oldChar: '\\'
     );
@@ -62,7 +63,7 @@ public sealed class GpuPipelineCacheLawTests : IDisposable {
             identity: identity,
             store: new GpuPipelineCacheStore(
                 contentKey: contentKey,
-                directory: m_directory
+                directory: m_directory.RootPath
             ),
             work: (work ?? new GpuPipelineCacheWork(backend: identity.Backend))
         );
@@ -76,7 +77,7 @@ public sealed class GpuPipelineCacheLawTests : IDisposable {
     // Writes a file under the root and sets its last-write time; returns its full path.
     private string Seed(string relative, DateTime written) {
         var path = Path.Join(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: relative
         );
 
@@ -100,10 +101,7 @@ public sealed class GpuPipelineCacheLawTests : IDisposable {
         );
     }
 
-    public void Dispose() => Directory.Delete(
-        path: m_directory,
-        recursive: true
-    );
+    public void Dispose() => m_directory.Dispose();
     [Fact]
     public void EveryBackendNamesItsFileInOneFormat() {
         // Vendor and device in four hexadecimal digits, the driver version in sixteen on both backends: Vulkan's 32-bit
@@ -134,7 +132,7 @@ public sealed class GpuPipelineCacheLawTests : IDisposable {
     public void AKeyThatIsNotOneSegmentIsRefused(string segment) {
         Assert.ThrowsAny<ArgumentException>(testCode: () => new GpuPipelineCacheStore(
             contentKey: segment,
-            directory: m_directory
+            directory: m_directory.RootPath
         ));
         Assert.ThrowsAny<ArgumentException>(testCode: () => Open(identity: Vulkan with { Backend = segment }));
     }
@@ -163,7 +161,7 @@ public sealed class GpuPipelineCacheLawTests : IDisposable {
             actual: serialized,
             expected: 0
         );
-        Assert.Empty(collection: Directory.GetFileSystemEntries(path: m_directory));
+        Assert.Empty(collection: Directory.GetFileSystemEntries(path: m_directory.RootPath));
     }
     [Fact]
     public void OnlyAMissedCreationOwesAWrite() {
@@ -431,7 +429,7 @@ public sealed class GpuPipelineCacheLawTests : IDisposable {
             collection: current
         );
         Assert.Equal(
-            actual: Directory.GetDirectories(path: Path.Join(path1: m_directory, path2: "vulkan")).Select(selector: Path.GetFileName),
+            actual: Directory.GetDirectories(path: Path.Join(path1: m_directory.RootPath, path2: "vulkan")).Select(selector: Path.GetFileName),
             expected: [Vulkan.CacheKey]
         );
         Assert.Equal(
@@ -489,7 +487,7 @@ public sealed class GpuPipelineCacheLawTests : IDisposable {
             written: Epoch.AddDays(value: -1).AddMinutes(value: index)
         )).ToArray();
         var empty = Directory.CreateDirectory(path: Path.Join(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: $"directx/{DirectX.CacheKey}"
         )).FullName;
 

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Puck.Hosting;
 
 namespace Puck.Cli.Laws;
 
@@ -11,7 +12,9 @@ namespace Puck.Cli.Laws;
 /// commit changes outside <c>tests/</c>.</param>
 internal sealed record LawFix(string? Revision, IReadOnlyList<string> Paths);
 /// <summary>One build of the law's project: whether it succeeded, and its error lines when it did not.</summary>
-internal sealed record LawBuild(bool Succeeded, IReadOnlyList<string> Errors);
+internal sealed record LawBuild(bool Succeeded, IReadOnlyList<string> Errors, LawBuildCounts Counts = default);
+/// <summary>Distinct projects compiled or entirely up to date, and target executions across the build.</summary>
+internal readonly record struct LawBuildCounts(int Compiled, int UpToDate, int Targets);
 /// <summary>One failed test: its name and the first line of its message.</summary>
 internal sealed record LawFailure(string Test, string Message);
 /// <summary>One run of the law: how many tests ran, which failed, and why the run reported nothing when it did
@@ -25,9 +28,10 @@ internal interface ILawRunner {
     /// <summary>Builds <paramref name="project"/> inside <paramref name="tree"/>.</summary>
     /// <param name="tree">The tree's root.</param>
     /// <param name="project">The project, relative to the tree.</param>
+    /// <param name="logDirectory">This side's scratch directory for build evidence.</param>
     /// <param name="cancellationToken">Cancels the build and waits for its process tree to exit.</param>
     /// <returns>The build's outcome.</returns>
-    LawBuild Build(string tree, string project, CancellationToken cancellationToken);
+    LawBuild Build(string tree, string project, string logDirectory, CancellationToken cancellationToken);
     /// <summary>Runs the tests <paramref name="law"/> names in the already-built <paramref name="project"/>.</summary>
     /// <param name="tree">The tree's root.</param>
     /// <param name="project">The project, relative to the tree.</param>
@@ -39,14 +43,19 @@ internal interface ILawRunner {
 }
 /// <summary>
 /// <c>puck laws prove</c>'s proof: that a law fails without its fix and passes with it. The proof runs in a detached
-/// git worktree under a scratch directory, never in the caller's tree: the worktree starts at the caller's HEAD and
+/// shared-object clone, never in the caller's tree: the clone starts at the caller's HEAD and
 /// takes the caller's uncommitted and untracked files, then the fix is withheld (the commit's change reversed, or the
 /// uncommitted change put back to HEAD), the law's project built and the law run, which must fail; then the fix is
 /// restored, the project built again and the law run, which must pass. A build that fails in either phase refuses the
-/// proof. The worktree and the scratch directory are removed whatever the outcome.
+/// proof. The clone is retained under an exclusive lease for incremental builds. A busy or unavailable cache uses a
+/// fresh scratch worktree instead. Scratch cleanup never changes the proof's verdict.
 /// </summary>
 internal static partial class LawProof {
     private const string Verb = "laws prove";
+
+    // Every git command that writes or deletes the proof tree enables long paths for that command alone: a built
+    // tree's obj and bin paths pass Windows' 260-character limit, and git without them cannot delete those files.
+    private static readonly string[] LongPaths = ["-c", "core.longpaths=true"];
 
     [GeneratedRegex(pattern: @"\A[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*\z")]
     private static partial Regex LawName();
@@ -206,39 +215,46 @@ internal static partial class LawProof {
 
         return false;
     }
-    private static void RemoveWorktree(string repositoryRoot, string tree, string scratch) {
-        var registered = CliGit.Run(repositoryRoot, "worktree", "list", "--porcelain", "-z");
+    // Removes this proof's worktree registration and its scratch directory: null when both are gone, otherwise why
+    // cleanup stopped. Never throws, so a cleanup failure cannot replace the proof's verdict.
+    private static string? TryRemoveWorktree(string repositoryRoot, string tree, string scratch, Func<string, string[], ChildProcessResult> git) {
+        var operation = "inspect proof worktree registration";
 
-        if (registered.ExitCode != 0) {
-            throw new IOException(message: $"cannot inspect proof worktree registration: {registered.Stderr.Trim()}");
-        }
-        if (registered.Stdout.Split(separator: '\0').Any(predicate: entry => string.Equals(a: entry, b: $"worktree {Puck.Abstractions.PuckPaths.Normalize(path: tree)}", comparisonType: Puck.Abstractions.PuckPaths.Comparison))) {
-            var removed = CliGit.Run(repositoryRoot, "worktree", "remove", "--force", "--force", tree);
+        try {
+            operation = $"inspect proof worktree registration for {CliPaths.ToDisplay(fullPath: tree)}";
+            var registered = git(arg1: repositoryRoot, arg2: [.. LongPaths, "worktree", "list", "--porcelain", "-z"]);
 
-            if (removed.ExitCode != 0) {
-                throw new IOException(message: $"cannot remove proof worktree {CliPaths.ToDisplay(fullPath: tree)}: {removed.Stderr.Trim()}");
+            if (registered.ExitCode != 0) {
+                return $"cannot {operation}: {registered.Stderr.Trim()}";
             }
+            if (registered.Stdout.Split(separator: '\0').Any(predicate: entry => string.Equals(a: entry, b: $"worktree {Puck.Abstractions.PuckPaths.Normalize(path: tree)}", comparisonType: Puck.Abstractions.PuckPaths.Comparison))) {
+                operation = $"remove proof worktree and its registration for {CliPaths.ToDisplay(fullPath: tree)}";
+                var removed = git(arg1: repositoryRoot, arg2: [.. LongPaths, "worktree", "remove", "--force", "--force", tree]);
+
+                if (removed.ExitCode != 0) {
+                    return $"cannot {operation}: {removed.Stderr.Trim()}";
+                }
+            }
+
+            operation = $"remove proof scratch directory {CliPaths.ToDisplay(fullPath: scratch)}";
+            try {
+                Directory.Delete(path: scratch, recursive: true);
+            } catch (DirectoryNotFoundException) {
+                // The scratch directory is already gone; its registration was handled above.
+            }
+
+            return null;
+        } catch (Exception exception) {
+            return $"cannot {operation}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
         }
-        Directory.Delete(path: scratch, recursive: true);
     }
-    // Refuse links before copying or building: writes through a checked-out link escape the isolated tree.
-    private static string? LinkedPath(string tree) {
-        var pending = new Stack<string>();
-
-        pending.Push(item: tree);
-        while (pending.TryPop(result: out var directory)) {
-            foreach (var entry in Directory.EnumerateFileSystemEntries(path: directory)) {
-                var attributes = File.GetAttributes(path: entry);
-
-                if ((attributes & FileAttributes.ReparsePoint) != 0) {
-                    return Relative(path: entry, root: tree);
-                }
-                if ((attributes & FileAttributes.Directory) != 0) {
-                    pending.Push(item: entry);
-                }
-            }
+    private static string? TryRemoveScratch(string scratch) {
+        try {
+            LawProofFiles.DeleteTree(path: scratch);
+            return null;
+        } catch (Exception exception) {
+            return $"cannot remove proof scratch directory {CliPaths.ToDisplay(fullPath: scratch)}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
         }
-        return null;
     }
     private static void Describe(StringBuilder evidence, string phase, LawRun run) {
         if (run.Failures.Count == 0) {
@@ -256,12 +272,16 @@ internal static partial class LawProof {
     private static bool TryPhase(ILawRunner runner, string tree, string project, string law, string results, string phase, CancellationToken cancellationToken, out LawRun run, out int refusal) {
         run = new LawRun(Error: null, Failures: [], Tests: []);
         Console.Error.WriteLine(value: $"laws prove: building {project} {phase}.");
+        _ = Directory.CreateDirectory(path: results);
 
         var build = runner.Build(
             cancellationToken: cancellationToken,
+            logDirectory: results,
             project: project,
             tree: tree
         );
+
+        Console.Error.WriteLine(value: FormattableString.Invariant(formattable: $"laws prove: built {phase}: {build.Counts.Compiled} project(s) compiled, {build.Counts.UpToDate} up to date, {build.Counts.Targets} target(s)"));
 
         if (!build.Succeeded) {
             refusal = Refuse(what: project, why: $"did not build {phase}, so the law cannot be judged:");
@@ -342,12 +362,16 @@ internal static partial class LawProof {
     /// <param name="runner">Builds and runs the law.</param>
     /// <param name="scratchRoot">The directory the proof's scratch directory is created under: the temporary root for a
     /// real run.</param>
+    /// <param name="lawTreesRoot">The persistent clone store, independent of per-proof scratch.</param>
     /// <param name="cancellationToken">Cancels the proof; cleanup runs without the cancelled token.</param>
+    /// <param name="cleanupGit">Runs cleanup's git commands; the real git process when omitted.</param>
+    /// <param name="reportCleanupFailure">Writes the cleanup warning; standard error when omitted. A failed write
+    /// cannot replace the proof's outcome.</param>
     /// <returns><see cref="CliExit.Success"/> when the law fails without the fix and passes with it,
     /// <see cref="CliExit.Failed"/> when it passes without the fix (it cannot fail) or fails with it, and
     /// <see cref="CliExit.Refused"/> for a build that failed, a law that selects no test, or a fix that cannot be
     /// withheld.</returns>
-    public static int Prove(string repositoryRoot, string law, string? project, LawFix fix, ILawRunner runner, string scratchRoot, CancellationToken cancellationToken = default) {
+    public static int Prove(string repositoryRoot, string law, string? project, LawFix fix, ILawRunner runner, string scratchRoot, string lawTreesRoot, CancellationToken cancellationToken = default, Func<string, string[], ChildProcessResult>? cleanupGit = null, Action<string>? reportCleanupFailure = null) {
         cancellationToken.ThrowIfCancellationRequested();
         if (!LawName().IsMatch(input: law)) {
             return Refuse(what: law, why: "a law is a test name of dotted identifiers, such as Class or Class.Method.");
@@ -432,9 +456,13 @@ internal static partial class LawProof {
             path2: "tree"
         );
         var hooks = Path.Combine(path1: scratch, path2: "hooks");
+        LawProofTree? persistent = null;
+        var scratchWorktree = true;
+
+        ChildProcessResult RunProofGit(string repository, string[] arguments) => CliGit.RunAsync(arguments: [.. LongPaths, "-c", $"core.hooksPath={hooks}", .. arguments], cancellationToken: cancellationToken, repository: repository).GetAwaiter().GetResult();
 
         bool ProofGit(string repository, out string stdout, out string error, params string[] arguments) {
-            var result = CliGit.RunAsync(arguments: ["-c", $"core.hooksPath={hooks}", .. arguments], cancellationToken: cancellationToken, repository: repository).GetAwaiter().GetResult();
+            var result = RunProofGit(arguments: arguments, repository: repository);
 
             stdout = result.Stdout;
             error = ((result.ExitCode == 0) ? string.Empty : $"git {string.Join(separator: ' ', values: arguments)} exited {result.ExitCode}: {result.Stderr.Trim()}");
@@ -443,13 +471,24 @@ internal static partial class LawProof {
 
         try {
             _ = Directory.CreateDirectory(path: hooks);
+            persistent = LawProofTree.TryAcquire(reason: out var cacheReason, repository: repositoryRoot, root: lawTreesRoot);
+            if ((persistent is not null) && persistent.TryPrepare(git: RunProofGit, head: head, reason: out cacheReason)) {
+                tree = persistent.Tree;
+                scratchWorktree = false;
+            } else {
+                Console.Error.WriteLine(value: $"laws prove: {cacheReason}; falling back to a fresh scratch worktree (cold).");
+            }
             Console.Error.WriteLine(value: $"laws prove: copying {head[..12]} and the working tree's changes into {CliPaths.ToDisplay(fullPath: tree)}.");
 
-            if (!ProofGit(repositoryRoot, out _, out var addError, "worktree", "add", "--detach", "--quiet", tree, head)) {
+            if (scratchWorktree && !ProofGit(repositoryRoot, out _, out var addError, "worktree", "add", "--detach", "--quiet", tree, head)) {
                 return Refuse(what: tree, why: addError);
             }
-            if (LinkedPath(tree: tree) is { } linked) {
+            if (LawProofFiles.LinkedPath(tree: tree) is { } linked) {
                 return Refuse(what: linked, why: "is a link in the proven tree; copying or building through it would escape isolation.");
+            }
+            if (!ProofGit(tree, out var indexEntries, out var indexError, "ls-files", "--stage")) { return Refuse(what: tree, why: indexError); }
+            if (Lines(text: indexEntries).FirstOrDefault(predicate: static entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "120000 ")) is { } symbolic) {
+                return Refuse(what: symbolic, why: "is a link in the proven tree; copying or building through it would escape isolation.");
             }
 
             if (!TryReadDirty(dirty: out var mirrored, error: out var mirrorError, repositoryRoot: repositoryRoot)) {
@@ -458,6 +497,11 @@ internal static partial class LawProof {
 
             foreach (var path in mirrored) {
                 cancellationToken.ThrowIfCancellationRequested();
+                try {
+                    LawProofFiles.RequireUnlinkedPath(path: Path.Combine(path1: repositoryRoot, path2: path));
+                } catch (IOException exception) {
+                    return Refuse(what: path, why: exception.Message);
+                }
                 Write(
                     content: Read(path: path, root: repositoryRoot),
                     path: path,
@@ -465,7 +509,7 @@ internal static partial class LawProof {
                 );
             }
 
-            // The worktree's own index takes the mirrored state, so a three-way reverse sees no unstaged change.
+            // The proof tree's own index takes the mirrored state, so a three-way reverse sees no unstaged change.
             if (!ProofGit(tree, out _, out var stageError, "add", "--all")) {
                 return Refuse(what: tree, why: stageError);
             }
@@ -515,9 +559,14 @@ internal static partial class LawProof {
                 return Refuse(what: law, why: "withholding the fix changed no file, so nothing would be proven.");
             }
 
-            if (LinkedPath(tree: tree) is { } withheldLink) {
+            if (LawProofFiles.LinkedPath(tree: tree) is { } withheldLink) {
                 return Refuse(what: withheldLink, why: "withholding created a link in the proven tree.");
             }
+            if (!ProofGit(tree, out indexEntries, out indexError, "ls-files", "--stage")) { return Refuse(what: tree, why: indexError); }
+            if (Lines(text: indexEntries).FirstOrDefault(predicate: static entry => entry.StartsWith(comparisonType: StringComparison.Ordinal, value: "120000 ")) is { } withheldSymbolic) {
+                return Refuse(what: withheldSymbolic, why: "withholding created a link in the proven tree.");
+            }
+            LawProofFiles.Touch(tree: tree, paths: mirrored.Concat(second: withheld).Distinct(comparer: StringComparer.Ordinal));
             if (!TryPhase(cancellationToken: cancellationToken, law: law, phase: "with the fix withheld", project: lawProject, refusal: out var refusal, results: Path.Combine(path1: scratch, path2: "withheld"), run: out var without, runner: runner, tree: tree)) {
                 return refusal;
             }
@@ -543,6 +592,7 @@ internal static partial class LawProof {
             foreach (var (path, content) in original) {
                 Write(content: content, path: path, root: tree);
             }
+            LawProofFiles.Touch(paths: withheld, tree: tree);
 
             if (!TryPhase(cancellationToken: cancellationToken, law: law, phase: "with the fix restored", project: lawProject, refusal: out refusal, results: Path.Combine(path1: scratch, path2: "restored"), run: out var with, runner: runner, tree: tree)) {
                 return refusal;
@@ -563,7 +613,22 @@ internal static partial class LawProof {
             cancellationToken.ThrowIfCancellationRequested();
             return CliExit.Success;
         } finally {
-            RemoveWorktree(repositoryRoot: repositoryRoot, scratch: scratch, tree: tree);
+            var failure = (scratchWorktree
+                ? TryRemoveWorktree(git: (cleanupGit ?? CliGit.Run), repositoryRoot: repositoryRoot, scratch: scratch, tree: tree)
+                : TryRemoveScratch(scratch: scratch));
+
+            try {
+                persistent?.Dispose();
+            } catch (Exception exception) {
+                failure = $"{failure} cannot release proof-tree lease: {exception.Message.ReplaceLineEndings(replacementText: " ")}".Trim();
+            }
+            if (failure is not null) {
+                try {
+                    (reportCleanupFailure ?? Console.Error.WriteLine).Invoke(obj: $"laws prove: {failure}; scratch directory: {CliPaths.ToDisplay(fullPath: scratch)}; cleanup may have left files{(scratchWorktree ? " or its registration" : string.Empty)} behind and the exit code still reports the proof.");
+                } catch (Exception) {
+                    // A closed error stream cannot receive the warning or replace the proof's outcome.
+                }
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 using Puck.Cli.Transpiler;
+using Puck.Testing;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Rewriting;
 using Xunit;
@@ -62,13 +63,8 @@ public sealed class PuckMigrateAtomicityLawTests {
         path2: "f3.puck"
     );
     // Five sources the migration would rewrite, of which the third is whatever the case is about.
-    private static string Fixture(string third) {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-migrate-atomicity-{Guid.NewGuid():N}"
-        );
-
-        Directory.CreateDirectory(path: directory);
+    private static TemporaryDirectory Fixture(string third) {
+        var scratch = new TemporaryDirectory(prefix: "puck-migrate-atomicity-");
 
         for (var index = 1; (index <= 5); ++index) {
             File.WriteAllText(
@@ -76,13 +72,13 @@ public sealed class PuckMigrateAtomicityLawTests {
                     ? third
                     : World),
                 path: Path.Combine(
-                    path1: directory,
+                    path1: scratch.RootPath,
                     path2: $"f{index}.puck"
                 )
             );
         }
 
-        return directory;
+        return scratch;
     }
     private static void AssertRefusedAndUntouched(string directory, string third) {
         Assert.Equal(
@@ -116,41 +112,30 @@ public sealed class PuckMigrateAtomicityLawTests {
 
     [Fact]
     public void AThirdSourceThatDoesNotParseLeavesAllFive() {
-        var directory = Fixture(third: Broken);
+        using var scratch = Fixture(third: Broken);
+        var directory = scratch.RootPath;
 
-        try {
-            AssertRefusedAndUntouched(
-                directory: directory,
-                third: Broken
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        AssertRefusedAndUntouched(
+            directory: directory,
+            third: Broken
+        );
     }
     [Fact]
     public void AThirdSourceWithAnUndeclaredDifferenceLeavesAllFive() {
-        var directory = Fixture(third: Undeclared);
+        using var scratch = Fixture(third: Undeclared);
+        var directory = scratch.RootPath;
 
-        try {
-            AssertRefusedAndUntouched(
-                directory: directory,
-                third: Undeclared
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        AssertRefusedAndUntouched(
+            directory: directory,
+            third: Undeclared
+        );
     }
     // The destination that cannot be replaced is refused while the run can still refuse for free, rather than at
     // its own turn in the write phase with earlier destinations already replaced.
     [Fact]
     public void AThirdSourceThatCannotBeWrittenLeavesAllFive() {
-        var directory = Fixture(third: World);
+        using var scratch = Fixture(third: World);
+        var directory = scratch.RootPath;
 
         try {
             File.SetAttributes(
@@ -173,47 +158,37 @@ public sealed class PuckMigrateAtomicityLawTests {
                 fileAttributes: FileAttributes.Normal,
                 path: Path3(directory: directory)
             );
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
         }
     }
     // The control: without the odd one out, the same run writes all five.
     [Fact]
     public void FiveWritableSourcesAreAllMigrated() {
-        var directory = Fixture(third: World);
+        using var scratch = Fixture(third: World);
+        var directory = scratch.RootPath;
 
-        try {
-            Assert.Equal(
-                actual: PuckMigrateCommand.Execute(
-                    check: false,
-                    migrations: Migrations,
-                    name: "retitle",
-                    path: directory
-                ),
-                expected: 0
-            );
+        Assert.Equal(
+            actual: PuckMigrateCommand.Execute(
+                check: false,
+                migrations: Migrations,
+                name: "retitle",
+                path: directory
+            ),
+            expected: 0
+        );
 
-            for (var index = 1; (index <= 5); ++index) {
-                Assert.Contains(
-                    actualString: File.ReadAllText(path: Path.Combine(
-                        path1: directory,
-                        path2: $"f{index}.puck"
-                    )),
-                    expectedSubstring: "documentId: \"atomicity-v2\""
-                );
-            }
-
-            Assert.Empty(collection: Directory.GetFiles(
-                path: directory,
-                searchPattern: "*.migrate-tmp"
-            ));
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
+        for (var index = 1; (index <= 5); ++index) {
+            Assert.Contains(
+                actualString: File.ReadAllText(path: Path.Combine(
+                    path1: directory,
+                    path2: $"f{index}.puck"
+                )),
+                expectedSubstring: "documentId: \"atomicity-v2\""
             );
         }
+
+        Assert.Empty(collection: Directory.GetFiles(
+            path: directory,
+            searchPattern: "*.migrate-tmp"
+        ));
     }
 }

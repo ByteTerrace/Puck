@@ -24,7 +24,7 @@ public sealed class WorldSessionViewLawTests {
     // The frame a session view of a destination renders, composed as WorldScreenBinder.RegisterSessionView composes it.
     private static SdfFrame SessionFrame(WorldDefinition definition) {
         var mirror = new WorldSessionMirror(placeholder: definition);
-        var emitter = new WorldSessionSceneEmitter(
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: mirror
         );
@@ -45,7 +45,7 @@ public sealed class WorldSessionViewLawTests {
     [InlineData(2048, 256)]
     [Theory]
     public void AuthoredSessionResolutionDeterminesTheFirstCameraAspect(int width, int height) {
-        var emitter = new WorldSessionSceneEmitter(effectiveCameraName: null,
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(), effectiveCameraName: null,
             mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: SessionWorld)));
         var source = new WorldSessionFrameSource(inner: new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]),
             captureHostFirst: static () => { }, resolution: new WorldScreenResolution(Height: height, Width: width));
@@ -55,6 +55,38 @@ public sealed class WorldSessionViewLawTests {
 
             Assert.Equal(expected: (width / ((float)height)), actual: frame.Views[0].Camera.AspectRatio);
         }
+    }
+    [Fact]
+    public void ASessionViewIsDressedAtItsAuthoredExtentWhateverIsRequested() {
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(), effectiveCameraName: null,
+            mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: SessionWorld)));
+        var dressed = new List<(uint Width, uint Height)>();
+        var source = new WorldSessionFrameSource(inner: new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]),
+            captureHostFirst: static () => { }, resolution: new WorldScreenResolution(Height: 144, Width: 160),
+            resolveResolution: (view, width, height) => { dressed.Add(item: (width, height)); return view; });
+
+        _ = source.CaptureFrame(deltaSeconds: 0f, height: 4096u, interpolationAlpha: 0f, width: 2048u);
+        Assert.Equal(actual: dressed, expected: [(160u, 144u)]);
+    }
+    [Fact]
+    public void OnlyTheSessionsOwnSnapshotIsDressedNotTheCamerasFilmedAfterIt() {
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(), effectiveCameraName: null,
+            mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: SessionWorld)));
+        var filmed = new SdfViewSnapshot(Camera: default, Region: default) { RenderScale = 0.5f, ResolvedRenderScale = 0.5f };
+
+        emitter.Film = views => views.Add(item: filmed);
+
+        var dressedCount = 0;
+        var source = new WorldSessionFrameSource(inner: new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]),
+            captureHostFirst: static () => { }, resolution: new WorldScreenResolution(Height: 144, Width: 160),
+            resolveResolution: (view, width, height) => { dressedCount++; return view with { RenderScale = 1f, ResolvedRenderScale = 1f }; });
+
+        var frame = source.CaptureFrame(deltaSeconds: 0f, height: 144u, interpolationAlpha: 0f, width: 160u);
+
+        Assert.Equal(expected: 2, actual: frame.Views.Count);
+        Assert.Equal(actual: dressedCount, expected: 1);
+        Assert.Equal(expected: 1f, actual: frame.Views[0].RenderScale);
+        Assert.Equal(expected: filmed, actual: frame.Views[1]);
     }
     [Fact]
     public void ASessionViewOfAnAnimatedCreationIncludesItsInstance() {

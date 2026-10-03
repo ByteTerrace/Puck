@@ -88,10 +88,8 @@ public sealed class CliDeadlineLawTests {
             address: IPAddress.Loopback,
             port: 0
         ));
-        var keyFile = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-probe-{Guid.NewGuid():N}.spki"
-        );
+        using var scratch = new TemporaryDirectory(prefix: "puck-probe-");
+        var keyFile = scratch.PathOf(name: "probe.spki");
 
         await File.WriteAllBytesAsync(
             bytes: new byte[91],
@@ -99,23 +97,19 @@ public sealed class CliDeadlineLawTests {
             path: keyFile
         );
 
-        try {
-            var clock = new VirtualClock();
-            var probe = WorldProbeCommand.RunAsync(
-                clock: clock,
-                host: IPAddress.Loopback.ToString(),
-                keyFile: keyFile,
-                port: ((IPEndPoint)silent.Client.LocalEndPoint!).Port
-            );
+        var clock = new VirtualClock();
+        var probe = WorldProbeCommand.RunAsync(
+            clock: clock,
+            host: IPAddress.Loopback.ToString(),
+            keyFile: keyFile,
+            port: ((IPEndPoint)silent.Client.LocalEndPoint!).Port
+        );
 
-            await clock.ExpireAsync(
-                ct: Token,
-                dueTime: WorldProbeCommand.ProbeTimeout,
-                pending: probe
-            );
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => probe);
-        } finally {
-            File.Delete(path: keyFile);
-        }
+        await clock.ExpireAsync(
+            ct: Token,
+            dueTime: WorldProbeCommand.ProbeTimeout,
+            pending: probe
+        );
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(testCode: () => probe);
     }
 }

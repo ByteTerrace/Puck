@@ -276,8 +276,21 @@ public static class IrradianceLattice {
     /// <param name="borderedX">The column in the bordered map, 0 to <see cref="BorderedTexels"/> − 1.</param>
     /// <param name="borderedY">The row in the bordered map, 0 to <see cref="BorderedTexels"/> − 1.</param>
     /// <returns>The interior texel's column and row.</returns>
-    public static (int X, int Y) BorderSource(int borderedX, int borderedY) {
-        var last = (InteriorTexels - 1);
+    public static (int X, int Y) BorderSource(int borderedX, int borderedY) =>
+        BorderSource(
+            borderedX: borderedX,
+            borderedY: borderedY,
+            interiorTexels: InteriorTexels
+        );
+    /// <summary>Returns the interior texel a texel of an octahedral map of any size with a one-texel border holds, by the
+    /// rule <see cref="BorderSource(int, int)"/> states for the cache's maps: the sky's environment map reads a filter tap
+    /// one texel past an edge through it.</summary>
+    /// <param name="borderedX">The column in the bordered map, 0 to <paramref name="interiorTexels"/> + 1.</param>
+    /// <param name="borderedY">The row in the bordered map, 0 to <paramref name="interiorTexels"/> + 1.</param>
+    /// <param name="interiorTexels">The interior texels along each side of the map, at least one.</param>
+    /// <returns>The interior texel's column and row.</returns>
+    public static (int X, int Y) BorderSource(int borderedX, int borderedY, int interiorTexels) {
+        var last = (interiorTexels - 1);
         var x = (borderedX - 1);
         var y = (borderedY - 1);
         var mirrorX = ((x < 0) || (x > last));

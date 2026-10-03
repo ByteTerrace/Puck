@@ -38,7 +38,7 @@ public enum DirectXExportableImageAccess {
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     private readonly IDirectXDeviceContext m_deviceContext;
-    private readonly GCHandle m_imageViewToken;
+    private readonly nint m_imageViewHandle;
 
     private bool m_disposed;
     private nint m_fence;
@@ -125,7 +125,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
             );
             m_sharedHandle = sharedHandle;
 
-            m_imageViewToken = GCHandle.Alloc(value: new DirectXImageView {
+            m_imageViewHandle = DirectXImageViews.Register(view: new DirectXImageView {
                 Format = dxgiFormat,
                 ResourceHandle = m_resource,
             });
@@ -183,7 +183,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
     /// <inheritdoc/>
     public nint ImageHandle => m_resource;
     /// <inheritdoc/>
-    public nint ImageViewHandle => GCHandle.ToIntPtr(value: m_imageViewToken);
+    public nint ImageViewHandle => m_imageViewHandle;
     /// <inheritdoc/>
     /// <remarks>A texture this device writes has one, which a Direct3D 11 device opens through
     /// <c>ID3D11Device5::OpenSharedFence</c>; a foreign-written texture has none.</remarks>
@@ -213,9 +213,7 @@ public sealed unsafe class DirectXGpuExportableImage : IGpuExportableImage {
             );
         }
 
-        if (m_imageViewToken.IsAllocated) {
-            m_imageViewToken.Free();
-        }
+        DirectXImageViews.Release(handle: m_imageViewHandle);
 
         Release(pointer: ref m_fence);
         DirectXDeviceMemory.CountReleased(

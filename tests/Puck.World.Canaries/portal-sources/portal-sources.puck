@@ -1,0 +1,11 @@
+// A lobby whose arch shows a window onto a gallery of screens, each showing one of the gallery's own sources: its
+// cabinet's picture, its own text in its own font, and a view through its own camera of a green lamp no seat looking
+// on along the walk sees. A seat walks through the arch into the gallery, where the same screens bind for the seat
+// presented there. Staging relocates the gallery's cartridge and font beside its staged document.
+
+schema: "puck.world.definition.v1"
+
+import "rooms.puck"
+
+entry world lobby = lobby(there: "gallery", nesting: 3)
+world gallery = gallery(nesting: 3)

@@ -785,7 +785,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         // Store the live definition and bump the delivery revision (one component of WriteRevision), so the frame source rebuilds
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         m_definition = definition;
-        m_documentVersion = version;
+        BeginVersion(version: version);
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -930,9 +930,20 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_definition = definition;
-        m_documentVersion = version;
+        BeginVersion(version: version);
         m_stateMirror.Refresh(stamp: in stamp);
     }
+
+    // Records the version a document was delivered at. A different activation is a different world: the state mirror
+    // begins a new lifetime, so what a presentation kept about the previous world's values does not carry over.
+    private void BeginVersion(WorldDocumentVersion version) {
+        if (version.Activation != m_documentVersion.Activation) {
+            m_stateMirror.BeginLifetime();
+        }
+
+        m_documentVersion = version;
+    }
+
     /// <summary>The complete durable address of the active occupant in a local slot.</summary>
     public WorldEntityAddress EntityAddress(int index) => new(
         Authority: m_authority,

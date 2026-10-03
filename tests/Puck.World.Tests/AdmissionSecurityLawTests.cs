@@ -211,7 +211,7 @@ public sealed class AdmissionSecurityLawTests {
                     request: new WorldRebuildRequest(
                         Kind: WorldRebuildKind.Reset,
                         Definition: null,
-                        PathHint: null,
+                        Origin: null,
                         Force: false
                     ),
                     principal: Principal.Console
@@ -389,7 +389,7 @@ public sealed class AdmissionSecurityLawTests {
                     request: new WorldRebuildRequest(
                         Kind: WorldRebuildKind.Reset,
                         Definition: null,
-                        PathHint: null,
+                        Origin: null,
                         Force: false
                     ),
                     principal: Principal.Console
@@ -554,7 +554,7 @@ public sealed class AdmissionSecurityLawTests {
                         Definition: widened,
                         Force: true,
                         Kind: WorldRebuildKind.Load,
-                        PathHint: "successive-rebuild.world.json"
+                        Origin: new WorldRebuildOrigin.File(Path: "successive-rebuild.world.json")
                     ),
                     principal: Principal.Console
                 );
@@ -593,7 +593,7 @@ public sealed class AdmissionSecurityLawTests {
                     request: new WorldRebuildRequest(
                         Kind: WorldRebuildKind.Reset,
                         Definition: null,
-                        PathHint: null,
+                        Origin: null,
                         Force: false
                     ),
                     principal: Principal.Console
@@ -676,7 +676,7 @@ public sealed class AdmissionSecurityLawTests {
                     request: new WorldRebuildRequest(
                         Kind: WorldRebuildKind.Reset,
                         Definition: null,
-                        PathHint: null,
+                        Origin: null,
                         Force: false
                     ),
                     principal: Principal.Console

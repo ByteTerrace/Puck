@@ -41,7 +41,8 @@ namespace Puck.World.Server;
 /// <para>The "which op can be solid" ceiling is <see cref="SdfFieldEvaluator"/>'s warp-free excluded-op set:
 /// <see cref="TryBuild"/> forwards the constructor's <see cref="ArgumentException"/> message verbatim as its reject
 /// reason, so <see cref="WorldServer"/> turns an unsupported solid into a loud apply-time rejection instead of a
-/// constructor throw at install time.</para>
+/// constructor throw at install time. Every moving body's step is proved clear of the solids by a certified sweep over
+/// the evaluator's bounds before the contact solve runs.</para>
 /// </remarks>
 public sealed class WorldSolidField : IContactField {
     // The same float-safety margin the client stamper adds around a placement's render reach, in world units.
@@ -106,13 +107,20 @@ public sealed class WorldSolidField : IContactField {
             program: program
         ),
         });
-        // A field lattice's height columns union with the authored solids for contact; sweeps and line of sight
-        // still march the authored program alone.
-        m_contactField = ((lattice is null)
+        // A field lattice's height columns union with the authored solids for contact and for the certified sweep
+        // that proves how far a body moves; ray casts and line of sight still march the authored program alone. The
+        // sweep proves clearance of the exact program, never the grid's corner bound, so it stops a body at geometry
+        // rather than at the grid's slack.
+        var latticeSolid = ((lattice is null)
+            ? null
+            : new FieldLatticeSolid(lattice: lattice)
+        );
+
+        m_contactField = ((latticeSolid is null)
             ? m_field
             : new UnionField(
                 a: m_field,
-                b: new FieldLatticeSolid(lattice: lattice)
+                b: latticeSolid
             )
         );
         m_solver = new FixedFieldContactSolver(
@@ -122,7 +130,19 @@ public sealed class WorldSolidField : IContactField {
             gradientUp: tuning.GradientUp,
             groundedThreshold: tuning.GroundedThreshold,
             maxIterations: tuning.MaxIterations,
-            query: m_query
+            query: m_query,
+            sweep: (evaluator.HasShape, latticeSolid) switch {
+                (true, null) => evaluator,
+                (true, { } solid) => new CertifiedFieldSweep(field: new FieldBoundsUnion(
+                    a: evaluator,
+                    b: solid
+                )),
+                (false, { } solid) => new CertifiedFieldSweep(field: solid),
+                // No geometry for a body to cross: the endpoint solve finds nothing either.
+                (false, null) => null,
+            },
+            sweepBoundsQueryBudget: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget,
+            sweepWork: FixedContactSweepWork.Process
         );
     }
 

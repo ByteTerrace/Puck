@@ -1,6 +1,6 @@
 ---
 name: rendering
-description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages, pipelines and the frame-graph runtime, and views.post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
+description: "Holds the settled contracts and working procedure for Puck's GPU presentation code: the SDF instruction set and its two interpreters (Puck.SignedDistance, including the fixed-point query evaluator), the Puck.SdfVm engine and its HLSL kernels, render assembly and composition emitters, camera rigs and camera views, how world render data reaches SdfFrame, Puck.Shaders packages, pipelines and the frame-graph runtime, and views.post passes. Use whenever changing or debugging an SDF op, shape, blend, field scope or packed layout; any .hlsl/.hlsli file; shader builds, kernel variants or hot reload; a prototype bake or texture codec; GPU cost, capacity or world.budget; cross-backend parity or captures; or a shader pipeline. Creation and shape authoring belongs to sdf-authoring, world-document render sections and console semantics to puck-world, .puck grammar to puck-dsl, fixed-point primitives to maths-usage. Carries the C#/HLSL sync contracts so they are never re-derived or forked."
 ---
 
 # Rendering
@@ -89,7 +89,14 @@ over `RotatePlane`). A new instruction touches every partner in one change:
 6. **CPU interpreter** — `SdfFieldEvaluator` either interprets the instruction
    (its blend switch and `ResolveWinner` included) or refuses it by name. Its
    blend switch falls through to union for an unknown value, so a missing arm
-   silently turns the new blend into a union in contact and queries.
+   silently turns the new blend into a union in contact and queries. An
+   interpreted instruction also gets its inclusion rule in the bounds
+   interpreter (`SdfFieldEvaluator.Bounds.cs`, `BoundedOps`/`BoundedShapes`).
+   `SdfFieldBoundsLawTests` fails an accepted op or shape without one, and
+   sweeps a new shape's or blend's point answers against its bounds. A rule may
+   enclose rather than mirror (`Sweep` does), but it is never missing: a shape
+   with no rule answers the unbounded interval, which empties its program's
+   frame.
 7. **Document surface** — enum values are nameable in creation documents and
    `.puck` as soon as they exist, and their XML docs feed the generated world
    schemas. Either carry the new parameters through `CreationCanonicalizer` and
@@ -281,12 +288,17 @@ These are one-line cautions; the owning pages hold the derivations.
   (`SdfBakeField` counts each evaluation); never add a second interpreter or
   march for baking. A program the evaluator refuses has no bake, and a creation
   bakes only its contact emission (`CreationStampEmitter.EmitFixed`).
-- **The shape moves with the bytes.** `SdfBaker.Version` keys every bake and is
-  the `BAKE` chunk's version; a change to what the baker, `CreationBaker` or
-  `CreationBakeCodec` produces re-records the product pin in
-  `CreationBakeLawTests` and moves the shape `puck formats` records for the
-  format. A held bake this baker cannot decode draws the field, counted and named
-  (`sdf.bakes.undecodable`).
+- **The fingerprint follows the code.** `[Derivation(name: "bake")]` marks
+  `CreationBaker.TryBake`, `CreationBakeCodec.Encode` and `EncodeRefusal`.
+  `puck derivations` follows their transitive source dependencies across
+  assemblies and regenerates `DerivationFingerprint.Bake`; every bake key
+  carries that full fingerprint. The `BAKE` chunk and bake-pack entries use
+  its first eight hexadecimal digits as an unsigned integer. Regenerate after
+  changing any reached declaration, re-record the product pin in
+  `CreationBakeLawTests`, and verify with `puck derivations --check`. A held
+  bake is keyed by the code that wrote it, so two lanes that change the bytes
+  never share a key; a held bake this baker cannot decode draws the field,
+  counted and named (`sdf.bakes.undecodable`).
 - **Portable bytes.** A bake is content-addressed and one build's pack stands in
   for any device's bake, so its bytes must not depend on the machine: scalar
   IEEE arithmetic in a written order, no transcendental function, no `Vector3`
@@ -304,9 +316,10 @@ These are one-line cautions; the owning pages hold the derivations.
   each usage's source format, stored format, color space and mip filter; the
   codecs, mip filters and octahedral normal pair live in `Puck.Assets.Textures`,
   where a GPU upload also reaches them. An encoder's bytes are pinned by
-  `TextureCodecLawTests`, so an encoder change re-records those pins, moves
-  `SdfBaker.Version` and regenerates `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
-  (`BakeSamplingFixtureLawTests` writes the fresh one to the temporary directory).
+  `TextureCodecLawTests`, so an encoder change re-records those pins, regenerates
+  `DerivationFingerprint.Bake` and `tests/Puck.SignedDistance.Tests/Fixtures/bake-sampling.json`
+  (`BakeSamplingFixtureLawTests` writes the fresh one into its law directory, which a failing
+  law keeps and names).
   Material identity is never blended or compressed.
 - **A bake reaches the GPU through the one image upload.** `GpuPixelFormat`
   carries `Bc4Unorm`, `Bc5Unorm`, `Bc6hUfloat` and `Bc7Unorm` (sampled only:
@@ -369,8 +382,9 @@ These are one-line cautions; the owning pages hold the derivations.
 
 ## Engine seams that bite
 
-- **Host-owned image-view handles are not identities.** Both backends reuse
-  handle values for new objects, so an `sdf.world` pass rewrites every screen's
+- **Neutral image-view handles are not identities.** Vulkan can reuse
+  handle values for new objects; Direct3D 12 uses process-local generational
+  handles and retires exhausted slots. An `sdf.world` pass rewrites every screen's
   host image in its set every frame (`SdfWorldPassRecorder`'s `BindScreens`) and
   value-skips only the tables' filler. A
   stress test for handle reuse must render a frame between image swaps
@@ -570,11 +584,13 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Captures.** Create the `FrameCaptureRequest`, arm it with
   `ICaptureRequestTarget.RequestCapture`, and await its `Completion`. Never
   block the host pump on it. Let a readback `DeviceLostException` propagate
-  after completing the request. A scheduled capture raises
+  after completing the request. A scheduled capture, and a `world.screenshot`
+  armed through `WorldCaptureScheduler.ArmUnscheduled`, raises
   `IFixedStepSimulation.AwaitsFrame` until a frame serves it, so the pump
-  composes that tick's frame before stepping on. Offscreen the pump also holds
-  its clock (`IFixedStepSimulation.HoldsClock`): no tick past the armed one
-  runs until the capture is served or refused. The hold counts from
+  composes that tick's frame before stepping on. Both rendered hosts' pumps also
+  hold their clock (`IFixedStepSimulation.HoldsClock`): no tick past the armed
+  one runs until the capture is served or refused, and the offscreen host's
+  hold on an unrendered frame (`FixedStepPump.Hold`) charges the same budgets. The hold counts from
   readiness (`IWorldEngineReadiness`, `WorldRenderProbe` over the world's
   `SdfWorldResidency.IsReady` and the root served): time held while the world
   is not ready is spent
@@ -902,8 +918,9 @@ These are one-line cautions; the owning pages hold the derivations.
   (`SdfWorldTables.Regions.cs`, created by `CreateRegion` under
   `GpuResidency.Select` with a reader in flight), and brick staging is a staged
   region whose destination is the brick pool (`Target` names the brick's slot).
-  Each region, brick staging included,
-  writes copy sets the tables reserved for it at construction, its
+  Each staged region, brick staging included, writes a slot's copy set at its
+  first recorded copy and again only after another region writes that set. The
+  tables reserve the copy sets at construction, each region taking its
   `GpuRegionCopySets` slice of the tables' one `GpuRegionCopyPool` (whatever
   policy the device selects), so the tables create and admit two pools, their
   own and the copy pool, and no region the frame thread creates or grows takes
@@ -959,8 +976,10 @@ These are one-line cautions; the owning pages hold the derivations.
   bytes unchanged. `SdfWorldTables.PoseRevision` moves only on an upload that
   changes a pose, and `PreviousPoseRevision` names the poses the previous tables
   advanced from; `SdfTemporalHistory` continues an instance's history only
-  while they are the poses its preceding render held, and retains its preceding
-  completed camera even when temporal sampling is off; resets invalidate it.
+  while they are the poses its preceding completed render held (a render whose
+  submission failed commits no poses, though its tables uploaded), and retains
+  its preceding completed camera even when temporal sampling is off; resets
+  invalidate it.
   `frame/sdf-reprojection.hlsli` is the one visibility reprojection
   implementation, shared by motion diagnostics and reconstruction.
 - **Device identity is recorded, never branched on.** Each backend fills
@@ -1080,7 +1099,7 @@ These are one-line cautions; the owning pages hold the derivations.
   of its own. A counting set is never a device's own
   `IGpuDeviceContext.Services`, and wrapping a counting member again is refused.
   A new pass needs its `EnterPass`/`LeavePass` where it submits; the SDF upload
-  counts its `fillers`, `bricks` and `upload` passes, skipping one it has no work
+  counts its `fillers`, `bricks`, `upload` and `environment` passes, skipping one it has no work
   for. `SdfWorldTablesWorkLawTests` and `SdfWorldResidencyWorkLawTests` pin the
   upload's exact counts over `tests/Shared/FakeGpuDevice.cs`, so a
   recording change re-records those constants in the same change.
@@ -1116,7 +1135,11 @@ These are one-line cautions; the owning pages hold the derivations.
   every lane that did work. A new march, query or volume sample adds to
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
   counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
-  and `SdfWorkCountingLawTests` hold both. Vulkan devices are created with
+  and `SdfWorkCountingLawTests` hold both. The residency's upload counts its
+  `environment` pass (the sky's environment map and its reduction,
+  `SdfWorldTables.SkyEnvironment.cs`) the same way: the tables keep a
+  `GpuKernelCounters` of a row per upload pass over their ring slots and name the
+  slot to their ledger on an upload that renders the map. Vulkan devices are created with
   `fragmentStoresAndAtomics` for the fragment stages' counts and
   `shaderDemoteToHelperInvocation` for a fragment `discard`, and every shader
   module's SPIR-V capabilities are checked against
@@ -1264,8 +1287,17 @@ per-backend-deterministic submission counts, pass by pass and outside every
 pass, to `tests/Puck.Counters/counters.ceilings.json`
 (`puck.counters.ceilings.v1`): a count reads at most its ceiling, a ceiling of
 zero is a required zero, and a per-backend-deterministic count is judged only
-on the device its backend was recorded on. `--record` rewrites the file, only
-in the change that explains the move. It needs a GPU on both backends, so it
+on the device its backend was recorded on, except a ceiling carrying
+`requiredZero` (a zero of a kernel kind such as the march steps or sky
+evaluations, which the recorder sets and the reader validates), a structural
+contract that is judged on every device; the foreign-device note says how many
+counts were not judged and how many zeros still were. `--record` rewrites the file, only
+in the change that explains the move, and writes nothing when the backends
+disagree on a deterministic count or pass state, or the recorded ceilings fail
+their own run. It uses atomic replacement; a write failure leaves the existing
+ceilings unchanged. A refused record prints `not written: …` and exits 1.
+`--output` names a different file from the ceilings with `--check` or `--record`.
+It needs a GPU on both backends, so it
 runs with the other GPU checks, never beside a build.
 
 **Qualification judges a published package, not a change.** `puck qualify
@@ -1310,8 +1342,18 @@ block carries offsets and a phase, never a rate),
 definition every frame, so a `world.row.set render …` lands on the next frame
 without a program rebuild; `render.tonemap` reaches the root graph
 (`WorldViewGraphHost.BeginFrame`), which it recomposes, never an SDF kernel. Creation volumes become `SdfFrame.Volumes`, not
-instructions. Validation ranges live in `WorldDefinitionValidator`; a new render
-field needs its validator bound, its field on the record that carries it (a
+instructions. A bindable scalar's domain is its row in `WorldValueFields`, which
+the validator judges and the resolve maps every resolved value through
+(`WorldValueDomain.Map`, applied by `WorldValueDomainGuard.Resolve`): a finite
+value beyond a closed end clamps to it, and a value that is not finite or lies at
+or beyond an open end holds the binding's last valid value, so no value a bound
+row strays to reaches a record. A domain a kernel needs away from zero (a
+`smoothstep` width, a divisor) is closed at a floor proved for the kernel, such
+as `SdfSky.MinCloudSoftness` for both cloud bands and
+`CameraSnapshot.MinFieldOfViewRadians` for a camera, never open at zero, whose
+clamp target the GPU may flush, so the kernel names no bound of its own. Plain-float ranges live
+in `WorldDefinitionValidator`. A new render field needs its domain or validator
+bound, its field on the record that carries it (a
 light's on `SdfLight`, the sky's on `SdfSkyBlock`, `SdfSkyStop` or `SdfSoftbox`,
 whose declarations `puck shaders generate` writes into `sdf-world.interface.hlsli`
 from the C# type) or else its pass-block value (`SdfWorldPackage.Values`, written
@@ -1483,8 +1525,16 @@ previous history. It fills a caller-owned `RenderGraphSchedule`, whose `Next`
 it rewrites, so the next frame goes into another schedule; a refused frame
 leaves the schedule unchanged, and a host alternating two schedules allocates
 nothing in a steady frame. `RenderGraphSchedulerLawTests` pins demand, extent,
+history reads creating no producer demand, and withdrawal of unsuccessful
+writes. History remains reachable for lifetime and binding. Local history
+uses a per-storage successful-write cursor (`ShaderPipelineRenderNode.History.cs`),
+committed at submission and rolled back with access state on failure; device
+loss starts with no history. Package signatures decide whether another sample
+is owed, and publication and export remain allowed. `RenderGraphHistoryLawTests`
+holds this rule for images, buffers, reloads, graphics attachments and recovery.
+`RenderGraphSchedulerLawTests` also pins
 refresh, self-reads, cycles, the pass-pixel budget, buffer reads (demanded by
-every rendering reader, no extent, no pass-pixels), kind mismatches and that
+every same-frame rendering reader, no extent, no pass-pixels), kind mismatches and that
 zero-allocation steady frame with a buffer edge in it. A source instance
 (`RenderGraphInstance.IsSource`, package `source.<producer id>`) is scheduled
 by demand at most once a frame, but at the cadence and negotiated extent its
@@ -1807,15 +1857,23 @@ the destination's own frame source on its own clock, released in
 `ReconcileViewResidencies` once the session is gone. A camera view reads every
 source within the frame and every view a screen of its world shows, itself
 included, at its previous frame; a session reads, within the frame, what its own
-world's screens show one level deeper (`WorldView.Reads`: sessions, and source
-instances only nested worlds show, `WorldViewInstances.NestedSources`); the
+world's screens show one level deeper (`WorldView.Reads`: sessions, camera views of
+that world, and source instances only nested worlds show,
+`WorldViewInstances.NestedSources`); a camera of a presented world reads the same
+but its world's camera views, which it reads at their previous frame
+(`WorldView.PreviousReads`); the
 world's instance reads every view a screen of a world the display shows directly
 shows (`WorldViewInstances.IsShownDirectly`) within the frame, so the reads grow
 with the views shown, never with the square of every view. `WorldViewGraphHost.TryCompose` puts the views
 after the sources. A view's demand (`WorldViewDemand`, flags) is every way
 something shows it: a screen, through a footprint of its declared extent over the
 display, and a HUD frame or a probe export, as a root beside the runtime's
-(`WorldViewGraphHost.Roots`); a parked one is demanded not at all. A declared
+(`WorldViewGraphHost.Roots`); a parked one is demanded not at all. A camera
+reads the views it films at their previous frame, which demands nothing, so while
+a root camera films the world the host roots every view the world's screens show,
+at the camera's fraction times the view's extent and at the camera's refresh
+(`AddFilmedRoots`, `RenderGraphRoot.Refresh`: an instance only roots show renders
+no more often than its most frequent root asks). A declared
 extent past the display is scaled by one factor on both axes
 (`WorldViewInstances.Fit`), so a view never renders stretched. Every view
 refreshes at `world.view-refresh`'s divisor except a window session (every
@@ -1889,12 +1947,33 @@ depth 0 (`routed$<digest>`, a digest of its authority, `WorldViewNames.Routed`) 
 whose session screens open session feeds of their own while the world is
 shallower than the nesting depth, named `WorldViewNames.Nested`
 (`session$<screen>$<screen>…`). A screen at the depth shows its session's
-`fallback` colour through the `color` producer (`WorldPortalFallback`); a world
-shown through a screen shows only sessions and producers whose content is
-deterministic. Views of one residency render one world at different levels, so
+`fallback` colour through the `color` producer (`WorldPortalFallback`). Every
+other screen of a presented world shows that world's own source, through the
+one mechanism the boot world's screens use (`WorldScreenMappingSet`, one per
+world, named by its world instance): a machine or a probe source instance carries
+a `world` setting (`WorldSourceInstances.WorldOf`), so the binder's
+`MachineSource` reads that world's host (`WorldScreenBinder.MachinesOf`, null for
+a world another authority runs). A session's level opens no machine source, reads
+no framebuffer extent and casts no machine light while its delivered definition
+withholds that machine's declaration. `ProbeSource` opens a fault for any world but
+the boot world, which alone runs a probe host; a camera view is a view of that
+world filmed under the level (`WorldViewNames.NestedCamera`,
+`WorldNestedScreens.Cameras`) into the residency the level renders through, after
+its own views, by the dresser's `Film` hook (`WorldSessionSceneEmitter.Film`,
+`WorldRoutedScene.Film`; `WorldScreenBinder.NestedCameras.cs` records each
+index in a `WorldFilmedViews`, which drops a view its residency's dress no
+longer films and, on a nesting move, every view no live level shows), reading the level's sessions and sources within the frame and its camera
+views at their previous frame (`WorldView.PreviousReads`); text draws through
+the world's own font catalog (`WorldTextCatalog` resolved beside the delivered
+definition's `DocumentDirectory`), whose decals the dresser hands the residency
+(`ISdfFrameDresser.GlyphAtlas`/`ScreenDecals`, forwarded by
+`SdfCompositionFrameSource`; `WorldScreenDecals` serves the boot presenter and
+every session emitter alike). Only a producer of the local device's content shows
+nothing. Views of one residency render one world at different levels, so
 `ISdfScreenSources.ReadOf` takes the view: a routed scene's seat views read the
-routed world's level, each window view its feed's (`RoutedScreenSources`), and
-the residency's bound flag holds while any view of its frame reads the screen.
+routed world's level, each window view its feed's, each camera view the level
+that films it (`RoutedScreenSources`), and the residency's bound flag holds
+while any view of its frame reads the screen.
 A window fits to the eye of the view one level up and starts its rays past the
 counterpart's own glass (`WorldPrototypeFacets.GlassSpan`). A session's
 footprint holds only while its consumer's last camera sees its glass
@@ -2216,21 +2295,37 @@ backends with `--debug-layers` after changing the resolve, the fragment or the
 reprojection; `SdfPassPlanLawTests.Temporal` and `SdfWorldPassesLawTests.Temporal`
 hold the plan and the convergence rule without a device.
 
+`temporal-standing` pins the absence of further temporal shading and resolve
+work after a still camera converges. The completed World submission stays the
+same across later frames while the root's submission advances; the counters
+retain the previous sample's counts, so those historical counts are not new
+work. Its camera-pan control resumes both passes. `place-sharpen` captures the
+production Place pass at equal extent and checks exact analytic UNORM colors
+at zero, full and partial strength, with flat and saturated edges. Its control
+disables `sharpen` while keeping full strength. Run both on Vulkan and Direct3D
+12 with `--debug-layers`; both require `gpu` and belong to the merge selection.
+
 ## Dynamic resolution
 
 `WorldDynamicResolution` (`src/Puck.World.Client`) is the one controller; the
-presenter (`WorldFramePresenter.DynamicResolution.cs`) advances it once a
+presenter (`WorldFramePresenter.DynamicResolution.cs`) advances each view's instance once a
 frame and writes its grid as `ResolvedRenderScale`, times the transition dip,
-with `RenderScale = WorldRenderSettings.RenderCeiling`. Off, every view's
+with `RenderScale = WorldRenderSettings.Ceiling(view)`. Off, every view's
 values are exactly what they were without it. Never add a second grid or
 quantizer: the grid reaches `RenderGraphExtent.Quantize`, and the controller
 compares grids through `WorldDynamicResolution.GridOf`, the same quantization.
+The one parser is `WorldRenderScaleCommand`: `world.render-scale [view]`
+accepts ceilings, tier floors, pins and auto. `views.quality` saves per-view
+ceilings and floors; pins never enter save or replay. The floor defaults to
+Quarter and quality presets supply `renderScaleFloor`. The world-wide ceiling,
+automatic mode and default pin govern the player views (`world`, `world$N`); a
+camera or session view renders native until a lever or a row names it.
 All three signals go through `WorldDynamicResolution.Take` and `Respond`, so a
 policy change is one edit there. A sample counts only at the grid the views
 render now: a node records the grid each rendered submission ran at
 (`IShaderPipelineRenderExtent.Grid`, `ShaderPipelineRenderNode.TryGetRenderGrid`),
 and a reading names its renders' common grid. The load reaches the controller
-only through `IWorldFrameLoadSource`; the World's `WorldFrameLoadSource` sums
+only through `IWorldFrameLoadSource`; the World's `WorldFrameLoadSource` reads
 each view's newest timed (`LatestTimingSubmission`,
 `LatestTimingMilliseconds`) or completed (`TryReadCompleted`) submission not
 read before through a `WorldFrameLoadAggregate`, so a standing view adds

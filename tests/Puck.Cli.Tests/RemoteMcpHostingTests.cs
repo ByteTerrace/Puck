@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Puck.Hosting;
 using Puck.Mcp;
 using ModelContextProtocol.Protocol;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -42,7 +43,8 @@ public sealed class RemoteMcpHostingTests {
             cancellationToken: Token
         );
         var id = attached.StructuredContent!.Value.GetProperty(propertyName: "attachmentId").GetString();
-        var path = Path.GetTempFileName();
+        using var scratch = new TemporaryDirectory(prefix: "puck-remote-mcp-options-");
+        var path = scratch.PathOf(name: "options.json");
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: Token);
         Task? monitor = null;
         var policy = fixture.App.Services.GetRequiredService<RemoteMcpAccessPolicy>();
@@ -113,52 +115,50 @@ public sealed class RemoteMcpHostingTests {
         } finally {
             await stop.CancelAsync();
             if (monitor is not null) { await monitor; }
-            File.Delete(path: path);
         }
     }
     [Fact]
     public async Task MinimalTargetConfigurationPreservesDeploymentDefaults() {
-        var path = Path.GetTempFileName();
+        using var scratch = new TemporaryDirectory(prefix: "puck-remote-mcp-options-");
+        var path = scratch.PathOf(name: "options.json");
 
-        try {
-            const string Json = """{"target":"row","publicUrl":"https://mcp.example.test/mcp","listenUrl":"http://127.0.0.1:8080","issuer":"https://issuer.example.test","audience":"api","scope":"user_impersonation","allowedSubjects":[]}""";
+        const string Json = """{"target":"row","publicUrl":"https://mcp.example.test/mcp","listenUrl":"http://127.0.0.1:8080","issuer":"https://issuer.example.test","audience":"api","scope":"user_impersonation","allowedSubjects":[]}""";
 
-            await File.WriteAllTextAsync(
-                path,
-                Json,
-                Token
-            );
-            var options = await RemoteMcpServer.ReadOptionsAsync(
-                path,
-                Token
-            );
+        await File.WriteAllTextAsync(
+            path,
+            Json,
+            Token
+        );
+        var options = await RemoteMcpServer.ReadOptionsAsync(
+            path,
+            Token
+        );
 
-            Assert.Equal(
-                "row",
-                options.Target
-            );
-            Assert.Equal(
-                "sub",
-                options.SubjectClaim
-            );
-            Assert.Empty(collection: options.AllowedOrigins);
-            Assert.Equal(
-                300,
-                options.IdleTimeoutSeconds
-            );
-            await File.WriteAllTextAsync(
-                path,
-                Json.Replace(
-                    newValue: "\"target\":\"row\",\"idleTimeoutSeconds\":0",
-                    oldValue: "\"target\":\"row\""
-                ),
-                Token
-            );
-            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(testCode: () => RemoteMcpServer.ReadOptionsAsync(
-                path,
-                Token
-            ));
-        } finally { File.Delete(path: path); }
+        Assert.Equal(
+            "row",
+            options.Target
+        );
+        Assert.Equal(
+            "sub",
+            options.SubjectClaim
+        );
+        Assert.Empty(collection: options.AllowedOrigins);
+        Assert.Equal(
+            300,
+            options.IdleTimeoutSeconds
+        );
+        await File.WriteAllTextAsync(
+            path,
+            Json.Replace(
+                newValue: "\"target\":\"row\",\"idleTimeoutSeconds\":0",
+                oldValue: "\"target\":\"row\""
+            ),
+            Token
+        );
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(testCode: () => RemoteMcpServer.ReadOptionsAsync(
+            path,
+            Token
+        ));
     }
     [Fact]
     public async Task ReadinessUsesInjectedHostWithoutOpeningAnAttachment() {

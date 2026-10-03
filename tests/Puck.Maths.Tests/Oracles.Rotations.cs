@@ -81,4 +81,99 @@ internal static partial class Oracles {
 
         return (numerators, ((rootA * rootCross) << Guard));
     }
+    /// <summary>The reference screw exponential of a dual vector given as raw lanes, each output lane an exact numerator
+    /// over its own positive denominator: the rotation <c>(û·sin θ, cos θ)</c> and the dual part
+    /// <c>dual·sin θ/θ + û·(û·dual)·(cos θ − sin θ/θ)</c> with scalar <c>−(û·dual)·sin θ</c>, for <c>θ = |real|</c>.
+    /// Null for a zero rotation, whose exponential is exact.</summary>
+    /// <param name="real">The rotation part's three raw lanes.</param>
+    /// <param name="dual">The dual part's three raw lanes.</param>
+    /// <returns>The eight lane rationals (rotation x, y, z, w, then dual x, y, z, w), or <see langword="null"/>.</returns>
+    /// <remarks>θ is the integer root of the exact sum of squares at Q60, and its sine and cosine come from
+    /// <see cref="EncloseSinCosScaled"/>, 40 guard bits below Q16: the series, never the subject's Q60 table, and θ
+    /// never rounded to the Q16 grid the subject's angle sits on.</remarks>
+    public static (BigInteger Numerator, BigInteger Denominator)[]? RigidExp(ReadOnlySpan<long> real, ReadOnlySpan<long> dual) {
+        const int Guard = RotationGuardBitCount;
+        BigInteger rx = real[0], ry = real[1], rz = real[2], dx = dual[0], dy = dual[1], dz = dual[2];
+        var sum = (((rx * rx) + (ry * ry)) + (rz * rz));
+
+        if (sum.IsZero) {
+            return null;
+        }
+
+        // T = θ·2⁶⁰; sin and cos at 2^(16 + Guard); θ_raw = T/2⁴⁴.
+        var t = IntegerSquareRoot(value: (sum << 88));
+
+        var (sin, cos) = EncloseSinCosScaled(
+            fractionBitCount: 60,
+            guardBitCount: Guard,
+            raw: t
+        );
+        var sinS = sin.Low;
+        var cosS = cos.Low;
+        var slide = (((rx * dx) + (ry * dy)) + (rz * dz));
+        var realDenominator = (t << Guard);
+        var dualDenominator = (((t * t) * t) << (16 + Guard));
+        var bend = ((cosS * t) - (sinS << 60));
+        BigInteger[] r = [rx, ry, rz];
+        BigInteger[] d = [dx, dy, dz];
+        var lanes = new (BigInteger, BigInteger)[8];
+
+        for (var lane = 0; (lane < 3); lane++) {
+            lanes[lane] = (((r[lane] * sinS) << 44), realDenominator);
+            lanes[(4 + lane)] = ((((((d[lane] * sinS) * t) * t) << 60) + (((r[lane] * slide) * bend) << 88)), dualDenominator);
+        }
+
+        lanes[3] = (cosS, (BigInteger.One << Guard));
+        lanes[7] = (-((slide * sinS) << 44), (t << (16 + Guard)));
+
+        return lanes;
+    }
+    /// <summary>The reference screw logarithm of a transform given as raw lanes, each output lane an exact numerator
+    /// over a positive denominator: the rotation bivector <c>rᵢ·h/s</c> and the dual part
+    /// <c>dᵢ·h/s − rᵢ·d_w·(s − w·h)/s³</c>, for <c>s = |vector part|</c> and <c>h = atan2(s, w)</c>. Null for a
+    /// vector-free rotation, where the subject answers the dual part as given.</summary>
+    /// <param name="real">The rotation quaternion's four raw lanes (x, y, z, w).</param>
+    /// <param name="dual">The dual quaternion's four raw lanes.</param>
+    /// <param name="sineSensitivity">Per dual lane, <c>|dᵢ·h/s| + 3·|rᵢ·d_w·(s − w·h)/s³|</c> over the dual lanes'
+    /// denominator: the first-order change of the lane per unit relative error in s, the two terms' magnitudes
+    /// weighted by their powers of s, which a near-half-turn rotation makes large and nearly cancelling.</param>
+    /// <returns>The six lane rationals (rotation x, y, z, then dual x, y, z), or <see langword="null"/>.</returns>
+    /// <remarks>s is the integer root of the exact sum of squares at 2⁻⁶⁰ and h comes from
+    /// <see cref="EncloseAtan2"/>, the arctangent series, 40 guard bits below Q16. The subject carries both at Q20 and
+    /// folds the lanes into one fraction each; this oracle shares neither its precision nor its arctangent.</remarks>
+    public static (BigInteger Numerator, BigInteger Denominator)[]? RigidLog(ReadOnlySpan<long> real, ReadOnlySpan<long> dual, out BigInteger[] sineSensitivity) {
+        const int Guard = RotationGuardBitCount;
+        BigInteger rx = real[0], ry = real[1], rz = real[2], w = real[3], dw = dual[3];
+        var sum = (((rx * rx) + (ry * ry)) + (rz * rz));
+
+        sineSensitivity = new BigInteger[3];
+
+        if (sum.IsZero) {
+            return null;
+        }
+
+        // Ssc = s·2⁶⁰ (s in real units); h·2^(16 + Guard) from operands at a shared scale below 2⁶³.
+        var ssc = IntegerSquareRoot(value: (sum << 88));
+        var h = EncloseAtan2(
+            guardBitCount: Guard,
+            xRaw: ((long)(w << 30)),
+            yRaw: ((long)IntegerSquareRoot(value: (sum << 60)))
+        ).Low;
+        var tilt = (((ssc << (32 + Guard)) - ((w * h) << 60)) << (72 - Guard));
+        BigInteger[] r = [rx, ry, rz];
+        BigInteger[] d = [dual[0], dual[1], dual[2]];
+        var cube = ((ssc * ssc) * ssc);
+        var lanes = new (BigInteger, BigInteger)[6];
+
+        for (var lane = 0; (lane < 3); lane++) {
+            lanes[lane] = (((r[lane] * h) << (44 - Guard)), ssc);
+            var screw = ((((d[lane] * h) << (44 - Guard)) * ssc) * ssc);
+            var slide = ((r[lane] * dw) * tilt);
+
+            lanes[(3 + lane)] = ((screw - slide), cube);
+            sineSensitivity[lane] = (BigInteger.Abs(value: screw) + (3 * BigInteger.Abs(value: slide)));
+        }
+
+        return lanes;
+    }
 }

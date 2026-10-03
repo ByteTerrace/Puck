@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Testing;
 using System.Text;
 using System.Text.Json.Nodes;
 using Xunit;
@@ -23,7 +24,7 @@ public sealed class WorldAdmissionEnvironmentLawTests {
     public async Task BootValuesSettleBeforeTheOnlyFullAdmission(string path, bool draw) {
         var previous = BindingVocabularyHook.VocabularyCheck;
         var checks = 0;
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-boot-admission-");
+        using var directory = new TemporaryDirectory(prefix: "puck-boot-admission-");
 
         try {
             BindingVocabularyHook.VocabularyCheck = (_, _, _, _) => checks++;
@@ -62,7 +63,7 @@ public sealed class WorldAdmissionEnvironmentLawTests {
                 bool accepted;
 
                 if (path == "file") {
-                    var file = Path.Combine(path1: directory.FullName, path2: "world.json");
+                    var file = Path.Combine(path1: directory.RootPath, path2: "world.json");
 
                     File.WriteAllBytes(bytes: bytes, path: file);
                     accepted = WorldDefinitionLoader.TryLoadFileForAdmission(file, out admission, out _, out reason);
@@ -81,7 +82,6 @@ public sealed class WorldAdmissionEnvironmentLawTests {
             Assert.Equal((draw ? 1L : 0L), loaded.AuthoredState[0].DrawCursor);
         } finally {
             BindingVocabularyHook.VocabularyCheck = previous;
-            directory.Delete(recursive: true);
         }
     }
     [Fact]

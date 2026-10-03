@@ -858,7 +858,7 @@ public sealed partial class SessionObservationLawTests {
             request: new WorldRebuildRequest(
                 Kind: WorldRebuildKind.Reset,
                 Definition: null,
-                PathHint: null,
+                Origin: null,
                 Force: false
             )
         );

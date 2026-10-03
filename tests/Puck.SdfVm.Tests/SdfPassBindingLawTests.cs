@@ -7,8 +7,8 @@ namespace Puck.SdfVm.Tests;
 /// The counted cost of an <c>sdf.world</c> pass's constant data, held to the generated interface: every pass block is
 /// the world interface's pass block, which holds the view and frame values and no light or sky table, and each kernel
 /// the build deploys binds the lights table and the sky's block and tables only when its pass reads them (the lights
-/// the shadow and views passes, the sky block and its stops the sky and views passes, the softboxes views alone), as its
-/// SPIR-V reflects.
+/// the shadow and views passes, the sky block and its stops the sky and views passes, the softboxes views alone, the sky's
+/// environment map the composite alone), as its SPIR-V reflects.
 /// </summary>
 public sealed class SdfPassBindingLawTests {
     // The pass block's bytes: the extent and the world values, the view, the levers, the light count and shadow light, and
@@ -22,6 +22,7 @@ public sealed class SdfPassBindingLawTests {
         (SdfKernelInterfaces.Sky, [SdfKernel.Sky, SdfKernel.Composite, SdfKernel.Resolve, .. ViewsKernels]),
         (SdfKernelInterfaces.SkyStops, [SdfKernel.Sky, SdfKernel.Composite]),
         (SdfKernelInterfaces.Softboxes, ViewsKernels),
+        (SdfKernelInterfaces.SkyEnvironment, [SdfKernel.Composite]),
     ];
 
     private static ShaderInterfaceGroupLayout Group(ShaderInterfaceLayout layout, ShaderInterfaceGroup group) =>

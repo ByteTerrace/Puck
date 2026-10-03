@@ -1,5 +1,6 @@
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -62,33 +63,21 @@ public sealed class PipelineCanaryFixtureTests {
             condition: (new ShaderToolchain().Locate(name: "dxc") is null),
             reason: "DXC is required to compile the canary pipeline sources."
         );
-        var cache = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-pipeline-canary-" + Guid.NewGuid().ToString(format: "N"))
+        using var directory = new TemporaryDirectory(prefix: "puck-pipeline-canary-");
+
+        var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: directory.RootPath)).Load(
+            cancellationToken: TestContext.Current.CancellationToken,
+            name: "feedback",
+            path: FixturePath(fileName: fileName)
         );
 
-        try {
-            var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache)).Load(
-                cancellationToken: TestContext.Current.CancellationToken,
-                name: "feedback",
-                path: FixturePath(fileName: fileName)
-            );
-
-            Assert.True(
-                condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
-                userMessage: result.Message
-            );
-            foreach (var shader in result.Pipeline!.Shaders.Values) {
-                Assert.NotEmpty(collection: shader.SpirvByStage);
-                Assert.NotEmpty(collection: shader.DxilByStage);
-            }
-        } finally {
-            if (Directory.Exists(path: cache)) {
-                Directory.Delete(
-                    path: cache,
-                    recursive: true
-                );
-            }
+        Assert.True(
+            condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
+            userMessage: result.Message
+        );
+        foreach (var shader in result.Pipeline!.Shaders.Values) {
+            Assert.NotEmpty(collection: shader.SpirvByStage);
+            Assert.NotEmpty(collection: shader.DxilByStage);
         }
     }
     [InlineData("broken.graph.json", "convert-broken.hlsl")]
@@ -138,36 +127,24 @@ public sealed class PipelineCanaryFixtureTests {
             condition: (new ShaderToolchain().Locate(name: "dxc") is null),
             reason: "DXC is required to compile the canary pipeline sources."
         );
-        var cache = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-pipeline-canary-" + Guid.NewGuid().ToString(format: "N"))
+        using var directory = new TemporaryDirectory(prefix: "puck-pipeline-canary-");
+
+        var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: directory.RootPath)).Load(
+            cancellationToken: TestContext.Current.CancellationToken,
+            name: "fixture",
+            path: FixturePath(
+                canary: canary,
+                fileName: fileName
+            )
         );
 
-        try {
-            var result = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache)).Load(
-                cancellationToken: TestContext.Current.CancellationToken,
-                name: "fixture",
-                path: FixturePath(
-                    canary: canary,
-                    fileName: fileName
-                )
-            );
-
-            Assert.True(
-                condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
-                userMessage: result.Message
-            );
-            foreach (var shader in result.Pipeline!.Shaders.Values) {
-                Assert.NotEmpty(collection: shader.SpirvByStage);
-                Assert.NotEmpty(collection: shader.DxilByStage);
-            }
-        } finally {
-            if (Directory.Exists(path: cache)) {
-                Directory.Delete(
-                    path: cache,
-                    recursive: true
-                );
-            }
+        Assert.True(
+            condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
+            userMessage: result.Message
+        );
+        foreach (var shader in result.Pipeline!.Shaders.Values) {
+            Assert.NotEmpty(collection: shader.SpirvByStage);
+            Assert.NotEmpty(collection: shader.DxilByStage);
         }
     }
     [Fact]
@@ -211,42 +188,30 @@ public sealed class PipelineCanaryFixtureTests {
             condition: (new ShaderToolchain().Locate(name: "dxc") is null),
             reason: "DXC is required to compile the canary pipeline sources."
         );
-        var cache = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: ("puck-pipeline-canary-" + Guid.NewGuid().ToString(format: "N"))
+        using var directory = new TemporaryDirectory(prefix: "puck-pipeline-canary-");
+
+        var corrected = LoadEdit(
+            cache: directory.RootPath,
+            fileName: "corrected.graph.json"
+        );
+        var broken = LoadEdit(
+            cache: directory.RootPath,
+            fileName: "broken.graph.json"
         );
 
-        try {
-            var corrected = LoadEdit(
-                cache: cache,
-                fileName: "corrected.graph.json"
-            );
-            var broken = LoadEdit(
-                cache: cache,
-                fileName: "broken.graph.json"
-            );
-
-            Assert.True(
-                condition: (corrected.Status == ShaderPipelineLoadStatus.Compiled),
-                userMessage: corrected.Message
-            );
-            Assert.Equal(
-                expected: ShaderPipelineLoadStatus.Failed,
-                actual: broken.Status
-            );
-            Assert.Null(@object: broken.Pipeline);
-            Assert.Contains(
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "convert",
-                actualString: broken.Message
-            );
-        } finally {
-            if (Directory.Exists(path: cache)) {
-                Directory.Delete(
-                    path: cache,
-                    recursive: true
-                );
-            }
-        }
+        Assert.True(
+            condition: (corrected.Status == ShaderPipelineLoadStatus.Compiled),
+            userMessage: corrected.Message
+        );
+        Assert.Equal(
+            expected: ShaderPipelineLoadStatus.Failed,
+            actual: broken.Status
+        );
+        Assert.Null(@object: broken.Pipeline);
+        Assert.Contains(
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "convert",
+            actualString: broken.Message
+        );
     }
 }

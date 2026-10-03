@@ -131,16 +131,9 @@
           "default": false
         },
         "renderScale": {
-          "description": "The boot render-scale tier.",
-          "enum": [
-            "Native",
-            "ThreeQuarter",
-            "Half",
-            "Quarter",
-            "Eighth"
-          ],
-          "default": "Native",
-          "title": "WorldRenderScaleTier"
+          "description": "The scalar boot render-scale ceiling in [0.125, 1].",
+          "type": "number",
+          "default": 1
         },
         "upscaleSharpness": {
           "description": "The boot reconstruction sharpness: the spatial resolve\u0027s blend (0 bilinear .. 1 Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect\u0027s own extent.",
@@ -153,21 +146,9 @@
           "default": false
         },
         "dynamicResolution": {
-          "description": "Whether the world\u0027s own views boot with dynamic resolution (world.dynamic-resolution): each frame one controller moves each view\u0027s render grid between DynamicResolutionFloor and the render-scale ceiling, by the present timing or, where the presenter reports none, by the views\u0027 counted march steps against the budget the floor tier\u0027s committed counters ceilings give per output pixel. A native ceiling is lowered to three-quarter while it is on, since a native view reconstructs nothing.",
+          "description": "Whether views boot adapting their grids (world.render-scale auto). Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while adaptation is enabled, since a native view reconstructs nothing.",
           "type": "boolean",
           "default": false
-        },
-        "dynamicResolutionFloor": {
-          "description": "The lowest render-scale tier dynamic resolution moves a view\u0027s grid to.",
-          "enum": [
-            "Native",
-            "ThreeQuarter",
-            "Half",
-            "Quarter",
-            "Eighth"
-          ],
-          "default": "Quarter",
-          "title": "WorldRenderScaleTier"
         },
         "low": {
           "description": "The world.quality low preset.",
@@ -191,7 +172,19 @@
               "type": "boolean"
             },
             "renderScale": {
-              "description": "The render-scale tier the preset selects.",
+              "description": "The scalar render-scale ceiling the preset selects.",
+              "type": "number"
+            },
+            "temporal": {
+              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
+              "type": "boolean"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
+              "type": "boolean"
+            },
+            "renderScaleFloor": {
+              "description": "The per-view floor tier the preset selects (Quarter by default).",
               "enum": [
                 "Native",
                 "ThreeQuarter",
@@ -200,14 +193,6 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
-            },
-            "temporal": {
-              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
-              "type": "boolean"
-            },
-            "dynamicResolution": {
-              "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
-              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -236,7 +221,19 @@
               "type": "boolean"
             },
             "renderScale": {
-              "description": "The render-scale tier the preset selects.",
+              "description": "The scalar render-scale ceiling the preset selects.",
+              "type": "number"
+            },
+            "temporal": {
+              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
+              "type": "boolean"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
+              "type": "boolean"
+            },
+            "renderScaleFloor": {
+              "description": "The per-view floor tier the preset selects (Quarter by default).",
               "enum": [
                 "Native",
                 "ThreeQuarter",
@@ -245,14 +242,6 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
-            },
-            "temporal": {
-              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
-              "type": "boolean"
-            },
-            "dynamicResolution": {
-              "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
-              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -281,7 +270,19 @@
               "type": "boolean"
             },
             "renderScale": {
-              "description": "The render-scale tier the preset selects.",
+              "description": "The scalar render-scale ceiling the preset selects.",
+              "type": "number"
+            },
+            "temporal": {
+              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
+              "type": "boolean"
+            },
+            "dynamicResolution": {
+              "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
+              "type": "boolean"
+            },
+            "renderScaleFloor": {
+              "description": "The per-view floor tier the preset selects (Quarter by default).",
               "enum": [
                 "Native",
                 "ThreeQuarter",
@@ -290,14 +291,6 @@
                 "Eighth"
               ],
               "title": "WorldRenderScaleTier"
-            },
-            "temporal": {
-              "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
-              "type": "boolean"
-            },
-            "dynamicResolution": {
-              "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
-              "type": "boolean"
             }
           },
           "additionalProperties": false,
@@ -4441,59 +4434,6 @@
             "additionalProperties": false,
             "default": null,
             "title": "WorldScreenMagazine"
-          },
-          "memory": {
-            "description": "The screen\u0027s live byte-window bindings between its booted machine\u0027s bus and ordinary state.world Int cells (see WorldScreenMemory), or null for a screen with none. Omitted from the wire when null.",
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "description": "One live byte-window binding between a declared screens row\u0027s booted machine and an ordinary state.world Int cell \u2014 the campfire seam: a 3D log on the fire is a cell, the cartridge reads it (or, the other direction, a lever the cartridge throws is a cell the 3D world reads). A Direction of Read mirrors the machine\u0027s bytes into the cell every tick through the ordinary state-mutation door (WorldMutation.UpsertStateCell, the same door a rule\u0027s own single-cell write folds into \u2014 see Server.WorldServer.MachineMemory.cs), a write landing only when the peeked value changed, so a quiet machine costs nothing; Write pokes the cell\u0027s current value into the machine\u0027s bus (PokeByte through Server.IWorldMachineHost.TryPokeMessage) every tick the cell\u0027s value has moved since the last poke \u2014 a mutation of the machine\u0027s guest state through the host seam, deterministic under replay because the value it carries is itself simulation state a replay reproduces bit-for-bit, unlike a bare debug poke\u0027s own unrecorded-input caveat. Distinct from an addon row\u0027s own WorldAddonMemoryWatch (an edge-triggered event feed for a mounted guest): this binding is a standing per-tick mirror into ordinary state, read by every other state consumer (rules, HUD bindings, a placement\u0027s respond) with no addon in the loop.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "address": {
-                  "description": "The machine bus address the window starts at. Validated within 0..(MaxAddress - Width \u002B 1) \u2014 outside the engine\u0027s addressable memory refuses by name at validation, never at runtime (a machine\u0027s own IMachineMemoryPeek silently reads/no-ops out of its own smaller readable/writable range instead, exactly as it does for any other peek/poke).",
-                  "type": "integer"
-                },
-                "width": {
-                  "description": "How many bytes the window spans, little-endian (the low byte at Address): 1 or 2.",
-                  "type": "integer"
-                },
-                "row": {
-                  "description": "The declared state.world row this binding mirrors to/from \u2014 must resolve to a kind=Int row.",
-                  "type": "string"
-                },
-                "key": {
-                  "description": "The cell inside Row, or null for its slot cell. Refused when Row is keyed and this is absent, or unkeyed and this is present \u2014 the same (row, key) pair rule every other named-cell reference in this document follows. Omitted from the wire when null.",
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "direction": {
-                  "description": "Which way the binding moves a value.",
-                  "enum": [
-                    "Read",
-                    "Write"
-                  ],
-                  "default": "Read",
-                  "title": "WorldScreenMemoryDirection"
-                }
-              },
-              "required": [
-                "address",
-                "width",
-                "row"
-              ],
-              "additionalProperties": false,
-              "title": "WorldScreenMemory"
-            },
-            "default": null
           },
           "filter": {
             "description": "How the face samples its source\u0027s image: Nearest, the default, keeps each source pixel crisp, as an emulator or a pixel-art source wants; Linear blends between source pixels, as a camera or a desktop capture wants. The screen\u0027s mapping carries it, and a hit maps to the same source pixel under either. Omitted from the wire when Nearest.",
@@ -22867,6 +22807,68 @@
           ],
           "default": null
         },
+        "quality": {
+          "description": "Per-view render quality and tier floors; a row named * supplies the defaults.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "A view\u0027s durable render quality. A name of * supplies the defaults for the world\u0027s own player views (world, world$2 on); a named row overrides only that view, and a camera or session view takes only a row that names it, rendering native otherwise. Pins are session state and have no document member.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "The render view\u0027s instance name, or * for the player-view defaults.",
+                "type": "string"
+              },
+              "renderScale": {
+                "description": "The scalar allocation ceiling, or null to inherit the render defaults.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "renderScaleFloor": {
+                "description": "The lowest dynamic grid tier, or null to use the selected tier\u0027s floor (Quarter by default).",
+                "enum": [
+                  "Native",
+                  "ThreeQuarter",
+                  "Half",
+                  "Quarter",
+                  "Eighth",
+                  null
+                ],
+                "default": null,
+                "title": "WorldRenderScaleTier"
+              },
+              "tier": {
+                "description": "The authored quality preset whose floor this view uses.",
+                "default": null,
+                "title": "QualityTier",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  null
+                ]
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false,
+            "title": "WorldViewQuality"
+          },
+          "default": null
+        },
         "layouts": {
           "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
           "type": [
@@ -38998,7 +39000,7 @@
                       "title": "WorldEffectPose"
                     },
                     {
-                      "description": "Writes one fact on the identity a world-addressed body drives under: the body\u0027s cell in the world\u0027s reserved WorldIdentityFactLane row and the identity\u0027s own persisted facts row, together. Exactly one of Value and Expression is authored; a body driving under no owned identity refuses the write rather than minting one.",
+                      "description": "Writes one fact on the identity a world-addressed body drives under: the body\u0027s cell in the world\u0027s reserved WorldIdentityFactLane row and the identity\u0027s facts row, together. An owned identity\u0027s row is persisted; a visitor\u0027s is its travelling row, which its own authority adopts when it comes home. Exactly one of Value and Expression is authored; a body driving under no identity refuses the write rather than minting one.",
                       "properties": {
                         "$type": {
                           "const": "setIdentityFact"
@@ -40310,13 +40312,13 @@
       "title": "WorldProjectedMetadata"
     },
     "observations": {
-      "description": "Explicitly disclosed literal state observations, without executable or draw bookkeeping traits.",
+      "description": "Explicitly disclosed state observations, without draw bookkeeping: each cell as stored, with the value-over-time trait that governs it.",
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "description": "A presentation observation, without draw seeds, cursors, masks, grants, or executable traits. HiddenCount counts the cells the row\u0027s Hidden policy withheld from this observer (placeholders included), zero under Omit. Space names a Vector row\u0027s vector space, and is absent for every other kind.",
+        "description": "A presentation observation, without draw seeds, cursors, masks or grants: each cell as it is stored, with the value-over-time trait that governs it (WorldObservedCell). HiddenCount counts the cells the row\u0027s Hidden policy withheld from this observer (placeholders included), zero under Omit. Space names a Vector row\u0027s vector space, and is absent for every other kind. Min and Max are the row\u0027s declared envelope, which an eased read is clamped to and a bound value is read against.",
         "type": [
           "object",
           "null"
@@ -40338,19 +40340,22 @@
           "cells": {
             "type": "array",
             "items": {
-              "description": "A disclosed literal cell, or, under Placeholder, an anonymous card back (Hidden true, empty key, zero value, no text, no observation).",
+              "description": "A disclosed cell, or, under Placeholder, an anonymous card back (Hidden true, empty key, zero value, no text, no observation). A cell under a value-over-time trait carries its stored value as Value beside the one trait that governs it (Advance, Cycle or Dynamics) and the Clock that trait reads, exactly as the cell is stored: an advancing cell its base and epoch engine tick, a cycling cell its phase, epoch tick and substep remainder, and an eased cell its target, which a .$target read answers, with the epoch tick and the follower\u0027s position and velocity. A reader evaluates the trait at the tick it presents with the engine\u0027s own fixed-point computation, so it presents what the authority presents at every tick, and nothing is sent while the value only moves as its trait says.",
               "type": [
                 "object",
                 "null"
               ],
               "properties": {
                 "key": {
+                  "description": "The cell\u0027s key.",
                   "type": "string"
                 },
                 "value": {
+                  "description": "The stored value: the base an advance or a cycle turns from, or the target an eased cell follows.",
                   "type": "integer"
                 },
                 "text": {
+                  "description": "The text of a Text cell.",
                   "type": [
                     "string",
                     "null"
@@ -40358,6 +40363,7 @@
                   "default": null
                 },
                 "observation": {
+                  "description": "The cell\u0027s last-seen stamp.",
                   "type": [
                     "object",
                     "null"
@@ -40381,12 +40387,137 @@
                   "title": "StateObservation"
                 },
                 "hidden": {
+                  "description": "Whether the cell is an anonymous placeholder.",
                   "type": "boolean",
                   "default": false
                 },
                 "vector": {
+                  "description": "The vector of a Vector cell.",
                   "default": null,
                   "title": "StateVector"
+                },
+                "advance": {
+                  "description": "The accumulation an advancing cell moves by, or null.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "perSecondNumerator": {
+                      "description": "The per-second rate\u0027s signed numerator, in the row\u0027s own displayed unit (see this type\u0027s remarks). Negative accumulates downward (decay); zero is declared but inert.",
+                      "type": "integer"
+                    },
+                    "perSecondDenominator": {
+                      "description": "The per-second rate\u0027s denominator. Refused at zero or below.",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "perSecondNumerator",
+                    "perSecondDenominator"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "StateAdvance"
+                },
+                "cycle": {
+                  "description": "The rotation a cycling cell turns by, or null.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "word": {
+                      "description": "The generator as a word of reflections \u2014 mirror nodes, one to eight, applied first to last \u2014 or null for the lattice\u0027s own cycle. A word that moves no node is refused: it loops nothing.",
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": "integer"
+                      },
+                      "default": null
+                    },
+                    "power": {
+                      "description": "How many applications of the generator one step is; nonzero, and smaller in magnitude than the generator\u0027s order, since a power reduces modulo the order and a multiple of it would be the identity.",
+                      "type": "integer",
+                      "default": 1
+                    },
+                    "output": {
+                      "description": "What the cell reads; must suit the carrying row\u0027s CellKind.",
+                      "enum": [
+                        "Step",
+                        "Turns",
+                        "Cos",
+                        "Sin",
+                        "Node",
+                        "ProjectionX",
+                        "ProjectionY",
+                        "Ring"
+                      ],
+                      "default": "Step",
+                      "title": "CycleOutput"
+                    },
+                    "ticksPerStep": {
+                      "description": "The server ticks one step lasts; refused at zero or below.",
+                      "type": "integer",
+                      "default": 1
+                    }
+                  },
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "StateCycle"
+                },
+                "dynamics": {
+                  "description": "The follower an eased cell eases by, or null.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "row": {
+                      "description": "The referenced dynamics row name; must resolve.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "row"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "StateDynamics"
+                },
+                "clock": {
+                  "description": "The clock the cell\u0027s trait reads, or null for a trait that has never settled anywhere but tick zero (a follower at rest on its target).",
+                  "default": null,
+                  "title": "StateCellClock",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "epochTick": {
+                      "description": "The simulation tick this clock\u0027s rotation is measured from \u2014 the tick the cell\u0027s base value was last explicitly set, or its own behavior last changed. Read by StateCycle. A negative value is refused; in practice this can only be violated by an authored boot document, since every live settle rebases to the applying tick before validation sees it.",
+                      "type": "integer"
+                    },
+                    "epochEngineTick": {
+                      "description": "The engine tick (TicksPerSecond per second) this clock\u0027s accumulation is measured from \u2014 the engine tick the cell\u0027s base value was last explicitly set, or its own behavior last changed. Read by StateAdvance alone; never derived from EpochTick at a simulation rate, since a live rate change must move neither. A negative value is refused, for the same reason EpochTick is.",
+                      "type": "integer"
+                    },
+                    "y0": {
+                      "description": "A StateDynamics follower\u0027s position at EpochTick, as raw FixedQ4816 bits, independent of the carrying row\u0027s stored-value kind.",
+                      "type": "string"
+                    },
+                    "v0": {
+                      "description": "A StateDynamics follower\u0027s velocity at EpochTick, per second, as raw FixedQ4816 bits.",
+                      "type": "string"
+                    },
+                    "substepTicks": {
+                      "description": "Elapsed ticks a StateCycle has already accumulated toward its next step at EpochTick; must be non-negative and less than the cycle\u0027s own ticksPerStep.",
+                      "type": "integer"
+                    }
+                  },
+                  "additionalProperties": false
                 }
               },
               "required": [
@@ -40404,6 +40535,20 @@
           "space": {
             "type": [
               "string",
+              "null"
+            ],
+            "default": null
+          },
+          "min": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "max": {
+            "type": [
+              "integer",
               "null"
             ],
             "default": null
@@ -40462,7 +40607,7 @@
       "default": null
     },
     "timeline": {
-      "description": "The world\u0027s tick clocks, which a recipient evaluates from the tick it presents, and no state clock: a state clock reads a state row, and a projection sends no anchor of its phase, so a projection whose values key on one does not hydrate (TryToDefinition).",
+      "description": "The world\u0027s clocks as a recipient evaluates them from the tick it presents: each tick clock as authored, and each state clock a carried value keys on as an anchored clock holding the anchor of its phase the recipient was last sent (WorldClockAnchorLedger), never the row it reads. A state clock no carried value keys on does not cross.",
       "type": [
         "object",
         "null"
@@ -40475,7 +40620,7 @@
             "null"
           ],
           "items": {
-            "description": "One named presentation clock: a tick clock, whose phase advances with the simulation\u0027s engine tick through a period, or a state clock, whose phase is the fractional part of a state row\u0027s presented value (an advancing row wraps once per unit).",
+            "description": "One named presentation clock: a tick clock, whose phase advances with the simulation\u0027s engine tick through a period, or a state clock, whose phase is the fractional part of a state row\u0027s presented value (an advancing row wraps once per unit). A projection carries a state clock as an anchored clock instead, whose phase its recipient predicts from the anchor at the tick it presents (WorldClockAnchor); a document never authors one.",
             "type": [
               "object",
               "null"
@@ -40516,6 +40661,40 @@
                   "null"
                 ],
                 "default": null
+              },
+              "anchor": {
+                "description": "An anchored clock\u0027s anchor: what a projection carries for a state clock it discloses, in place of the row. Refused in an authored document. An anchored clock carrying none reads no phase, as the state clock it stands for reads none while its row holds no number.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "tick": {
+                    "description": "The engine tick the anchor stands at.",
+                    "type": "integer"
+                  },
+                  "phase": {
+                    "description": "The phase at Tick, a whole turn being 2^64.",
+                    "type": "integer"
+                  },
+                  "rate": {
+                    "description": "The phase one authoritative tick adds, wrapping; zero for a clock held still.",
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "step": {
+                    "description": "The engine ticks one authoritative tick spans; zero exactly when Rate is.",
+                    "type": "integer",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "tick",
+                  "phase"
+                ],
+                "additionalProperties": false,
+                "default": null,
+                "title": "WorldClockAnchor"
               }
             },
             "required": [

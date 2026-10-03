@@ -20,7 +20,7 @@ public static class WorldServerStepShell {
     /// <param name="tape">The replay tape (a no-op close while <see cref="WorldReplayMode.Idle"/>; the drive
     /// injection and burst while <see cref="WorldReplayMode.Replaying"/>), or <see langword="null"/> for a row
     /// nothing records.</param>
-    /// <param name="publishTick">Called after each server step, before the tape closes, with the host work count — the
+    /// <param name="publishTick">Called after each server step and tape close, with the host work count — the
     /// caller's own tick-clock sink (a console wait gate's <c>PublishTick</c>, or a no-op for a caller with nothing
     /// subscribed to publish yet). This project cannot name <c>Puck.World</c>'s <c>WorldConsoleWaitGate</c> or
     /// <c>Puck.Launcher</c>'s <c>ITextCommandHoldGate</c> it implements — both sit above this project's
@@ -44,25 +44,23 @@ public static class WorldServerStepShell {
 
         while (true) {
             peerHost?.DrainPending();
-            // A replay drive's recorded tick enters the server's doors here, at the pre-step position the live
-            // command-apply window holds; the loopback has already dropped this tick's masked seat input.
-            tape?.InjectDriveTick();
-            server.Advance(stepTicks: current.StepTicks);
-            server.EnforceJournalDepth();
+            // Federation may commit from another thread. Its authority operation must precede this whole step or
+            // follow its tape close: a post-step arrival cannot enter the bucket replay will apply before that step.
+            lock (server.AuthorityGate) {
+                tape?.InjectDriveTick();
+                server.Advance(stepTicks: current.StepTicks);
+                server.EnforceJournalDepth();
+                // Close this tick's captured server-input group for an armed recording or an in-session history, or
+                // compare and advance a drive (a no-op otherwise): the whole tick's intent and command stream has
+                // reached the loopback taps by now, submitted during ApplySnapshot before this step.
+                tape?.NoteTick();
+            }
 
             var tick = (current.Tick + 1UL);
 
             // The caller's own tick clock: a queued script held by world.wait resumes off THIS count, so the barrier
             // measures completed simulation ticks rather than frames or wall time.
             publishTick(tick);
-
-            // Close this tick's captured server-input group while a recording is armed, or compare and advance a
-            // drive (a no-op otherwise) — the whole tick's intent/command stream has reached the loopback taps by
-            // now (submitted during ApplySnapshot, before this Step call), so the group is complete regardless of
-            // what a presentation-side post-step does next.
-            if (tape is { Mode: not WorldReplayMode.Idle }) {
-                tape.NoteTick();
-            }
 
             if (
                 pacing.StepsOneTickPerFrame ||

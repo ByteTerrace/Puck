@@ -7,6 +7,7 @@ using Puck.Testing;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
+using static Puck.World.Tests.FederationSigning;
 
 namespace Puck.World.Tests;
 

@@ -250,11 +250,53 @@ internal sealed class FormatShapeClosure {
                 }
             }
         }
+        foreach (var unit in Parts(id: $"{format.Owner}.{format.Member}")) { roots.Add(item: unit); }
+
         if (TokenKey(format: format) is { } token) {
             foreach (var unit in (Naming(member: format.Member, owner: format.Owner).GetValueOrDefault(key: token) ?? [])) { roots.Add(item: unit); }
         }
 
         return ([.. roots], candidates);
+    }
+    // The units of every declaration marked [FormatPart("<id>")]: the codecs a format governs that none of its own code calls.
+    private IEnumerable<Unit> Parts(string id) {
+        var quoted = $"\"{id}\"";
+
+        foreach (var (path, text) in m_files) {
+            if (!text.Contains(comparisonType: StringComparison.Ordinal, value: "FormatPart") || !text.Contains(comparisonType: StringComparison.Ordinal, value: quoted)) { continue; }
+
+            var tree = m_trees[path];
+            var model = Model(tree: tree);
+
+            foreach (var declaration in tree.GetRoot().DescendantNodes().OfType<MemberDeclarationSyntax>()) {
+                var marked = declaration.AttributeLists.SelectMany(selector: static list => list.Attributes).Any(predicate: attribute => (
+                    (attribute.Name.ToString() is "FormatPart" or "FormatPartAttribute" or "Puck.FormatPart" or "Puck.FormatPartAttribute") &&
+                    (attribute.ArgumentList?.Arguments.FirstOrDefault()?.Expression is LiteralExpressionSyntax { RawKind: ((int)SyntaxKind.StringLiteralExpression) } literal) &&
+                    (literal.Token.ValueText == id)
+                ));
+
+                if (!marked || (model.GetDeclaredSymbol(declaration) is not { } symbol)) { continue; }
+
+                var key = KeyOf(symbol: symbol);
+
+                if (declaration is BaseTypeDeclarationSyntax) {
+                    // Every unit of the type, in whichever partial file it sits, and of its nested types.
+                    var name = key[2..];
+
+                    foreach (var file in m_files.Keys) {
+                        if (!m_files[file].Contains(comparisonType: StringComparison.Ordinal, value: symbol.Name)) { continue; }
+
+                        foreach (var (unitKey, kind) in Index(path: file).Nodes.Keys) {
+                            if ((unitKey.Length > 2) && ((unitKey[2..] == name) || unitKey[2..].StartsWith(comparisonType: StringComparison.Ordinal, value: $"{name}.") || unitKey[2..].StartsWith(comparisonType: StringComparison.Ordinal, value: $"{name}+"))) {
+                                yield return new Unit(Key: unitKey, Kind: kind, Path: file);
+                            }
+                        }
+                    }
+                } else if (Index(path: path).Nodes.ContainsKey(key: (key, UnitKind.Code))) {
+                    yield return new Unit(Key: key, Kind: UnitKind.Code, Path: path);
+                }
+            }
+        }
     }
     private string? TokenKey((string Source, string Owner, string Member) format) {
         var tree = m_trees[format.Source];

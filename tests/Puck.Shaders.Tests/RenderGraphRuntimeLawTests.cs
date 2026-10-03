@@ -12,7 +12,7 @@ namespace Puck.Shaders.Tests;
 /// graphs reading their producers through external versions; a mirror reads its own previous frame through its graph's
 /// history. Every instance renders through its own node, so its renders are that node's submissions.
 /// </summary>
-public sealed partial class RenderGraphRuntimeLawTests {
+public sealed partial class RenderGraphRuntimeLawTests : IDisposable {
     private const int Display = 64;
     private const string Camera = "test.camera";
     private const string Over = "test.over";
@@ -57,6 +57,10 @@ public sealed partial class RenderGraphRuntimeLawTests {
             Summary: "A raw buffer its readers bind."
         ),
     ]);
+
+    private readonly TemporaryDirectory m_captures = new(prefix: "puck-render-graph-capture-");
+
+    public void Dispose() => m_captures.Dispose();
 
     private static CompiledShader Shader(string name) {
         ReadOnlyMemory<byte> bytecode = new byte[] { 0x03, 0x02, 0x23, 0x07 };
@@ -302,11 +306,13 @@ public sealed partial class RenderGraphRuntimeLawTests {
         public readonly Dictionary<string, (nint Input, nint Output, bool MayStandIn)> PassRecords = new(comparer: StringComparer.Ordinal);
 
         public long Records;
+        public bool RefuseRecording;
         public uint Width;
     }
     private sealed class FakeRecorder(Counter counter, string pass) : IRenderGraphPackageRecorder {
         public void Dispose() => counter.Disposed++;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
+            if (counter.RefuseRecording) { throw new InvalidOperationException(message: "Injected history writer recording refusal."); }
             counter.Records++;
             counter.MayStandIn = recording.MayStandIn;
             recording.Leases.Hold(lease: in counter.Lease);

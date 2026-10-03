@@ -29,7 +29,7 @@ public sealed class ReplayForkLawTests {
         );
 
         Assert.Equal(
-            expected: 5u,
+            expected: 9u,
             actual: BitConverter.ToUInt32(
                 startIndex: sizeof(uint),
                 value: buffer.ToArray()
@@ -70,13 +70,15 @@ public sealed class ReplayForkLawTests {
         fixture.Step();
         tape.NoteTick();
     }
-    private static WorldReplaySnapshot Snapshot(int ticks, WorldReplayForkProvenance? forkedFrom) {
+    private static WorldReplaySnapshot Snapshot(int ticks, WorldReplayForkProvenance? forkedFrom, IReadOnlyList<WorldReplayEntry>? firstTick = null, WorldDefinition? definition = null, IReadOnlyList<WorldReplaySeat>? seats = null) {
         var tickInputs = new List<WorldReplayTickInput>(capacity: ticks);
         var hashes = new ulong[ticks];
 
         for (var tick = 0; (tick < ticks); tick++) {
             tickInputs.Add(item: new WorldReplayTickInput(
-                Authority: [],
+                Authority: ((tick == 0)
+                    ? (firstTick ?? [])
+                    : []),
                 Intents: []
             ));
             hashes[tick] = ((ulong)(tick + 1));
@@ -85,17 +87,104 @@ public sealed class ReplayForkLawTests {
         return new WorldReplaySnapshot {
             Authority = "boot",
             Instance = "boot",
-            DefinitionJson = WorldDefinitionSerialization.Serialize(definition: Fixtures.BuildDocument()),
+            DefinitionJson = WorldDefinitionSerialization.Serialize(definition: (definition ?? Fixtures.BuildDocument())),
             ForkedFrom = forkedFrom,
             MountedAddons = [],
             RecordedHashes = hashes,
             RecordedAuthoritativeHashes = [.. hashes],
-            Seats = [],
-            SimulationRate = 240U,
+            Seats = (seats ?? []),
+            SimulationRate = ((definition is null)
+                ? 240U
+                : ((uint)definition.SimulationRateHz)),
             Ticks = tickInputs,
         };
     }
+    private static WorldReplaySnapshot WithSeatIdentity(int slot) => Snapshot(
+        firstTick: [new WorldReplayEntry.SeatIdentity(
+            Profile: new WorldIdentityProjection(Id: "guest", Name: "Guest", ColorHex: "#112233", MoveSpeed: null, TurnSpeed: null),
+            Slot: slot
+        )],
+        forkedFrom: null,
+        ticks: 1
+    );
 
+    // The switch a fork records for a rebound seat survives the tape file: its slot and the projection it names.
+    [Fact]
+    public void ASeatIdentityEntry_RoundTripsThroughTheTape() {
+        var entry = Assert.IsType<WorldReplayEntry.SeatIdentity>(@object: Assert.Single(collection: RoundTrip(recording: WithSeatIdentity(slot: 1)).Ticks[0].Authority));
+
+        Assert.Equal(expected: 1, actual: entry.Slot);
+        Assert.Equal(expected: "guest", actual: entry.Profile.Id);
+        Assert.Equal(expected: "#112233", actual: entry.Profile.ColorHex);
+    }
+    // A doctored slot would index straight past the local seats during a re-drive, so the reader refuses it by name.
+    // The red leg drops the range check: the file reads back and the throw never comes.
+    [Fact]
+    public void ASeatIdentityEntry_NamingASlotOutsideTheLocalSeats_IsRefusedByName() {
+        var slot = ((int)WorldBodiesLimits.LocalSeatCount);
+        using var buffer = new MemoryStream();
+
+        WorldReplaySnapshot.Write(
+            stream: buffer,
+            recording: WithSeatIdentity(slot: slot)
+        );
+        buffer.Position = 0L;
+
+        var exception = Assert.ThrowsAny<Exception>(testCode: () => WorldReplaySnapshot.Read(stream: buffer));
+
+        Assert.Contains(
+            expectedSubstring: $"seat identity names slot {slot}",
+            actualString: exception.Message
+        );
+    }
+    // THE LAW: a recorded switch is applied against the population of the re-drive, not the host's seat ceiling. The tape
+    // embeds a world authoring one local seat and switches seat 1, which the format's four-seat bound admits: the re-drive
+    // refuses it by name rather than indexing a seat the world does not hold. The red leg applies the switch unchecked.
+    [Fact]
+    public void ASeatIdentityEntry_NamingASeatTheWorldDoesNotHold_IsRefusedByNameWhenApplied() {
+        var basis = Fixtures.BuildDocument();
+        var definition = basis with {
+            PopulationRaw = basis.Population with {
+                LocalSeatsRaw = 1,
+                SeatActivationRaw = [SeatActivationPolicy.Eager],
+                SeatSpawnsRaw = ["seat-1"],
+                CapacityRaw = 1,
+                PeerColorsRaw = new WorldSequence(Name: WorldSequence.Additive, Offset: -1, Step: 0.618034f),
+                PeerVariationRaw = new WorldPopulationVariation(
+                    Phase: new WorldSequence(Name: WorldSequence.Additive, Offset: -1, Step: 0.38196602f),
+                    Weave: new WorldSequence(Name: WorldSequence.Additive, Offset: -1, Step: 0.618034f),
+                    Activity: new WorldSequence(Name: WorldSequence.R2, Offset: 1, Step: 0f)
+                ),
+            },
+        };
+        var recording = Snapshot(
+            definition: definition,
+            firstTick: [new WorldReplayEntry.SeatIdentity(
+                Profile: new WorldIdentityProjection(Id: "guest", Name: "Guest", ColorHex: "#112233", MoveSpeed: null, TurnSpeed: null),
+                Slot: 1
+            )],
+            forkedFrom: null,
+            seats: [new WorldReplaySeat(Profile: null, Slot: 0)],
+            ticks: 1
+        );
+
+        using var fixture = Fixtures.FreshServer();
+
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => recording.Drive(
+            addonHostFactory: static (_, _) => new NullAddonHost(),
+            engines: [],
+            machineHostFactory: Fixtures.MachineHostFactory,
+            profiles: fixture.Server.Profiles
+        ));
+
+        Assert.True(
+            condition: exception.Message.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "SeatSwitchRefused"
+            ),
+            userMessage: exception.Message
+        );
+    }
     [Fact]
     public void Cancel_EndsTheDriveWhereItStands_AndSeatsAreLiveAgain() {
         using var stateDirectory = new TemporaryDirectory(prefix: "puck-replay-");

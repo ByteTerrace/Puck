@@ -119,62 +119,58 @@ internal sealed record CompileClosure(string? AssemblyName, IReadOnlyList<string
             return closures;
         }
 
-        // The traversals name no SDK, so the scratch directory only holds them.
-        var scratch = Directory.CreateTempSubdirectory(prefix: "puck-format-closures-").FullName;
+        // The traversals name no SDK, so the run directory only holds them; one whose evaluation throws keeps them.
+        using var run = RunDirectory.Create(prefix: "puck-format-closures-");
+        var scratch = run.Path;
         var targets = Path.Combine(
             path1: scratch,
             path2: "closure.targets"
         );
 
-        try {
+        File.WriteAllText(
+            contents: ClosureTargets,
+            path: targets
+        );
+
+        var partitions = PartitionBySdkContext(projects: projects);
+
+        for (var index = 0; (index < partitions.Count); index++) {
+            var partition = partitions[index];
+            var traversal = Path.Combine(
+                path1: scratch,
+                path2: $"closures-{index}.proj"
+            );
+
             File.WriteAllText(
-                contents: ClosureTargets,
-                path: targets
+                contents: $"""
+                    <Project>
+                      <ItemGroup>
+                    {string.Concat(values: partition.Select(selector: static project => $"    <ClosureProject Include=\"{Escape(path: project)}\" />\n"))}  </ItemGroup>
+                      <Target Name="Closures">
+                        <MSBuild Projects="@(ClosureProject)" Targets="{ClosureItem}" BuildInParallel="true" ContinueOnError="true" SkipNonexistentTargets="true" Properties="Configuration={Escape(path: configuration)};BuildProjectReferences=false;DesignTimeBuild=true;CustomAfterMicrosoftCommonTargets={Escape(path: targets)}">
+                          <Output TaskParameter="TargetOutputs" ItemName="{ClosureItem}" />
+                        </MSBuild>
+                      </Target>
+                    </Project>
+                    """,
+                path: traversal
             );
 
-            var partitions = PartitionBySdkContext(projects: projects);
+            var result = CliProcess.RunAsync(
+                workingDirectory: Path.GetDirectoryName(path: partition[0]),
+                arguments: ["msbuild", traversal, "-nologo", "--disable-build-servers", "-t:Closures", $"-getItem:{ClosureItem}"],
+                fileName: "dotnet"
+            ).GetAwaiter().GetResult();
 
-            for (var index = 0; (index < partitions.Count); index++) {
-                var partition = partitions[index];
-                var traversal = Path.Combine(
-                    path1: scratch,
-                    path2: $"closures-{index}.proj"
-                );
-
-                File.WriteAllText(
-                    contents: $"""
-                        <Project>
-                          <ItemGroup>
-                        {string.Concat(values: partition.Select(selector: static project => $"    <ClosureProject Include=\"{Escape(path: project)}\" />\n"))}  </ItemGroup>
-                          <Target Name="Closures">
-                            <MSBuild Projects="@(ClosureProject)" Targets="{ClosureItem}" BuildInParallel="true" ContinueOnError="true" SkipNonexistentTargets="true" Properties="Configuration={Escape(path: configuration)};BuildProjectReferences=false;DesignTimeBuild=true;CustomAfterMicrosoftCommonTargets={Escape(path: targets)}">
-                              <Output TaskParameter="TargetOutputs" ItemName="{ClosureItem}" />
-                            </MSBuild>
-                          </Target>
-                        </Project>
-                        """,
-                    path: traversal
-                );
-
-                var result = CliProcess.RunAsync(
-                    workingDirectory: Path.GetDirectoryName(path: partition[0]),
-                    arguments: ["msbuild", traversal, "-nologo", "--disable-build-servers", "-t:Closures", $"-getItem:{ClosureItem}"],
-                    fileName: "dotnet"
-                ).GetAwaiter().GetResult();
-
-                foreach (var (project, closure) in ReadAll(
-                    configuration: configuration,
-                    json: result.Stdout
-                )) {
-                    closures[project] = closure;
-                }
+            foreach (var (project, closure) in ReadAll(
+                configuration: configuration,
+                json: result.Stdout
+            )) {
+                closures[project] = closure;
             }
-        } finally {
-            Directory.Delete(
-                path: scratch,
-                recursive: true
-            );
         }
+
+        run.Conclude(passed: true);
 
         return closures;
     }

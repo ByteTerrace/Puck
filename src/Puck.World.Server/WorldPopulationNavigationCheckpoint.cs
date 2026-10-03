@@ -10,5 +10,5 @@ public readonly record struct WorldPopulationNavigationCheckpoint(
     int Waypoint,
     int ExpandedLast,
     NavigationStatus Status,
-    int[] Path
+    IReadOnlyList<int> Path
 );

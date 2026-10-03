@@ -1,0 +1,142 @@
+{
+  "schema": "puck.world.definition.v1",
+  "documentId": "thin-wall-sweep-canary-open",
+  "bodies": {
+    "localSeats": 1
+  },
+  "simulation": {
+    "rateHz": 60
+  },
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveAdvance"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    }
+  ],
+  "collision": {
+    "requirements": [
+      "SmoothUnionContact"
+    ],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
+  "dynamics": [
+    {
+      "name": "chase",
+      "f": 0.9549,
+      "zeta": 1,
+      "r": 1
+    }
+  ],
+  "views": {
+    "layouts": [],
+    "seatControl": {
+      "yawReference": "World",
+      "minPitch": -0.35,
+      "maxPitch": 1.2
+    },
+    "seatRig": {
+      "name": "seatChase",
+      "version": "puck.camera.program.v1",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5.4626001,
+          "yaw": 0,
+          "pitch": 0.4145069,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fieldOfView",
+          "fieldOfViewRadians": 0.9599311
+        },
+        {
+          "$type": "dynamics",
+          "row": "chase"
+        }
+      ]
+    }
+  },
+  "bodyMotionPrograms": [
+    {
+      "name": "traverse",
+      "version": "puck.body.program.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "bolt",
+        "bodyMotionProgram": "traverse",
+        "motion": {
+          "speed": {
+            "value": 3000
+          },
+          "turn": {
+            "rate": 2.5
+          },
+          "holds": [
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "None"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ]
+        },
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.5
+        },
+        "bodyContact": "Solid"
+      }
+    ]
+  },
+  "defaultSeatKit": "bolt",
+  "prototypes": [],
+  "placements": {
+    "rows": []
+  }
+}

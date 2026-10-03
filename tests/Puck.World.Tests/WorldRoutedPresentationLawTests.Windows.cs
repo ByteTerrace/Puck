@@ -5,6 +5,7 @@ using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Testing;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -100,7 +101,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         Assert.Equal(actual: following.Index, expected: 0);
 
         var fallback = Capture(source: scene.FrameSource);
-        var emitter = new WorldSessionSceneEmitter(effectiveCameraName: null, mirror: north.Mirror);
+        var emitter = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(), effectiveCameraName: null, mirror: north.Mirror);
         var expected = Capture(source: new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]));
 
         Assert.Equal(actual: Assert.Single(collection: fallback.Views), expected: expected.Views[0]);
@@ -120,6 +121,36 @@ public sealed partial class WorldRoutedPresentationLawTests {
         Assert.Equal(actual: reopened.Index, expected: 0);
         Assert.Single(collection: Capture(source: reopened.Scene.FrameSource).Views);
     }
+    // A window whose camera fit is unavailable renders the world's default projection, which takes the same resolution
+    // policy as a fitted camera: the ceiling and the grid a pin holds.
+    [Fact]
+    public void AWindowsDefaultProjectionFallbackIsDressedByItsResolutionPolicy() {
+        using var state = new TemporaryDirectory(prefix: "puck-routed-window-fallback-");
+        var host = state.Own(owner: WorldBootHarness.Compose(
+            edit: definition => (definition with {
+                ViewsRaw = (definition.Views with {
+                    Layouts = [new WorldViewLayout(Name: "seat", Slots: [new WorldViewSlot(Height: 1f, Width: 1f, X: 0f, Y: 0f)])],
+                }),
+            }),
+            presentation: WorldHostPresentation.Offscreen,
+            stateDirectory: state,
+            world: "tests/Puck.Counters/counters.world.json"
+        ).Build());
+        var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
+        using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
+        using var window = presenter.AttachWindow(endpoint: north);
+
+        _ = Capture(source: presenter);
+        Assert.Null(value: window.View);
+        Assert.Equal(actual: Assert.Single(collection: Capture(source: window.Scene.FrameSource).Views).RenderScale, expected: 1f);
+
+        window.FallbackResolution = static view => (view with { RenderScale = 0.75f, ResolvedRenderScale = 0.625f });
+
+        var dressed = Assert.Single(collection: Capture(source: window.Scene.FrameSource).Views);
+
+        Assert.Equal(actual: dressed.RenderScale, expected: 0.75f);
+        Assert.Equal(actual: dressed.ResolvedRenderScale, expected: 0.625f);
+    }
     // A window shows its destination under the destination's own sky, as the destination's authority renders it, never
     // the pinned default sky.
     [Fact]
@@ -133,9 +164,9 @@ public sealed partial class WorldRoutedPresentationLawTests {
             }),
         });
         using var north = Endpoint(definition: destination, identity: Away, position: AwayPose);
-        var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
+        var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
         var frame = Capture(source: scene.FrameSource);
-        var sky = new WorldEnvironmentResolve().Resolve(
+        var sky = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(
             definition: destination,
             mirror: north.FollowState(),
             revision: north.Mirror.DefinitionRevision
@@ -153,6 +184,168 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         Assert.NotEqual(expected: retained, actual: changed.Sky.Stops.ToArray());
     }
+    // A routed view guards the values its destination binds as the viewer's own world does: a cloud scale that goes to
+    // zero, which its field does not admit, holds the last value the view presented and is reported.
+    [Fact]
+    public void ARoutedViewsBoundCloudScaleThatGoesToZeroHoldsItsLastValueAndIsReported() {
+        static WorldDefinition Scaled(double value) => WorldValueDomainLawTests.WithRow(
+            definition: (AwayDocument() with {
+                RenderRaw = (WorldRenderDefaults.Absent with {
+                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Scale: new BindableScalar(binding: $"state.{WorldValueDomainLawTests.Row}"))]),
+                }),
+            }),
+            value: value
+        );
+
+        var domains = new WorldValueDomainGuard();
+        var reports = new List<string>();
+
+        domains.Report = reports.Add;
+
+        using var north = Endpoint(definition: Scaled(value: 0.5d), identity: Away, position: AwayPose);
+        var scene = new WorldRoutedScene(domains: domains, bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
+
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: default);
+        _ = Capture(source: scene.FrameSource);
+
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+        Assert.Single(collection: reports);
+        Assert.Contains(expectedSubstring: $"render.sky.layers[0].scale reads 0 from state.{WorldValueDomainLawTests.Row}", actualString: reports[0]);
+    }
+    // A destination replaced by another world, a different activation delivering a document, starts a routed view's
+    // bindings fresh: the new world's cloud scale, out of range at its first look, does not wear the old world's last value.
+    [Fact]
+    public void AReplacedDestinationStartsItsRoutedViewsBindingsFresh() {
+        static WorldDefinition Scaled(double value) => WorldValueDomainLawTests.WithRow(
+            definition: (AwayDocument() with {
+                RenderRaw = (WorldRenderDefaults.Absent with {
+                    Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(Scale: new BindableScalar(binding: $"state.{WorldValueDomainLawTests.Row}"))]),
+                }),
+            }),
+            value: value
+        );
+
+        var domains = new WorldValueDomainGuard();
+        var first = new WorldDocumentVersion(Activation: Guid.NewGuid(), Sequence: 0L);
+        var second = new WorldDocumentVersion(Activation: Guid.NewGuid(), Sequence: 0L);
+
+        domains.Report = static _ => { };
+
+        using var north = Endpoint(definition: Scaled(value: 0.5d), identity: Away, position: AwayPose);
+        var scene = new WorldRoutedScene(domains: domains, bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
+
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0.5d), version: first);
+
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+
+        // The same world, written out of range: the view keeps what it last presented.
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: new WorldDocumentVersion(Activation: first.Activation, Sequence: 1L));
+        _ = Capture(source: scene.FrameSource);
+
+        Assert.Equal(expected: 0.5f, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+
+        // Another world answers at the destination: it has presented nothing yet, so it shows the engine default.
+        north.Mirror.DeliverDefinition(definition: Scaled(value: 0d), version: second);
+        _ = Capture(source: scene.FrameSource);
+
+        Assert.Equal(expected: new SdfSky().Block.CloudScale, actual: Capture(source: scene.FrameSource).Sky.Block.CloudScale);
+    }
+    // A world's lifetime and its document are one publication: a reader of the destination's delivered document sees, in
+    // one snapshot, the document and the number of replacements that brought it, so it can never pair a new world's
+    // lifetime with the old world's document. A writer replaces the world over and over while a reader samples.
+    [Fact]
+    public void AReplacementIsPublishedWithItsLifetimeInOneSnapshot() {
+        var activations = Enumerable.Range(count: 2000, start: 0).Select(selector: static _ => Guid.NewGuid()).ToArray();
+        var expected = new Dictionary<Guid, int>(capacity: activations.Length);
+
+        for (var index = 0; (index < activations.Length); index++) {
+            expected[activations[index]] = (index + 1);
+        }
+
+        var worlds = activations.Select(selector: static (_, index) => WorldValueDomainLawTests.WithRow(
+            definition: AwayDocument(),
+            value: index
+        )).ToArray();
+
+        using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
+
+        var finished = 0;
+        var torn = 0;
+        var samples = 0L;
+        var writer = new Thread(start: () => {
+            for (var index = 0; (index < activations.Length); index++) {
+                north.Mirror.DeliverDefinition(definition: worlds[index], version: new WorldDocumentVersion(Activation: activations[index], Sequence: 0L));
+            }
+
+            Volatile.Write(location: ref finished, value: 1);
+        });
+
+        writer.Start();
+
+        do {
+            var delivered = north.Mirror.Document;
+
+            samples++;
+
+            // Each activation's first document arrives with exactly the lifetime of its place in the sequence, and the
+            // definition it carries is that world's own.
+            if (
+                expected.TryGetValue(key: delivered.Version.Activation, value: out var lifetime) &&
+                ((delivered.Lifetime != lifetime) || !ReferenceEquals(objA: delivered.Definition, objB: worlds[(lifetime - 1)]))
+            ) {
+                torn++;
+            }
+        } while (Volatile.Read(location: ref finished) == 0);
+
+        writer.Join();
+
+        Assert.True(condition: (samples > 0L));
+        Assert.Equal(actual: torn, expected: 0);
+        Assert.Equal(expected: activations.Length, actual: north.Mirror.Document.Lifetime);
+    }
+    // The type system makes the guard a required argument of every consumer; a null reaching one through reflection, a
+    // default path or a nullable-oblivious caller is refused at the door, naming the argument, never stored to fail on a
+    // later frame.
+    [Fact]
+    public void EveryConsumerOfTheValueDomainGuardRefusesNullByName() {
+        var document = AwayDocument();
+        var mirror = ClientFixtures.StateMirror(definition: document);
+        var program = new WorldCameraProgram(
+            Name: "p",
+            Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 1f))],
+            Version: WorldCameraProgram.CurrentVersion
+        );
+        using var north = Endpoint(definition: document, identity: Away, position: AwayPose);
+
+        static void Names(Action refusing) {
+            var thrown = Assert.Throws<ArgumentNullException>(testCode: refusing);
+
+            Assert.Equal(expected: "domains", actual: thrown.ParamName);
+        }
+
+        Names(refusing: () => _ = new WorldEnvironmentResolve(domains: null!));
+        Names(refusing: () => _ = new WorldThemeResolve(domains: null!));
+        Names(refusing: () => _ = WorldMarkerAlphas.Resolve(domains: null!, index: 0, marker: new WorldMarkerRow(Id: "m", Source: new WorldMarkerSource.Speakers(), Icon: "i", Ring: null, Style: new WorldMarkerStyle(ChipAlpha: 1f, Size: 1f, RingAlpha: 1f, RingColor: new BindableColor(Raw: "#000000"))), mirror: mirror));
+        Names(refusing: () => _ = WorldCameraRigCompiler.Compile(definition: document, domains: null!, mirror: mirror, program: program));
+        Names(refusing: () => _ = new WorldCameraRigCompiler.Cache().Resolve(definition: document, domains: null!, mirror: mirror, program: program));
+        Names(refusing: () => _ = new WorldSeatViewState().ResolveChase(bodyOrientation: System.Numerics.Quaternion.Identity, definition: document, domains: null!, mirror: mirror, views: WorldViewDefaults.Absent));
+        Names(refusing: () => _ = WorldSessionSceneEmitter.ResolveCamera(cameraName: null, domains: null!, height: 1u, mirror: north.Mirror, width: 1u));
+        Names(refusing: () => _ = new WorldSessionSceneEmitter(domains: null!, effectiveCameraName: null, mirror: north.Mirror));
+        Names(refusing: () => _ = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, domains: null!, endpoint: north, hostFrame: static () => null));
+
+        // The two roots that take a long list of services refuse the guard before anything else.
+        foreach (var type in new[] { typeof(WorldFramePresenter), Assert.IsAssignableFrom<Type>(@object: Type.GetType(typeName: "Puck.World.WorldScreenBinder, Puck.World")) }) {
+            var constructor = Assert.Single(collection: type.GetConstructors());
+            var arguments = constructor.GetParameters().Select(selector: static parameter => (parameter.ParameterType.IsValueType
+                ? Activator.CreateInstance(type: parameter.ParameterType)
+                : null)).ToArray();
+            var thrown = Assert.IsType<ArgumentNullException>(@object: Assert.IsType<System.Reflection.TargetInvocationException>(@object: Record.Exception(testCode: () => constructor.Invoke(parameters: arguments))).InnerException);
+
+            Assert.Equal(expected: "domains", actual: thrown.ParamName);
+        }
+    }
     // A routed view's sky clock (its stars' twinkle, its clouds' drift, its media's motion) is the destination's presented
     // tick: the sky it shows moves as its world does, whatever the viewer's own world has reached. Its presentation time
     // is still the viewer's frame's.
@@ -160,7 +353,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     public void ARoutedViewsSkyClockIsTheDestinationsTick() {
         using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
         SdfFrame? viewer = null;
-        var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: () => viewer);
+        var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: () => viewer);
 
         viewer = (Capture(source: scene.FrameSource) with {
             Clock = new PresentedTick(

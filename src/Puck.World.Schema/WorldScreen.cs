@@ -393,9 +393,6 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 /// <param name="Magazine">The per-screen source magazine (the cycle primitive), or <see langword="null"/> for a screen
 /// with no magazine — nothing to cycle. Omitted from the wire when null — the whole-row <c>UpsertScreen</c>
 /// carries it for free, so no new mutation kind is needed.</param>
-/// <param name="Memory">The screen's live byte-window bindings between its booted machine's bus and ordinary
-/// <c>state.world</c> Int cells (see <see cref="WorldScreenMemory"/>), or <see langword="null"/> for a screen with
-/// none. Omitted from the wire when null.</param>
 /// <param name="Filter">How the face samples its source's image: <c>Nearest</c>, the default, keeps each source pixel
 /// crisp, as an emulator or a pixel-art source wants; <c>Linear</c> blends between source pixels, as a camera or a
 /// desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted
@@ -413,6 +410,5 @@ public sealed record WorldScreen(
     WorldScreenRoute Route,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenMemory>? Memory = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] GpuSamplerFilter Filter = GpuSamplerFilter.Nearest
 );

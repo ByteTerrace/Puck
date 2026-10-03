@@ -111,6 +111,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public bool Recording { get; set; }
     /// <summary>Gets or sets whether the next fenced submission throws before any commands reach the queue.</summary>
     public bool RefuseNextSubmission { get; set; }
+    /// <summary>Gets or sets whether the next submission reports device loss before any commands reach the queue.</summary>
+    public bool LoseNextSubmission { get; set; }
     /// <summary>Gets or sets whether the next device drain reports a lost device.</summary>
     public bool LoseNextIdleWait { get; set; }
     /// <summary>Gets or sets whether the queue holds every submission unfinished: while set, no fence reads as
@@ -665,6 +667,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         _ = Submitted(commandBufferHandles: commandBufferHandles);
     }
     public void Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) {
+        if (LoseNextSubmission) { LoseNextSubmission = false; throw new DeviceLostException(message: "Injected loss before submission."); }
         if (RefuseNextSubmission) { RefuseNextSubmission = false; throw new InvalidOperationException(message: "Injected pre-submit failure."); }
         Submissions++;
 

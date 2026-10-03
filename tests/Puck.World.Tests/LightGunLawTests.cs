@@ -99,8 +99,7 @@ public sealed class LightGunLawTests {
                     Route: (new WorldScreenRoute(
                         Engageable: true,
                         EngageRadius: 100f
-                    ) with { Input = input }),
-                    Memory: null
+                    ) with { Input = input })
                 ),
             ],
         };

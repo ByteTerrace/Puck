@@ -1,5 +1,6 @@
 using Puck.Assets;
 using Puck.Cli.Canary;
+using Puck.Testing;
 
 using Xunit;
 
@@ -13,12 +14,7 @@ namespace Puck.Cli.Tests;
 /// unresolved pipeline waits from a transcript.
 /// </summary>
 public sealed class CanaryOffscreenLawTests : IDisposable {
-    private readonly string m_root = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-cli-tests-canary-offscreen-{Guid.NewGuid():N}"
-    );
-
-    public CanaryOffscreenLawTests() => Directory.CreateDirectory(path: m_root);
+    private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-cli-tests-canary-offscreen-");
 
     private static CanaryImageRegionAssertion Region(string capture, double value, bool holds, CanaryImageReduce reduce = CanaryImageReduce.Every, int width = 32) => new(
         Bottom: 0.96875,
@@ -65,7 +61,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             rgba[offset] = pixel.Code;
         }
         var path = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: fileName
         );
 
@@ -79,7 +75,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
     }
     private string WriteManifestTree(string id, string manifestBody) {
         var directory = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "tests",
             path3: "Puck.World.Canaries"
         );
@@ -138,22 +134,14 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             error: out var error,
             manifests: out _,
             refused: out _,
-            repositoryRoot: m_root,
+            repositoryRoot: m_directory.RootPath,
             strict: true
         );
 
         return (loaded, error);
     }
 
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_root,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
     [Fact]
     public void TheShippedPipelineManifestsLoadAsOneProofPerBackend() {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
@@ -276,7 +264,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             error: out var error,
             manifests: out var manifests,
             refused: out _,
-            repositoryRoot: m_root,
+            repositoryRoot: m_directory.RootPath,
             strict: true
         );
 
@@ -305,7 +293,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             error: out var error,
             manifests: out var manifests,
             refused: out _,
-            repositoryRoot: m_root,
+            repositoryRoot: m_directory.RootPath,
             strict: true
         );
 
@@ -335,7 +323,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             fileName: "stray.png",
             odd: (5, 5, 18)
         );
-        var transcript = Transcript(runDirectory: m_root);
+        var transcript = Transcript(runDirectory: m_directory.RootPath);
         var results = CanaryAssertions.Evaluate(
             leg: Leg(
                 Region(
@@ -402,7 +390,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
                     holds: inside,
                     value: 0.215686275
                 )),
-                primaryTranscript: Transcript(runDirectory: m_root)
+                primaryTranscript: Transcript(runDirectory: m_directory.RootPath)
             ).Passed);
         }
     }
@@ -427,7 +415,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
                         width: 64
                     )
                 ),
-                primaryTranscript: Transcript(runDirectory: m_root)
+                primaryTranscript: Transcript(runDirectory: m_directory.RootPath)
             ).Results;
 
             Assert.All(
@@ -453,7 +441,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             reference[(index + 2)] = code;
             reference[(index + 3)] = 255;
         }
-        PngEncoder.Write(height: (2 * Size), path: Path.Combine(path1: m_root, path2: "reference.png"), rgba: reference, width: (2 * Size));
+        PngEncoder.Write(height: (2 * Size), path: Path.Combine(path1: m_directory.RootPath, path2: "reference.png"), rgba: reference, width: (2 * Size));
         Gray(code: 20, fileName: "exact.png", height: Size, width: Size);
         Gray(code: 22, fileName: "off.png", height: Size, width: Size);
         Gray(code: 20, fileName: "odd.png", height: 24, width: 24);
@@ -472,7 +460,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             Width: size
         );
 
-        var transcript = Transcript(runDirectory: m_root);
+        var transcript = Transcript(runDirectory: m_directory.RootPath);
         var results = CanaryAssertions.Evaluate(
             leg: Leg(
                 Difference(capture: "exact.png", holds: true, maximum: 0),
@@ -560,7 +548,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             actual: CanaryCommand.AudioUnsupportedReason(
                 manifest: AudioManifest("gpu", "audio-output"),
                 transcript: Transcript(
-                    runDirectory: m_root,
+                    runDirectory: m_directory.RootPath,
                     stdout: [NoDefaultEndpoint]
                 )
             )
@@ -571,7 +559,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             actual: CanaryCommand.AudioUnsupportedReason(
                 manifest: AudioManifest("audio-output"),
                 transcript: Transcript(
-                    runDirectory: m_root,
+                    runDirectory: m_directory.RootPath,
                     stdout: [NoPlatformBackend]
                 )
             )
@@ -580,7 +568,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
         Assert.Null(@object: CanaryCommand.AudioUnsupportedReason(
             manifest: AudioManifest("audio-output"),
             transcript: Transcript(
-                runDirectory: m_root,
+                runDirectory: m_directory.RootPath,
                 stdout: [Playing]
             )
         ));
@@ -588,7 +576,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
         Assert.Null(@object: CanaryCommand.AudioUnsupportedReason(
             manifest: AudioManifest("gpu"),
             transcript: Transcript(
-                runDirectory: m_root,
+                runDirectory: m_directory.RootPath,
                 stdout: [NoDefaultEndpoint]
             )
         ));
@@ -597,7 +585,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
         Assert.Null(@object: CanaryCommand.AudioUnsupportedReason(
             manifest: AudioManifest("audio-output"),
             transcript: Transcript(
-                runDirectory: m_root,
+                runDirectory: m_directory.RootPath,
                 stdout: ["[audio.state: device=rebinding frames=100 rebinds=1 fillFaults=0 sources=0 voices=0 peak=0 droppedTriggers=0 emitters=1 fault=stream invalidated]"]
             )
         ));
@@ -611,7 +599,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             actual: CanaryCommand.UnsupportedReason(
                 exitCode: 2,
                 transcript: Transcript(
-                    runDirectory: m_root,
+                    runDirectory: m_directory.RootPath,
                     stderr: [Host]
                 )
             )
@@ -619,33 +607,33 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
         // The exit code alone, or the line under another exit code, is not the announcement.
         Assert.Null(@object: CanaryCommand.UnsupportedReason(
             exitCode: 2,
-            transcript: Transcript(runDirectory: m_root)
+            transcript: Transcript(runDirectory: m_directory.RootPath)
         ));
         Assert.Null(@object: CanaryCommand.UnsupportedReason(
             exitCode: 1,
             transcript: Transcript(
-                runDirectory: m_root,
+                runDirectory: m_directory.RootPath,
                 stderr: [Host]
             )
         ));
         Assert.NotNull(@object: CanaryCommand.UnsupportedReason(
             exitCode: 0,
             transcript: Transcript(
-                runDirectory: m_root,
+                runDirectory: m_directory.RootPath,
                 stderr: ["[pipeline: ink unsupported: The shader tool 'dxc' was not found.]"]
             )
         ));
         Assert.NotNull(@object: CanaryCommand.UnsupportedReason(
             exitCode: 0,
             transcript: Transcript(
-                runDirectory: m_root,
+                runDirectory: m_directory.RootPath,
                 stderr: ["[pipeline: ink wait compiled unsupported: The shader tool 'dxc' was not found.]"]
             )
         ));
         Assert.Null(@object: CanaryCommand.UnsupportedReason(
             exitCode: 0,
             transcript: Transcript(
-                runDirectory: m_root,
+                runDirectory: m_directory.RootPath,
                 stderr: ["[pipeline: ink wait compiled failed: failed pass 'visualize']"]
             )
         ));
@@ -653,7 +641,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
     [Fact]
     public void EveryArmedPipelineWaitMustResolveWithoutRunningOutItsDeadline() {
         var reached = CanaryCommand.PipelineWaitInvariants(transcript: Transcript(
-            runDirectory: m_root,
+            runDirectory: m_directory.RootPath,
             stderr: ["[pipeline: feedback wait installed reached]", "[pipeline: feedback wait submitted 2 failed: candidate refused]", "[pipeline: feedback wait counted 1 reached]", "[pipeline: feedback wait resized 32 32 reached]"],
             stdout: ["[pipeline.wait: feedback installed armed for at most 10s]", "[pipeline.wait: feedback submitted 2 armed for at most 10s]", "[pipeline.wait: feedback counted 1 armed for at most 10s]", "[pipeline.wait: feedback resized 32 32 armed for at most 10s]"]
         ));
@@ -671,7 +659,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             )
         );
         var timedOut = CanaryCommand.PipelineWaitInvariants(transcript: Transcript(
-            runDirectory: m_root,
+            runDirectory: m_directory.RootPath,
             stderr: ["[pipeline: feedback wait submitted 2 timed out after 10s: frames=1 ready=true]"],
             stdout: ["[pipeline.wait: feedback submitted 2 armed for at most 10s]"]
         ));
@@ -684,7 +672,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             ))
         );
         var resizeTimedOut = CanaryCommand.PipelineWaitInvariants(transcript: Transcript(
-            runDirectory: m_root,
+            runDirectory: m_directory.RootPath,
             stderr: ["[pipeline: feedback wait resized 32 32 timed out after 10s: requested=64x64 extent=64x64]"],
             stdout: ["[pipeline.wait: feedback resized 32 32 armed for at most 10s]"]
         ));
@@ -697,7 +685,7 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             ))
         );
         var unresolved = CanaryCommand.PipelineWaitInvariants(transcript: Transcript(
-            runDirectory: m_root,
+            runDirectory: m_directory.RootPath,
             stdout: ["[pipeline.wait: feedback captured armed for at most 10s]"]
         ));
 
@@ -705,6 +693,6 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             collection: unresolved,
             filter: static result => !result.Passed
         );
-        Assert.Empty(collection: CanaryCommand.PipelineWaitInvariants(transcript: Transcript(runDirectory: m_root)));
+        Assert.Empty(collection: CanaryCommand.PipelineWaitInvariants(transcript: Transcript(runDirectory: m_directory.RootPath)));
     }
 }

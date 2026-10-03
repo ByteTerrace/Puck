@@ -1,25 +1,27 @@
 using System.Text.Json.Nodes;
 
 using Puck.Cli.Format;
+using Puck.Testing;
 
 using Xunit;
 
 namespace Puck.Cli.Tests;
 
 public sealed class FormatSelectionTests : IDisposable {
-    private readonly string m_root = CliScratchDirectories.CreateProject(prefix: "puck-format-selection-");
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-format-selection-");
 
     public FormatSelectionTests() {
+        CliScratchDirectories.PinSdk(directory: m_directory.RootPath);
         File.WriteAllText(
             path: Path.Combine(
-                path1: m_root,
+                path1: m_directory.RootPath,
                 path2: "One.cs"
             ),
             contents: "class One {}\n"
         );
         File.WriteAllText(
             path: Path.Combine(
-                path1: m_root,
+                path1: m_directory.RootPath,
                 path2: "Two.cs"
             ),
             contents: "class Two {}\n"
@@ -31,7 +33,7 @@ public sealed class FormatSelectionTests : IDisposable {
 
         foreach (var path in paths) { array.Add(item: JsonValue.Create(value: path)); }
         var manifest = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "files.json"
         );
 
@@ -59,12 +61,12 @@ public sealed class FormatSelectionTests : IDisposable {
 
         Assert.Throws<ArgumentException>(testCode: () => FormatSelection.Read(
             manifest: manifest,
-            root: m_root
+            root: m_directory.RootPath
         ));
         Assert.Equal(
             expected: "class One {}\n",
             actual: File.ReadAllText(path: Path.Combine(
-                path1: m_root,
+                path1: m_directory.RootPath,
                 path2: "One.cs"
             ))
         );
@@ -73,13 +75,13 @@ public sealed class FormatSelectionTests : IDisposable {
     public void BothSemanticPhasesRejectAnUnbuiltOwningProject() {
         File.WriteAllText(
             path: Path.Combine(
-                path1: m_root,
+                path1: m_directory.RootPath,
                 path2: "Sample.csproj"
             ),
             contents: "<Project Sdk=\"Microsoft.NET.Sdk\" />"
         );
         var targets = new[] { Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "One.cs"
         ) };
         // One run's phases share its closures, as `format` hands them over.
@@ -93,7 +95,7 @@ public sealed class FormatSelectionTests : IDisposable {
                 configuration: "Release",
                 namedArgs: true,
                 nullPattern: false,
-                rootArgument: m_root,
+                rootArgument: m_directory.RootPath,
                 targets: targets
             )
         );
@@ -105,7 +107,7 @@ public sealed class FormatSelectionTests : IDisposable {
                 configuration: "Release",
                 namedArgs: false,
                 nullPattern: true,
-                rootArgument: m_root,
+                rootArgument: m_directory.RootPath,
                 targets: targets
             )
         );
@@ -130,16 +132,13 @@ public sealed class FormatSelectionTests : IDisposable {
         );
     }
     public void Dispose() {
-        Directory.Delete(
-            path: m_root,
-            recursive: true
-        );
+        m_directory.Dispose();
         GC.SuppressFinalize(obj: this);
     }
     [Fact]
     public void EmptySelectionIsEmptyRatherThanTheDefaultSourceTree() {
         Assert.Empty(collection: FormatSelection.Read(
-            root: m_root,
+            root: m_directory.RootPath,
             manifest: WriteManifest(paths: [])
         ));
     }
@@ -149,12 +148,12 @@ public sealed class FormatSelectionTests : IDisposable {
 
         Assert.Equal(
             expected: [Path.Combine(
-                    path1: m_root,
+                    path1: m_directory.RootPath,
                     path2: "One.cs"
                 )],
             actual: FormatSelection.Read(
                 manifest: manifest,
-                root: m_root
+                root: m_directory.RootPath
             )
         );
     }

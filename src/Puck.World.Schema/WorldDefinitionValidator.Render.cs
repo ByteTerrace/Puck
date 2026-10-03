@@ -4,6 +4,46 @@ using Puck.SignedDistance;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    private static void ValidateRenderResolution(WorldDefinition definition, List<string> errors) {
+        RequireRange(definition.Render.RenderScale, 0.125f, 1f, "render.renderScale", errors);
+        foreach (var tier in Enum.GetValues<Puck.Abstractions.Presentation.QualityTier>()) {
+            if (definition.Render.Preset(tier: tier) is { } preset) {
+                RequireRange(preset.RenderScale, 0.125f, 1f, $"render.{tier.ToString().ToLowerInvariant()}.renderScale", errors);
+            }
+        }
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var quality in (definition.Views.Quality ?? [])) {
+            if ((quality is null) || string.IsNullOrWhiteSpace(value: quality.Name)) {
+                errors.Add(item: "views.quality row requires a view name.");
+                continue;
+            }
+            if (!names.Add(item: quality.Name)) {
+                errors.Add(item: $"views.quality repeats view '{quality.Name}'.");
+            }
+            if (!NamesRenderView(definition: definition, name: quality.Name)) {
+                errors.Add(item: $"views.quality row '{quality.Name}' names no render view: use *, world, a camera, a view graph or a generated view name.");
+            }
+            if (quality.RenderScale is { } scale) {
+                RequireRange(scale, 0.125f, 1f, $"views.quality[{quality.Name}].renderScale", errors);
+            }
+            if ((quality.Tier is { } selected) && (definition.Render.Preset(tier: selected) is null)) {
+                errors.Add(item: $"views.quality[{quality.Name}].tier names no {selected} preset.");
+            }
+        }
+    }
+    // A row applies to the view it names when that view renders: the default selector, the primary world, an authored
+    // camera or view graph, or a view the engine names itself (a generated name, which carries the joiner).
+    private static bool NamesRenderView(WorldDefinition definition, string name) {
+        if ((name == "*") || (name == WorldViewGraphs.WorldInstance) || name.Contains(value: GeneratedName.Joiner)) { return true; }
+        foreach (var camera in definition.Cameras) {
+            if (camera.Name == name) { return true; }
+        }
+        foreach (var graph in (definition.Views.Graphs ?? [])) {
+            if (graph.Name == name) { return true; }
+        }
+        return false;
+    }
     // The far distance is the depth every camera march ends at; the band is the representable one (see the constants'
     // remarks), refused by name so a world authoring 0, a negative, or a depth past float's epsilon reach never boots
     // into a renderer whose cone proofs would rest on rounding. Absent resolves to the engine's pinned default.
@@ -52,24 +92,14 @@ public static partial class WorldDefinitionValidator {
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequireNonNegative(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.DirectionalWeight,
                                 path: $"{lightPath}.weight",
                                 scalar: directional.Weight
                             );
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequireRange(
-                                    errors: errors,
-                                    max: MathF.Atan(x: SdfLights.MaxPenumbraSlope),
-                                    min: 0f,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.DirectionalAngularRadius,
                                 path: $"{lightPath}.angularRadius",
                                 scalar: directional.AngularRadius?.Value
                             );
@@ -84,22 +114,14 @@ public static partial class WorldDefinitionValidator {
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequireNonNegative(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.HemisphereBase,
                                 path: $"{lightPath}.base",
                                 scalar: hemisphere.Base
                             );
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequireFinite(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.HemisphereGradient,
                                 path: $"{lightPath}.gradient",
                                 scalar: hemisphere.Gradient
                             );
@@ -110,22 +132,14 @@ public static partial class WorldDefinitionValidator {
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequireNonNegative(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.RimWeight,
                                 path: $"{lightPath}.weight",
                                 scalar: rim.Weight
                             );
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequireNonNegative(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.RimPower,
                                 path: $"{lightPath}.power",
                                 scalar: rim.Power
                             );
@@ -142,22 +156,14 @@ public static partial class WorldDefinitionValidator {
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequirePositive(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.OccluderRadius,
                                 path: $"{lightPath}.radius",
                                 scalar: occluder.Radius
                             );
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequireUnitInterval(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.OccluderWeight,
                                 path: $"{lightPath}.weight",
                                 scalar: occluder.Weight
                             );
@@ -180,22 +186,14 @@ public static partial class WorldDefinitionValidator {
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequirePositive(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.PointRadius,
                                 path: $"{lightPath}.radius",
                                 scalar: point.Radius
                             );
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequireNonNegative(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.PointWeight,
                                 path: $"{lightPath}.weight",
                                 scalar: point.Weight
                             );
@@ -221,16 +219,12 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (lighting.Curvature is { } curvature) {
-            foreach (var (name, value) in new (string, BindableScalar?)[] { ("cavity", curvature.Cavity), ("rim", curvature.Rim), ("ink", curvature.Ink), ("inkLow", curvature.InkLow), ("inkHigh", curvature.InkHigh) }) {
+            foreach (var (field, value) in new (WorldValueField, BindableScalar?)[] { (WorldValueFields.CurvatureCavity, curvature.Cavity), (WorldValueFields.CurvatureRim, curvature.Rim), (WorldValueFields.CurvatureInk, curvature.Ink), (WorldValueFields.CurvatureInkLow, curvature.InkLow), (WorldValueFields.CurvatureInkHigh, curvature.InkHigh) }) {
                 JudgeScalar(
                     definition: definition,
                     errors: errors,
-                    judge: (gain, valuePath) => RequireNonNegative(
-                        errors: errors,
-                        name: valuePath,
-                        value: gain
-                    ),
-                    path: $"{path}.curvature.{name}",
+                    field: field,
+                    path: $"{path}.curvature.{field.Name}",
                     scalar: value
                 );
             }
@@ -321,11 +315,7 @@ public static partial class WorldDefinitionValidator {
                         JudgeScalar(
                             definition: definition,
                             errors: errors,
-                            judge: (value, name) => RequireNonNegative(
-                                errors: errors,
-                                name: name,
-                                value: value
-                            ),
+                            field: WorldValueFields.FogDensity,
                             path: $"{layerPath}.density",
                             scalar: fog.Density
                         );
@@ -336,25 +326,14 @@ public static partial class WorldDefinitionValidator {
                         JudgeScalar(
                             definition: definition,
                             errors: errors,
-                            judge: (value, name) => RequireRange(
-                                errors: errors,
-                                max: (MathF.PI / 2f),
-                                min: 0f,
-                                minExclusive: true,
-                                name: name,
-                                value: value
-                            ),
+                            field: WorldValueFields.SunDiscRadius,
                             path: $"{layerPath}.radius",
                             scalar: disc.Radius?.Value
                         );
                         JudgeScalar(
                             definition: definition,
                             errors: errors,
-                            judge: (value, name) => RequireNonNegative(
-                                errors: errors,
-                                name: name,
-                                value: value
-                            ),
+                            field: WorldValueFields.SunDiscIntensity,
                             path: $"{layerPath}.intensity",
                             scalar: disc.Intensity
                         );
@@ -381,11 +360,7 @@ public static partial class WorldDefinitionValidator {
                         JudgeScalar(
                             definition: definition,
                             errors: errors,
-                            judge: (value, name) => RequireNonNegative(
-                                errors: errors,
-                                name: name,
-                                value: value
-                            ),
+                            field: WorldValueFields.StarBrightness,
                             path: $"{layerPath}.brightness",
                             scalar: stars.Brightness
                         );
@@ -394,22 +369,14 @@ public static partial class WorldDefinitionValidator {
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequireUnitInterval(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.TwinkleShare,
                                 path: $"{layerPath}.twinkle.share",
                                 scalar: twinkle.Share
                             );
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequireUnitInterval(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.TwinkleDepth,
                                 path: $"{layerPath}.twinkle.depth",
                                 scalar: twinkle.Depth
                             );
@@ -422,11 +389,7 @@ public static partial class WorldDefinitionValidator {
                             JudgeScalar(
                                 definition: definition,
                                 errors: errors,
-                                judge: (value, name) => RequirePositive(
-                                    errors: errors,
-                                    name: name,
-                                    value: value
-                                ),
+                                field: WorldValueFields.TwinkleRate,
                                 path: $"{layerPath}.twinkle.rate",
                                 scalar: twinkle.Rate
                             );
@@ -438,36 +401,21 @@ public static partial class WorldDefinitionValidator {
                         JudgeScalar(
                             definition: definition,
                             errors: errors,
-                            judge: (value, name) => RequireUnitInterval(
-                                errors: errors,
-                                name: name,
-                                value: value
-                            ),
+                            field: WorldValueFields.CloudCoverage,
                             path: $"{layerPath}.coverage",
                             scalar: clouds.Coverage
                         );
                         JudgeScalar(
                             definition: definition,
                             errors: errors,
-                            judge: (value, name) => RequireRange(
-                                errors: errors,
-                                max: 1f,
-                                min: 0f,
-                                minExclusive: true,
-                                name: name,
-                                value: value
-                            ),
+                            field: WorldValueFields.CloudSoftness,
                             path: $"{layerPath}.softness",
                             scalar: clouds.Softness
                         );
                         JudgeScalar(
                             definition: definition,
                             errors: errors,
-                            judge: (value, name) => RequirePositive(
-                                errors: errors,
-                                name: name,
-                                value: value
-                            ),
+                            field: WorldValueFields.CloudScale,
                             path: $"{layerPath}.scale",
                             scalar: clouds.Scale
                         );
@@ -507,22 +455,14 @@ public static partial class WorldDefinitionValidator {
                         JudgeScalar(
                             definition: definition,
                             errors: errors,
-                            judge: (value, name) => RequireFinite(
-                                errors: errors,
-                                name: name,
-                                value: value
-                            ),
+                            field: WorldValueFields.CloudSpin,
                             path: $"{layerPath}.spin",
                             scalar: clouds.Spin
                         );
                         JudgeScalar(
                             definition: definition,
                             errors: errors,
-                            judge: (value, name) => RequireFinite(
-                                errors: errors,
-                                name: name,
-                                value: value
-                            ),
+                            field: WorldValueFields.CloudCurl,
                             path: $"{layerPath}.curl",
                             scalar: clouds.Curl?.Value
                         );
@@ -559,13 +499,7 @@ public static partial class WorldDefinitionValidator {
                 JudgeScalar(
                     definition: definition,
                     errors: errors,
-                    judge: (value, name) => RequireRange(
-                        errors: errors,
-                        max: 1f,
-                        min: -1f,
-                        name: name,
-                        value: value
-                    ),
+                    field: WorldValueFields.StopElevation,
                     path: $"{stopPath}.elevation",
                     scalar: elevation
                 );
@@ -591,9 +525,10 @@ public static partial class WorldDefinitionValidator {
             values: elevations
         );
     }
-    // A bindable scalar's admissibility and every value it authors: a literal judged at its own path, each key's value
-    // at its key's.
-    private static void JudgeScalar(BindableScalar? scalar, WorldDefinition definition, string path, List<string> errors, Action<float, string> judge) {
+    // A bindable scalar's admissibility and every value it authors, each judged against its field's one declared domain
+    // (WorldValueFields): a literal at its own path, each key's value at its key's. A binding's starting value is judged
+    // at load (ValidateBoundStarts).
+    private static void JudgeScalar(WorldValueField field, BindableScalar? scalar, WorldDefinition definition, string path, List<string> errors) {
         if (scalar is not { } value) {
             return;
         }
@@ -604,16 +539,64 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (value.Literal is { } literal) {
-            judge(arg1: literal, arg2: path);
+        if ((value.Literal is { } literal) && !field.Domain.Contains(value: literal)) {
+            errors.Add(item: $"{path} {literal} must be finite and within {field.Domain}{Because(field: field)}.");
         }
 
         if (value.Keys is { } keys) {
             for (var index = 0; (index < keys.Keys.Length); index++) {
-                judge(arg1: keys.Keys[index].Value, arg2: $"{path}.keys[{index}].value");
+                if (!field.Domain.Contains(value: keys.Keys[index].Value)) {
+                    errors.Add(item: $"{path}.keys[{index}].value {keys.Keys[index].Value} must be finite and within {field.Domain}{Because(field: field)}.");
+                }
             }
         }
     }
+    // Every presentation scalar a document binds to a state row starts within its field's domain: the value the binding
+    // presents as the document loads, which is its row's eased follower unless the binding reads the stored truth with
+    // $target. Only a load judges it. A live document's rows hold whatever its rules and console writes last set, which
+    // the presentation maps into the domain, so revalidating an applied mutation, a journal replay or an embedded
+    // snapshot never reads them.
+    private static void ValidateBoundStarts(WorldDefinition definition, List<string> errors) {
+        foreach (var bound in WorldKeyedValues.BoundOf(definition: definition)) {
+            if (bound is not { Value: { } value, Field: { } field }) {
+                continue;
+            }
+
+            var (path, binding) = (bound.Path, bound.Binding);
+
+            if (
+                (binding.Target
+                    ? WorldStateReader.TryReadValue(
+                        definition: definition,
+                        engineTick: 0UL,
+                        key: binding.Key,
+                        row: out _,
+                        rowName: binding.Row,
+                        tick: 0UL,
+                        value: out var cell
+                    )
+                    : WorldStateReader.TryReadEasedValue(
+                        definition: definition,
+                        engineTick: 0UL,
+                        key: binding.Key,
+                        row: out _,
+                        rowName: binding.Row,
+                        tick: 0UL,
+                        value: out cell
+                    )) &&
+                WorldStateReader.TryNumber(
+                number: out var start,
+                value: cell
+            ) &&
+                !field.Domain.Contains(value: ((float)start))
+            ) {
+                errors.Add(item: $"{path} binds {value} whose starting value {((float)start)} lies outside {field.Domain}{Because(field: field)}; a bound value starts within its field's domain.");
+            }
+        }
+    }
+    private static string Because(WorldValueField field) => ((field.Why is { } why)
+        ? $"; {why}"
+        : string.Empty);
     private static void JudgeDirection(BindableDirection? direction, string path, List<string> errors) {
         if (direction is not { } value) {
             return;

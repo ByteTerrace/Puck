@@ -70,6 +70,7 @@ public sealed class PlacementResponseDisclosureLawTests {
             recipient: recipient,
             revision: 1,
             tier: WorldDisclosureTier.Presentation,
+            time: fixture.Server.Time,
             version: default
         );
 

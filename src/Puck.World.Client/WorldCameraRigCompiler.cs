@@ -59,10 +59,12 @@ public static class WorldCameraRigCompiler {
     /// true for the seat rig a joined seat steers, false for an authored camera that renders its own angles.</param>
     /// <param name="mirror">The state mirror whose registered slots the program's bound operands read each
     /// frame.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions.</param>
     /// <returns>A fresh presentation rig.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public static IWorldCameraProgramRig Compile(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, bool interactive = false) {
+    public static IWorldCameraProgramRig Compile(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains, bool interactive = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
@@ -75,6 +77,7 @@ public static class WorldCameraRigCompiler {
 
         return new CompiledRig(
             definition: definition,
+            domains: domains,
             mirror: mirror,
             scalarSources: translation.ScalarSources,
             set: new SdfCameraProgramSet(Programs: translation.Programs),
@@ -92,6 +95,7 @@ public static class WorldCameraRigCompiler {
     public sealed class Cache {
         private IReadOnlyList<WorldCamera>? m_cameras;
         private IReadOnlyList<WorldCurveRow>? m_curves;
+        private WorldValueDomainGuard? m_domains;  // unset until the first compile
         private IReadOnlyList<DynamicsRow>? m_dynamics;
         private bool m_interactive;
         private WorldStateMirror? m_mirror;
@@ -110,16 +114,23 @@ public static class WorldCameraRigCompiler {
         /// <see cref="Compile"/>).</param>
         /// <param name="interactive">Whether the program's orbit op folds in the live look (see
         /// <see cref="Compile"/>).</param>
+        /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions;
+        /// a different guard compiles the rig again, since the rig keeps the one it compiled with.</param>
         /// <returns>The rig.</returns>
         /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-        public IWorldCameraProgramRig Resolve(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, bool interactive = false) {
+        public IWorldCameraProgramRig Resolve(WorldCameraProgram program, WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains, bool interactive = false) {
             ArgumentNullException.ThrowIfNull(argument: definition);
+            ArgumentNullException.ThrowIfNull(argument: domains);
             ArgumentNullException.ThrowIfNull(argument: program);
             ArgumentNullException.ThrowIfNull(argument: mirror);
 
             if (
                 (m_rig is { } rig) &&
                 (m_interactive == interactive) &&
+                ReferenceEquals(
+                objA: m_domains,
+                objB: domains
+            ) &&
                 ReferenceEquals(
                 objA: m_mirror,
                 objB: mirror
@@ -153,6 +164,7 @@ public static class WorldCameraRigCompiler {
             Revision++;
             m_cameras = definition.Cameras;
             m_curves = definition.Curves;
+            m_domains = domains;
             m_dynamics = definition.Dynamics;
             m_interactive = interactive;
             m_mirror = mirror;
@@ -160,6 +172,7 @@ public static class WorldCameraRigCompiler {
             m_views = definition.ViewsRaw;
             m_rig = Compile(
                 definition: definition,
+                domains: domains,
                 interactive: interactive,
                 mirror: mirror,
                 program: program
@@ -171,8 +184,10 @@ public static class WorldCameraRigCompiler {
 
     // One per-frame scalar slot's source: the authored binding whose mirror slot it reads (null for none), or the
     // group-spread widening an offset op's pullback applies. Exactly one arm is live per slot.
-    // A bound or keyed operand, read through the mirror each frame; an angle's keys turn along the shorter arc.
-    private readonly record struct ScalarSource(BindableScalar? Value, float Fallback, float SpreadPullback, bool IsAngle = false);
+    // A bound or keyed operand, read through the mirror each frame; an angle's keys turn along the shorter arc. Every
+    // operand the document binds or keys names its field (WorldValueFields) and site, and is mapped into the field's
+    // domain as it is read, so no value a row strays to or a key blends to reaches the evaluator outside it.
+    private readonly record struct ScalarSource(BindableScalar? Value, float Fallback, float SpreadPullback, bool IsAngle = false, WorldValueField? Field = null, WorldValueSite Site = default);
     // One per-frame subject slot's source — an authored subject other than the program's own reference pose.
     private readonly record struct SubjectSource(WorldCameraSubject Subject);
     // The authored-to-IR walk. Programs are keyed by authored name so a blend that reaches the same program twice
@@ -227,13 +242,15 @@ public static class WorldCameraRigCompiler {
 
             return null;
         }
-        private SdfCameraScalar Angle(BindableAngle angle, float fallback) {
+        private SdfCameraScalar Angle(BindableAngle angle, float fallback, WorldValueField field, in WorldValueSite site) {
             var scalar = angle.Value;
 
             if ((scalar.State is null) && (scalar.Keys is null)) {
                 return Scalar(
                     fallback: fallback,
-                    scalar: scalar
+                    field: field,
+                    scalar: scalar,
+                    site: site
                 );
             }
 
@@ -241,7 +258,9 @@ public static class WorldCameraRigCompiler {
 
             ScalarSources.Add(item: new ScalarSource(
                 Fallback: fallback,
+                Field: field,
                 IsAngle: true,
+                Site: site,
                 SpreadPullback: 0f,
                 Value: scalar
             ));
@@ -251,7 +270,7 @@ public static class WorldCameraRigCompiler {
                 slot: slot
             );
         }
-        private SdfCameraScalar Scalar(BindableScalar scalar, float fallback) {
+        private SdfCameraScalar Scalar(BindableScalar scalar, float fallback, WorldValueField? field = null, WorldValueSite site = default) {
             if ((scalar.State is null) && (scalar.Keys is null)) {
                 return SdfCameraScalar.FromLiteral(value: (((scalar.Literal is { } literal) && float.IsFinite(f: literal))
                     ? literal
@@ -262,6 +281,8 @@ public static class WorldCameraRigCompiler {
 
             ScalarSources.Add(item: new ScalarSource(
                 Fallback: fallback,
+                Field: field,
+                Site: site,
                 SpreadPullback: 0f,
                 Value: scalar
             ));
@@ -300,6 +321,38 @@ public static class WorldCameraRigCompiler {
 
             return slot;
         }
+        // Where an operand sits in the document, which a report names and the guard's entry for the binding is keyed
+        // by: the program's own place in it (the seat rig, the camera rig, or a camera's rig), so the operand is
+        // addressed as the document addresses it, whatever the program is called. A program the document does not
+        // declare is named by its own name.
+        private WorldValueSite SiteOf(WorldCameraProgram program, int index) => new(
+            Index: index,
+            Section: $"{LocationOf(program: program)}.operations"
+        );
+        private string LocationOf(WorldCameraProgram program) {
+            var views = definition.ViewsRaw;
+
+            if (ReferenceEquals(objA: views?.SeatRig, objB: program)) {
+                return "views.seatRig";
+            }
+
+            if (ReferenceEquals(objA: views?.CameraRig, objB: program)) {
+                return "views.cameraRig";
+            }
+
+            var cameras = definition.Cameras;
+
+            for (var index = 0; (index < cameras.Count); index++) {
+                if (ReferenceEquals(
+                    objA: cameras[index].Rig,
+                    objB: program
+                )) {
+                    return $"cameras[{index}].rig";
+                }
+            }
+
+            return $"camera program '{program.Name}'";
+        }
         private List<SdfCameraOp> TranslateOperations(WorldCameraProgram program) {
             var authored = program.Operations;
             var operations = new List<SdfCameraOp>(capacity: authored.Count);
@@ -335,12 +388,22 @@ public static class WorldCameraRigCompiler {
                             Distance: SdfCameraScalar.FromLiteral(value: orbit.Distance),
                             Pitch: Angle(
                                 angle: orbit.Pitch,
-                                fallback: 0f
+                                fallback: 0f,
+                                field: WorldValueFields.OrbitPitch,
+                                site: SiteOf(
+                                    index: index,
+                                    program: program
+                                )
                             ),
                             PivotOffset: (orbit.PivotOffset?.Value ?? Vector3.Zero),
                             Yaw: Angle(
                                 angle: orbit.Yaw,
-                                fallback: 0f
+                                fallback: 0f,
+                                field: WorldValueFields.OrbitYaw,
+                                site: SiteOf(
+                                    index: index,
+                                    program: program
+                                )
                             )
                         ));
 
@@ -357,7 +420,12 @@ public static class WorldCameraRigCompiler {
                                 Curve: new SdfCurvePath(compiled: curveRow.Compiled),
                                 Fraction: Scalar(
                                     fallback: 0f,
-                                    scalar: pathOp.Fraction
+                                    field: WorldValueFields.PathFraction,
+                                    scalar: pathOp.Fraction,
+                                    site: SiteOf(
+                                        index: index,
+                                        program: program
+                                    )
                                 )
                             ));
                         }
@@ -391,7 +459,12 @@ public static class WorldCameraRigCompiler {
                     case WorldCameraProgramOp.FieldOfView fov:
                         operations.Add(item: new SdfCameraOp.Fov(FieldOfViewRadians: Scalar(
                             fallback: OrbitRig.DefaultFieldOfViewRadians,
-                            scalar: fov.FieldOfViewRadians
+                            field: WorldValueFields.FieldOfView,
+                            scalar: fov.FieldOfViewRadians,
+                            site: SiteOf(
+                                index: index,
+                                program: program
+                            )
                         )));
 
                         break;
@@ -408,7 +481,12 @@ public static class WorldCameraRigCompiler {
                                 ProgramB: Translate(program: programB),
                                 Weight: Scalar(
                                     fallback: 0f,
-                                    scalar: blend.Weight
+                                    field: WorldValueFields.BlendWeight,
+                                    scalar: blend.Weight,
+                                    site: SiteOf(
+                                        index: index,
+                                        program: program
+                                    )
                                 )
                             ));
                         }
@@ -447,7 +525,12 @@ public static class WorldCameraRigCompiler {
                             DefaultProgram: Translate(program: defaultProgram),
                             Key: Scalar(
                                 fallback: 0f,
-                                scalar: selectOp.Key
+                                field: WorldValueFields.SelectKey,
+                                scalar: selectOp.Key,
+                                site: SiteOf(
+                                    index: index,
+                                    program: program
+                                )
                             )
                         ));
 
@@ -485,6 +568,7 @@ public static class WorldCameraRigCompiler {
         }
     }
     private sealed class CompiledRig : IWorldCameraProgramRig {
+        private readonly WorldValueDomainGuard m_domains;
         private readonly WorldStateMirror m_mirror;
         private readonly SdfCameraProgramRig m_rig;
         private readonly IReadOnlyList<ScalarSource> m_scalarSources;
@@ -492,8 +576,9 @@ public static class WorldCameraRigCompiler {
 
         private WorldDefinition m_definition;
 
-        public CompiledRig(SdfCameraProgramSet set, WorldDefinition definition, WorldStateMirror mirror, IReadOnlyList<ScalarSource> scalarSources, IReadOnlyList<SubjectSource> subjectSources) {
+        public CompiledRig(SdfCameraProgramSet set, WorldDefinition definition, WorldStateMirror mirror, IReadOnlyList<ScalarSource> scalarSources, IReadOnlyList<SubjectSource> subjectSources, WorldValueDomainGuard domains) {
             m_definition = definition;
+            m_domains = domains;
             m_mirror = mirror;
             m_rig = new SdfCameraProgramRig(
                 programs: set,
@@ -523,10 +608,22 @@ public static class WorldCameraRigCompiler {
                 var source = m_scalarSources[index];
 
                 scalars[index] = ((source.Value is { } value)
-                    ? (source.IsAngle
-                        ? m_mirror.Angle(
-                            angle: new BindableAngle(value: value),
-                            fallback: source.Fallback
+                    ? ((source.Field is { } field)
+                        ? m_domains.Resolve(
+                            fallback: source.Fallback,
+                            field: field,
+                            mirror: m_mirror,
+                            scalar: in value,
+                            site: source.Site,
+                            value: (source.IsAngle
+                                ? m_mirror.Angle(
+                                    angle: new BindableAngle(value: value),
+                                    fallback: source.Fallback
+                                )
+                                : m_mirror.Scalar(
+                                    fallback: source.Fallback,
+                                    scalar: in value
+                                ))
                         )
                         : m_mirror.Scalar(
                             fallback: source.Fallback,

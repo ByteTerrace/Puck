@@ -10,6 +10,15 @@ internal static partial class CanaryCommand {
 
     // The run-directory name of the warm boots, which no manifest id can take: ids are lowercase words and hyphens.
     private const string WarmRunId = "_warm";
+    // The seconds a warm boot waits for its one capture to land once the engine is ready.
+    private const int WarmCaptureSeconds = 20;
+
+    /// <summary>Returns the file name a warm boot on <paramref name="backend"/> captures into its run directory: one
+    /// frame, read back through the display encode, so the encode's pipeline is in the cache every leg starts from and
+    /// no leg's first capture builds it cold.</summary>
+    /// <param name="backend">The backend the boot runs on.</param>
+    /// <returns>The capture's file name.</returns>
+    internal static string WarmCaptureName(string backend) => $"{backend}-encode.png";
 
     /// <summary>The world a run boots once per backend, before any leg, so every GPU leg starts from a pipeline cache
     /// that already holds the engine's pipelines instead of building them on a cold driver under its own timeout.</summary>
@@ -44,13 +53,13 @@ internal static partial class CanaryCommand {
     private static bool IsPlainLeg(CanaryLeg leg) =>
         ((leg.Authorities.Count == 0) && (leg.AuthorityWorldPath is null) && !leg.Connect && (leg.Entry is null) && (leg.Package is null) && !leg.HideShaderCompiler);
     // Boots the warm world once per backend into one shared state directory, each boot waiting for the engine to be
-    // ready and reading its pipeline-cache counts, then hands the cache it persisted to the seed. The first boot that
-    // fails (WarmRefusal) ends the warm with its refusal, and the selection fails without starting a leg.
+    // ready, capturing one frame through the display encode and reading its pipeline-cache counts, then hands the
+    // cache it persisted to the seed. The first boot that fails (WarmRefusal) ends the warm with its refusal, and the
+    // selection fails without starting a leg.
     private static string? WarmPipelineCache(CanaryWarm warm, string artifact, CanaryBudget budget) {
-        var runDirectory = CreateRunDirectory(
-            id: WarmRunId,
-            leg: "pipeline-cache"
-        );
+        // A warm that refuses keeps its transcripts, named; one that succeeds is deleted once the seed holds its cache.
+        using var run = RunDirectory.Create(prefix: $"{ScratchPrefix}{WarmRunId}-pipeline-cache-");
+        var runDirectory = run.Path;
         var stateDirectory = Path.Combine(
             path1: runDirectory,
             path2: "state"
@@ -75,7 +84,16 @@ internal static partial class CanaryCommand {
                 ),
                 ],
                 cancellationToken: budget.Cancellation,
-                input: $"world.wait ready {(WarmSeconds - 20).ToString(provider: CultureInfo.InvariantCulture)}{Environment.NewLine}world.counters pipeline-cache.{backend}{Environment.NewLine}{RunnerQuit}",
+                input: string.Join(
+                    separator: Environment.NewLine,
+                    values: [
+                        $"world.wait ready {((WarmSeconds - 20) - WarmCaptureSeconds).ToString(provider: CultureInfo.InvariantCulture)}",
+                        $"world.screenshot {Path.Combine(path1: runDirectory, path2: WarmCaptureName(backend: backend)).Replace(newChar: '/', oldChar: '\\')}",
+                        $"world.wait captures {WarmCaptureSeconds.ToString(provider: CultureInfo.InvariantCulture)}",
+                        $"world.counters pipeline-cache.{backend}",
+                        RunnerQuit,
+                    ]
+                ),
                 timeout: TimeSpan.FromSeconds(value: WarmSeconds)
             );
 
@@ -113,13 +131,15 @@ internal static partial class CanaryCommand {
             path1: stateDirectory,
             path2: "pipeline-cache"
         ));
+        run.Conclude(passed: true);
 
         return null;
     }
 
     /// <summary>Names how one warm boot failed, or returns <see langword="null"/> when it succeeded: it exited 0 before
-    /// its timeout, after narrating the engine ready on standard error and printing its backend's pipeline-cache
-    /// counts on standard output.</summary>
+    /// its timeout, after narrating the engine ready and its capture landing (<see cref="WarmCaptureName"/>, which the
+    /// display encode served, so the encode's pipeline is built) on standard error, and printing its backend's
+    /// pipeline-cache counts on standard output.</summary>
     /// <param name="backend">The backend the boot ran on.</param>
     /// <param name="process">The boot's captured process.</param>
     /// <param name="source">The id of the manifest whose positive world it booted.</param>
@@ -136,6 +156,9 @@ internal static partial class CanaryCommand {
         }
         if (!SplitLines(text: process.Stderr).Any(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[engine: ready at tick "))) {
             return $"{warm} never reported the engine ready";
+        }
+        if (!SplitLines(text: process.Stderr).Any(predicate: line => (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "[capture] ") && line.Contains(comparisonType: StringComparison.Ordinal, value: " -> ") && line.EndsWith(comparisonType: StringComparison.Ordinal, value: WarmCaptureName(backend: backend))))) {
+            return $"{warm} never landed its capture, so the display encode's pipeline was not built";
         }
         if ((CountOf(kind: "gpu.created.pipelines", lines: stdout) is null) || (CountOf(kind: "gpu.pipeline-cache.misses", lines: stdout) is null)) {
             return $"{warm} printed no pipeline-cache.{backend} counts";

@@ -1,6 +1,7 @@
 using Puck.Networking;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.Testing;
 
 namespace Puck.World.Tests;
 
@@ -23,12 +24,12 @@ internal sealed class InertAuthenticator : IAuthenticator {
 /// (<c>WorldBootComposition.AddWorldAuthoritativeCore</c>) for a row that carries no seats, no door, and no
 /// tape.</summary>
 internal sealed class HostRow : IDisposable {
-    private readonly string m_stateDirectory;
+    private readonly TemporaryDirectory? m_scratch;
 
-    private HostRow(WorldInstance instance, WorldMachineHost machines, string stateDirectory) {
+    private HostRow(WorldInstance instance, WorldMachineHost machines, TemporaryDirectory? scratch) {
         Instance = instance;
         Machines = machines;
-        m_stateDirectory = stateDirectory;
+        m_scratch = scratch;
     }
 
     /// <summary>The admitted row.</summary>
@@ -53,10 +54,15 @@ internal sealed class HostRow : IDisposable {
             screens: doc.Screens,
             engines: []
         );
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: $"puck-host-row-tests-{name}-").FullName;
+        // The row composes a host whose background work may still hold a file as the row is disposed; what a law proves is
+        // not that host's file handling, so the scratch delete is best-effort.
+        var scratch = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: $"puck-host-row-tests-{name}-"
+        );
         var profiles = new WorldOwnedWorlds(
             template: doc,
-            directory: stateDirectory,
+            directory: scratch.RootPath,
             machineId: Guid.NewGuid()
         );
         var server = new WorldServer(
@@ -85,25 +91,13 @@ internal sealed class HostRow : IDisposable {
         return new HostRow(
             instance: instance,
             machines: machines,
-            stateDirectory: stateDirectory
+            scratch: scratch
         );
     }
     /// <inheritdoc/>
     public void Dispose() {
         Instance.Dispose();
-
-        if (m_stateDirectory.Length == 0) {
-            return;
-        }
-
-        try {
-            Directory.Delete(
-                path: m_stateDirectory,
-                recursive: true
-            );
-        } catch (IOException) {
-            // Best-effort scratch cleanup; a locked handle on a slow CI disk must never fail the test itself.
-        }
+        m_scratch?.Dispose();
     }
     /// <summary>Wraps an ALREADY-BUILT server (a checkpoint restore's own <see cref="WorldServer.FromCheckpoint"/>
     /// output) into a row this suite's host can admit and drive — the reciprocal of <see cref="Build"/> for the
@@ -113,10 +107,10 @@ internal sealed class HostRow : IDisposable {
     /// round-trip comparison to mean anything.</param>
     /// <param name="server">The restored server.</param>
     /// <param name="machines">The machine host the restored server was built with.</param>
-    /// <param name="stateDirectory">The scratch profile-catalog directory <paramref name="server"/> was restored
-    /// against, deleted alongside this row, or <see langword="null"/> when the caller owns that directory some
-    /// other way (a row built with no scratch directory of its own).</param>
-    public static HostRow Wrap(string name, WorldServer server, WorldMachineHost machines, string? stateDirectory = null) {
+    /// <param name="scratch">The scratch profile-catalog directory <paramref name="server"/> was restored against,
+    /// resolved alongside this row, or <see langword="null"/> when the caller owns that directory some other way (a
+    /// row built with no scratch directory of its own).</param>
+    public static HostRow Wrap(string name, WorldServer server, WorldMachineHost machines, TemporaryDirectory? scratch = null) {
         var link = new LoopbackTransport(server: server);
         var instance = new WorldInstance(
             name: name,
@@ -134,7 +128,7 @@ internal sealed class HostRow : IDisposable {
         return new HostRow(
             instance: instance,
             machines: machines,
-            stateDirectory: (stateDirectory ?? string.Empty)
+            scratch: scratch
         );
     }
 }

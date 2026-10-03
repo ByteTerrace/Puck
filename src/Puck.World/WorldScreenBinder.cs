@@ -65,6 +65,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     private readonly bool m_hostsOnDirectX;
     // The host's paper-white level, which an HDR capture's room glow is measured against.
     private readonly double m_paperWhiteNits;
+    private readonly WorldValueDomainGuard m_domains;
     // The process's running world instances. Its observation resolver door owns destination lookup, origin adoption,
     // generation resolution and start/reuse, so a screen and a crossing cannot grow independent routing rules.
     private readonly WorldInstanceHost m_instanceHost;
@@ -204,9 +205,13 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     /// <see langword="null"/> for none; each must match a shape in <see cref="WorldImageProducerVocabulary"/>.</param>
     /// <param name="paperWhiteNits">The host's paper-white level, in cd/m², the luminance a working value of one shows at,
     /// which an HDR capture's room glow is measured against.</param>
+    /// <param name="domains">The guard that holds the last valid value of a session view's bound value and reports its
+    /// transitions.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
+    public WorldScreenBinder(IReadOnlyList<WorldScreen> screens, WorldMachineHost machines, ICameraCaptureService cameraCapture, INativeImageCaptureService windowCapture, IProbeKernelHostService probeKernels, IReadOnlyList<WorldCamera> cameras, ISdfAnchorSource anchors, WorldStampPool stamps, WorldPerceptionAnchor perception, Func<WorldOverlayFacts> facts, bool hostsOnDirectX, WorldInstanceHost instanceHost, PlayerRoster roster, WorldValueDomainGuard domains, WorldRenderProbe? renderProbe = null, bool alwaysFillsCaptures = false, IReadOnlyList<IWorldImageProducer>? producers = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: screens);
+        m_domains = domains;
         m_renderProbe = renderProbe;
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentNullException.ThrowIfNull(argument: cameraCapture);

@@ -176,6 +176,7 @@ public sealed partial class WorldFramePresenter {
             endpoint: endpoint,
             index: index
         ),
+        domains: m_domains,
         endpoint: endpoint,
         hostFrame: () => m_dressedFrame
     );

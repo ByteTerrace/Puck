@@ -1,5 +1,16 @@
 namespace Puck.World;
 
+/// <summary>A view's durable render quality. A name of <c>*</c> supplies the defaults for the world's own player views
+/// (<c>world</c>, <c>world$2</c> on); a named row overrides only that view, and a camera or session view takes only a row
+/// that names it, rendering native otherwise. Pins are session state and have no document member.</summary>
+/// <param name="Name">The render view's instance name, or <c>*</c> for the player-view defaults.</param>
+/// <param name="RenderScale">The scalar allocation ceiling, or null to inherit the render defaults.</param>
+/// <param name="RenderScaleFloor">The lowest dynamic grid tier, or null to use the selected tier's floor (Quarter by default).</param>
+/// <param name="Tier">The authored quality preset whose floor this view uses.</param>
+public sealed record WorldViewQuality(string Name,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] float? RenderScale = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldRenderScaleTier? RenderScaleFloor = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Puck.Abstractions.Presentation.QualityTier? Tier = null);
 /// <summary>One slot of a <see cref="WorldViewLayout"/> — a normalized rect (origin top-left, Y down) plus what fills it.
 /// A slot whose <see cref="Camera"/> and <see cref="Instance"/> are both <see langword="null"/> shows the seat that owns
 /// this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named graph
@@ -192,6 +203,7 @@ public enum WorldSeatYawReference : byte {
 /// <see langword="null"/> for <see cref="Puck.Hosting.RenderGraphInstanceSet.DefaultNestingDepth"/>; refused past
 /// <see cref="Puck.Hosting.RenderGraphInstanceSet.MaxNestingDepth"/>. <see cref="NestingDepth"/> is what a reader
 /// resolves through.</param>
+/// <param name="Quality">Per-view render quality and tier floors; a row named * supplies the defaults.</param>
 public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatRig"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? SeatRigRaw = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("seatControl"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatViewControl? SeatControlRaw = null,
@@ -201,7 +213,8 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewGraphBudget? GraphBudget = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Root = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewPostPass>? Post = null,
-    [property: System.Text.Json.Serialization.JsonPropertyName("nestingDepth"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? NestingDepthRaw = null) {
+    [property: System.Text.Json.Serialization.JsonPropertyName("nestingDepth"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? NestingDepthRaw = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewQuality>? Quality = null) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 
     /// <summary>Gets how many screens deep the presentation of this world nests: a portal whose face shows another
@@ -228,7 +241,7 @@ public sealed record WorldViewDefaults(IReadOnlyList<WorldViewLayout>? Layouts =
                     Yaw: new BindableScalar(literal: 0f),
                     Pitch: new BindableScalar(literal: 0f)
                 ),
-                new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0f)),
+                new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 1f)),
             ]
         ),
         SeatControlRaw: new WorldSeatViewControl(

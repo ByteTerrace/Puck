@@ -205,6 +205,15 @@ back with `WorldOwnedWorlds.Discarded` + `identity.list`'s `discarded=` column
 `WorldOwnedWorlds.Refused` + `identity.list`'s `refused=` column (everything
 left in place, whatever the class).
 
+Storage narration is path-free, built so at its source. A refusal or narration may name what a document says, such as
+its authored `basis` reference exactly as written, and a document by its file name; it never names what the host
+resolved: an absolute path, the catalog root, a probe file, or an exception message that quotes either. The loader and
+composers (`WorldDefinitionFileSource`, `PuckDocumentComposer`, the push chain walk, the save-flat note) name documents
+through `WorldDocumentLabel.Of` and failures through `WorldDocumentLabel.Failure` (access denied, file in use, no
+space left, ...), and a host that must not even show the file's directory passes `displayName` to the loader
+(`TryLoadFileForAdmission`; the catalog passes the file name). `NarrationPaths.AssertNone` holds that over the save, discard,
+refusal, save-flat and push narration by asserting the test's own paths are absent.
+
 **Seeding.** When the identity directory holds zero admitted documents,
 `WorldOwnedWorlds` seeds one owned world per `playerDefaults.identities` row
 (`WorldIdentitySeed(Id, Name, Color)`, validated non-empty, ids and names both
@@ -241,15 +250,17 @@ keyed `int` row named `identity` it declares in `state.world`
 (`WorldIdentityFactLane`; cells keyed `<bodyIndex>-<fact>`), loaded into a
 body's cells when a seat binds the identity and zeroed when it unbinds. A rule
 writes one with the `setIdentityFact` effect (`{key: <body>, fact, value |
-expression}` — lane and identity row together, the identity persisted through
-`WorldOwnedWorlds.TrySetFact`) and reads one through `$identity:<bodyRef>:<fact>`
+expression}` — lane and identity row together through `WorldOwnedWorlds.TrySetFact`,
+which persists an identity the catalog owns and keeps a visitor's fact on the
+travelling row of the projection it arrived as; the visitor's own authority
+adopts it when the seat comes home) and reads one through `$identity:<bodyRef>:<fact>`
 (0 when never written or no identity drives the body); a world declaring no
 lane refuses both by name at compile (`IdentityLaneUndeclared`). The lane is
 trait-free: an `advance`, `dynamics` or `cycle` on the row or any cell is
 refused by name at validation and at compile (`IdentityLaneTraited`, one check,
 `WorldIdentityFactLane.TryAdmitTraits`), because the server compares and
 persists the stored value while the operand reads the live one. A body driving
-under no owned identity refuses the write at fire time (`IdentityUnbound`), and
+under no identity refuses the write at fire time (`IdentityUnbound`), and
 a lane write the row refuses (its envelope, say) reports that write's own
 reason under `IdentityFactUnwritable`; the lane mints a cell only when it holds
 none under the key (`StateArena.TryWriteOrMint`). `identity.facts [player]` echoes the identity's row;

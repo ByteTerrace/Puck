@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Puck.Testing;
 
 namespace Puck.HumbleGamingDeck.Tests;
 
@@ -9,7 +10,9 @@ public sealed class GateLaneTests {
     /// <returns>The task that completes after the executable exits and its reports are checked.</returns>
     [Fact]
     public async Task TierAIsGreenThroughTheRealBatteryExecutable() {
-        var artifacts = Path.Combine(path1: Path.GetTempPath(), path2: "puck-hgd-post", path3: Guid.NewGuid().ToString(format: "N"));
+        using var directory = new TemporaryDirectory(prefix: "puck-hgd-post-");
+
+        var artifacts = directory.PathOf(name: "artifacts");
         var start = new ProcessStartInfo {
             FileName = "dotnet",
             UseShellExecute = false,

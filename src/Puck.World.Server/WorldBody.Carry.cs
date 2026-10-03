@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -180,14 +181,20 @@ public sealed partial class WorldBody {
     /// relationship in that case). Pushing and being blocked by another BODY (rather than static geometry) is the
     /// caller's own separate pass — see <c>WorldPopulation.ResolveCarriedBodyPush</c> — since only the population
     /// can see every other body.</summary>
-    internal void FollowCarrier(WorldBody carrier) {
+    /// <param name="carrier">The body carrying this one.</param>
+    /// <param name="scratch">The caller's step scratch, which a refused sweep restores this body from.</param>
+    internal void FollowCarrier(WorldBody carrier, StepScratch scratch) {
         if (carrier.m_carry is not { } carry) {
             return;
         }
 
         var previousPosition = m_position;
         var desiredPosition = (carrier.m_position + carrier.m_orientation.Rotate(vector: (carry.Offset * carrier.m_scale)));
+        // A refused sweep is a full block for this body alone (WorldBody.SweepRefusal.cs): it stays as it was, and the
+        // carrier is handed no correction, so a refusal never reaches it.
+        CaptureMotion(scratch: scratch);
 
+        m_sweepRefusal = ContactRefusal.None;
         m_orientation = carrier.m_orientation;
 
         if (
@@ -198,7 +205,7 @@ public sealed partial class WorldBody {
             var sweptPosition = desiredPosition;
             var sweptVelocity = (desiredPosition - previousPosition);
 
-            field.ResolveSweep(
+            var resolution = field.ResolveSweep(
                 orientation: in m_orientation,
                 position: ref sweptPosition,
                 previousPosition: in previousPosition,
@@ -207,11 +214,23 @@ public sealed partial class WorldBody {
                 volumes: volumes
             );
 
+            if (resolution.Refusal != ContactRefusal.None) {
+                NoteSweepRefusal(refusal: resolution.Refusal);
+                RestoreMotion(scratch: scratch);
+
+                return;
+            }
+
             var blockCorrection = (sweptPosition - desiredPosition);
 
             desiredPosition = sweptPosition;
 
-            if (blockCorrection != FixedVector3.Zero) {
+            // A carrier is corrected only by a proven contact: a sweep that held the body for want of proof is no
+            // physical block, and hands the carrier nothing, the same as a refusal.
+            if (
+                (blockCorrection != FixedVector3.Zero) &&
+                !resolution.Unproved
+            ) {
                 // The carried body's OWN position already took the full sweep correction above — it is never left
                 // penetrating. What reaches the CARRIER is bounded to this body's own bounding radius: a legitimate
                 // touch-and-block push is well under an object's own size, while a correction larger than the

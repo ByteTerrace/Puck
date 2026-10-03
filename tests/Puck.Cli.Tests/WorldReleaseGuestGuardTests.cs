@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Testing;
 using Puck.World.Server;
 using Xunit;
 
@@ -151,46 +152,44 @@ public sealed class WorldReleaseGuestGuardTests {
             record with { PendingPhase = WorldReleaseOperationPhase.Finalized, PendingOperationId = null },
             false
         );
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-guest-guard-");
+        using var directory = new TemporaryDirectory(prefix: "puck-guest-guard-");
 
-        try {
-            var path = Path.Combine(
-                path1: directory.FullName,
-                path2: "cases.json"
-            );
+        var path = Path.Combine(
+            path1: directory.RootPath,
+            path2: "cases.json"
+        );
 
-            File.WriteAllText(
-                path,
-                cases.ToJsonString()
-            );
-            const string Program = """
-                import json, runpy, sys
-                validate = runpy.run_path(sys.argv[1])['validate']
-                for index, case in enumerate(json.load(open(sys.argv[2], encoding='utf-8'))):
-                    try:
-                        validate(case['request'], case['record'])
-                        accepted = True
-                    except ValueError:
-                        accepted = False
-                    assert accepted == case['accepted'], f'guest guard case {index} returned {accepted}'
-                print('guest guard wire contract passed')
-                """;
-            var result = await CliProcess.RunCheckedAsync(
-                workingDirectory: directory.FullName,
-                fileName: python,
-                arguments: ["-c", Program, Path.Combine(
-                        path1: root,
-                        path2: "build/Guard-WorldRelease.py"
-                    ), path],
-                capture: true,
-                cancellationToken: token
-            );
+        File.WriteAllText(
+            path,
+            cases.ToJsonString()
+        );
+        const string Program = """
+            import json, runpy, sys
+            validate = runpy.run_path(sys.argv[1])['validate']
+            for index, case in enumerate(json.load(open(sys.argv[2], encoding='utf-8'))):
+                try:
+                    validate(case['request'], case['record'])
+                    accepted = True
+                except ValueError:
+                    accepted = False
+                assert accepted == case['accepted'], f'guest guard case {index} returned {accepted}'
+            print('guest guard wire contract passed')
+            """;
+        var result = await CliProcess.RunCheckedAsync(
+            workingDirectory: directory.RootPath,
+            fileName: python,
+            arguments: ["-c", Program, Path.Combine(
+                    path1: root,
+                    path2: "build/Guard-WorldRelease.py"
+                ), path],
+            capture: true,
+            cancellationToken: token
+        );
 
-            Assert.Contains(
-                actualString: result,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "guest guard wire contract passed"
-            );
-        } finally { directory.Delete(recursive: true); }
+        Assert.Contains(
+            actualString: result,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "guest guard wire contract passed"
+        );
     }
 }

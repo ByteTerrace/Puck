@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Assets.Tests;
@@ -5,22 +6,22 @@ namespace Puck.Assets.Tests;
 // A promotion out of tmp/ either lands the object or ref, or leaves tmp/ exactly as it found it: a failed
 // File.Move never orphans the temp file it was about to promote.
 public sealed class ContentAddressedStoreLawTests : IDisposable {
-    private readonly DirectoryInfo m_root = Directory.CreateTempSubdirectory(prefix: "puck-content-store-");
+    private readonly TemporaryDirectory m_root = new(prefix: "puck-content-store-");
 
     public void Dispose() =>
-        m_root.Delete(recursive: true);
+        m_root.Dispose();
 
     private string[] TmpEntries() =>
-        [.. Directory.EnumerateFileSystemEntries(path: Path.Combine(path1: m_root.FullName, path2: "tmp"))];
+        [.. Directory.EnumerateFileSystemEntries(path: Path.Combine(path1: m_root.RootPath, path2: "tmp"))];
 
     [Fact]
     public void APutWhosePromotionFailsLeavesNoTemporaryFile() {
-        var store = new ContentAddressedStore(root: m_root.FullName);
+        var store = new ContentAddressedStore(root: m_root.RootPath);
         var content = "hello"u8.ToArray();
         var pin = ContentPin.Compute(content: content);
         var objectPath = ContentAddressedStore.ObjectPath(
             pin: pin,
-            root: m_root.FullName
+            root: m_root.RootPath
         );
 
         // A directory at the object's own path makes the final rename fail after the temp file is fully written;
@@ -35,9 +36,9 @@ public sealed class ContentAddressedStoreLawTests : IDisposable {
     }
     [Fact]
     public void ASetRefWhosePromotionFailsLeavesNoTemporaryFile() {
-        var store = new ContentAddressedStore(root: m_root.FullName);
+        var store = new ContentAddressedStore(root: m_root.RootPath);
         var hash = ContentPin.Compute(content: "hello"u8.ToArray());
-        var refPath = Path.Combine(path1: m_root.FullName, path2: "refs", path3: "worlds", path4: "demo");
+        var refPath = Path.Combine(path1: m_root.RootPath, path2: "refs", path3: "worlds", path4: "demo");
 
         // A directory at the ref's own path makes the final rename fail after the temp file is fully written.
         _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: refPath)!);

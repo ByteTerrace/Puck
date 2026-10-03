@@ -14,7 +14,7 @@ public sealed partial class WorldReplaySnapshot {
     /// <exception cref="InvalidDataException">The stream is not a <c>.puckreplay</c> tape, or is an older shape this
     /// build does not read (refused outright — greenfield keeps no read-side tolerance for a foreign shape); is
     /// truncated, corrupt, or carries bytes after the tape; carries a value no wire table names; pins one addon name
-    /// twice; or pins a seat slot out of range or twice.</exception>
+    /// twice; pins a seat slot out of range or twice; or carries an arrival no commit could have decided.</exception>
     public static WorldReplaySnapshot Read(Stream stream) {
         ArgumentNullException.ThrowIfNull(argument: stream);
 
@@ -215,6 +215,19 @@ public sealed partial class WorldReplaySnapshot {
             }
         }
 
+        // A commit that stood answers every later commit of its handoff token as already committed and lands nothing,
+        // so no recording holds a landed arrival's token again.
+        var landed = new HashSet<(string Source, ulong TransferId)>();
+
+        foreach (var arrival in ticks.SelectMany(selector: static tick => tick.Authority).OfType<WorldReplayEntry.Arrival>()) {
+            if (landed.Contains(item: (arrival.SourceAuthority, arrival.TransferId))) {
+                throw new InvalidDataException(message: $"Corrupt .puckreplay recording: transfer {arrival.TransferId} from '{arrival.SourceAuthority}' arrives again after its commit stood.");
+            }
+            if (!arrival.Outcome.RolledBack) {
+                _ = landed.Add(item: (arrival.SourceAuthority, arrival.TransferId));
+            }
+        }
+
         // The two lengths are equal BY CONSTRUCTION on the record side (one hash sampled per tick appended), so a file
         // where they disagree is doctored or truncated between the two sections. Reject it here rather than letting the
         // shorter one silently bound the comparison — a trace cut short would otherwise read as "matched everywhere it
@@ -404,13 +417,9 @@ public sealed partial class WorldReplaySnapshot {
             items: recording.Seats,
             writeItem: static (w, seat) => {
                 w.WriteInt32(value: seat.Slot);
-                w.WriteOptional(
-                    value: seat.Profile,
-                    writeValue: static (pinWriter, pin) => {
-                        pinWriter.WriteString(value: pin.Name);
-                        pinWriter.WriteNullableFixed(value: pin.MoveSpeed);
-                        pinWriter.WriteNullableFixed(value: pin.TurnSpeed);
-                    }
+                WorldIdentityProjectionWire.WriteOptional(
+                    projection: seat.Profile,
+                    writer: w
                 );
             }
         );

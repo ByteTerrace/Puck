@@ -2278,11 +2278,11 @@ export type StateCellClock = {
   /**
    * A StateDynamics follower's position at EpochTick, as raw FixedQ4816 bits, independent of the carrying row's stored-value kind.
    */
-  y0?: number;
+  y0?: string;
   /**
    * A StateDynamics follower's velocity at EpochTick, per second, as raw FixedQ4816 bits.
    */
-  v0?: number;
+  v0?: string;
   /**
    * Elapsed ticks a StateCycle has already accumulated toward its next step at EpochTick; must be non-negative and less than the cycle's own ticksPerStep.
    */
@@ -4405,6 +4405,29 @@ export type WorldClock = {
    * A state clock's Fixed or Int row. Refused beside PeriodSeconds.
    */
   state?: string | null;
+  /**
+   * An anchored clock's anchor: what a projection carries for a state clock it discloses, in place of the row. Refused in an authored document. An anchored clock carrying none reads no phase, as the state clock it stands for reads none while its row holds no number.
+   */
+  anchor?: WorldClockAnchor | null;
+};
+
+export type WorldClockAnchor = {
+  /**
+   * The engine tick the anchor stands at.
+   */
+  tick: number;
+  /**
+   * The phase at Tick, a whole turn being 2^64.
+   */
+  phase: number;
+  /**
+   * The phase one authoritative tick adds, wrapping; zero for a clock held still.
+   */
+  rate?: number;
+  /**
+   * The engine ticks one authoritative tick spans; zero exactly when Rate is.
+   */
+  step?: number;
 };
 
 export type WorldCollider = WorldColliderSphere | WorldColliderCapsule | WorldColliderBox | WorldColliderFromCreation | null;
@@ -5093,7 +5116,7 @@ export type WorldEffectScaleVerticalVelocity = {
 };
 
 /**
- * Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's reserved WorldIdentityFactLane row and the identity's own persisted facts row, together. Exactly one of Value and Expression is authored; a body driving under no owned identity refuses the write rather than minting one.
+ * Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's reserved WorldIdentityFactLane row and the identity's facts row, together. An owned identity's row is persisted; a visitor's is its travelling row, which its own authority adopts when it comes home. Exactly one of Value and Expression is authored; a body driving under no identity refuses the write rather than minting one.
  */
 export type WorldEffectSetIdentityFact = {
   $type?: "setIdentityFact";
@@ -8746,17 +8769,21 @@ export type WorldQualityPreset = {
    */
   ambientOcclusion?: boolean;
   /**
-   * The render-scale tier the preset selects.
+   * The scalar render-scale ceiling the preset selects.
    */
-  renderScale?: WorldRenderScaleTier;
+  renderScale?: number;
   /**
    * Whether the preset reconstructs the world's views over time (world.temporal).
    */
   temporal?: boolean;
   /**
-   * Whether the preset moves each view's render extent with the load (world.dynamic-resolution).
+   * Whether the preset moves each view's render extent with the load (world.render-scale auto).
    */
   dynamicResolution?: boolean;
+  /**
+   * The per-view floor tier the preset selects (Quarter by default).
+   */
+  renderScaleFloor?: WorldRenderScaleTier;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -8916,9 +8943,9 @@ export type WorldRenderDefaults = {
    */
   ambientOcclusion?: boolean;
   /**
-   * The boot render-scale tier.
+   * The scalar boot render-scale ceiling in [0.125, 1].
    */
-  renderScale?: WorldRenderScaleTier;
+  renderScale?: number;
   /**
    * The boot reconstruction sharpness: the spatial resolve's blend (0 bilinear .. 1 Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.
    */
@@ -8928,13 +8955,9 @@ export type WorldRenderDefaults = {
    */
   temporal?: boolean;
   /**
-   * Whether the world's own views boot with dynamic resolution (world.dynamic-resolution): each frame one controller moves each view's render grid between DynamicResolutionFloor and the render-scale ceiling, by the present timing or, where the presenter reports none, by the views' counted march steps against the budget the floor tier's committed counters ceilings give per output pixel. A native ceiling is lowered to three-quarter while it is on, since a native view reconstructs nothing.
+   * Whether views boot adapting their grids (world.render-scale auto). Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while adaptation is enabled, since a native view reconstructs nothing.
    */
   dynamicResolution?: boolean;
-  /**
-   * The lowest render-scale tier dynamic resolution moves a view's grid to.
-   */
-  dynamicResolutionFloor?: WorldRenderScaleTier;
   /**
    * The world.quality low preset.
    */
@@ -9177,7 +9200,7 @@ export type WorldRenderLightingKey = {
 };
 
 /**
- * The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view's output keeps its rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition's dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the world document's quality presets, the console world.render-scale verb and the boot resolution read. Each extent below is a lone whole-display view at 1280x800.
+ * The enumerated world render-scale tiers a player picks at the console and a view's floor names, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view's output keeps its rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition's dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the quality presets' floors, the console world.render-scale verb and the per-view floors read; a ceiling is a scalar. Each extent below is a lone whole-display view at 1280x800.
  */
 export type WorldRenderScaleTier = "Native" | "ThreeQuarter" | "Half" | "Quarter" | "Eighth";
 
@@ -9590,10 +9613,6 @@ export type WorldScreen = {
    */
   magazine?: WorldScreenMagazine | null;
   /**
-   * The screen's live byte-window bindings between its booted machine's bus and ordinary state.world Int cells (see WorldScreenMemory), or null for a screen with none. Omitted from the wire when null.
-   */
-  memory?: (WorldScreenMemory | null)[] | null;
-  /**
    * How the face samples its source's image: Nearest, the default, keeps each source pixel crisp, as an emulator or a pixel-art source wants; Linear blends between source pixels, as a camera or a desktop capture wants. The screen's mapping carries it, and a hit maps to the same source pixel under either. Omitted from the wire when Nearest.
    */
   filter?: GpuSamplerFilter;
@@ -9613,31 +9632,6 @@ export type WorldScreenMagazine = {
    */
   wrap?: boolean;
 };
-
-export type WorldScreenMemory = {
-  /**
-   * The machine bus address the window starts at. Validated within 0..(MaxAddress - Width + 1) — outside the engine's addressable memory refuses by name at validation, never at runtime (a machine's own IMachineMemoryPeek silently reads/no-ops out of its own smaller readable/writable range instead, exactly as it does for any other peek/poke).
-   */
-  address: number;
-  /**
-   * How many bytes the window spans, little-endian (the low byte at Address): 1 or 2.
-   */
-  width: number;
-  /**
-   * The declared state.world row this binding mirrors to/from — must resolve to a kind=Int row.
-   */
-  row: string;
-  /**
-   * The cell inside Row, or null for its slot cell. Refused when Row is keyed and this is absent, or unkeyed and this is present — the same (row, key) pair rule every other named-cell reference in this document follows. Omitted from the wire when null.
-   */
-  key?: string | null;
-  /**
-   * Which way the binding moves a value.
-   */
-  direction?: WorldScreenMemoryDirection;
-};
-
-export type WorldScreenMemoryDirection = "Read" | "Write";
 
 /**
  * How a Session face's destination render projects onto the face — an ordinary head-on camera image, or a WINDOW whose image shears with the viewer's own eye so the destination scene parallaxes against the aperture the way a real opening would.
@@ -10966,7 +10960,7 @@ export type WorldThemeRadius = {
 };
 
 /**
- * One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha is clamped to ScrimMinAlpha at resolve time when it is a state binding (see WorldDefinitionValidator's theme validation for the literal-authoring floor).
+ * One scrim's fill color plus its own alpha, split apart so a world can retheme opacity independent of hue — the two knobs a scrim (a translucent panel/strip/chip backing) actually varies. Alpha lies between ScrimMinAlpha and one; a bound alpha a live write moves below the floor presents at it.
  */
 export type WorldThemeScrim = {
   /**
@@ -11178,6 +11172,10 @@ export type WorldViewDefaults = {
    */
   nestingDepth?: number | null;
   /**
+   * Per-view render quality and tier floors; a row named * supplies the defaults.
+   */
+  quality?: (WorldViewQuality | null)[] | null;
+  /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
   layouts?: (WorldViewLayout | null)[] | null;
@@ -11319,6 +11317,25 @@ export type WorldViewPostPass = {
    * The package's config values, each absent field at its default, or null for every default. The graph compiler binds them against the package's schema when the root graph is composed, and a boot refuses a value that does not bind, naming the row.
    */
   config?: unknown;
+};
+
+export type WorldViewQuality = {
+  /**
+   * The render view's instance name, or * for the player-view defaults.
+   */
+  name: string;
+  /**
+   * The scalar allocation ceiling, or null to inherit the render defaults.
+   */
+  renderScale?: number | null;
+  /**
+   * The lowest dynamic grid tier, or null to use the selected tier's floor (Quarter by default).
+   */
+  renderScaleFloor?: WorldRenderScaleTier | null;
+  /**
+   * The authored quality preset whose floor this view uses.
+   */
+  tier?: QualityTier | null;
 };
 
 export type WorldViewSlot = {

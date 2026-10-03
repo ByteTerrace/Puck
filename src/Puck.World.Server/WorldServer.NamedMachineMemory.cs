@@ -44,9 +44,72 @@ public sealed partial class WorldServer {
         return observation.State;
     }
 
-    // Same phase as the original mirror: rules, ordered bindings, then machine advance. Each hardware scalar
-    // crosses the provider barrier once, so a word cannot combine bytes from different guest steps.
-    private void SyncNamedMachineMemory(ulong tick) {
+    // The memo a checkpoint carries: every observation the next synchronization keeps, ordered by machine then binding
+    // name so the encoding never depends on the order the dictionary filled. An observation of a binding the document
+    // no longer declares is the next synchronization's to drop, so it is not carried.
+    internal WorldMachineBindingEntry[] CaptureMachineBindings() {
+        var entries = new List<WorldMachineBindingEntry>(capacity: m_namedMemory.Count);
+
+        foreach (var ((machine, binding), observation) in m_namedMemory) {
+            if (DeclaredBinding(definition: m_document.Definition, machine: machine, binding: binding) == observation.Binding) {
+                entries.Add(item: new(Binding: binding, Machine: machine, State: observation.State));
+            }
+        }
+
+        entries.Sort(comparison: static (left, right) => CompareBindingOrder(left: left, right: right));
+
+        return [.. entries];
+    }
+    /// <summary>Orders two memo entries by machine name, then binding name, ordinally — the one order a checkpoint
+    /// writes them in.</summary>
+    /// <param name="left">The first entry.</param>
+    /// <param name="right">The second entry.</param>
+    /// <returns>A negative number, zero, or a positive number as <paramref name="left"/> sorts before, with, or after
+    /// <paramref name="right"/>.</returns>
+    internal static int CompareBindingOrder(WorldMachineBindingEntry left, WorldMachineBindingEntry right) {
+        var machine = string.CompareOrdinal(strA: left.Machine, strB: right.Machine);
+
+        return ((machine != 0)
+            ? machine
+            : string.CompareOrdinal(strA: left.Binding, strB: right.Binding));
+    }
+    // Refuses a captured memo that names a binding the restored document does not declare, before the restore changes
+    // anything.
+    internal static void ValidateMachineBindings(IReadOnlyList<WorldMachineBindingEntry> entries, WorldDefinition definition) {
+        foreach (var entry in entries) {
+            if (DeclaredBinding(definition: definition, machine: entry.Machine, binding: entry.Binding) is null) {
+                throw new InvalidOperationException(message: $"the checkpoint's memo names binding '{entry.Binding}' on machine '{entry.Machine}', which its document does not declare");
+            }
+        }
+    }
+    // Replaces the live memo with the captured one, never merges: an observation the captured server had not made
+    // must not survive from the timeline the restore abandons.
+    internal void RestoreMachineBindings(IReadOnlyList<WorldMachineBindingEntry> entries) {
+        m_namedMemory.Clear();
+        m_namedMemoryRows = null;
+
+        foreach (var entry in entries) {
+            m_namedMemory[(entry.Machine, entry.Binding)] = new BindingObservation(
+                binding: DeclaredBinding(definition: m_document.Definition, machine: entry.Machine, binding: entry.Binding)!,
+                generation: entry.State.Generation
+            ) { State = entry.State };
+        }
+    }
+
+    private static WorldMachineMemory? DeclaredBinding(WorldDefinition definition, string machine, string binding) {
+        foreach (var row in definition.Machines) {
+            if (row.Name == machine) {
+                return row.Memory?.FirstOrDefault(predicate: memory => (memory.Name == binding));
+            }
+        }
+
+        return null;
+    }
+    /// <summary>Synchronizes the ordered <c>machines[].memory</c> bindings after rules and before machine advance.
+    /// Each hardware scalar crosses the provider barrier once, so a word cannot combine bytes from different guest
+    /// steps. Read bindings mirror through the ordinary world-state mutation door.</summary>
+    /// <param name="tick">The current simulation tick.</param>
+    public void SyncNamedMachineMemory(ulong tick) {
         if (!ReferenceEquals(
             objA: m_namedMemoryRows,
             objB: m_document.Definition.MachinesRaw
@@ -126,6 +189,7 @@ public sealed partial class WorldServer {
             }
         }
     }
+
     private static void Observe(BindingObservation observation, MachineAccessResult result, long? accepted = null) =>
         observation.State = observation.State with {
             Status = result.Status,

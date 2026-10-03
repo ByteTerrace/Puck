@@ -11,6 +11,10 @@ namespace Puck.State;
 /// <param name="Members">The member names in value order; member <c>i</c> is the value <c>i</c>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateEnum(CellName Name, IReadOnlyList<CellName> Members) {
+    // Owned (StateLists.Freeze): a caller that keeps the collection it passed in cannot change the enum, so every
+    // cache keyed by an enum stays true while the enum lives.
+    /// <summary>The member names in value order; member <c>i</c> is the value <c>i</c>.</summary>
+    public IReadOnlyList<CellName> Members { get => field; init => field = StateLists.Freeze(items: value)!; } = StateLists.Freeze(items: Members)!;
     /// <summary>Gets how many members the enum declares — the exclusive upper bound of its value range.</summary>
     [JsonIgnore]
     public int Count => Members.Count;
