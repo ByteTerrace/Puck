@@ -7,6 +7,7 @@ using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.Security;
+using Windows.Win32.System.Com;
 using static Puck.DirectX.DirectXConstants;
 
 namespace Puck.DirectX.Interop;
@@ -19,16 +20,23 @@ namespace Puck.DirectX.Interop;
 /// <see cref="Upload"/> copies every level into the texture and leaves it in both shader-resource states; a consumer
 /// binds <see cref="TextureHandle"/> through a set of its own pool, a range of the device's shader-visible heaps, so the
 /// upload holds no descriptor. This is the Direct3D 12 peer of <c>VulkanSurfaceUpload</c> — the consumer/ingest half that
-/// lets a DirectX host sample a surface that arrived as host memory. Single-thread affine.
+/// lets a DirectX host sample a surface that arrived as host memory. A recording that fails is discarded: the next
+/// <see cref="Upload"/> replaces the command allocator and list, so one failed upload never wedges the instance.
+/// Single-thread affine.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
+    // The calls every command, fence and creation below asks; the device's own unless a law supplies others.
+    private readonly IDirectXCommandCalls m_calls;
     private readonly IDirectXDeviceContext m_deviceContext;
     // The device every object below lives on, from construction (DirectXDeviceOwnership).
     private readonly DirectXDevice m_heldDevice;
 
     private nint m_commandAllocator;
     private nint m_commandList;
+    // True from the moment a recording begins until its list closes: a list that is open, or whose close failed, is never
+    // closed again, so the next upload replaces the allocator and the list before it records.
+    private bool m_commandsFaulted;
     private bool m_disposed;
     private nint m_fence;
     private HANDLE m_fenceEvent;
@@ -51,28 +59,31 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
     /// <param name="deviceContext">The shared device context whose device and queue the upload runs on.</param>
     /// <exception cref="ArgumentNullException"><paramref name="deviceContext"/> is <see langword="null"/>.</exception>
     /// <exception cref="DirectXException">A Direct3D 12 call failed.</exception>
-    public DirectXSurfaceUpload(IDirectXDeviceContext deviceContext) {
+    public DirectXSurfaceUpload(IDirectXDeviceContext deviceContext) :
+        this(
+            calls: DirectXDeviceCommandCalls.Of(deviceContext: deviceContext),
+            deviceContext: deviceContext
+        ) { }
+    /// <summary>Initializes a new instance of the <see cref="DirectXSurfaceUpload"/> class whose commands, fence waits and
+    /// texture creations are answered by <paramref name="calls"/>, which a law gives a device's calls that fail on
+    /// demand.</summary>
+    /// <param name="deviceContext">The shared device context whose device and queue the upload runs on.</param>
+    /// <param name="calls">The answerer of the command-list, mapping, fence and texture-creation calls, over the device
+    /// of <paramref name="deviceContext"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="deviceContext"/> or <paramref name="calls"/> is
+    /// <see langword="null"/>.</exception>
+    /// <exception cref="DirectXException">A Direct3D 12 call failed.</exception>
+    public DirectXSurfaceUpload(IDirectXDeviceContext deviceContext, IDirectXCommandCalls calls) {
         ArgumentNullException.ThrowIfNull(deviceContext);
+        ArgumentNullException.ThrowIfNull(calls);
 
+        m_calls = calls;
         m_deviceContext = deviceContext;
         m_heldDevice = deviceContext.Device;
 
         var device = ((ID3D12Device*)m_heldDevice.Handle);
 
-        var calls = DirectXDeviceCommandCalls.Of(deviceContext: deviceContext);
-        var commandList = DirectXCommandCalls.CreateCommandList(
-            allocator: out var commandAllocator,
-            calls: calls,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
-        );
-
-        m_commandAllocator = ((nint)commandAllocator);
-        m_commandList = ((nint)commandList);
-        DirectXCommandCalls.Close(
-            calls: calls,
-            commandList: commandList
-        );
-
+        CreateCommandResources();
         device->CreateFence(
             Flags: default,
             InitialValue: 0,
@@ -116,8 +127,10 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
     /// <param name="levels">The number of mip levels <paramref name="pixels"/> holds.</param>
     /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
     /// <exception cref="ArgumentException"><paramref name="pixels"/> is not exactly the chain's length.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension or the level count is zero, or the level count
-    /// exceeds the extent's full chain.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension or the level count is zero, a dimension exceeds
+    /// Direct3D 12's two-dimensional texture limit (`D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION`, refused before any
+    /// resource is touched, so the current texture and its view stay), or the level count exceeds the extent's full
+    /// chain.</exception>
     /// <exception cref="NotSupportedException">The device cannot sample a two-dimensional texture of
     /// <paramref name="format"/>.</exception>
     /// <exception cref="InvalidOperationException">The context's device is not the one this upload was created on: its owner
@@ -132,6 +145,14 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             held: m_heldDevice,
             holder: nameof(DirectXSurfaceUpload),
             offered: m_deviceContext.Device
+        );
+        RequireWithinTextureLimit(
+            dimension: width,
+            name: nameof(width)
+        );
+        RequireWithinTextureLimit(
+            dimension: height,
+            name: nameof(height)
         );
         _ = GpuPixelFormats.RequireChain(
             byteLength: pixels.Length,
@@ -149,14 +170,18 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         );
         WriteUploadBuffer(pixels: pixels);
 
-        var calls = DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext);
+        if (m_commandsFaulted) {
+            CreateCommandResources();
+        }
+
         var commandList = ((ID3D12GraphicsCommandList*)m_commandList);
         var allocator = ((ID3D12CommandAllocator*)m_commandAllocator);
         var texture = ((ID3D12Resource*)m_texture);
 
+        m_commandsFaulted = true;
         DirectXCommandCalls.Reset(
             allocator: allocator,
-            calls: calls,
+            calls: m_calls,
             commandList: commandList
         );
 
@@ -208,9 +233,10 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             pBarriers: &toShaderResource
         );
         DirectXCommandCalls.Close(
-            calls: calls,
+            calls: m_calls,
             commandList: commandList
         );
+        m_commandsFaulted = false;
         m_textureState = DirectXResourceStates.ShaderRead;
 
         var executable = ((ID3D12CommandList*)commandList);
@@ -222,6 +248,19 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         WaitForGpu();
     }
 
+    // Refuses a width or height beyond the largest two-dimensional texture Direct3D 12 admits. The device accepts a larger
+    // texture's creation and refuses only the recording that copies into it, so the limit is checked first.
+    private static void RequireWithinTextureLimit(uint dimension, string name) {
+        const uint Limit = PInvoke.D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+
+        if (dimension > Limit) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: dimension,
+                message: $"The {name} is {dimension} texels; Direct3D 12 limits a two-dimensional texture to {Limit} texels per side.",
+                paramName: name
+            );
+        }
+    }
     // Refuses a format the device cannot sample from a two-dimensional texture, naming the format and what the device
     // reports for it. Every Direct3D 12 device at feature level 11_0 samples BC1 to BC7; the query still answers for the
     // device in hand.
@@ -274,6 +313,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         DisposeImageResources();
 
         m_texture = ((nint)DirectXTextures.CreateCommitted(
+            calls: m_calls,
             device: device,
             format: dxgiFormat,
             height: height,
@@ -329,11 +369,39 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
         m_levels = levels;
         m_width = width;
     }
+    // Creates the command allocator and the closed list that records into it, then releases the pair they replace: the
+    // first pair at construction, and the pair a failed recording left open. Nothing submitted has used the old pair,
+    // since every earlier upload waited for the queue and a failed recording never reached it.
+    private void CreateCommandResources() {
+        var commandList = DirectXCommandCalls.CreateCommandList(
+            allocator: out var commandAllocator,
+            calls: m_calls,
+            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
+        );
+
+        try {
+            DirectXCommandCalls.Close(
+                calls: m_calls,
+                commandList: commandList
+            );
+        } catch {
+            _ = ((IUnknown*)commandList)->Release();
+            _ = ((IUnknown*)commandAllocator)->Release();
+
+            throw;
+        }
+
+        Release(pointer: ref m_commandList);
+        Release(pointer: ref m_commandAllocator);
+        m_commandAllocator = ((nint)commandAllocator);
+        m_commandList = ((nint)commandList);
+        m_commandsFaulted = false;
+    }
     // Writes each level's rows, tightly packed and back to back in the source, at its footprint's offset and row pitch.
     private void WriteUploadBuffer(ReadOnlySpan<byte> pixels) {
         var uploadBuffer = ((ID3D12Resource*)m_uploadBuffer);
         var mapped = ((byte*)DirectXCommandCalls.Map(
-            calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+            calls: m_calls,
             resource: uploadBuffer
         ));
 
@@ -366,7 +434,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
     }
     private void WaitForGpu() =>
         DirectXCommandCalls.SignalAndWait(
-            calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+            calls: m_calls,
             fence: ((ID3D12Fence*)m_fence),
             fenceEvent: m_fenceEvent,
             fenceValue: ref m_fenceValue,
@@ -405,7 +473,7 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
 
         if (0 != m_fence) {
             _ = DirectXCommandCalls.Drain(
-                calls: DirectXDeviceCommandCalls.Of(deviceContext: m_deviceContext),
+                calls: m_calls,
                 fence: ((ID3D12Fence*)m_fence),
                 fenceEvent: m_fenceEvent,
                 fenceValue: ref m_fenceValue,

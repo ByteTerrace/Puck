@@ -299,6 +299,11 @@ output at the host's paper-white level once, and writes the source image through
 tables, which `DirectXCommandListRecorder` binds at the group's `ViewTableIndex`
 and `SamplerTableIndex`. A CPU surface reaches the encode through the device's
 `IGpuSurfaceUpload`, whose texture holds no descriptor of its own.
+The upload refuses a width or height past the two-dimensional texture limit,
+`D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION`, with an `ArgumentOutOfRangeException` before it
+touches its texture, because the device creates a larger texture and refuses only
+the copy recorded into it. A recording that fails leaves its command list open, so
+the next upload replaces the allocator and the list before it records.
 
 The compositor creates its swap chain as SDR in the preferred 8-bit unsigned
 normalized format, then chooses its `DisplayOutput` through

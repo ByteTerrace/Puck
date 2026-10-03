@@ -145,3 +145,7 @@ DXGI_ADAPTER_DESC
 ID3D12Device1
 ID3D12PipelineLibrary
 DXGI_ADAPTER_DESC1
+
+// Direct3D 12: the largest width or height of a two-dimensional texture (D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION), which
+// the surface upload checks before it touches a resource.
+D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION
