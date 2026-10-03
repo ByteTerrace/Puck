@@ -65,11 +65,6 @@ public static partial class WorldDefinitionFileSource {
 
         return true;
     }
-    private static string DescribeImport(string resolvedName, string? alias) =>
-        ((alias is null)
-            ? resolvedName
-            : $"{resolvedName} as {alias}"
-        );
     // The one writer of s_composedDocuments: both of TryComposeLayers' success exits hold what they are about to
     // return, so the next reader of the same path meets an image recorded together with the chain it was composed
     // from. A composition over a source whose names are not files beside their referrers is never held: nothing
@@ -187,7 +182,7 @@ public static partial class WorldDefinitionFileSource {
             touched = [];
             touchedPaths = [];
             reach = 0;
-            reason = $"{resolvedPath} contains an invalid document value: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} contains an invalid document value: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
@@ -209,13 +204,13 @@ public static partial class WorldDefinitionFileSource {
                     comparisonType: StringComparison.Ordinal
                 )
                 ) {
-                    reason = $"{resolvedPath} composition received catalog fingerprint '{suppliedFingerprint}', but the selected catalog is '{selectedFingerprint}'.";
+                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} composition received catalog fingerprint '{suppliedFingerprint}', but the selected catalog is '{selectedFingerprint}'.";
                     return false;
                 }
 
                 catalogFingerprint = selectedFingerprint;
             } else if (string.IsNullOrWhiteSpace(value: catalogFingerprint)) {
-                reason = $"{resolvedPath} composition requires the explicit machine catalog fingerprint.";
+                reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} composition requires the explicit machine catalog fingerprint.";
                 return false;
             }
         }
@@ -224,16 +219,16 @@ public static partial class WorldDefinitionFileSource {
             value: resolvedPath,
             comparer: StringComparer.OrdinalIgnoreCase
         )) {
-            reason = $"composition cycles back to {resolvedPath} (chain: {string.Join(
+            reason = $"composition cycles back to {WorldDocumentLabel.Of(path: resolvedPath)} (chain: {string.Join(
                 separator: " -> ",
-                values: ancestors.Append(element: resolvedPath)
+                values: ancestors.Append(element: resolvedPath).Select(selector: static ancestor => WorldDocumentLabel.Of(path: ancestor))
             )}).";
 
             return false;
         }
 
         if (ancestors.Count >= WorldDocumentBasis.MaxChainDepth) {
-            reason = $"composition chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {resolvedPath}.";
+            reason = $"composition chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {WorldDocumentLabel.Of(path: resolvedPath)}.";
 
             return false;
         }
@@ -274,7 +269,7 @@ public static partial class WorldDefinitionFileSource {
         }
 
         if (root is null) {
-            reason = $"{resolvedPath} does not hold a JSON object.";
+            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} does not hold a JSON object.";
 
             return false;
         }
@@ -320,7 +315,7 @@ public static partial class WorldDefinitionFileSource {
                 !basisValue.TryGetValue<string>(value: out var basisName) ||
                 (basisName.Length == 0)
             ) {
-                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {resolvedPath} must be a non-empty document name.";
+                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be a non-empty document name.";
 
                 return false;
             }
@@ -372,7 +367,7 @@ public static partial class WorldDefinitionFileSource {
                 targetDocumentPath: resolvedPath
             )
             ) {
-                reason = $"{resolvedPath} basis {basisResolvedName}: {basisMetadataReason}";
+                reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} basis {WorldDocumentLabel.Of(path: basisResolvedName)}: {basisMetadataReason}";
                 return false;
             }
             reach = Math.Max(
@@ -395,13 +390,14 @@ public static partial class WorldDefinitionFileSource {
             propertyName: WorldDocumentBasis.ImportsMemberName
         )) {
             if (importsNode is not JsonArray importsArray) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {resolvedPath} must be an array of import entries.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be an array of import entries.";
 
                 return false;
             }
 
             var importTrees = new List<(string Name, JsonObject Tree)>();
             var modules = new List<(string Name, JsonObject Tree, WorldExports Exports)>();
+            var importDescriptions = new HashSet<string>(comparer: StringComparer.Ordinal);
 
             foreach (var entry in importsArray) {
                 if (!TryReadImportEntry(
@@ -472,7 +468,7 @@ public static partial class WorldDefinitionFileSource {
                         reason: out aliasReason
                     ))
                 ) {
-                    reason = $"{resolvedPath} imports {importResolvedName} as '{importAlias}': {aliasReason}";
+                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {WorldDocumentLabel.Of(path: importResolvedName)} as '{importAlias}': {aliasReason}";
 
                     return false;
                 }
@@ -488,13 +484,15 @@ public static partial class WorldDefinitionFileSource {
                     targetDocumentPath: resolvedPath
                 )
                 ) {
-                    reason = $"{resolvedPath} imports {importResolvedName}: {importMetadataReason}";
+                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {WorldDocumentLabel.Of(path: importResolvedName)}: {importMetadataReason}";
                     return false;
                 }
 
                 var importDescription = DescribeImport(
                     alias: importAlias,
-                    resolvedName: importResolvedName
+                    importName: importName,
+                    resolvedName: importResolvedName,
+                    taken: importDescriptions
                 );
 
                 if (!WorldModuleExports.TryTake(
@@ -503,7 +501,7 @@ public static partial class WorldDefinitionFileSource {
                     moduleName: importDescription,
                     reason: out var exportsReason
                 )) {
-                    reason = $"{resolvedPath} imports {exportsReason}";
+                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {exportsReason}";
 
                     return false;
                 }
@@ -535,7 +533,7 @@ public static partial class WorldDefinitionFileSource {
                 reason: out var mergeReason,
                 restated: ownBody
             )) {
-                reason = $"{resolvedPath}: {mergeReason}";
+                reason = $"{WorldDocumentLabel.Of(path: resolvedPath)}: {mergeReason}";
 
                 return false;
             }
@@ -550,7 +548,7 @@ public static partial class WorldDefinitionFileSource {
             overlay: importsLayer,
             reason: out var stackReason
         )) {
-            reason = $"{resolvedPath}: {stackReason}";
+            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)}: {stackReason}";
 
             return false;
         }
@@ -564,7 +562,7 @@ public static partial class WorldDefinitionFileSource {
             overlay: ownBody,
             reason: out var finalReason
         )) {
-            reason = $"{resolvedPath}: {finalReason}";
+            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)}: {finalReason}";
 
             return false;
         }
@@ -594,22 +592,22 @@ public static partial class WorldDefinitionFileSource {
             value: resolvedPath,
             comparer: StringComparer.OrdinalIgnoreCase
         )) {
-            reason = $"composition cycles back to {resolvedPath} (chain: {string.Join(
+            reason = $"composition cycles back to {WorldDocumentLabel.Of(path: resolvedPath)} (chain: {string.Join(
                 separator: " -> ",
-                values: ancestors.Append(element: resolvedPath)
+                values: ancestors.Append(element: resolvedPath).Select(selector: static ancestor => WorldDocumentLabel.Of(path: ancestor))
             )}).";
 
             return false;
         }
 
         if (ancestors.Count >= WorldDocumentBasis.MaxChainDepth) {
-            reason = $"composition chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {resolvedPath}.";
+            reason = $"composition chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {WorldDocumentLabel.Of(path: resolvedPath)}.";
 
             return false;
         }
 
         if (JsonNode.Parse(json: DecodeJson(bytes: bytes)) is not JsonObject root) {
-            reason = $"{resolvedPath} does not hold a JSON object.";
+            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} does not hold a JSON object.";
 
             return false;
         }
@@ -625,7 +623,7 @@ public static partial class WorldDefinitionFileSource {
                 !basisValue.TryGetValue<string>(value: out var basisName) ||
                 (basisName.Length == 0)
             ) {
-                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {resolvedPath} must be a non-empty document name.";
+                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be a non-empty document name.";
 
                 return false;
             }
@@ -659,7 +657,7 @@ public static partial class WorldDefinitionFileSource {
             propertyName: WorldDocumentBasis.ImportsMemberName
         )) {
             if (importsNode is not JsonArray importsArray) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {resolvedPath} must be an array of import entries.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be an array of import entries.";
 
                 return false;
             }
@@ -735,7 +733,7 @@ public static partial class WorldDefinitionFileSource {
                     options: WorldJsonContext.Default.Options
                 );
             } catch (JsonException exception) {
-                reason = $"'{WorldExports.MemberName}' in {resolvedPath} is malformed: {exception.Message}";
+                reason = $"'{WorldExports.MemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} is malformed: {exception.Message}";
 
                 return false;
             }
@@ -779,13 +777,16 @@ public static partial class WorldDefinitionFileSource {
     // returns, and the pin read keeps only the hash. It returns the parsed, undrawn document, which nothing may
     // admit or carry before the draw.
     internal static bool TryLoadParsed(string path, out WorldDefinition? definition, out string contentHash, out string reason,
-        string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents = null) {
+        string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents = null, string? displayName = null) {
+        // What a refusal calls the document: the name its caller gave it for display, or its path when it gave none.
+        var shown = (displayName ?? path);
+
         definition = null;
         contentHash = string.Empty;
         WorldBootWork.Count(kind: WorldBootWork.Loads);
 
         if (!File.Exists(path: path)) {
-            reason = $"no file at {path}";
+            reason = $"no file at {shown}";
 
             return false;
         }
@@ -804,7 +805,7 @@ public static partial class WorldDefinitionFileSource {
                 referrerName: path,
                 resolvedName: out _
             )) {
-                reason = $"cannot read {path}: {readReason.ReplaceLineEndings(replacementText: " ")}";
+                reason = $"cannot read {shown}: {readReason.ReplaceLineEndings(replacementText: " ")}";
 
                 return false;
             }
@@ -818,7 +819,7 @@ public static partial class WorldDefinitionFileSource {
             try {
                 bytes = File.ReadAllBytes(path: path);
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                reason = $"cannot read {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+                reason = $"cannot read {shown}: {WorldDocumentLabel.Failure(exception: exception)}";
 
                 return false;
             }
@@ -840,7 +841,7 @@ public static partial class WorldDefinitionFileSource {
 
             json = reader.ReadToEnd();
         } catch (Exception exception) {
-            reason = $"cannot decode {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot decode {shown}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
@@ -872,7 +873,7 @@ public static partial class WorldDefinitionFileSource {
                 catalogFingerprint: catalogFingerprint,
                 catalog: catalog
             )) {
-                reason = $"{path} composition refused: {composeReason}";
+                reason = $"{shown} composition refused: {composeReason}";
 
                 return false;
             }
@@ -891,7 +892,7 @@ public static partial class WorldDefinitionFileSource {
                 definition: out var parsed,
                 json: json,
                 reason: out reason,
-                sourceName: path
+                sourceName: shown
             )) {
                 return false;
             }
@@ -904,7 +905,7 @@ public static partial class WorldDefinitionFileSource {
 
             return true;
         } catch (Exception exception) {
-            reason = $"{path} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"{shown} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
@@ -917,7 +918,7 @@ public static partial class WorldDefinitionFileSource {
         alias = null;
 
         if (entry is not JsonObject entryObject) {
-            reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {referrerPath} must hold only entries of the form {{\"{WorldImport.DocumentMemberName}\": \"<name>\"}} with an optional \"{WorldImport.AsMemberName}\".";
+            reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {WorldDocumentLabel.Of(path: referrerPath)} must hold only entries of the form {{\"{WorldImport.DocumentMemberName}\": \"<name>\"}} with an optional \"{WorldImport.AsMemberName}\".";
 
             return false;
         }
@@ -935,7 +936,7 @@ public static partial class WorldDefinitionFileSource {
                 comparisonType: StringComparison.Ordinal
             )
             ) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {referrerPath} carries '{name}'; an entry carries only '{WorldImport.DocumentMemberName}' and '{WorldImport.AsMemberName}'.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {WorldDocumentLabel.Of(path: referrerPath)} carries '{name}'; an entry carries only '{WorldImport.DocumentMemberName}' and '{WorldImport.AsMemberName}'.";
 
                 return false;
             }
@@ -950,7 +951,7 @@ public static partial class WorldDefinitionFileSource {
             !documentValue.TryGetValue<string>(value: out var documentText) ||
             (documentText.Length == 0)
         ) {
-            reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {referrerPath} must name a non-empty '{WorldImport.DocumentMemberName}' document.";
+            reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry in {WorldDocumentLabel.Of(path: referrerPath)} must name a non-empty '{WorldImport.DocumentMemberName}' document.";
 
             return false;
         }
@@ -968,7 +969,7 @@ public static partial class WorldDefinitionFileSource {
                 (aliasNode is not JsonValue aliasValue) ||
                 !aliasValue.TryGetValue<string>(value: out var aliasText)
             ) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {referrerPath}: '{WorldImport.AsMemberName}' must be a string.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {WorldDocumentLabel.Of(path: referrerPath)}: '{WorldImport.AsMemberName}' must be a string.";
 
                 return false;
             }
@@ -977,7 +978,7 @@ public static partial class WorldDefinitionFileSource {
                 alias: aliasText,
                 reason: out var aliasReason
             )) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {referrerPath}: {aliasReason}.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {WorldDocumentLabel.Of(path: referrerPath)}: {aliasReason}.";
 
                 return false;
             }
@@ -997,7 +998,7 @@ public static partial class WorldDefinitionFileSource {
             !value.TryGetValue<string>(value: out var name) ||
             (name.Length == 0)
         ) {
-            reason = $"'{WorldDocumentBasis.BasisMemberName}' in {referrerPath} must be a non-empty document name.";
+            reason = $"'{WorldDocumentBasis.BasisMemberName}' in {WorldDocumentLabel.Of(path: referrerPath)} must be a non-empty document name.";
 
             return false;
         }
@@ -1127,7 +1128,7 @@ public static partial class WorldDefinitionFileSource {
                 !basisValue.TryGetValue<string>(value: out var name) ||
                 (name.Length == 0)
             ) {
-                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {currentResolvedName} must be a non-empty document name.";
+                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {WorldDocumentLabel.Of(path: currentResolvedName)} must be a non-empty document name.";
 
                 return false;
             }
@@ -1149,16 +1150,16 @@ public static partial class WorldDefinitionFileSource {
                 value: resolvedName,
                 comparer: StringComparer.OrdinalIgnoreCase
             )) {
-                reason = $"basis chain cycles back to {resolvedName} (chain: {string.Join(
+                reason = $"basis chain cycles back to {WorldDocumentLabel.Of(path: resolvedName)} (chain: {string.Join(
                     separator: " -> ",
-                    values: visited
+                    values: visited.Select(selector: static link => WorldDocumentLabel.Of(path: link))
                 )}).";
 
                 return false;
             }
 
             if (visited.Count >= WorldDocumentBasis.MaxChainDepth) {
-                reason = $"basis chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {resolvedName}.";
+                reason = $"basis chain exceeds {WorldDocumentBasis.MaxChainDepth} documents at {WorldDocumentLabel.Of(path: resolvedName)}.";
 
                 return false;
             }
@@ -1172,7 +1173,7 @@ public static partial class WorldDefinitionFileSource {
             }
 
             if (nextObject is null) {
-                reason = $"basis document {resolvedName} does not hold a JSON object.";
+                reason = $"basis document {WorldDocumentLabel.Of(path: resolvedName)} does not hold a JSON object.";
 
                 return false;
             }
@@ -1240,7 +1241,7 @@ public static partial class WorldDefinitionFileSource {
         } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
             documentPath = name;
             sourcePath = string.Empty;
-            reason = $"cannot resolve document '{name}' from {referrerName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot resolve document '{name}' from {WorldDocumentLabel.Of(path: referrerName)}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
         }
@@ -1255,7 +1256,7 @@ public static partial class WorldDefinitionFileSource {
             return true;
         }
 
-        reason = $"{reason} (named by {referrerName})";
+        reason = $"{reason} (named by {WorldDocumentLabel.Of(path: referrerName)})";
 
         return false;
     }
@@ -1292,7 +1293,7 @@ public static partial class WorldDefinitionFileSource {
 
             return true;
         } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-            reason = $"cannot resolve document '{name}' in {directory}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot resolve document '{name}': {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1499,7 +1500,7 @@ public static partial class WorldDefinitionFileSource {
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
             tree = null;
-            reason = $"cannot compose {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot compose {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1597,7 +1598,7 @@ public static partial class WorldDefinitionFileSource {
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
             stack = null;
-            reason = $"cannot compose {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot compose {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1642,7 +1643,7 @@ public static partial class WorldDefinitionFileSource {
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
             layers = collected;
-            reason = $"cannot describe {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot describe {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1734,7 +1735,7 @@ public static partial class WorldDefinitionFileSource {
             var json = File.ReadAllText(path: path);
 
             if (JsonNode.Parse(json: json) is not JsonObject root) {
-                reason = $"{path} does not hold a JSON object.";
+                reason = $"{WorldDocumentLabel.Of(path: path)} does not hold a JSON object.";
 
                 return false;
             }
@@ -1762,7 +1763,7 @@ public static partial class WorldDefinitionFileSource {
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
-            reason = $"cannot peek {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot peek {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1784,7 +1785,7 @@ public static partial class WorldDefinitionFileSource {
             var json = File.ReadAllText(path: path);
 
             if (JsonNode.Parse(json: json) is not JsonObject root) {
-                reason = $"{path} does not hold a JSON object.";
+                reason = $"{WorldDocumentLabel.Of(path: path)} does not hold a JSON object.";
 
                 return false;
             }
@@ -1799,7 +1800,7 @@ public static partial class WorldDefinitionFileSource {
             }
 
             if (importsNode is not JsonArray importsArray) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {path} must be an array of import entries.";
+                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {WorldDocumentLabel.Of(path: path)} must be an array of import entries.";
 
                 return false;
             }
@@ -1834,7 +1835,7 @@ public static partial class WorldDefinitionFileSource {
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)) {
-            reason = $"cannot peek {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot peek {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1861,7 +1862,7 @@ public static partial class WorldDefinitionFileSource {
         chain = [];
 
         if (!File.Exists(path: path)) {
-            reason = $"no file at {path}";
+            reason = $"no file at {WorldDocumentLabel.Of(path: path)}";
 
             return false;
         }
@@ -1871,7 +1872,7 @@ public static partial class WorldDefinitionFileSource {
         try {
             bytes = File.ReadAllBytes(path: path);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            reason = $"cannot read {path}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+            reason = $"cannot read {WorldDocumentLabel.Of(path: path)}: {WorldDocumentLabel.Failure(exception: exception)}";
 
             return false;
         }
@@ -1902,7 +1903,7 @@ public static partial class WorldDefinitionFileSource {
                     b: basisDirectory,
                     comparisonType: StringComparison.OrdinalIgnoreCase
                 )) {
-                    reason = $"'{links[index].ResolvedName}' does not live directly under '{basisDirectory}' — a pushed chain link must sit in the owned world's basis directory so its cloud key can never collide with another chain's link";
+                    reason = $"'{WorldDocumentLabel.Of(path: links[index].ResolvedName)}' does not live directly under the owned world's basis directory — a pushed chain link must sit there so its cloud key can never collide with another chain's link";
 
                     return false;
                 }
@@ -1979,7 +1980,7 @@ public static partial class WorldDefinitionFileSource {
                     return true;
                 default:
                     content = null;
-                    reason = $"'{name}' (named by {referrerName}) resolves to nothing — this composition is in-memory only and carries no further basis or imports beyond the fragment itself.";
+                    reason = $"'{name}' (named by {WorldDocumentLabel.Of(path: referrerName)}) resolves to nothing — this composition is in-memory only and carries no further basis or imports beyond the fragment itself.";
 
                     return false;
             }

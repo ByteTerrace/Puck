@@ -123,7 +123,7 @@ public sealed class WorldOwnedWorlds {
             ) {
                 unloadable.Add(item: (path, ((document is null)
                     ? reason
-                    : $"{path} is not a valid {WorldDefinition.SchemaVersion} document: it declares no identity section, so it is not an owned world")
+                    : $"{Path.GetFileName(path: path)} is not a valid {WorldDefinition.SchemaVersion} document: it declares no identity section, so it is not an owned world")
                 ));
 
                 continue;
@@ -499,10 +499,9 @@ public sealed class WorldOwnedWorlds {
         var retained = new List<(string FileName, string Reason)>();
 
         foreach (var (path, reason) in candidates) {
-            var detail = PathFreeReason(
+            var detail = Strip(
                 path: path,
-                reason: reason,
-                root: m_directory
+                reason: reason
             );
 
             if (!IsTerminalDocumentShape(
@@ -536,7 +535,7 @@ public sealed class WorldOwnedWorlds {
 
                 moved = true;
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                detail = $"{detail} — and it could not be moved aside into {QuarantineDirectoryName}/ ({DescribeStorageFailure(exception: exception)}), so its bytes stay where they are and it will be named again on the next boot";
+                detail = $"{detail} — and it could not be moved aside into {QuarantineDirectoryName}/ ({WorldDocumentLabel.Failure(exception: exception)}), so its bytes stay where they are and it will be named again on the next boot";
             }
 
             m_discarded.Add(item: new WorldOwnedWorldDisposal(
@@ -582,13 +581,16 @@ public sealed class WorldOwnedWorlds {
     /// <param name="catalogFingerprint">The selected catalog's composition identity.</param>
     /// <param name="document">The drawn, admitted document, or <see langword="null"/> on refusal.</param>
     /// <param name="reason">The loader's classed refusal, or empty on success.</param>
+    /// <param name="displayName">What the refusal calls the document, or <see langword="null"/> for the file's own name. A
+    /// refusal never names the directory the file is in.</param>
     /// <returns><see langword="true"/> when the file loaded, drew, and was admitted.</returns>
-    internal static bool TryLoadOwned(string path, string id, IWorldNeighbourResolver? neighbours, IMachineValidationCatalog? catalog, string catalogFingerprint, out WorldDefinition? document, out string reason) {
+    internal static bool TryLoadOwned(string path, string id, IWorldNeighbourResolver? neighbours, IMachineValidationCatalog? catalog, string catalogFingerprint, out WorldDefinition? document, out string reason, string? displayName = null) {
         var loaded = WorldDefinitionLoader.TryLoadFileForAdmission(
             admission: out var admission,
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             contentHash: out _,
+            displayName: (displayName ?? Path.GetFileName(path: path)),
             instanceIdentity: id,
             neighbours: neighbours,
             path: path,
@@ -617,31 +619,13 @@ public sealed class WorldOwnedWorlds {
     private static bool IsTerminalDocumentShape(string path, string reason) => (
         reason.StartsWith(
         comparisonType: StringComparison.Ordinal,
-        value: $"{path} is not a valid {WorldDefinition.SchemaVersion} document:"
+        value: $"{Path.GetFileName(path: path)} is not a valid {WorldDefinition.SchemaVersion} document:"
     ) ||
         reason.StartsWith(
         comparisonType: StringComparison.Ordinal,
-        value: $"cannot decode {path}:"
+        value: $"cannot decode {Path.GetFileName(path: path)}:"
     )
     );
-
-    /// <summary>Names the kind of a storage failure without the machine-local path its message carries: the one door
-    /// every narration and refusal reason about a file this catalog (or its sync) could not read, write or move goes
-    /// through, so the player's state directory never reaches a console line.</summary>
-    /// <param name="exception">The failure.</param>
-    /// <returns>A short kind such as <c>access denied</c>, never a path.</returns>
-    internal static string DescribeStorageFailure(Exception exception) => exception switch {
-        UnauthorizedAccessException => "access denied",
-        System.Text.Json.JsonException => "the document is malformed",
-        PathTooLongException => "the path is too long",
-        DirectoryNotFoundException => "directory not found",
-        FileNotFoundException => "file not found",
-        // The Win32 sharing and lock violations, and the two disk-full codes; every other I/O failure is named plainly.
-        IOException { HResult: unchecked((int)0x80070020) or unchecked((int)0x80070021) } => "file in use by another process",
-        IOException { HResult: unchecked((int)0x80070027) or unchecked((int)0x80070070) } => "no space left on the device",
-        _ => "storage error",
-    };
-
     private static string Narrate(IReadOnlyList<(string FileName, string Reason)> entries) => string.Join(
         separator: "; ",
         values: entries
@@ -737,26 +721,12 @@ public sealed class WorldOwnedWorlds {
 
         return rows;
     }
-
     // The result is a GROUPING KEY as well as a narration, so it must carry nothing that varies per file: the loader
     // spells the path at the head of some reasons ("{path} is not a valid …") and mid-sentence in others ("no file
     // at {path}", "cannot read {path}: …"), and the operating system's own message quotes it again. Every occurrence
     // becomes one file-independent placeholder so two files failing the same way share a key, a leading placeholder
     // then drops because the file name is already carried beside the reason, and no absolute path — the player's
     // state directory — reaches the console.
-    /// <summary>Returns a loader's refusal for <paramref name="path"/> with the document named as "the file" dropped and every
-    /// other path relative to <paramref name="root"/>, so it names no machine-local directory.</summary>
-    /// <param name="path">The document the loader was asked for.</param>
-    /// <param name="reason">The loader's refusal.</param>
-    /// <param name="root">The catalog's root directory.</param>
-    /// <returns>The path-free reason.</returns>
-    internal static string PathFreeReason(string path, string reason, string root) => WorldNarratedPaths.Relative(
-        root: root,
-        text: Strip(
-            path: path,
-            reason: reason
-        )
-    );
 
     private static string Strip(string path, string reason) {
         const string Placeholder = "the file";
@@ -764,7 +734,7 @@ public sealed class WorldOwnedWorlds {
         var text = (reason ?? string.Empty).Replace(
             comparisonType: StringComparison.Ordinal,
             newValue: Placeholder,
-            oldValue: path
+            oldValue: Path.GetFileName(path: path)
         ).Trim();
 
         return (text.StartsWith(
@@ -1190,7 +1160,7 @@ public sealed class WorldOwnedWorlds {
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             // An arrival may already be durable. Report the file refusal so its caller can finish binding the owned
             // identity and recording the arrival, rather than stranding a committed seat on its travelling copy.
-            reason = $"could not save identity '{identity.Id}' ('{Path.GetFileName(path: path)}'): {DescribeStorageFailure(exception: exception)}";
+            reason = $"could not save identity '{identity.Id}' ('{Path.GetFileName(path: path)}'): {WorldDocumentLabel.Failure(exception: exception)}";
             return false;
         }
 

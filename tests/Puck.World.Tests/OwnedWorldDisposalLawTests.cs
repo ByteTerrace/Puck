@@ -789,4 +789,46 @@ public sealed class OwnedWorldDisposalLawTests {
             text: captured.ToString()
         );
     }
+    /// <summary>A basis reference spelled as a rooted UNC path names the authored reference exactly, and never the file
+    /// the host resolved it to: the document's own words are content, the resolved path is not.</summary>
+    [Fact]
+    public void MissingUncBasisRefusal_NamesTheAuthoredReferenceAndNoHostPath() {
+        using var dir = new TemporaryDirectory();
+        var files = Populate(dir: dir);
+        var originalError = Console.Error;
+        using var captured = new StringWriter();
+
+        File.WriteAllText(
+            contents: /*lang=json*/ """{ "basis": "//files/private/shared" }""",
+            path: files[0]
+        );
+
+        WorldOwnedWorlds opened;
+
+        try {
+            Console.SetError(newError: captured);
+
+            opened = Open(dir: dir);
+        } finally {
+            Console.SetError(newError: originalError);
+        }
+
+        var refused = Assert.Single(collection: opened.Refused);
+
+        Assert.Contains(
+            actualString: refused.Reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "'//files/private/shared'"
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: refused.Reason,
+            hostPaths: "//files/private/shared.world.json"
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: captured.ToString(),
+            hostPaths: "//files/private/shared.world.json"
+        );
+    }
 }

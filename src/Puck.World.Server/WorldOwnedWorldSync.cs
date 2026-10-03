@@ -307,7 +307,7 @@ public sealed class WorldOwnedWorldSync {
             if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
                 m_worlds.NarrationHub?.Narrate(
                     channel: "storage",
-                    text: $"[storage] sync state unreadable, starting untracked ({WorldOwnedWorlds.DescribeStorageFailure(exception: exception)})"
+                    text: $"[storage] sync state unreadable, starting untracked ({WorldDocumentLabel.Failure(exception: exception)})"
                 );
             }
             m_basisTokens.Clear();
@@ -472,6 +472,7 @@ public sealed class WorldOwnedWorldSync {
                 !WorldOwnedWorlds.TryLoadOwned(
                 catalog: null,
                 catalogFingerprint: string.Empty,
+                displayName: WorldDocumentName.For(id: safe),
                 document: out var document,
                 id: safe.Value,
                 neighbours: neighbours,
@@ -481,7 +482,7 @@ public sealed class WorldOwnedWorldSync {
                 (document is null)
             ) {
                 return new WorldSyncOutcome(
-                    Detail: $"cloud copy refused by the document gate — {WorldOwnedWorlds.PathFreeReason(path: probePath, reason: reason, root: m_worlds.FilePath)}",
+                    Detail: $"cloud copy refused by the document gate — {reason}",
                     Id: id,
                     Ok: false
                 );
@@ -545,7 +546,7 @@ public sealed class WorldOwnedWorldSync {
             return new WorldSyncOutcome(
                 Id: id,
                 Ok: false,
-                Detail: $"local write failed — {WorldOwnedWorlds.DescribeStorageFailure(exception: exception)}"
+                Detail: $"local write failed — {WorldDocumentLabel.Failure(exception: exception)}"
             );
         } finally {
             try { File.Delete(path: probePath); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
@@ -875,7 +876,7 @@ public sealed class WorldOwnedWorldSync {
             if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
                 m_worlds.NarrationHub?.Narrate(
                     channel: "storage",
-                    text: $"[storage] sync state not persisted ({WorldOwnedWorlds.DescribeStorageFailure(exception: exception)})"
+                    text: $"[storage] sync state not persisted ({WorldDocumentLabel.Failure(exception: exception)})"
                 );
             }
         }
@@ -945,7 +946,7 @@ public sealed class WorldOwnedWorldSync {
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException)) {
-            reason = WorldOwnedWorlds.DescribeStorageFailure(exception: exception);
+            reason = WorldDocumentLabel.Failure(exception: exception);
 
             return false;
         }
