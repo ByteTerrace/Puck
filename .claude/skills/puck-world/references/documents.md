@@ -166,8 +166,11 @@ shape — `WorldDefinition.CompiledInputHold` is the compiled ticks form
 runtime code consumes; see `WorldInputHoldSettings`'s remarks), `Rules`,
 `Identity`, `Groups`, `Properties`, `Interactions`, `Generation`,
 `Generators`, `References`, `Portals`,
-`Simulation`, `Destinations`, `Admission`, `Adjacencies`, `Text`, and
-`Metadata` — plus `Schema` and the `[JsonExtensionData]` `Extensions` bag.
+`Simulation`, `Destinations`, `Admission`, `Adjacencies`, `Text`,
+`Metadata`, `Icons`, `Theme`, `Markers`, `SeatModes`, `Probes`, `Captures`,
+`Schedule`, `Update`, `Music`, `Navigation`, `Patterns`, `Tables`, `Search`,
+`RuleGroups`, `Sets`, `Editor`, and `Timeline` — plus `Schema` and the
+`[JsonExtensionData]` `Extensions` bag.
 Scenery is authored through `Placements`.
 
 `Dynamics`, `Curves`, `Rules`, `References`, `Gravity`, `Portals`,

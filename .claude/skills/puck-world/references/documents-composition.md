@@ -397,7 +397,7 @@ its own directory) is a DELTA over that document — templates/prefabs for simil
 is the fan-in half beside it: an ORDERED list of `{"document": "<path>", "as": "<alias>"}` entries (`WorldImport`;
 each document resolved against the importing file's own directory, exactly like `basis`; `as` is optional), letting
 several documents each own one disjoint slice of a world — the garden's
-own `src/Puck.World/Assets/worlds/games/{chess,poker,dominoes,billiards,bowling,tictactoe,hexlines}.world.json`, each
+own `src/Puck.World/Assets/worlds/games/{poker,dominoes,billiards,bowling,tictactoe,hexlines,mancala,solitaire}.puck`, each
 imported by `puck.world.json` — rather than forcing every slice through the single-parent basis chain. A keyed
 list assembled this way (every import's rows concatenated in import order, then the importing file's own new
 rows appended last) never reproduces a monolithic predecessor's own interleaved authoring order — order is not
@@ -476,11 +476,13 @@ Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
 **`standard.world.json` — the standard library, not a world.** The engine ships
-no content default: the standard bindings, movement channels, chase rig,
-icon/badge table, theme, seat modes and markers are AUTHORED, in
-`standard.world.json`, beside the kits, body-motion programs and state rows it
-carries. Every shipped world names it as its `basis` (directly, or through
-`quilt-base`). Absent means
+no content default: what a world shares is AUTHORED. `standard.world.json`
+carries the `transforms` and `colors` state rows, the `theme`, the ground
+safety-net placements and prototypes, a body sleep default, and an import of the
+`quality.puck` render presets; the island (`puck.world.json`) names it as its
+`basis` and authors its own channels, bindings, kits, body-motion programs and
+chase rig, and the quilt shards take the island as theirs. Another world takes a
+different basis (the Parlor games share `parlor.basis.puck`). Absent means
 absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),
 and `views` resolves to `WorldViewDefaults.Absent`, a placeholder holding the

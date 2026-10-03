@@ -84,15 +84,16 @@ surface.
   `Read` refuses a mismatch loudly (`ReplayRefusal.ShapeMismatch`, naming
   found vs expected) — there is NO tolerant reader, no version negotiation,
   no legacy branch. That is the contract: never write one.
-- The declared `replay.tape` refusal catalog has twelve members: shape
+- The declared `replay.tape` refusal catalog has thirteen members: shape
   mismatch, rate mismatch, three addon-receipt mismatches, rebuild content
   mismatch, rebuild source unavailable, a rate-zero tape carrying recorded
   ticks, a tampered transfer content signature, a recorded mutation
   outcome disagreeing with what the replay's own apply pipeline produced, and a
   recorded arrival the shadow's own escrow does not reproduce: its body indices,
-  each traveler's generation, or its rollback (`ArrivalRefused`), and a
+  each traveler's generation, or its rollback (`ArrivalRefused`), a
   recorded departure or its rollback the shadow's own population does not
-  reproduce (`DepartureRefused`).
+  reproduce (`DepartureRefused`), and a recorded seat identity switch naming a
+  body that is no active local seat in the re-drive (`SeatSwitchRefused`).
   `ScreenOpContentMismatch`
   is emitted by `WorldMachineHost` as a named screen-op refusal, not a
   `ReplayRefusal` enum member.
@@ -125,7 +126,7 @@ owned identities are ordinary `puck.world.definition.v1` documents on disk, outs
 the tape's scope. An arrival entry is the exception for the travellers it lands: its
 leaf carries each landed profile's identity projection and nothing of its owned document, so a
 re-driven landing holds the same identity, owned records and facts the live one did.
-`Drive(profiles, engines, addonHostFactory)` reconstructs each seat from its
+`Drive(profiles, engines, machineHostFactory, addonHostFactory)` reconstructs each seat from its
 recorded projection. The live `WorldOwnedWorlds` catalog supplies only the
 rate-drift report (`ReportProfileDrift` reports, never substitutes, a drifted
 rate). The shadow server holds a detached
@@ -217,15 +218,16 @@ absent, or hashed content differs in either direction. Other screen ops carry
 no content signature. An authority denial is also taped, with no signature,
 so the denial replays through the same Control check.
 
-**Capture scope: every one of the 12 envelope payload kinds except `Lever`**
-(Command, Grant, Revoke, Session, Rebuild, ScreenOp,
-Designation, Mutation, Undo, Composition, Query), the two server-event kinds,
-plus the separate intent buffer. The boot instance's own schedule lever is
+**Capture scope: every one of the 13 envelope payload kinds except `Lever` and
+`Operation`** (Command, Grant, Revoke, Session, Rebuild, ScreenOp,
+Designation, Mutation, Undo, Composition, Query), the server-event kinds,
+plus the separate intent buffer. A generic named-machine `Operation` is not on
+the tape: `WorldServer.ApplyMachineOperation` refuses it while a recording is armed. The boot instance's own schedule lever is
 captured under its own `RateLever` entry instead of the payload leaf. All six `SessionRequest` variants are
 captured through the shared session leaf before apply and re-executed through
-`WorldServer.ApplySession` during the offline drive. The replay uses its captured
-player document to construct a detached profile catalog, so a replayed
-`SetPlayerSection` changes neither the live catalog nor persistent state.
+`WorldServer.ApplySession` during the offline drive. The replay applies them to its
+detached `WorldOwnedWorlds` copy, so a replayed `SetIdentity` changes neither the
+live catalog nor persistent state.
 `Mutation`/`Undo` re-enqueue through the ordinary buffered door
 (`EnqueueMutation`/`EnqueueUndo`, drained by the SAME tick's `DrainPendingOps`),
 so the whole apply pipeline (including an `UpsertAddon`/`RemoveAddon`'s own
@@ -426,7 +428,7 @@ against the live catalog is printed, never thrown) → mount addons after
 seats, matching live composition order → `VerifyMountedAddons` → per tick:
 apply authority and peer-lifecycle entries in recorded order through the
 same population/grant doors, enqueue intents,
-`server.Step` (stepped at the tape's OWN recorded `SimulationRate` — 240 Hz
+`server.Step` (stepped at the tape's OWN recorded `SimulationRate` — 30 Hz
 for every world that authors no `simulation` section, or whatever rate the
 recorded world authored), hash.
 

@@ -417,8 +417,9 @@ Run the game; drive `body.engage <target> [body] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. Exercising
-the screen path needs a screen at index 0, and no shipped world declares one,
-so validate a screen application against a scratch
+the screen path needs a declared screen: the flagship's arcade district declares
+engageable cabinet screens (kit `arcadePad`, none at index 0), so
+validate any other screen layout against a scratch
 world copy. Remember actor ≠ target: every seat holds wide grants by default, so
 self-targeting discriminates nothing — revoke first, then prove the denial, then
 re-grant and prove success. Remember body index vs. player index:
