@@ -6,9 +6,11 @@ this file is the decision/derivation prose the schema cannot state.
 
 The composer is N-ary (`Compose(params ReadOnlySpan<BindingProfileDocument?>)`,
 base-first, null layers skipped, mismatched `Version` throws). The four layer
-CLASSES are assembled by `src/Puck.World.Client/WorldSeatBindings.cs`: engine
-default → every world `bindingOverlays` row in order → the seat profile's
-`bindings` → live session rebinds (freshest wins). A row's members are two
+CLASSES are assembled by `src/Puck.World.Client/WorldSeatBindings.cs`: the
+engine's build layer (`WorldEditorBindings.Layer`, see Context rows) → every
+world `bindingOverlays` row in order (a row with a `when` gate that does not
+hold is skipped) → the seat profile's `bindings` → live session rebinds
+(freshest wins). A row's members are two
 lists: `held` (a SET — down in any order) and `chord` (a SEQUENCE — pressed in
 that order, tested with the held members removed from the press order); a
 member is a modifier id, or a raw source id (`"held": ["mouse.button1",
@@ -20,8 +22,8 @@ group's resting page. A command row targeting a channel may author
 `mode: Toggle`: each chord completion flips the input-side channel latch, and
 breaking the physical chord leaves that latch untouched. This is the first-class
 authoring model for auto-actions: auto-X toggles channel X without inventing a
-bespoke command or simulation state. The standard profile uses held `look` (LT)
-plus `gamepad.leftStickPress` to toggle `forward` for autorun, and held `look`
+bespoke command or simulation state. No checked-in world authors one today; a profile can hold `look` (LT)
+plus `gamepad.leftStickPress` to toggle `forward` for autorun, and hold `look`
 plus `gamepad.rightStickPress` to toggle `up` for auto-jetpack. Each command
 chord consumes its stick press before the resting page's bare stick binding can
 see it. Toggle contributions are owned by the compiled command destination,
@@ -51,17 +53,18 @@ A page may name `inherits`, the profile-unique id of another page in the same
 group. Compilation flattens the inherited page first, then replaces its entries
 at every source or activator identity the child declares; untouched bindings
 remain active with no runtime fallback lookup. Missing pages, cross-group
-inheritance, empty ids, and cycles refuse by page name. The standard
-`actionWheel` page inherits `base`, so its right-stick selector override does
-not suspend left-stick or keyboard movement while the radial is open.
+inheritance, empty ids, and cycles refuse by page name. A radial's hold page
+(an `actionWheel` page, say) that inherits `base` keeps left-stick and keyboard
+movement active while its right-stick selector override is open.
 
 A chord row's, context row's, and wheel row's `group` may be a literal or a
 `state.<row>[.<key>]` reference to a Text cell. All references to one cell
 resolve together before the profile is composed, so changing that single cell
 renames the relationship consistently instead of requiring a document-wide
-search/replace. `standard.puck` is the worked example — its
-`state.world.bindingGroups` row holds `defaultActionGroup`, and every chord and
-wheel row names it through the reference.
+search/replace. The
+[Schema README](../../../../src/Puck.World.Schema/README.md) shows the shape
+(`"group": "state.bindingGroups.defaultActionGroup"`); no checked-in world
+authors it today.
 
 Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Absence anywhere in the resolved chain (no
@@ -271,9 +274,8 @@ relative to the displayed hub; this deliberately permits direct mouse/touch
 targeting and gamepad excursion on the same authored radial.
 
 Selection, ring navigation, commit, and cancel sources are ordinary entries
-on each hold page. The engine default uses Tab and authors right-stick
-selection; the four shipped worlds currently replace the `play-primary`
-radial with one six-sector action ring. `WorldWheelFeed` owns presentation;
+on each hold page. No checked-in world authors a `wheels` row today.
+`WorldWheelFeed` owns presentation;
 its drawn labels, icons and hub label come from `WorldWheelRings`
 (`Puck.World.Client`), which reads the label and icon rows through the seat's
 routed mirror and rebuilds only when one of those cells changes. `world.view.wheel` reports the live wheel, hover, effective selector dead

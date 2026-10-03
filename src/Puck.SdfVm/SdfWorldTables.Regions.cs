@@ -5,7 +5,8 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The host-written tables: program words, dynamic transforms, the frame instance grid, screen surfaces, screen mappings,
-// screen lights, volumes, glyph decals, mesh draws, the lights and the sky's block, stops and softboxes, each a GpuRegion under the policy GpuResidency.Select chooses for
+// screen lights, volumes, glyph decals, mesh draws, the lights and the sky's block, stops and softboxes, plus the staged
+// shadow handoff controls. Each table uses a GpuRegion under the policy GpuResidency.Select chooses for
 // its size with the upload ring's readers in flight, a ring's buffers in the memory GpuResidency.RingMemory chooses. A
 // frame writes each table into its region, which owes only the words that differ; the upload flushes its ring slot's
 // share (the previous upload's fence has retired the views that read it), records each staged region's copy, then one
@@ -23,7 +24,7 @@ public sealed partial class SdfWorldTables {
     private const int MeshRegionIndex = 8;
     private const int ProgramRegionIndex = 0;
     // The per-frame regions RegionAt names.
-    private const int RegionCount = 13;
+    private const int RegionCount = 14;
     private const int ScreenLightRegionIndex = 4;
     private const int ScreenMappingRegionIndex = 7;
     private const int ScreenSurfaceRegionIndex = 3;
@@ -103,6 +104,7 @@ public sealed partial class SdfWorldTables {
         }
 
         m_brickRegion?.Dispose();
+        m_shadowHandoffBuffer.Dispose();
         m_regionCopyPool.Dispose();
     }
     // The upload's copies: sends this ring slot, whose previous readers have finished, what it owes of every region, and
@@ -111,6 +113,7 @@ public sealed partial class SdfWorldTables {
     // per copied buffer so the views' passes read what it wrote. Every host write and copy of the regions is counted in
     // this pass. An upload owing nothing writes and records nothing.
     private void RecordRegionCopies() {
+        StageShadowHandoffs();
         for (var index = 0; (index < RegionCount); index++) {
             if (RegionAt(index: index) is { } region) {
                 m_regionCopies.Record(
@@ -144,7 +147,7 @@ public sealed partial class SdfWorldTables {
     /// pool. Read at the time asked, since a region grows by being replaced.</summary>
     public GpuMemoryBytes TableBytes {
         get {
-            var bytes = new GpuMemoryBytes(DeviceLocal: (m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes), HostVisible: 0);
+            var bytes = new GpuMemoryBytes(DeviceLocal: ((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes), HostVisible: 0);
 
             for (var index = 0; (index < RegionCount); index++) {
                 if (RegionAt(index: index) is { } region) {
@@ -172,7 +175,8 @@ public sealed partial class SdfWorldTables {
         LightRegionIndex => m_lightRegion,
         SkyRegionIndex => m_skyRegion,
         SkyStopRegionIndex => m_skyStopRegion,
-        _ => m_softboxRegion,
+        SoftboxRegionIndex => m_softboxRegion,
+        _ => m_shadowHandoffRegion,
     };
     // The debug name of region index's objects, its reserved copy sets included: its table's role.
     private static GpuObjectName RegionName(int region) => NameOf(part: region switch {
@@ -189,6 +193,7 @@ public sealed partial class SdfWorldTables {
         SkyRegionIndex => "sky",
         SkyStopRegionIndex => "sky-stops",
         SoftboxRegionIndex => "softboxes",
+        ShadowHandoffRegionIndex => "shadow-handoffs",
         _ => "brick-staging",
     });
     // Creates the one copy pool of every region the tables may create, the brick staging's with a brick pool, each

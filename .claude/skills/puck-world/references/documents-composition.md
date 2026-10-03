@@ -17,8 +17,8 @@ subject names them:
   authored, never both, never neither. `NeighbourKey` (computed, never
   serialized) folds whichever arm was authored into the one opaque string
   every `IWorldNeighbourResolver` call site resolves against. This is what a
-  portal facet's `destination` resolves against: the nexus's own `references`
-  section names the three dungeons by document path.
+  portal facet's `destination` resolves against: the island's own `references`
+  section names its four quilt shards (`shards/quilt-*`) by document path.
 - **`Gravity`** (`WorldGravity.cs`) — an acceleration field, deliberately not
   geometry. `uniform` is an authored acceleration vector. `attractors` names a
   placement plus explicit mass; optional `points` instead names a placement,
@@ -95,7 +95,7 @@ subject names them:
 ## Worlds have no in-code definition — the shipped `puck.world.json` walkthrough
 
 A boot with no `--world` override loads
-`src/Puck.World/Assets/worlds/puck.world.json` — the bare walker world, a delta over
+`src/Puck.World/Assets/worlds/puck.world.json` — the island, a delta over
 `standard.puck`. The basis carries the standards, defined AS STATE — a `transforms` text row
 (`identity`/`origin`/`unit`) and a `colors` text row that document values reference by
 `state.<row>.<key>` instead of restating literals — the standard `theme` section (an ABSENT theme
@@ -111,7 +111,7 @@ at parse naming the missing member). Unauthored it derives
 (`WorldPlacementPolicyDefaults.DeriveFrom`): zero placement and screen headroom, no derived
 faces, no candidate ring, no preview deadline, and a scale envelope spanning exactly the rows' authored scales, so the basis's static
 rows need no policy at all. Console placement mutations can grow the renderer beyond its initial reserve without
-an authored policy. The pip prototype's shape rotations are
+an authored policy. The `debugRoom` prototype's unrotated shapes use
 `state.transforms.identity`, its palette is `state.colors.*`, the seat rig's pivot is
 `state.transforms.origin` (the `IDocumentSpatialValue` machinery: `DocumentVector2`/`DocumentVector3`/
 `DocumentQuaternion` fields accept a literal array OR a text-cell reference, resolved at the
@@ -270,23 +270,23 @@ conservative margin is numerically calibrated against. `strands` above 1 is
 render-only, refused for deterministic field contact by name. `body.rig [body]` is the read-back (Immediate, client-local — the values live only on the stamp pool): per driver its phase and eased weight, per effector its weight, whether its latch is holding, and the WORLD point its tip is being asked for (`target=(x, y, z)` or `none`), so a piped run fences twice and asserts a planted foot's target is unchanged while `body.where` moved. A body-rooted part anchor (`WorldStampPool.TryBodyPartAuthoredPose`) reports the COMPOSED pose — drivers, parent chain, effector — so an anchor consumer and the rendered geometry never disagree. Everything else — the
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
 QUIC), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
-(`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the pip look, and grants — is the
+(`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the `wren` look, and grants — is the
 world document's own. A field trait's `color` speaks the same grammar (resolved live at
 emit — a state cell write recolors a height field on the next frame, no re-bake, bricks hold only
 distances; `world.fields` echoes the authored token).
-The world's one placement is the `debugRoom` prototype at origin: a 48 m platform (top at y = −0.5)
+The `provingCourt` placement carries the `debugRoom` placement (one of the island's districts,
+beside the garden and market courts): a 48 m platform (top at y = −0.5)
 carrying one fixture per contact contract, each with a `spawnPoints` row (engine frame) that stands
-the body in front of it — `origin`, `ramps`, `stairs`, `wall`, `pit`, `ladder`, `edge` —
+the body in front of it — `proving-arrival`, `ramps`, `stairs`, `wall`, `pit`, `ladder`, `edge` —
 reachable by `body.pose spawn:<id> [body]` (the console mirror of a rule's `pose` effect naming a
-spawn point; seats still spawn at `origin` by the absent-`seatSpawns` derivation). Author-frame
+spawn point; the island's seats spawn where its authored `bodies.seatSpawns` say). Author-frame
 layout, +Z ahead of the origin spawn and +X the player's LEFT (the half-turn flips X): the scale
 ladder (0.5/1/2 m cubes) ahead-left, the slope fan (30/45/55/65/75°, bracketing
 `collision.maxSlopeDegrees` 60) ahead-right, the step stairs (rises 0.1/0.25/0.5/1 m) to the left,
 the wall with a 1.5 m-clearance and a 0.5 m-clearance overhang at the right edge (a 1 m column,
 `pillarUnderhang`, joins the floor to the low overhang's underside so a whole-sphere pull can crawl
 floor → column → ceiling without leaving contact), the pit (a `Subtraction` carve) behind, and 1 m compass posts on the platform's axis midpoints — `axisX` red,
-`axisZ` blue, a post at the ENGINE-positive end and a flat disc at the negative — with `farPillar`
-120 m ahead on the net as the fog/far-distance landmark. What it measures (`body.fly` from each
+`axisZ` blue, a post at the ENGINE-positive end and a flat disc at the negative — What it measures (`body.fly` from each
 spawn, `body.where` samples): the 30/45/55° ramps climb at walking speed, the 65/75° faces stop the
 body at their foot (`FixedContactPushMath` treats a non-walkable, non-ceiling normal as a WALL —
 penetration resolved across `up`, the approach clamp horizontal only — pinned by
@@ -300,7 +300,7 @@ contact solver grounds on, a phantom lip ~radius wide at the rim) — the carve 
 net to above head height for exactly that reason, and a void that must be exact is built from union
 geometry instead. The chase rig's orbit yaw is `state.look.behind`, world-referenced, so a spawn's
 `yawDegrees` turns the body, never the camera. Three population creatures live on the platform as
-`inhabit` rows with `wander` producers (`spiderDen`, `dragonflyPerch`, `houndRun`), each a different
+`inhabit` rows with `wander` producers (`spiderDen`, `dragonflyPerch`, `houndPack`), each a different
 hold list over the same primitives (see [documents-motion.md](documents-motion.md)): the spider (`spiderKit`) pulls any face in a `[0, 180]` cone,
 the dragonfly (`dragonflyKit`, the same `walk` program every kit here shares) holds the air on full
 lift with its own row's `thrust` climbing, and keeps its altitude
@@ -328,11 +328,8 @@ volumes, move speed/turn rate, hold probes/standoff/reach, a hold's own gravity 
 vertical-channel envelope (including a medium's idle/settle target), a wall hold's travel speed, and a pull's own rate; the client multiplies the same live cell into the
 rendered rig AND the seat chase camera's orbit distance and look-at height
 (`Client.WorldFramePresenter.ResolveCamera`), so a shrunk body stays framed instead of shrinking to a
-speck on screen. A `tabletop` placement (a solid pedestal table, 1.2 m clearance under its top) carries
-the chess board (below); `drinkMe` sits north of it, its region kept clear of the tabletop's own
-footprint and of every resting piece's contact radius, so shrinking never jostles the board. `eatMe`
-and the `table` spawn point sit south of the tabletop, inside the `eatMe` region already, so an
-unshrunk arrival reads `scale=1` from the first tick. `body.where`'s `scale=` echo is the read-back.
+speck on screen. The `table` spawn point sits inside the `eatMe` region already, so an
+unshrunk arrival reads `scale=1` from the first tick; `drinkMe` sits north of it. `body.where`'s `scale=` echo is the read-back.
 Body-vs-body contact, overlap events, the cross-boundary continuum trajectory, the adjacency sweep's
 LOCAL side, and the self-collision sweep all read each body's live-scaled collider volumes; a rigid
 body's mass, inertia, bounding radius, centre of mass (`com=` on `body.where`), and linear rest
@@ -340,7 +337,8 @@ threshold scale with it too (`WorldBody.ScaleRigid`). Only the adjacency sweep's
 neighbour authority's own entities) still reads an unscaled collider, since no delivered snapshot yet
 carries a remote entity's live Scale.
 
-The tabletop's `chessBoard` Grid topology (8x8, 0.2 m cells) carries 32 `piece`-kit rigid bodies.
+Physical chess is not part of the shipped island: it is the Parlor package's
+`worlds/parlor/chess.puck`, whose tabletop's `chessBoard` Grid topology (8x8, 0.2 m cells) carries 32 `piece`-kit rigid bodies.
 Its candidate matcher unions four lossless bit-plane differences, rejects changes outside the move
 footprint, and directly compares the at most four affected cells. Every pre-move read uses `lastLegal`, never a refused observation.
 Local bindings hold attack and geometry intermediates. A legal move commits turn, board, four
@@ -352,9 +350,8 @@ piece count minus occupied squares. A `:between:0:63` count reduction over
 64 minus the empty-square mask's population. The [state reduction contract](../../../../docs/reference/state/expressions.md#reductions)
 owns range bounds, `:where:` composition, live reads, and pricing.
 Board-history fingerprints remain diagnostic, not repetition adjudication.
-The [chess authoring notes](../../../../src/Puck.World/README.md#the-world-as-data) own these contracts.
-They also own the closed -6..7 encoding, the topology shifts, and the bit-extract/deposit
-projection of home-piece losses into castling rights. The existing two-rule settle counter
+The `chess.puck` source owns these contracts, including the closed -6..7 encoding, the
+topology shifts, and the bit-extract/deposit projection of home-piece losses into castling rights. The existing two-rule settle counter
 avoids per-moving-tick epoch writes; `$physics:quiescent` is bool-kind, so an integer
 conditional expression cannot combine its gates.
 Periodic expression masks use `replicationMask(width)` and `repeatBits(pattern, width)`;
@@ -371,8 +368,8 @@ rendered as 64 `boardSquareLight`/`boardSquareDark` placements, one per cell, co
 capsule (radius 0.35, live-scaled by `Scale` like every other collider — `scale=1` near the table, so
 its full radius applies there) still reaches roughly 0.4 m from its own center, well past a single
 0.2 m cell — so a body cannot stand ANYWHERE on the board's own 1.6 m footprint (let alone tread among
-the pieces) without risking contact; the garden's own proof keeps Wren at a safe standoff beside the
-table and moves pieces by console verb (`body.impulse`/`body.pose`), never by having her body touch
+the pieces) without risking contact; a proof keeps the body at a safe standoff beside the
+table and moves pieces by console verb (`body.impulse`/`body.pose`), never by having the body touch
 one. The `plan` row is a rendered-nothing seam: an addon may write candidate cell keys into it and
 `world.tabletop` echoes them back, but no client code paints a highlight from it — chess set style and
 board rendering are this lane's; painting `plan` is deliberately left to a future addon.
@@ -400,7 +397,7 @@ its own directory) is a DELTA over that document — templates/prefabs for simil
 is the fan-in half beside it: an ORDERED list of `{"document": "<path>", "as": "<alias>"}` entries (`WorldImport`;
 each document resolved against the importing file's own directory, exactly like `basis`; `as` is optional), letting
 several documents each own one disjoint slice of a world — the garden's
-own `src/Puck.World/Assets/worlds/games/{chess,poker,dominoes,billiards,bowling,tictactoe,hexlines}.world.json`, each
+own `src/Puck.World/Assets/worlds/games/{poker,dominoes,billiards,bowling,tictactoe,hexlines,mancala,solitaire}.puck`, each
 imported by `puck.world.json` — rather than forcing every slice through the single-parent basis chain. A keyed
 list assembled this way (every import's rows concatenated in import order, then the importing file's own new
 rows appended last) never reproduces a monolithic predecessor's own interleaved authoring order — order is not
@@ -479,11 +476,13 @@ Law suite: `tests/Puck.World.Tests/DocumentBasisLawTests.cs`,
 `StorageCompositionLawTests.cs`.
 
 **`standard.puck` — the standard library, not a world.** The engine ships
-no content default: the standard bindings, movement channels, chase rig,
-icon/badge table, theme, seat modes and markers are AUTHORED, in
-`standard.puck`, beside the kits, body-motion programs and state rows it
-carries. Every shipped world names it as its `basis` (directly, or through
-`quilt-base`). Absent means
+no content default: what a world shares is AUTHORED. `standard.puck`
+carries the `transforms` and `colors` state rows, the `theme`, the ground
+safety-net placements and prototypes, a body sleep default, and an import of the
+`quality.puck` render presets; the island (`puck.world.json`) names it as its
+`basis` and authors its own channels, bindings, kits, body-motion programs and
+chase rig, and the quilt shards take the island as theirs. Another world takes a
+different basis (the Parlor games share `parlor.basis.puck`). Absent means
 absent: `channels` resolves to NONE (a kit whose motion program claims
 `MoveAdvance`/`MoveStrafe`/`Turn` refuses by name when nothing declares them),
 and `views` resolves to `WorldViewDefaults.Absent`, a placeholder holding the

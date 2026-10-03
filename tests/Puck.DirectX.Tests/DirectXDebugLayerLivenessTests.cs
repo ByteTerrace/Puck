@@ -27,6 +27,7 @@ public sealed class ConsoleErrorCollection {
 /// </summary>
 [Collection(name: nameof(ConsoleErrorCollection))]
 [SupportedOSPlatform("windows10.0.10240")]
+[Trait("Category", "Gpu")]
 public sealed unsafe class DirectXDebugLayerLivenessTests {
     private const string DebugPrefix = "[d3d12-debug] ";
     private const string LivePrefix = "[d3d12-debug] live ";

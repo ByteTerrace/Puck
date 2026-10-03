@@ -2,8 +2,8 @@
 
 Puck.Analyzers provides the Roslyn analyzers and code fixes used when building
 the repository. It checks verified-code declarations, source-file length
-limits, comment smells, strict-enum usage, unmanaged function-pointer calls, and
-environment reads. It is a
+limits, comment smells, strict-enum usage, unmanaged function-pointer calls,
+environment reads, and the GPU trait on test classes. It is a
 compiler extension, not an engine runtime dependency or a published package.
 
 ## Usage
@@ -22,7 +22,7 @@ per-file count may only fall. Both ledgers use one ledger type and one analyzer
 base, and `puck lengths` and `puck comment-smells` regenerate them. Update each
 file through its owning workflow rather than suppressing a diagnostic to hide a
 changed declaration.
-The [CLI reference](../Puck.Cli/README.md) documents the related inspection tools.
+The [CLI reference](../../docs/reference/cli.md) documents the related inspection tools.
 
 ENV001 refuses any read of the process environment whose variable is not named,
 with its reason and the assemblies that may read it, in `EnvironmentReadAllowlist`,
@@ -30,6 +30,24 @@ and any read whose name is not a compile-time constant. Nothing in Puck is
 switched by an environment variable; the
 [configuration guide](../../docs/development/contributing.md#configuration-and-diagnostics)
 names what replaces one.
+
+GPU001 refuses a test class that reaches the host's GPU without
+`[Trait("Category", "Gpu")]`, the trait a test run beside a GPU leg leaves out
+with `--filter-not-trait Category=Gpu`. The ways onto the GPU carry
+`[OpensGpuDevice]` (`build/OpensGpuDeviceAttribute.cs`, linked into every
+project): the native device APIs and the test helpers that bring a device up.
+Every member of a marked type is a way onto the GPU too. A helper that reaches
+a marked member carries the mark and hands the obligation to its callers. A test
+class takes the trait as xUnit gives it, from itself or a base type and never
+from a type enclosing it, so a nested class that declares tests carries the
+trait itself. The mark never stands in for the trait on what the runner calls
+itself: a test class, a test method, or a test class's constructors and
+lifecycle members. A test class built on a marked base type, or handed a class,
+collection or assembly fixture that is marked or has a marked constructor or
+lifecycle member, carries the trait. The rule runs only in assemblies that
+reference xUnit v3. A device
+reached through a composed host, or through a native entry point no mark names,
+is outside what it sees.
 
 INTEROP001 refuses a call through an unmanaged function pointer whose signature
 mentions a type parameter anywhere but behind a pointer, because that call throws

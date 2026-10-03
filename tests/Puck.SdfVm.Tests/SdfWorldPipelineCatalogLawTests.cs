@@ -18,7 +18,8 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfWorldPipelineCatalogLawTests {
     private const uint Extent = 32;
-    // Every engine kernel but the brick baker, which the fake kernel set leaves empty.
+    // F=0 leases no fade variants; the two environment kernels join the twelve base kernels.
+    // The fake brick baker is empty and resolve is acquired on demand.
     private const long KernelPipelines = 14L;
     // The kernels, the region copy, the mesh pass and its impostor card pass.
     private const int ResidencyPipelines = 17;

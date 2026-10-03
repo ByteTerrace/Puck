@@ -206,8 +206,9 @@ earlier run kept in the per-user `bakes` cache is read back, and any
 other is baked and kept there, so editing one prototype bakes that prototype
 alone. A prototype draws through its field until its bake is ready. The
 `sdf.bakes` work source counts the keys the cache held, the keys scheduled, the
-bakes made, the refusals, and the field evaluations spent; every kind is
-pacing-class, because what the cache already holds decides it.
+bakes made, the refusals, the held bakes that cannot be decoded, the field
+evaluations spent, and the bakes a presentation switched to from their field;
+every kind is pacing-class, because what the cache already holds decides it.
 
 ## World relationships
 
@@ -839,20 +840,23 @@ frame capture runs the world's existing view composer before scheduling. That ca
 SDF view using the same eased rect its camera projects, including fractional pixel extents, and places
 shader panes from that composition.
 Each occupant's allocation is the largest width and height its slots reach over the layout
-transition in flight, from its starting rect to its ending one, with padded departing cameras and
-the slot a view ordinal holds on either side of the midpoint cut included (`WorldViewOutputRegions`).
+transition in flight, from its starting rect to its ending one, when one of the two contains the
+other, with padded departing cameras and the slot a view ordinal holds on either side of the
+midpoint cut included (`WorldViewOutputRegions`).
 An endpoint with no rendered slot reserves the whole-display spectator. Interrupted transitions
 retain each occupant's largest reservation until the chain settles, so repeated interruptions never
 shrink its allocation mid-ease. A settled layout requests each view and pane's own rect, subject to
 the scheduler's quantization and shrink hysteresis, so the shipped split layout renders
 each seat at half the display. Easing changes placement and the resolved grid inside the
 render-scale ceiling without resizing a node; allocations grow as a transition starts and shrink
-as it settles. An occupant that grows on one axis and shrinks on the other changes allocation at
-both boundaries. Collapsed arriving slots keep a
+as it settles. An occupant that grows on one axis and shrinks on the other keeps its starting
+extent through the ease, which `place` resamples its eased rect from, and allocates once, at its
+settled rect, so every transition allocates at most once. Collapsed arriving slots keep a
 finite camera while positive extents retain their fractional-pixel aspect. Frozen convergence
 frames publish their retained placements on every prepared frame. Editor comparisons record their
 viewports after that placement. `WorldCameraPlacementLawTests` pins agreement on every transition
-frame, one rebuild for a shrinking transition across quantization steps, and the split layout's half-display
+frame, one rebuild for a shrinking transition across quantization steps and for an opposite-axis one,
+and the split layout's half-display
 allocation. A pane's frame values carry its placed extent (`placedExtent`), the extent its paired
 camera projects for, so a pane shader projects at the placed aspect while its output keeps the
 allocation's.
@@ -1116,8 +1120,9 @@ the tape and every companion a crossing involves, and pairs every crossing's dep
 arrival whose commit stood, by handoff token. A crossing whose other half is on a remote authority,
 or on a row nothing taped, is reported as not verified, and `replay.verify` fails.
 
-Each authority tape records the initial authored rate and every ordered rate write, pause and resume
-that changes which steps occur. Replay drives from the tape's recorded rate history and refuses a
+Each authority tape records the world's simulation rate in its header and notes each pause and
+resume of the boot instance's own rate lever. Replay steps at the header's rate for exactly the
+ticks the tape holds, which already reproduces a paused span's missing steps, and refuses a
 definition/rate disagreement by name before stepping. A missing or mismatched rate must never fall
 through into a plausible-looking ordinary determinism `MISMATCH`. Rate and rate changes are part of
 the simulation input contract, not an out-of-band launcher setting.

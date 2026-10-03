@@ -92,6 +92,14 @@ public sealed class SdfKernelSet {
         SdfKernel.SkyEnvironmentReduce => "sdf-sky-environment-reduce",
         SdfKernel.BrickBake => "sdf-brick-bake",
         SdfKernel.Resolve => "sdf-resolve",
+        SdfKernel.ShadowFade1 => "sdf-world-shadow-fade1",
+        SdfKernel.ShadowFade2 => "sdf-world-shadow-fade2",
+        SdfKernel.ViewsFade1 => "sdf-world-views-fade1",
+        SdfKernel.ViewsCoreFade1 => "sdf-world-views-core-fade1",
+        SdfKernel.ViewsFoldsFade1 => "sdf-world-views-folds-fade1",
+        SdfKernel.ViewsFade2 => "sdf-world-views-fade2",
+        SdfKernel.ViewsCoreFade2 => "sdf-world-views-core-fade2",
+        SdfKernel.ViewsFoldsFade2 => "sdf-world-views-folds-fade2",
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not an SDF kernel."),
     };
     /// <summary>Returns the layout of the interface a kernel reads: the brick baker's
@@ -107,6 +115,8 @@ public sealed class SdfKernelSet {
             SdfKernel.BrickBake => SdfWorldInterfaces.BrickBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
             SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,
+            SdfKernel.ShadowFade1 or SdfKernel.ViewsFade1 or SdfKernel.ViewsCoreFade1 or SdfKernel.ViewsFoldsFade1 => SdfWorldInterfaces.WorldFadeParameters[1].Layout,
+            SdfKernel.ShadowFade2 or SdfKernel.ViewsFade2 or SdfKernel.ViewsCoreFade2 or SdfKernel.ViewsFoldsFade2 => SdfWorldInterfaces.WorldFadeParameters[2].Layout,
             SdfKernel.SkyEnvironment or SdfKernel.SkyEnvironmentReduce => SdfWorldInterfaces.EnvironmentParameters.Layout,
             _ => SdfWorldInterfaces.WorldLayout,
         };

@@ -321,20 +321,19 @@ internal static partial class LawProof {
     }
 
     /// <summary>Reads a Visual Studio test results (TRX) report into a run: every executed result, and the first line of
-    /// each failure's message, ordered by test name.</summary>
+    /// each failure's message, ordered by test name. An explicit test the run did not opt into is reported
+    /// <c>NotRunnable</c> and was never selected, so it is left out; any other result that did not pass or fail makes the
+    /// run unfit to judge.</summary>
     /// <param name="report">The report's XML text.</param>
     /// <returns>The run.</returns>
     public static LawRun ReadReport(string report) {
         var document = XDocument.Parse(text: report);
         XNamespace schema = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010";
-        var results = document.Descendants(name: (schema + "UnitTestResult")).ToArray();
+        var results = document.Descendants(name: (schema + "UnitTestResult"))
+            .Where(predicate: static result => (((string?)result.Attribute(name: "outcome")) != "NotRunnable"))
+            .ToArray();
         var incomplete = results.FirstOrDefault(predicate: static result => (((string?)result.Attribute(name: "outcome")) is not ("Passed" or "Failed")));
-        // The VSTest adapter echoes every failed xUnit test as a run-level error whose text ends in "[FAIL]"; that is a
-        // test verdict, already counted from its result, not a fault of the run. Any other run-level error is one.
-        var infrastructureError = (document.Descendants(name: (schema + "RunInfo")).Any(predicate: info => (
-                (((string?)info.Attribute(name: "outcome")) is "Error" or "Aborted" or "Timeout") &&
-                !(((string?)info.Element(name: (schema + "Text"))) ?? string.Empty).TrimEnd().EndsWith(comparisonType: StringComparison.Ordinal, value: "[FAIL]")
-            )) ||
+        var infrastructureError = (document.Descendants(name: (schema + "RunInfo")).Any(predicate: static info => (((string?)info.Attribute(name: "outcome")) is "Error" or "Aborted" or "Timeout")) ||
             document.Descendants(name: (schema + "ResultSummary")).Any(predicate: static summary => (((string?)summary.Attribute(name: "outcome")) is "Error" or "Aborted" or "Timeout")) ||
             document.Descendants(name: (schema + "Counters")).Any(predicate: static counters => (new[] { "error", "timeout", "aborted" }.Any(predicate: name => (((int?)counters.Attribute(name: name)) is > 0)))));
         var failures = results.Where(predicate: static result => (((string?)result.Attribute(name: "outcome")) == "Failed"))

@@ -200,7 +200,7 @@ the grace window (not merely the leave itself) is what the rules above ride.
   document).
 - **Grace-expiry teardown is population-internal, not a mutation** — `world.status`'s
   `dirty`/journal length does not move when `ReclaimExpiredParks` fires.
-- Default `reconnectGraceSeconds` (3.0, which is 720 ticks at 240 Hz) is small enough that `world.wait 721`
+- Default `reconnectGraceSeconds` (3.0, which is 90 ticks at the unauthored 30 Hz) is small enough that `world.wait 91`
   after a leave reliably crosses the deadline in a scripted verification run;
   `world.wait <2` plus `world.parked` reads the remaining-ticks countdown
   mid-window.

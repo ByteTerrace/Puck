@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-\[render-batch\]\s*(started|progress|done|blocked|question):
+\[render-readback\]\s*(started|progress|done|blocked|question):

@@ -203,6 +203,10 @@ public sealed partial class ShaderPipelineRenderNode {
             extent: preview,
             inFlight: m_inFlight
         )));
+
+        if (ReferenceEquals(objA: plan, objB: m_pipeline?.Plan) && (m_passes.Length > 0) && (m_passes[0].KernelCounters is { } counters)) {
+            steady = checked(((steady + counters.TotalBytes) - KernelCounterBytes(inFlight: m_inFlight, plan: plan)));
+        }
         var carried = 0UL;
 
         foreach (var index in CarriedHistoryOf(

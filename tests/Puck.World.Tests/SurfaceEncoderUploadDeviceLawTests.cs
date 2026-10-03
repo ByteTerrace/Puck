@@ -23,6 +23,7 @@ namespace Puck.World.Tests;
 /// </summary>
 [Collection(name: DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class SurfaceEncoderUploadDeviceLawTests {
     private const uint Height = 8U;
     private const int HeadroomRow = 7;

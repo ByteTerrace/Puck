@@ -609,8 +609,8 @@ public sealed partial class FederationTransferLawTests {
             ) == WorldTransferStatus.Committed),
             userMessage: replay
         );
-        var alternatives = new WorldTransferActionContinuity?[] {
-            null, continuity with { Channels = [] }, continuity with { Registers = [] },
+        var alternatives = new WorldTransferActionContinuity[] {
+            WorldTransferActionContinuity.Empty, continuity with { Channels = [] }, continuity with { Registers = [] },
             continuity with { Channels = channels.Reverse().ToArray() }, continuity with { Registers = registers.Reverse().ToArray() },
             continuity with { Channels = [channels[0] with { Name = "other" }, channels[1]] },
             continuity with { Channels = [channels[0] with { PreviousBit = false }, channels[1]] },
@@ -889,7 +889,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
@@ -1088,7 +1088,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
@@ -1164,7 +1164,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         using var client = new PeerTestClient();
@@ -1269,7 +1269,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
         byte[] capturedProof;
@@ -1363,7 +1363,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var endpoint = IPEndPoint.Parse(s: host.ListenEndpoint!);
         var testToken = TestContext.Current.CancellationToken;
 
@@ -1845,7 +1845,7 @@ public sealed partial class FederationTransferLawTests {
             transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
         );
 
-        host.Start(listen: "127.0.0.1:0");
+        PeerTestClient.StartOrSkip(host: host);
         var verifyOnly = Authenticator(trustEntries: () => [TrustEntryFor(oracle: oracle)]);
 
         Assert.True(condition: verifyOnly.IsConfigured);

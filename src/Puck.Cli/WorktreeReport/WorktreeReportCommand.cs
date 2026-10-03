@@ -11,7 +11,7 @@ namespace Puck.Cli.WorktreeReport;
 public static class WorktreeReportCommand {
     private const string Verb = "worktree-report";
 
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new() { NewLine = "\n", PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     private static readonly string[] DiffOptions = ["--no-ext-diff", "--no-textconv", "--no-color", "--no-renames", "--binary", "--full-index", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--diff-algorithm=myers", "--no-indent-heuristic"];
 
     private sealed record Upstream(string Name, string Track);

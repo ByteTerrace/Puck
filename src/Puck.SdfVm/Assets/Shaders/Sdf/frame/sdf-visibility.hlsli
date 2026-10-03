@@ -15,8 +15,8 @@
 // S (2 words): curvature and ambient occlusion as halves, then the surface flags in bits 0..7 and the surface and
 //    ambient query count, saturated, in bits 8..31. Surface flag bit 0 marks an ordinary lit, non-screen surface, the
 //    only kind the ambient pass occludes.
-// K (1 word): the key light's soft-shadow visibility, 1 where no shadow was marched. The shadow stage writes it only on
-//    a frame whose soft shadows are on and that has a shadow light, and views reads it only then.
+// K (1 word): four eight-bit stable-slot visibilities, 1 where no shadow was marched. The shadow stage writes it
+//    only when soft shadows are on and K is nonzero; views reads it only then.
 // V and the identity in it are exact; the packed fields round only presentation values.
 // Primary writes V, C and L for every active pixel, misses included; surface writes N and S; ambient updates S; shadow
 // writes K and adds its queries to S. Views reads the whole record once, as one surface sample (SdfSurfaceSample).
@@ -33,6 +33,7 @@
 #define SDF_VISIBILITY_HLSLI
 
 #include "../field/sdf-octahedral.hlsli"
+#include "sdf-shadow-visibility.hlsli"
 #include "../isa/sdf-isa.hlsli"
 
 #if defined(SDF_PRIMARY_PASS) || defined(SDF_SURFACE_PASS) || defined(SDF_AMBIENT_PASS) || defined(SDF_SHADOW_PASS)
@@ -184,9 +185,9 @@ SdfVisibilityNormal sdfLoadVisibilityNormal(uint record) {
     normal.gradientMagnitude = asfloat(sdfVisibilityRecordBuffer[word + 1u]);
     return normal;
 }
-// The key light's soft-shadow visibility, which the K row carries.
-float sdfLoadVisibilityKey(uint record) {
-    return asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityRowK]);
+// Four stable-slot visibilities share the K row.
+float4 sdfLoadVisibilityShadows(uint record) {
+    return sdfUnpackShadowVisibility(sdfVisibilityRecordBuffer[record + SdfVisibilityRowK]);
 }
 // A mesh hit's triangle, which its L row carries.
 uint sdfVisibilityMeshTriangle(uint record) {
@@ -229,9 +230,6 @@ struct SdfSurfaceSample {
     // The queries the surface, ambient and shadow stages made, and the surface flags.
     float surfaceQueries;
     uint surfaceFlags;
-    // The key light's soft-shadow visibility, current only on a frame whose soft shadows are on and that has a shadow
-    // light.
-    float keyVisibility;
 };
 SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     SdfVisibility visibility = sdfLoadVisibility(record);
@@ -259,7 +257,6 @@ SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
     sample.ambient = surface.ambient;
     sample.surfaceQueries = surface.queries;
     sample.surfaceFlags = surface.flags;
-    sample.keyVisibility = sdfLoadVisibilityKey(record);
     return sample;
 }
 
@@ -288,8 +285,8 @@ void sdfStoreVisibilityCoverage(uint record, SdfVisibilityCoverage coverage) {
 void sdfStoreVisibilityFrameSlot(uint record, int frameSlot) {
     sdfVisibilityStoreWord(record + SdfVisibilityRowL, asuint(frameSlot));
 }
-void sdfStoreVisibilityKey(uint record, float visibility) {
-    sdfVisibilityStoreWord(record + SdfVisibilityRowK, asuint(visibility));
+void sdfStoreVisibilityShadows(uint record, float4 visibility) {
+    sdfVisibilityStoreWord(record + SdfVisibilityRowK, sdfPackShadowVisibility(visibility));
 }
 void sdfStoreVisibilityMeshTriangle(uint record, uint triangleIndex) {
     sdfVisibilityStoreRow(record + SdfVisibilityRowL, uint4(triangleIndex, 0u, 0u, 0u));

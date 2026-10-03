@@ -843,18 +843,22 @@ public sealed partial class SdfProgramBuilder {
     // for a static instance, boundOffset for a dynamic one), so the caller's own parameter names are passed through
     // rather than reported as this helper's or BeginInstanceCore's. The bound is a world-space sphere the beam prepass
     // tests per tile (SdfProgram.WriteBound scales the radius and packs it): a negative radius describes a sphere that
-    // covers nothing, so the instance would silently never be marched.
+    // covers nothing, so the instance would silently never be marched. The one non-finite radius admitted is
+    // SdfBoundAlgebra.Unbounded, the declaration that nothing bounds the instance: it packs UnmaskableBoundRadius.
     private static void RequireInstanceBound(Vector3 center, string centerParamName, float radius, string radiusParamName) {
         RequireFinite(
             paramName: centerParamName,
             subject: "An instance bound centre",
             value: center
         );
-        RequireNonNegative(
-            paramName: radiusParamName,
-            subject: "An instance bound radius",
-            value: radius
-        );
+
+        if (!SdfBoundAlgebra.IsUnbounded(bound: radius)) {
+            RequireNonNegative(
+                paramName: radiusParamName,
+                subject: "An instance bound radius",
+                value: radius
+            );
+        }
     }
     private static void RequireNonNegative(float value, string paramName, string subject) {
         if (

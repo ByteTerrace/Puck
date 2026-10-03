@@ -13,7 +13,7 @@ public sealed class AffectedBaselineLawTests {
 
     private static AffectedPlan Select(string path, bool deleted = false, bool consumer = false) => AffectedSelection.Select(
         changed: [path], projects: Projects, canaries: [], coverage: new Dictionary<string, IReadOnlySet<string>>(),
-        consumersOf: _ => (consumer ? ["Puck.State.Rebuild.Corpus"] : []), worldClosure: new HashSet<string>(),
+        consumersOf: _ => (consumer ? ["Puck.State.Rebuild.Corpus"] : []), worldClosure: new HashSet<string>(), worldInput: static _ => false,
         declaresTests: static _ => false, catalogInputs: static (_, _) => false,
         standInsFor: static _ => [], canariesReaching: static _ => new HashSet<string>(),
         deleted: (deleted ? new HashSet<string>(collection: [path]) : null));

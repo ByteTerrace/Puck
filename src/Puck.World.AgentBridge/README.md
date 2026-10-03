@@ -54,6 +54,9 @@ The mutating surface stays deliberately small:
 - `PressAsync` resolves an exact authored channel name and submits a timed or
   single-step press.
 - `StopAsync` clears the body's movement tape and held channels.
+- `WriteVectorAsync` submits a vector-cell write into an admitted state row as
+  a document mutation under the bridge's principal; the harness does not offer
+  it as a model tool.
 
 Every numeric input must be finite, and every duration must fit the protocol's
 single-precision seconds field. The server still owns range folding, grant
@@ -70,7 +73,8 @@ body afterward before claiming a result.
 Console scripts. It is a useful discovery and operator surface, but free-form
 command strings would make an agent parse human output and could accidentally
 borrow Console identity. The bridge instead constructs the same typed
-`WorldCommand` and `WorldQuery` values those handlers ultimately use.
+`WorldCommand`, `WorldQuery` and `WorldMutation` values those handlers
+ultimately use.
 
 The Console belongs above this project as a control plane for tasks such as
 starting, pausing, inspecting, and stopping hosted agents. It should not become

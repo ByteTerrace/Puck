@@ -37,6 +37,8 @@ public static partial class WorldSessionLevers {
     /// <summary>Soft-shadow reach in <see cref="WorldSessionLever.A"/> and crowd radius in
     /// <see cref="WorldSessionLever.B"/> (<c>world.shadows</c>).</summary>
     public const string Shadows = "shadows";
+    /// <summary>The complete shadow policy: stable slots, fade slots, fade ticks and overflow in lanes A through D.</summary>
+    public const string ShadowSlots = "shadow-slots";
     /// <summary>The target present rate in Hz, 0 meaning automatic display pacing (<c>world.target</c>), folding into
     /// <c>host</c>.</summary>
     public const string TargetHertz = "target";
@@ -47,6 +49,13 @@ public static partial class WorldSessionLevers {
 
     private static bool Flag(WorldSessionLever lever) => (lever.A != 0.0);
 
+    /// <summary>Creates the one lever that installs a preset's complete shadow policy.</summary>
+    /// <param name="preset">The authored quality row.</param>
+    /// <returns>The four shadow fields in one accepted settings write.</returns>
+    public static WorldSessionLever ShadowPolicy(WorldQualityPreset preset) => new(
+        Section: WorldSection.Render, Name: ShadowSlots,
+        A: preset.ShadowLights, B: preset.ShadowFadeSlots,
+        C: preset.ShadowFadeTicks, D: ((int)preset.ShadowOverflow));
     /// <summary>Composes the applier every shipped knob is registered on.</summary>
     /// <param name="settings">The live render-lever settings the frame source reads.</param>
     /// <param name="pacing">The live present-rate control the window pump reads.</param>
@@ -144,6 +153,8 @@ public static partial class WorldSessionLevers {
             }
         );
 
+        sink.Register(name: ShadowSlots, setter: lever => settings.ShadowSlots = new WorldShadowSettings(
+            Slots: ((int)lever.A), FadeSlots: ((int)lever.B), FadeTicks: ((uint)lever.C), Overflow: ((WorldShadowOverflow)((int)lever.D))));
         return sink;
     }
 }

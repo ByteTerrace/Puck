@@ -15,8 +15,8 @@ namespace Puck.Abstractions.Cameras;
 /// <see cref="Jitter"/>, in normalized device coordinates.</para>
 /// <para><see cref="RayParameter"/> reconstructs, from a depth, the ray parameter the SDF march records: the
 /// Euclidean distance from the camera along the normalized ray through the sample.</para>
-/// <para>The previous frame's matrices ride beside the current ones for motion. A view with no previous frame, or one
-/// whose history is invalid, carries its own matrices as the previous ones, so it reports no motion.</para>
+/// <para>The temporal path keeps its own previous-frame view in the SDF engine's temporal history; these matrices describe
+/// one frame only.</para>
 /// </remarks>
 public readonly record struct ViewProjection {
     private ViewProjection(Vector3 position, float near, Vector2 frustumOffset, Vector2 jitter, Matrix4x4 worldToView, Matrix4x4 viewToClip, Matrix4x4 clipToWorld) {
@@ -28,8 +28,6 @@ public readonly record struct ViewProjection {
         ViewToClip = viewToClip;
         WorldToClip = (worldToView * viewToClip);
         ClipToWorld = clipToWorld;
-        PreviousWorldToView = worldToView;
-        PreviousWorldToClip = WorldToClip;
     }
 
     /// <summary>Gets the sample offset in normalized device coordinates, added to the pixel-center ray.</summary>
@@ -44,10 +42,6 @@ public readonly record struct ViewProjection {
     public float Near { get; }
     /// <summary>Gets the camera's world-space position.</summary>
     public Vector3 Position { get; }
-    /// <summary>Gets the previous frame's world-to-clip transform.</summary>
-    public Matrix4x4 PreviousWorldToClip { get; private init; }
-    /// <summary>Gets the previous frame's world-to-view transform.</summary>
-    public Matrix4x4 PreviousWorldToView { get; private init; }
     /// <summary>Gets the view-to-clip transform: the reversed-Z infinite-far projection.</summary>
     public Matrix4x4 ViewToClip { get; }
     /// <summary>Gets the world-to-clip transform, <see cref="WorldToView"/> then <see cref="ViewToClip"/>.</summary>
@@ -55,7 +49,7 @@ public readonly record struct ViewProjection {
     /// <summary>Gets the world-to-view transform.</summary>
     public Matrix4x4 WorldToView { get; }
 
-    /// <summary>Creates the matrices of <paramref name="camera"/> with its previous frame equal to itself.</summary>
+    /// <summary>Creates the matrices of <paramref name="camera"/>.</summary>
     /// <param name="camera">The camera basis, field of view, and aspect ratio.</param>
     /// <param name="near">The near-plane distance; positive and finite.</param>
     /// <param name="jitter">The ray offset in normalized device coordinates; zero samples the pixel center.</param>
@@ -229,12 +223,4 @@ public readonly record struct ViewProjection {
             z: world.Z
         ) / world.W);
     }
-    /// <summary>Returns these matrices with <paramref name="previous"/>'s current matrices as the previous frame's.</summary>
-    /// <param name="previous">The same view's matrices one frame earlier.</param>
-    /// <returns>The view with its previous-frame transforms set.</returns>
-    public ViewProjection WithPrevious(ViewProjection previous) =>
-        (this with {
-            PreviousWorldToClip = previous.WorldToClip,
-            PreviousWorldToView = previous.WorldToView,
-        });
 }

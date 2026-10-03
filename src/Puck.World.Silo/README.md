@@ -213,8 +213,7 @@ activation's fence and requires recovery.
   tick thread the headless host has not spawned yet). It waits for application startup, then requires each pinned world to activate and checkpoint; a refusal stops the host with a failing exit code.
 - `IWorldGrain`/`WorldGrain`—the grain interface (`IGrainWithGuidCompoundKey`:
   owner oid + world id extension) and its thin adapter over `WorldSiloHost`.
-  Activation allows three minutes for composition and checkpoint recovery;
-  root and neighbour storage reads are awaited without a `Task.Run` wrapper.
+  Root and neighbour storage reads are awaited without a `Task.Run` wrapper.
 - `WorldGrainStatus`—the Orleans-serializable read-back payload
   `IWorldGrain.StatusAsync` and `silo.grains` both answer with.
 - `WorldNoAddonHost : IWorldAddonHost`—the inert host every row's replay
@@ -313,13 +312,15 @@ embedded definition; CI does not erase checkpoints to apply authored changes.
 
 ## Not built here
 
-Distributed clustering. Console verbs whose module takes a
-process-wide `IServerLink`/similar singleton rather than resolving it
-through the row `IWorldConsoleAuthority` returns (`WorldGrantCommandModule`,
-`WorldGroupCommandModule`, `WorldLookCommandModule`,
-`WorldRowCommandModule`, `WorldStateCommandModule`) are not registered here—registering them
-unmodified would misattribute every row's mutation to whichever one
-happened to be resolved into the shared singleton.
+Distributed clustering. The silo registers `SiloCommandModule` and, from
+`Puck.World.Console`, `WorldWaitCommandModule`, `WorldNetworkCommandModule`,
+`WorldStateCommandModule`, `WorldExtensionsCommandModule` and
+`WorldMachineCommandModule`. The other console modules (`WorldGrantCommandModule`,
+`WorldGroupCommandModule`, `WorldLookCommandModule`, `WorldRowCommandModule`, the
+replay, history and read-back modules, and `world.counters`) are not registered
+here. The grant, group, look and row modules resolve their row through
+`IWorldConsoleAuthority`, which `SiloConsoleAuthority` implements, and none holds
+a process-wide `IServerLink`, so their absence is not a missing seam.
 
 ## Documentation
 

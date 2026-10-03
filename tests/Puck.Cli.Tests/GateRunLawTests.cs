@@ -21,6 +21,7 @@ public sealed partial class GateRunLawTests {
 
         public List<string[]> Steps { get; } = [];
         public List<string> Events { get; } = [];
+        public List<(string Step, bool Device)> Admissions { get; } = [];
         public List<string[]> Devices { get; } = [];
         public GateClock Clock { get; } = new();
         public bool Admitted { get; init; } = true;
@@ -33,14 +34,15 @@ public sealed partial class GateRunLawTests {
             Clock.Advance(duration: TimeSpan.FromMilliseconds(milliseconds: 2700));
         }
 
-        public bool WaitForCapacity(string repositoryRoot, string step) {
+        public bool WaitForCapacity(string repositoryRoot, string step, bool device) {
             Events.Add(item: ("admit " + step));
+            Admissions.Add(item: (step, device));
             return Admitted;
         }
         public GateStepResult Dotnet(string repositoryRoot, IReadOnlyList<string> arguments) {
             if (arguments[0] == "build") { Execute(name: "build"); return build; }
             Devices.Add(item: [.. arguments]);
-            Execute(name: Path.GetFileNameWithoutExtension(path: arguments[1]));
+            Execute(name: Path.GetFileNameWithoutExtension(path: arguments[(arguments.ToList().IndexOf(item: "--project") + 1)]));
             return new GateStepResult(ExitCode: ExitCode([.. arguments]), Output: "device output");
         }
         public string CopyCli(string repositoryRoot, string directory) {
@@ -49,7 +51,7 @@ public sealed partial class GateRunLawTests {
 
             return Path.Combine(path1: directory, path2: "Puck.Cli.dll");
         }
-        public GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments) {
+        public GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments, Action<string>? progress = null) {
             var name = (((arguments[0] == "docs") || (arguments[0] == "shaders") || (arguments[0] == "baselines")) ? string.Join(separator: ' ', values: arguments.Take(count: 2)) : arguments[0]);
 
             if (arguments[0] == "canary") { name = "affected canaries"; }
@@ -63,7 +65,15 @@ public sealed partial class GateRunLawTests {
                 FormatSources = JsonSerializer.Deserialize<string[]>(json: File.ReadAllText(path: arguments[^1]));
             }
 
-            return new GateStepResult(ExitCode: ExitCode(arg: [.. arguments]), Output: $"output of {arguments[0]}");
+            // A canary run reports each canary's verdict as it lands; the progress sink sees each line as written.
+            string[] lines = ((arguments[0] == "canary")
+                ? [.. arguments.Skip(count: 1).Select(selector: static id => $"PASS: canary {id} held")]
+                : [$"output of {arguments[0]}"]);
+
+            foreach (var line in lines) { progress?.Invoke(obj: line); }
+            var output = string.Join(separator: Environment.NewLine, values: lines);
+
+            return new GateStepResult(ExitCode: ExitCode(arg: [.. arguments]), Output: output);
         }
     }
     // main: A; feature leaves at A and commits B (src/Branch.cs); main then commits C (src/Target.cs). HEAD is feature.
@@ -133,7 +143,8 @@ public sealed partial class GateRunLawTests {
         var (exitCode, output, _) = Gate(branches: branches, directory: directory, runner: runner);
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
-        Assert.Contains(actualString: output, expectedSubstring: "gate: build FAILED (exit 1); nothing else ran.");
+        Assert.Contains(actualString: output, expectedSubstring: "gate: build FAILED (exit 1, ");
+        Assert.Contains(actualString: output, expectedSubstring: "s); nothing else ran.");
         Assert.Contains(actualString: output, expectedSubstring: "  src/Branch.cs(1,1): error CS1002: ; expected");
         Assert.DoesNotContain(actualString: output, expectedSubstring: "restore ok");
         Assert.False(condition: runner.Copied);
@@ -204,7 +215,7 @@ public sealed partial class GateRunLawTests {
 
         Assert.Equal(actual: exitCode, expected: CliExit.Failed);
         Assert.Equal(actual: runner.Steps.Count, expected: 14);
-        Assert.Contains(actualString: output, expectedSubstring: "gate: lengths FAILED (exit 1)");
+        Assert.Contains(actualString: output, expectedSubstring: "gate: lengths FAILED (exit 1, ");
         Assert.Contains(actualString: output, expectedSubstring: "gate: FAILED: lengths; full output in ");
         Assert.Contains(expectedSubstring: "===== lengths (exit 1)\noutput of lengths", actualString: File.ReadAllText(path: directory.PathOf(name: "gate.log")).ReplaceLineEndings(replacementText: "\n"));
     }

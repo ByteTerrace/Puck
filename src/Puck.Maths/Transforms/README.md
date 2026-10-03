@@ -197,7 +197,7 @@ record, in [tests/Puck.Maths.Tests](../../../tests/Puck.Maths.Tests/README.md).
 
 ```text
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
-dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --settings tests/Puck.Maths.Tests/deep.runsettings
+dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release --explicit on --filter-trait tier=Deep
 ```
 
 `ntt.*` and `wht.*` statements are exact identities or exact agreement with an

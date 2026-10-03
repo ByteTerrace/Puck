@@ -111,7 +111,7 @@ They are P1a's windowed boot on a machine with no GPU driver; P1b's
 qualification on the reference GPUs, the RTX 4070 and the AMD devices, and its
 driver-removal exercise; P7's comparison of the shader bytecode that Linux and
 Windows CI build; the recorded camera run of P12b-4; the recorded Windows
-editor click of P13b-4; P15's recorded Steam Deck run; and P16's checks on an
+editor click of P13b-4; P10's floor-tier parity leg; P15's recorded Steam Deck run; and P16's checks on an
 HDR display. For the GPU checks each change runs, whether the two backends
 agree is judged in one final review pass rather than change by change.
 

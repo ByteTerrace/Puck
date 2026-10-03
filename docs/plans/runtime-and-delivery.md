@@ -36,12 +36,15 @@ reasoning behind every decision is in
   compiled-world chunks, and the evidence package. Release-pair qualification
   (`puck world release qualify`) exists; only metadata-only definition deltas
   pass it, other sections refuse, and Azure acceptance is open.
-- **Not started, and partly defective where it exists:** the presentation view.
-  `WorldProjection` composes and hydrates a document for a federated neighbour,
-  but `Compose` never sets `Fields`, so a presentation-tier peer sees no field
-  lattice, and the primary client is fed the authority's own definition by
-  reference. `TryToDefinition` rebuilds the observed rows as plain `state.world`
-  rows.
+- **Partly landed, and partly defective where it exists:** the presentation
+  view. `IWorldStateView` exists, with one implementation,
+  `WorldDocumentStateView`, which answers from the definition the client was
+  delivered; `WorldStateMirror` reads every presentation `state.*` row through
+  it. `WorldProjection` composes and hydrates a document for a federated
+  neighbour, but `Compose` never sets `Fields`, so a presentation-tier peer sees
+  no field lattice, and the primary client is fed the authority's own definition
+  by reference. `TryToDefinition` rebuilds the disclosed observations as plain
+  `state.world` rows and copies no other authored row.
 
 ## The forcing artifact
 
@@ -209,10 +212,14 @@ projections and neighbour solids, and the live scene program are never stored.
 `puck compile` writes one beside a document's JSON, `build/WorldAssets.targets`
 produces them for shipped worlds, the runtime writes one into the per-user
 compiled-world cache on a miss. Checkpoints, replay tapes, and instance starts do
-not yet reference one by its header hash. Four packages, each with the same law: for every shipped world,
-every product derived fresh equals the product loaded from the compiled world
-byte for byte; a deliberate change to a derivation moves the chunk version and
-re-records the compiled worlds in the same change.
+not yet reference one by its header hash. Every package that adds a chunk
+carries the same law: for every shipped world, each product derived fresh equals
+the product loaded from the compiled world byte for byte, and a deliberate
+change to a derivation moves that chunk's version and re-records its pin
+(`CompiledWorldLawTests`; `CreationBakeLawTests` for `BAKE`) in the same change. A chunk's version is set by hand for
+`DEFN` and `ASST` (`CompiledWorldChunks.cs`); for `BAKE` it is the fingerprint of
+the baking code, which `puck derivations --check` holds current. [Derivation
+keys](#derivation-keys) owns moving the rest onto fingerprints.
 
 **One validated load (landed).** Owns `WorldDefinitionValidator.ValidateCore`'s
 callers and `WorldServer.RecompileRules`'s. One validation receipt reaches the
@@ -303,29 +310,85 @@ byte-for-byte law over every chunk; restore, rewind, and the replay drive load
 products from the compiled world their checkpoint names; the `puck landing`
 canary and `puck parity` from compiled worlds on both backends.
 
+#### Derivation keys
+
+A derived product is keyed by the code that makes it, so a deliberate change to
+that code moves the key and nothing is served stale. `puck derivations` computes
+the fingerprint of the bake producer's transitive source into
+`DerivationFingerprint.Bake`, which the bake keys and the `BAKE` chunk's version
+read; [the command reference](../reference/cli.md#puck-derivationscode-provenance-keys)
+owns what the verb does today. Two other products are not yet keyed this way.
+Each slice reuses the verb's machinery: a `[Derivation]` entry point names the
+producer, the generated fingerprint carries its reach, and `--check` refuses a
+stale one.
+
+**Owns:** `DerivationsCommand`, `DerivationReach`, `DerivationAttribute` and the
+generated `DerivationFingerprint`, and the two products below.
+
+**Delivers, as two independent slices:**
+
+1. **Chunk versions.** A compiled world is kept only while its header's engine
+   build equals the running one (`CompiledWorldCache.TryResolve`), and the
+   engine build is the module version id of every `Puck.*` assembly reachable
+   from `Puck.World.Schema` (`CompiledWorld.EngineBuild`). `DEFN` and `ASST`
+   derive wholly inside that reach, and carry hand-set integers (2 and 1) that
+   `CompiledWorldChunks.Holds` compares only after the header has matched, so
+   they can never decide anything the engine build has not. `BAKE` is the one
+   chunk whose producer, `Puck.World.Authoring`, lies outside the reach, which
+   is why its version is a fingerprint. The rule is that a chunk's `Version` is
+   the fingerprint of its derivation exactly when the derivation's assemblies
+   are outside the engine build's reach, and carries nothing when they are
+   inside: `DEFN` and `ASST` drop their integers, `ICompiledWorldChunk.Version`
+   defaults to zero for a chunk inside the reach, and each chunk the
+   simulation-chunks and everything-else packages add declares which side it is
+   on. Per-chunk fingerprints for `DEFN` and `ASST` are not taken: they would
+   gain a kept compiled world across a rebuild only if the header gave up the
+   engine build, which is the stronger key (module ids cover reflection,
+   dispatch and package code the token fingerprint does not read). Nothing
+   re-records: no hash, baseline or shipped compiled world moves, because the
+   compile at build already re-derives every world. Check: a law that every
+   registered chunk either lists an assembly inside the engine build's reach
+   and carries zero, or carries its derivation's fingerprint and names its
+   `[Derivation]` entry point; `puck derivations --check` red after an edit to a
+   source a fingerprinted chunk reads, shown once. Sequenced after Cloud C's
+   format-token sweep and the derivation reach changes in flight, which touch
+   the same files.
+2. **Shader packages.** `ShaderPackager.KeyOf` hashes the document's logical
+   path, the pipeline's name, every closure file's pin, and each pass's interface
+   and declarations pins. It reads nothing of the code that compiles and writes
+   the package, so a change to that code under an unchanged source keeps the key
+   and a stored package is served. The key gains the packaging code's
+   fingerprint. Check: a law that a packaging-code change misses a package stored
+   under the earlier key and loads the rebuilt one.
+
 ### The presentation view
 
 Presentation code receives a view and never the authority's document, as
 [the decision](../decisions/runtime-and-delivery.md#the-presentation-view)
 states. The gap between that and the code is a programme rather than a package:
-the primary client holds the authority's own definition by reference,
-presentation reads document members the projection omits, and every
-presentation `state.*` read goes through `WorldStateReader`, which takes a
-document. The five cuts are in dependency order, each independently landable.
+the primary client holds the authority's own definition by reference, and
+presentation reads document members the projection omits. Presentation `state.*`
+reads already go through `WorldStateMirror` and `IWorldStateView`
+(`src/Puck.World.Protocol`), whose one implementation, `WorldDocumentStateView`,
+answers from that delivered definition; the cuts below add the view that does
+not need the document. The five cuts are in dependency order, each independently
+landable.
 
 **The mechanism defects, and the conformance law.** Owns `WorldProjection`'s
 `Compose` and `TryToDefinition`, and the round-trip law. Delivers a `Compose`
 that supplies `Fields`, which it declares and never sets, so a presentation-tier
 peer stops seeing no field lattice where the client's state view
-(`WorldDocumentStateView`) and `WorldFieldEmitter` read `Definition.Fields`; and a `TryToDefinition` that reads
-`projection.Observations` back, so the channel `WorldStateDisclosure.Compose`
-fills stops being inert — the hydration rebuilds `StateRaw` only through
-`WorldFieldsSection.ToStateSection`, which manufactures lattice-shaped rows and
-copies no authored row. The conformance law is written here: for every shipped
+(`WorldDocumentStateView`) and `WorldFieldEmitter` read `Definition.Fields`. The
+hydration already reads `projection.Observations` back as plain `state.world`
+rows, so the channel `WorldStateDisclosure.Compose` fills is not inert; it
+rebuilds the rest of `StateRaw` only through `WorldFieldsSection.ToStateSection`,
+which manufactures lattice-shaped rows from `Fields`, and copies no authored row
+beyond the observed ones. The conformance law is written here: for every shipped
 world, tick, and recipient, the colocated view and a view rebuilt from an
 encode-then-decode round trip answer every query identically. Check: a law that
 a composed projection carries the document's field lattice; a law that a
-disclosed observation survives the round trip; the conformance law green over
+disclosed observation of each cell kind survives the round trip
+(`VectorStateLawTests` holds the vector row's); the conformance law green over
 every shipped world and red when one member is dropped from `Compose`, shown
 once.
 
@@ -365,16 +428,15 @@ sizes the same screen and placement reservations as the authority for the same
 document, with a law over both the derived and the authored policy.
 
 **Bound state crosses as per-recipient observations.** Owns the
-`IWorldStateView` implementation, the observation channel's regions, and
-`WorldStateDisclosure.ValidateBindings`' reach. Delivers the presentation
-manifest's rows crossing as observations filtered per recipient, and the view's
-`IWorldStateView` — the interface the state mirror (`WorldStateMirror`) reads
-every presentation read of state through, from the HUD binding resolver, the
-binding bar and the radial wheel to the overlay predicates, camera operands,
-markers, render colors, theme, seat-binding contexts, and a body's look lanes,
-gait drivers, poses, effectors and scale — answering from the view instead of
-the delivered document, which is one implementation rather than each
-consumer. Public rows
+observation-backed `IWorldStateView` implementation, the observation channel's
+regions, and `WorldStateDisclosure.ValidateBindings`' reach. The interface and
+`WorldDocumentStateView` exist: `WorldStateMirror` reads every presentation read
+of state through the interface, from the HUD binding resolver, the binding bar
+and the radial wheel to the overlay predicates, camera operands, markers, render
+colors, theme, seat-binding contexts, and a body's look lanes, gait drivers,
+poses, effectors and scale. What the cut adds is the second implementation: the
+presentation manifest's rows crossing as observations filtered per recipient, and
+a view that answers from them instead of from the delivered document. Public rows
 share one region, restricted rows get one region per recipient in use, and an
 audience is re-evaluated when a row it reads moves or a slot's seat changes.
 `ValidateBindings` walks for `IDocumentStateValue`, and `BindableScalar` and
@@ -426,8 +488,15 @@ state, applied only as admitted changes through validation and authority,
 retained by stable row and entity identity, refusing removed or retyped state
 and conflicting live edits; rollback reverses the admitted delta with the same
 checks and never installs the old definition wholesale. A pair carrying
-machines qualifies by boot-anchored reproduction; addon guest state, applied
-screen operations, live coupled links, and rewind history stay live features.
+machines qualifies through checkpoints: they preserve named handheld machine
+cores, held input, pacing, instance generations, and each binding's on-change
+memo, and restore only against the same firmware, cartridge, and core format
+identity ([the server README](../../src/Puck.World.Server/README.md#hosted-release-records)).
+Pumped addon guest state, applied screen operations, live coupled machine links,
+and enabled machine rewind history refuse capture by name, so a world
+exercising one cannot pass qualification yet. Release pairs own
+deciding, state by state, whether each gains capture or stays excluded by that
+refusal.
 
 **Check:** A-to-B deployment, play under B, B-to-A rollback, and continuation
 under A preserve inventory, identity, population, clocks, random state,
@@ -481,7 +550,7 @@ carries the commands and results against the candidate.
 | Step | Packages, in parallel | Why here |
 |---|---|---|
 | 1 — today | The product tree; the ledger; the view's mechanism defects and conformance law | Neither of the first two reads `Puck.State`. The root must exist before anything is named relative to it, and the ledger before cartridges leave the engine tree. The two projection defects are `Puck.World.Schema` alone, and the law they are written with is what every later cut is measured by. |
-| 2 | One validated load; the container; the view's static sections | Validating once and the container are independent of the arena; a disclosed static section is one compose and hydrate arm each and parallelizable. |
+| 2 | One validated load; the container; the view's static sections; the derivation keys for shader packages, pipeline caches and kernel sets | Validating once and the container are independent of the arena; a disclosed static section is one compose and hydrate arm each and parallelizable; the derivation-key slices share the verb's machinery and touch no simulation state, and a new chunk's version slice lands with the chunk. |
 | 3 | Simulation chunks; target registers and the authoring envelope | Content-keyed caches first; the widest slice of the boot profile. The two by-design members need a decision before state crosses, because both change what a client submits or recomputes. |
 | 4 | Everything else in the compiled world; release pairs; bound state as observations | `RULE` needs the rebuilt vocabulary's ordinal operands; a qualified pair needs a packaged product; the observation channel needs the rebuilt substrate's delivery seam. |
 | 5 | The primary client onto the view | Last of the view's cuts: until the four above are settled it would either darken presentation or keep a raw-document escape hatch, which is what it exists to remove. |

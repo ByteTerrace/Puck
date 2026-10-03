@@ -27,3 +27,4 @@ SMELL002 | Puck.CommentSmell | Error | CommentSmellAnalyzer, [Documentation not 
 SMELL003 | Puck.CommentSmell | Error | CommentSmellAnalyzer, [Documentation not provided]
 SMELL004 | Puck.CommentSmell | Error | CommentSmellAnalyzer, [Documentation not provided]
 ENV001 | Puck.Environment | Error | EnvironmentReadAnalyzer, [Documentation not provided]
+GPU001 | Puck.Testing | Error | GpuTraitAnalyzer, [Documentation not provided]

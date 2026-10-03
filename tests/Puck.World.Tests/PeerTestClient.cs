@@ -2,6 +2,7 @@ using System.Net;
 using Puck.Networking.Peers;
 using Puck.Testing;
 using Puck.World.Server;
+using Xunit;
 
 namespace Puck.World.Tests;
 
@@ -13,6 +14,21 @@ internal sealed class PeerTestClient : IDisposable {
     /// <see cref="QuicPeerTransport.DefaultHandshakeTimeout"/>; a genuine hang still ends at the test's own
     /// cancellation.</summary>
     public static readonly TimeSpan TransportHandshakeTimeout = TimeSpan.FromMinutes(minutes: 5);
+
+    /// <summary>Skips the calling law on a host whose QUIC transport is unavailable (<see cref="QuicPeerTransport.IsSupported"/>:
+    /// msquic with TLS 1.3 and a dual-mode socket stack), where a world's peer door cannot listen at all.</summary>
+    public static void SkipWithoutQuic() {
+        if (!QuicPeerTransport.IsSupported) {
+            Assert.Skip(reason: "the peer door needs QUIC (msquic with TLS 1.3 and dual-mode sockets) on this host.");
+        }
+    }
+    /// <summary>Starts <paramref name="host"/> listening on a loopback port the system picks, or skips the calling law
+    /// where QUIC is unavailable (<see cref="SkipWithoutQuic"/>).</summary>
+    /// <param name="host">The unstarted peer door.</param>
+    public static void StartOrSkip(WorldPeerHost host) {
+        SkipWithoutQuic();
+        host.Start(listen: "127.0.0.1:0");
+    }
 
     // The client peer's own deadlines (its dial's HandshakeTimeout, a refusal's drain, a link's SendTimeout) run on a
     // clock no law advances, so a loaded machine that slows the host's side of the handshake never expires one: the
