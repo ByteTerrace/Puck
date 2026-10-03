@@ -53,7 +53,11 @@ over its ceiling. A ceiling is
 re-recorded only in the change that explains why the count moved, so a cost
 increase is always a stated decision; wall-clock and GPU timing never set or
 move one. The floor device is where a missed budget first shows, so its counts
-bound the programme's rendering cost before any timing is taken.
+bound the programme's rendering cost before any timing is taken. The programme
+tests on more than one GPU, so the ledger holds one record per device for the
+counts whose magnitudes follow the device, beside the deterministic counts and
+required zeros every device shares, and a device with no record fails by name
+rather than going unjudged.
 
 **Attachment ownership belongs to the pipeline plan.** A backend executes a
 plan it does not own. Outputs are versioned, each version has one writer, and

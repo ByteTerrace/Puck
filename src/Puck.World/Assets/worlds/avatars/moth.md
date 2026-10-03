@@ -37,7 +37,9 @@ The Pipeline is on the left and the native SDF creation is on the right. The
 Pipeline pane is the `graph "moth-pipeline"` row inside `views`, and the
 `pipeline` layout's left slot shows it with `instance: "moth-pipeline"`; the
 root render graph places it over the SDF world. Both read the `three-quarter`
-camera. `pipeline.status` reports the compile and watch state;
+camera. The Pipeline authors its geometry in world units, with +Y up and -Z
+forward, and marches the paired camera's world-space ray directly.
+`pipeline.status` reports the compile and watch state;
 `pipeline.reload moth-pipeline` recompiles the Pipeline when needed. Inspection layouts
 switch immediately so a close-up does not render overlapping camera transitions.
 
@@ -68,8 +70,9 @@ descend. Return to the comparison with `view.override layout pipeline`.
 The `moth` creation's `document.shapes`, `palette`, `drivers`, `frames` and
 `volumes` are the authoring surface. Shape positions and pivots use a common
 rest frame: +Y up, +Z forward, with the sole near Y=0 and the hood crown near
-Y=2.06. Most Pipeline dimensions are halved; the head also follows the Pipeline's
-smaller, seated head transform. Parent names carry animation deltas, so child
+Y=2.06. The native rest frame and the Pipeline's world frame use the same units;
+the Pipeline faces -Z. The head follows the Pipeline's smaller, seated head
+transform. Parent names carry animation deltas, so child
 positions are authored in the common frame rather than relative to a parent.
 
 For a small live change:

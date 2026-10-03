@@ -5863,11 +5863,11 @@ counted rows recorded in the same change.
      `tests/Puck.Counters` (a `puck.counters.ceilings.v1` document with its
      generated schema), exiting 1
      and naming the kind, pass and node over its ceiling; `puck counters --record`
-     rewrites it. Deterministic kinds are judged on any device; a
-     per-backend-deterministic kind is judged only on the device identity the file
-     was recorded on, the RTX 2060, and reported as not judged elsewhere, except
-     a required zero of a kernel kind (`requiredZero`), which is judged on every
-     device.
+     records into it. Deterministic kinds and the required zeros of kernel kinds
+     (`requiredZero`) are shared by every device; every other
+     per-backend-deterministic kind is judged against the record of the device
+     the run is on, one record per device, and a device with no record fails by
+     name.
    - Touches: `src/Puck.Abstractions/Gpu/Counters` (`GpuWork`),
      `SdfWorldPackage` (the counter resource and members), the pass kernels under
      `Sdf/passes`, `SdfWorldPassRecorder`, `SdfWorldTables.Upload.cs`,

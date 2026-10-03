@@ -26,8 +26,11 @@ same change. The user's current instruction outranks it.
   counters workload and docs citations, serially. `--record` requires `--gpu`
   and refreshes canary coverage only after every qualification step passes.
   Without a GPU grant, omit `--gpu` and list those GPU additions as owed.
-  Admission uses host load's defaults before heavy steps; `gate.log` and
-  `gate.steps` retain output and the flushed step timeline.
+  The affected map selects committed baseline checks from their owning projects
+  and declared data inputs. Each runs after the repository checks and before GPU
+  steps; `affected --run` leaves them to the gate. Admission uses host load's
+  defaults before heavy steps; `gate.log` and `gate.steps` retain output and the
+  flushed step timeline.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
   or changed law, with `--fix <commit>` or with `--file-list` for an
   uncommitted fix, instead of the manual withholding below: it withholds the
@@ -36,8 +39,7 @@ same change. The user's current instruction outranks it.
   selected test is skipped or the two legs ran different tests.
 
 Run covered steps by hand only where a brief rules a verb out, for example a
-machine that must not build the solution. Complete checks the gate omits:
-`puck baselines <artifact> --check` for affected committed baselines, explicit
+machine that must not build the solution. Complete checks the gate omits: explicit
 `puck docs links <document>...` for changed documents outside its default set,
 and `puck docs citations` when required below, under the GPU rules.
 
@@ -206,7 +208,10 @@ World run with effective `host.presentation: none` uses no GPU; the
 `puck-world` skill owns the presentation modes and deployment overrides.
 
 - A GPU runs one GPU leg at a time. Legs compete for the device, the ports and
-  the frame budget, and a contended leg times out.
+  the frame budget, and a contended leg times out. One `puck canary` run (or
+  `puck affected --gpu`, `puck gate --gpu`) is one GPU leg: it schedules its
+  own canary legs side by side up to its `--gpu-jobs` bound, so nothing else
+  GPU-bound runs beside it.
 - While another GPU leg runs, run test suites with
   `--filter-not-trait Category=Gpu` and list the skipped `Gpu` classes as
   owed. Every class that opens a hardware GPU device carries
@@ -229,16 +234,14 @@ World run with effective `host.presentation: none` uses no GPU; the
   the change means to move pixels or simulation state, and otherwise once at
   the lane's end. The `rendering` skill owns which canaries a render change
   owes.
-- Treat `puck counters --check` on a non-recording device as partial ledger
-  evidence under the
-  [rules](../../../docs/reference/cli.md#puck-counterswork-counter-collector).
-  On every device it judges `deterministic` ceilings and the required zeros of
-  kernel kinds (`requiredZero`: march steps, texels written, sky evaluations).
-  It skips `per-backend-deterministic` magnitudes and device-following zeros
-  (the SDF `upload` and `bricks` passes), and its note says how many counts
-  were not judged and how many required zeros still were. Require each
-  backend's recorded device identity to match before claiming the whole ledger
-  was judged; use the recording device (the floor GPU) for a re-record.
+- `puck counters --check` judges every count on a device the ledger holds a
+  record for, and fails on any other device with `no ceilings recorded for
+  <device>` ([rules](../../../docs/reference/cli.md#counted-cost-ceilings)).
+  That failure is owed work, not a flake: record the device
+  (`puck counters --record`, once per ledger under a GPU grant) in the change
+  that adds it. A change that moves per-backend counts re-records every device
+  the ledger holds, each on its own machine; a record never touches another
+  device's record. `--report <file>` judges a saved report with no GPU.
 
 ### GPU process checks and script runs
 

@@ -742,6 +742,11 @@ base, so passing both is refused.
   no project owns, such as a test data directory under `tests/`, chooses the
   projects whose sources name that directory, spelled by its first two
   segments such as `tests/Puck.World.Verdicts` or `worlds/parlor`.
+- **Baselines** follow the same reached projects: a baseline is chosen when its
+  owning test project is reached, or a changed or deleted path matches the
+  repository-relative data globs declared beside its artifact. The plan lists
+  them in ordinal name order; `puck gate` runs their checks. A docs-only change
+  selects none.
 - **The catalog**: a change to a shipped world under
   `src/Puck.World/Assets/worlds`, a World pipeline source, the compile verb, or
   a project the composer, the SDF baker, the shader packager or the texture
@@ -763,9 +768,40 @@ base, so passing both is refused.
   adjacencies or post-process packages need the host's resolvers still reaches
   them.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
+- A changed `.puck` or `.world.json` under `src/Puck.World/Assets/worlds`
+  chooses no canary when the document named by its stem compiles to the same
+  value at the base and in the working tree. Both sides use the world's document
+  reader, with the base's shipped assets extracted from git. Object member order
+  and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
+  array order and every member's value do. A JSON-to-source replacement judges
+  both paths. The owner's suites, catalog check and changed test blocks still
+  run, and neither path is listed as `unmapped` or unplaced `deleted`.
+  Libraries and compositions keep ordinary selection, as do missing documents
+  and failed compilations: none establishes that the compiled value is unchanged.
+- A C# edit whose syntax is equivalent after stripping trivia chooses no suite,
+  canary, catalog or baseline. Roslyn parses the base text from git and the
+  working text with the same options, without a base build. Comments, XML
+  documentation, whitespace and regions do not count; other directive tokens
+  must match. Files with conditional directives are not judged because the
+  comparison does not infer project preprocessor symbols. Added or deleted
+  files and parse errors keep ordinary selection.
+- A canary manifest edit confined to root `title` and `binding` chooses only
+  that canary's strict load/list check. Every other JSON field remains in the
+  comparison, including nested assertion names and text. The plan prints
+  `canary-check <id>` and the shared `puck canary --list <id...>` command;
+  `--run` executes it without building or booting a World. Invalid prose still
+  fails strict loading. An execution or verdict field change chooses the run.
+  These rules leave the gate's repository checks intact: lengths,
+  comment-smells and docs links, format for changed C# sources, and docs
+  citations in the GPU gate. JSON manifests are not formatter inputs.
 - A file no canary can execute is placed through the indexed C# sources it
-  stands for. A project file, restore lock or `NativeMethods.txt` stands for
-  its project's sources. A shader source or include stands for the C# that
+  stands for. A project file or `NativeMethods.txt` stands for its project's
+  sources. A restore lock (`packages.lock.json`) reaches its own project's
+  suite alone, never the projects that reference it, and every canary only when
+  its project is one the World is built from. Build infrastructure reaches every
+  suite, and every canary only when the file is an input of the World build: one
+  of the paths the World build key hashes (`WorldArtifactClosure`), which
+  include every file at the repository root. A shader source or include stands for the C# that
   names, by its file name, each kernel whose include closure reaches it: the
   kernels are the stage sources the projects' shader items declare, the
   Direct3D 11 kernels (`Direct3D11KernelSource`) among them, and the naming C#
@@ -819,13 +855,25 @@ holds no test worlds. The following two lines are the exact commands `--run`
 uses to build that catalog and check it, in that order. Each runs from the
 repository root; the compile selects the tree's sources itself.
 
-`--run` builds and runs the chosen suites, then `puck test` on the chosen
-worlds, then the catalog check, and exits 1 when any of them fails. A suite
-prints one verdict line; a failed one follows it with its whole report, each
-failed test with its message and stack or the build errors that stopped it, so
-the log `puck gate` keeps names every failure. `--gpu`,
-which needs `--run`, then runs the chosen canaries and then parity, one after
-the other: they boot real Worlds and hold both GPU backends, so they run only
+Each `baseline <artifact>` line is followed by its exact
+`puck baselines <artifact> --check` command. The gate owns these checks;
+`affected --run` does not run them a second time.
+
+`--run` first strictly loads and lists the prose-edited manifests, then builds
+the chosen suites once, in one build over a solution filter of exactly those
+projects, then runs their CPU tests (`--filter-not-trait Category=Gpu`) side by
+side on that build, then `puck test` on the chosen worlds, then the catalog
+check, and exits 1 when any of them fails. At most `--suite-jobs` suites run at
+once (default: a quarter of the logical processors). A heavy suite
+(`Puck.World.Tests`) starts first and, before its run, waits on the one
+machine-wide heavy-suite admission the gate uses (see
+[`puck gate`](#puck-gatethe-change-scoped-gate)): no other process running a
+heavy suite, and memory and disk headroom. Each suite prints one verdict line with its wall time
+as it ends; a failed one follows it with its whole report, each failed test
+with its message and stack, and a failed build prints its errors and runs no
+suite, so the log `puck gate` keeps names every failure. `--gpu`, which needs
+`--run`, then runs the chosen canaries, up to `--gpu-jobs` legs on the GPU at
+once, and then parity: they boot real Worlds and hold both GPU backends, so they run only
 when asked for, on a machine with no competing build or GPU work.
 [`puck gate`](#puck-gatethe-change-scoped-gate) runs this step on the
 candidate's own CLI.
@@ -859,8 +907,9 @@ against the merge base of `HEAD` and `--merge-base` (default
    A failed build stops the gate before it can use stale binaries.
 2. `copy CLI`: copy the freshly built CLI into the run's own directory.
    Subsequent puck steps use this candidate copy.
-3. `affected`: `puck affected --merge-base <merge base> --run`, adding `--gpu`
-   when selected, for the chosen canaries followed by parity.
+3. `affected`: `puck affected --merge-base <merge base> --run --suite-jobs <n>`
+   for the selected suites, side by side, worlds and catalog check. The gate's
+   `--suite-jobs` sets the bound.
 4. `format`: `puck format --check --file-list <file list>` over changed C# and
    `.puck` sources; skipped when no such source changed.
 5. `lengths`: `puck lengths --check`.
@@ -875,17 +924,23 @@ against the merge base of `HEAD` and `--merge-base` (default
 14. `formats`: `puck formats --check`.
 15. `canary-ceilings`: `puck canary-ceilings --check`.
 16. `derivations`: `puck derivations --check`.
-17. `Puck.World.Tests`: device suite, only with `--gpu`.
-18. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
-19. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
-20. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-21. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.world.json`
+17. `baselines browser-parity`: `puck baselines browser-parity --check` when reached.
+18. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
+19. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
+20. `baselines state`: `puck baselines state --check` when reached.
+21. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
+22. `parity`: `puck parity` when selected, only with `--gpu`.
+23. `Puck.World.Tests`: device suite, only with `--gpu`.
+24. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+25. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+26. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+27. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.world.json`
     with matching `<name>.ceilings.json`, in ordinal order. Each runs
     `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
     `<name>.script.txt` supplies `--script` when present; otherwise the script
     recorded in the ceilings supplies it, or the verb's default when absent.
-22. `docs citations`: `puck docs citations`, only with `--gpu`.
-23. `affected record`: `puck affected --record`, only with `--gpu --record`
+28. `docs citations`: `puck docs citations`, only with `--gpu`.
+29. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
 
 The device suites run `dotnet test --project <suite> -c Release --no-build` over the
@@ -898,13 +953,36 @@ root command tree: every `--check` command has a step or an explicit reasoned
 exclusion beside the plan. Another law holds this ordered list and help to that
 plan.
 
-Before the solution build, affected run, each device suite, each counters
+Each baseline declares its owning test project and the data globs its tests read
+outside that project's reach. The affected map selects the checks against the
+same merge base as the suites. The gate runs each reached baseline once, after
+the repository checks and before the selected GPU commands. The completeness
+law requires every baseline check to have a baseline step and non-empty inputs.
+
+Before the solution build, affected run, each baseline check, selected canaries
+and parity, each device suite, each counters
 workload, citations and recording, admission uses
 [`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s default
-classification in-process. Capacity with an idle GPU admits immediately.
-Otherwise the gate reports waiting on stderr, samples every ten seconds for
-at most thirty minutes, and reports when capacity returns. Expiry refuses the
-remaining run. Completed child processes do not hold admission; builds and
+thresholds in-process. Memory and disk decide: every heavy step waits for free
+memory over the capacity threshold (5 GB) and free disk over the pressure
+threshold (10 GB), since running out of either is what fails a build or a heavy
+suite. CPU load only slows a step, so it is advisory: a step admitted while the
+CPU is over the capacity threshold (50%) runs, and the gate prints the load it
+ran under; the gate never waits or refuses for CPU alone. A step that opens a
+device (the canaries, parity, each device suite, counters, citations and
+recording, the steps that run only with `--gpu`) also waits for an idle GPU; the
+build, affected run and baseline checks run no `Gpu`-trait test and never wait
+on a GPU holder. A heavy suite (`Puck.World.Tests`, whatever its filter) also
+waits while another process on the machine runs one, since two at once exhaust
+its memory: the gate's `Puck.World.Tests` device suite waits before it starts,
+and `affected --run` waits before each heavy suite's run, so a CPU run inside one
+gate and another gate's run never overlap. The waiting process's own descendants
+never hold it back. A step with what it needs admits immediately. Otherwise the
+gate reports waiting on stderr, naming the holder again when it changes, samples
+every ten seconds, prints a still-waiting line after ten silent minutes, and
+reports when capacity returns. A step waits at most thirty minutes and a heavy
+suite at most two hours, since a full `Puck.World.Tests` under load takes up to
+half an hour and a gate can queue behind two; expiry refuses the remaining run. Completed child processes do not hold admission; builds and
 reusable MSBuild nodes are not GPU holders.
 
 A failed build or CLI copy stops the gate. Other failed steps allow later checks
@@ -913,7 +991,11 @@ to run, but prevent recording. Checks leave their ledgers untouched;
 `gate.log` keeps every step's full output. Beside it, `gate.steps` flushes a line
 at each start and exit, naming the step, its exit code (`-` until it exits),
 elapsed whole seconds and an ISO-8601 UTC time from the CLI host's clock. The
-console summary names both files. The CLI copy and format list are removed.
+console summary names both files. The CLI copy and format list are removed. Each
+step's console verdict carries its wall time (`gate: lengths passed (3s)`), the
+canary step echoes each canary's `PASS`/`FAIL` verdict as it lands, and a wait for
+host capacity names what holds it back: the process holding the GPU, named again
+when it changes, or the CPU and memory reading.
 
 Run from a CLI copy outside the checkout, because the build rewrites
 `src/Puck.Cli/bin/Release/net10.0`. GPU work runs serially on a machine with no
@@ -940,7 +1022,11 @@ CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
   `canary`, `parity` or `counters` verb, or a test host for
   `Puck.DirectX.Tests`, `Puck.Vulkan.Tests`, `Puck.World.Tests` or
   `Puck.Platform.Windows.Tests`, whose
-  device laws open the GPU. Builds, restores, MSBuild nodes, compilers and
+  device laws open the GPU, when its arguments can select a `Gpu`-trait test.
+  A run carrying affected's CPU selection, `--filter-not-trait Category=Gpu`,
+  opens no device whatever else it filters, so it counts no GPU work; a run
+  with no such exclusion, or one reading a response file (`@file`), counts.
+  Builds, restores, MSBuild nodes, compilers and
   shells never count, whatever project they name, and the verb never counts
   itself. The classifier uses the running executable or managed entry assembly;
   a `dotnet run` wrapper does not count; its World child counts once it starts.
@@ -1125,20 +1211,29 @@ started, starts no further leg, and exits with code 2. A leg that fails with
 an exception stops the run the same way. The runner waits for the other legs'
 processes to die before it reports the failure.
 
-Legs run concurrently, up to `--jobs` World processes at once. The default is
-half the processor count, at most eight and at least one. A leg holds one slot
-for each process it runs: two for a companion-authority leg, one for each
-listener in an `authorities` leg. A windowed or offscreen leg, and a leg whose
-manifest declares any requirement (`gpu`, `audio-output`, or input hardware),
-holds every slot, so its GPU, window, or device never shares the machine with
-another leg. Legs start in authored
-order, and each proof's report prints whole and in authored order.
-`--jobs 1` runs the legs one at a time.
+Legs run concurrently under two bounds. `--jobs` bounds the World processes
+running at once; the default is the logical processor count. A leg holds one
+of them for each process it runs: two for a companion-authority leg, one for
+each listener in an `authorities` leg. `--gpu-jobs` bounds the legs on the GPU
+at once, a windowed or offscreen leg or one that requires `gpu`; the default
+is 4. Every leg runs in its own run directory, state directory and loopback
+endpoints, so legs side by side share nothing they write. A manifest that
+declares `"exclusive": true` runs each of its legs alone, before every other
+leg; a proof says so when what it observes depends on how busy the machine
+is, as `four-corners-sharded` does, whose five processes keep independent
+wall clocks that its crossing must line up. Otherwise legs start in authored
+order as their bounds allow, a leg that does not fit yet never holding back a
+smaller one behind it. Each leg prints one line with its wall time as it ends
+(`canary: [12/332] pipeline-ink on vulkan positive held in 9.4s`), each
+proof's report prints whole and in authored order, and the closing `FAIL` line
+names the failed proofs in authored order. `--jobs 1 --gpu-jobs 1` runs the
+legs one at a time.
 
 After the last proof the runner prints what the run started and how its legs
 ended: the World boots, the processes it started for legs (World, stub
-launcher, and `shaders package`), whether it built `Puck.World`, and how many
-legs ended at their script's `quit`, at their timeout, or otherwise.
+launcher, and `shaders package`), whether it built `Puck.World`, how many
+legs ended at their script's `quit`, at their timeout, or otherwise, and the
+legs' summed time against the run's wall time.
 
 A `bootShape: "stub"` manifest runs its leg through `Puck.Launcher.Stub` from a
 leg-private, disposable `<run>/install/` tree, never the shared build path,
@@ -1255,11 +1350,12 @@ manifest's own assertions.
 puck canary                         run the automatic set (headless, no environmental requirements)
 puck canary <id> ...                explicitly run named proofs
 puck canary --all                   explicitly run every proof; does not change automatic eligibility
-puck canary --list                  strictly load and list manifests without building or running
+puck canary --list [id ...]         strictly load and list named manifests, or all when unnamed, without building or running
 puck canary --capability <class>    filter automatic/headless/windowed/offscreen or an environmental requirement
 puck canary --merge                 run the merge gate: the automatic set plus every proof requiring gpu
 puck canary --backend <name> ...    run every backend-declaring proof on vulkan or directx only
 puck canary --jobs <n>              run at most n World processes at once (n ≥ 1)
+puck canary --gpu-jobs <n>          run at most n legs on the GPU at once (n ≥ 1)
 puck canary --plan                  print a selection's counts and ceiling without building or running
 puck canary --keep-transcripts ...  keep every leg's run directory whatever its verdict
 ```
@@ -1280,8 +1376,8 @@ Like the automatic set and `--all`, a merge run fails when a manifest was
 skipped as unreadable.
 
 `--plan` counts a selection from its manifests alone and prints it without
-building or running anything: one line per proof, then the legs (serial and
-parallel), the World boots, the processes the run would start for its legs,
+building or running anything: one line per proof, then the legs (alone, on
+the GPU, and headless), the World boots, the processes the run would start for its legs,
 the builds, and the summed per-leg timeouts. Every value is a count of the
 manifests, so the output is the same on every machine, and a GPU selection can
 be costed on a machine without a GPU. The two gate selections, the automatic
@@ -1314,7 +1410,7 @@ never narrates the engine ready, never lands its capture, or prints no counts
 fails the selection with exit 2, naming its backend, before any leg starts.
 
 The selection forms are mutually exclusive and every execution selection must
-be nonempty. `--jobs` combines with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
+be nonempty. `--jobs` and `--gpu-jobs` combine with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
 command declares `accepted` or intentionally expected `refused`, bound to its
 verb and occurrence; an accepted claim may add `"stream": "stderr"` to expect
 its confirmation there instead of stdout—the shape server narration
@@ -1815,6 +1911,8 @@ run, so a performance change can be judged by counted work rather than by time.
 ```text
 puck counters [--world <file>] [--script <file>] [--output <file>] [--check | --record] [--ceilings <file>]
                                            run the workload on both backends and write the report
+puck counters --report <file> [--check | --record] [--ceilings <file>]
+                                           judge or record a saved report
 puck counters compare <left> <right>       compare two reports
 ```
 
@@ -1837,8 +1935,8 @@ The `sky-still`, `sky-drift`, `sky-twinkle`, and `sky-cycle` worlds under
 and enable cadence. They isolate an unchanging sky, cloud drift, star twinkle,
 and a changing cycle value so their pass counts show which work each change
 requires. The cycle also carries a lighting-only panel, counting its projection
-and analytic reflection work. Each has its own ceilings beside it, recorded on the floor machine
-(`sky-still.ceilings.json` and so on); pass it with `--ceilings`, because the
+and analytic reflection work. Each has its own ceilings beside it, with a record for each device
+that ran it (`sky-still.ceilings.json` and so on); pass it with `--ceilings`, because the
 default ceilings cover only the default workload. A cadence-omitted node has no completed sample
 in the report, so missing rows must not be read as measured zeros.
 
@@ -1896,54 +1994,80 @@ different sources, a note on standard error says so.
 `--check` holds the run's report to the counted-cost ceilings in
 `tests/Puck.Counters/counters.ceilings.json`, a `puck.counters.ceilings.v1`
 document whose schema, `tests/Puck.Counters/puck.counters.ceilings.v1.schema.json`,
-`puck schema` generates. For each backend, recorded on one device at the
-workload's resolution, the file states what every render node's GPU submission
-kinds may read, pass by pass and outside every pass: each deterministic or
-per-backend-deterministic count reads at most its ceiling, and a ceiling of zero
-is a required zero. The SDF view's march steps (`gpu.march.steps`) and texels
-written (`gpu.texels.written`), which its kernels count on the GPU, are among
-them, so a pass that cannot do such work (`sdf.world$cull-args` marches
-nothing) and a pass the floor tier skips (the shadow and ambient passes, and
-the mesh pass of a meshless frame) hold required zeros. Every recorded ceiling must
-have been measured: its count read, of the class it was recorded as, or its pass
-reported and not executed, which reads zero. A per-backend-deterministic count's
-value is judged only on the device the backend's ceilings were recorded on, with
-one exception: a ceiling that carries `requiredZero` is a zero of a kernel kind
-(march steps, texels written, sky evaluations), a magnitude that follows the
-device, that its pass never counts, so zero is a structural contract and is
-judged on every device and backend. On any other device, one line says how many
-per-backend-deterministic counts were not judged and how many required zeros
-were still judged. A zero of a deterministic kind loosened to a device-following
-pass's class (the SDF `upload` and `bricks` passes) is one device's policy, not
-a required zero, and is not judged elsewhere. The run prints one line for
-each count over its ceiling, each required zero broken, each ceiling not measured
-or measured as another class, and each count no ceiling was recorded for, naming
-its backend, class, kind, pass and node, then whether the ceilings hold.
+`puck schema` generates. At the workload's resolution, the file states for each
+backend what every render node's GPU submission kinds may read, pass by pass
+and outside every pass: each deterministic or per-backend-deterministic count
+reads at most its ceiling, and a ceiling of zero is a required zero. The SDF
+view's march steps (`gpu.march.steps`) and texels written
+(`gpu.texels.written`), which its kernels count on the GPU, are among them, so
+a pass that cannot do such work (`sdf.world$cull-args` marches nothing) and a
+pass the floor tier skips (the shadow and ambient passes, and the mesh pass of
+a meshless frame) hold required zeros.
 
-`--record` writes the run's counts as the ceilings instead, each reading its own
-ceiling, and every submission kind of a pass that did not execute as a zero. A
-zero of a per-backend-deterministic kind is written with `requiredZero` set. A
-record is all or nothing: when the backends disagree on a deterministic count or
-a pass state, or the recorded ceilings would fail their own run, the verb writes
-no file, leaves an existing one byte for byte as it was, prints `not written: …`
-and exits 1. The write uses a flushed temporary file and atomic replacement;
-a write failure also leaves the existing ceilings unchanged, prints the reason
-and exits 1. `--output` names a different file from the ceilings when `--check`
-or `--record` is selected; a collision refuses before the workload runs.
-A ceiling is re-recorded only in the change that explains why its count
-moved, never from wall-clock or GPU timing. `--ceilings <file>` names another
-ceilings file for either option.
+Each backend's ceilings are in two parts. Its shared ceilings hold every
+deterministic count and every ceiling carrying `requiredZero`: a zero of a
+kernel kind (march steps, texels written, sky evaluations), a magnitude that
+follows the device, that its pass never counts, so zero is a structural
+contract on every device. Its `devices` hold one record per device, with every
+other per-backend-deterministic ceiling: the kernel kinds' magnitudes, and the
+counts of a pass whose work follows the device (the SDF `upload` and `bricks`
+passes), whose zeros are that device's policy rather than required zeros. A
+record is keyed by the backend, the adapter's PCI vendor and device, and the
+driver implementation (`driver.id`); it carries the whole device identity,
+driver version included, as recorded evidence. A run is held to its backend's
+shared ceilings and its own device's record.
+
+A run on a device with no record fails with one line naming it, `no ceilings
+recorded for <device>; run puck counters --record on it`, and is still held to
+the shared ceilings; no count goes unjudged without a failure. A driver update
+keeps the device's record, because the record's counts come from Puck's own
+recording and from loops the shaders count, which a driver's compiler can move
+only through floating-point results; a count it moves is judged against the
+recorded reading, and a line names the recorded and the running drivers. Every
+recorded ceiling must have been measured: its count read, of the class it was
+recorded as, or its pass reported and not executed, which reads zero. The run
+prints one line for each count over its ceiling, each required zero broken,
+each ceiling not measured or measured as another class, and each count no
+ceiling was recorded for, naming its backend, class, kind, pass and node, then
+whether the ceilings hold. A kind the current device's record lacks fails on
+that device, whichever other devices record it.
+
+`--record` writes the run's counts into the ceilings instead, each reading its
+own ceiling, and every submission kind of a pass that did not execute as a
+zero. A zero of a per-backend-deterministic kind is written with
+`requiredZero` set. It replaces each backend's shared ceilings, the resolution,
+and the record of the device each backend ran on, adds that record after the
+others when the device has none, and leaves every other device's record byte
+for byte as it was. Another device's record then still judges that device, so
+a change that moves its counts is recorded on it too. A record is all or
+nothing: when the backends disagree on a deterministic count or a pass state,
+the existing file holds another workload or script, a ceiling the record would
+share across devices is another device's own reading, or the recorded ceilings
+would fail their own run, the verb writes no file, leaves an existing one byte
+for byte as it was, prints `not written: …` and exits 1. An existing file that
+is not a ceilings document refuses before the workload runs. The write uses a
+flushed temporary file and atomic replacement; a write failure also leaves the
+existing ceilings unchanged, prints the reason and exits 1. `--output` names a
+different file from the ceilings when `--check` or `--record` is selected; a
+collision refuses before the workload runs. A ceiling is re-recorded only in
+the change that explains why its count moved, never from wall-clock or GPU
+timing. `--ceilings <file>` names another ceilings file for either option.
+
+`--report <file>` judges or records a saved `puck.counters.report.v1` report
+instead of running the workload, so it boots nothing and needs no GPU;
+`--world`, `--script` and `--output` select a run and refuse beside it.
 
 ```text
-puck counters --check [--ceilings <file>]   hold the counts to their ceilings
-puck counters --record [--ceilings <file>]  record the counts as the ceilings
+puck counters --check [--ceilings <file>] [--report <file>]   hold the counts to their ceilings
+puck counters --record [--ceilings <file>] [--report <file>]  record the counts into the ceilings
 ```
 
-Exit codes: `puck counters` exits 0 when the backends agree and every judged
-count holds its ceiling, 1 when a deterministic count or pass state differs or a
-ceiling fails, and 2 for a build, leg or reading refusal, including a missing GPU
-device or shader tool, or a ceilings file that is missing or not a ceilings
-document. `counters compare`
+Exit codes: `puck counters` exits 0 when the backends agree and every count
+holds its ceiling, 1 when a deterministic count or pass state differs or a
+ceiling fails, a device with no record included, and 2 for a build, leg or
+reading refusal, including a missing GPU device or shader tool, a ceilings file
+that is missing or not a ceilings document, or a saved report that is not a
+report. `counters compare`
 exits 0 when every comparable count agrees, 1 on a difference, and 2 for a usage
 error or a file that is not a readable report.
 

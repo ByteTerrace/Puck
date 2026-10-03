@@ -50,7 +50,7 @@ cartridge-compatible rendition are distinct products; shaders and meshes do
 not translate to handheld hardware by themselves.
 
 **Districts are modules** imported under an alias and exporting only their
-control rows. `granaries.world.json` moves under the modules rather than
+control rows. `granaries.puck` moves under the modules rather than
 disappearing; the frozen documents, the scenarios, and their canaries retire
 with a ledger naming each successor.
 
