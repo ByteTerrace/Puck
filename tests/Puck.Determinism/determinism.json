@@ -50,7 +50,7 @@
         },
         {
             "name": "flow-conservation",
-            "world": "../Puck.World.Canaries/flow-conservation-live/fixture.world.json",
+            "world": "../Puck.World.Canaries/flow-conservation-live/fixture.puck",
             "ticks": 240,
             "seats": [],
             "intents": [],
