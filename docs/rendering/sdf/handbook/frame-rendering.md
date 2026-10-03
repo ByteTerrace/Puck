@@ -114,7 +114,11 @@ resource tracker. A disabled optional pass reads `skipped` instead.
 Cloud drift, twinkle, gradient colour and moving bounded media change only
 `sky` and `composite`. Fog density and light colour also change `views` and
 `resolve` when present. A selected shadow direction adds `shadow`; geometry
-or camera changes render every active pass. The shared environment map keeps
+or camera changes render every active pass. Any edit to the sky's layer table,
+its quality tier included, changes only `sky` and `composite`. A sky layer that
+samples a screen (a panorama, a textured disc) runs `sky` and `composite` every
+frame, since the screen's image changes in place where no signature sees it;
+the march passes still stand. The shared environment map keeps
 its own layer refresh, so a gradient change with enabled fog also refreshes
 that map. `world.lighting` reports each keyed value's change class, including
 fields keyed through a section.

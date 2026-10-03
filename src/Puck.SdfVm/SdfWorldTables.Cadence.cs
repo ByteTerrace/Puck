@@ -33,6 +33,8 @@ namespace Puck.SdfVm;
 //   - m_screenLightScratch : the per-screen glow colors.
 //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
 // Not covered by any packed span — handled conservatively by forcing a render:
+//   - a sky layer sampling a screen (a panorama, a textured disc): the screen's image updates in place like a slab's, so
+//                          the sky and the composite run every frame (ForcesPass) and the whole view never stands.
 //   - m_programDeclaresScreenSlab : a bound screen's image content updates in place each frame with the same view handle,
 //                          unseen by any packed span, so any declared ScreenSlab force-renders.
 //   - AnyBrickBaking()  : an in-progress carve bake writing brick voxels each upload.
@@ -127,18 +129,50 @@ public sealed partial class SdfWorldTables {
     }
 
     /// <summary>Returns whether the frame the tables hold forces every view to render whatever its signature: a
-    /// declared screen slab, whose bound image changes in place, or a carve bake in progress.</summary>
+    /// declared screen slab, whose bound image changes in place, a carve bake in progress, or a sky layer sampling a
+    /// screen (<see cref="ForcesPass"/>).</summary>
     /// <param name="frame">The frame the tables packed.</param>
     /// <returns><see langword="true"/> when no view's latest render may stand for the frame.</returns>
     public bool ForcesRender(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
+        return (ForcesEveryPass(frame: frame) || SkySamplesScreen(sky: frame.Sky));
+    }
+    /// <summary>Returns whether the frame the tables hold forces one pass group to run whatever its signature: every
+    /// group under <see cref="ForcesRender"/>'s whole-view causes, and the sky and the composite while a sky layer (a
+    /// panorama, a textured disc) samples a screen, whose bound image changes in place unseen by any packed span.</summary>
+    /// <param name="frame">The frame the tables packed.</param>
+    /// <param name="part">The fragment pass name.</param>
+    /// <returns><see langword="true"/> when the pass's latest output may not stand for the frame.</returns>
+    public bool ForcesPass(SdfFrame frame, string part) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+
         return (
-            !frame.EnableCadenceGate ||
-            m_programDeclaresScreenSlab ||
-            AnyBrickBaking()
+            ForcesEveryPass(frame: frame) ||
+            ((part is SdfWorldPackage.Parts.Sky or SdfWorldPackage.Parts.Composite) && SkySamplesScreen(sky: frame.Sky))
         );
     }
+
+    private bool ForcesEveryPass(SdfFrame frame) => (
+        !frame.EnableCadenceGate ||
+        m_programDeclaresScreenSlab ||
+        AnyBrickBaking()
+    );
+    // Whether any layer of the sky names a screen to sample: a panorama, or a disc with a texture.
+    private static bool SkySamplesScreen(SdfSky sky) {
+        for (var layer = 0; (layer < sky.LayerCount); layer++) {
+            var screen = sky.LayerAt(index: layer).Kind switch {
+                SdfSkyLayerKind.Panorama => sky.Parameters<SdfSkyPanorama>(index: layer).Screen,
+                SdfSkyLayerKind.Disc => sky.Parameters<SdfSkyDisc>(index: layer).Screen,
+                _ => -1,
+            };
+
+            if (screen >= 0) { return true; }
+        }
+
+        return false;
+    }
+
     /// <summary>Returns the 64-bit FNV-1a signature of what one view renders from in the frame the tables hold: the
     /// tables' signature (<see cref="UpdateTablesSignature"/>) folded with the view's pass block
     /// (<see cref="SdfFrameBlock"/>), written with no render extent. A collision would need a

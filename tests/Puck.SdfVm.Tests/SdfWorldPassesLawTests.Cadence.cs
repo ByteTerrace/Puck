@@ -131,6 +131,16 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: 10, actual: Executed(work: CadenceWork(rig: rig)).Length);
     }
     [Fact]
+    public void CadenceRunsTheSkyEveryFrameWhileALayerSamplesAScreen() {
+        using var rig = new TemporalRig(sky: static sky => { _ = sky.Add(label: "panorama", parameters: new SdfSkyPanorama { Intensity = 1f, Screen = 0 }); }, views: 1, cadence: true);
+
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Produce();
+            Assert.False(condition: rig.Stood(), userMessage: $"frame {frame}");
+            Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
+        }
+    }
+    [Fact]
     public void CadenceAtTheFloorLeavesMarchAndShadowStandingOnDrift() {
         using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, renderScale: 0.25f);
 
