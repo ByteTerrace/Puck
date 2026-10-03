@@ -1824,6 +1824,15 @@ A refusal about an imported or basis document names it by file name (`WorldDocum
 and a storage failure by its kind, never by the host's directory or an exception message
 that quotes one; `TryLoadFileForAdmission` takes a `displayName` for a host (the owned-world
 catalog) that must call the root document by something other than its path.
+
+A document path names a document, not a file format: a `<name>.world.json` path whose
+`<name>.puck` source stands beside it reads as the document that source lowers to
+through the local document source (`WorldDefinitionFileSource.TryReadDocumentFile`, the
+source winning over a document file beside it as it does for every name). Every door
+that takes a document by name or path (a neighbour, a crossing's or a session screen's
+destination, `WorldFileNeighbourResolver`) reads through it, so a world authored as a
+source resolves exactly as the document it compiles to, and keeps the `.world.json`
+name as its identity.
 A release publishes a definition undrawn, since draws are instance state:
 `WorldDefinitionLoader.TryReadPublishable` returns the parsed, undrawn document once a copy
 drawn for the boot instance admits, and `puck world prepare`, `puck world release`, the
