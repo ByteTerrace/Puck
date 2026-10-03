@@ -7232,9 +7232,11 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      counts 2 dispatches, 2 pipeline binds, 4 descriptor-set binds, 8 buffer
      barriers, the kernel counters' clear and their 96-byte copy, 4,096 sky
      evaluations and 4,105 texels written, under the residency's
-     `environment` pass; construction adds a frame set, a pass set per ring
-     slot (13 descriptor writes), two blocks (128 host-visible bytes), and a
-     counter and a readback buffer of 96 bytes per ring slot. The device law,
+     `environment` pass, whose first refresh also writes its frame set and a
+     pass set per ring slot (13 descriptor writes) and its two blocks (128
+     host-visible bytes), so nothing lands outside every pass; construction
+     creates them and a counter and a readback buffer of 96 bytes per ring
+     slot. The device law,
      the `sky-environment` canary, parity's re-record and the counters
      ceilings await a GPU run.
    - Delivers: `views` shading hits only into `lit`, premultiplied, with

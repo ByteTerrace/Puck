@@ -32,7 +32,7 @@
         },
         {
           "$type": "fog",
-          "density": 0.1
+          "density": 1
         },
         {
           "$type": "sunDisc",
@@ -125,8 +125,8 @@
               "$type": "worldPoint",
               "point": [
                 0,
-                22.35,
-                -44.7
+                2.235,
+                -4.47
               ]
             }
           },
@@ -164,9 +164,9 @@
               0
             ],
             "scale": [
-              10,
-              10,
-              10
+              1,
+              1,
+              1
             ],
             "rotation": [
               0,
@@ -187,8 +187,8 @@
         "yawDegrees": 0,
         "position": [
           0,
-          22.35,
-          -44.7
+          2.235,
+          -4.47
         ],
         "prototypeId": "body"
       }

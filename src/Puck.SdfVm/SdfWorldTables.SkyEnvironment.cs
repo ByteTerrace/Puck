@@ -73,14 +73,22 @@ public sealed partial class SdfWorldTables {
 
         private readonly SdfSkyStop[] m_renderedStops = new SdfSkyStop[SdfSky.MaxStops];
 
+        private readonly SdfWorldTables m_tables;
+        private readonly IGpuBindings m_bindings;
+
         private SdfSkyBlock m_renderedBlock;
         private bool m_holdsSky;
+        private bool m_written;
 
-        // Creates the map, the coefficients, the blocks and the sets, each owned by the tables' construction scope.
+        // Creates the map, the coefficients, the blocks and the sets, each owned by the tables' construction scope. Nothing is
+        // written into them until the first refresh (WriteOnce), so the writes count under the environment pass that
+        // needs them, never outside every pass of the tables' first submission.
         public SkyEnvironmentPass(SdfWorldTables tables, GpuDeviceServices gpu, GpuCreationScope scope) {
             var layout = SdfWorldInterfaces.EnvironmentParameters;
             var groups = tables.m_pipelines.Pipeline(kernel: SdfKernel.SkyEnvironment).GroupLayoutHandles;
 
+            m_tables = tables;
+            m_bindings = gpu.Bindings;
             m_map = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
                 name: NameOf(part: "sky-environment", detail: "map"),
                 sizeBytes: SdfSkyEnvironment.MapBytes,
@@ -103,45 +111,22 @@ public sealed partial class SdfWorldTables {
                 sizeBytes: ((ulong)UniformBytes(blockBytes: layout.FrameBlockSizeBytes)),
                 usage: GpuBufferUsage.Uniform
             ));
-
-            var frameBlockBytes = new byte[layout.FrameBlockSizeBytes];
-
-            layout.WriteFrame(block: frameBlockBytes, extent: default, frame: 0UL, values: default);
-            m_frameBlock.Write<byte>(data: frameBlockBytes);
             m_block = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
                 name: NameOf(part: "sky-environment", detail: "block"),
                 sizeBytes: ((ulong)UniformBytes(blockBytes: layout.SizeBytes)),
                 usage: GpuBufferUsage.Uniform
             ));
-
-            // The block's extent is the map's, and its row the environment pass's in the counters.
-            var blockBytes = new byte[layout.SizeBytes];
-
-            layout.WriteExtent(block: blockBytes, height: SdfSkyEnvironment.Size, width: SdfSkyEnvironment.Size);
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)layout.BlockOffsetOf(member: ShaderWorkCounters.Row))), value: EnvironmentPass);
-            m_block.Write<byte>(data: blockBytes);
             m_frameSet = gpu.Bindings.AllocateSet(
                 name: NameOf(part: "sky-environment", detail: "frame group"),
                 descriptorSetLayoutHandle: groups[((int)FrameGroup)],
                 poolHandle: tables.m_pool
             );
-            gpu.Bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: m_frameBlock.BufferHandle, bufferSize: m_frameBlock.SizeBytes, descriptorSetHandle: m_frameSet);
-
-            // A pass set per ring slot: the slot's sky block and stops, which the upload has copied before it renders.
             for (var slot = 0; (slot < FrameRingSize); slot++) {
-                var set = gpu.Bindings.AllocateSet(
+                m_sets[slot] = gpu.Bindings.AllocateSet(
                     name: NameOf(part: "sky-environment", index: slot),
                     descriptorSetLayoutHandle: groups[((int)PassGroup)],
                     poolHandle: tables.m_pool
                 );
-
-                m_sets[slot] = set;
-                gpu.Bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: m_block.BufferHandle, bufferSize: m_block.SizeBytes, descriptorSetHandle: set);
-                tables.WriteInterfaceBuffer(buffer: tables.m_skyRegion.Buffer(slot: slot), layout: layout.Layout, member: SdfKernelInterfaces.Sky, set: set);
-                tables.WriteInterfaceBuffer(buffer: tables.m_skyStopRegion.Buffer(slot: slot), layout: layout.Layout, member: SdfKernelInterfaces.SkyStops, set: set);
-                tables.WriteInterfaceBuffer(buffer: m_map, layout: layout.Layout, member: SdfKernelInterfaces.SkyEnvironmentWritten, set: set);
-                tables.WriteInterfaceBuffer(buffer: m_coefficients, layout: layout.Layout, member: SdfKernelInterfaces.SkyCoefficientsWritten, set: set);
-                tables.WriteInterfaceBuffer(buffer: m_counters.RowOf(row: EnvironmentPass, slot: slot).Buffer, layout: layout.Layout, member: ShaderWorkCounters.Buffer, set: set);
             }
         }
 
@@ -170,10 +155,11 @@ public sealed partial class SdfWorldTables {
         // Forgets the sky the map holds, so the next upload whose fog reads it renders it: a kernel reload's.
         public void Forget() =>
             m_holdsSky = false;
-        // Records a refresh: the counters' clear, the map's readers before its writes, the map, its writes before the
+        // Records a refresh: on the first, the blocks' and sets' writes (WriteOnce); then the counters' clear, the map's readers before its writes, the map, its writes before the
         // reduction reads it and the coefficients' readers before the reduction writes them, the reduction, both handed to
         // their readers, then the counters' copy.
         public void Record(IGpuRecorder recorder, nint commandBuffer, SdfWorldPipelines pipelines, int slot) {
+            WriteOnce();
             recorder.BeginDebugGroup(commandBufferHandle: commandBuffer, label: "sky-environment");
             m_counters.RecordClear(commandBuffer: commandBuffer, recorder: recorder, slot: slot);
             Transition(access: (GpuAccess.ShaderRead, GpuAccess.ShaderWrite), buffer: m_map, commandBuffer: commandBuffer, recorder: recorder);
@@ -186,6 +172,38 @@ public sealed partial class SdfWorldTables {
             m_counters.RecordCopy(commandBuffer: commandBuffer, recorder: recorder, slot: slot);
             recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
         }
+
+        // Writes the blocks and the sets once, inside the first refresh's pass: the frame block, the block holding the map's
+        // extent and the environment pass's counter row, the frame set, and a pass set per ring slot binding the slot's sky
+        // block and stops, which the upload has copied before it renders, the map, the coefficients and the counters.
+        private void WriteOnce() {
+            if (m_written) {
+                return;
+            }
+
+            var layout = SdfWorldInterfaces.EnvironmentParameters;
+            var frameBlockBytes = new byte[layout.FrameBlockSizeBytes];
+            var blockBytes = new byte[layout.SizeBytes];
+
+            layout.WriteFrame(block: frameBlockBytes, extent: default, frame: 0UL, values: default);
+            m_frameBlock.Write<byte>(data: frameBlockBytes);
+            layout.WriteExtent(block: blockBytes, height: SdfSkyEnvironment.Size, width: SdfSkyEnvironment.Size);
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)layout.BlockOffsetOf(member: ShaderWorkCounters.Row))), value: EnvironmentPass);
+            m_block.Write<byte>(data: blockBytes);
+            m_bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: m_frameBlock.BufferHandle, bufferSize: m_frameBlock.SizeBytes, descriptorSetHandle: m_frameSet);
+            for (var slot = 0; (slot < FrameRingSize); slot++) {
+                var set = m_sets[slot];
+
+                m_bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: m_block.BufferHandle, bufferSize: m_block.SizeBytes, descriptorSetHandle: set);
+                m_tables.WriteInterfaceBuffer(buffer: m_tables.m_skyRegion.Buffer(slot: slot), layout: layout.Layout, member: SdfKernelInterfaces.Sky, set: set);
+                m_tables.WriteInterfaceBuffer(buffer: m_tables.m_skyStopRegion.Buffer(slot: slot), layout: layout.Layout, member: SdfKernelInterfaces.SkyStops, set: set);
+                m_tables.WriteInterfaceBuffer(buffer: m_map, layout: layout.Layout, member: SdfKernelInterfaces.SkyEnvironmentWritten, set: set);
+                m_tables.WriteInterfaceBuffer(buffer: m_coefficients, layout: layout.Layout, member: SdfKernelInterfaces.SkyCoefficientsWritten, set: set);
+                m_tables.WriteInterfaceBuffer(buffer: m_counters.RowOf(row: EnvironmentPass, slot: slot).Buffer, layout: layout.Layout, member: ShaderWorkCounters.Buffer, set: set);
+            }
+            m_written = true;
+        }
+
         public void Dispose() {
             m_counters.Dispose();
             m_block.Dispose();

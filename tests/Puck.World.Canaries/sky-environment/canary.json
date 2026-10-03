@@ -1,7 +1,7 @@
 {
   "id": "sky-environment",
   "title": "Fog in-scatters the sky's gradient from the residency's environment map: before a bright disc it reads the gradient alone, the composite evaluates no sky, and a still sky renders its map once",
-  "binding": "The positive leg boots an offscreen 128x128 native view, cadence off so every frame renders every pass, looking into the core of a sun disc sixteen times as bright as the sky, whose glow saturates every sky pixel about it, through a black unlit sphere of radius ten fifty units away under fog of density 0.1, over a uniform mid-grey gradient. The sphere is fogged to about 98 percent of the sky its pixels look into, and the composite reads that sky from the residency's environment map, which holds the sky's gradient and never a body: every pixel of a box in the sphere's interior, straight in front of the disc, reads the gradient's grey through the fog (code 127 of 255, within 0.48 to 0.515 and a code), where a map that held the disc would saturate it. The composite's line in world.counters gpu counts no sky evaluation although every sphere pixel fogs, and the residency's environment pass, after the upload that rendered the map once, reads skipped. The discriminating leg turns the fog off, so the sphere shows its own black and the box falls below the grey, while the composite still evaluates no sky and the map still stands.",
+  "binding": "The positive leg boots an offscreen 128x128 native view, cadence off so every frame renders every pass, looking into the core of a sun disc sixteen times as bright as the sky, whose glow saturates every sky pixel about it, through a black unlit sphere of radius one five units away, centred on the disc, under fog of density 1, over a uniform mid-grey gradient. The sphere's pixels lie about four units away, so the fog in-scatters about 98 percent of the sky they look into, and the composite reads that sky from the residency's environment map, which holds the sky's gradient and never a body: every pixel of a box in the sphere's interior, straight in front of the disc, reads the gradient's grey through the fog (code 127 of 255, within 0.48 to 0.515 and a code), where a map that held the disc would saturate it. The composite's line in the one world.counters gpu read counts no sky evaluation although every sphere pixel fogs, and the residency's environment pass, after the upload that rendered the map once, reads skipped. The discriminating leg turns the fog off, so the sphere shows its own black and the box falls below the grey, while the composite still evaluates no sky and the map still stands.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -84,7 +84,7 @@
         "stream": "stdout",
         "verb": "world.counters",
         "occurrence": 1,
-        "count": 2,
+        "count": 1,
         "extract": [
           {
             "name": "composite-sky",
@@ -191,7 +191,7 @@
         "stream": "stdout",
         "verb": "world.counters",
         "occurrence": 1,
-        "count": 2,
+        "count": 1,
         "extract": [
           {
             "name": "composite-sky",
