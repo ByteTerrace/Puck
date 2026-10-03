@@ -258,7 +258,10 @@ These are one-line cautions; the owning pages hold the derivations.
   scope's field joins its parent divided by its Lipschitz factor
   (`PopField.Data1.Y = 1/L`), and the halo says so; an instance bound contains the
   surface and the blends' influence, and the field outside it is at least its
-  distance to the bound over `SdfInstanceCost.FieldRescale`, not the distance.
+  distance to the bound over `SdfInstanceCost.FieldRescale`, not the distance. The
+  `sdf-lattice-cull` canary pins on the GPU what the CPU laws hold: a hex
+  wallpaper with no edge clipped by a box in one scoped placement is bounded by
+  the box and still draws across all of it.
 - **Bounds compose through the set operations.** `SdfBoundAlgebra` is the one
   statement: an intersection takes the smaller operand bound (unbounded and
   finite is finite), a subtraction its subject's, a union the larger (one
