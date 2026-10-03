@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: Coordinates Puck's delegated sessions and subagents as the lead who lands work on the integration branch. Use when writing assignment briefs, coordinating delegated work, sequencing integration merges or batches, scheduling GPU legs across machines, selecting models per lane, or routing reviews and findings. verification owns gates, red legs and GPU execution; review-passes owns launching and closing cross-family review-and-fix passes; documentation owns agent-document authoring and checks.
+description: Coordinates Puck's delegated sessions and subagents as the lead who lands work on the integration branch. Use when writing assignment briefs, messaging partners, deciding what each partner works on next, sequencing integration merges or batches, scheduling GPU legs and builds across machines, selecting models per lane, routing reviews and findings, ruling on a finding or on two lanes that collide, closing a review, and answering an owner's remark about how the fleet is run. verification owns gates, red legs and GPU execution; review-passes owns launching and closing cross-family review-and-fix passes; documentation owns agent-document authoring and checks.
 ---
 
 # Orchestration
