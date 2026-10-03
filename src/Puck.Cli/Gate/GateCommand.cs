@@ -54,8 +54,9 @@ internal static class GateCommand {
             The chosen canaries and parity follow the baseline checks, only with --gpu. Counters expands every
             tests/Puck.Counters/*.world.json with matching ceilings, using its sibling script when
             present or the script recorded in its ceilings. Checks write nothing; --record writes coverage.
-            Before each heavy step, admission uses host load's default classification in-process. A step that
-            opens a device (the --gpu steps) also waits for an idle GPU; every other step waits for capacity alone.
+            Before each heavy step, admission waits for memory and disk headroom by host load's default thresholds.
+            CPU load is advisory: a step runs whatever the CPU, and the gate prints a load over the threshold.
+            A step that opens a device (the --gpu steps) also waits for an idle GPU.
             It waits at most {HostAdmission.Timeout.TotalMinutes:0} minutes, reporting when waiting starts and capacity returns.
             A failed build or CLI copy stops the run. Other failures allow later checks, but skip recording.
             gate.log holds full output; gate.steps records each start and exit with UTC time and whole seconds.
