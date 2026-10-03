@@ -32,7 +32,7 @@ public sealed class ProbeKindCatalog {
                 path: rootDirectory,
                 searchOption: SearchOption.AllDirectories,
                 searchPattern: $"*{suffix}"
-            )) {
+            ).Order(comparer: StringComparer.Ordinal)) {
                 var id = Path.GetFileName(path: path)[..^suffix.Length];
 
                 if (!pathsById.TryAdd(

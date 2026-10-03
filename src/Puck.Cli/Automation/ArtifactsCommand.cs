@@ -66,10 +66,12 @@ internal static class ArtifactsCommand {
         var contents = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
         var copies = new JsonObject();
 
+        // The archive's entry order and its tests array are the walk order, so the walk is ordinal: a directory listing is the
+        // host's order, and two hosts would write two archives from one tree.
         foreach (var project in new[] { "src", "tests" }.SelectMany(selector: parent => Directory.EnumerateDirectories(path: Path.Combine(
             path1: root,
             path2: parent
-        )))) {
+        )).Order(comparer: StringComparer.Ordinal))) {
             var output = Path.Combine(
                 path1: project,
                 path2: "bin/Release"
@@ -80,7 +82,7 @@ internal static class ArtifactsCommand {
                 path: output,
                 searchOption: SearchOption.AllDirectories,
                 searchPattern: "*"
-            )) {
+            ).Order(comparer: StringComparer.Ordinal)) {
                 var relative = RepositoryRelative(
                     path: file,
                     root: root

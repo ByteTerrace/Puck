@@ -274,7 +274,20 @@ public sealed partial class WorldReplayTape {
             names.Add(item: Path.GetFileNameWithoutExtension(path: path));
         }
 
-        names.Sort(comparer: StringComparer.OrdinalIgnoreCase);
+        // Two names that differ only in case compare equal ignoring case, and the sort does not keep their listing order: the
+        // ordinal comparison settles them, so the list is the same on every host.
+        names.Sort(comparison: static (left, right) => {
+            var order = string.Compare(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                strA: left,
+                strB: right
+            );
+
+            return ((order != 0) ? order : string.CompareOrdinal(
+                strA: left,
+                strB: right
+            ));
+        });
 
         return names;
     }

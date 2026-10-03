@@ -1172,7 +1172,7 @@
                 "P:Puck.World.Transpiler.WorldCompilation.EmitsDocument",
                 "P:Puck.World.Transpiler.WorldCompilation.Success"
             ],
-            "shape": "b7dd7ae407ee3d9f",
+            "shape": "8f6f0cfe52ad3c26",
             "source": "src/Puck.World.Transpiler/Composition/WorldCompileCache.cs",
             "token": "PUCKWCC1"
         },

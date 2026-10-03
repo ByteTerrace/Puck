@@ -63,10 +63,10 @@ public static class PuckExtensionDiscovery {
             foreach (var stray in Directory.EnumerateFiles(
                 path: directory,
                 searchPattern: "*.dll"
-            )) {
+            ).Order(comparer: StringComparer.Ordinal)) {
                 throw new PuckExtensionException(message: $"'{stray}' sits directly in an extensions directory; install each extension as <name>/<name>.dll.");
             }
-            foreach (var installation in Directory.EnumerateDirectories(path: directory)) {
+            foreach (var installation in Directory.EnumerateDirectories(path: directory).Order(comparer: StringComparer.Ordinal)) {
                 var name = Path.GetFileName(path: installation);
                 var assembly = Path.Combine(
                     path1: installation,

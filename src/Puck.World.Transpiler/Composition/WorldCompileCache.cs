@@ -565,7 +565,7 @@ public sealed class WorldCompileCache {
             return;
         }
 
-        foreach (var stale in entries.OrderBy(keySelector: static entry => entry.LastWriteTimeUtc).Take(count: (entries.Count - MaxPersistedEntries))) {
+        foreach (var stale in entries.OrderBy(keySelector: static entry => entry.LastWriteTimeUtc).ThenBy(keySelector: static entry => entry.Name, comparer: StringComparer.Ordinal).Take(count: (entries.Count - MaxPersistedEntries))) {
             Remove(file: stale);
         }
     }

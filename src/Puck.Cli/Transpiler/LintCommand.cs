@@ -87,7 +87,7 @@ internal static class LintCommand {
                 path: fullPath,
                 searchOption: SearchOption.AllDirectories,
                 searchPattern: "*.puck"
-            );
+            ).Order(comparer: StringComparer.Ordinal).ToArray();
             var failureCount = 0;
 
             foreach (var file in files) {
