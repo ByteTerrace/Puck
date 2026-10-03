@@ -14,7 +14,7 @@
     "stripes.hlsl"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-geometry/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-geometry/fixture.puck",
     "script": "geometry.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
@@ -39,7 +39,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-geometry/always.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-geometry/always.puck",
     "script": "geometry.script.txt",
     "commands": [
       { "verb": "pipeline.wait", "occurrence": 1, "outcome": "accepted" },
