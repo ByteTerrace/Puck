@@ -1,0 +1,1618 @@
+schema: "puck.world.definition.v1"
+
+motion {
+  moveSpeed: 4
+  turnSpeed: 2.5
+  maxSmoothError: 3
+}
+
+spawnPoints [
+  {
+    id: "seat-1"
+    position [0, 0, 0]
+    yawDegrees: 0
+  }
+  {
+    id: "seat-2"
+    position [2, 0, 0]
+    yawDegrees: 0
+  }
+  {
+    id: "seat-3"
+    position [0, 0, 2]
+    yawDegrees: 0
+  }
+  {
+    id: "seat-4"
+    position [2, 0, 2]
+    yawDegrees: 0
+  }
+]
+
+screens [
+  {
+    index: 0
+    origin [0, 1, 0]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 1
+    halfHeight: 1
+    halfDepth: 0.1
+    round: 0
+    source: producer(id: "testPattern", settings: {
+      width: 320
+      height: 240
+    }
+    )
+    route {
+      engageable: false
+      engageRadius: 0
+      autoInsert: false
+    }
+  }
+]
+
+cameras []
+
+bodies {
+  seatActivation [Eager, Eager, Eager, Eager]
+  networkPlayers: 0
+  defaultPeerSource: "Idle"
+  seatSpawns [
+    "seat-1"
+    "seat-2"
+    "seat-3"
+    "seat-4"
+  ]
+  distribution {
+    region: disc(radius: 40, sampleCount: 124)
+    fill {
+      name: "additive"
+      offset: 0
+      step: 0.38196602
+    }
+  }
+  peerVariation {
+    phase {
+      name: "additive"
+      offset: -4
+      step: 0.38196602
+    }
+    weave {
+      name: "additive"
+      offset: -4
+      step: 0.618034
+    }
+    activity {
+      name: "r2"
+      offset: 1
+      step: 0
+    }
+  }
+  seatVariation {
+    phase {
+      name: "additive"
+      offset: 0
+      step: 0.38196602
+    }
+    weave {
+      name: "additive"
+      offset: 0
+      step: 0.618034
+    }
+    activity {
+      name: "r2"
+      offset: 1
+      step: 0
+    }
+  }
+  peerColors {
+    name: "additive"
+    offset: -4
+    step: 0.618034
+  }
+  capacity: 4
+  reconnectGraceSeconds: 3
+}
+
+seatDefaults {
+  identities [
+    {
+      id: "amber"
+      name: "amber"
+      color: "#ED8530"
+    }
+  ]
+  neutralColor: "#8C8C8C"
+  colorSequence {
+    name: "additive"
+    offset: 0
+    step: 0.618034
+  }
+  saturation: 0.65
+  value: 0.85
+  colorSearchLimit: 64
+  noseFactor: 0.35
+  pickerThreshold: 0.6
+  pickerNeutralColor: "#8C8C8C"
+  pickerNeutralBlend: 0.5
+  seatCameraFeel {
+    yawSensitivity: 0.001
+    pitchSensitivity: 0.001
+    invertYaw: false
+    invertPitch: false
+    stickLookRate: 2.6
+  }
+}
+
+channels [
+  {
+    name: "forward"
+    shape: Bipolar
+    role: MoveAdvance
+    composition: false
+  }
+  {
+    name: "strafe"
+    shape: Bipolar
+    role: MoveStrafe
+    composition: false
+  }
+  {
+    name: "turn"
+    shape: Bipolar
+    role: Turn
+    composition: false
+  }
+]
+
+targetRegisters []
+
+bodyMotionPrograms [
+  {
+    name: "grounded"
+    version: "puck.body.program.v1"
+    kind: Motion
+    operations [ResolveYawAttitudeAndPlanarFrame, ResolveHold, ComputePlanarTargetVelocity, ShapeVelocity, SnapYawToPlanarIntent, RunActionTriggers, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]
+  }
+  {
+    name: "roam"
+    version: "puck.body.program.v1"
+    kind: Producer
+    operations [ProduceSteeringIntent]
+  }
+]
+
+kits {
+  rows [
+    {
+      name: "traveler"
+      bodyMotionProgram: "grounded"
+      motion {
+        speed {
+          value: 4
+        }
+        turn {
+          rate: 2.5
+          falloff: 1
+          pitchRate: 0
+          maxPitch: 1.2
+        }
+        shaping [
+          {
+            along {}
+            turnScale: 1
+          }
+        ]
+        moveFrame: World
+        facingSnap: true
+        holds [
+          {
+            name: "air"
+            bond: Free
+            hold: Gravity
+            pull: 0
+            lift: 0
+            reach: 0
+            upLean: 0
+            forward: Heading
+            onDrive: false
+            driveAlignment: 0
+            gravity {
+              rise: 14
+              fall: 23
+            }
+            envelope {
+              sinkSpeed: 20
+            }
+            thrust: 0
+          }
+        ]
+        groundStick: 2
+      }
+      producers {
+        roam {
+          scalars {
+            forward: 0.375
+            softRadius: 45
+            weaveAmplitude: 0.5
+            inwardGain: 1.6
+            turnScale: 2.5
+            weaveFrequencyBase: 0.3
+            weaveFrequencyRange: 0.2
+            altitudeGain: 0.32
+            activityRateBase: 2.2
+            activityRateRange: 1.3
+            strafeWave: 0
+            turnWave: 0
+            upWave: 0
+            pitchWave: 0
+            rollTurn: 0
+            pressThreshold: 0
+            altitudeBase: 0
+            altitudeRange: 0
+          }
+          channels {}
+        }
+      }
+      actions {}
+      bodyContact: Overlap
+      mass: 0
+    }
+  ]
+  assignment {
+    sequence {
+      name: "r1"
+      offset: 1
+      step: 0
+    }
+    rows []
+  }
+}
+
+defaultSeatKit: "traveler"
+
+addon "probe" {
+  modulePath: "probe.wasm"
+  hash: "sha256-64/0123456789abcdef"
+  fuel: 1000000
+  enabled: false
+  revision: 0
+}
+
+
+bindingOverlays []
+
+storage {
+  endpoint: null
+  userId: null
+  discoveryEndpoint: null
+}
+
+prototypes {}
+
+placements {
+  policy {
+    authoringHeadroomScreens: 4
+    authoringHeadroomPlacements: 8
+    minPlacementScale: 0.2
+    maxPlacementScale: 5
+    candidateRadius: 32
+    candidateCap: 16
+    previewDeadlineFrames: 12
+    derivedFaceScreens: 4
+  }
+}
+
+speakers []
+
+tunes []
+
+patches []
+
+collision {
+  requirements []
+  contactSkin: 0.02
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  gradientProbe: 0
+  defaultHold: false
+}
+
+host {
+  presentation: Windowed
+  width: 1280
+  height: 800
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  presentMode: Immediate
+  targetHertz: 0
+  exitAfterSeconds: 0
+  genlock: null
+  listen: null
+  authority: null
+  backend: auto
+}
+
+views {
+  seatControl {
+    yawReference: World
+    minPitch: -0.35
+    maxPitch: 1.2
+  }
+
+  seatRig "seatChase" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5.4626, yaw: 0, pitch: 0.4145069, pivotOffset: [0, 0, 0], opcode: "orbit")
+      lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false, focusDistance: 6, opcode: "lookAt")
+      fieldOfView(fieldOfViewRadians: 0.9599311, opcode: "fov")
+      dynamics(row: chase, opcode: "dynamics")
+    ]
+    anchorOp: null
+    blendOp: null
+    clampPitchOp: null
+    fovOp {
+      fieldOfViewRadians: 0.9599311
+      opcode: "fov"
+    }
+    lookAtOp {
+      subject: reference()
+      targetOffset [0, 1, 0]
+      worldAxes: false
+      focusDistance: 6
+      opcode: "lookAt"
+    }
+    offsetOp: null
+    orbitOp {
+      distance: 5.4626
+      yaw: 0
+      pitch: 0.4145069
+      pivotOffset [0, 0, 0]
+      opcode: "orbit"
+    }
+    pathOp: null
+    dynamicsOp {
+      row: "chase"
+      opcode: "dynamics"
+    }
+    selectOp: null
+  }
+}
+
+looks {
+  rows []
+  assignment {
+    sequence {
+      name: "r1"
+      offset: 129
+      step: 0
+    }
+    rows []
+  }
+}
+
+dynamics [
+  {
+    name: "chase"
+    f: 0.9549
+    zeta: 1
+    r: 1
+  }
+  {
+    name: "probe"
+    f: 2
+    zeta: 1
+    r: 0
+  }
+]
+
+grants []
+
+hud {
+  defaults {
+    enabled: true
+    cursor: null
+  }
+  panels []
+}
+
+state {
+  world {
+    table solitaireKlondikeCards capacity(52) {
+      "0" = 0
+      "1" = 1
+      "2" = 2
+      "3" = 3
+      "4" = 4
+      "5" = 5
+      "6" = 6
+      "7" = 7
+      "8" = 8
+      "9" = 9
+      "10" = 10
+      "11" = 11
+      "12" = 12
+      "13" = 13
+      "14" = 14
+      "15" = 15
+      "16" = 16
+      "17" = 17
+      "18" = 18
+      "19" = 19
+      "20" = 20
+      "21" = 21
+      "22" = 22
+      "23" = 23
+      "24" = 24
+      "25" = 25
+      "26" = 26
+      "27" = 27
+      "28" = 28
+      "29" = 29
+      "30" = 30
+      "31" = 31
+      "32" = 32
+      "33" = 33
+      "34" = 34
+      "35" = 35
+      "36" = 36
+      "37" = 37
+      "38" = 38
+      "39" = 39
+      "40" = 40
+      "41" = 41
+      "42" = 42
+      "43" = 43
+      "44" = 44
+      "45" = 45
+      "46" = 46
+      "47" = 47
+      "48" = 48
+      "49" = 49
+      "50" = 50
+      "51" = 51
+    }
+
+    row {
+      name: "solitaireKlondikeRank"
+      kind: "Int"
+      capacity: 52
+      cells [
+        {
+          key: "0"
+          value: 1
+        }
+        {
+          key: "1"
+          value: 2
+        }
+        {
+          key: "2"
+          value: 3
+        }
+        {
+          key: "3"
+          value: 4
+        }
+        {
+          key: "4"
+          value: 5
+        }
+        {
+          key: "5"
+          value: 6
+        }
+        {
+          key: "6"
+          value: 7
+        }
+        {
+          key: "7"
+          value: 8
+        }
+        {
+          key: "8"
+          value: 9
+        }
+        {
+          key: "9"
+          value: 10
+        }
+        {
+          key: "10"
+          value: 11
+        }
+        {
+          key: "11"
+          value: 12
+        }
+        {
+          key: "12"
+          value: 13
+        }
+        {
+          key: "13"
+          value: 1
+        }
+        {
+          key: "14"
+          value: 2
+        }
+        {
+          key: "15"
+          value: 3
+        }
+        {
+          key: "16"
+          value: 4
+        }
+        {
+          key: "17"
+          value: 5
+        }
+        {
+          key: "18"
+          value: 6
+        }
+        {
+          key: "19"
+          value: 7
+        }
+        {
+          key: "20"
+          value: 8
+        }
+        {
+          key: "21"
+          value: 9
+        }
+        {
+          key: "22"
+          value: 10
+        }
+        {
+          key: "23"
+          value: 11
+        }
+        {
+          key: "24"
+          value: 12
+        }
+        {
+          key: "25"
+          value: 13
+        }
+        {
+          key: "26"
+          value: 1
+        }
+        {
+          key: "27"
+          value: 2
+        }
+        {
+          key: "28"
+          value: 3
+        }
+        {
+          key: "29"
+          value: 4
+        }
+        {
+          key: "30"
+          value: 5
+        }
+        {
+          key: "31"
+          value: 6
+        }
+        {
+          key: "32"
+          value: 7
+        }
+        {
+          key: "33"
+          value: 8
+        }
+        {
+          key: "34"
+          value: 9
+        }
+        {
+          key: "35"
+          value: 10
+        }
+        {
+          key: "36"
+          value: 11
+        }
+        {
+          key: "37"
+          value: 12
+        }
+        {
+          key: "38"
+          value: 13
+        }
+        {
+          key: "39"
+          value: 1
+        }
+        {
+          key: "40"
+          value: 2
+        }
+        {
+          key: "41"
+          value: 3
+        }
+        {
+          key: "42"
+          value: 4
+        }
+        {
+          key: "43"
+          value: 5
+        }
+        {
+          key: "44"
+          value: 6
+        }
+        {
+          key: "45"
+          value: 7
+        }
+        {
+          key: "46"
+          value: 8
+        }
+        {
+          key: "47"
+          value: 9
+        }
+        {
+          key: "48"
+          value: 10
+        }
+        {
+          key: "49"
+          value: 11
+        }
+        {
+          key: "50"
+          value: 12
+        }
+        {
+          key: "51"
+          value: 13
+        }
+      ]
+      domain: keysOf(row: solitaireKlondikeCards, ordered: false)
+    }
+
+    row {
+      name: "solitaireKlondikeSuit"
+      kind: "Int"
+      capacity: 52
+      cells [
+        {
+          key: "0"
+          value: 0
+        }
+        {
+          key: "1"
+          value: 0
+        }
+        {
+          key: "2"
+          value: 0
+        }
+        {
+          key: "3"
+          value: 0
+        }
+        {
+          key: "4"
+          value: 0
+        }
+        {
+          key: "5"
+          value: 0
+        }
+        {
+          key: "6"
+          value: 0
+        }
+        {
+          key: "7"
+          value: 0
+        }
+        {
+          key: "8"
+          value: 0
+        }
+        {
+          key: "9"
+          value: 0
+        }
+        {
+          key: "10"
+          value: 0
+        }
+        {
+          key: "11"
+          value: 0
+        }
+        {
+          key: "12"
+          value: 0
+        }
+        {
+          key: "13"
+          value: 1
+        }
+        {
+          key: "14"
+          value: 1
+        }
+        {
+          key: "15"
+          value: 1
+        }
+        {
+          key: "16"
+          value: 1
+        }
+        {
+          key: "17"
+          value: 1
+        }
+        {
+          key: "18"
+          value: 1
+        }
+        {
+          key: "19"
+          value: 1
+        }
+        {
+          key: "20"
+          value: 1
+        }
+        {
+          key: "21"
+          value: 1
+        }
+        {
+          key: "22"
+          value: 1
+        }
+        {
+          key: "23"
+          value: 1
+        }
+        {
+          key: "24"
+          value: 1
+        }
+        {
+          key: "25"
+          value: 1
+        }
+        {
+          key: "26"
+          value: 2
+        }
+        {
+          key: "27"
+          value: 2
+        }
+        {
+          key: "28"
+          value: 2
+        }
+        {
+          key: "29"
+          value: 2
+        }
+        {
+          key: "30"
+          value: 2
+        }
+        {
+          key: "31"
+          value: 2
+        }
+        {
+          key: "32"
+          value: 2
+        }
+        {
+          key: "33"
+          value: 2
+        }
+        {
+          key: "34"
+          value: 2
+        }
+        {
+          key: "35"
+          value: 2
+        }
+        {
+          key: "36"
+          value: 2
+        }
+        {
+          key: "37"
+          value: 2
+        }
+        {
+          key: "38"
+          value: 2
+        }
+        {
+          key: "39"
+          value: 3
+        }
+        {
+          key: "40"
+          value: 3
+        }
+        {
+          key: "41"
+          value: 3
+        }
+        {
+          key: "42"
+          value: 3
+        }
+        {
+          key: "43"
+          value: 3
+        }
+        {
+          key: "44"
+          value: 3
+        }
+        {
+          key: "45"
+          value: 3
+        }
+        {
+          key: "46"
+          value: 3
+        }
+        {
+          key: "47"
+          value: 3
+        }
+        {
+          key: "48"
+          value: 3
+        }
+        {
+          key: "49"
+          value: 3
+        }
+        {
+          key: "50"
+          value: 3
+        }
+        {
+          key: "51"
+          value: 3
+        }
+      ]
+      domain: keysOf(row: solitaireKlondikeCards, ordered: false)
+    }
+
+    row {
+      name: "solitaireKlondikeFace"
+      kind: "Int"
+      capacity: 52
+      cells [
+        {
+          key: "0"
+          value: 0
+        }
+        {
+          key: "1"
+          value: 0
+        }
+        {
+          key: "2"
+          value: 0
+        }
+        {
+          key: "3"
+          value: 0
+        }
+        {
+          key: "4"
+          value: 0
+        }
+        {
+          key: "5"
+          value: 0
+        }
+        {
+          key: "6"
+          value: 0
+        }
+        {
+          key: "7"
+          value: 0
+        }
+        {
+          key: "8"
+          value: 0
+        }
+        {
+          key: "9"
+          value: 0
+        }
+        {
+          key: "10"
+          value: 0
+        }
+        {
+          key: "11"
+          value: 0
+        }
+        {
+          key: "12"
+          value: 0
+        }
+        {
+          key: "13"
+          value: 0
+        }
+        {
+          key: "14"
+          value: 0
+        }
+        {
+          key: "15"
+          value: 0
+        }
+        {
+          key: "16"
+          value: 0
+        }
+        {
+          key: "17"
+          value: 0
+        }
+        {
+          key: "18"
+          value: 0
+        }
+        {
+          key: "19"
+          value: 0
+        }
+        {
+          key: "20"
+          value: 0
+        }
+        {
+          key: "21"
+          value: 0
+        }
+        {
+          key: "22"
+          value: 0
+        }
+        {
+          key: "23"
+          value: 0
+        }
+        {
+          key: "24"
+          value: 0
+        }
+        {
+          key: "25"
+          value: 0
+        }
+        {
+          key: "26"
+          value: 0
+        }
+        {
+          key: "27"
+          value: 0
+        }
+        {
+          key: "28"
+          value: 0
+        }
+        {
+          key: "29"
+          value: 0
+        }
+        {
+          key: "30"
+          value: 0
+        }
+        {
+          key: "31"
+          value: 0
+        }
+        {
+          key: "32"
+          value: 0
+        }
+        {
+          key: "33"
+          value: 0
+        }
+        {
+          key: "34"
+          value: 0
+        }
+        {
+          key: "35"
+          value: 0
+        }
+        {
+          key: "36"
+          value: 0
+        }
+        {
+          key: "37"
+          value: 0
+        }
+        {
+          key: "38"
+          value: 0
+        }
+        {
+          key: "39"
+          value: 0
+        }
+        {
+          key: "40"
+          value: 0
+        }
+        {
+          key: "41"
+          value: 0
+        }
+        {
+          key: "42"
+          value: 0
+        }
+        {
+          key: "43"
+          value: 0
+        }
+        {
+          key: "44"
+          value: 0
+        }
+        {
+          key: "45"
+          value: 0
+        }
+        {
+          key: "46"
+          value: 0
+        }
+        {
+          key: "47"
+          value: 0
+        }
+        {
+          key: "48"
+          value: 0
+        }
+        {
+          key: "49"
+          value: 0
+        }
+        {
+          key: "50"
+          value: 0
+        }
+        {
+          key: "51"
+          value: 0
+        }
+      ]
+      domain: keysOf(row: solitaireKlondikeCards, ordered: false)
+    }
+
+    pile solitaireKlondikePile0 of solitaireKlondikeCards capacity(52) {
+      "0"
+      "1"
+      "2"
+      "3"
+      "4"
+      "5"
+      "6"
+      "7"
+      "8"
+      "9"
+      "10"
+      "11"
+      "12"
+      "13"
+      "14"
+      "15"
+      "16"
+      "17"
+      "18"
+      "19"
+      "20"
+      "21"
+      "22"
+      "23"
+      "24"
+      "25"
+      "26"
+      "27"
+      "28"
+      "29"
+      "30"
+      "31"
+      "32"
+      "33"
+      "34"
+      "35"
+      "36"
+      "37"
+      "38"
+      "39"
+      "40"
+      "41"
+      "42"
+      "43"
+      "44"
+      "45"
+      "46"
+      "47"
+      "48"
+      "49"
+      "50"
+      "51"
+    }
+
+    pile solitaireKlondikePile1 of solitaireKlondikeCards capacity(52)
+
+    pile solitaireKlondikePile2 of solitaireKlondikeCards capacity(52)
+
+    pile solitaireKlondikePile3 of solitaireKlondikeCards capacity(52)
+
+    pile solitaireKlondikePile4 of solitaireKlondikeCards capacity(52)
+
+    pile solitaireKlondikePile5 of solitaireKlondikeCards capacity(52)
+
+    pile solitaireKlondikePile6 of solitaireKlondikeCards capacity(52)
+
+    pile solitaireKlondikePile7 of solitaireKlondikeCards capacity(52)
+
+    pile solitaireKlondikePile8 of solitaireKlondikeCards capacity(52)
+
+    pile solitaireKlondikePile10 of solitaireKlondikeCards capacity(13)
+
+    pile solitaireKlondikePile11 of solitaireKlondikeCards capacity(13)
+
+    pile solitaireKlondikePile12 of solitaireKlondikeCards capacity(13)
+
+    pile solitaireKlondikePile13 of solitaireKlondikeCards capacity(13)
+
+    table solitaireKlondike capacity(27) {
+      request = 0
+      applied = 0
+      action = 0
+      from = -1
+      to = -1
+      card = -1
+      option = 1
+      activeOption = 1
+      stage = 0
+      busy = 0
+      status = 0
+      result = 0
+      moves = 0
+      score = 0
+      passes = 0
+      sourceOk = 0
+      targetOk = 0
+      runLength = 0
+      emptyCells = 0
+      emptyColumns = 0
+      deals = 0
+      dealStep = 0
+      gatherStep = 0
+      scan = 0
+      changed = 0
+      attributeStep = 0
+      drawLeft = 0
+    }
+
+    row {
+      name: "solitaireKlondikeStream"
+      kind: "Int"
+      cells []
+      "draw" {
+        generator {
+          source: "StreamDraw"
+          bound: 1
+          mode: "WithReplacement"
+        }
+        timing: "Event"
+      }
+    }
+
+    table solitaire capacity(1) {
+      table = 1
+    }
+  }
+}
+
+inputHold {
+  ceilingSeconds: 0.5
+  lowerAfterSeconds: 0.25
+  defaultSeconds: 0
+  equalizeByDefault: true
+  participants []
+}
+
+rule "solitaireKlondike-new-deal" {
+  gate: all(predicates: [
+    compareState(state: solitaire, comparison: Equal, value: 1, key: table)
+    compareState(state: solitaireKlondike, comparison: NotEqual, value: null, key: request, comparandState: solitaireKlondike, comparandKey: applied)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: stage)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: busy)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: action)
+    any(predicates: [
+      compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: option)
+      compareState(state: solitaireKlondike, comparison: Equal, value: 3, key: option)
+    ]
+    )
+  ]
+  )
+  mode: Level
+  setState(state: solitaireKlondike, value: null, target: Self, key: activeOption, expression: solitaireKlondike[option])
+  setState(state: solitaireKlondike, value: 1, target: Self, key: stage)
+  setState(state: solitaireKlondike, value: 0, target: Self, key: status)
+  setState(state: solitaireKlondike, value: 0, target: Self, key: result)
+  setState(state: solitaireKlondike, value: 1, target: Self, key: busy)
+}
+
+rule "solitaireKlondike-gather" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 1 and count($zones[solitaireKlondike[gatherStep]]) > 0
+  mode: Level
+  zones [solitaireKlondikePile1, solitaireKlondikePile2, solitaireKlondikePile3, solitaireKlondikePile4, solitaireKlondikePile5, solitaireKlondikePile6, solitaireKlondikePile7, solitaireKlondikePile8, solitaireKlondikePile10, solitaireKlondikePile11, solitaireKlondikePile12, solitaireKlondikePile13]
+  transform transfer(from: $zones[solitaireKlondike[gatherStep]], to: solitaireKlondikePile0, selector: Slice, key: zone($zones[solitaireKlondike[gatherStep]], first), insertFirst: false, draw: null, count: 1)
+}
+
+rule "solitaireKlondike-attributes-start" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 1 and solitaireKlondike[gatherStep] == 11 and count(solitaireKlondikePile0) == 52
+  mode: Level
+  setState(state: solitaireKlondike, value: 5, target: Self, key: stage)
+}
+
+rule "solitaireKlondike-reset-attributes" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 5
+  mode: Level
+  setState(state: solitaireKlondikeFace, value: 0, target: Self, key: solitaireKlondike[attributeStep])
+}
+
+rule "solitaireKlondike-shuffle" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 5 and solitaireKlondike[attributeStep] == 51
+  mode: Level
+  transaction {
+    shuffle solitaireKlondikePile0 with solitaireKlondikeStream
+    setState(state: solitaireKlondike, value: 3, target: Self, key: stage)
+  }
+}
+
+rule "solitaireKlondike-deal" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 3 and solitaireKlondike[dealStep] <= 27
+  mode: Level
+  zones [solitaireKlondikePile0, solitaireKlondikePile1, solitaireKlondikePile2, solitaireKlondikePile3, solitaireKlondikePile4, solitaireKlondikePile5, solitaireKlondikePile6, solitaireKlondikePile7, solitaireKlondikePile8, "", solitaireKlondikePile10, solitaireKlondikePile11, solitaireKlondikePile12, solitaireKlondikePile13]
+  deal 1 from solitaireKlondikePile0 to $zones[solitaireKlondike[dealStep] < 7 ? 2 + solitaireKlondike[dealStep] : solitaireKlondike[dealStep] < 13 ? solitaireKlondike[dealStep] - 4 : solitaireKlondike[dealStep] < 18 ? solitaireKlondike[dealStep] - 9 : solitaireKlondike[dealStep] < 22 ? solitaireKlondike[dealStep] - 13 : solitaireKlondike[dealStep] < 25 ? solitaireKlondike[dealStep] - 16 : solitaireKlondike[dealStep] < 27 ? solitaireKlondike[dealStep] - 18 : 8]
+}
+
+rule "solitaireKlondike-deal-finish" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 3 and solitaireKlondike[dealStep] == 27
+  mode: Level
+  transaction {
+    setState(state: solitaireKlondike, value: 0, target: Self, key: stage)
+    setState(state: solitaireKlondike, value: 1, target: Self, key: status)
+    setState(state: solitaireKlondike, value: 0, target: Self, key: moves)
+    setState(state: solitaireKlondike, value: 0, target: Self, key: score)
+    setState(state: solitaireKlondike, value: 0, target: Self, key: passes)
+    setState(state: solitaireKlondike, value: null, target: Self, key: deals, expression: solitaireKlondike[deals] + 1)
+    setState(state: solitaireKlondike, value: 1, target: Self, key: result)
+    setState(state: solitaireKlondike, value: null, target: Self, key: applied, expression: solitaireKlondike[request])
+  }
+}
+
+rule "solitaireKlondike-prepare-move" {
+  gate: all(predicates: [
+    compareState(state: solitaire, comparison: Equal, value: 1, key: table)
+    compareState(state: solitaireKlondike, comparison: NotEqual, value: null, key: request, comparandState: solitaireKlondike, comparandKey: applied)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: stage)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: busy)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: status)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 2, key: action)
+  ]
+  )
+  mode: Level
+  setState(state: solitaireKlondike, value: 0, target: Self, key: sourceOk)
+  setState(state: solitaireKlondike, value: 0, target: Self, key: targetOk)
+  setState(state: solitaireKlondike, value: 0, target: Self, key: runLength)
+}
+
+rule "solitaireKlondike-source" {
+  gate: all(predicates: [
+    compareState(state: solitaire, comparison: Equal, value: 1, key: table)
+    compareState(state: solitaireKlondike, comparison: NotEqual, value: null, key: request, comparandState: solitaireKlondike, comparandKey: applied)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: stage)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: busy)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: status)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 2, key: action)
+    compareState(state: $zones[solitaireKlondike[from]], comparison: Equal, value: 1, key: solitaireKlondike[card])
+  ]
+  )
+  mode: Level
+  zones ["", "", solitaireKlondikePile2, solitaireKlondikePile3, solitaireKlondikePile4, solitaireKlondikePile5, solitaireKlondikePile6, solitaireKlondikePile7, solitaireKlondikePile8]
+  setState(state: solitaireKlondike, value: null, target: Self, key: sourceOk, expression: match(solitaireKlondikeRun, $zones[solitaireKlondike[from]])[solitaireKlondike[card]])
+  setState(state: solitaireKlondike, value: null, target: Self, key: runLength, expression: match(solitaireKlondikeLength, $zones[solitaireKlondike[from]], prefix)[solitaireKlondike[card]])
+}
+
+rule "solitaireKlondike-source-1" {
+  gate: all(predicates: [
+    compareState(state: solitaire, comparison: Equal, value: 1, key: table)
+    compareState(state: solitaireKlondike, comparison: NotEqual, value: null, key: request, comparandState: solitaireKlondike, comparandKey: applied)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: stage)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: busy)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: status)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 2, key: action)
+    compareState(state: $zones[solitaireKlondike[from]], comparison: Equal, value: 1, key: solitaireKlondike[card])
+  ]
+  )
+  mode: Level
+  zones ["", solitaireKlondikePile1, "", "", "", "", "", "", "", "", solitaireKlondikePile10, solitaireKlondikePile11, solitaireKlondikePile12, solitaireKlondikePile13]
+  setState(state: solitaireKlondike, value: null, target: Self, key: sourceOk, expression: match(solitaireKlondikeSingle, $zones[solitaireKlondike[from]])[solitaireKlondike[card]])
+  setState(state: solitaireKlondike, value: null, target: Self, key: runLength, expression: match(solitaireKlondikeLength, $zones[solitaireKlondike[from]], prefix)[solitaireKlondike[card]])
+}
+
+rule "solitaireKlondike-target" {
+  gate: all(predicates: [
+    compareState(state: solitaire, comparison: Equal, value: 1, key: table)
+    compareState(state: solitaireKlondike, comparison: NotEqual, value: null, key: request, comparandState: solitaireKlondike, comparandKey: applied)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: stage)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: busy)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: status)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 2, key: action)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: sourceOk)
+  ]
+  )
+  mode: Level
+  zones ["", "", solitaireKlondikePile2, solitaireKlondikePile3, solitaireKlondikePile4, solitaireKlondikePile5, solitaireKlondikePile6, solitaireKlondikePile7, solitaireKlondikePile8]
+  setState(state: solitaireKlondike, value: null, target: Self, key: targetOk, expression: count($zones[solitaireKlondike[to]]) == 0 ? solitaireKlondikeRank[solitaireKlondike[card]] == 13 : match(solitaireKlondikeLanding, $zones[solitaireKlondike[to]]))
+}
+
+rule "solitaireKlondike-target-10" {
+  gate: all(predicates: [
+    compareState(state: solitaire, comparison: Equal, value: 1, key: table)
+    compareState(state: solitaireKlondike, comparison: NotEqual, value: null, key: request, comparandState: solitaireKlondike, comparandKey: applied)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: stage)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: busy)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: status)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 2, key: action)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: sourceOk)
+  ]
+  )
+  mode: Level
+  zones ["", "", "", "", "", "", "", "", "", "", solitaireKlondikePile10, solitaireKlondikePile11, solitaireKlondikePile12, solitaireKlondikePile13]
+  setState(state: solitaireKlondike, value: null, target: Self, key: targetOk, expression: (solitaireKlondike[runLength] == 1) * (solitaireKlondikeSuit[solitaireKlondike[card]] == solitaireKlondike[to] - 10) * (solitaireKlondikeRank[solitaireKlondike[card]] == count($zones[solitaireKlondike[to]]) + 1))
+}
+
+rule "solitaireKlondike-move" {
+  gate: all(predicates: [
+    compareState(state: solitaire, comparison: Equal, value: 1, key: table)
+    compareState(state: solitaireKlondike, comparison: NotEqual, value: null, key: request, comparandState: solitaireKlondike, comparandKey: applied)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: stage)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: busy)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: status)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 2, key: action)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: sourceOk)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: targetOk)
+    compareValue(left: solitaireKlondike[from], comparison: NotEqual, right: solitaireKlondike[to], kind: Int)
+  ]
+  )
+  mode: Level
+  zones [solitaireKlondikePile0, solitaireKlondikePile1, solitaireKlondikePile2, solitaireKlondikePile3, solitaireKlondikePile4, solitaireKlondikePile5, solitaireKlondikePile6, solitaireKlondikePile7, solitaireKlondikePile8, "", solitaireKlondikePile10, solitaireKlondikePile11, solitaireKlondikePile12, solitaireKlondikePile13]
+  transaction {
+    transform transfer(from: $zones[solitaireKlondike[from]], to: $zones[solitaireKlondike[to]], selector: Slice, key: solitaireKlondike[card], insertFirst: false, draw: null, count: 1)
+    setState(state: solitaireKlondike, value: null, target: Self, key: moves, expression: solitaireKlondike[moves] + 1)
+    setState(state: solitaireKlondike, value: 1, target: Self, key: busy)
+    setState(state: solitaireKlondike, value: null, target: Self, key: score, expression: maximum(0, solitaireKlondike[score] + (solitaireKlondike[to] >= 10 ? 10 : solitaireKlondike[from] >= 10 ? -15 : solitaireKlondike[from] == 1 ? 5 : 0)))
+    setState(state: solitaireKlondike, value: 1, target: Self, key: result)
+    setState(state: solitaireKlondike, value: null, target: Self, key: applied, expression: solitaireKlondike[request])
+  }
+}
+
+rule "solitaireKlondike-draw-start" {
+  gate: all(predicates: [
+    compareState(state: solitaire, comparison: Equal, value: 1, key: table)
+    compareState(state: solitaireKlondike, comparison: NotEqual, value: null, key: request, comparandState: solitaireKlondike, comparandKey: applied)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: stage)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: busy)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: status)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 3, key: action)
+    compareState(state: count(solitaireKlondikePile0), comparison: Greater, value: 0)
+  ]
+  )
+  mode: Level
+  transaction {
+    setState(state: solitaireKlondike, value: 4, target: Self, key: stage)
+    setState(state: solitaireKlondike, value: null, target: Self, key: drawLeft, expression: minimum(solitaireKlondike[activeOption], count(solitaireKlondikePile0)))
+    setState(state: solitaireKlondike, value: 1, target: Self, key: busy)
+  }
+}
+
+rule "solitaireKlondike-draw-card" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 4
+  mode: Level
+  transaction {
+    setState(state: solitaireKlondikeFace, value: 1, target: Self, key: zone(solitaireKlondikePile0, first))
+    deal 1 from solitaireKlondikePile0 to solitaireKlondikePile1
+    setState(state: solitaireKlondike, value: null, target: Self, key: drawLeft, expression: solitaireKlondike[drawLeft] - 1)
+  }
+}
+
+rule "solitaireKlondike-draw-finish" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 4 and solitaireKlondike[drawLeft] == 0
+  mode: Level
+  transaction {
+    setState(state: solitaireKlondike, value: 0, target: Self, key: stage)
+    setState(state: solitaireKlondike, value: null, target: Self, key: moves, expression: solitaireKlondike[moves] + 1)
+    setState(state: solitaireKlondike, value: 1, target: Self, key: result)
+    setState(state: solitaireKlondike, value: null, target: Self, key: applied, expression: solitaireKlondike[request])
+  }
+}
+
+rule "solitaireKlondike-recycle-start" {
+  gate: all(predicates: [
+    compareState(state: solitaire, comparison: Equal, value: 1, key: table)
+    compareState(state: solitaireKlondike, comparison: NotEqual, value: null, key: request, comparandState: solitaireKlondike, comparandKey: applied)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: stage)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: busy)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 1, key: status)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 3, key: action)
+    compareState(state: count(solitaireKlondikePile0), comparison: Equal, value: 0)
+    compareState(state: count(solitaireKlondikePile1), comparison: Greater, value: 0)
+  ]
+  )
+  mode: Level
+  setState(state: solitaireKlondike, value: 2, target: Self, key: stage)
+  setState(state: solitaireKlondike, value: null, target: Self, key: passes, expression: solitaireKlondike[passes] + 1)
+}
+
+rule "solitaireKlondike-recycle-card" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 2 and count(solitaireKlondikePile1) > 0
+  mode: Level
+  deal 1 from solitaireKlondikePile1 to solitaireKlondikePile0
+}
+
+rule "solitaireKlondike-recycle-face-down" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 2 and solitaireKlondikeFace[$each] == 1
+  mode: Level
+  forEach: solitaireKlondikePile0
+  setState(state: solitaireKlondikeFace, value: 0, target: Self, key: $each)
+}
+
+rule "solitaireKlondike-recycle-finish" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 2 and count(solitaireKlondikePile1) == 0
+  mode: Level
+  transaction {
+    setState(state: solitaireKlondike, value: 0, target: Self, key: stage)
+    setState(state: solitaireKlondike, value: null, target: Self, key: moves, expression: solitaireKlondike[moves] + 1)
+    setState(state: solitaireKlondike, value: 1, target: Self, key: result)
+    setState(state: solitaireKlondike, value: null, target: Self, key: applied, expression: solitaireKlondike[request])
+  }
+}
+
+rule "solitaireKlondike-deal-advance" {
+  when solitaire[table] == 1 and (solitaireKlondike[stage] == 0 or solitaireKlondike[stage] == 3 or solitaireKlondike[stage] == 4)
+  mode: Level
+  setState(state: solitaireKlondike, value: null, target: Self, key: dealStep, expression: solitaireKlondike[stage] == 0 ? 0 : solitaireKlondike[dealStep] + 1)
+}
+
+rule "solitaireKlondike-reject" {
+  gate: all(predicates: [
+    compareState(state: solitaire, comparison: Equal, value: 1, key: table)
+    compareState(state: solitaireKlondike, comparison: NotEqual, value: null, key: request, comparandState: solitaireKlondike, comparandKey: applied)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: stage)
+    compareState(state: solitaireKlondike, comparison: Equal, value: 0, key: busy)
+  ]
+  )
+  mode: Level
+  transaction {
+    setState(state: solitaireKlondike, value: -1, target: Self, key: result)
+    setState(state: solitaireKlondike, value: null, target: Self, key: applied, expression: solitaireKlondike[request])
+  }
+}
+
+rule "solitaireKlondike-maintenance-start" {
+  when solitaire[table] == 1 and solitaireKlondike[stage] == 0 and solitaireKlondike[busy] == 1
+  mode: Level
+  setState(state: solitaireKlondike, value: 0, target: Self, key: busy)
+}
+
+rule "solitaireKlondike-reveal" {
+  when solitaire[table] == 1 and solitaireKlondike[status] == 1 and solitaireKlondike[stage] == 0 and count($zones[$each]) > 0 and solitaireKlondikeFace[zone($zones[$each], last)] == 0
+  mode: Level
+  forEach: $zones
+  zones [solitaireKlondikePile2, solitaireKlondikePile3, solitaireKlondikePile4, solitaireKlondikePile5, solitaireKlondikePile6, solitaireKlondikePile7, solitaireKlondikePile8, solitaireKlondikePile1]
+  setState(state: solitaireKlondikeFace, value: 1, target: Self, key: zone($zones[$each], last))
+  setState(state: solitaireKlondike, value: 1, target: Self, key: busy)
+}
+
+rule "solitaireKlondike-gather-advance" {
+  when solitaire[table] == 1 and (solitaireKlondike[stage] == 0 or solitaireKlondike[stage] == 1)
+  mode: Level
+  setState(state: solitaireKlondike, value: null, target: Self, key: gatherStep, expression: solitaireKlondike[stage] == 0 ? 0 : minimum(11, solitaireKlondike[gatherStep] + 1))
+}
+
+rule "solitaireKlondike-attribute-advance" {
+  when solitaire[table] == 1 and (solitaireKlondike[stage] == 0 or solitaireKlondike[stage] == 5)
+  mode: Level
+  setState(state: solitaireKlondike, value: null, target: Self, key: attributeStep, expression: solitaireKlondike[stage] == 0 ? 0 : solitaireKlondike[attributeStep] + 1)
+}
+
+rule "solitaireKlondike-win" {
+  when solitaire[table] == 1 and solitaireKlondike[status] == 1 and solitaireKlondike[busy] == 0
+  mode: Level
+  setState(state: solitaireKlondike, value: null, target: Self, key: status, expression: count(solitaireKlondikePile10) + count(solitaireKlondikePile11) + count(solitaireKlondikePile12) + count(solitaireKlondikePile13) == 52 ? 2 : 1)
+}
+
+simulation {
+  rateHz: 240
+}
+
+pattern solitaireKlondikeLength: Int {
+  value: "1"
+  maxStates: 64
+  symbols {
+    any = 1
+  }
+  match: any*
+}
+
+pattern solitaireKlondikeSingle: Int {
+  value: "1"
+  maxStates: 64
+  symbols {
+    any = 1
+  }
+  match: any
+}
+
+pattern solitaireKlondikeRun: Int {
+  value: "solitaireKlondikeFace[$token] * (1 + (solitaireKlondikeRank[$token] == solitaireKlondikeRank[$previous] - 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[$previous] % 2))"
+  maxStates: 64
+  symbols {
+    face = 1..2
+    next = 2
+  }
+  match: face next*
+}
+
+pattern solitaireKlondikeLanding: Int {
+  value: "(solitaireKlondikeRank[$token] == solitaireKlondikeRank[solitaireKlondike[card]] + 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[solitaireKlondike[card]] % 2)"
+  maxStates: 64
+  symbols {
+    yes = 1
+  }
+  match: any* yes
+}

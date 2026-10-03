@@ -2394,7 +2394,7 @@ separate evidence, and unresolved rows remain unmodeled.
 
 The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
 `puck.world.json` and a checked-in Klondike fixture document
-(`Bench/klondike.fixture.world.json`, spliced the way
+(`Bench/klondike.fixture.puck`, spliced the way
 `tests/Puck.World.Tests/SolitaireFixtures.cs`'s `Game` builds one, without this
 project referencing the test project) and prints one row per number—
 shipped-world server construction time, idle-tick time and quiet-tick
