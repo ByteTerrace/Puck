@@ -3,20 +3,21 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    private readonly List<WorldCrossingArrival> m_arrivalNotes = [];
-
     private IWorldCrossingLog? m_crossingLog;
     private ulong? m_uncertainCrossing;
 
     // Set while the escrow lands a committed cohort: the admissions it makes are the arrival's own consequences.
     internal bool LandingArrival { get; set; }
 
-    /// <summary>Gets or sets the observer of every arrival this authority lands. A commit lands under the authority
-    /// gate on whichever thread carried it — the host's drain for a colocated source, a socket worker for a federated
-    /// one — so the arrival is held and handed to this observer at the start of the next step, on the stepping thread,
-    /// in landing order. The replay tape attaches here while it records, so the arrival joins the tick group the step
-    /// it preceded applies.</summary>
-    public Action<WorldCrossingArrival>? ArrivalTap { get; set; }
+    /// <summary>Gets or sets the observer of every arrival a commit here decided with at least one traveler landed: the
+    /// arrival as the commit bound it, and its outcome (each landed traveler's generation, and whether the commit rolled
+    /// the landings back because a member was refused or its record could not be made durable). A commit lands under the
+    /// authority gate on whichever thread carried it, the host's drain for a colocated source or a socket worker for a
+    /// federated one, and this observer hears it there, at the commit's own position among the authority's inputs. A
+    /// step and its tape close hold the same gate (<see cref="WorldServerStepShell.Step"/>), so an arrival that follows
+    /// a step joins the tick group of the next one. The replay tape attaches here while it records, and its re-drive
+    /// reproduces the outcome through <see cref="WorldTransferEscrow.TryReland"/>.</summary>
+    public Action<WorldCrossingArrival, WorldArrivalOutcome>? ArrivalTap { get; set; }
     /// <summary>Gets or sets the observer of the federated device images each step applies: the input a forwarded or
     /// federated traveler drives this authority's body with, which reaches it through no loopback. It hears the held
     /// set at the start of every step while any image is held and once more as the set empties, on the stepping thread
@@ -29,6 +30,34 @@ public sealed partial class WorldServer {
     /// captures and recovery redoes from.</summary>
     public ulong CrossingSequence => ExecuteAuthorityOperation(operation: () => m_transferEscrow.CrossingSequence);
 
+    /// <summary>Returns the identity this authority's catalog owns for a seat that is its own: a local seat whose
+    /// incarnation, when it has crossed, this authority minted at that very seat, carrying the id of an identity the
+    /// catalog owns. An id alone proves nothing, since every catalog seeds its identities from its template. A seat
+    /// coming home, a restored checkpoint and a source rollback after a restart rebind such a seat to the identity this
+    /// returns; every other seat keeps the projection it carries.</summary>
+    /// <param name="slot">The seat's body index.</param>
+    /// <param name="mobility">The seat's mobility identity, or <see langword="null"/> for a seat that never crossed.</param>
+    /// <param name="id">The id of the identity the seat carries.</param>
+    /// <returns>The owned identity, or <see langword="null"/> when the seat is not this authority's own.</returns>
+    public WorldIdentity? HomeSeatIdentity(int slot, WorldMobilityIdentity? mobility, string id) {
+        if (
+            (((uint)slot) >= ((uint)Population.LocalSeatCount)) ||
+            ((mobility is { } crossed) && (
+                (crossed.Incarnation.Index != slot) ||
+                !string.Equals(
+                    a: crossed.Incarnation.Authority,
+                    b: AuthorityIdentity,
+                    comparisonType: StringComparison.Ordinal
+                )
+            ))
+        ) {
+            return null;
+        }
+
+        return ((Profiles.FindById(id: id) is { Document: not null } owned)
+            ? owned
+            : null);
+    }
     /// <summary>Replaces every held federated device image with a recorded set — the replay's door for the images a
     /// recorded step held.</summary>
     /// <param name="held">The images, each with the body index it drives.</param>
@@ -104,23 +133,5 @@ public sealed partial class WorldServer {
             m_uncertainCrossing = entry.Sequence;
         }
         return durability;
-    }
-    // Callers hold the authority gate.
-    internal void NoteArrival(WorldCrossingArrival arrival) {
-        if (ArrivalTap is not null) {
-            m_arrivalNotes.Add(item: arrival);
-        }
-    }
-    // Runs at the start of a step, under the authority gate, on the stepping thread.
-    internal void FlushArrivalNotes() {
-        if (m_arrivalNotes.Count == 0) {
-            return;
-        }
-        if (ArrivalTap is { } tap) {
-            foreach (var arrival in m_arrivalNotes) {
-                tap(obj: arrival);
-            }
-        }
-        m_arrivalNotes.Clear();
     }
 }

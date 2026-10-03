@@ -128,6 +128,11 @@ public static class WorldBootComposition {
         // The boot's own work counts, which every boot shape does before the first tick; a counters report reads
         // every registered work source.
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldBootWork.Process);
+        // What keeping presentation-tier recipients current costs: projections, deltas, their bytes and the anchor rows
+        // held per recipient.
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldProjectionWork.Process);
+        // The certified body sweeps every authoritative shape runs: what proving a moving body's travel costs.
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.Physics.FixedContactSweepWork.Process);
 
         // The owned-world catalog (files under the state root; the storage.* verbs sync it to the per-user cloud
         // container): loaded once at startup, malformed documents refused by name — the roster and the settings verbs
@@ -349,12 +354,13 @@ public static class WorldBootComposition {
                     derivedFaceScreens: definition.Authoring.DerivedFaceScreens
                 )];
 
-        // WorldMachineHost's own narration hub: it is a peer singleton to WorldServer (constructed before it, as its
-        // own constructor parameter — see the remarks below), so it cannot share WorldServer's hub without a
-        // circular dependency; this one is its own. Bound to stderr in the same factory that constructs it, before
-        // anything resolves it — WorldMachineHost narrates from inside its own constructor (a declared machine's
-        // boot fault), so attaching only after the container finishes building the host, the way
-        // WorldPostBuildWiring.Install attaches WorldInstanceHost's, would miss those lines.
+        // The narration hub of the peers constructed before WorldServer: WorldMachineHost (a constructor parameter of
+        // WorldServer — see the remarks below) and the owned-world catalog (its identity refusals and a replay's
+        // profile drift). Neither can share WorldServer's hub without a circular dependency, so this one is theirs.
+        // Bound to stderr in the same factory that constructs it, before anything resolves it — both narrate from
+        // inside their own constructors (a declared machine's boot fault, a refused owned world), so attaching only
+        // after the container finishes building them, the way WorldPostBuildWiring.Install attaches
+        // WorldInstanceHost's, would miss those lines.
         services.AddSingleton(implementationFactory: static sp => {
             var hub = new WorldOutputHub();
 
@@ -392,6 +398,9 @@ public static class WorldBootComposition {
             contentAdmissionPolicy: sp.GetRequiredService<IMachineContentAdmissionPolicy>()
         ));
 
+        // Where every presentation reports a bound value it clamps into its field's domain; WorldPostBuildWiring routes
+        // the reports to the host's diagnostic fan-out.
+        services.AddSingleton<WorldValueDomainGuard>();
         // The screen binder — owns the declared screens' CPU-fed GPU sources (test patterns, the shared webcam,
         // window captures) and READS Server.WorldMachineHost's outputs for a machine-owning index (it no longer
         // boots, steps, or owns a machine itself — see WorldMachineHost's own remarks). CORE (not presentation-only)
@@ -423,6 +432,7 @@ public static class WorldBootComposition {
                 // never resolves either backend, so this bool only matters once presentation composes.
                 hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX,
                 paperWhiteNits: sp.GetRequiredService<WorldHostSettings>().PaperWhiteNits,
+                domains: sp.GetRequiredService<WorldValueDomainGuard>(),
                 // A session-sourced face's destination/reference lookup and resolver-owned instance — CORE, not
                 // presentation-only, so an observation lease attaches (and a destination instance starts) in every
                 // boot shape, exactly like WorldMachineHost's own boot-time machine start.
@@ -596,6 +606,16 @@ public static class WorldBootComposition {
         // The one source every live document swap and replay re-read goes through: a .puck origin lowers here.
         services.AddSingleton<IWorldDocumentSource>(implementationInstance: PuckDocumentComposer.Instance);
         services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
+        // The in-session history (world.history): keyframes plus the tape capture's per-tick input, for deterministic
+        // seek, branch, diff, and replay-edit over the boot world. Off until world.history on.
+        services.AddSingleton(implementationFactory: static sp => new WorldHistory(
+            engines: sp.GetServices<IMachineEngine>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+            server: sp.GetRequiredService<WorldServer>(),
+            stateRoot: sp.GetRequiredService<WorldStateRoot>(),
+            tape: sp.GetRequiredService<WorldReplayTape>()
+        ));
+        services.AddSingleton<ICommandModule, WorldHistoryCommandModule>();
 
         // The console's sequencing primitive: the tick barrier world.wait arms (published by the shared server-step
         // shell each fixed step) and the verb that arms it. CORE — world.wait is a server-safe verb by name (DELIVER
@@ -690,6 +710,7 @@ public static class WorldBootComposition {
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
             population: sp.GetRequiredService<WorldPopulation>(),
             continuum: sp.GetRequiredService<WorldContinuum>(),
+            history: sp.GetRequiredService<WorldHistory>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>()
         ));
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldHudCommandModule(
@@ -1201,7 +1222,8 @@ public static class WorldBootComposition {
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             bakes: sp.GetRequiredService<WorldBakeSchedule>(),
-            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>())
+            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>()),
+            domains: sp.GetRequiredService<WorldValueDomainGuard>()
         ) {
             // An offscreen capture shows bound state exactly as of the tick it is armed for.
             PinsStateFraction = true,
@@ -1565,7 +1587,8 @@ public static class WorldBootComposition {
             resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
             graphs: sp.GetRequiredService<WorldViewGraphHost>(),
             bakes: sp.GetRequiredService<WorldBakeSchedule>(),
-            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>())
+            editor: sp.GetRequiredService<WorldEditorPointer>().Attach(seats: sp.GetRequiredService<WorldEditorSeats>()),
+            domains: sp.GetRequiredService<WorldValueDomainGuard>()
         ).AttachTo(probe: sp.GetRequiredService<WorldRenderProbe>()));
 
         // The overlay's glyph pack, loaded once, and the default render graph, which draws the overlay when the pack

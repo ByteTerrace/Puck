@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Testing;
 using Puck.World.Transpiler.Lsp;
 using Xunit;
 
@@ -180,32 +181,28 @@ public class LspDiagnosticSchedulingTests {
     }
     [Fact]
     public void TheSemanticPublishCarriesBothTiers() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-lsp-tiers-");
+        using var directory = new TemporaryDirectory(prefix: "puck-lsp-tiers-");
 
-        try {
-            // The source tier finds an unused `let` (a lint warning); the semantic tier finds that the basis names no
-            // document.
-            var path = Path.Combine(path1: directory.FullName, path2: "root.puck");
-            var text = "schema: \"puck.world.definition.v1\"\nbasis: \"missing\"\nlet unused = 1\n";
-            var uri = new System.Uri(uriString: path).AbsoluteUri;
+        // The source tier finds an unused `let` (a lint warning); the semantic tier finds that the basis names no
+        // document.
+        var path = Path.Combine(path1: directory.RootPath, path2: "root.puck");
+        var text = "schema: \"puck.world.definition.v1\"\nbasis: \"missing\"\nlet unused = 1\n";
+        var uri = new System.Uri(uriString: path).AbsoluteUri;
 
-            File.WriteAllText(contents: text, path: path);
+        File.WriteAllText(contents: text, path: path);
 
-            var server = new PuckLanguageServer();
-            var written = new List<JsonObject>();
+        var server = new PuckLanguageServer();
+        var written = new List<JsonObject>();
 
-            Send(message: Open(text: text, uri: uri, version: 1), server: server, written: written);
-            Assert.Equal(actual: Quiet(server: server, written: written), expected: 2);
+        Send(message: Open(text: text, uri: uri, version: 1), server: server, written: written);
+        Assert.Equal(actual: Quiet(server: server, written: written), expected: 2);
 
-            var published = Published(written: written);
-            var codes = published.Select(selector: static message => Assert.IsType<JsonArray>(@object: message["params"]?["diagnostics"])
-                .Select(selector: static diagnostic => diagnostic?["code"]?.ToString()).ToHashSet()).ToArray();
+        var published = Published(written: written);
+        var codes = published.Select(selector: static message => Assert.IsType<JsonArray>(@object: message["params"]?["diagnostics"])
+            .Select(selector: static diagnostic => diagnostic?["code"]?.ToString()).ToHashSet()).ToArray();
 
-            Assert.Equal(actual: published.Length, expected: 2);
-            Assert.True(condition: codes[0].IsProperSubsetOf(other: codes[1]), userMessage: $"source tier [{string.Join(separator: ", ", values: codes[0])}], both tiers [{string.Join(separator: ", ", values: codes[1])}]");
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(actual: published.Length, expected: 2);
+        Assert.True(condition: codes[0].IsProperSubsetOf(other: codes[1]), userMessage: $"source tier [{string.Join(separator: ", ", values: codes[0])}], both tiers [{string.Join(separator: ", ", values: codes[1])}]");
     }
     [Fact]
     public void AClosedDocumentIsNeverDiagnosed() {
@@ -227,46 +224,42 @@ public class LspDiagnosticSchedulingTests {
     }
     [Fact]
     public void AnEditMarksTheOpenDocumentsThatReadItAfterItself() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-lsp-dependents-");
+        using var directory = new TemporaryDirectory(prefix: "puck-lsp-dependents-");
 
-        try {
-            var basis = Path.Combine(path1: directory.FullName, path2: "base.puck");
-            var middle = Path.Combine(path1: directory.FullName, path2: "middle.puck");
-            var root = Path.Combine(path1: directory.FullName, path2: "root.puck");
-            var alone = Path.Combine(path1: directory.FullName, path2: "alone.puck");
-            var basisText = "schema: \"puck.world.definition.v1\"\n";
-            var middleText = "schema: \"puck.world.definition.v1\"\nbasis: \"base\"\n";
-            var rootText = "schema: \"puck.world.definition.v1\"\nbasis: \"middle\"\n";
+        var basis = Path.Combine(path1: directory.RootPath, path2: "base.puck");
+        var middle = Path.Combine(path1: directory.RootPath, path2: "middle.puck");
+        var root = Path.Combine(path1: directory.RootPath, path2: "root.puck");
+        var alone = Path.Combine(path1: directory.RootPath, path2: "alone.puck");
+        var basisText = "schema: \"puck.world.definition.v1\"\n";
+        var middleText = "schema: \"puck.world.definition.v1\"\nbasis: \"base\"\n";
+        var rootText = "schema: \"puck.world.definition.v1\"\nbasis: \"middle\"\n";
 
-            File.WriteAllText(contents: basisText, path: basis);
-            File.WriteAllText(contents: middleText, path: middle);
-            File.WriteAllText(contents: rootText, path: root);
-            File.WriteAllText(contents: basisText, path: alone);
+        File.WriteAllText(contents: basisText, path: basis);
+        File.WriteAllText(contents: middleText, path: middle);
+        File.WriteAllText(contents: rootText, path: root);
+        File.WriteAllText(contents: basisText, path: alone);
 
-            var uris = new[] { basis, middle, root, alone }.Select(selector: static path => new System.Uri(uriString: path).AbsoluteUri).ToArray();
-            var server = new PuckLanguageServer();
-            var written = new List<JsonObject>();
+        var uris = new[] { basis, middle, root, alone }.Select(selector: static path => new System.Uri(uriString: path).AbsoluteUri).ToArray();
+        var server = new PuckLanguageServer();
+        var written = new List<JsonObject>();
 
-            Send(message: Open(text: rootText, uri: uris[2], version: 1), server: server, written: written);
-            Send(message: Open(text: middleText, uri: uris[1], version: 1), server: server, written: written);
-            Send(message: Open(text: basisText, uri: uris[0], version: 1), server: server, written: written);
-            Send(message: Open(text: basisText, uri: uris[3], version: 1), server: server, written: written);
-            _ = Quiet(server: server, written: written);
-            Assert.Equal(actual: server.SourceDiagnoses, expected: 4);
+        Send(message: Open(text: rootText, uri: uris[2], version: 1), server: server, written: written);
+        Send(message: Open(text: middleText, uri: uris[1], version: 1), server: server, written: written);
+        Send(message: Open(text: basisText, uri: uris[0], version: 1), server: server, written: written);
+        Send(message: Open(text: basisText, uri: uris[3], version: 1), server: server, written: written);
+        _ = Quiet(server: server, written: written);
+        Assert.Equal(actual: server.SourceDiagnoses, expected: 4);
 
-            Send(message: Change(text: $"{basisText}// edited\n", uri: uris[0], version: 2), server: server, written: written);
+        Send(message: Change(text: $"{basisText}// edited\n", uri: uris[0], version: 2), server: server, written: written);
 
-            var order = new List<string>();
+        var order = new List<string>();
 
-            while (server.TakePendingDiagnosis() is { } request) {
-                order.Add(item: request.Uri);
-            }
-
-            // The edited document first, then what reads it, then what reads that; the unrelated document not at all.
-            Assert.Equal(actual: order, expected: [uris[0], uris[1], uris[2]]);
-        } finally {
-            directory.Delete(recursive: true);
+        while (server.TakePendingDiagnosis() is { } request) {
+            order.Add(item: request.Uri);
         }
+
+        // The edited document first, then what reads it, then what reads that; the unrelated document not at all.
+        Assert.Equal(actual: order, expected: [uris[0], uris[1], uris[2]]);
     }
     [Fact]
     public async Task TheStdioHostPublishesTheLastVersionOnceItsInputEnds() {

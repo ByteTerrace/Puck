@@ -3,6 +3,7 @@ using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Cli.Counters;
+using Puck.Testing;
 using Puck.World;
 
 using Xunit;
@@ -61,34 +62,26 @@ public sealed class CountersLawTests {
         Workload: CountersCommand.WorldPath
     );
     private static (int ExitCode, string Output, string Error) Compare(WorldCountersReport left, WorldCountersReport right) {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-law-");
 
-        try {
-            var leftPath = Path.Combine(path1: directory.FullName, path2: "left.json");
-            var rightPath = Path.Combine(path1: directory.FullName, path2: "right.json");
+        var leftPath = Path.Combine(path1: directory.RootPath, path2: "left.json");
+        var rightPath = Path.Combine(path1: directory.RootPath, path2: "right.json");
 
-            CountersCommand.WriteReport(path: leftPath, report: left);
-            CountersCommand.WriteReport(path: rightPath, report: right);
+        CountersCommand.WriteReport(path: leftPath, report: left);
+        CountersCommand.WriteReport(path: rightPath, report: right);
 
-            return ConsoleCapture.RunSplit(run: () => CountersCommand.Compare(left: leftPath, right: rightPath));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        return ConsoleCapture.RunSplit(run: () => CountersCommand.Compare(left: leftPath, right: rightPath));
     }
     private static (int ExitCode, string Output, string Error) CompareText(string leftText) {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-law-");
 
-        try {
-            var leftPath = Path.Combine(path1: directory.FullName, path2: "left.json");
-            var rightPath = Path.Combine(path1: directory.FullName, path2: "right.json");
+        var leftPath = Path.Combine(path1: directory.RootPath, path2: "left.json");
+        var rightPath = Path.Combine(path1: directory.RootPath, path2: "right.json");
 
-            File.WriteAllText(contents: leftText, path: leftPath);
-            CountersCommand.WriteReport(path: rightPath, report: Report(vulkan: Run(backend: "vulkan")));
+        File.WriteAllText(contents: leftText, path: leftPath);
+        CountersCommand.WriteReport(path: rightPath, report: Report(vulkan: Run(backend: "vulkan")));
 
-            return ConsoleCapture.RunSplit(run: () => CountersCommand.Compare(left: leftPath, right: rightPath));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        return ConsoleCapture.RunSplit(run: () => CountersCommand.Compare(left: leftPath, right: rightPath));
     }
 
     [Fact]
@@ -265,22 +258,18 @@ public sealed class CountersLawTests {
     }
     [Fact]
     public void AWrittenReportReadsBackAsWritten() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-law-");
+        using var directory = new TemporaryDirectory(prefix: "puck-counters-law-");
 
-        try {
-            var path = Path.Combine(path1: directory.FullName, path2: "report.json");
-            var report = Report(vulkan: Run(backend: "vulkan"));
+        var path = Path.Combine(path1: directory.RootPath, path2: "report.json");
+        var report = Report(vulkan: Run(backend: "vulkan"));
 
-            CountersCommand.WriteReport(path: path, report: report);
+        CountersCommand.WriteReport(path: path, report: report);
 
-            Assert.True(condition: CountersCommand.TryReadReport(path: path, reason: out var reason, report: out var read), userMessage: reason);
-            Assert.Equal(
-                actual: JsonSerializer.Serialize(value: read, jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport),
-                expected: JsonSerializer.Serialize(value: report, jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport)
-            );
-            Assert.Contains(expectedSubstring: "\"class\": \"per-backend-deterministic\"", actualString: File.ReadAllText(path: path, encoding: Encoding.UTF8));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.True(condition: CountersCommand.TryReadReport(path: path, reason: out var reason, report: out var read), userMessage: reason);
+        Assert.Equal(
+            actual: JsonSerializer.Serialize(value: read, jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport),
+            expected: JsonSerializer.Serialize(value: report, jsonTypeInfo: WorldJsonContext.Default.WorldCountersReport)
+        );
+        Assert.Contains(expectedSubstring: "\"class\": \"per-backend-deterministic\"", actualString: File.ReadAllText(path: path, encoding: Encoding.UTF8));
     }
 }

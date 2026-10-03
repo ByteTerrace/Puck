@@ -1,4 +1,5 @@
 using Puck.Cli.Bench;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -26,37 +27,35 @@ public sealed class StartupBenchmarkTests {
     }
     [Fact]
     public void PendingCaptureAndUnrelatedCaptureDoNotProveReadiness() {
-        var path = Path.GetTempFileName();
+        using var scratch = new TemporaryDirectory(prefix: "puck-startup-benchmark-");
+        var path = scratch.PathOf(name: "capture.png");
 
-        try {
-            File.WriteAllText(contents: "existing bytes", path: path);
-            var pending = new CliProcessOutputLine(ElapsedMilliseconds: 150, Line: $"[world.screenshot: pending {path} — lands on the next composed frame]", Sequence: 3, Stream: CliProcessOutputStream.Stdout);
-            var unrelated = new CliProcessOutputLine(ElapsedMilliseconds: 200, Line: $"[capture] unified overlay -> {path}.other", Sequence: 4, Stream: CliProcessOutputStream.Stderr);
+        File.WriteAllText(contents: "existing bytes", path: path);
+        var pending = new CliProcessOutputLine(ElapsedMilliseconds: 150, Line: $"[world.screenshot: pending {path} — lands on the next composed frame]", Sequence: 3, Stream: CliProcessOutputStream.Stdout);
+        var unrelated = new CliProcessOutputLine(ElapsedMilliseconds: 200, Line: $"[capture] unified overlay -> {path}.other", Sequence: 4, Stream: CliProcessOutputStream.Stderr);
 
-            Assert.NotNull(@object: StartupBenchmarks.Assess("world", 1, Transcript(extra: [pending, unrelated]), false, path).Error);
-            var completion = new CliProcessOutputLine(ElapsedMilliseconds: 250, Line: $"[capture] unified overlay -> {path}", Sequence: 5, Stream: CliProcessOutputStream.Stderr);
-            var sample = StartupBenchmarks.Assess("world", 1, Transcript(extra: [pending, completion]), false, path);
+        Assert.NotNull(@object: StartupBenchmarks.Assess("world", 1, Transcript(extra: [pending, unrelated]), false, path).Error);
+        var completion = new CliProcessOutputLine(ElapsedMilliseconds: 250, Line: $"[capture] unified overlay -> {path}", Sequence: 5, Stream: CliProcessOutputStream.Stderr);
+        var sample = StartupBenchmarks.Assess("world", 1, Transcript(extra: [pending, completion]), false, path);
 
-            Assert.Null(@object: sample.Error);
-            Assert.Equal(250, StartupBenchmarks.Summarize(expected: 1, headless: false, rows: [sample])!.MeanMilliseconds);
-            File.Delete(path: path);
-            Assert.NotNull(@object: StartupBenchmarks.Assess("world", 1, Transcript(extra: [completion]), false, path).Error);
-        } finally { File.Delete(path: path); }
+        Assert.Null(@object: sample.Error);
+        Assert.Equal(250, StartupBenchmarks.Summarize(expected: 1, headless: false, rows: [sample])!.MeanMilliseconds);
+        File.Delete(path: path);
+        Assert.NotNull(@object: StartupBenchmarks.Assess("world", 1, Transcript(extra: [completion]), false, path).Error);
     }
     [Fact]
     public void CompletedCaptureWithMissingOverlaysCannotClaimReadiness() {
-        var path = Path.GetTempFileName();
+        using var scratch = new TemporaryDirectory(prefix: "puck-startup-benchmark-");
+        var path = scratch.PathOf(name: "capture.png");
 
-        try {
-            File.WriteAllText(contents: "completed capture", path: path);
-            var sample = StartupBenchmarks.Assess("world", 1, Transcript(extra: [
-                new(ElapsedMilliseconds: 130, Line: "[unified-overlay] skipped: no usable glyph atlas", Sequence: 3, Stream: CliProcessOutputStream.Stderr),
-                new(ElapsedMilliseconds: 200, Line: $"[capture] unified overlay -> {path}", Sequence: 4, Stream: CliProcessOutputStream.Stderr),
-            ]), false, path);
+        File.WriteAllText(contents: "completed capture", path: path);
+        var sample = StartupBenchmarks.Assess("world", 1, Transcript(extra: [
+            new(ElapsedMilliseconds: 130, Line: "[unified-overlay] skipped: no usable glyph atlas", Sequence: 3, Stream: CliProcessOutputStream.Stderr),
+            new(ElapsedMilliseconds: 200, Line: $"[capture] unified overlay -> {path}", Sequence: 4, Stream: CliProcessOutputStream.Stderr),
+        ]), false, path);
 
-            Assert.Equal("overlay unavailable; rendered startup is degraded", sample.Error);
-            Assert.Null(@object: StartupBenchmarks.Summarize(expected: 1, headless: false, rows: [sample]));
-        } finally { File.Delete(path: path); }
+        Assert.Equal("overlay unavailable; rendered startup is degraded", sample.Error);
+        Assert.Null(@object: StartupBenchmarks.Summarize(expected: 1, headless: false, rows: [sample]));
     }
     [Fact]
     public void ChildOutputCarriesObservedProcessElapsedTime() {

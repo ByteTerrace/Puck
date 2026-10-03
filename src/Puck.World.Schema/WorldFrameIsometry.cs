@@ -30,6 +30,8 @@ public readonly record struct WorldFrameArrival(FixedVector3 Position, FixedQ481
 /// off-center crossing lands at its counterpart point BY the isometry and needs no seam carried beside it.</para>
 /// </remarks>
 public static class WorldFrameIsometry {
+    private static readonly FixedQ4816 Pi = FixedQ4816.FromDouble(value: Math.PI);
+    private static readonly FixedQ4816 TwoPi = (Pi + Pi);
     private static readonly FixedVector3 Forward = new(
         X: FixedQ4816.Zero,
         Y: FixedQ4816.Zero,
@@ -137,5 +139,44 @@ public static class WorldFrameIsometry {
             y: mappedForward.X,
             x: mappedForward.Z
         );
+    }
+    /// <summary>Returns the turn about world up that carries a traveler's heading from <paramref name="before"/> to
+    /// <paramref name="after"/>, reduced to <c>[-pi, pi)</c>: the one turn rule a crossing reports. A mapped arrival's
+    /// turn is the turn between its departure and arrival yaws (<see cref="YawDelta"/>); the turn a route change
+    /// carries is the turn between the traveler's accumulated arrival turns (<see cref="AccumulateTurn"/>) before and
+    /// after it.</summary>
+    /// <param name="before">The earlier heading or accumulated turn, fixed-point radians.</param>
+    /// <param name="after">The later one.</param>
+    /// <returns>The turn.</returns>
+    public static FixedQ4816 TurnBetween(FixedQ4816 before, FixedQ4816 after) => WrapTurn(radians: (after - before));
+    /// <summary>Returns a traveler's accumulated arrival turn after one more mapped arrival: the turns of every mapped
+    /// arrival it has made, reduced to <c>[-pi, pi)</c>. An observer that held the traveler at one accumulated turn turns
+    /// its view by <see cref="TurnBetween"/> that and the next, however many arrivals lie between.</summary>
+    /// <param name="travelTurn">The traveler's accumulated arrival turn before this arrival.</param>
+    /// <param name="departureYaw">The traveler's yaw at departure, fixed-point radians.</param>
+    /// <param name="arrivalYaw">The traveler's mapped yaw at arrival.</param>
+    /// <returns>The accumulated arrival turn after this arrival.</returns>
+    public static FixedQ4816 AccumulateTurn(FixedQ4816 travelTurn, FixedQ4816 departureYaw, FixedQ4816 arrivalYaw) => WrapTurn(radians: (travelTurn + TurnBetween(
+        after: arrivalYaw,
+        before: departureYaw
+    )));
+    /// <summary>Returns whether <paramref name="turn"/> is a reduced turn, in <c>[-pi, pi)</c>: what a wire or
+    /// checkpoint reader accepts for an accumulated arrival turn.</summary>
+    /// <param name="turn">The turn to check.</param>
+    /// <returns><see langword="true"/> when the turn is reduced.</returns>
+    public static bool IsTurn(FixedQ4816 turn) => ((turn >= -Pi) && (turn < Pi));
+
+    // The quotient's rounding can leave the reduction one period short at either end of the interval; the two corrections
+    // close the interval exactly.
+    private static FixedQ4816 WrapTurn(FixedQ4816 radians) {
+        var reduced = (radians - (TwoPi * FixedQ4816.Floor(value: ((radians + Pi) / TwoPi))));
+
+        if (reduced >= Pi) {
+            reduced -= TwoPi;
+        } else if (reduced < -Pi) {
+            reduced += TwoPi;
+        }
+
+        return reduced;
     }
 }

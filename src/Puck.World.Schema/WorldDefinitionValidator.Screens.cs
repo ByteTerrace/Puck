@@ -250,15 +250,17 @@ public static partial class WorldDefinitionValidator {
                         errors: errors
                     );
 
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.OrbitYaw,
                         path: $"{opPath}.yaw",
                         scalar: orbit.Yaw.Value
                     );
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.OrbitPitch,
                         path: $"{opPath}.pitch",
                         scalar: orbit.Pitch.Value
                     );
@@ -288,9 +290,10 @@ public static partial class WorldDefinitionValidator {
                         rowNoun: "curves",
                         value: pathOp.Curve
                     );
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.PathFraction,
                         path: $"{opPath}.fraction",
                         scalar: pathOp.Fraction
                     );
@@ -349,9 +352,10 @@ public static partial class WorldDefinitionValidator {
 
                     seenFov = true;
 
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.FieldOfView,
                         path: $"{opPath}.fieldOfViewRadians",
                         scalar: fov.FieldOfViewRadians
                     );
@@ -371,9 +375,10 @@ public static partial class WorldDefinitionValidator {
                         errors.Add(item: $"{opPath} needs non-empty program names 'a' and 'b'.");
                     }
 
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.BlendWeight,
                         path: $"{opPath}.weight",
                         scalar: blend.Weight
                     );
@@ -386,9 +391,10 @@ public static partial class WorldDefinitionValidator {
 
                     seenSelect = true;
 
-                    RequireBindableScalar(
+                    JudgeScalar(
                         definition: definition,
                         errors: errors,
+                        field: WorldValueFields.SelectKey,
                         path: $"{opPath}.key",
                         scalar: select.Key
                     );

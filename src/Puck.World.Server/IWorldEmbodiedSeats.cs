@@ -26,6 +26,14 @@ public interface IWorldEmbodiedSeats {
     bool IsOccupied(int slot);
     /// <summary>Publishes a new complete authority claim for local seat <paramref name="slot"/>.</summary>
     void PublishRoute(int slot, WorldAuthorityEndpoint endpoint, in WorldEntityAddress entity);
+    /// <summary>Carries local seat <paramref name="slot"/>'s view through a mapped arrival that turned its traveler by
+    /// <paramref name="yawDelta"/> (<c>WorldSeatViewState.Cross</c>), so the seat looks along what the door's window
+    /// showed.</summary>
+    /// <param name="slot">The local seat.</param>
+    /// <param name="yawDelta">The arrival's turn about world up (<see cref="WorldFrameIsometry.YawDelta"/>), fixed-point
+    /// radians.</param>
+    /// <param name="yawReference">The yaw reference of the world the seat arrives in.</param>
+    void CrossView(int slot, Puck.Maths.FixedQ4816 yawDelta, WorldSeatYawReference yawReference);
     /// <summary>Retargets local seat <paramref name="slot"/>'s routed entity only if it is still routed through
     /// <paramref name="expectedEndpoint"/> — the route-level CAS a background federation callback uses so a stale
     /// callback cannot overwrite a newer authority claim.</summary>
@@ -60,6 +68,7 @@ public static class WorldEmbodiedSeats {
         public void ClearAnalog() { }
         public void ClearHeld(int slot) { }
         public void ConfigureLeave(Func<int, Principal, bool> leave) { }
+        public void CrossView(int slot, Puck.Maths.FixedQ4816 yawDelta, WorldSeatYawReference yawReference) { }
         public bool IsOccupied(int slot) => false;
         public bool OccupySeat(int slot, WorldIdentity? profile) => false;
         public void PublishRoute(int slot, WorldAuthorityEndpoint endpoint, in WorldEntityAddress entity) { }

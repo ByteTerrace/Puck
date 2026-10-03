@@ -31,11 +31,11 @@ internal static partial class TestCommand {
     }
     // The World every leg boots: the --world-artifact the caller named, or the build of this checkout's sources, reused
     // when an earlier run built it and leased until every leg has exited.
-    private static bool TryResolveArtifact(string? worldArtifact, string repositoryRoot, out string? artifact, out WorldArtifact? lease) {
+    private static bool TryResolveArtifact(string? worldArtifact, string repositoryRoot, string runDirectory, out string? artifact, out WorldArtifact? lease) {
         if (WorldArtifactBuild.TryResolveNamed(
-            build: out var build,
             error: out var error,
             lease: out lease,
+            logDirectory: runDirectory,
             named: worldArtifact,
             path: out artifact,
             repositoryRoot: repositoryRoot,
@@ -46,11 +46,6 @@ internal static partial class TestCommand {
         }
 
         Console.Error.WriteLine(value: $"ERROR: {error}");
-
-        if (build is not null) {
-            Console.Error.WriteLine(value: build.Stdout);
-            Console.Error.WriteLine(value: build.Stderr);
-        }
 
         return false;
     }

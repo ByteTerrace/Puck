@@ -200,6 +200,29 @@ public sealed class WorldSeatViewState {
             );
         }
     }
+    /// <summary>Returns the rotation of the world a mapped arrival turns its traveler by: the boundary pair's yaw delta
+    /// (<see cref="WorldFrameIsometry.YawDelta"/>, the arrival yaw less the departure yaw) as a turn about world up.</summary>
+    /// <param name="yawDelta">The arrival's yaw delta, fixed-point radians.</param>
+    /// <returns>The turn.</returns>
+    public static Quaternion ArrivalTurn(Puck.Maths.FixedQ4816 yawDelta) => Quaternion.CreateFromAxisAngle(
+        angle: ((float)((double)yawDelta)),
+        axis: Vector3.UnitY
+    );
+    /// <summary>Carries the seat's view through a mapped arrival that turns its traveler by
+    /// <paramref name="turn"/>, so the seat looks through the door it walked through as a window onto the same door
+    /// showed it. A world-referenced live yaw turns with the traveler; a body-referenced one already rides the
+    /// traveler's turned heading. The eased chase boom turns either way.</summary>
+    /// <param name="turn">The arrival's turn (<see cref="ArrivalTurn"/>).</param>
+    /// <param name="yawReference">The yaw reference of the world the seat arrives in.</param>
+    public void Cross(Quaternion turn, WorldSeatYawReference yawReference) {
+        lock (m_gate) {
+            if (yawReference == WorldSeatYawReference.World) {
+                m_yaw = Wrap(radians: (m_yaw + (WorldSeatCameraResolver.BodyYaw(orientation: turn) - WorldSeatCameraResolver.BodyYaw(orientation: Quaternion.Identity))));
+            }
+
+            m_boom.Rotate(rotation: turn);
+        }
+    }
     public void Recenter() {
         lock (m_gate) {
             m_yaw = 0f;
@@ -241,15 +264,18 @@ public sealed class WorldSeatViewState {
     /// <param name="bodyOrientation">The perceived body's orientation.</param>
     /// <param name="definition">The routed world's live document.</param>
     /// <param name="mirror">The state mirror the rig's bound operands read through.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions.</param>
     /// <returns>The rig.</returns>
     /// <remarks>The compiled rig is cached against the AUTHORED program instance, so a delivery that only advances
     /// the document retargets in place — the seat's live orbit is an evaluator input, never a recompile.</remarks>
-    public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition, WorldStateMirror mirror) {
+    public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: views);
 
         var rig = m_rigCache.Resolve(
             definition: definition,
+            domains: domains,
             interactive: true,
             mirror: mirror,
             program: views.SeatRig

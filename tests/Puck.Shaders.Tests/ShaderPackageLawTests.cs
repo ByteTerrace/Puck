@@ -4,6 +4,7 @@ using System.Text;
 using Puck.Abstractions;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -717,9 +718,12 @@ public sealed partial class ShaderPackageLawTests {
             expected: ShaderPipelineLoadStatus.Compiled
         );
 
-        using var clean = new Scratch();
+        using var clean = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-shader-package-"
+        );
         var relocated = Path.Combine(
-            path1: clean.Path,
+            path1: clean.RootPath,
             path2: "moved"
         );
 
@@ -731,7 +735,7 @@ public sealed partial class ShaderPackageLawTests {
 
         // A fresh cache, so the relocated sources are what compiles.
         var loaded = await new ShaderPackager(compiler: new ShaderCompiler(
-            cacheDirectory: Path.Combine(path1: clean.Path, path2: "cache"),
+            cacheDirectory: Path.Combine(path1: clean.RootPath, path2: "cache"),
             processRunner: new PackageRunner()
         )).LoadAsync(
             cancellationToken: Token,
@@ -770,9 +774,12 @@ public sealed partial class ShaderPackageLawTests {
             expected: ShaderPipelineLoadStatus.Compiled
         );
 
-        using var clean = new Scratch();
+        using var clean = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-shader-package-"
+        );
         var relocated = Path.Combine(
-            path1: clean.Path,
+            path1: clean.RootPath,
             path2: "moved"
         );
 
@@ -949,9 +956,12 @@ public sealed partial class ShaderPackageLawTests {
             expected: ["R8G8B8A8Unorm"]
         );
 
-        using var clean = new Scratch();
+        using var clean = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-shader-package-"
+        );
         var relocated = Path.Combine(
-            path1: clean.Path,
+            path1: clean.RootPath,
             path2: "image"
         );
 
@@ -962,7 +972,7 @@ public sealed partial class ShaderPackageLawTests {
         fixture.DeleteSources();
 
         var loaded = await new ShaderPackager(compiler: new ShaderCompiler(
-            cacheDirectory: Path.Combine(path1: clean.Path, path2: "cache"),
+            cacheDirectory: Path.Combine(path1: clean.RootPath, path2: "cache"),
             processRunner: new PackageRunner()
         )).LoadAsync(
             cancellationToken: Token,
@@ -1052,9 +1062,12 @@ public sealed partial class ShaderPackageLawTests {
             expected: await new ShaderCompiler(cacheDirectory: fixture.Output(name: "cache")).ToolVersionAsync(cancellationToken: Token, tool: ShaderCompiler.DxcTool)
         );
 
-        using var clean = new Scratch();
+        using var clean = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: "puck-shader-package-"
+        );
         var relocated = Path.Combine(
-            path1: clean.Path,
+            path1: clean.RootPath,
             path2: "moved"
         );
 
@@ -1064,7 +1077,7 @@ public sealed partial class ShaderPackageLawTests {
         );
         fixture.DeleteSources();
 
-        var loaded = await new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: Path.Combine(path1: clean.Path, path2: "cache"))).LoadAsync(
+        var loaded = await new ShaderPackager(compiler: new ShaderCompiler(cacheDirectory: Path.Combine(path1: clean.RootPath, path2: "cache"))).LoadAsync(
             cancellationToken: Token,
             package: relocated
         );
@@ -1081,11 +1094,14 @@ public sealed partial class ShaderPackageLawTests {
 
     /// <summary>A copy of one fixture directory in a scratch directory, beside the outputs a law writes.</summary>
     private sealed class Fixture : IDisposable {
-        private readonly Scratch m_scratch = new();
+        private readonly TemporaryDirectory m_scratch = new(
+            bestEffortDelete: true,
+            prefix: "puck-shader-package-"
+        );
 
         public Fixture(string name) {
             Root = System.IO.Path.Combine(
-                path1: m_scratch.Path,
+                path1: m_scratch.RootPath,
                 path2: "source"
             );
             Copy(
@@ -1184,7 +1200,7 @@ public sealed partial class ShaderPackageLawTests {
             oldChar: '\\'
         );
         public string Output(string name) => System.IO.Path.Combine(
-            path1: m_scratch.Path,
+            path1: m_scratch.RootPath,
             path2: "out",
             path3: name
         );
@@ -1192,26 +1208,6 @@ public sealed partial class ShaderPackageLawTests {
             path1: Root,
             path2: logicalPath
         ));
-    }
-    private sealed class Scratch : IDisposable {
-        public Scratch() {
-            Path = System.IO.Path.Combine(
-                path1: System.IO.Path.GetTempPath(),
-                path2: ("puck-shader-package-" + Guid.NewGuid().ToString(format: "N")[..12])
-            );
-            Directory.CreateDirectory(path: Path);
-        }
-
-        public string Path { get; }
-
-        public void Dispose() {
-            try {
-                Directory.Delete(
-                    path: Path,
-                    recursive: true
-                );
-            } catch (IOException) { }
-        }
     }
     private sealed class ManifestComparer : IEqualityComparer<ShaderPackageManifest> {
         public bool Equals(ShaderPackageManifest? x, ShaderPackageManifest? y) =>

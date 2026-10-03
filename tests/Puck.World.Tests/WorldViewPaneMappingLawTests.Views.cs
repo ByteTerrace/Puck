@@ -43,7 +43,7 @@ public sealed partial class WorldViewPaneMappingLawTests {
     );
     // Two screens showing the camera, and the camera as a view of the given demand at a quarter of the display.
     private WorldScreenMappingSet ShowCamera(WorldViewDemand demand) {
-        var screens = new WorldScreenMappingSet();
+        var screens = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
         var view = new WorldScreenSource.View(CameraName: ViewCamera);
 
         screens.Reconcile(

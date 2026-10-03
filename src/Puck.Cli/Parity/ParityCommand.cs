@@ -31,13 +31,20 @@ internal static class ParityCommand {
             return CliExit.Refused;
         }
 
+        using var run = RunDirectory.Create(prefix: ScratchPrefix);
+
+        Console.WriteLine(value: $"parity: artifacts {run.Path}");
+
+        return run.Conclude(exitCode: Run(
+            bakes: bakes,
+            debugLayers: debugLayers,
+            repositoryRoot: repositoryRoot,
+            runDirectory: run.Path
+        ));
+    }
+    // One parity run inside its run directory, which the caller concludes with the exit code this returns.
+    private static int Run(bool bakes, bool debugLayers, string repositoryRoot, string runDirectory) {
         var suiteClock = Stopwatch.StartNew();
-
-        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
-
-        var runDirectory = Directory.CreateTempSubdirectory(prefix: ScratchPrefix).FullName;
-
-        Console.WriteLine(value: $"parity: artifacts {runDirectory}");
 
         if (!WorldOffscreenLeg.TryResolveWorld(
             artifact: out var world,

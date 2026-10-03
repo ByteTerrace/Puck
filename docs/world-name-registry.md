@@ -1178,8 +1178,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
 | `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].name` | State | Declares |  | `StateRow.Name` |
-| `state.world[].cells[].dynamics.row` | Dynamics | Names | Read | `StateDynamics.Row` |
-| `state.world[].cells[].visibility.readersFrom` | State | Names | Read | `StateVisibility.ReadersFrom` |
 | `state.world[].draw.source` | Generator | Names | Read | `Draw.Source` |
 | `state.world[].dynamics.row` | Dynamics | Names | Read | `StateDynamics.Row` |
 | `state.world[].domain[keysOf].row` | State | Names | Read | `StateDomain.KeysOf.Row` |
@@ -1191,6 +1189,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].knowledge.source` | State | Names | Read | `StateKnowledge.Source` |
 | `state.world[].knowledge.mask` | State | Names | Read | `StateKnowledge.Mask` |
 | `state.world[].phaseOf` | State | Names | Read | `StateRow.PhaseOf` |
+| `state.world[].cells[].dynamics.row` | Dynamics | Names | Read | `StateDynamics.Row` |
+| `state.world[].cells[].visibility.readersFrom` | State | Names | Read | `StateVisibility.ReadersFrom` |
 | `state.lattices[].name` | Topology | Declares |  | `LatticeTopology.Name` |
 | `state.lattices[][grid].name` | Topology | Declares |  | `LatticeTopology.Name` |
 | `state.lattices[][ring].name` | Topology | Declares |  | `LatticeTopology.Name` |
@@ -2791,11 +2791,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.paint[][draw].generator.contexts[].alternatives[].next` | `GeneratorAlternative.Next` | a context key is local to its generator |
 | `state.world[].field.paint[][draw].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].verdict.status` | `WorldVerdictTrait.Status` | a verdict's status cell key is local to its own row |
-| `state.world[].cells[].key` | `StateCell.Key` | a cell key is local to its row |
 | `state.world[].draw.generator.start` | `StateGenerator.Start` | a context key is local to its generator |
 | `state.world[].draw.generator.contexts[].key` | `GeneratorContext.Key` | a context key is local to its generator |
 | `state.world[].draw.generator.contexts[].alternatives[].next` | `GeneratorAlternative.Next` | a context key is local to its generator |
 | `state.world[].enum` | `StateRow.Enum` | an enum name is local to the document |
+| `state.world[].cells[].key` | `StateCell.Key` | a cell key is local to its row |
 | `state.body` | `WorldStateSection.Body` | per-body slots, the body-state lane's own namespace |
 | `state.body[].name` | `ActionStateSlot.Name` | a per-body slot name, the body-state lane's own namespace |
 | `state.identity` | `WorldStateSection.Identity` | per-body slots, the identity lane's own namespace |

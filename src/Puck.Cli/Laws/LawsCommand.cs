@@ -59,10 +59,12 @@ internal static class LawsCommand {
                                           --file-list paths when given
                 --file-list <json>        put each listed path back to HEAD, removing one HEAD lacks
               It then builds the law's project in Release and runs the law, which must fail; restores the
-              fix, builds and runs again, and the law must pass. The worktree and scratch directory are
-              removed on success, refusal, exception and cancellation. Cleanup removes only this
-              proof's registration and reports any removal failure. Caller Git hooks are disabled;
-              links in the proven tree and projects outside it are refused.
+              fix, builds and runs again, and the law must pass. Cleanup runs on success, refusal,
+              exception and cancellation, removing the worktree, scratch directory and only this
+              proof's registration. Git commands that write or remove the proof tree enable long
+              paths for that command alone. Cleanup failures are reported on standard error with the
+              failed operation and scratch directory; cleanup never changes the proof's exit code.
+              Caller Git hooks are disabled; links in the proven tree and projects outside it are refused.
               Every selected test must execute, and both legs must execute the same tests. A skipped
               test, an aborted process or an inconsistent report refuses the proof.
 

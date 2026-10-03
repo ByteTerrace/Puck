@@ -75,17 +75,19 @@ internal static partial class AzureCommand {
         }
         var commit = Text(value: release["commit"]);
         var official = $"{endpoint}/{container}/public/puck/official";
-        var staging = Directory.CreateTempSubdirectory(prefix: "puck-official-");
-
-        try {
+        // Staging holds nothing a later look needs, so it is deleted however the step ends.
+        using (var staging = RunDirectory.Create(
+            keepOnFailure: false,
+            prefix: "puck-official-"
+        )) {
             // A copy shares one media type and one encoding, and hash paths carry neither, so each pair is staged as
             // its own tree. An object is stored Brotli-compressed, with Content-Encoding: br, when that makes it
             // meaningfully smaller: Front Door compresses on the fly only files of a few megabytes, and the engine's
             // WebAssembly is tens of megabytes. The path still names the hash of the decoded bytes, which is what
             // every client checks after its HTTP stack decodes the response.
             foreach (var (group, index) in types.GroupBy(keySelector: item => item.Value).Select(selector: (group, index) => (group, index))) {
-                var raw = $"{LocalPath(path: staging.FullName)}/{index}/raw";
-                var encoded = $"{LocalPath(path: staging.FullName)}/{index}/br";
+                var raw = $"{LocalPath(path: staging.Path)}/{index}/raw";
+                var encoded = $"{LocalPath(path: staging.Path)}/{index}/br";
 
                 foreach (var path in group.Select(selector: item => item.Key)) {
                     var bytes = File.ReadAllBytes(path: $"{bundle}/official/{path}");
@@ -119,7 +121,7 @@ internal static partial class AzureCommand {
                     );
                 }
             }
-        } finally { staging.Delete(recursive: true); }
+        }
         await CopyBlobsAsync(
             commit: commit,
             contentType: "application/json",
@@ -204,16 +206,18 @@ internal static partial class AzureCommand {
         )));
     }
     private static async Task SyncBlobsAsync(bool delete, string destination, string source, IEnumerable<string>? exclude = null) {
-        var hashes = Directory.CreateTempSubdirectory(prefix: "puck-azcopy-hashes-");
-
-        try {
+        // Staging holds nothing a later look needs, so it is deleted however the step ends.
+        using (var hashes = RunDirectory.Create(
+            keepOnFailure: false,
+            prefix: "puck-azcopy-hashes-"
+        )) {
             // MD5 comparison: artifact extraction timestamps identify neither a release nor a rollback.
             var arguments = new List<string> {
                 "sync", LocalPath(path: source), destination, "--from-to=LocalBlob", "--recursive=true", "--compare-hash=MD5", "--put-md5",
                 $"--delete-destination={(delete
                 ? "true"
                 : "false")}", "--local-hash-storage-mode=HiddenFiles",
-                $"--hash-meta-dir={hashes.FullName}", "--log-level=ERROR", "--output-level=essential",
+                $"--hash-meta-dir={hashes.Path}", "--log-level=ERROR", "--output-level=essential",
             };
 
             // Excluded paths are neither uploaded nor deleted; the match is a relative-path prefix.
@@ -227,7 +231,7 @@ internal static partial class AzureCommand {
                 arguments: arguments,
                 executable: "azcopy"
             );
-        } finally { hashes.Delete(recursive: true); }
+        }
     }
     private static Task CopyBlobsAsync(string commit, string contentType, string destination, string source, string cache = "no-cache", string? contentEncoding = null, bool immutable = false) =>
         // AzCopy owns concurrency, retries and transfer validation. Mutable paths always

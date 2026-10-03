@@ -170,10 +170,11 @@ public interface IHudBindingResolver {
     /// <param name="seat">The 0-based local roster slot whose player-scope panel the token is on, which reads the
     /// world that seat is routed to; -1 for a world-scope panel.</param>
     /// <param name="fraction">The value normalized to 0..1 (a gauge's fill), when resolved.</param>
-    /// <param name="text">The value's formatted text form (a text element's display), when resolved.</param>
+    /// <param name="text">The value's formatted text form (a text element's display), when resolved. Borrowed until
+    /// the next call to this resolver; a writer consumes it before resolving another binding.</param>
     /// <returns><see langword="true"/> when the token resolved (always true for a document-validated token; a
     /// resolver still reports honestly rather than assuming).</returns>
-    bool TryResolve(string binding, int seat, out float fraction, out string text);
+    bool TryResolve(string binding, int seat, out float fraction, out ReadOnlySpan<char> text);
 }
 /// <summary>
 /// The HUD structure store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>. The world feed

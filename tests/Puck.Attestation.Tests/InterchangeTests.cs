@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Attestation.Tests;
@@ -10,22 +11,10 @@ namespace Puck.Attestation.Tests;
 /// </summary>
 public sealed class InterchangeTests {
     private static void WithExportedFixture(Action<string> body) {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-attestation-interchange-{Guid.NewGuid():N}"
-        );
+        using var directory = new TemporaryDirectory(prefix: "puck-attestation-interchange-");
 
-        try {
-            AttestationInterchangeHarness.Export(directory: directory);
-            body(obj: directory);
-        } finally {
-            if (Directory.Exists(path: directory)) {
-                Directory.Delete(
-                    path: directory,
-                    recursive: true
-                );
-            }
-        }
+        AttestationInterchangeHarness.Export(directory: directory.RootPath);
+        body(obj: directory.RootPath);
     }
 
     [Fact]

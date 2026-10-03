@@ -195,7 +195,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     public void ARoutedPaletteFollowsHostColorsWithoutAnAuthorityDelivery() {
         using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
         var color = Vector3.UnitX;
-        var scene = new WorldRoutedScene(bodyColor: _ => color, endpoint: north, hostFrame: static () => null);
+        var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: _ => color, endpoint: north, hostFrame: static () => null);
         var first = Capture(source: scene.FrameSource);
 
         color = Vector3.UnitY;
@@ -260,7 +260,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     [Fact]
     public void ChangingTheViewWithinOneResidencyPreservesItsPasses() {
         using var north = Endpoint(definition: AwayDocument(), identity: Away, position: AwayPose);
-        var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
+        var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
         using var residency = new SdfWorldResidency(
             film: static _ => false,
             frameSource: scene.FrameSource,
@@ -294,7 +294,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
     public void AnInstanceCannotStandOnAViewRenderedByAnotherInstance() {
         // A world with no screen, since a program declaring one renders every frame and never stands.
         using var north = Endpoint(definition: (AwayDocument() with { PlacementRowsRaw = [], ScreensRaw = [] }), identity: Away, position: AwayPose);
-        var scene = new WorldRoutedScene(bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
+        var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(), bodyColor: north.Mirror.BodyColor, endpoint: north, hostFrame: static () => null);
         var frame = (Capture(source: scene.FrameSource) with { EnableCadenceGate = true });
         var gpu = new FakeGpuDevice();
         var context = new FrameContext(
@@ -350,7 +350,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             settings: new WorldRenderSettings(defaults: home.Render),
             text: new WorldTextCatalog(source: new(Definition: home, SourcePath: "unused.world.json"))
         );
-        var dresser = new WorldSessionSceneEmitter(effectiveCameraName: null, mirror: new WorldSessionMirror(placeholder: home));
+        var dresser = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(), effectiveCameraName: null, mirror: new WorldSessionMirror(placeholder: home));
         var source = new SdfCompositionFrameSource(dresser: dresser, emitters: [emitter]);
         var withDepartedSeat = Capture(source: source).Program;
 
@@ -463,7 +463,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             position: AwayPose
         );
 
-        var scene = new WorldRoutedScene(
+        var scene = new WorldRoutedScene(domains: new WorldValueDomainGuard(),
             bodyColor: north.Mirror.BodyColor,
             endpoint: north,
             hostFrame: static () => null
@@ -493,11 +493,11 @@ public sealed partial class WorldRoutedPresentationLawTests {
         var frame = Capture(source: scene.FrameSource);
 
         Assert.True(condition: frame.DynamicTransforms[0].CastsSoftShadow);
-        var destination = new WorldSessionSceneEmitter(
+        var destination = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: north.Mirror
         );
-        var boot = new WorldSessionSceneEmitter(
+        var boot = new WorldSessionSceneEmitter(domains: new WorldValueDomainGuard(),
             effectiveCameraName: null,
             mirror: new WorldSessionMirror(placeholder: home)
         );

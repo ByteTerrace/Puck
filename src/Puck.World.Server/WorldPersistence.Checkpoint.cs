@@ -4,6 +4,38 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldPersistence {
+    // The base document's canonical bytes, kept while the same base object stands. A base moves only on a rebuild, a
+    // compaction, an undo, or a journal horizon fold, so a checkpoint cadence serializes it once rather than at
+    // every capture.
+    private (WorldDefinition Base, byte[] Json)? m_baseJson;
+
+    private byte[] BaseJson(byte[] definitionJson) {
+        var baseDefinition = Host.Document.Base;
+
+        if (ReferenceEquals(
+            objA: baseDefinition,
+            objB: Host.Document.Definition
+        )) {
+            return definitionJson;
+        }
+
+        if (
+            (m_baseJson is { } cached) &&
+            ReferenceEquals(
+                objA: cached.Base,
+                objB: baseDefinition
+            )
+        ) {
+            return cached.Json;
+        }
+
+        var json = WorldDefinitionSerialization.Serialize(definition: baseDefinition);
+
+        m_baseJson = (baseDefinition, json);
+
+        return json;
+    }
+
     // Undo the last `count` applied mutations (default clamps to 1): restore the base and deterministically replay the
     // journal minus its tail through the SAME per-entry gates a live mutation passes — compose, whole-document
     // validate, render-envelope capacity, and solid-field buildability — everything but the authority check (the
@@ -367,7 +399,10 @@ public sealed partial class WorldPersistence {
 
             Host.Document.AdoptBase(
                 definition: candidate,
-                origin: $"the journal depth horizon (host.journalDepth {depth})"
+                origin: new WorldBaseOrigin(
+                    Depth: depth,
+                    Kind: WorldBaseOriginKind.JournalHorizon
+                )
             );
             Host.Document.Journal.RemoveRange(
                 count: excess,
@@ -465,15 +500,17 @@ public sealed partial class WorldPersistence {
     /// <param name="adjacencies">The restored authority's live adjacency source. When present, it is installed
     /// before checkpoint state so contact-field observations rebase against the final effective field rather than
     /// acquiring a host-construction-only pending wake afterward.</param>
+    /// <param name="documentDirectory">The directory the captured document's relative paths resolve against, or
+    /// <see langword="null"/> for a document that names none.</param>
     /// <returns>The restored server and the population it owns.</returns>
-    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null) {
+    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
-            utf8Json: checkpoint.Server.DefinitionJson, machines: machines.ValidationCatalog);
+            documentDirectory: documentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: machines.ValidationCatalog);
         var definition = admission.Definition;
         var population = new WorldPopulation(definition: definition);
         var server = new WorldServer(
@@ -521,6 +558,11 @@ public sealed partial class WorldPersistence {
 
                 return false;
             }
+            if (!Host.Tick.MusicMatchesDefinition) {
+                checkpoint = null;
+                reason = "a checkpoint cannot capture a music runtime whose boot score differs from the current document";
+                return false;
+            }
             if (
                 (Host.Document.Pending.Count != 0) ||
                 (Host.Extensions.PendingContributionCount != 0)
@@ -538,6 +580,26 @@ public sealed partial class WorldPersistence {
             }
 
             Host.Engagement.AssertCheckpointQuiescent();
+
+            if (!TryNameBaseOrigin(
+                origin: out var baseOrigin,
+                reason: out var originReason
+            )) {
+                checkpoint = null;
+                reason = originReason;
+
+                return false;
+            }
+
+            if (!Host.Profiles.TryCapture(
+                checkpoint: out var ownedWorlds,
+                reason: out var ownedReason
+            )) {
+                checkpoint = null;
+                reason = ownedReason;
+
+                return false;
+            }
 
             WorldMachineHostCheckpoint? machines = null;
 
@@ -582,15 +644,16 @@ public sealed partial class WorldPersistence {
                 );
             }
 
+            var definitionJson = WorldDefinitionSerialization.Serialize(definition: Host.Document.Definition);
             var server = new WorldServerCheckpoint(
                 Undo: (Host.RuleHost.Groups.Any(predicate: group => (group.Undo is not null)) ? Host.Arena.ExportUndoSnapshot() : null),
                 ArenaKeys: [.. Host.Arena.Keys.Names.OrderBy(
                     keySelector: static name => name.Value,
                     comparer: StringComparer.Ordinal
                 )],
-                DefinitionJson: WorldDefinitionSerialization.Serialize(definition: Host.Document.Definition),
-                BaseDefinitionJson: WorldDefinitionSerialization.Serialize(definition: Host.Document.Base),
-                BaseOrigin: Host.Document.BaseOrigin,
+                DefinitionJson: definitionJson,
+                BaseDefinitionJson: BaseJson(definitionJson: definitionJson),
+                BaseOrigin: baseOrigin,
                 Journal: journal,
                 LastCompletedTick: Host.Tick.CompletedTick,
                 LastCompletedEngineTicks: Host.Tick.CompletedEngineTicks,
@@ -598,6 +661,7 @@ public sealed partial class WorldPersistence {
                 Intents: [.. Host.Tick.Intents],
                 Pending: [],
                 Decisions: Decisions.Capture(),
+                MachineBindings: Host.CaptureMachineBindings(),
                 RuleGateHeld: ruleGateHeld,
                 InteractionGateHeld: interactionGateHeld,
                 RuleGroups: ruleGroups,
@@ -605,7 +669,7 @@ public sealed partial class WorldPersistence {
                 SolidRevision: Host.Document.SolidRevision,
                 MusicClockElapsedTicks: Host.Tick.MusicClock?.ElapsedTicks,
                 MusicDirectorCurrentSegmentId: Host.Tick.MusicDirector?.CurrentSegmentId,
-                MusicDirectorArmed: null,
+                MusicDirectorArmed: Host.Tick.MusicDirector?.ArmedTransition,
                 MusicDirectorTransitionCount: (Host.Tick.MusicDirector?.TransitionCount ?? 0UL),
                 MusicDirectorLastTransitionTick: Host.Tick.MusicDirector?.LastTransitionTick,
                 MusicDirectorLastTransitionFromSegmentId: Host.Tick.MusicDirector?.LastTransitionFromSegmentId,
@@ -621,7 +685,7 @@ public sealed partial class WorldPersistence {
                 Escrow: Host.TransferEscrow.Capture(),
                 InputHold: Host.InputHold.Capture(),
                 EventFeed: Host.Events.Capture(),
-                OwnedWorlds: Host.Profiles.Capture(),
+                OwnedWorlds: ownedWorlds!,
                 HostRow: hostRow,
                 Fields: Host.Population.Fields?.Capture(),
                 Search: Host.Search.Capture(),
@@ -637,15 +701,57 @@ public sealed partial class WorldPersistence {
     /// checkpoint. Called immediately after construction and before the first <see cref="WorldTick.Step"/> — the definition
     /// this restore installs is the checkpoint's own, never re-composed by replaying the journal.</summary>
     /// <param name="checkpoint">The captured image to restore.</param>
-    internal void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint) {
+    /// <param name="restoreOwnedIdentities">Whether to restore the catalog and bind its home seats. A live replay's
+    /// boot image keeps its pinned identities detached and leaves the live catalog alone.</param>
+    internal void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
             documentDirectory: Host.Document.Definition.DocumentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
 
-        RestoreCheckpointCore(admission: admission, checkpoint: checkpoint);
+        RestoreCheckpointCore(admission: admission, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
     }
 
-    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission) {
+    // A base loaded from a file names that file relative to the base's own document directory, which the loader set to
+    // the file's directory, so a checkpoint carries the file's name and not where this machine keeps it. A base read
+    // from a hosted world's store names that store, which no machine keeps anywhere, so it is written as it is.
+    private bool TryNameBaseOrigin(out WorldBaseOrigin origin, out string reason) {
+        origin = Host.Document.BaseOrigin;
+        reason = string.Empty;
+
+        if (origin.Source is not WorldRebuildOrigin.File { Path: var path }) {
+            return true;
+        }
+
+        if (
+            (Host.Document.Base.DocumentDirectory is not { } directory) ||
+            (WorldCheckpointPaths.RelativeUnder(path: path, root: directory) is not { Length: > 0 } relative)
+        ) {
+            reason = $"the journal base was loaded from a file outside its document directory, so a durable checkpoint cannot name it ({origin})";
+
+            return false;
+        }
+
+        origin = (origin with { Source = new WorldRebuildOrigin.File(Path: relative) });
+
+        return true;
+    }
+    private static WorldBaseOrigin ResolveBaseOrigin(WorldBaseOrigin origin, string? directory) {
+        if (origin.Source is not WorldRebuildOrigin.File { Path: var relative }) {
+            return origin;
+        }
+
+        if (directory is null) {
+            throw new InvalidOperationException(message: $"the checkpoint's journal base names '{relative}' beside the world's document directory, and the restoring world has none");
+        }
+
+        return (origin with {
+            Source = new WorldRebuildOrigin.File(Path: WorldCheckpointPaths.Resolve(
+                relative: relative,
+                root: directory
+            )),
+        });
+    }
+    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true) {
         var server = checkpoint.Server;
 
         if ((Host.Population.Fields is null) != (checkpoint.Fields is null)) {
@@ -653,6 +759,11 @@ public sealed partial class WorldPersistence {
         }
 
         Host.Population.Fields?.ValidateCheckpoint(checkpoint: checkpoint.Fields!);
+
+        var restoredOrigin = ResolveBaseOrigin(
+            directory: admission.Definition.DocumentDirectory,
+            origin: server.BaseOrigin
+        );
         // Population validation is deliberately before any server field changes below. A malformed cached route
         // must refuse the entire restore atomically, not fail after the definition, clocks, or journal were replaced.
         Host.Population.ValidateCheckpoint(checkpoint: checkpoint.Population);
@@ -662,22 +773,20 @@ public sealed partial class WorldPersistence {
         // own validation; do it before adopting any restored state so malformed base bytes refuse atomically.
         var restoredBase = (server.BaseDefinitionJson.AsSpan().SequenceEqual(other: server.DefinitionJson)
             ? restoredDefinition
-            : WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson));
+            : WorldDefinitionSerialization.Deserialize(documentDirectory: restoredDefinition.DocumentDirectory, utf8Json: server.BaseDefinitionJson));
 
-        ValidateRetainedTurns(compilation: admission.Compilation, server: server);
+        var restoredArena = PrepareCheckpointArena(compilation: admission.Compilation, server: server);
 
         Host.Events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
+        Host.Profiles.ValidateCheckpoint(checkpoint: checkpoint.OwnedWorlds);
         Decisions.ValidateCheckpoint(
             checkpoint: server,
             definition: restoredDefinition
         );
-
-        if (!Host.Arena.TryRestoreKeys(
-            names: server.ArenaKeys,
-            reason: out var arenaKeyReason
-        )) {
-            throw new InvalidOperationException(message: $"the checkpoint's arena keys do not restore: {arenaKeyReason}");
-        }
+        WorldServer.ValidateMachineBindings(
+            definition: restoredDefinition,
+            entries: server.MachineBindings
+        );
 
         var machineCheckpoint = (checkpoint.Machines ?? WorldMachineHostCheckpoint.Empty);
 
@@ -693,7 +802,7 @@ public sealed partial class WorldPersistence {
         Host.Document.AdoptDefinition(definition: restoredDefinition);
         Host.Document.AdoptBase(
             definition: restoredBase,
-            origin: server.BaseOrigin
+            origin: restoredOrigin
         );
         Host.Document.Journal.Clear();
         foreach (var (tick, engineTick, mutation) in server.Journal) {
@@ -754,6 +863,7 @@ public sealed partial class WorldPersistence {
         if (Host.Population.Fields is { } lattice) {
             lattice.Restore(checkpoint: checkpoint.Fields!);
         }
+        Host.AdoptPreparedArena(arena: restoredArena, definition: restoredDefinition);
         Host.Population.Restore(
             checkpoint: checkpoint.Population,
             defaults: Host.Document.Definition.PlayerDefaults,
@@ -798,16 +908,34 @@ public sealed partial class WorldPersistence {
         Host.TransferEscrow.Restore(checkpoint: checkpoint.Escrow);
         Host.InputHold.Restore(checkpoint: checkpoint.InputHold);
         Host.Events.Restore(checkpoint: checkpoint.EventFeed);
-        Host.Profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
-        Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation);
-        // RecompileRules may relayout onto the installed definition's catalog. Relayout and prepared replacement
-        // preserve the ledger; the idempotent restore checks that every committed name survives installation.
-        if (!Host.Arena.TryRestoreKeys(
-            names: server.ArenaKeys,
-            reason: out arenaKeyReason
-        )) {
-            throw new InvalidOperationException(message: $"the checkpoint's arena keys do not survive restored rule compilation: {arenaKeyReason}");
+        if (restoreOwnedIdentities) {
+            Host.Profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
         }
+        // Projection leaves never carry owned documents. Reconnect a local home seat to this restored catalog;
+        // a visitor with a colliding id keeps its projection, including on a silo move or a history restore.
+        foreach (var entry in checkpoint.Population.Entries) {
+            if (
+                !restoreOwnedIdentities ||
+                entry.IsRemoteHuman ||
+                (entry.Profile is not { } projection) ||
+                (Host.HomeSeatIdentity(
+                    id: projection.Id,
+                    mobility: entry.Mobility,
+                    slot: entry.Index
+                ) is not { } owned)
+            ) {
+                continue;
+            }
+            Host.Population.SetSeatProfile(
+                profile: owned,
+                slot: entry.Index
+            );
+            Host.Population.SetBodyColor(
+                color: entry.BodyColor,
+                slot: entry.Index
+            );
+        }
+        Host.RecompileRules(definition: restoredDefinition, compilation: admission.Compilation);
         if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out var undoReason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");
         }
@@ -821,6 +949,7 @@ public sealed partial class WorldPersistence {
         );
         Host.RuleHost.PruneLatches();
         Decisions.Restore(checkpoint: server.Decisions);
+        Host.RestoreMachineBindings(entries: server.MachineBindings);
         if (!Host.Search.TryRestore(
             checkpoint: (checkpoint.Search ?? ArenaSearchCheckpoint.Empty),
             reason: out var searchReason
@@ -828,6 +957,10 @@ public sealed partial class WorldPersistence {
             throw new InvalidOperationException(message: $"the checkpoint's search progress does not restore: {searchReason}");
         }
         BoardEnforcement.Restore(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
+        // A restore completes outside the tick, so it delivers the restored definition itself: every attached sink
+        // replaces the observations and trait clocks it held, which no per-tick anchor step would resend.
+        Host.Document.MarkDefinitionDeliveryPending();
+        Host.Document.DeliverPending();
     }
 
     /// <summary>Re-applies one mutation from a hosted row's persisted journal tail — the mutations recorded after

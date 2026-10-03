@@ -243,6 +243,40 @@ public static class WorldStateReader {
         )?.Value ?? default);
     }
 
+    /// <summary>Reads a cell as the number a presentation reads it as: an Int's value, a Fixed's value, or a Bool's 0
+    /// or 1.</summary>
+    /// <param name="value">The cell.</param>
+    /// <param name="number">The number, or zero when the cell holds none.</param>
+    /// <returns><see langword="true"/> when the cell holds an Int, Fixed or Bool value.</returns>
+    public static bool TryNumber(CellValue value, out double number) {
+        if (!value.HasValue) {
+            number = 0d;
+
+            return false;
+        }
+
+        switch (value.Kind) {
+            case CellKind.Int:
+                number = value.AsInt;
+
+                return true;
+            case CellKind.Fixed:
+                number = ((double)FixedQ4816.FromRawBits(value: value.AsFixed));
+
+                return true;
+            case CellKind.Bool:
+                number = (value.AsBool
+                    ? 1d
+                    : 0d
+                );
+
+                return true;
+            default:
+                number = 0d;
+
+                return false;
+        }
+    }
     /// <summary>Resolves one (row, key) pair as the one <see cref="CellValue"/> carrier the row's kind declares.</summary>
     /// <param name="definition">The document to read.</param>
     /// <param name="rowName">The state row's name.</param>

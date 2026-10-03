@@ -13,16 +13,11 @@ public sealed class WorldStateDisclosureVectorTests {
             section: definition.StateRaw,
             time: ArenaTime.Origin
         );
-        var time = ArenaTime.At(
-            engineTick: 0UL,
-            tick: 0UL
-        );
 
         return WorldStateDisclosure.Compose(
             arena: arena,
             definition: definition,
-            recipient: recipient,
-            time: in time
+            recipient: recipient
         );
     }
     private static StateVector SampleVector(int dimensions) {

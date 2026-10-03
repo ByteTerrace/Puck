@@ -220,6 +220,9 @@ public sealed partial class WorldPopulation {
     /// <summary>The entity-owned procedural appearance rig. Unlike a look row, this follows the occupant when
     /// authority transfer assigns it a different population slot.</summary>
     public byte CatalogRig(int index) => m_entries[index].CatalogRig;
+    /// <summary>The occupant's accumulated arrival turn (<see cref="WorldFrameIsometry.AccumulateTurn"/>), which follows
+    /// it through every authority transfer.</summary>
+    public FixedQ4816 TravelTurn(int index) => m_entries[index].TravelTurn;
     /// <summary>Clears designation outputs after the world authority has applied them.</summary>
     public void ClearDesignationOutputs() => m_designationOutputs.Clear();
     /// <summary>Clears staged generator invocations after the world authority has enqueued them.</summary>
@@ -567,15 +570,59 @@ public sealed partial class WorldPopulation {
             )
         );
     }
+    /// <summary>Reads the stable mobility identity one active occupant offers a destination, stamped with the slot it
+    /// holds here, without minting or changing state: the stored identity while it belongs to the occupant's
+    /// generation, else the local incarnation <see cref="EnsureMobility"/> would mint, which is a function of the
+    /// authority, the index and the generation alone. A reservation reads the credential here; only a departure's
+    /// detach mints it, so the credential a reservation names is the one the detach stores.</summary>
+    /// <param name="index">The current population slot.</param>
+    /// <param name="authority">The local authority identity a not-yet-minted local incarnation is addressed under.</param>
+    /// <returns>The credential, stamped with the slot it holds here.</returns>
+    /// <exception cref="ArgumentException"><paramref name="authority"/> is empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The slot holds no active body.</exception>
+    public WorldMobilityIdentity ReadMobility(int index, string authority) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: authority);
+
+        return Mobility(
+            authority: authority,
+            entry: m_entries[index],
+            index: index
+        );
+    }
     /// <summary>Reads or mints the stable mobility identity for one active occupant and returns it stamped with the
     /// slot it holds here, which is what this authority offers a destination. A new local incarnation is derived
     /// from the complete authority/index/generation address; a transferred incarnation retains its origin. The
     /// stored identity keeps the stamp it arrived with, so the occupant still names where it came from while an
-    /// onward offer is pending.</summary>
+    /// onward offer is pending. The minted credential is authoritative state, so only a recorded step mints it: a
+    /// departure's detach, which a replay's re-drive also runs.</summary>
+    /// <param name="index">The current population slot.</param>
+    /// <param name="authority">The local authority identity a new local incarnation is addressed under.</param>
+    /// <returns>The credential, stamped with the slot it holds here; equal to what <see cref="ReadMobility"/> read
+    /// before the mint.</returns>
+    /// <exception cref="ArgumentException"><paramref name="authority"/> is empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The slot holds no active body.</exception>
     public WorldMobilityIdentity EnsureMobility(int index, string authority) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: authority);
         var entry = m_entries[index];
+        var mobility = Mobility(
+            authority: authority,
+            entry: entry,
+            index: index
+        );
 
+        if (
+            (entry.Mobility is null) ||
+            (entry.MobilityGeneration != entry.Generation)
+        ) {
+            entry.Mobility = mobility;
+            entry.MobilityGeneration = entry.Generation;
+        }
+
+        return mobility;
+    }
+
+    // The credential an active occupant holds or would be minted, stamped with the slot it holds here.
+    private static WorldMobilityIdentity Mobility(Entry entry, int index, string authority) {
         if (
             !entry.Active ||
             (entry.Body is null)
@@ -589,20 +636,15 @@ public sealed partial class WorldPopulation {
             Generation: entry.Generation
         );
 
-        if (
-            (entry.Mobility is null) ||
-            (entry.MobilityGeneration != entry.Generation)
-        ) {
-            entry.Mobility = new WorldMobilityIdentity(
+        return (((entry.Mobility is { } held) && (entry.MobilityGeneration == entry.Generation))
+            ? (held with { DepartedFrom = here })
+            : new WorldMobilityIdentity(
                 DepartedFrom: here,
                 Epoch: 0UL,
                 Incarnation: here
-            );
-            entry.MobilityGeneration = entry.Generation;
-        }
-
-        return (entry.Mobility.Value with { DepartedFrom = here });
+            ));
     }
+
     /// <summary>Reads the slot an arrived occupant held under the authority it last left, without minting or
     /// changing state.</summary>
     /// <param name="index">The current population slot.</param>
@@ -866,6 +908,12 @@ public sealed partial class WorldPopulation {
     public void SetCatalogRig(int slot, byte catalogRig) {
         if (((uint)slot) < Capacity) {
             m_entries[slot].CatalogRig = catalogRig;
+        }
+    }
+    /// <summary>Restores a transferred occupant's accumulated arrival turn.</summary>
+    public void SetTravelTurn(int slot, FixedQ4816 travelTurn) {
+        if (((uint)slot) < Capacity) {
+            m_entries[slot].TravelTurn = travelTurn;
         }
     }
     /// <summary>Writes one already-validated target into a body's named register. Wakes the target body — its own

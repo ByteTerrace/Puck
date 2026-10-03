@@ -220,7 +220,11 @@ another world as a view instance (`WorldViewInstances`).
   the depth; a face at the depth shows its session's `fallback` colour. One
   world seen at several levels shares its endpoint's residency while its
   sessions disclose everything, and each view of that residency binds the
-  screens of its own level (`ISdfScreenSources.ReadOf` takes the view).
+  screens of its own level (`ISdfScreenSources.ReadOf` takes the view). Every
+  other screen of that world shows its own source: its machines from its own
+  host, its text through its own fonts, and its cameras as further views of the
+  residency it renders through (`<level>$camera$<camera>`), filmed after its own
+  views and reading each other at their previous frame.
 
 **The scheduler decides what renders.** A view renders only while something
 shows it: a screen, through the footprint of its declared extent inside the

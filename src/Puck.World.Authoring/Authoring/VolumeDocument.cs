@@ -30,6 +30,12 @@ public sealed record VolumeDocument(string Kind, DocumentVector3 Position, Docum
     /// <summary>The admitted density family.</summary>
     public const string FlowKind = "flow";
 
+    /// <summary>Gets the softness a cloud volume admits: at least <see cref="SdfSky.MinCloudSoftness"/>, whose
+    /// argument covers the volume kernel's band, and at most one.</summary>
+    public static WorldValueDomain SoftnessDomain { get; } = new(
+        Maximum: 1f,
+        Minimum: SdfSky.MinCloudSoftness
+    );
     /// <summary>Whether the family is supported.</summary>
     public bool IsKnownKind => (Kind is FlowKind or CloudKind);
 

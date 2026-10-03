@@ -28,6 +28,7 @@ public sealed class DeliveredDocumentIdentifierLawTests {
                     definition: live,
                     revision: 3,
                     tier: tier,
+                    time: ArenaTime.At(engineTick: 0UL, tick: 0UL),
                     version: default
                 ),
                 definition: out var delivered,

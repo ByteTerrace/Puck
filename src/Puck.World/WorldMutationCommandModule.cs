@@ -198,7 +198,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     request: new WorldRebuildRequest(
                         Kind: WorldRebuildKind.Reset,
                         Definition: null,
-                        PathHint: null,
+                        Origin: null,
                         Force: false
                     ),
                     principal: context.Principal,
@@ -264,7 +264,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         Definition: loaded,
                         Force: force,
                         Kind: WorldRebuildKind.Load,
-                        PathHint: fullPath
+                        Origin: new WorldRebuildOrigin.File(Path: fullPath)
                     ),
                     principal: context.Principal,
                     verb: "world.load"
@@ -321,7 +321,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         Definition: loaded,
                         Force: false,
                         Kind: WorldRebuildKind.Reload,
-                        PathHint: path
+                        Origin: new WorldRebuildOrigin.File(Path: path)
                     ),
                     principal: context.Principal,
                     verb: "world.reload"

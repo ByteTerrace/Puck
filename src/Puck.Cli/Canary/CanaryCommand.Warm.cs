@@ -47,10 +47,9 @@ internal static partial class CanaryCommand {
     // ready and reading its pipeline-cache counts, then hands the cache it persisted to the seed. The first boot that
     // fails (WarmRefusal) ends the warm with its refusal, and the selection fails without starting a leg.
     private static string? WarmPipelineCache(CanaryWarm warm, string artifact, CanaryBudget budget) {
-        var runDirectory = CreateRunDirectory(
-            id: WarmRunId,
-            leg: "pipeline-cache"
-        );
+        // A warm that refuses keeps its transcripts, named; one that succeeds is deleted once the seed holds its cache.
+        using var run = RunDirectory.Create(prefix: $"{ScratchPrefix}{WarmRunId}-pipeline-cache-");
+        var runDirectory = run.Path;
         var stateDirectory = Path.Combine(
             path1: runDirectory,
             path2: "state"
@@ -113,6 +112,7 @@ internal static partial class CanaryCommand {
             path1: stateDirectory,
             path2: "pipeline-cache"
         ));
+        run.Conclude(passed: true);
 
         return null;
     }

@@ -3,8 +3,8 @@ using System.Buffers.Binary;
 namespace Puck.Machines.Tests;
 
 /// <summary>Pins the queued host's pacing and checkpoint at a clock that is not a whole number of hertz: the durable
-/// checkpoint carries a phase scaled by the rate's seconds, restores and continues identically in an independent host,
-/// and refuses a runtime whose clock carries a different scale.</summary>
+/// checkpoint carries a phase scaled by the rate's seconds, restores and continues identically in an independent host
+/// and over the stepped runtime it was captured from, and refuses a runtime whose clock carries a different scale.</summary>
 public sealed class FractionalRateCheckpointTests {
     private static readonly MachineCycleRate NtscMasterClock = new(
         cycles: 236_250_000UL,
@@ -35,6 +35,28 @@ public sealed class FractionalRateCheckpointTests {
             actual: target.CaptureCheckpoint(),
             expected: untouched
         );
+    }
+    // A world history rewinds a running machine in place: the restore lands on the captured image and step count
+    // exactly as a restore into a fresh host does, and the two continue identically.
+    [Fact]
+    public void ACheckpointRestoresOverASteppedRuntimeAsItDoesIntoAFreshOne() {
+        using var rewound = new TestHost(rate: NtscMasterClock);
+        using var fresh = new TestHost(rate: NtscMasterClock);
+
+        _ = rewound.Advance(deltaTicks: 841UL);
+
+        var checkpoint = rewound.CaptureCheckpoint();
+
+        _ = rewound.Advance(deltaTicks: 2523UL);
+        Assert.NotEqual(expected: checkpoint, actual: rewound.CaptureCheckpoint());
+
+        rewound.RestoreCheckpoint(checkpoint: checkpoint);
+        fresh.RestoreCheckpoint(checkpoint: checkpoint);
+        Assert.Equal(expected: checkpoint, actual: rewound.CaptureCheckpoint());
+
+        _ = rewound.Advance(deltaTicks: 1682UL);
+        _ = fresh.Advance(deltaTicks: 1682UL);
+        Assert.Equal(expected: fresh.CaptureCheckpoint(), actual: rewound.CaptureCheckpoint());
     }
     [Fact]
     public void ARateRefusesZeroSeconds() =>

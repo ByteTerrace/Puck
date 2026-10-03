@@ -11,6 +11,7 @@ Read the relevant section when `SKILL.md` routes here.
 - [Agent-facing material](#5-agent-facing-material)
 - [Mechanics](#6-mechanics)
 - [Verification](#7-verifying-a-documentation-change)
+- [Evaluating a skill](#8-evaluating-a-skill)
 
 Factual and procedural only: which surface you are on, which register that
 surface takes, who owns each fact, and how to prove a documentation change is
@@ -452,3 +453,57 @@ document under `docs/` that names the skill.
    documentation — required for a changed `cref`, and the only check that the
    structural diagnostics in §4 still pass. A pure Markdown edit does not owe a
    build.
+
+---
+
+## 8. Evaluating a skill
+
+An agent runs this procedure by hand with `claude plugin eval`; no `puck` verb
+wraps it. Work in the skill's own `evals/` directory, one directory per case.
+
+**A case** is `prompt.md` (frontmatter `max_turns` and `allowed_tools`, then a
+realistic task written as a question) beside `graders/*.md`. A grader's
+frontmatter names its `type`: `regex` (`match`, `flags`, the pattern as body),
+`llm` (the criterion as body) or `tool_used` (`tool: Skill`, which also shows
+whether the skill fired at all). Write every criterion from the grade side, as a
+statement about what the reply contains ("The response states …"), one fact per
+grader. A criterion phrased as a pass/fail instruction ("Pass only when … fail
+if …") fails correct answers.
+
+**Split before running.** `split.json` records a random 32-bit seed and the
+rule: a case is `train` when the first byte of `sha256("<seed>:<case name>")` is
+below 154, else `test`. Adding a case never moves another. Redraw the seed only
+on case counts, before any case has run, and record that.
+
+**Calibrate the judge.** `calibration/samples.json` holds fixed answers labelled
+good, bad or borderline, with the expected verdict of each LLM grader. Replay
+them through the real graders as echo cases, twice, and read the run-to-run
+agreement and the accuracy against the labels. Calibration on short answers is
+not enough: a cheaper judge can fail correct long answers, so score a sample of
+real runs under a stronger judge (`--judge-model`) whenever the case set
+changes materially, and treat a gap as a grader fault.
+
+**Never score an invalid run.** A reply that starts with "API Error" is not an
+answer. Re-run it, and report the number re-run.
+
+**Measure noise first.** Run the unchanged skill several times; the spread of
+the train and test means is the smallest effect a change can claim. Use at
+least five runs per case when comparing a change.
+
+**Hill-climb one change at a time.**
+
+1. Take the failures of the train cases only, and name each one's cause: the
+   skill lacks the rule, the grader asks for more than the task raises, or the
+   judge misreads a correct answer.
+2. Change the skill by one rule, stated generally; never paste a failing
+   case's content into it. A grader or task at fault is fixed in the case, not
+   worked around in the skill.
+3. Evaluate train and test. Keep the change when the case it targets improves
+   and neither aggregate falls by more than the noise. A rule that only one
+   case can see leaves the test mean flat; treat that as no harm, not as
+   generalisation.
+4. Revert a change that does not move its target twice.
+
+At a plateau, write the root cause of each remaining failure as skill, grader
+or task, and stop.
+

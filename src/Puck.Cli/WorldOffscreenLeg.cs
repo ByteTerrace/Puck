@@ -31,25 +31,13 @@ internal static class WorldOffscreenLeg {
     public static bool TryResolveWorld(string verb, string repositoryRoot, string runDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact) {
         var built = WorldArtifactBuild.TryResolve(
             artifact: out artifact,
-            build: out var build,
             error: out var buildError,
+            logDirectory: runDirectory,
             repositoryRoot: repositoryRoot,
             timeout: timeout,
             verb: verb
         );
 
-        if (build is not null) {
-            WriteLog(
-                name: "build-stdout.log",
-                runDirectory: runDirectory,
-                text: build.Stdout
-            );
-            WriteLog(
-                name: "build-stderr.log",
-                runDirectory: runDirectory,
-                text: build.Stderr
-            );
-        }
         if (!built) {
             Console.Error.WriteLine(value: $"ERROR: {buildError}");
         }

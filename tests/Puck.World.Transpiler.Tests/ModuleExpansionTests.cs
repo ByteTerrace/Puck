@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
 using Puck.Transpiler.Parsing;
@@ -152,94 +153,78 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void OneImportedFileCanBeInstantiatedThroughTwoAliases() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-modules-");
+        using var directory = new TemporaryDirectory(prefix: "puck-modules-");
 
-        try {
-            var modulePath = Path.Combine(path1: directory.FullName, path2: "counter.puck");
-            var rootPath = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        var modulePath = Path.Combine(path1: directory.RootPath, path2: "counter.puck");
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: "module counter() { state { world { slot score = 0 } } export read score }", path: modulePath);
-            File.WriteAllText(contents: """
-                import "counter.puck" as first
-                import "counter.puck" as second
-                use first.counter as left()
-                use second.counter as right()
-                """, path: rootPath);
+        File.WriteAllText(contents: "module counter() { state { world { slot score = 0 } } export read score }", path: modulePath);
+        File.WriteAllText(contents: """
+            import "counter.puck" as first
+            import "counter.puck" as second
+            use first.counter as left()
+            use second.counter as right()
+            """, path: rootPath);
 
-            var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-            Assert.Null(@object: compilation.RequireJson()["imports"]);
-            var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
+        Assert.Null(@object: compilation.RequireJson()["imports"]);
+        var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
 
-            Assert.Equal(["left$score", "right$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(["left$score", "right$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
     }
     [Fact]
     public void SourceImportDoesNotComposeTheLibrarysOrdinaryDocumentStatements() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-import-only-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-import-only-");
 
-        try {
-            var modulePath = Path.Combine(path1: directory.FullName, path2: "library.puck");
-            var rootPath = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        var modulePath = Path.Combine(path1: directory.RootPath, path2: "library.puck");
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: "state { world { slot accidental = 9 } }\nmodule wanted() { state { world { slot deliberate = 3 } } }", path: modulePath);
-            File.WriteAllText(contents: "import \"library.puck\"\nuse wanted()", path: rootPath);
+        File.WriteAllText(contents: "state { world { slot accidental = 9 } }\nmodule wanted() { state { world { slot deliberate = 3 } } }", path: modulePath);
+        File.WriteAllText(contents: "import \"library.puck\"\nuse wanted()", path: rootPath);
 
-            var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-            Assert.Null(@object: compilation.RequireJson()["imports"]);
-            var row = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"])));
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
+        Assert.Null(@object: compilation.RequireJson()["imports"]);
+        var row = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"])));
 
-            Assert.Equal("deliberate", row["name"]!.ToString());
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal("deliberate", row["name"]!.ToString());
     }
     [Fact]
     public void TwoOuterAliasesRetainNestedModuleAndConstantClosures() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-closures-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-closures-");
 
-        try {
-            File.WriteAllText(Path.Combine(path1: directory.FullName, path2: "leaf.puck"), "let initial = 7\nmodule counter() { state { world { slot score = initial } } }");
-            File.WriteAllText(Path.Combine(path1: directory.FullName, path2: "wrapper.puck"), "import \"leaf.puck\" as dep\nmodule wrapper() { use dep.counter as child() }");
-            var rootPath = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        File.WriteAllText(Path.Combine(path1: directory.RootPath, path2: "leaf.puck"), "let initial = 7\nmodule counter() { state { world { slot score = initial } } }");
+        File.WriteAllText(Path.Combine(path1: directory.RootPath, path2: "wrapper.puck"), "import \"leaf.puck\" as dep\nmodule wrapper() { use dep.counter as child() }");
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: "import \"wrapper.puck\" as first\nimport \"wrapper.puck\" as second\nuse first.wrapper as left()\nuse second.wrapper as right()", path: rootPath);
+        File.WriteAllText(contents: "import \"wrapper.puck\" as first\nimport \"wrapper.puck\" as second\nuse first.wrapper as left()\nuse second.wrapper as right()", path: rootPath);
 
-            var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-            var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
+        var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
 
-            Assert.Equal(["left$child$score", "right$child$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
-            Assert.All(rows, static row => Assert.Equal("7", row!["value"]!.ToString()));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(["left$child$score", "right$child$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
+        Assert.All(rows, static row => Assert.Equal("7", row!["value"]!.ToString()));
     }
     [Fact]
     public void ARefusalInsideAnImportedModuleNamesItsDefiningSource() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-diagnostic-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-diagnostic-");
 
-        try {
-            var modulePath = Path.Combine(path1: directory.FullName, path2: "broken.puck");
-            var rootPath = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        var modulePath = Path.Combine(path1: directory.RootPath, path2: "broken.puck");
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: "module broken() { missingTemplate() }", path: modulePath);
-            File.WriteAllText(contents: "import \"broken.puck\"\nuse broken()", path: rootPath);
+        File.WriteAllText(contents: "module broken() { missingTemplate() }", path: modulePath);
+        File.WriteAllText(contents: "import \"broken.puck\"\nuse broken()", path: rootPath);
 
-            var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
-            var error = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
+        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var error = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
-            Assert.Equal(modulePath, error.SourcePath);
-            Assert.Contains(modulePath, error.Format(filePath: rootPath), StringComparison.Ordinal);
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(modulePath, error.SourcePath);
+        Assert.Contains(modulePath, error.Format(filePath: rootPath), StringComparison.Ordinal);
     }
     [Fact]
     public void CompilePrintCompilePreservesExpandedDocument() {
@@ -280,39 +265,35 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void ImportedRowsAndRulesKeepDefinitionPathAndExpansionInstance() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-origins-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-origins-");
 
-        try {
-            var modulePath = Path.Combine(path1: directory.FullName, path2: "counter.puck");
-            var rootPath = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        var modulePath = Path.Combine(path1: directory.RootPath, path2: "counter.puck");
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: """
-                module counter() {
-                  state { world { slot score = false } }
-                  rule tick {
-                    when score == false
-                    score = true
-                  }
-                }
-                """, path: modulePath);
-            File.WriteAllText(contents: "import \"counter.puck\"\nuse counter as first()\nuse counter as second()", path: rootPath);
-            var sourceMap = new SourceMap();
+        File.WriteAllText(contents: """
+            module counter() {
+              state { world { slot score = false } }
+              rule tick {
+                when score == false
+                score = true
+              }
+            }
+            """, path: modulePath);
+        File.WriteAllText(contents: "import \"counter.puck\"\nuse counter as first()\nuse counter as second()", path: rootPath);
+        var sourceMap = new SourceMap();
 
-            var compilation = WorldCompiler.CompileFile(rootPath, sourceMap: sourceMap, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompiler.CompileFile(rootPath, sourceMap: sourceMap, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-            Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/state/world/0", origin: out var firstRow));
-            Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/rules/0", origin: out var firstRule));
-            Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/state/world/1", origin: out var secondRow));
-            Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/rules/1", origin: out var secondRule));
-            Assert.All(new[] { firstRow, firstRule, secondRow, secondRule }, origin => Assert.Equal(modulePath, origin.SourcePath));
-            Assert.Equal("first", firstRow.ModuleInstancePath);
-            Assert.Equal("first", firstRule.ModuleInstancePath);
-            Assert.Equal("second", secondRow.ModuleInstancePath);
-            Assert.Equal("second", secondRule.ModuleInstancePath);
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
+        Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/state/world/0", origin: out var firstRow));
+        Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/rules/0", origin: out var firstRule));
+        Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/state/world/1", origin: out var secondRow));
+        Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/rules/1", origin: out var secondRule));
+        Assert.All(new[] { firstRow, firstRule, secondRow, secondRule }, origin => Assert.Equal(modulePath, origin.SourcePath));
+        Assert.Equal("first", firstRow.ModuleInstancePath);
+        Assert.Equal("first", firstRule.ModuleInstancePath);
+        Assert.Equal("second", secondRow.ModuleInstancePath);
+        Assert.Equal("second", secondRule.ModuleInstancePath);
     }
     [Fact]
     public void GateParameterCanDriveAnAuthoredRuleFromAHostRow() {
@@ -424,169 +405,141 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void ImportedHelperTemplatesKeepTheirAliasAndLexicalConstant() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-helpers-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-helpers-");
 
-        try {
-            var modulePath = Path.Combine(path1: directory.FullName, path2: "counter.puck");
-            var rootPath = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        var modulePath = Path.Combine(path1: directory.RootPath, path2: "counter.puck");
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: "let initial = 5\ntemplate rows() { state { world { slot score = initial } } }\nmodule counter() { rows() }", path: modulePath);
-            File.WriteAllText(contents: "import \"counter.puck\" as first\nimport \"counter.puck\" as second\nuse first.counter as left()\nuse second.counter as right()", path: rootPath);
+        File.WriteAllText(contents: "let initial = 5\ntemplate rows() { state { world { slot score = initial } } }\nmodule counter() { rows() }", path: modulePath);
+        File.WriteAllText(contents: "import \"counter.puck\" as first\nimport \"counter.puck\" as second\nuse first.counter as left()\nuse second.counter as right()", path: rootPath);
 
-            var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-            var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
+        var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
 
-            Assert.Equal(["left$score", "right$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
-            Assert.All(rows, static row => Assert.Equal(5L, row!["value"]!.GetValue<long>()));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(["left$score", "right$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
+        Assert.All(rows, static row => Assert.Equal(5L, row!["value"]!.GetValue<long>()));
     }
     [Fact]
     public void DuplicateImportedDeclarationsProduceDiagnosticsInsteadOfResolverExceptions() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-duplicates-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-duplicates-");
 
-        try {
-            var modulePath = Path.Combine(path1: directory.FullName, path2: "library.puck");
-            var rootPath = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        var modulePath = Path.Combine(path1: directory.RootPath, path2: "library.puck");
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: "let value = 1\nlet value = 2\nmodule sample() { state { world { slot score = value } } }", path: modulePath);
-            File.WriteAllText(contents: "import \"library.puck\" as library", path: rootPath);
+        File.WriteAllText(contents: "let value = 1\nlet value = 2\nmodule sample() { state { world { slot score = value } } }", path: modulePath);
+        File.WriteAllText(contents: "import \"library.puck\" as library", path: rootPath);
 
-            var compilation = WorldCompiler.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompiler.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
-            var error = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
+        var error = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
-            Assert.Contains("Duplicate constant 'library.value'", error.Message, StringComparison.Ordinal);
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Contains("Duplicate constant 'library.value'", error.Message, StringComparison.Ordinal);
     }
     [Fact]
     public void DeepImportGraphsRespectTheExpansionDepthLimit() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-import-depth-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-import-depth-");
 
-        try {
-            const int LastIndex = 65;
+        const int LastIndex = 65;
 
-            for (var index = 0; (index <= LastIndex); index++) {
-                var source = ((index == LastIndex)
-                    ? "module leaf() { state { world { slot score = 0 } } }"
-                    : $"import \"level-{(index + 1)}.puck\"");
+        for (var index = 0; (index <= LastIndex); index++) {
+            var source = ((index == LastIndex)
+                ? "module leaf() { state { world { slot score = 0 } } }"
+                : $"import \"level-{(index + 1)}.puck\"");
 
-                File.WriteAllText(path: Path.Combine(path1: directory.FullName, path2: $"level-{index}.puck"), contents: source);
-            }
-
-            var compilation = WorldCompiler.CompileFile(
-                path: Path.Combine(path1: directory.FullName, path2: "level-0.puck"),
-                cancellationToken: TestContext.Current.CancellationToken
-            );
-
-            Assert.Contains(collection: compilation.Diagnostics, filter: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.EvaluationLimit));
-        } finally {
-            directory.Delete(recursive: true);
+            File.WriteAllText(path: Path.Combine(path1: directory.RootPath, path2: $"level-{index}.puck"), contents: source);
         }
+
+        var compilation = WorldCompiler.CompileFile(
+            path: Path.Combine(path1: directory.RootPath, path2: "level-0.puck"),
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        Assert.Contains(collection: compilation.Diagnostics, filter: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.EvaluationLimit));
     }
     [Fact]
     public void ImportGraphAtTheExpansionDepthLimitIsAccepted() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-import-depth-edge-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-import-depth-edge-");
 
-        try {
-            const int LastIndex = 63;
+        const int LastIndex = 63;
 
-            for (var index = 0; (index <= LastIndex); index++) {
-                var source = ((index == LastIndex)
-                    ? "module leaf() {}"
-                    : $"import \"level-{(index + 1)}.puck\"");
+        for (var index = 0; (index <= LastIndex); index++) {
+            var source = ((index == LastIndex)
+                ? "module leaf() {}"
+                : $"import \"level-{(index + 1)}.puck\"");
 
-                File.WriteAllText(path: Path.Combine(path1: directory.FullName, path2: $"level-{index}.puck"), contents: source);
-            }
-
-            var compilation = WorldCompiler.CompileFile(
-                path: Path.Combine(path1: directory.FullName, path2: "level-0.puck"),
-                cancellationToken: TestContext.Current.CancellationToken
-            );
-
-            Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-        } finally {
-            directory.Delete(recursive: true);
+            File.WriteAllText(path: Path.Combine(path1: directory.RootPath, path2: $"level-{index}.puck"), contents: source);
         }
+
+        var compilation = WorldCompiler.CompileFile(
+            path: Path.Combine(path1: directory.RootPath, path2: "level-0.puck"),
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
     }
     [Fact]
     public void AliasedImportDagIsRefusedBeforeExponentialExpansion() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-import-work-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-import-work-");
 
-        try {
-            const int LastIndex = 22;
+        const int LastIndex = 22;
 
+        File.WriteAllText(
+            path: Path.Combine(path1: directory.RootPath, path2: $"level-{LastIndex}.puck"),
+            contents: ""
+        );
+        for (var index = (LastIndex - 1); (index >= 0); index--) {
             File.WriteAllText(
-                path: Path.Combine(path1: directory.FullName, path2: $"level-{LastIndex}.puck"),
-                contents: ""
+                path: Path.Combine(path1: directory.RootPath, path2: $"level-{index}.puck"),
+                contents: $"import \"level-{(index + 1)}.puck\" as left\nimport \"level-{(index + 1)}.puck\" as right"
             );
-            for (var index = (LastIndex - 1); (index >= 0); index--) {
-                File.WriteAllText(
-                    path: Path.Combine(path1: directory.FullName, path2: $"level-{index}.puck"),
-                    contents: $"import \"level-{(index + 1)}.puck\" as left\nimport \"level-{(index + 1)}.puck\" as right"
-                );
-            }
-
-            var compilation = WorldCompiler.CompileFile(
-                path: Path.Combine(path1: directory.FullName, path2: "level-0.puck"),
-                cancellationToken: TestContext.Current.CancellationToken
-            );
-
-            Assert.Contains(collection: compilation.Diagnostics, filter: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.EvaluationLimit));
-        } finally {
-            directory.Delete(recursive: true);
         }
+
+        var compilation = WorldCompiler.CompileFile(
+            path: Path.Combine(path1: directory.RootPath, path2: "level-0.puck"),
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        Assert.Contains(collection: compilation.Diagnostics, filter: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.EvaluationLimit));
     }
     [Fact]
     public void ImportedParameterDefaultsAndLoopBindersShadowGlobalConstants() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-import-shadow-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-import-shadow-");
 
-        try {
-            var libraryPath = Path.Combine(path1: directory.FullName, path2: "library.puck");
-            var rootPath = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        var libraryPath = Path.Combine(path1: directory.RootPath, path2: "library.puck");
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: """
-                let value = 9
-                module sample(value: Angle, copy: Angle = value) {
-                  for value in [copy] { state { world { slot score = value } } }
-                }
-                """, path: libraryPath);
-            File.WriteAllText(contents: "import \"library.puck\" as library\nuse library.sample(value: 3)", path: rootPath);
+        File.WriteAllText(contents: """
+            let value = 9
+            module sample(value: Angle, copy: Angle = value) {
+              for value in [copy] { state { world { slot score = value } } }
+            }
+            """, path: libraryPath);
+        File.WriteAllText(contents: "import \"library.puck\" as library\nuse library.sample(value: 3)", path: rootPath);
 
-            var compilation = WorldCompiler.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompiler.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-            var row = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"])));
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
+        var row = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"])));
 
-            Assert.Equal(3L, row["value"]!.GetValue<long>());
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(3L, row["value"]!.GetValue<long>());
     }
     [Fact]
     public void ImportAliasesRemainCaseSensitive() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-module-import-case-");
+        using var directory = new TemporaryDirectory(prefix: "puck-module-import-case-");
 
-        try {
-            var libraryPath = Path.Combine(path1: directory.FullName, path2: "library.puck");
-            var rootPath = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        var libraryPath = Path.Combine(path1: directory.RootPath, path2: "library.puck");
+        var rootPath = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: "module sample() { state { world { slot score = 0 } } }", path: libraryPath);
-            File.WriteAllText(contents: "import \"library.puck\" as a\nimport \"library.puck\" as A\nuse a.sample as lower()\nuse A.sample as upper()", path: rootPath);
+        File.WriteAllText(contents: "module sample() { state { world { slot score = 0 } } }", path: libraryPath);
+        File.WriteAllText(contents: "import \"library.puck\" as a\nimport \"library.puck\" as A\nuse a.sample as lower()\nuse A.sample as upper()", path: rootPath);
 
-            var compilation = WorldCompiler.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompiler.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-            var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
+        var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
 
-            Assert.Equal(["lower$score", "upper$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(["lower$score", "upper$score"], rows.Select(selector: static row => row!["name"]!.ToString()));
     }
 }

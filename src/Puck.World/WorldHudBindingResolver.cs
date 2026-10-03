@@ -9,7 +9,8 @@ namespace Puck.World;
 /// <summary>
 /// The render-side implementation of <see cref="IHudBindingResolver"/> for the closed <see cref="HudBindingVocabulary"/>:
 /// resolves each frame's live value for <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>,
-/// <c>population.active</c>, and <c>state.&lt;row&gt;[.&lt;key&gt;][.$target]</c>. Each token is parsed once, on first
+/// <c>population.active</c>, <c>history.cursor</c>, <c>history.window</c>, and
+/// <c>state.&lt;row&gt;[.&lt;key&gt;][.$target]</c>. Each token is parsed once, on first
 /// sight. A state token on a world-scope panel reads the client's own <see cref="WorldStateMirror"/>; one on a seat's
 /// player-scope panel reads the mirror of the world that seat is routed to (<see cref="WorldSeatBindings.GetRoutedState"/>),
 /// where the seat registered its panel's reads, so a crossed seat's panel shows the world it is in. Either slot is found
@@ -22,7 +23,9 @@ namespace Puck.World;
 /// <param name="population">The population <c>population.active</c> counts.</param>
 /// <param name="continuum">The continuum a seat position resolves through.</param>
 /// <param name="seatBindings">The seat bindings, whose routed mirror a seat's panel reads.</param>
-public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPopulation population, WorldContinuum continuum, WorldSeatBindings seatBindings) : IHudBindingResolver {
+/// <param name="history">The boot world's in-session history the <c>history.*</c> tokens present, or
+/// <see langword="null"/> for a host with none, where they read "off".</param>
+public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPopulation population, WorldContinuum continuum, WorldSeatBindings seatBindings, WorldHistory? history) : IHudBindingResolver {
     // A generous FPS ceiling a gauge fraction normalizes against (240 covers every target hertz World boots at).
     private const float FpsNormalizerCeiling = 240f;
     // A generous symmetric world-extent a seat-position gauge fraction normalizes against — cosmetic only; a body
@@ -38,10 +41,13 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
     private readonly WorldPopulation m_population = population;
     private readonly WorldContinuum m_continuum = continuum;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
+    private readonly WorldHistory? m_history = history;
+    // Two UInt64 decimal values and their two-character separator, reused by the history bindings.
+    private readonly char[] m_historyText = new char[42];
     // Every token seen so far, parsed once; an unknown token is remembered as unresolvable.
     private readonly Dictionary<string, (bool Known, HudBinding Binding)> m_tokens = new(comparer: StringComparer.Ordinal);
 
-    private void ResolveFps(out float fraction, out string text) {
+    private void ResolveFps(out float fraction, out ReadOnlySpan<char> text) {
         var fps = m_frameRate.Summarize().AverageFps;
 
         fraction = Math.Clamp(
@@ -54,7 +60,7 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
             provider: CultureInfo.InvariantCulture
         );
     }
-    private void ResolvePopulationActive(out float fraction, out string text) {
+    private void ResolvePopulationActive(out float fraction, out ReadOnlySpan<char> text) {
         var active = m_population.SimulatedCount;
 
         fraction = Math.Clamp(
@@ -65,7 +71,7 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
         text = active.ToString(provider: CultureInfo.InvariantCulture);
     }
     // Seat n (1-based) resolves through the same authority claim and frame mapping as its camera.
-    private void ResolveSeatPosition(HudBindingKind kind, int seatIndex, out float fraction, out string text) {
+    private void ResolveSeatPosition(HudBindingKind kind, int seatIndex, out float fraction, out ReadOnlySpan<char> text) {
         var slot = (seatIndex - 1);
 
         if (!m_continuum.TryResolvePresentedSeatPose(
@@ -106,7 +112,7 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
     // render path stays honest too), a keyed row bound with the plain state.<row> form, or a row carrying no declared
     // range draws an empty gauge (fraction 0), the same "an unbound gauge draws empty" precedent every other gauge
     // follows; a bool/text row carries no range at all, so its gauge fraction is always 0.
-    private static void ResolveState(WorldStateMirror mirror, int slot, out float fraction, out string text) {
+    private static void ResolveState(WorldStateMirror mirror, int slot, out float fraction, out ReadOnlySpan<char> text) {
         fraction = 0f;
         text = string.Empty;
 
@@ -192,7 +198,43 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
             value: ((presented - low) / (high - low))
         ));
     }
-    private void ResolveTick(out float fraction, out string text) {
+    // history.cursor: the tick the world sits at, and where it lies in the window; history.window: the window's ends,
+    // and the bytes held against the budget. Both read "off" with an empty gauge while no window is held.
+    private void ResolveHistory(HudBindingKind kind, out float fraction, out ReadOnlySpan<char> text) {
+        if (
+            (m_history is not { } history) ||
+            (history.OldestTick is not { } oldest) ||
+            (history.HeadTick is not { } head) ||
+            (history.CursorTick is not { } cursor)
+        ) {
+            fraction = 0f;
+            text = "off";
+
+            return;
+        }
+
+        if (kind == HudBindingKind.HistoryCursor) {
+            fraction = ((head > oldest)
+                ? (((float)(cursor - oldest)) / (head - oldest))
+                : 1f);
+            _ = cursor.TryFormat(destination: m_historyText, charsWritten: out var written, provider: CultureInfo.InvariantCulture);
+            text = m_historyText.AsSpan(length: written, start: 0);
+
+            return;
+        }
+
+        fraction = Math.Clamp(
+            max: 1f,
+            min: 0f,
+            value: (((float)history.BytesHeld) / history.BudgetBytes)
+        );
+        _ = oldest.TryFormat(destination: m_historyText, charsWritten: out var prefix, provider: CultureInfo.InvariantCulture);
+        m_historyText[prefix] = '.';
+        m_historyText[(prefix + 1)] = '.';
+        _ = head.TryFormat(destination: m_historyText.AsSpan(start: (prefix + 2)), charsWritten: out var suffix, provider: CultureInfo.InvariantCulture);
+        text = m_historyText.AsSpan(length: ((prefix + 2) + suffix), start: 0);
+    }
+    private void ResolveTick(out float fraction, out ReadOnlySpan<char> text) {
         var tick = m_client.Tick;
 
         fraction = (((float)(tick % TickCycleLength)) / TickCycleLength);
@@ -233,7 +275,7 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
     }
 
     /// <inheritdoc/>
-    public bool TryResolve(string binding, int seat, out float fraction, out string text) {
+    public bool TryResolve(string binding, int seat, out float fraction, out ReadOnlySpan<char> text) {
         fraction = 0f;
         text = string.Empty;
 
@@ -254,6 +296,15 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
             case HudBindingKind.WorldFps:
                 ResolveFps(
                     fraction: out fraction,
+                    text: out text
+                );
+
+                return true;
+            case HudBindingKind.HistoryCursor:
+            case HudBindingKind.HistoryWindow:
+                ResolveHistory(
+                    fraction: out fraction,
+                    kind: parsed.Kind,
                     text: out text
                 );
 

@@ -1157,9 +1157,9 @@ off the source picks nothing. The pipeline pane's pointer
 P13b-2 has landed: the simulation destination runs end to end. A seat folds the
 `source.pointer.origin` and `source.pointer.direction` verbs into its intent's
 optional `PlayerIntent.SourceRay`, which `WorldWireCodec` carries behind one
-flag byte on every intent path, so an absent ray costs one byte; the tape's
-`ShapeToken`, the checkpoint's `SupportedVersion` and the handshake's
-`WorldProtocol.WireProtocolKey` `PUCKWRL4` and the federation's `WorldFederationCodec.WireKey` `PUCKFED6`, each strict. The server keeps each
+flag byte on every intent path, so an absent ray costs one byte. The tape's
+shape token, the checkpoint version, the handshake key and the federation key
+each name the format that carries it, and each is strict. The server keeps each
 body's tick ray and maps it in the tick through `WorldScreenMappings.Normalized`,
 the row's mapping against a one-by-one source, for the rule operand
 `$pointer:<seat>:<screenIndex>:x|y|on`; `body.channels` echoes the ray and its
@@ -1421,7 +1421,7 @@ while material identity stays uncompressed with majority mips. The encoders writ
 bytes on every machine and each has an exact decoder as its test oracle.
 Dual contouring won the extraction: it strays from the field about half as far
 as surface nets did, for about a tenth more evaluations over a whole bake, and
-surface nets is deleted. A bake is keyed by the creation pin, `SdfBaker.Version`
+surface nets is deleted. A bake is keyed by the creation pin, `DerivationFingerprint.Bake`
 and the tier. `WorldBakeStore` is the one cache: a compiled world's `BAKE`
 chunk fills it, so a released world bakes nothing on the device, and a
 presentation's `WorldBakeSchedule` bakes each missing prototype on the thread
@@ -1434,6 +1434,15 @@ worlds, so a creation several worlds share is baked and shipped once. A bake is
 the same bytes on every machine: the baker reads the field in fixed point,
 writes floats only from correctly rounded scalar arithmetic, and encodes sRGB
 against exact thresholds.
+
+`puck derivations` follows the bake producer's transitive source dependencies
+across assemblies and hashes their canonical C# tokens into that fingerprint.
+The checked-in constant makes a reached maths or texture-codec edit invalidate
+every bake key when it is regenerated; `puck derivations --check` refuses a
+stale constant. The compiled-world `BAKE` chunk and pack entries take their
+integer version from the fingerprint's first eight hexadecimal digits.
+Further derivation-key slices cover the other compiled-world chunk versions,
+shader packages, `GpuPipelineCacheStore` content keys, and kernel sets.
 
 Both backends put a bake's textures on the GPU as they are stored.
 `GpuPixelFormat` names BC4, BC5, BC6H and BC7, sampled only, and the one image
@@ -4846,10 +4855,11 @@ Each commit is marked with what it waits on.
      (submission, held channels, authority checkpoints, federation, the tape),
      keep the sixteen lanes and add one flag byte, followed by the ray's six
      fixed-point values only when it is present.
-   - The format moved with it, strictly and with no reader for the old shape:
-     the tape's `ShapeToken`, the checkpoint's `SupportedVersion`,
-     `WorldProtocol.WireProtocolKey` `PUCKWRL4`, and the federation's
-     `WorldFederationCodec.WireKey` `PUCKFED6`. No tape is checked in.
+   - Every format that carries an intent is strict and has no reader for an
+     earlier shape: the tape's shape token, the checkpoint version
+     (`WorldAuthorityCheckpointCodec.SupportedVersion`), the handshake key
+     (`WorldProtocol.WireProtocolKey`) and the federation key
+     (`WorldFederationCodec.WireKey`). No tape is checked in.
    - `PlayerCommandModule` registers `source.pointer.origin` and
      `source.pointer.direction` as Axis3D seat verbs, the seat keeps them for
      the tick, and `SeatController.HeldIntent` folds them into the intent. A
@@ -5791,7 +5801,9 @@ counted rows recorded in the same change.
      and naming the kind, pass and node over its ceiling; `puck counters --record`
      rewrites it. Deterministic kinds are judged on any device; a
      per-backend-deterministic kind is judged only on the device identity the file
-     was recorded on, the RTX 2060, and reported as not judged elsewhere.
+     was recorded on, the RTX 2060, and reported as not judged elsewhere, except
+     a required zero of a kernel kind (`requiredZero`), which is judged on every
+     device.
    - Touches: `src/Puck.Abstractions/Gpu/Counters` (`GpuWork`),
      `SdfWorldPackage` (the counter resource and members), the pass kernels under
      `Sdf/passes`, `SdfWorldPassRecorder`, `SdfWorldTables.Upload.cs`,
@@ -6116,6 +6128,37 @@ so one could be added later as another mode of `resolve`.
 **Depends on:** P4's motion and jitter contract, P11 for per-instance history,
 and P14.
 
+#### Research input: per-tile interval pruning
+
+A CPU study measured how much of a render program interval analysis could stop
+evaluating per screen tile, beyond what the per-tile instance mask already
+removes. It enclosed each primitive over a ball of the tile's view cone in
+centered Lipschitz form, mapped the ball through every transform and fold,
+decided a hard min or max when the intervals separated (a smooth one only when
+they separated by more than its radius), and dropped the dead instructions. On
+the counters camera at 1440x810 with 16-pixel tiles, one tape per tile removed
+5.9% of the instructions the mask leaves in the counters world, 9.5% in the
+parity world's vocabulary station, 84.1% in nexus and 83.0% in the courtyard.
+Per march sample, shape evaluations fell against today's mask plus sphere and
+rigid-leaf skips by 2.3%, 9.1%, 71.4% and 84.7%, and by 10.1%, 46.2%, 83.6% and
+91.1% with a tape per depth slab. Every pruned tape returned the full walk's
+value at all 1.79 million march samples, at tile sizes 8, 16 and 32. The gain is
+large for dense programs, negligible for small ones, and larger per slab.
+
+The figures count shape evaluations and dispatched instructions on the CPU, not
+GPU time, and do not price building, uploading or indexing a tape per tile. The
+study ran static placements only, with no active bodies or adjacency bands, and
+records its figures for 16-pixel tiles. An op with no interval model stays live,
+and a wallpaper fold was transcribed approximately. The figures were printed by
+an explicit experiment and survive only in a commit message; the study's code is
+not part of the engine.
+
+A production version builds on Puck.Maths' certified interval rules
+(`FixedInterval` and the SDF interval rules over it), never on a second,
+float-based evaluator. The study's soundness law failed once its outward
+rounding was removed: a tape pruned by an uncertified bound can silently change
+what is drawn.
+
 ### P16 — Display output
 
 **Starts from:** P14-10's float working targets. The pieces are in place:
@@ -6246,8 +6289,8 @@ whether it is sRGB or linear. The Steam Deck supports all three formats. One
 pixel-format vocabulary, `GpuPixelFormat`, names the baker's stored formats, the
 GPU's images and the presented surfaces, with no conversion between them.
 
-Each bake is keyed by the prototype's content hash, the baker version, and the
-quality tier, and one cache is filled in two ways. A build ships each bake once
+Each bake is keyed by the prototype's content hash, the bake derivation's code
+fingerprint, and the quality tier, and one cache is filled in two ways. A build ships each bake once
 in a bake pack, and a compiled world's chunk names the keys it needs from it, so
 a released world bakes nothing on a player's device. On a cache miss, which happens during live authoring or for a world
 that has not been compiled, the CPU baker runs in the background on the thread
@@ -6324,6 +6367,21 @@ above the switch, so no parity reference depends on an impostor.
 
 **Depends on:** P3 for indexed geometry, P4 for shared visibility, P5 for
 packaging, and compiled worlds in the runtime and delivery programme.
+
+#### Research input: manifold meshes and octree sign resolution
+
+A CPU study of the baker counted two things against the mesher's one vertex per
+cell. At the standard tier, 19 of the 93 prototypes baked from the counters,
+parity, nexus, standard and courtyard worlds carry edges shared by more than two
+triangles (a nexus kart ramp 33, a kart bank wall 30, a granary anchor 27, each
+hex tile 8, the courtyard floor 1), while every mesh is closed. A plate one cell
+thick meshes with 84 such edges; plates 0.4, 0.7 and 1.3 to 3 cells thick have
+none. An octree sign resolution saved 20.9% of sign evaluations but 0.5% of a
+whole bake's evaluations. The limits: the census does not separate its causes (a
+cell shared by two sheets and coincident clamped vertices both count), covers one
+tier, matches vertices by position to 1e-5, and does not ask whether any consumer
+of the mesh needs a two-manifold. The figures survive only in the study's commit
+messages.
 
 ### P18 — Sky and atmosphere
 
@@ -6951,7 +7009,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      is refused (`JudgeAscending`) where its values may meet between keys as
      well as at them; an ordered value binds no state row. A presentation-tier
      projection carries the timeline's tick clocks, which a recipient
-     evaluates at the tick it presents.
+     evaluates at the tick it presents, and each state clock a value keys on as
+     an anchored clock (below).
    - Delivers: the keyed form of every bindable value (`keys(clock: …)`), the
      angle and direction bindables, section keys whose values are partial
      records addressed by name, blends by field type with per-key ease, the
@@ -6975,35 +7034,73 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      `WindIntegralLawTests` hold a keyed cloud rate's offset continuous across a
      key (red leg: `rate × time` at each key's rate jumps); `sky-cycle` holds the
      courtyard's toggle.
-   - Remote presentation decision: use the existing tier-governed
-     `WorldProjectionDocument`, with no side metadata or held-value history.
-     Tick-only clock closures evaluate locally. For a disclosed state clock,
-     send an anchor whenever the client's prediction at an authoritative tick
-     differs from the authority's phase. The anchor carries its tick, phase
-     and the current rate for a proven affine span, or rate zero otherwise.
-     Rate changes, quantized advances, staircases, nonlinear rows and seeks
-     all follow this one rule. Other resolved presentation values travel as
-     per-recipient deltas only when changed. Every used dependency must pass
-     the existing disclosure boundary; a hidden source refuses before any
-     derived value is emitted. A late view seeds invalid fields from the
-     load-validated authored initial value (or clamps a closed range), so
-     early and late views may hold different values while invalid.
-   - Projection proof is a separate unimplemented slice after the keys
-     substrate. Until it lands, a projection carries no state clock, and a
-     projection whose values key on one (the courtyard's and the parity
-     world's `skyMode`) refuses to hydrate by name
-     (`WorldProjection.TryToDefinition`), so a presentation-tier recipient of
-     such a world receives a refusal rather than every keyed value at its
-     fallback. The slice replaces that refusal with the anchors below. Authority and recipient must call the same prediction function
-     from a shared package, bit-exact on the u64 phase. A mixed affine,
-     staircase, quantized, nonlinear and seek trace must match the host phase
-     at every tick and produce zero spurious anchors. A steady state sends
-     nothing; a late join hydrates the exact current phase; a hidden
-     dependency sends no derived value. Count the last anchor per recipient
-     per clock as a memory row, and release it when that recipient leaves or
-     loses disclosure. Before merge, count bytes per recipient per second for
-     a steady sky, a busy sky and a nonlinear clock that re-anchors every
-     tick, plus full late-join hydration. Each law needs an actual red leg.
+   - Landed: remote presentation. A presentation-tier recipient is fed by its
+     own `WorldProjectionFeed` through the tier-governed
+     `WorldProjectionDocument`, with no side metadata or held-value history;
+     every projection and delta travels as compact canonical JSON
+     (`WorldProjection.SerializeCompact`), as does a replica's definition
+     (`WorldDefinitionSerialization.SerializeCompact`), and the canonical
+     indented forms stay for what hashes, stores or displays a document. Delivering prototypes by
+     content reference is an [open item](open-items.md#cross-plan-maintenance).
+     Tick-only clock closures evaluate locally. A disclosed state clock
+     crosses as an anchored clock (`WorldClock.Anchor`, refused in an authored
+     document) carrying a `WorldClockAnchor`: its engine tick, its phase as a
+     `u64` share of a turn (a Fixed row's fractional bits, exactly), and the
+     phase one authoritative tick adds over a span `WorldClockAnchors.Read`
+     proves affine (a Fixed slot whose one trait is an advance summing whole
+     raw units every tick, which the next tick confirms), or rate zero
+     otherwise. Authority and recipient call the one prediction in
+     `Puck.World.Schema` (`WorldClockAnchor.Predict`, exact on the `u64` phase
+     at every authoritative tick), and `WorldClockAnchorLedger` sends an anchor
+     exactly when the recipient's prediction at an authoritative tick misses
+     the authority's phase: rate changes, quantized advances, staircases,
+     eased rows and seeks all follow that one rule, checked at every
+     authoritative tick, sampled or not. Other resolved values travel as
+     per-recipient deltas of the projection members that changed
+     (`WorldDocumentBasis.Diff`, merged by `WorldProjectionHold` on the far
+     side), and only when one changed; a delta of values alone reaches the
+     recipient as a state delivery. An observed cell carries its stored
+     value with the value-over-time trait that governs it and the clock it
+     reads, so the recipient advances, turns and eases it itself, and the
+     per-tick step sends anchors alone. A change to
+     observed row order or cell layout installs the definition so bindings
+     resolve their row ordinals again. A session's state mirror uses a delta's
+     stamped clock independently of the sampled body snapshots. Every state clock a value keys on must
+     pass the disclosure boundary for its row's slot, and every bindable bound
+     to a state cell for that cell (every cell of its row for a per-body
+     read), or the composition refuses by name before any derived value is
+     emitted; a row a presented bindable binds crosses as an observation of
+     the cells the recipient may read, policy or not, so a bound value is
+     never presented at its fallback. An observed row carries its envelope,
+     and a `.$target` read answers an eased cell's stored target. Only a
+     disclosure refusal (`WorldDisclosureException`) detaches a federation
+     stream by name; any other composition failure is a fault. A late view hydrates the
+     exact current phase; a clock whose row holds no number seeds a late view
+     from the phase the world loaded with (`WorldServer.ClockSeeds`), or zero
+     clamped into the row's closed envelope, while an early view keeps its
+     last anchor, so the two may differ while the clock reads none. Anchors
+     coalesce: the ledger keeps only the last one sent, so a recipient presents
+     the latest authoritative tick it was told about and never seeks backward
+     through anchors it was not sent. Presentation interpolates only forward
+     from the anchor it holds; a frame before the anchor's tick presents the
+     anchor's phase, `WorldClockAnchor.Predict` refuses an earlier tick by
+     name, and an authority restored before a sent anchor re-anchors. The last
+     anchor per recipient per clock is a counted row (`world.projection`
+     anchor rows retained and released), released when the recipient leaves
+     or loses disclosure, when a projection stops carrying the clock, or when
+     its stream detaches, without waiting for the socket to drain.
+     `ProjectionAnchorLawTests` hold a mixed affine,
+     quantized, staircase, eased and seek trace to the host phase at every
+     tick with no spurious anchor, a steady sky to zero bytes, a late join to
+     the exact phase, a hidden clock to a refusal, the anchor rows to their
+     release, an eased binding to the authority's presented value and its
+     target, advancing and cycling observations to the authority's values
+     with no composition or byte sent, a composition that does not flatten
+     to a fault rather than a disclosure detach, a coalesced anchor to
+     forward-only presentation, and the
+     courtyard's and the parity world's skies to the
+     authority's for a presentation-tier recipient; the federation wire
+     carries a delta as its own `ProjectionDelta` frame.
    - Counted-cost gate: the environment re-resolves only when a clock a key
      reads moves or a bound slot moves, counted as resolutions in
      `world.timeline`.

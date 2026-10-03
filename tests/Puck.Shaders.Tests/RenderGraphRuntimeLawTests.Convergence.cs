@@ -23,7 +23,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         );
         view.Unchanged = true;
         var start = view.Parts.Count;
-        var request = new FrameCaptureRequest(path: Path.Combine(path1: Path.GetTempPath(), path2: $"{Guid.NewGuid():N}.png"), converge: 8);
+        var request = new FrameCaptureRequest(path: CaptureRequest().Path, converge: 8);
 
         runtime.CaptureTarget(instance: PackageView).RequestCapture(request: request);
         Assert.Same(expected: request, actual: Assert.Single(collection: view.Convergence).Request);

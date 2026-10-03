@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Puck.Testing;
+using Puck.Cli.Canary;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -56,6 +57,7 @@ public sealed class WorldArtifactBuildLawTests {
             Commit(message: "initial");
         }
 
+        public string LogDirectory => m_directory.PathOf(name: "run");
         public string Root => m_directory.RootPath;
         public WorldArtifactStore Store => new(root: m_directory.PathOf(name: "store"));
 
@@ -116,7 +118,9 @@ public sealed class WorldArtifactBuildLawTests {
 
         public int Builds => Volatile.Read(location: ref m_builds);
 
-        public bool Build(string outputDirectory, TimeSpan timeout, out CliProcessResult? build, out string error) {
+        public CliProcessResult Build(IReadOnlyList<string> arguments, TimeSpan timeout) {
+            var outputDirectory = arguments[^1];
+
             _ = Interlocked.Increment(location: ref m_builds);
             Thread.Sleep(timeout: pause);
             File.WriteAllText(
@@ -126,10 +130,7 @@ public sealed class WorldArtifactBuildLawTests {
                     path2: WorldArtifactBuild.ArtifactName
                 )
             );
-            build = null;
-            error = string.Empty;
-
-            return true;
+            return new CliProcessResult(ExitCode: 0, OutputLines: [], Stderr: string.Empty, Stdout: "Build succeeded.", TimedOut: false);
         }
     }
 
@@ -137,9 +138,9 @@ public sealed class WorldArtifactBuildLawTests {
         Assert.True(
             condition: WorldArtifactBuild.TryResolve(
             artifact: out var artifact,
-            build: out _,
             builder: builder.Build,
             error: out var error,
+            logDirectory: checkout.LogDirectory,
             repositoryRoot: checkout.Root,
             store: store,
             timeout: TimeSpan.FromMinutes(value: 2),
@@ -182,6 +183,67 @@ public sealed class WorldArtifactBuildLawTests {
             actual: File.ReadAllText(path: second.Path),
             expected: File.ReadAllText(path: first.Path)
         );
+    }
+    [InlineData("world")]
+    [InlineData("stub")]
+    [Theory]
+    public void ACanaryBuildDirectoryExistsOnlyWhenABuildWritesItsLog(string id) {
+        using var checkout = new Checkout();
+        var builder = new CountingBuilder(pause: TimeSpan.Zero);
+        var builtLogDirectory = CanaryCommand.BuildRunDirectory(id: id);
+        var reusedLogDirectory = CanaryCommand.BuildRunDirectory(id: id);
+        var namedLogDirectory = CanaryCommand.BuildRunDirectory(id: id);
+
+        try {
+            Assert.False(condition: Directory.Exists(path: builtLogDirectory));
+            Assert.True(condition: WorldArtifactBuild.TryResolve(
+                artifact: out var built,
+                builder: builder.Build,
+                error: out var error,
+                logDirectory: builtLogDirectory,
+                repositoryRoot: checkout.Root,
+                store: checkout.Store,
+                timeout: TimeSpan.FromMinutes(value: 2),
+                verb: "law"
+            ), userMessage: error);
+            using var buildLease = built;
+
+            Assert.True(condition: File.Exists(path: Path.Combine(path1: builtLogDirectory, path2: "Puck.World.build.log")));
+
+            Assert.True(condition: WorldArtifactBuild.TryResolve(
+                artifact: out var reused,
+                builder: builder.Build,
+                error: out error,
+                logDirectory: reusedLogDirectory,
+                repositoryRoot: checkout.Root,
+                store: checkout.Store,
+                timeout: TimeSpan.FromMinutes(value: 2),
+                verb: "law"
+            ), userMessage: error);
+            using var reusedLease = reused;
+
+            Assert.True(condition: reused.Reused);
+            Assert.False(condition: Directory.Exists(path: reusedLogDirectory));
+
+            Assert.True(condition: WorldArtifactBuild.TryResolveNamed(
+                error: out error,
+                lease: out var namedLease,
+                logDirectory: namedLogDirectory,
+                named: built.Path,
+                path: out var namedPath,
+                repositoryRoot: checkout.Root,
+                timeout: TimeSpan.FromMinutes(value: 2),
+                verb: "law"
+            ), userMessage: error);
+            Assert.Null(@object: namedLease);
+            Assert.Equal(expected: built.Path, actual: namedPath);
+            Assert.False(condition: Directory.Exists(path: namedLogDirectory));
+            Assert.Equal(expected: 1, actual: builder.Builds);
+        } finally {
+            _ = RunDirectory.TryDelete(path: builtLogDirectory);
+            _ = RunDirectory.TryDelete(path: reusedLogDirectory);
+            _ = RunDirectory.TryDelete(path: namedLogDirectory);
+        }
     }
     [Fact]
     public void AOneByteChangeUnderTheClosureProducesANewKeyAndAChangeOutsideItDoesNot() {
@@ -243,10 +305,17 @@ public sealed class WorldArtifactBuildLawTests {
         );
 
         // Committing the same bytes moves them from the working-tree half of the key to the committed half.
+        checkout.Git("add", "src/Puck.World/Added.cs");
         checkout.Commit(message: "add a source");
+        var committed = checkout.Key();
+
         Assert.NotEqual(
-            actual: checkout.Key(),
+            actual: committed,
             expected: clean
+        );
+        Assert.NotEqual(
+            actual: committed,
+            expected: untracked
         );
         checkout.Write(
             name: "Directory.Build.props",
@@ -254,7 +323,7 @@ public sealed class WorldArtifactBuildLawTests {
         );
         Assert.NotEqual(
             actual: checkout.Key(),
-            expected: untracked
+            expected: committed
         );
     }
     [Fact]
@@ -493,6 +562,121 @@ public sealed class WorldArtifactBuildLawTests {
         Assert.Equal(
             actual: second,
             expected: first
+        );
+    }
+    [Fact]
+    public void AFailedBuildsRefusalQuotesItsFirstErrorsAndNamesTheLogThatKeepsItsWholeOutput() {
+        using var checkout = new Checkout();
+        const string Error = @"C:\x\Library.cs(1,1): error CS1002: ; expected [C:\x\Puck.Library.csproj]";
+        var stdout = $"  Determining projects to restore...\n  3>{Error}\n\nBuild FAILED.\n\n    {Error}\n    0 Warning(s)\n    1 Error(s)\n";
+
+        Assert.False(condition: WorldArtifactBuild.TryResolve(
+            artifact: out _,
+            builder: (arguments, timeout) => new CliProcessResult(
+                    ExitCode: 1,
+                    OutputLines: [],
+                    Stderr: "a line on standard error\n",
+                    Stdout: stdout,
+                    TimedOut: false
+                ),
+            error: out var refusal,
+            logDirectory: checkout.LogDirectory,
+            repositoryRoot: checkout.Root,
+            store: checkout.Store,
+            timeout: TimeSpan.FromMinutes(value: 2),
+            verb: "law"
+        ));
+
+        var log = Path.Combine(
+            path1: checkout.LogDirectory,
+            path2: CliProjectBuild.LogName(project: WorldArtifactClosure.WorldProject)
+        );
+
+        Assert.StartsWith(
+            actualString: refusal,
+            expectedStartString: "the Puck.World build exited 1. First errors:"
+        );
+        Assert.Equal(
+            actual: refusal.Split(separator: Error).Length,
+            expected: 2
+        );
+        Assert.Contains(
+            actualString: refusal,
+            expectedSubstring: CliPaths.ToDisplay(fullPath: log)
+        );
+        Assert.True(
+            condition: File.Exists(path: log),
+            userMessage: $"{log} was not kept"
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: log),
+            expectedSubstring: "Determining projects to restore"
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: log),
+            expectedSubstring: "a line on standard error"
+        );
+    }
+    [Fact]
+    public void AFailedBuildQuotesOnlyErrorDiagnosticsAndCapsDistinctErrorsAtFive() {
+        using var checkout = new Checkout();
+        string[] diagnostics = [
+            "C:/x/error/Library.cs(1,1): error CS1002: ; expected [C:/x/Library.csproj]",
+            "MSBUILD : error MSB1009: Project file does not exist.",
+            "CSC : error CS0006: Metadata file could not be found.",
+            "error NETSDK1004: Assets file not found.",
+            "error NU1101: Unable to find package Missing.",
+        ];
+        string[] noise = [
+            "C:/x/Library.cs(1,1): warning CS1030: #warning: 'reported error: one' [C:/x/Library.csproj]",
+            "C:/x/Library.cs(2,1): warning CS1030: #warning: 'reported error: two' [C:/x/Library.csproj]",
+            "C:/x/Library.cs(3,1): warning CS1030: #warning: 'reported error: three' [C:/x/Library.csproj]",
+            "C:/x/Library.cs(4,1): warning CS1030: #warning: 'reported error: four' [C:/x/Library.csproj]",
+            "C:/x/Library.cs(5,1): warning CS1030: #warning: 'reported error: five' [C:/x/Library.csproj]",
+            "warning NU1900: error: could not load vulnerability data.",
+            "a message mentioning error: without a diagnostic",
+            "C:/x/error/Library.cs -> C:/x/error/Library.dll",
+            "    0 Error(s)",
+        ];
+        var stdout = string.Join(separator: "\r\n", values: ((string[])[
+            " \t ", .. noise,
+            .. diagnostics.Select(selector: static line => $"  12>{line}"),
+            "Build FAILED.", .. diagnostics,
+            "error MSB4018: This sixth error is kept only in the log.",
+            " \t ",
+        ]));
+        const string Stderr = "error MSB9999: This seventh error is kept only in the log.\r\n";
+
+        Assert.False(condition: WorldArtifactBuild.TryResolve(
+            artifact: out _,
+            builder: (arguments, timeout) => new CliProcessResult(
+                    ExitCode: 1,
+                    OutputLines: [],
+                    Stderr: Stderr,
+                    Stdout: stdout,
+                    TimedOut: false
+                ),
+            error: out var refusal,
+            logDirectory: checkout.LogDirectory,
+            repositoryRoot: checkout.Root,
+            store: checkout.Store,
+            timeout: TimeSpan.FromMinutes(value: 2),
+            verb: "law"
+        ));
+
+        var log = Path.Combine(path1: checkout.LogDirectory, path2: CliProjectBuild.LogName(project: WorldArtifactClosure.WorldProject));
+
+        Assert.Equal(
+            actual: refusal,
+            expected: string.Join(separator: Environment.NewLine, values: ((string[])[
+                "the Puck.World build exited 1. First errors:",
+                .. diagnostics.Select(selector: static line => $"  {line}"),
+                $"Its whole output is in {CliPaths.ToDisplay(fullPath: log)}.",
+            ]))
+        );
+        Assert.Equal(
+            actual: File.ReadAllText(path: log),
+            expected: $"{stdout}{Environment.NewLine}--- stderr ---{Environment.NewLine}{Stderr}"
         );
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.World.Browser.Tests;
@@ -10,17 +11,17 @@ public sealed class BrowserWorkspaceTests : IDisposable {
     private const string Broken = "schema: \"puck.world.definition.v1\"\nbasis: \"../base\"\n\nhost: {\n  width: 320\n}\n";
     private const string Counter = "games/counter.puck";
 
-    private readonly DirectoryInfo m_directory = Directory.CreateTempSubdirectory(prefix: "puck-browser-workspace-");
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-browser-workspace-");
     private readonly BrowserWorkspace m_workspace;
 
     public BrowserWorkspaceTests() {
         m_workspace = new BrowserWorkspace(root: Path.Combine(
-            path1: m_directory.FullName,
+            path1: m_directory.RootPath,
             path2: "worlds"
         ));
     }
 
-    public void Dispose() => m_directory.Delete(recursive: true);
+    public void Dispose() => m_directory.Dispose();
 
     private static Dictionary<string, string> Fixtures() {
         var root = RepositoryPaths.Resolve(relativePath: "tests/Puck.World.Browser.Tests/Fixtures/sources");

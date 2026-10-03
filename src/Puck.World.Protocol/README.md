@@ -141,7 +141,7 @@ no activation, and a live route or definition with no delivered version; only a
 reservation's preview carries the empty version. A mutation payload composed on
 a read of a document carries that document's activation
 (`WorldSubmissionPayload.Mutation.ExpectedActivation`); the server refuses it by
-name (`world.mutation.activation_mismatch`), before recording or applying
+name (`world.mutation.activation-mismatch`), before recording or applying
 anything, when that is not its own. One composed on no read carries none and is
 not checked. A disposed
 `WorldAuthorityEndpoint` refuses every submission through its `Submissions`

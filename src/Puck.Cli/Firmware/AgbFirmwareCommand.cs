@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.ComponentModel;
-using Puck.Abstractions;
 
 namespace Puck.Cli.Firmware;
 
@@ -45,89 +44,67 @@ internal static class AgbFirmwareCommand {
     }
 
     private static async Task<byte[]> BuildAsync(string source, string clang, string linker) {
-        var temporary = Directory.CreateTempSubdirectory(prefix: "puck-firmware-agb-").FullName;
+        // A build that fails keeps its objects and linker inputs, named.
+        using var run = RunDirectory.Create(prefix: "puck-firmware-agb-");
+        var temporary = run.Path;
 
-        try {
-            var objects = new List<string>();
+        var objects = new List<string>();
 
-            foreach (var name in Sources) {
-                var path = Path.Combine(
-                    path1: temporary,
-                    path2: Path.ChangeExtension(
-                        extension: ".o",
-                        path: name
-                    )
-                );
-                var arguments = new List<string> { "--target=armv4t-none-eabi", "-mcpu=arm7tdmi" };
+        foreach (var name in Sources) {
+            var path = Path.Combine(
+                path1: temporary,
+                path2: Path.ChangeExtension(
+                    extension: ".o",
+                    path: name
+                )
+            );
+            var arguments = new List<string> { "--target=armv4t-none-eabi", "-mcpu=arm7tdmi" };
 
-                if (name.EndsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: ".s"
-                )) {
-                    arguments.AddRange(collection: ["-marm", "-x", "assembler"]);
-                } else {
-                    arguments.AddRange(collection: ["-mthumb", "-Oz", "-ffreestanding", "-fno-builtin", "-fno-unwind-tables", "-fno-asynchronous-unwind-tables", "-fomit-frame-pointer", "-Wall", "-Wextra", "-Werror", "-std=c11"]);
-                }
-
-                arguments.AddRange(collection: ["-I", source, "-c", Path.Combine(
-                        path1: source,
-                        path2: name
-                    ), "-o", path]);
-                _ = await CliProcess.RunCheckedAsync(
-                    workingDirectory: temporary,
-                    fileName: clang,
-                    arguments: arguments,
-                    capture: true
-                );
-                objects.Add(item: path);
+            if (name.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: ".s"
+            )) {
+                arguments.AddRange(collection: ["-marm", "-x", "assembler"]);
+            } else {
+                arguments.AddRange(collection: ["-mthumb", "-Oz", "-ffreestanding", "-fno-builtin", "-fno-unwind-tables", "-fno-asynchronous-unwind-tables", "-fomit-frame-pointer", "-Wall", "-Wextra", "-Werror", "-std=c11"]);
             }
 
-            var image = Path.Combine(
-                path1: temporary,
-                path2: "firmware.bin"
-            );
-
+            arguments.AddRange(collection: ["-I", source, "-c", Path.Combine(
+                    path1: source,
+                    path2: name
+                ), "-o", path]);
             _ = await CliProcess.RunCheckedAsync(
                 workingDirectory: temporary,
-                fileName: linker,
-                arguments: ["-T", Path.Combine(
-                        path1: source,
-                        path2: "firmware.ld"
-                    ), "--oformat=binary", .. objects, "-o", image],
+                fileName: clang,
+                arguments: arguments,
                 capture: true
             );
-            var bytes = File.ReadAllBytes(path: image);
-
-            if (bytes.Length != BiosLength) {
-                throw new InvalidDataException(message: $"AGB BIOS must contain exactly {BiosLength} bytes; linked image contains {bytes.Length}.");
-            }
-
-            return bytes;
-        } finally {
-            // Delete only the fresh directory this invocation created, never the source or output directory.
-            var actual = Path.GetFullPath(path: temporary);
-            var parent = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: Path.GetTempPath()));
-
-            if (
-                !string.Equals(
-                a: Path.GetDirectoryName(path: actual),
-                b: parent,
-                comparisonType: PuckPaths.Comparison
-            ) ||
-                !Path.GetFileName(path: actual).StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: "puck-firmware-agb-"
-            ) ||
-                ((File.GetAttributes(path: actual) & FileAttributes.ReparsePoint) != 0)
-            ) {
-                throw new IOException(message: "Refusing to remove a firmware build directory outside its temporary parent.");
-            }
-
-            Directory.Delete(
-                path: actual,
-                recursive: true
-            );
+            objects.Add(item: path);
         }
+
+        var image = Path.Combine(
+            path1: temporary,
+            path2: "firmware.bin"
+        );
+
+        _ = await CliProcess.RunCheckedAsync(
+            workingDirectory: temporary,
+            fileName: linker,
+            arguments: ["-T", Path.Combine(
+                    path1: source,
+                    path2: "firmware.ld"
+                ), "--oformat=binary", .. objects, "-o", image],
+            capture: true
+        );
+        var bytes = File.ReadAllBytes(path: image);
+
+        if (bytes.Length != BiosLength) {
+            throw new InvalidDataException(message: $"AGB BIOS must contain exactly {BiosLength} bytes; linked image contains {bytes.Length}.");
+        }
+
+        run.Conclude(passed: true);
+
+        return bytes;
     }
     private static string RequiredFile(string path) {
         path = Path.GetFullPath(path: path);

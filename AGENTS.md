@@ -86,9 +86,9 @@ leave it that way (rules 2 and 5).
    re-run the gates it reaches (`puck test --reproduce`, `puck parity`, the
    canaries, the emulator batteries) to prove determinism still holds, and
    re-record the persisted replays and baselines it invalidates in the same
-   change. The gates compare runs with each other and pin no historical values. Never
-   preserve a wrong result to keep a hash, and never add a path that reproduces
-   old-wrong behavior.
+   change. The gates compare runs with each other and pin no historical values.
+   Never preserve a wrong result to keep a hash, and never add a path that
+   reproduces old-wrong behavior.
 5. **Zero consumers, zero legacy.** Nothing outside this repository consumes
    Puck. Backwards compatibility is a non-goal; never raise it or let it shape a
    change. Rename, reshape and delete freely, updating every internal caller in
@@ -109,10 +109,11 @@ leave it that way (rules 2 and 5).
    hash. If the change is right, re-establish the brand's `basis` (`exhaustive`,
    `exact-by-construction`, or `exact-by-proof`, whose entry carries the
    argument to re-read first), paste the new hash, and say in the commit why the
-   member is still correct. To unbrand, delete the attribute and its entry together (one alone
-   is VER002). Never delete a brand to unblock a build. VER003 means the
-   declaration's shape cannot be fingerprinted honestly (`partial`, a
-   preprocessor directive, a misplaced brand): restructure, never suppress.
+   member is still correct. To unbrand, delete the attribute and its entry
+   together (one alone is VER002). Never delete a brand to unblock a build.
+   VER003 means the declaration's shape cannot be fingerprinted honestly
+   (`partial`, a preprocessor directive, a misplaced brand): restructure, never
+   suppress.
    VER004 to VER010 refuse a brand, entry or ledger that cannot be trusted; each
    message names its fix. An entry's `assembly` is the compilation that sweeps
    it.
@@ -121,7 +122,7 @@ leave it that way (rules 2 and 5).
    `puck-dsl`, `rendering`, `sdf-authoring`, `maths-usage`, `maths-laws`,
    `gaming-bricks`, `rom-forge`, `dotnet10-performance`, `symbol-analysis`,
    `content-search`, `documentation`, `boy-scout`, `verification`,
-   `review-passes`), then ask the code with `puck references`,
+   `review-passes`, `orchestration`), then ask the code with `puck references`,
    `puck declarations` or `puck search -M 0`. `experimental/` is one of the
    places to look. A second implementation is a defect, and a skill wrong about
    its own area is corrected in the same change.
@@ -159,8 +160,8 @@ are stale; correct them where they live.
 
 Load the [`verification`](.claude/skills/verification/SKILL.md) skill before
 calling any change verified. It routes through `puck gate` and
-`puck laws prove` when the CLI lists them, and otherwise through the manual
-steps it gives. Its rules in brief:
+`puck laws prove`, and gives the steps to run by hand where a brief rules a
+verb out. Its rules in brief:
 
 - Run every gate from a copy of the head's own built CLI in a directory only
   your lane uses, never the global `puck` tool.
@@ -168,7 +169,8 @@ steps it gives. Its rules in brief:
   form rewrites the file.
 - Measure `puck affected` against the lane's merge base, and never test
   binaries a failed build left behind.
-- Prove every new or changed law red by withholding the fix.
+- Prove every new or changed law red by withholding the fix
+  (`puck laws prove`), never by reverting files in a shared tree.
 - GPU legs run one at a time per GPU, under a grant the lead issues. A failed
   leg is re-run once alone: a timeout or wait that passes alone is a flake to
   report, and a wrong value is a failure to fix.
@@ -200,6 +202,10 @@ steps it gives. Its rules in brief:
   worktree holds it.
 
 ## Delegated work
+
+Load [`orchestration`](.claude/skills/orchestration/SKILL.md) when leading
+delegated work, sequencing integration merges, scheduling machines or routing
+reviews.
 
 When you delegate, inventory the work first, assign each agent explicit file
 ownership and its skills, and sequence edits to shared files. Each brief holds

@@ -232,11 +232,27 @@ public static class WorldPostBuildWiring {
 
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
 
-        services.GetRequiredService<WorldSourceWatch>().Report = (message, refused) => {
+        Action<string, bool> report = (message, refused) => {
             toasts?.Publish(isError: refused, message: message);
             consoleSessions.RecordAdministrativeEcho(message: message, refused: refused);
         };
+
+        services.GetRequiredService<WorldSourceWatch>().Report = report;
         var consoleOutput = services.GetRequiredService<BufferedConsoleOutput>();
+
+        // A bound value a presentation clamps into its field's domain reaches the same fan-out as a document reload's
+        // diagnostic, and stderr, where a piped script reads it.
+        var valueDomains = services.GetRequiredService<WorldValueDomainGuard>();
+
+        valueDomains.Report = message => {
+            report(arg1: message, arg2: true);
+            consoleOutput.WriteErrorLine(value: message);
+        };
+        // A restored timeline is a state the held values of its world do not describe: that world's bindings start
+        // fresh, through the state mirror the boot instance's presentation reads. Another world's are untouched.
+        var restoredState = services.GetRequiredService<WorldClient>().StateMirror;
+
+        services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => valueDomains.Restart(mirror: restoredState);
 
         services.GetRequiredService<WorldCompareCapture>().Report = result => {
             // Only late settlements reach this callback; synchronous refusals are counted by Submit itself.
@@ -289,11 +305,12 @@ public static class WorldPostBuildWiring {
             // SERVER's own echo confirms the rebuild actually applied (this tap fires from the tick boundary, after
             // every gate — authority, dirty-guard, validation, capacity, solids — has already passed), never eagerly
             // at submit time, when the rebuild might still be refused. world.reset never reaches here with a
-            // RebuildOrigin (it targets the base without moving it), so SourcePath is correctly left untouched.
+            // RebuildOrigin (it targets the base without moving it), so SourcePath is correctly left untouched, and
+            // only a file origin is a path the console can save to or re-read.
             if (
                 !echo.Rejected &&
                 (echo.Kind == WorldEditEchoKind.Rebuild) &&
-                (echo.RebuildOrigin is { } origin)
+                (echo.RebuildOrigin is WorldRebuildOrigin.File { Path: var origin })
             ) {
                 definitionSource.SourcePath = origin;
                 editorSeats.Reconcile(world: WorldInstanceHost.BootInstanceName, placements: server.Definition.Placements);

@@ -4,13 +4,30 @@ using Puck.Text;
 
 namespace Puck.World.Client;
 
-/// <summary>Resolves the delivered world's hash-pinned font assets and exposes their one packed GPU atlas.</summary>
-public sealed class WorldTextCatalog(WorldDefinitionSource source) {
+/// <summary>Resolves a delivered world's hash-pinned font assets, beside the world's own document, and exposes their one
+/// packed GPU atlas: the boot world's, or a world shown through a screen, which draws its own text with its own
+/// fonts.</summary>
+public sealed class WorldTextCatalog {
     private readonly FontAtlasSourceResolver m_resolver = new(assetSource: new FileSystemAssetSource());
-    private readonly WorldDefinitionSource m_source = (source ?? throw new ArgumentNullException(paramName: nameof(source)));
+    // The directory a delivered definition's font assets resolve beside, or null for a definition that names none.
+    private readonly Func<WorldDefinition, string?> m_directory;
 
     private TextFontCatalogDefinition? m_definition;
-    private string? m_origin;
+    private string? m_resolvedDirectory;
+
+    /// <summary>Initializes a new instance of the <see cref="WorldTextCatalog"/> class for the booted world, whose font
+    /// assets resolve beside the document it booted from.</summary>
+    /// <param name="source">The booted document and its path.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
+    public WorldTextCatalog(WorldDefinitionSource source) {
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        m_directory = _ => WorldDocumentPaths.DirectoryOf(documentPath: source.SourcePath);
+    }
+    /// <summary>Initializes a new instance of the <see cref="WorldTextCatalog"/> class for a world delivered from
+    /// another authority, whose font assets resolve beside its own document
+    /// (<see cref="WorldDefinition.DocumentDirectory"/>).</summary>
+    public WorldTextCatalog() => m_directory = static definition => definition.DocumentDirectory;
 
     private static void PreflightContent(WorldDefinition definition, PackedFontAtlasCatalog catalog) {
         foreach (var creation in definition.Creations) {
@@ -89,13 +106,16 @@ public sealed class WorldTextCatalog(WorldDefinitionSource source) {
             }
         }
     }
-    private PackedFontAtlasCatalog Resolve(WorldDefinition definition, string origin) {
+    private PackedFontAtlasCatalog Resolve(WorldDefinition definition, string? directory) {
         var text = (definition.Text ?? throw new ArgumentException(
             message: "The world declares no text catalog.",
             paramName: nameof(definition)
         ));
         var catalog = m_resolver.ResolveCatalog(
-            basePath: WorldDocumentPaths.DirectoryOf(documentPath: origin),
+            basePath: (directory ?? throw new ArgumentException(
+                message: "The world's document names no directory its font assets resolve beside.",
+                paramName: nameof(definition)
+            )),
             definition: text
         );
 
@@ -107,18 +127,24 @@ public sealed class WorldTextCatalog(WorldDefinitionSource source) {
         return catalog;
     }
 
-    /// <summary>Reconciles a newly delivered definition against the tracked document origin.</summary>
+    /// <summary>Reconciles a newly delivered definition against the directory its font assets resolve beside.</summary>
+    /// <param name="definition">The delivered definition.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The definition declares a text catalog and names no directory its font
+    /// assets resolve beside, or a font asset row is invalid.</exception>
+    /// <exception cref="InvalidDataException">A font asset fails its pin, or an authored text holds a scalar its font's
+    /// generated subset lacks.</exception>
     public void Reconcile(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(definition);
 
         var text = definition.Text;
-        var origin = m_source.SourcePath;
+        var directory = m_directory(arg: definition);
 
         if (text is null) {
             Catalog = null;
             GlyphAtlas = null;
             m_definition = null;
-            m_origin = origin;
+            m_resolvedDirectory = directory;
 
             return;
         }
@@ -129,8 +155,8 @@ public sealed class WorldTextCatalog(WorldDefinitionSource source) {
             objB: m_definition
         ) &&
             string.Equals(
-            a: origin,
-            b: m_origin,
+            a: directory,
+            b: m_resolvedDirectory,
             comparisonType: StringComparison.Ordinal
         )
         ) {
@@ -147,7 +173,7 @@ public sealed class WorldTextCatalog(WorldDefinitionSource source) {
 
         var catalog = Resolve(
             definition: definition,
-            origin: origin
+            directory: directory
         );
 
         Catalog = catalog;
@@ -157,7 +183,7 @@ public sealed class WorldTextCatalog(WorldDefinitionSource source) {
             Height: ((uint)catalog.ImageData.Height)
         );
         m_definition = text;
-        m_origin = origin;
+        m_resolvedDirectory = directory;
     }
     /// <summary>Preflights a candidate catalog without changing the live binding.</summary>
     public bool TryValidate(WorldDefinition definition, string origin, out string reason) {
@@ -173,7 +199,7 @@ public sealed class WorldTextCatalog(WorldDefinitionSource source) {
         try {
             _ = Resolve(
                 definition: definition,
-                origin: origin
+                directory: WorldDocumentPaths.DirectoryOf(documentPath: origin)
             );
             reason = string.Empty;
 

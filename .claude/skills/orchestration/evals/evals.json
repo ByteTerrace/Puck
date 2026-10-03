@@ -1,0 +1,41 @@
+{
+  "skill_name": "orchestration",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Brief a delegated assignment whose author says its base is already on the integration branch because a two-dot range is empty.",
+      "expected_output": "Verifies the base claim personally with git merge-base --is-ancestor and counts commits behind the integration head with git rev-list --count; does not infer ancestry from a two-dot range. Writes one self-contained brief with an id, whole task, integration branch, verified base commit, owned files or area, skills, finish line, stop condition, GPU grant and Needs you / Changed / Found report shape. Requires the assignment's last commit to carry Brief: <id> done or Brief: <id> blocked: <question>; treats the message as notification and git as record.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "One batch lands while two local batches remain open. An agent is denied a merge and another reports conflicting generated shader interfaces and fingerprints. How do you proceed?",
+      "expected_output": "Keeps batch branches local-only in worktrees under .claude/worktrees, cut from the current integration head. Merges the new integration head into every open batch before qualification and routes GPU qualification to verification. The lead runs the denied merge; agents resolve generated-file conflicts with their generators rather than hand-merging. Lands work on the integration branch and moves complete milestones to main only when the owner asks.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Choose machines for a GPU leg and a heavy build. The GPU machine has more free RAM at this instant than the other machine.",
+      "expected_output": "Plans by fixed CPU class, GPU, total memory and supported workloads, not fluctuating free-memory or free-disk snapshots. Schedules one GPU leg per GPU and keeps heavy builds off its machine while it runs. Routes grants, GPU work classification and execution to verification.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "The owner asks for more Claude participation while a Sol lane is underway. Choose a family for a new correctness-heavy lane and close a review whose second round still raises a blocker and an out-of-scope finding.",
+      "expected_output": "Treats steering as an adjustment to judgement, not a quota or a reason to reassign the Sol lane. Chooses Astra or Opus for correctness-heavy work and Sol or Sonnet for well-specified work; uses Fable only when genuinely needed. Routes review with fixes enabled to the writer's other family under review-passes, ending at two rounds. The lead rules on remaining second-round findings with a scoped fix, recorded open item or reasoned dismissal. Gives every finding a lane or named scope deferral before setting it aside.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Send a partner a long analysis for brief render-batch and proceed if they do not reply.",
+      "expected_output": "Uses a short message whose self-contained first line is [render-batch] <started|progress|done|blocked|question>: <sentence>. Places the large analysis on a branch and sends its path. Does not treat silence as agreement.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Several lanes are ready to merge into a batch. Their commit bodies report successful CPU checks but say that GPU legs and a counters re-record are owed. The lanes have no remaining assignments, and the batch has a GPU qualification slot. How do you account for the outstanding work?",
+      "expected_output": "Inspects each commit body's outstanding GPU legs and re-records at merge time and creates tracked items for them. Does not treat a commit note as an assigned lane or as completion. Carries each item into the batch's GPU qualification run and closes it only with evidence from the required check or re-record; leaves unperformed or failed items tracked as owed.",
+      "files": []
+    }
+  ]
+}

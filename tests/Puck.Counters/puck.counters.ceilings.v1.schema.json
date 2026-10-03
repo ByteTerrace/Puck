@@ -6,7 +6,7 @@
     "generator": "Puck.World.WorldSchema"
   },
   "title": "Puck counters ceilings (puck.counters.ceilings.v1)",
-  "description": "A puck.counters.ceilings.v1 document: the counted-cost ceilings puck counters --check holds the counters workload to, pass by pass, and puck counters --record writes. Each backend\u0027s run states, for every pass of every render node and for the work outside every pass, what each GPU submission kind may read there: at most its ceiling, where a ceiling of zero is a required zero. A deterministic kind is judged on any device; a per-backend-deterministic kind (PerBackendDeterministic) only on the device its run was recorded on, and is reported as not judged on any other.",
+  "description": "A puck.counters.ceilings.v1 document: the counted-cost ceilings puck counters --check holds the counters workload to, pass by pass, and puck counters --record writes. Each backend\u0027s run states, for every pass of every render node and for the work outside every pass, what each GPU submission kind may read there: at most its ceiling, where a ceiling of zero is a required zero. A deterministic kind is judged on any device; a per-backend-deterministic kind (PerBackendDeterministic) only on the device its run was recorded on, and is reported as not judged on any other, except a zero that is a structural contract (RequiredZero), which holds on every device and is judged on every one.",
   "type": [
     "object",
     "null"
@@ -134,6 +134,11 @@
                 "ceiling": {
                   "description": "The most the count may read; zero requires it to read zero.",
                   "type": "integer"
+                },
+                "requiredZero": {
+                  "description": "Whether the ceiling is a zero that holds on every device: the kind is a magnitude that varies with the device (a kernel kind such as the march steps), and the pass never does that kind of work, so zero is a structural contract and not one device\u0027s reading. A per-backend-deterministic ceiling is judged on a foreign device only when it is a required zero. Only a zero ceiling of a per-backend-deterministic class carries it; a deterministic ceiling is judged everywhere by its class, and a count loosened to its pass\u0027s class is a reading of the recording device alone.",
+                  "type": "boolean",
+                  "default": false
                 }
               },
               "required": [

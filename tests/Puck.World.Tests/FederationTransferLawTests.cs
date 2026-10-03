@@ -3,7 +3,6 @@ using System.Net;
 using System.Numerics;
 using System.Text;
 
-using Puck.Attestation;
 using Puck.Maths;
 using Puck.Networking;
 using Puck.Testing;
@@ -12,6 +11,7 @@ using Puck.World.Server;
 
 using Xunit;
 using Puck.Physics.Motion;
+using static Puck.World.Tests.FederationSigning;
 
 namespace Puck.World.Tests;
 
@@ -63,15 +63,6 @@ public sealed partial class FederationTransferLawTests {
                     Mobility: Mobility(index: 0)
                 )]
         );
-    /// <summary>The SignsDirectly admission row a peer must author to trust <paramref name="oracle"/>'s own key.</summary>
-    private static WorldAdmissionEntry TrustEntryFor(LocalKeySigningOracle oracle) => new(
-        Domain: oracle.Domain,
-        Subject: oracle.Subject,
-        Mode: WorldAdmissionTrustMode.SignsDirectly,
-        Algorithm: AttestationAlgorithms.EcdsaP256Sha256,
-        PublicKey: Convert.ToBase64String(inArray: oracle.PublicKeySubjectPublicKeyInfo),
-        Grants: []
-    );
 
     [Fact]
     public void AutonomousTransfer_RefusesAnUnsupportedProducerBeforeCommit() {
@@ -337,11 +328,11 @@ public sealed partial class FederationTransferLawTests {
     [Fact]
     public void CommitWire_PreservesTheSelectedMotionProgramAndTheCommitTimeProfile() {
         using var fixture = Fixtures.FreshServer();
-        // The commit-time profile is the discriminating field: a colocated crossing hands this object straight to the
-        // destination, so a codec that drops it gives federated and colocated crossings different semantics.
+        // The commit-time projection is the discriminating field: a colocated crossing lands the same projection, so a
+        // codec that drops or alters it gives federated and colocated crossings different semantics.
         var profile = fixture.Server.Profiles.BootProfile;
         var expected = new WorldTransferCommitMember(
-            Profile: profile,
+            Profile: profile.Project(),
             HasMappedArrival: true,
             BodyMotionProgramName: "free",
             Position: new FixedVector3(
@@ -392,11 +383,10 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeCommit(
                 body: encoded,
-                defaults: fixture.Server.Definition.PlayerDefaults,
-                sourceAuthority: out var sourceAuthority,
-                transferId: out var transferId,
+                failure: out var failure,
                 members: out var members,
-                failure: out var failure
+                sourceAuthority: out var sourceAuthority,
+                transferId: out var transferId
             ),
             userMessage: failure.ToString()
         );
@@ -422,6 +412,10 @@ public sealed partial class FederationTransferLawTests {
             expected: profile.Name,
             actual: member.Profile?.Name
         );
+        Assert.True(condition: WorldIdentityProjectionWire.Matches(
+            left: expected.Profile,
+            right: member.Profile
+        ));
         Assert.True(condition: Assert.Single(collection: member.ActionContinuity!.Channels).PreviousBit);
         Assert.Equal(
             expected: FixedQ4816.One,
@@ -458,7 +452,6 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeCommit(
                 body: encoded,
-                defaults: defaults,
                 failure: out var control,
                 members: out _,
                 sourceAuthority: out _,
@@ -469,7 +462,6 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.False(condition: WorldFederationCodec.TryDecodeCommit(
             body: [.. encoded, 0],
-            defaults: defaults,
             failure: out var trailing,
             members: out _,
             sourceAuthority: out _,
@@ -488,7 +480,6 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.False(condition: WorldFederationCodec.TryDecodeCommit(
             body: writer.ToArray(),
-            defaults: defaults,
             sourceAuthority: out _,
             transferId: out _,
             members: out _,
@@ -2053,9 +2044,8 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(
             condition: WorldFederationCodec.TryDecodeReservation(
                 body: bytes,
-                defaults: fixture.Server.Definition.PlayerDefaults,
-                request: out var decoded,
-                failure: out var failure
+                failure: out var failure,
+                request: out var decoded
             ),
             userMessage: failure.ToString()
         );
@@ -2089,7 +2079,6 @@ public sealed partial class FederationTransferLawTests {
         writer.WriteString(value: "seam");
         writer.WriteBoolean(value: false);
         writer.WriteBoolean(value: true);
-        writer.WriteBoolean(value: true);
         writer.WriteInt32(value: 1);
         writer.WriteInt32(value: 0);
         writer.WriteString(value: "origin/world");
@@ -2109,7 +2098,6 @@ public sealed partial class FederationTransferLawTests {
 
         Assert.False(condition: WorldFederationCodec.TryDecodeReservation(
             body: writer.ToArray(),
-            defaults: fixture.Server.Definition.PlayerDefaults,
             request: out var request,
             failure: out var failure
         ));
@@ -2118,99 +2106,6 @@ public sealed partial class FederationTransferLawTests {
             expectedSubstring: "identity id",
             actualString: failure.Detail,
             comparisonType: StringComparison.Ordinal
-        );
-    }
-    [Fact]
-    public void RouteWire_PreservesOneCompleteAuthorityEpoch() {
-        var expected = new WorldAuthorityRouteDescription(
-            Endpoint: "127.0.0.1:42001",
-            Entity: new WorldEntityAddress(
-                Authority: "world/corner-sw",
-                Generation: 23,
-                Index: 17
-            ),
-            Tick: 987654321UL,
-            Position: new FixedVector3(
-                X: FixedQ4816.FromDouble(value: -12.25),
-                Y: FixedQ4816.FromDouble(value: 3.5),
-                Z: FixedQ4816.FromDouble(value: 0.125)
-            ),
-            Orientation: FixedQuaternion.FromAxisAngle(
-                axis: new FixedVector3(
-                    X: FixedQ4816.Zero,
-                    Y: FixedQ4816.One,
-                    Z: FixedQ4816.Zero
-                ),
-                angle: FixedQ4816.FromDouble(value: 1.75)
-            ),
-            BodyColor: new Vector3(x: 0.25f, y: 0.5f, z: 0.75f),
-            Kit: 0,
-            Look: 0,
-            CatalogRig: 71,
-            PlacementId: "traveler-shell",
-            Definition: Fixtures.BuildDocument(),
-            Version: new WorldDocumentVersion(Activation: Guid.NewGuid(), Sequence: 42L)
-        );
-
-        var encoded = WorldFederationCodec.EncodeRoute(
-            authority: "world/corner-sw",
-            revision: 0,
-            route: in expected,
-            tier: WorldDisclosureTier.Replica
-        );
-
-        Assert.True(
-            condition: WorldFederationCodec.TryDecodeRoute(
-                body: encoded,
-                failure: out var failure,
-                route: out var actual
-            ),
-            userMessage: failure.ToString()
-        );
-        Assert.Equal(
-            expected: expected.Endpoint,
-            actual: actual.Endpoint
-        );
-        Assert.Equal(
-            expected: expected.Entity,
-            actual: actual.Entity
-        );
-        Assert.Equal(
-            expected: expected.Tick,
-            actual: actual.Tick
-        );
-        Assert.Equal(actual: actual.Version, expected: expected.Version);
-        Assert.Equal(
-            expected: expected.Position,
-            actual: actual.Position
-        );
-        Assert.Equal(
-            expected: expected.Orientation,
-            actual: actual.Orientation
-        );
-        Assert.Equal(
-            expected: expected.BodyColor,
-            actual: actual.BodyColor
-        );
-        Assert.Equal(
-            expected: expected.Kit,
-            actual: actual.Kit
-        );
-        Assert.Equal(
-            expected: expected.Look,
-            actual: actual.Look
-        );
-        Assert.Equal(
-            expected: expected.CatalogRig,
-            actual: actual.CatalogRig
-        );
-        Assert.Equal(
-            expected: expected.PlacementId,
-            actual: actual.PlacementId
-        );
-        Assert.Equal(
-            expected: expected.Definition.DocumentId,
-            actual: actual.Definition.DocumentId
         );
     }
     [Fact]

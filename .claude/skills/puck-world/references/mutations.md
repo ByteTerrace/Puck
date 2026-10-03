@@ -141,8 +141,8 @@ table — a row added there grants nothing until relaunch.
   server's own `m_base`, hashed fresh via `WorldDefinitionSerialization.
   Serialize`; Load/Reload: the console-resolved document, whose hash the
   console already computed from the exact bytes it read — or, on a REPLAY
-  drive, a fresh re-read of the path hint, since the tape carries no
-  document) → on replay, refuse BY NAME on a content-hash mismatch before
+  drive, a fresh re-read of a file origin, since the tape carries no
+  document; a store origin refuses as `RebuildSourceUnavailable`) → on replay, refuse BY NAME on a content-hash mismatch before
   anything else runs → `RebuildTap` fires (the replay tape's apply-time
   capture point — see [replay.md](replay.md)) → the principal must hold
   Mutate over EVERY section (`WorldGrants.AllowsAllSections`) → (Load-only,

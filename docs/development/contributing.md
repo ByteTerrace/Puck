@@ -81,6 +81,30 @@ subdirectory there:
 | `compilations` | The `.puck` compile cache the game and the CLI share |
 | `corpora` | The conformance corpora the emulator batteries fetch |
 
+## Temporary directories
+
+Every directory a run makes under the temporary directory follows one policy,
+`RunDirectory` in `build/RunDirectory.cs`. `Directory.Build.targets` links it
+into the CLI and every test and validation project, and `Directory.Build.props`
+into file apps. A directory gets a prefix that names its owner and a unique
+suffix. A run that passes deletes it. A run that fails keeps it and names its
+absolute path in a `run directory kept: <path>` line. The first directory a
+process creates under a prefix deletes that prefix's directories older than six
+hours, which clears a killed run's leftovers. The
+[CLI conventions](../reference/cli.md#conventions) list the verbs that follow
+it and the directories that are deleted whatever the outcome.
+
+A law takes its directory from `TemporaryDirectory`
+(`tests/Shared/TemporaryDirectory.cs`, linked into every test project), never
+from `Directory.CreateTempSubdirectory`, `Path.GetTempPath()` or
+`Path.GetTempFileName()`. Its disposal follows the law's verdict: a passing law
+deletes the directory, and a failing law keeps it and writes the kept line to
+the law's output. A directory disposed while its law runs waits for the
+verdict, which an assembly-level xUnit `BeforeAfterTestAttribute` reads once the
+law ends. A deletion failure fails a passing law, so a handle the code under
+test leaves open is caught; `bestEffortDelete` relaxes that for a law whose
+host may still hold a file as it is disposed.
+
 ## C# file apps
 
 Repository automation is Puck CLI: `puck --help` lists the verbs and
@@ -214,6 +238,27 @@ tape, or a release fixture) states which format it touches and whether old
 data can still load: old data must never load under a new interpretation, so
 a renamed or reshaped field makes the strict parser refuse the old form
 rather than silently reinterpreting it.
+
+Cross-host determinism has its own check.
+[`puck determinism record`](../reference/cli.md#puck-determinismcross-host-determinism-attestation)
+boots each scenario of
+[the determinism manifest](../../tests/Puck.Determinism/determinism.json)
+headless in-process and records every tick's per-system state hashes and the
+world's document-level hashes. `puck determinism compare` names the first tick
+and system, or document hash, where two recordings differ. CI records the
+manifest on Windows and on Linux and fails on any divergence. Locally, record it
+twice, or before and after a change, and compare the two streams. A deliberate
+correction to simulation math or logic moves the hashes on both hosts alike, so
+the cross-host compare still agrees and needs no re-recording. A host-dependent
+difference, such as a writer whose line breaks follow the operating system, is
+caught at the tick and system or the document hash it moves. When a change adds
+a system or a document hash the manifest's worlds do not reach, add a scenario:
+a small world, a few hundred ticks, and seats, intents or cell writes that make
+the system run within them. Name the components it moves in its `exercises`;
+`record` refuses a scenario that leaves one unchanged, and a law fails when a
+per-tick component other than the declared topologies is exercised by no
+scenario. The manifest covers no portal transfer, since that needs more than one
+world instance.
 
 For changes under `src/Puck.Maths`, also run the maths law suite. A plain
 `dotnet test` runs the default tier (Smoke and Default), the everyday gate;
@@ -440,6 +485,18 @@ framed as unverified when no device run exists.
 
 ## Hardware and toolchain cautions
 
+- In Git Bash on Windows, `python3` and `python` can resolve to the Microsoft
+  Store alias, which waits on standard input until the command times out. Use
+  the repository's own tools, or `sed`, `awk` or `perl`, instead.
+- The Codex Windows sandbox reads profile folders through an inherited
+  `CodexSandboxUsers` read-and-execute (RX) grant. A folder with inheritance
+  disabled is unreadable to it; affected locations include
+  `%LOCALAPPDATA%/Microsoft SDKs`, `%APPDATA%/NuGet` and `%LOCALAPPDATA%/NuGet`.
+  MSBuild can then fail inside the sandbox with MSB4184 from
+  `ToolLocationHelper.GetPlatformSDKLocation`, and NuGet with
+  "Failed to read NuGet.Config due to unauthorized access". The machine's
+  owner fixes the folder's permissions by re-enabling inheritance or granting
+  `CodexSandboxUsers` read and execute on that folder.
 - On the reference Windows/RTX 4070 system, enabling the Direct3D 12 debug
   layer can make `D3D12CreateDevice` fail with `0x887A0007`; it is opt-in.
 - Vulkan import of a Direct3D 12 shared texture on NVIDIA uses handle type
@@ -456,8 +513,9 @@ framed as unverified when no device run exists.
 - The .NET host picks the SDK from the working directory's nearest
   `global.json`, and MSBuild picks a project's SDK from the project's; with
   neither, both roll to the newest SDK installed, preview or not. A verb or
-  test that builds a scratch project outside the checkout creates it through
-  `CliScratchDirectories.CreateProject`, which copies the checkout's
+  test that builds a scratch project outside the checkout takes its directory
+  from the run-directory policy ([temporary directories](#temporary-directories)),
+  pins it with `CliScratchDirectories.PinSdk`, which copies the checkout's
   `global.json` in, and runs the SDK command from that directory. An SDK
   command against a checkout project runs from the checkout.
 - Incremental builds can retain corrupted reference assemblies. Confirm

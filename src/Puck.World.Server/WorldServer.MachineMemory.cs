@@ -91,6 +91,9 @@ public sealed partial class WorldServer {
             address: binding.Address,
             value: unchecked((byte)value)
         );
+        if (lowOk) {
+            NoteScreenOpApplied();
+        }
         var highOk = true;
 
         if (binding.Width == 2) {
@@ -99,6 +102,9 @@ public sealed partial class WorldServer {
                 address: (binding.Address + 1),
                 value: unchecked((byte)(value >> 8))
             );
+            if (highOk) {
+                NoteScreenOpApplied();
+            }
         }
 
         if (
@@ -119,6 +125,9 @@ public sealed partial class WorldServer {
             return;
         }
 
+        // A screen can read a named machine without any screen operation having dispatched. Its observation is
+        // outside the checkpoint inventory too, so it closes the same capture and history gate.
+        NoteScreenOpApplied();
         var value = ((long)low);
 
         if (binding.Width == 2) {

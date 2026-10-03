@@ -429,7 +429,7 @@ public sealed partial class SdfMeshCanaryOracleLawTests {
     }
     // A camera row as the World resolves it: its rig's eye, target and field of view at the extent its view renders at.
     private static CameraSnapshot Camera(WorldDefinition definition, string name, uint width, uint height) {
-        var (eye, target, fieldOfView) = WorldCameraRigCompiler.Compile(
+        var (eye, target, fieldOfView) = WorldCameraRigCompiler.Compile(domains: new WorldValueDomainGuard(),
             definition: definition,
             mirror: new WorldStateMirror(view: new WorldDocumentStateView(definition: () => definition)),
             program: definition.Cameras.Single(predicate: row => string.Equals(

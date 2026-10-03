@@ -93,6 +93,7 @@ internal static partial class TestCommand {
                 // Test worlds are temporary JSON documents, staged flattened so the executable boots the exact
                 // composed source without depending on the temporary file's location.
                 if (!WorldStaging.TryWrite(
+                    catalog: CliWorldVocabulary.EnsureInstalled(),
                     directory: directory,
                     name: document.Name,
                     path: out var path,

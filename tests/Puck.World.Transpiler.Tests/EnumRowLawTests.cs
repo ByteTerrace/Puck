@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
 using Puck.World.Transpiler.Validation;
@@ -209,50 +210,38 @@ public sealed class EnumRowLawTests {
     // document the validation reads declares it.
     [Fact]
     public void ARowMayNameAnEnumItsBasisDeclares() {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-enum-basis-{Guid.NewGuid():N}"
+        using var directory = new TemporaryDirectory(prefix: "puck-enum-basis-");
+
+        _ = directory.WriteText(
+            name: "base.puck",
+            text: $"{WorldSources.Header}state {{\n    {Element}    world {{\n        slot a: Element = Air\n    }}\n}}\n"
         );
 
-        _ = Directory.CreateDirectory(path: directory);
+        var path = directory.PathOf(name: "child.puck");
+        var source = "basis: \"base\"\n\nstate {\n    world {\n        slot left: Element = 1\n    }\n}\n";
+        var sourceMap = new SourceMap();
 
-        try {
-            File.WriteAllText(
-                contents: $"{WorldSources.Header}state {{\n    {Element}    world {{\n        slot a: Element = Air\n    }}\n}}\n",
-                path: Path.Combine(path1: directory, path2: "base.puck")
-            );
+        File.WriteAllText(contents: source, path: path);
 
-            var path = Path.Combine(path1: directory, path2: "child.puck");
-            var source = "basis: \"base\"\n\nstate {\n    world {\n        slot left: Element = 1\n    }\n}\n";
-            var sourceMap = new SourceMap();
+        var compilation = WorldCompiler.Compile(
+            cancellationToken: TestContext.Current.CancellationToken,
+            source: source,
+            sourceMap: sourceMap,
+            sourcePath: path
+        );
 
-            File.WriteAllText(contents: source, path: path);
-
-            var compilation = WorldCompiler.Compile(
-                cancellationToken: TestContext.Current.CancellationToken,
-                source: source,
+        Assert.False(
+            condition: compilation.Diagnostics.HasErrors,
+            userMessage: compilation.Diagnostics.FormatReport(source)
+        );
+        Assert.True(
+            condition: WorldSemanticValidator.ValidateComposedWorld(
+                diagnostics: compilation.Diagnostics,
+                loweredJson: compilation.RequireJson(),
                 sourceMap: sourceMap,
                 sourcePath: path
-            );
-
-            Assert.False(
-                condition: compilation.Diagnostics.HasErrors,
-                userMessage: compilation.Diagnostics.FormatReport(source)
-            );
-            Assert.True(
-                condition: WorldSemanticValidator.ValidateComposedWorld(
-                    diagnostics: compilation.Diagnostics,
-                    loweredJson: compilation.RequireJson(),
-                    sourceMap: sourceMap,
-                    sourcePath: path
-                ),
-                userMessage: compilation.Diagnostics.FormatReport(source)
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+            ),
+            userMessage: compilation.Diagnostics.FormatReport(source)
+        );
     }
 }

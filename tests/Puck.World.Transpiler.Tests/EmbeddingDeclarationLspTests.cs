@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.State;
+using Puck.Testing;
 using Puck.World.Transpiler.Embeddings;
 using Xunit;
 
@@ -82,57 +83,50 @@ public class EmbeddingDeclarationLspTests {
     }
     [Fact]
     public async Task HoverOnEmbeddedTextWithLockShowsLockStatusAndNearest() {
-        var tempPuckFile = Path.Combine(path1: Path.GetTempPath(), path2: (("lsp_embed_test_" + Guid.NewGuid().ToString(format: "N")) + ".puck"));
+        using var directory = new TemporaryDirectory(prefix: "puck-lsp-embed-");
+
+        var tempPuckFile = directory.PathOf(name: "lsp_embed_test.puck");
         var tempLockFile = EmbeddingLock.DeriveLockPath(sourcePath: tempPuckFile);
 
-        try {
-            var lockFile = new EmbeddingLock();
-            var space = new EmbeddingLockSpace(identity: new EmbeddingIdentity(Dimensions: 8, Model: "text-embedding-3-small", Revision: "1"));
-            var h1 = EmbeddingText.Hash(text: "hello world").Hex;
+        var lockFile = new EmbeddingLock();
+        var space = new EmbeddingLockSpace(identity: new EmbeddingIdentity(Dimensions: 8, Model: "text-embedding-3-small", Revision: "1"));
+        var h1 = EmbeddingText.Hash(text: "hello world").Hex;
 
-            space.Entries[h1] = new EmbeddingLockEntry(Text: "hello world", Vector: SampleVectorBase64);
-            var h2 = EmbeddingText.Hash(text: "peaceful morning").Hex;
+        space.Entries[h1] = new EmbeddingLockEntry(Text: "hello world", Vector: SampleVectorBase64);
+        var h2 = EmbeddingText.Hash(text: "peaceful morning").Hex;
 
-            space.Entries[h2] = new EmbeddingLockEntry(Text: "peaceful morning", Vector: SampleVectorBase64);
-            lockFile.Spaces["lore"] = space;
-            lockFile.Write(lockPath: tempLockFile);
+        space.Entries[h2] = new EmbeddingLockEntry(Text: "peaceful morning", Vector: SampleVectorBase64);
+        lockFile.Spaces["lore"] = space;
+        lockFile.Write(lockPath: tempLockFile);
 
-            var sourceWithCursor = """
-                schema: "puck.world.definition.v1"
+        var sourceWithCursor = """
+            schema: "puck.world.definition.v1"
 
-                state {
-                    spaces {
-                        space lore {
-                            model: "text-embedding-3-small"
-                            revision: "1"
-                            dimensions: 8
-                        }
-                    }
-                    world {
-                        slot current space("lore")
+            state {
+                spaces {
+                    space lore {
+                        model: "text-embedding-3-small"
+                        revision: "1"
+                        dimensions: 8
                     }
                 }
-                rule "r" {
-                    current = embed("hello| world")
+                world {
+                    slot current space("lore")
                 }
-                """;
-
-            var fileUri = new Uri(uriString: tempPuckFile).AbsoluteUri;
-            var card = await LanguageServerClient.HoverAsync(markedSource: sourceWithCursor, uri: fileUri);
-
-            Assert.NotNull(@object: card);
-            Assert.Contains(actualString: card, expectedSubstring: "Embedded Text");
-            Assert.Contains(actualString: card, expectedSubstring: "Lock status:** Locked");
-            Assert.Contains(actualString: card, expectedSubstring: "Nearest locked texts:");
-            Assert.Contains(actualString: card, expectedSubstring: "peaceful morning");
-        } finally {
-            if (File.Exists(path: tempPuckFile)) {
-                File.Delete(path: tempPuckFile);
             }
-            if (File.Exists(path: tempLockFile)) {
-                File.Delete(path: tempLockFile);
+            rule "r" {
+                current = embed("hello| world")
             }
-        }
+            """;
+
+        var fileUri = new Uri(uriString: tempPuckFile).AbsoluteUri;
+        var card = await LanguageServerClient.HoverAsync(markedSource: sourceWithCursor, uri: fileUri);
+
+        Assert.NotNull(@object: card);
+        Assert.Contains(actualString: card, expectedSubstring: "Embedded Text");
+        Assert.Contains(actualString: card, expectedSubstring: "Lock status:** Locked");
+        Assert.Contains(actualString: card, expectedSubstring: "Nearest locked texts:");
+        Assert.Contains(actualString: card, expectedSubstring: "peaceful morning");
     }
     [Fact]
     public async Task HoverOnUnlockedEmbeddedTextShowsNotLocked() {

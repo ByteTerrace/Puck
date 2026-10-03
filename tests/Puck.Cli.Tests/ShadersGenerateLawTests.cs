@@ -1,6 +1,7 @@
 using Puck.Cli.Shaders;
 using Puck.SdfVm;
 using Puck.Shaders;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -44,27 +45,23 @@ public sealed class ShadersGenerateLawTests {
         CheckTree(files: [.. files, .. EngineKernels.Where(predicate: kernel => !files.Any(predicate: file => string.Equals(a: file.Path, b: kernel.Path, comparisonType: StringComparison.Ordinal)))]);
     // A tree holding exactly the given files, each written with its text, checked by the verb over exactly those files.
     private static (int ExitCode, string Error) CheckTree((string Path, string Text)[] files) {
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-shaders-generate-");
+        using var root = new TemporaryDirectory(prefix: "puck-shaders-generate-");
 
-        try {
-            foreach (var (path, text) in files) {
-                var full = Path.Combine(path1: root.FullName, path2: path);
+        foreach (var (path, text) in files) {
+            var full = Path.Combine(path1: root.RootPath, path2: path);
 
-                _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
-                File.WriteAllText(contents: text, path: full);
-            }
-
-            var (exitCode, _, error) = ConsoleCapture.RunSplit(run: () => GenerateCommand.Run(
-                check: true,
-                files: [.. files.Select(selector: static file => file.Path)],
-                packages: RenderGraphPackageCatalog.Engine,
-                repositoryRoot: root.FullName
-            ));
-
-            return (exitCode, error);
-        } finally {
-            root.Delete(recursive: true);
+            _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
+            File.WriteAllText(contents: text, path: full);
         }
+
+        var (exitCode, _, error) = ConsoleCapture.RunSplit(run: () => GenerateCommand.Run(
+            check: true,
+            files: [.. files.Select(selector: static file => file.Path)],
+            packages: RenderGraphPackageCatalog.Engine,
+            repositoryRoot: root.RootPath
+        ));
+
+        return (exitCode, error);
     }
 
     [Fact]
@@ -168,26 +165,27 @@ public sealed class ShadersGenerateLawTests {
             .. SourceIncludes,
             .. EngineKernels,
         ];
-        var root = Directory.CreateTempSubdirectory(prefix: "puck-shaders-generate-index-");
+        using var scratch = new TemporaryDirectory(prefix: "puck-shaders-generate-index-");
+        var root = scratch.RootPath;
         var unstagedPath = (restoredMissingDeclaration ? IsaPath : OverlayPath);
 
         try {
             foreach (var (path, text) in files) {
-                var full = Path.Combine(path1: root.FullName, path2: path);
+                var full = Path.Combine(path1: root, path2: path);
 
                 _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: full)!);
                 File.WriteAllText(contents: ((!restoredMissingDeclaration && string.Equals(a: path, b: OverlayPath, comparisonType: StringComparison.Ordinal)) ? "// stale\n" : text), path: full);
             }
-            GitScratchCheckout.Initialize(repository: root.FullName);
-            Assert.Equal(actual: CliGit.Run(root.FullName, "add", "-A").ExitCode, expected: 0);
+            GitScratchCheckout.Initialize(repository: root);
+            Assert.Equal(actual: CliGit.Run(root, "add", "-A").ExitCode, expected: 0);
             if (restoredMissingDeclaration) {
-                Assert.Equal(actual: CliGit.Run(root.FullName, "rm", "-f", "--", unstagedPath).ExitCode, expected: 0);
+                Assert.Equal(actual: CliGit.Run(root, "rm", "-f", "--", unstagedPath).ExitCode, expected: 0);
                 var problems = new List<string>();
 
-                ShaderDeclarations.Reconcile(problems: problems, repositoryRoot: root.FullName, written: []);
+                ShaderDeclarations.Reconcile(problems: problems, repositoryRoot: root, written: []);
                 Assert.Empty(collection: problems);
             } else {
-                File.WriteAllText(contents: InterfaceOf(id: RenderGraphPackageCatalog.Overlay), path: Path.Combine(path1: root.FullName, path2: OverlayPath));
+                File.WriteAllText(contents: InterfaceOf(id: RenderGraphPackageCatalog.Overlay), path: Path.Combine(path1: root, path2: OverlayPath));
             }
 
             (int ExitCode, string Error) Check() {
@@ -195,7 +193,7 @@ public sealed class ShadersGenerateLawTests {
                     check: true,
                     files: [.. files.Select(selector: static file => file.Path)],
                     packages: RenderGraphPackageCatalog.Engine,
-                    repositoryRoot: root.FullName
+                    repositoryRoot: root
                 ));
 
                 return (exitCode, error);
@@ -207,7 +205,7 @@ public sealed class ShadersGenerateLawTests {
             Assert.Contains(actualString: unstaged.Error, expectedSubstring: $"{unstagedPath} matches the model only in the working tree");
             Assert.DoesNotContain(actualString: unstaged.Error, expectedSubstring: PlacePath);
 
-            Assert.Equal(actual: CliGit.Run(root.FullName, "add", "--", unstagedPath).ExitCode, expected: 0);
+            Assert.Equal(actual: CliGit.Run(root, "add", "--", unstagedPath).ExitCode, expected: 0);
 
             var staged = Check();
 
@@ -215,10 +213,9 @@ public sealed class ShadersGenerateLawTests {
             Assert.Empty(collection: staged.Error.Trim());
         } finally {
             // Git writes its objects read-only.
-            foreach (var file in Directory.EnumerateFiles(path: root.FullName, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
+            foreach (var file in Directory.EnumerateFiles(path: root, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
                 File.SetAttributes(fileAttributes: FileAttributes.Normal, path: file);
             }
-            CliScratchDirectories.TryDelete(path: root.FullName);
         }
     }
     [Fact]

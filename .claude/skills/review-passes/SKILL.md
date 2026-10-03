@@ -38,16 +38,36 @@ stale and is corrected in the same change.
   Keep a detached worktree under the checkout's `.claude/worktrees/<name>`.
   Pause other edits and commits on the author's branch until the pass lands;
   preserve any existing dirty work and clear it before the fast-forward.
+- Never launch a `--write` pass into a tree a canary, counters or parity run
+  builds from: an edit mid-run changes the source state that run reuses. Wait
+  for the run to finish or give the pass a separate worktree.
 - For a code pass, restore and build that worktree first so `obj/` and `bin/`
   exist. The Codex sandbox has no network: fetch corpora and packages before
   the run. A documentation-only pass needs no build unless XML comments change.
-- Launch a Codex pass as the companion's `task --write` with `--cwd` set to the
-  review worktree, and a Claude pass as an agent working in that worktree, each
-  with the model and effort the lead names. A pass cannot read this
-  conversation, message a session or ask a question, so the brief carries
-  every string, decision and path it needs.
+- Launch a Codex pass as the companion's `task --write`. The subcommand takes
+  `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file`, `--background`
+  and `--resume-last` (with `--resume` and `--fresh`).
+  Set `--cwd` to the review worktree and use the model and effort the lead
+  names. Pass the brief with `--prompt-file <path>`, never as command-line
+  prompt text. `task` has no `--help`: `task --help` is sent to the model as a
+  prompt. Launch a Claude pass as an agent working in that worktree. A pass
+  cannot read this conversation, message a session or ask a question, so the
+  brief carries every string, decision and path it needs, and tells it to answer
+  its own questions from the code and the brief. A Codex pass that ends on a
+  question has done nothing: answer it in a prompt file and continue the same
+  thread with `task --resume-last`.
+- Preserve the launch's working-directory spelling for `status`, `result` and
+  `cancel`: the companion keys job state by that spelling. A Git Bash `/c/...`
+  launch is invisible to a PowerShell `C:/...` query, and the reverse.
+- Cancel from PowerShell with the launch's path form, or use
+  `MSYS_NO_PATHCONV=1` under Git Bash: MSYS path conversion turns taskkill's
+  `/PID` into a path and makes `cancel` fail. Then stop the companion's
+  app-server broker for that working directory before removing the worktree;
+  the broker can outlive the job and hold the worktree open.
 - Write the brief to a lane-named file (`<scratchpad>/rb/<lane>.md`) so the
   second review and the verifier can reuse it.
+- Name a scratch directory outside the tree in the brief for any CLI copy or
+  temporary files; otherwise the pass can write them inside the worktree.
 
 ## The brief
 
@@ -61,8 +81,12 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    tree; don't commit." For a detached tree, name its head and the author's
    working branch that will receive its commits.
 3. **Scope.** An exact range, `git diff <base> <head>`, with the base as a
-   commit when the integration branch may move. List each lane commit by
-   commit and subject and say "read each message". Name exclusions exactly: a
+   commit when the integration branch may move. Two dots compare the two tips
+   (`git diff A..B` is `git diff A B`), three dots start at their merge base,
+   and `git log A..B` lists what B has that A lacks; none of them says A is an
+   ancestor of B, so check that with `git merge-base --is-ancestor A B` before
+   calling the range the lane's own. List each lane commit by commit and
+   subject and say "read each message". Name exclusions exactly: a
    merge of already-reviewed work is reviewed only for its conflict
    resolutions, in the files you name.
 4. **Contract.** What the change claims, in the code's own names: the types,
@@ -121,7 +145,10 @@ no brief, so it raises compatibility findings and tries to run tests.
 
 1. **Read the result.** Check every finding against the current files. A
    finding is evidence, not a verdict. Dismiss a compatibility finding under
-   `AGENTS.md` rule 5 once nothing checked in uses the old shape.
+   `AGENTS.md` rule 5 once nothing checked in uses the old shape. A pass's
+   build, test and format claims count only when its own environment could
+   run them: a sandbox that could not reach the SDK proved nothing, so step 3
+   builds and proves every law outside it.
    Record the round and fix range before continuing. If the pass changes
    nothing, skip steps 2 to 5; report remaining blockers to the lead in step 6,
    or go to step 7 when it reports none. Never create an empty WIP.
@@ -171,6 +198,7 @@ no brief, so it raises compatibility findings and tries to run tests.
 
 | Skill | Route there for |
 |---|---|
+| [`orchestration`](../orchestration/SKILL.md) | Selecting models and coordinating assignments, machines, integration merges and finding destinations. |
 | [`verification`](../verification/SKILL.md) | The gates, CLI copy, red-leg proofs, GPU legs and finished-lane list the verifier runs. |
 | [`rendering`](../rendering/SKILL.md) | The render-graph runtime contracts and recurring bug classes to put in a render lane's hunt list. |
 | [`maths-laws`](../maths-laws/SKILL.md) | A Maths lane's laws, legs and mutation probe. |
