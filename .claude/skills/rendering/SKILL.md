@@ -568,8 +568,18 @@ These are one-line cautions; the owning pages hold the derivations.
   working values; `source-transfer` writes them relative to the host's paper
   white, the pass-block value `SourceConversionPackage` writes each frame, so
   an HDR sample shows at its own luminance. A desktop capture of an HDR display
-  hands over half-float scRGB (`INativeImageCaptureFeed.Output`), which
-  converts on its CPU tier, never the B8G8R8A8 GPU route.
+  hands over half-float scRGB (`INativeImageCaptureFeed.Output`). On the
+  Direct3D 12 host the platform copies it GPU-side into half-float shared
+  targets (`NativeImageGpuCaptureTargets.Format`, the capture's own format), and
+  an image converter (`RenderGraphRuntime.CreateImageConverter`, the
+  `source-scrgb` package, `RenderGraphPackageCatalog.ImageConversions`) binds the
+  latest slot to its graph's external input under the slot's lease, waits on the
+  copy's shared fence in its submission, and converts it on the device, so
+  nothing is read back; a frame samples the converted image
+  (`WorldCapturePixels.Convert`, `CaptureFeed.SamplesRing` for the SDR copy
+  sampled directly). Elsewhere the CPU tier converts it through
+  `source-transfer`. `source-scrgb` is `source-transfer`'s arithmetic for the
+  same pixels (`ImportedImageConversionDeviceLawTests`).
   An HDR toggle, a move to a display that differs in it, or unavailable display
   discovery ends the native feed; its consumer reopens it with fresh metadata.
   Frame callbacks and background checks queued by consumer liveness polls check
@@ -1890,17 +1900,20 @@ bound parameters before publishing its mapping. A pane the active layout does
 not show draws nothing in its place pass and is not scheduled. A pane slot adds
 no SDF view. `WorldViewGraphHost.PlaceViews` and `Place` add footprints at the
 envelope the presenter hands them: the largest width and height each occupant
-reaches over the layout transition in flight (`WorldViewOutputRegions` over
-`WorldViewComposer.StartSlots` and `EndSlots`), including a whole-display
-spectator at an endpoint without a rendered slot. Reservations retain their largest
+reaches over the layout transition in flight when its endpoints nest
+(`WorldViewOutputRegions` over `WorldViewComposer.StartSlots` and `EndSlots`),
+including a whole-display spectator at an endpoint without a rendered slot, or
+its start's extent when they oppose, growing on one axis and shrinking on the
+other, which `place` resamples the eased rect from. Reservations retain their largest
 extent through interrupted transitions until the chain settles, then request the
 occupant's own rect, subject to scheduler quantization and shrink hysteresis.
 Placement uses the current eased rect with
 `world.upscale-sharpness`; the envelope holds through easing, so quantization
-and hysteresis rebuild nothing during an uninterrupted ease. Allocations grow as
-it starts and shrink as it settles; growth on one axis and shrinkage on the other
-rebuild at both boundaries
+and hysteresis rebuild nothing during an uninterrupted ease. A transition
+allocates at most once: a growing occupant as it starts, a shrinking one as it
+settles, and an opposite-axis one as it settles
 (`WorldCameraPlacementLawTests.AnEasedRectCrossesQuantizationStepsWithoutRebuildingItsNodeUntilTheTransitionSettles`,
+`AnOppositeAxisTransitionRebuildsItsNodeOnceWhenItSettles`,
 `ASteadySplitLayoutAllocatesItsFirstViewAtItsPlacedHalf`).
 The view package reconstructs a reduced render grid to that native output
 before `place` composes it, and `place` resamples it once more unless the

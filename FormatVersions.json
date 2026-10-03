@@ -736,6 +736,7 @@
         "RenderGraphSchemas.Graph": {
             "open": [
                 "M:Puck.Abstractions.Presentation.QualityTiers.Name(Puck.Abstractions.Presentation.QualityTier)",
+                "M:Puck.Abstractions.Sources.ImageSourceConversion.ImagePassOf(Puck.Abstractions.Sources.ImagePixelFormat,Puck.Abstractions.Sources.ImageColorEncoding)",
                 "M:Puck.Abstractions.Sources.ImageSourceConversion.PassOf(Puck.Abstractions.Sources.ImagePixelFormat,Puck.Abstractions.Sources.ImageColorEncoding)",
                 "M:Puck.Abstractions.Sources.ImageSourceUploadLayout.ByteCount(Puck.Abstractions.Sources.ImageSourceUploadHeader@)",
                 "M:Puck.Abstractions.Sources.ImageSourceUploadLayout.HeaderOf(Puck.Abstractions.Sources.ImagePixelFormat,Puck.Abstractions.Sources.ImageColorEncoding,System.UInt32,System.UInt32)",
@@ -796,7 +797,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Hosting.RenderGraphRefresh.EveryFrame"
             ],
-            "shape": "02d7917306b2ee46",
+            "shape": "a488fa230a57852d",
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },

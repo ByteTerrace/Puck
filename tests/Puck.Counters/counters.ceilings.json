@@ -1858,7 +1858,7 @@
           "detail": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 288
+          "ceiling": 1936
         },
         {
           "node": "world",
@@ -2633,7 +2633,7 @@
           "detail": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 96
+          "ceiling": 352
         },
         {
           "node": "main",
@@ -5277,7 +5277,7 @@
           "detail": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 288
+          "ceiling": 1936
         },
         {
           "node": "world",
@@ -6052,7 +6052,7 @@
           "detail": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 96
+          "ceiling": 352
         },
         {
           "node": "main",

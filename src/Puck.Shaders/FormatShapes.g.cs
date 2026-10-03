@@ -10,7 +10,7 @@ namespace Puck.Shaders {
         /// <summary>The shape fingerprint of <c>ProbeKindManifest.SchemaTag</c>, declared in <c>src/Puck.Shaders/ProbeKindManifest.cs</c>.</summary>
         public const string ProbeKindManifestSchemaTag = "71c92eb00760b8f9";
         /// <summary>The shape fingerprint of <c>RenderGraphSchemas.Graph</c>, declared in <c>src/Puck.Shaders/Graph/RenderGraphModel.cs</c>.</summary>
-        public const string RenderGraphSchemasGraph = "02d7917306b2ee46";
+        public const string RenderGraphSchemasGraph = "a488fa230a57852d";
         /// <summary>The shape fingerprint of <c>ShaderCompiler.CompilerVersion</c>, declared in <c>src/Puck.Shaders/ShaderCompiler.cs</c>.</summary>
         public const string ShaderCompilerCompilerVersion = "4dc008770756e2d6";
         /// <summary>The shape fingerprint of <c>ShaderPackageManifest.SchemaName</c>, declared in <c>src/Puck.Shaders/Packaging/ShaderPackageManifest.cs</c>.</summary>
