@@ -16,7 +16,7 @@
     "four-pass.puck"
   ],
   "positive": {
-    "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.puck",
     "script": "counters.script.txt",
     "commands": [
       {
