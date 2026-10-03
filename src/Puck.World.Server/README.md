@@ -1257,6 +1257,10 @@ authority journal (`Puck.World.Silo`'s `WorldSiloHost.Crossings.cs`).
 An occupied source slot retains its pending recovery; a rollback-only checkpoint
 keeps only the remaining paired body/profile records and can never retry Commit.
 Restoration reinstalls the original mobility identity even if that slot was reused.
+A reservation only reads the traveler's mobility credential
+(`WorldPopulation.ReadMobility`); the departure's detach mints it
+(`DetachForTransfer`), the one step a replay's re-drive also runs, so a refused,
+retried or aborted reservation changes nothing the authoritative hash folds.
 A contradictory peer commit verdict after rollback leaves recovery held and
 reports once; it cannot create another body or stop unrelated worlds.
 Non-atomic parties split before reservation, so a parent lease cannot block its

@@ -169,6 +169,15 @@ IDs. Acknowledgement retires that outcome; a later epoch for the same traveler
 may supersede a lost acknowledgement. The one current credential per mobility
 identity rejects delayed replay. These tables are bounded by active
 transactions/travelers, not lifetime crossing count.
+The source's reservation reads the traveler's credential and never mints it
+(`WorldPopulation.ReadMobility`, a pure read: the stored credential of the
+occupant's generation, else the one its authority, index and generation
+derive). Only the departure's detach mints it (`EnsureMobility` in
+`WorldServer.DetachForTransfer`), which a replay's re-drive runs too, because
+the authoritative hash folds a body's credential every recorded tick and the
+tape records no reservation. A refused and retried reservation, an abort
+before the detach, an in-doubt restore and a reused body slot each replay tick
+for tick (`CrossingTapeOrderLawTests`).
 An exact committed retry includes action-continuity collection order and every
 channel/register value, not just profile and motion. Escrow retains detached
 continuity values at commit and checkpoint restore; mutating a caller's original

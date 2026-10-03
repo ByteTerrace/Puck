@@ -1127,6 +1127,13 @@ body. The destination may not commit after the lease deadline and the source may
 it, so the deadline partitions every history into exactly-one-authority outcomes. The deadline is
 denominated in the source's own ticks and converted across rates by the exact 50400 bridge.
 
+**A reservation changes nothing the source's hash folds.** The source's tape records departures and
+restores, not reservations, and the authoritative hash folds every body's mobility credential each
+tick. So the reservation only reads the traveler's credential, the one its authority, slot and
+generation derive when none is stored, and the departure's detach mints it, which a re-drive runs
+too. A refused and retried reservation, an abort before the detach, an in-doubt restore and a reused
+body slot replay tick for tick.
+
 **Policy is authorable; the guarantee is not.** Hold duration, queue-or-refuse, party all-or-nothing
 and per-border capacity are document fields. Atomicity is not: a field that could break "the body
 exists in exactly one authority at every instant" is a defect with a schema entry.

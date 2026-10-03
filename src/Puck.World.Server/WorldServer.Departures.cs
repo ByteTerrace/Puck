@@ -48,9 +48,10 @@ public sealed partial class WorldServer {
         }
 
         // Captured before the detach, which discards pose, dynamic state and designations and keeps only the profile.
-        // The credential is the one a reservation issued for this body, or, on a replay's re-drive (which taped no
-        // reservation), the same credential issued here: it is a function of the authority, the index and the
-        // generation, so every path detaches the body with the credential its rollback installs again.
+        // The credential is minted here and nowhere earlier: a reservation only reads it (ReadMobility), and taped
+        // nothing, so the live crossing and a replay's re-drive both mint it at this detach, as a function of the
+        // authority, the index and the generation, and every path detaches the body with the credential its
+        // rollback installs again.
         var mobility = m_population.EnsureMobility(
             authority: AuthorityIdentity,
             index: slot
