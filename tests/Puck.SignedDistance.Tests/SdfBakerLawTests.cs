@@ -10,7 +10,8 @@ namespace Puck.SignedDistance.Tests;
 
 /// <summary>
 /// Laws over <see cref="SdfBaker"/>: a bake is a function of its program and tier, byte for byte; its mesh stays within
-/// half a lattice cell of the field it was baked from; every quad owns one block-aligned tile whose corners sit on
+/// half a lattice cell of the field it was baked from; every scene's mesh is closed and a plate about a cell thick meshes as
+/// a closed two-manifold; every quad owns one block-aligned tile whose corners sit on
 /// texel centers; triangles face out of the surface; every texture is a tile-aware mip chain in its usage's format, and
 /// a tile of one material stores that material's albedo and emission exactly; the impostor sees the silhouette; and a
 /// program the fixed-point interpreter refuses, or one with no shape in its field, has no bake. The scenes cover a
@@ -249,6 +250,77 @@ public sealed class SdfBakerLawTests {
             userMessage: $"{scene}: {(mesh.Triangles - facing)} of {mesh.Triangles} triangles wind inward"
         );
     }
+    [MemberData(memberName: nameof(SceneNames))]
+    [Theory]
+    public void EverySceneMeshIsClosed(string scene) {
+        foreach (var quality in ((SdfBakeQuality[])[SdfBakeQuality.Preview, SdfBakeQuality.Standard])) {
+            var bake = Bake(name: scene, quality: quality);
+
+            var (_, boundary) = EdgeCensus(mesh: bake.Mesh);
+
+            Assert.True(condition: (bake.Mesh.Triangles > 0), userMessage: $"{scene} at {quality} baked no triangles");
+            Assert.True(condition: (boundary == 0), userMessage: $"{scene} at {quality}: {boundary} edges bound one triangle, so a face is cut differently by the two cells that share it");
+        }
+    }
+    // A plate of this thickness in lattice cells, tilted off the lattice axes so both faces cross the same cells, takes
+    // the mesh of a closed two-manifold at every thickness, a plate about one cell thick included, where both faces
+    // cross the same cells and a single vertex per cell pinches them together.
+    [InlineData(0.4)]
+    [InlineData(0.7)]
+    [InlineData(0.85)]
+    [InlineData(0.9)]
+    [InlineData(0.95)]
+    [InlineData(1.05)]
+    [InlineData(1.1)]
+    [InlineData(1.2)]
+    [InlineData(1.0)]
+    [InlineData(1.3)]
+    [InlineData(2.0)]
+    [InlineData(3.0)]
+    [Theory]
+    public void AThinPlateMeshesAsAClosedTwoManifoldAtEveryThickness(double thicknessCells) {
+        // The Standard lattice's cell is 2 * reach over its 30 unpadded cells.
+        const float Reach = 1.5f;
+        var cell = ((2.0 * Reach) / (SdfBakeTier.For(quality: SdfBakeQuality.Standard).Cells - (2 * SdfBakeTier.PaddingCells)));
+        var program = Make(emit: builder => builder.ResetPoint()
+            .Rotate(rotation: Quaternion.CreateFromYawPitchRoll(pitch: 0.2f, roll: 0.1f, yaw: 0.3f))
+            .Box(halfExtents: new Vector3(x: 1f, y: ((float)((0.5 * thicknessCells) * cell)), z: 1f), material: 0, round: 0f));
+        var bake = SdfBaker.Bake(
+            cancellationToken: TestContext.Current.CancellationToken,
+            center: Vector3.Zero,
+            materials: Materials,
+            program: program,
+            reach: Reach,
+            tier: SdfBakeTier.For(quality: SdfBakeQuality.Standard)
+        );
+
+        var (shared, boundary) = EdgeCensus(mesh: bake.Mesh);
+
+        Assert.True(condition: (bake.Mesh.Triangles > 0), userMessage: $"a plate {thicknessCells} cells thick baked no triangles");
+        Assert.True(
+            condition: ((shared == 0) && (boundary == 0)),
+            userMessage: $"a plate {thicknessCells} cells thick: {shared} edges are shared by more than two triangles and {boundary} by one"
+        );
+    }
+
+    // Counts a mesh's edges shared by more than two triangles and by exactly one, an edge being a pair of positions: a
+    // baked quad owns its four vertices, so a vertex shared by two quads appears at one position once per quad.
+    private static (int Shared, int Boundary) EdgeCensus(SdfBakedMesh mesh) {
+        var edges = new Dictionary<(Vector3, Vector3), int>();
+
+        for (var index = 0; (index < mesh.Indices.Length); index += 3) {
+            for (var side = 0; (side < 3); side++) {
+                var a = mesh.Vertices[mesh.Indices[(index + side)]].Position;
+                var b = mesh.Vertices[mesh.Indices[(index + ((side + 1) % 3))]].Position;
+                var edge = (((a.X, a.Y, a.Z).CompareTo(other: (b.X, b.Y, b.Z)) < 0) ? (a, b) : (b, a));
+
+                edges[edge] = (edges.GetValueOrDefault(key: edge) + 1);
+            }
+        }
+
+        return (edges.Values.Count(predicate: static count => (count > 2)), edges.Values.Count(predicate: static count => (count == 1)));
+    }
+
     [Fact]
     public void TheImpostorSeesTheSilhouetteFromEveryView() {
         // At the standard tier each view's middle 4x4 block lies inside the silhouette.
