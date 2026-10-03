@@ -179,6 +179,112 @@ public sealed class GpuTraitAnalyzerTests {
         );
     }
     [Fact]
+    public void ANestedTestClassIsNotAdmittedByTheTraitOfTheClassEnclosingIt() {
+        // xUnit discovers Inner as a test class of its own, with the traits of its base types and none of Outer's, so a
+        // run that leaves the Gpu classes out still runs Inner.Opens.
+        var result = Run(body: """
+            [Trait("Category", "Gpu")]
+            public class Outer {
+                public class Inner {
+                    [Fact]
+                    public void Opens() => _ = Devices.Open();
+                }
+            }
+            """);
+
+        Assert.Contains(
+            actualString: result.Single(id: Id).GetMessage(),
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "'Outer.Inner.Opens()' reaches the GPU through 'Devices.Open()'"
+        );
+    }
+    [Fact]
+    public void ATestClassIsAdmittedByTheTraitOfItsBaseType() {
+        var result = Run(body: """
+            [Trait("Category", "Gpu")]
+            public abstract class DeviceLaws;
+            public sealed class SubjectTests : DeviceLaws {
+                [Fact]
+                public void Opens() => _ = new NativeDeviceApi();
+
+                private sealed class Fixture {
+                    public object Device { get; } = Devices.Default;
+                }
+            }
+            """);
+
+        Assert.Empty(collection: result.Analyzer);
+    }
+    [Fact]
+    public void EveryMemberOfAMarkedTypeIsAReach() {
+        // The mark on TestDevices admits the bodies of its members, so the obligation passes to every caller of each of them.
+        var result = Run(body: """
+            [Puck.OpensGpuDevice]
+            internal static class TestDevices {
+                public static object Open() => new NativeDeviceApi();
+                public static readonly object Shared = new NativeDeviceApi();
+
+                public static class Nested {
+                    public static object Open() => new NativeDeviceApi();
+                }
+            }
+            public sealed class SubjectTests {
+                [Fact]
+                public void Called() => _ = TestDevices.Open();
+                [Fact]
+                public void Read() => _ = TestDevices.Shared;
+                [Fact]
+                public void CalledInANestedType() => _ = TestDevices.Nested.Open();
+            }
+            """);
+        var diagnostics = result.WithId(id: Id);
+
+        Assert.Equal(
+            actual: diagnostics.Length,
+            expected: 3
+        );
+        Assert.All(
+            action: diagnostic => Assert.Contains(
+                actualString: diagnostic.GetMessage(),
+                comparisonType: StringComparison.Ordinal,
+                expectedSubstring: "'SubjectTests."
+            ),
+            collection: diagnostics
+        );
+    }
+    [Fact]
+    public void TheMarkDoesNotAdmitATestClassOrATestMethod() {
+        // xUnit runs a test with no analyzed caller to hand the obligation to, so a test needs the trait itself.
+        var result = Run(body: """
+            [Puck.OpensGpuDevice]
+            public sealed class MarkedClassTests {
+                [Fact]
+                public void Opens() => _ = new NativeDeviceApi();
+
+                private static object Open() => Devices.Open();
+            }
+            public sealed class MarkedMethodTests {
+                [Fact]
+                [Puck.OpensGpuDevice]
+                public void Opens() => _ = new NativeDeviceApi();
+                [InlineData(1)]
+                [Puck.OpensGpuDevice]
+                [Theory]
+                public void OpensEach(int count) => _ = (count, Devices.Open());
+            }
+            """);
+        var refused = result.WithId(id: Id).Select(selector: static diagnostic => diagnostic.GetMessage()).ToArray();
+
+        Assert.Equal(
+            actual: refused.Length,
+            expected: 4
+        );
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'MarkedClassTests.Opens()'"));
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'MarkedClassTests.Open()'"));
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'MarkedMethodTests.Opens()'"));
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'MarkedMethodTests.OpensEach(int)'"));
+    }
+    [Fact]
     public void AnotherCategoryDoesNotAdmitAReach() {
         var result = Run(body: """
             [Trait("Category", "Docker")]

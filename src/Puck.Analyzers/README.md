@@ -35,9 +35,13 @@ GPU001 refuses a test class that reaches the host's GPU without
 `[Trait("Category", "Gpu")]`, the trait a test run beside a GPU leg leaves out
 with `--filter-not-trait Category=Gpu`. The ways onto the GPU carry
 `[OpensGpuDevice]` (`build/OpensGpuDeviceAttribute.cs`, linked into every
-project): the native device APIs and the test helpers that bring a device up. A
-helper that reaches a marked member carries the mark and hands the obligation to
-its callers. The rule runs only in assemblies that reference xUnit. A device
+project): the native device APIs and the test helpers that bring a device up.
+Every member of a marked type is a way onto the GPU too. A helper that reaches
+a marked member carries the mark and hands the obligation to its callers. A test
+class takes the trait as xUnit gives it, from itself or a base type and never
+from a type enclosing it, so a nested class that declares tests carries the
+trait itself; the mark never stands in for the trait on a test class or a test
+method. The rule runs only in assemblies that reference xUnit v3. A device
 reached through a composed host, or through a native entry point no mark names,
 is outside what it sees.
 
