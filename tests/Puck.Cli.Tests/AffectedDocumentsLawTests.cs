@@ -97,10 +97,11 @@ public sealed class AffectedDocumentsLawTests {
         Assert.Contains(collection: reachedBy["src/Puck.Shaders/Assets/Shaders/Sources/image-source.hlsli"], expected: "source-conversion");
 
         // The same reach read from a revision's tree through git rather than the disk: the committed documents of two
-        // real canaries reach the same pass sources.
+        // real canaries reach the same pass sources, a world authored as .puck included (the revision exports once and composes it).
+        using var head = new AffectedRevisionTree(revision: "HEAD", root: repositoryRoot);
         var recorded = AffectedDocuments.ReachedBy(
             canaries: [.. canaries.Where(predicate: static canary => (canary.Id is "resample-reconstruction" or "pipeline-ink"))],
-            tree: new AffectedRevisionTree(revision: "HEAD", root: repositoryRoot)
+            tree: head
         );
 
         Assert.Contains(collection: recorded["src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl"], expected: "resample-reconstruction");

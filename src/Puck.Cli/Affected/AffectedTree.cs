@@ -99,10 +99,13 @@ internal sealed class AffectedWorkingTree(string root) : IAffectedTree {
     }
 }
 /// <summary>The tree a revision recorded, read through git: its file list once (<c>git ls-tree</c>), and each file's
-/// text when first asked for (<c>git show &lt;revision&gt;:&lt;path&gt;</c>), kept for the tree's lifetime.</summary>
+/// text when first asked for (<c>git show &lt;revision&gt;:&lt;path&gt;</c>), kept for the tree's lifetime. Its documents
+/// compose through an export of the revision (<see cref="AffectedRevisionDocuments"/>), made when first read and deleted
+/// with the tree.</summary>
 /// <param name="root">The repository root.</param>
 /// <param name="revision">The revision.</param>
-internal sealed class AffectedRevisionTree(string root, string revision) : IAffectedTree {
+internal sealed class AffectedRevisionTree(string root, string revision) : IAffectedTree, IDisposable {
+    private readonly AffectedRevisionDocuments m_documents = new(revision: revision, root: root);
     private readonly Lazy<string[]> m_files = new(valueFactory: () => [.. CliGit.Run(root, "ls-tree", "-r", "--name-only", revision).Stdout
         .Split(separator: '\n')
         .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
@@ -110,6 +113,8 @@ internal sealed class AffectedRevisionTree(string root, string revision) : IAffe
         .Order(comparer: StringComparer.Ordinal)]);
     private readonly Dictionary<string, string?> m_texts = new(comparer: StringComparer.Ordinal);
 
+    /// <inheritdoc/>
+    public IWorldDocumentSource Documents => m_documents;
     /// <inheritdoc/>
     public string Root { get; } = Path.GetFullPath(path: root);
 
@@ -134,4 +139,7 @@ internal sealed class AffectedRevisionTree(string root, string revision) : IAffe
 
         return text;
     }
+
+    /// <summary>Deletes the export of the revision, when its documents were read.</summary>
+    public void Dispose() => m_documents.Dispose();
 }

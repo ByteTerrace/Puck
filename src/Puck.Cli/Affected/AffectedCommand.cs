@@ -211,7 +211,7 @@ internal static class AffectedCommand {
         // Reading every canary world is the cost of this map, so it is built only for a change a document can reach; the
         // base's map, over the tree the base recorded, only for a deleted file one can reach.
         var workingTree = new AffectedWorkingTree(root: repositoryRoot);
-        var baseTree = new AffectedRevisionTree(revision: since, root: repositoryRoot);
+        using var baseTree = new AffectedRevisionTree(revision: since, root: repositoryRoot);
         // Each tree's kernels and post-process packages are read once, for both its documents' reach and its stand-ins.
         var workingShaders = new AffectedShaders(projects: projects, tree: workingTree);
         var baseShaders = new AffectedShaders(projects: projects, tree: baseTree);

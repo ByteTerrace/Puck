@@ -760,7 +760,9 @@ base, so passing both is refused.
   shaders it declares and every file they include, each resolved as the host
   resolves it. A world is read composed and parsed but not validated, so a world whose
   adjacencies or post-process packages need the host's resolvers still reaches
-  them.
+  them. A world authored as a `.puck` source is read as the document it lowers
+  to, so a canary whose manifest names the source reaches what the document
+  does.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
 - A file no canary can execute is placed through the indexed C# sources it
   stands for. A project file, restore lock or `NativeMethods.txt` stands for
@@ -792,7 +794,10 @@ base, so passing both is refused.
   tree: each canary's worlds and graph documents are read as the base recorded
   them, through the same readers, so a deleted pass source that a base graph
   document declared, or an asset a base world named, chooses the canaries whose
-  documents reached it there. The canaries are today's, since only a canary
+  documents reached it there. A base `.puck` source composes through an export
+  of the base revision (`git archive` into a temporary directory, made when the
+  first document is read and deleted when the selection ends), because the
+  composer reads files. The canaries are today's, since only a canary
   that exists now can run. One none of these places is listed as `deleted`, and
   its project's suites still run. Nothing reads a deleted file from disk.
 

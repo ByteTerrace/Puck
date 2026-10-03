@@ -22,12 +22,14 @@ public sealed class ParityBindingReferenceLawTests : IDisposable {
 
     private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-cli-tests-parity-reference-");
 
-    private static (ParityContract Contract, ParityBindingReference Reference) LoadContract(string station = Station) {
+    // The checked-in contract names the emitted parity.world.json, which the tree compile writes beside it, so the law loads a
+    // copy whose reference names the emitted document it writes into its own directory.
+    private (ParityContract Contract, ParityBindingReference Reference) LoadContract(string station = Station) {
         Assert.True(
             condition: ParityManifestLoader.TryLoadContract(
                 contract: out var contract,
                 error: out var error,
-                path: RepositoryPaths.Resolve(relativePath: ContractPath)
+                path: WriteContract(edit: static _ => { })
             ),
             userMessage: error
         );
