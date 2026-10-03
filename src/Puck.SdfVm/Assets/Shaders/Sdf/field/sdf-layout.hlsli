@@ -181,6 +181,5 @@ SdfProgramLayout sdfLoadProgramLayout() {
 #define SDF_VM_LOAD_DATA1 float4 data1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * index) + 1u])
 #endif
 
-#include "sdf-parts.hlsli"
 
 #endif

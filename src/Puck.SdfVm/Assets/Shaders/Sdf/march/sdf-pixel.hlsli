@@ -66,6 +66,11 @@ SdfPixel sdfPixelAt(ViewportData view, uint2 pixel, uint viewIndex) {
     }
 
     p.instanceMaskBase = worldInstanceMaskBase(tileIndex);
+#if defined(SDF_SEGMENT_TAPES) && !defined(SDF_TAPE_REFERENCE)
+    sdfTapeBase = tileIndex * sdfTapeStride();
+    sdfTapeInstanceMask = p.instanceMaskBase;
+    sdfTapeActive = sdfSegmentTapes[sdfTapeBase] != 0u;
+#endif
     p.pixelFootprint = ((2.0 * view.right.w) / max(float(rectDims.y), 1.0));
     p.rayOrigin = view.position.xyz;
     p.rayDirection = cameraRayDirection(view, localUv);

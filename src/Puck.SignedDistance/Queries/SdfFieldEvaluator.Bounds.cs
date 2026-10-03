@@ -583,10 +583,10 @@ public sealed partial class SdfFieldEvaluator {
     }
     private static FixedInterval ShapeBounds(CompiledInstruction instruction, IntervalVector3 p) {
         return ((SdfShapeType)instruction.Shape) switch {
-            SdfShapeType.Sphere => (p.Length - Point(value: instruction.Data0X)),
+            SdfShapeType.Sphere => SphereBounds(p: p, radius: Point(value: instruction.Data0X)),
             SdfShapeType.Box or SdfShapeType.ScreenSlab => BoxBounds(p: p, halfExtents: Vector(instruction: instruction), cornerRadius: instruction.Data0W),
-            SdfShapeType.Torus => (FixedInterval.Magnitude(x: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: instruction.Data0X)), y: p.Y) - Point(value: instruction.Data0Y)),
-            SdfShapeType.Plane => (Dot(left: p, right: Vector(instruction: instruction)) + Point(value: instruction.Data0W)),
+            SdfShapeType.Torus => TorusBounds(p: p, majorRadius: Point(value: instruction.Data0X), minorRadius: Point(value: instruction.Data0Y)),
+            SdfShapeType.Plane => PlaneBounds(p: p, normal: Interval(value: Vector(instruction: instruction)), offset: Point(value: instruction.Data0W)),
             SdfShapeType.RoundCone => RoundConeBounds(p: p, lowerRadius: instruction.Data0X, upperRadius: instruction.Data0Y, height: instruction.Data0Z, b: instruction.Data0W, a: instruction.Data1Y),
             SdfShapeType.Capsule => CapsuleBounds(p: p, endpoint: Vector(instruction: instruction), radius: instruction.Data0W, inverseLengthSquared: instruction.Data1Y),
             SdfShapeType.Cylinder => (Extrude2DBounds(distance2D: (FixedInterval.Magnitude(x: p.X, y: p.Z) - Point(value: instruction.Data0X)), z: p.Y, halfDepth: instruction.Data0Y) - Point(value: instruction.Data1W)),
@@ -625,9 +625,12 @@ public sealed partial class SdfFieldEvaluator {
             _ => FixedInterval.Entire,
         };
     }
-    private static FixedInterval BoxBounds(IntervalVector3 p, FixedVector3 halfExtents, FixedQ4816 cornerRadius) {
-        var inset = (halfExtents - new FixedVector3(X: cornerRadius, Y: cornerRadius, Z: cornerRadius));
-        var q = (p.Abs() - inset);
+    private static FixedInterval BoxBounds(IntervalVector3 p, FixedVector3 halfExtents, FixedQ4816 cornerRadius) =>
+        BoxBounds(p: p, halfExtents: Interval(value: halfExtents), cornerRadius: Point(value: cornerRadius));
+    private static FixedInterval BoxBounds(IntervalVector3 p, IntervalVector3 halfExtents, FixedInterval cornerRadius) {
+        var absolute = p.Abs();
+        var q = new IntervalVector3(X: (absolute.X - (halfExtents.X - cornerRadius)),
+            Y: (absolute.Y - (halfExtents.Y - cornerRadius)), Z: (absolute.Z - (halfExtents.Z - cornerRadius)));
         var zero = Point(value: FixedQ4816.Zero);
         var outside = new IntervalVector3(
             X: FixedInterval.Max(first: q.X, second: zero),
@@ -636,20 +639,22 @@ public sealed partial class SdfFieldEvaluator {
         ).Length;
         var inside = FixedInterval.Min(first: FixedInterval.Max(first: q.X, second: FixedInterval.Max(first: q.Y, second: q.Z)), second: zero);
 
-        return ((outside + inside) - Point(value: cornerRadius));
+        return ((outside + inside) - cornerRadius);
     }
-    private static FixedInterval CapsuleBounds(IntervalVector3 p, FixedVector3 endpoint, FixedQ4816 radius, FixedQ4816 inverseLengthSquared) {
+    private static FixedInterval CapsuleBounds(IntervalVector3 p, FixedVector3 endpoint, FixedQ4816 radius, FixedQ4816 inverseLengthSquared) =>
+        CapsuleBounds(p: p, endpoint: Interval(value: endpoint), radius: Point(value: radius), inverseLengthSquared: Point(value: inverseLengthSquared));
+    private static FixedInterval CapsuleBounds(IntervalVector3 p, IntervalVector3 endpoint, FixedInterval radius, FixedInterval inverseLengthSquared) {
         var h = FixedInterval.Clamp(
-            value: (Dot(left: p, right: endpoint) * Point(value: inverseLengthSquared)),
+            value: ((((p.X * endpoint.X) + (p.Y * endpoint.Y)) + (p.Z * endpoint.Z)) * inverseLengthSquared),
             minimum: FixedQ4816.Zero,
             maximum: FixedQ4816.One
         );
 
         return (new IntervalVector3(
-            X: (p.X - (Point(value: endpoint.X) * h)),
-            Y: (p.Y - (Point(value: endpoint.Y) * h)),
-            Z: (p.Z - (Point(value: endpoint.Z) * h))
-        ).Length - Point(value: radius));
+            X: (p.X - (endpoint.X * h)),
+            Y: (p.Y - (endpoint.Y * h)),
+            Z: (p.Z - (endpoint.Z * h))
+        ).Length - radius);
     }
     // SdfSuperellipsoid over a box. The point side scales each ratio q_i/m into [0, 1] (each q_i is at most the largest,
     // m), raises it, sums, and roots the sum; the largest axis's ratio is exactly one and so is its power, so the sum is
@@ -748,16 +753,24 @@ public sealed partial class SdfFieldEvaluator {
             Z: Lerp(amount: t, from: Lerp(amount: t, from: Point(value: a.Z), to: Point(value: b.Z)), to: Lerp(amount: t, from: Point(value: b.Z), to: Point(value: c.Z)))
         );
     }
-    private static FixedInterval SuperellipsoidSphereBounds(IntervalVector3 p, FixedVector3 radii, FixedVector3 inverseRadii) {
+    private static FixedInterval SuperellipsoidSphereBounds(IntervalVector3 p, FixedVector3 radii, FixedVector3 inverseRadii) =>
+        SuperellipsoidSphereBounds(p: p, radii: Interval(value: radii), inverseRadii: Interval(value: inverseRadii));
+    private static FixedInterval SuperellipsoidSphereBounds(IntervalVector3 p, IntervalVector3 radii, IntervalVector3 inverseRadii) =>
+        SuperellipsoidNormBounds(p: p, radii: radii, inverseRadii: inverseRadii, lowerFactor: Point(value: FixedQ4816.One));
+    private static FixedInterval SuperellipsoidNormBounds(IntervalVector3 p, IntervalVector3 radii, IntervalVector3 inverseRadii,
+        FixedInterval lowerFactor) {
         var absolute = p.Abs();
         var q = new IntervalVector3(
-            X: (absolute.X * Point(value: inverseRadii.X)),
-            Y: (absolute.Y * Point(value: inverseRadii.Y)),
-            Z: (absolute.Z * Point(value: inverseRadii.Z))
+            X: (absolute.X * inverseRadii.X),
+            Y: (absolute.Y * inverseRadii.Y),
+            Z: (absolute.Z * inverseRadii.Z)
         );
-        var minimumRadius = FixedQ4816.Min(x: radii.X, y: FixedQ4816.Min(x: radii.Y, y: radii.Z));
+        var minimumRadius = FixedInterval.Min(first: radii.X, second: FixedInterval.Min(first: radii.Y, second: radii.Z));
 
-        return ((q.Length - Point(value: FixedQ4816.One)) * Point(value: minimumRadius));
+        var norm = q.Length;
+
+        return FixedInterval.Union(first: (((lowerFactor * norm) - Point(value: FixedQ4816.One)) * minimumRadius),
+            second: ((norm - Point(value: FixedQ4816.One)) * minimumRadius));
     }
     private static FixedInterval RoundConeBounds(IntervalVector3 p, FixedQ4816 lowerRadius, FixedQ4816 upperRadius, FixedQ4816 height, FixedQ4816 b, FixedQ4816 a) {
         var qx = FixedInterval.Magnitude(x: p.X, y: p.Z);
@@ -821,62 +834,75 @@ public sealed partial class SdfFieldEvaluator {
         SdfShapeType.ConvexPolygon => ConvexPolygon2DBounds(p: p, vertices: (instruction.ConvexPolygonVertices ?? [])),
         _ => throw new NotSupportedException(message: $"The bounds interpreter has no profile for shape {((SdfShapeType)instruction.Shape)}."),
     };
-    private static FixedInterval Extrude2DBounds(FixedInterval distance2D, FixedInterval z, FixedQ4816 halfDepth) {
-        var wy = (FixedInterval.Abs(value: z) - Point(value: halfDepth));
+    private static FixedInterval Extrude2DBounds(FixedInterval distance2D, FixedInterval z, FixedQ4816 halfDepth) =>
+        Extrude2DBounds(distance2D: distance2D, z: z, halfDepth: Point(value: halfDepth));
+    private static FixedInterval Extrude2DBounds(FixedInterval distance2D, FixedInterval z, FixedInterval halfDepth) {
+        var wy = (FixedInterval.Abs(value: z) - halfDepth);
         var zero = Point(value: FixedQ4816.Zero);
         var inside = FixedInterval.Min(first: FixedInterval.Max(first: distance2D, second: wy), second: zero);
         var outside = FixedInterval.Magnitude(x: FixedInterval.Max(first: distance2D, second: zero), y: FixedInterval.Max(first: wy, second: zero));
 
         return (inside + outside);
     }
-    private static FixedInterval ExtrudeChamfer2DBounds(FixedInterval distance2D, FixedInterval z, FixedQ4816 halfDepth, FixedQ4816 c) {
-        var wy = (FixedInterval.Abs(value: z) - Point(value: halfDepth));
+    private static FixedInterval ExtrudeChamfer2DBounds(FixedInterval distance2D, FixedInterval z, FixedQ4816 halfDepth, FixedQ4816 c) =>
+        ExtrudeChamfer2DBounds(distance2D: distance2D, z: z, halfDepth: Point(value: halfDepth), c: Point(value: c), sqrtHalf: Point(value: SqrtHalf));
+    private static FixedInterval ExtrudeChamfer2DBounds(FixedInterval distance2D, FixedInterval z, FixedInterval halfDepth, FixedInterval c, FixedInterval sqrtHalf) {
+        var wy = (FixedInterval.Abs(value: z) - halfDepth);
         var plain = Extrude2DBounds(distance2D: distance2D, halfDepth: halfDepth, z: z);
-        var bevel = (((distance2D + wy) + Point(value: c)) * Point(value: SqrtHalf));
+        var bevel = (((distance2D + wy) + c) * sqrtHalf);
 
         return FixedInterval.Max(first: plain, second: bevel);
     }
-    private static FixedInterval RoundedRectangle2DBounds(IntervalVector2 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 cornerRadius) {
-        var qx = ((FixedInterval.Abs(value: p.X) - Point(value: halfWidth)) + Point(value: cornerRadius));
-        var qy = ((FixedInterval.Abs(value: p.Y) - Point(value: halfHeight)) + Point(value: cornerRadius));
+    private static FixedInterval RoundedRectangle2DBounds(IntervalVector2 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 cornerRadius) =>
+        RoundedRectangle2DBounds(p: p, halfWidth: Point(value: halfWidth), halfHeight: Point(value: halfHeight), cornerRadius: Point(value: cornerRadius));
+    private static FixedInterval RoundedRectangle2DBounds(IntervalVector2 p, FixedInterval halfWidth, FixedInterval halfHeight, FixedInterval cornerRadius) {
+        var qx = ((FixedInterval.Abs(value: p.X) - halfWidth) + cornerRadius);
+        var qy = ((FixedInterval.Abs(value: p.Y) - halfHeight) + cornerRadius);
         var zero = Point(value: FixedQ4816.Zero);
         var outside = FixedInterval.Magnitude(x: FixedInterval.Max(first: qx, second: zero), y: FixedInterval.Max(first: qy, second: zero));
         var inside = FixedInterval.Min(first: FixedInterval.Max(first: qx, second: qy), second: zero);
 
-        return ((inside + outside) - Point(value: cornerRadius));
+        return ((inside + outside) - cornerRadius);
     }
-    private static FixedInterval ChamferBox2DBounds(IntervalVector2 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 chamfer) {
-        var qx = (FixedInterval.Abs(value: p.X) - Point(value: halfWidth));
-        var qy = (FixedInterval.Abs(value: p.Y) - Point(value: halfHeight));
+    private static FixedInterval ChamferBox2DBounds(IntervalVector2 p, FixedQ4816 halfWidth, FixedQ4816 halfHeight, FixedQ4816 chamfer) =>
+        ChamferBox2DBounds(p: p, halfWidth: Point(value: halfWidth), halfHeight: Point(value: halfHeight), chamfer: Point(value: chamfer), sqrtHalf: Point(value: SqrtHalf));
+    private static FixedInterval ChamferBox2DBounds(IntervalVector2 p, FixedInterval halfWidth, FixedInterval halfHeight, FixedInterval chamfer, FixedInterval sqrtHalf) {
+        var qx = (FixedInterval.Abs(value: p.X) - halfWidth);
+        var qy = (FixedInterval.Abs(value: p.Y) - halfHeight);
         var zero = Point(value: FixedQ4816.Zero);
         var box = (FixedInterval.Min(first: FixedInterval.Max(first: qx, second: qy), second: zero) + FixedInterval.Magnitude(x: FixedInterval.Max(first: qx, second: zero), y: FixedInterval.Max(first: qy, second: zero)));
-        var bevel = (((qx + qy) + Point(value: chamfer)) * Point(value: SqrtHalf));
+        var bevel = (((qx + qy) + chamfer) * sqrtHalf);
 
         return FixedInterval.Max(first: box, second: bevel);
     }
     private static FixedInterval Trapezoid2DBounds(IntervalVector2 p, FixedQ4816 r1, FixedQ4816 r2, FixedQ4816 halfHeight) {
-        var k1 = new FixedVector2(X: r2, Y: halfHeight);
         var k2 = new FixedVector2(X: (r2 - r1), Y: (Two * halfHeight));
+
+        return Trapezoid2DBounds(p: p, r1: Point(value: r1), r2: Point(value: r2), halfHeight: Point(value: halfHeight),
+            slant: new IntervalVector2(X: Point(value: k2.X), Y: Point(value: k2.Y)),
+            slantLengthSquared: Point(value: FixedVector2.Dot(left: k2, right: k2)));
+    }
+    private static FixedInterval Trapezoid2DBounds(IntervalVector2 p, FixedInterval r1, FixedInterval r2, FixedInterval halfHeight,
+        IntervalVector2 slant, FixedInterval slantLengthSquared) {
         var px = FixedInterval.Abs(value: p.X);
         var zero = Point(value: FixedQ4816.Zero);
         // p.x − min(p.x, r) is max(p.x − r, 0) exactly; r is r1 below the axis and r2 at or above it.
         var r = ((p.Y.Upper < FixedQ4816.Zero)
-            ? Point(value: r1)
+            ? r1
             : ((p.Y.Lower >= FixedQ4816.Zero)
-                ? Point(value: r2)
-                : FixedInterval.Hull(first: r1, second: r2)));
+                ? r2
+                : FixedInterval.Union(first: r1, second: r2)));
         var cax = FixedInterval.Max(first: (px - r), second: zero);
-        var cay = (FixedInterval.Abs(value: p.Y) - Point(value: halfHeight));
-        var slantLengthSquared = FixedVector2.Dot(left: k2, right: k2);
-        var projection = ((slantLengthSquared == FixedQ4816.Zero)
+        var cay = (FixedInterval.Abs(value: p.Y) - halfHeight);
+        var projection = ((slantLengthSquared == zero)
             ? zero
             : FixedInterval.Clamp(
-                value: ((((Point(value: k1.X) - px) * Point(value: k2.X)) + ((Point(value: k1.Y) - p.Y) * Point(value: k2.Y))) / Point(value: slantLengthSquared)),
+                value: ((((r2 - px) * slant.X) + ((halfHeight - p.Y) * slant.Y)) / slantLengthSquared),
                 minimum: FixedQ4816.Zero,
                 maximum: FixedQ4816.One
             ));
-        var cbx = ((px - Point(value: k1.X)) + (Point(value: k2.X) * projection));
-        var cby = ((p.Y - Point(value: k1.Y)) + (Point(value: k2.Y) * projection));
+        var cbx = ((px - r2) + (slant.X * projection));
+        var cby = ((p.Y - halfHeight) + (slant.Y * projection));
         var magnitude = FixedInterval.Sqrt(value: FixedInterval.Min(
             first: (FixedInterval.Square(value: cax) + FixedInterval.Square(value: cay)),
             second: (FixedInterval.Square(value: cbx) + FixedInterval.Square(value: cby))

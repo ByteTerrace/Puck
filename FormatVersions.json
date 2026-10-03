@@ -796,7 +796,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Hosting.RenderGraphRefresh.EveryFrame"
             ],
-            "shape": "fa684c8ceb3196ba",
+            "shape": "8f0bc92547d76174",
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },
@@ -1129,7 +1129,7 @@
                 "P:Puck.World.Transpiler.WorldCompilation.EmitsDocument",
                 "P:Puck.World.Transpiler.WorldCompilation.Success"
             ],
-            "shape": "7e0bf140e1ac5fd7",
+            "shape": "c7d723f8a7bc7448",
             "source": "src/Puck.World.Transpiler/Composition/WorldCompileCache.cs",
             "token": "PUCKWCC3"
         },
@@ -1162,7 +1162,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersCeilings"
             ],
-            "shape": "d966feb0465e5cdf",
+            "shape": "313564dc51296f07",
             "source": "src/Puck.World.Schema/WorldCountersCeilings.cs",
             "token": "puck.counters.ceilings.v1"
         },
@@ -1181,7 +1181,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersReport"
             ],
-            "shape": "aad199b55a1aa6d0",
+            "shape": "2933adc331733034",
             "source": "src/Puck.World.Schema/WorldCountersReport.cs",
             "token": "puck.counters.report.v1"
         },
@@ -1495,7 +1495,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "c090dbdf56beabe6",
+            "shape": "bf08ea4b89434467",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },

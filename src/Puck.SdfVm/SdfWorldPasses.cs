@@ -547,6 +547,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         private readonly Lock m_gate = new();
 
+        private long m_revision;
+        private long m_revisionCapacity;
+        private long m_revisionSwitches;
         private SdfWorldView? m_view;
 
         // The frame the entry was last resolved in.
@@ -563,7 +566,20 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         // The view the instance's passes follow, and how often a change of it could not be followed in place, which
         // moves the revision and so rebuilds the passes.
         public SdfWorldView? Followed { get; set; }
-        public long Revision => ((Switches << 32) + (Residency?.CapacityRevision ?? 0L));
+        public long Revision {
+            get {
+                lock (m_gate) {
+                    var capacity = (Residency?.CapacityRevision ?? 0L);
+
+                    if ((m_revisionCapacity != capacity) || (m_revisionSwitches != Switches)) {
+                        m_revisionCapacity = capacity;
+                        m_revisionSwitches = Switches;
+                        m_revision++;
+                    }
+                    return m_revision;
+                }
+            }
+        }
         public long Switches { get; set; }
         // How often the resolved view changed at all, and the binding the instance last rendered.
         public long Bindings { get; set; }

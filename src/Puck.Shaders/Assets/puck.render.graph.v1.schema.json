@@ -157,7 +157,8 @@
                       "InstanceMaskWords",
                       "InstanceGridWords",
                       "BrickPoolVoxels",
-                      "RenderExtent"
+                      "RenderExtent",
+                      "SegmentTapeWords"
                     ],
                     "title": "ShaderPipelineCountBasis"
                   }

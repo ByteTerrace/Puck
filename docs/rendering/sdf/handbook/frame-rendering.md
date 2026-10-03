@@ -2,7 +2,8 @@
 
 One world frame turns an SDF program and opaque meshes into pixels through a
 fixed sequence of compute and graphics passes. The upload precedes culling; the mask pass builds per-tile instance
-visibility before the beam and primary marches; surface, ambient, shadow and view passes shade each view's hits, and
+visibility before the beam and primary marches; a tape pass removes certified
+noncontributing shapes, surface, ambient, shadow and view passes shade each view's hits, and
 the sky and composite passes finish its image. The sequence exposes
 where the GPU work goes, why mask-first processing keeps beam cost tied to nearby
 instances, how render-scale tiers trade resolution for frame budget, and how
@@ -15,13 +16,13 @@ moving transforms, the screens, lights, volumes and mesh draws — live in one
 **residency** (`SdfWorldResidency`) per frame source, and the frame first
 submits one **upload** that brings those tables up to date. Then every view of
 the scene is an instance of the render graph's `sdf.world` package, and its node
-records the package's eleven native passes into its own submission, reading the tables
+records the package's twelve native passes into its own submission, reading the tables
 the upload wrote. The upload precedes culling; camera traversal, surface evaluation, AO,
 the selected lights' shadows, lighting, the sky and the composite have separate dispatches. The
 passes finish that view's own output image:
 
 ```text
-   upload → mask → beam → cull-args → mesh → primary → surface → ambient → shadow → views → sky → composite
+   upload → mask → beam → tape → cull-args → mesh → primary → surface → ambient → shadow → views → sky → composite
 ```
 
 The render graph plans the view's passes like any other graph: the package
@@ -57,6 +58,31 @@ Budget exhaustion leaves the unproven bounds disabled. Because the beam marches
 `mapMasked`—the field with masked-out instances excluded—it never pays for
 instances the mask already ruled out. Its cost is dominated by the VM evaluations
 performed along the representative cone.
+
+**tape** (`sdf-tape.comp.hlsl`) reads each tile's instance mask and beam bounds.
+Eight balls cover depth slabs of the tile's cone between its entry and far
+bound. At each ball's centre, the existing interpreter evaluates each candidate
+once; its certified world-space Lipschitz bound and outward floating-point
+error margin enclose that candidate over the whole ball. A separated interval
+proves which side of a union, intersection or subtraction decides the value;
+a smooth blend requires separation beyond its blend radius. Unknown operations
+and candidates without finite certificates stay live.
+
+Each slab has its own live-instruction mask and a segment mask with summary
+words. Only shapes and field pops occupy mask bits; transform instructions
+retain their ordered execution without expanding those masks. The depth
+intervals follow the fourth power of normalized depth from the beam entry,
+placing more precision near the first surface. Their balls enclose the cone's axial and
+radial extent together. Scalar and gradient queries select a containing ball
+and consume its tape through the existing instance-mask walk. A losing shape
+can be omitted inside a retained segment while its point and field operations
+still execute. A query outside the covered balls retains the unpruned
+walk. Secondary rays, another gather mask, or a different detail selection
+also retain their full walk, as do root queries that omit independently marched
+parts. Compiled parts read the same instruction decisions
+through each placement's original instruction indices. Small masked programs retain their segments without paying for slab
+evaluation. The [field-correctness reference](../reference/lipschitz-and-field-correctness.md#tile-pruning-certificates)
+explains why the candidate's distance scale alone cannot certify a deletion.
 
 **cull-args** (`sdf-cull-args.comp.hlsl`) reads the beam's per-tile results and packs the
 indirect-dispatch arguments for primary, surface, ambient, shadow and views. A parallel min/max reduction
@@ -105,13 +131,21 @@ the seats the same way it places panes.
 ## What each pass costs
 
 The passes scale with different things. `mask` and `beam` scale with how many
-instances lie near each tile's cone. `primary`, `surface`, `ambient`, `shadow` and
+instances lie near each tile's cone. `tape` scales with the masked instructions
+and its fixed slab count, and reduces repeated shape work in later queries.
+`primary`, `surface`, `ambient`, `shadow` and
 `views` scale with on-screen content: how many pixels hit a surface and how
 much of the program each field query walks. `cull-args` is small; `composite`
 scales with the output's pixels and `sky` with the uncovered ones. **The five per-pixel passes are the scale lever for
 on-screen content; `mask`+`beam` is the scale lever for instance count.**
 Moving work between the per-pixel passes can relieve register pressure but
 adds hit-buffer traffic, so compare their sum as well as each label.
+
+Each pass exposes `gpu.shapes.evaluated` beside `gpu.march.steps`, and
+`gpu.shapes.gradients` for primitive derivatives. The shape count includes
+tape construction and gradient winner selection. A pruning comparison keeps
+march steps unchanged and includes the tape's work in the savings; fewer
+shapes per query alone do not establish a cheaper frame.
 
 ## Why the mask pass flattens beam cost
 
@@ -198,8 +232,9 @@ installs that extent the root presents its last image and a capture waits for
 the first frame at it
 ([loading and installing](../../../reference/shaders.md#loading-and-installing)).
 
-A view whose ceiling is native keeps the eleven-pass native fragment and writes
-its output directly. It allocates no resolve resources and ignores the current
+A view whose ceiling is native and whose quality does not ask for temporal
+reconstruction keeps the twelve-pass native fragment and writes its output
+directly. It allocates no resolve resources and ignores the current
 grid, so a layout transition does not dip it. A changed ceiling rebuilds the
 view's graph beside the installed one, which presents its last image until the
 replacement installs. A reduced view adds one output-sized dispatch; its memory

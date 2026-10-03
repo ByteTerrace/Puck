@@ -113,4 +113,6 @@ public enum ShaderPipelineCountBasis : byte {
     BrickPoolVoxels = 9,
     /// <summary>Per pixel of the package's allocated render extent.</summary>
     RenderExtent = 10,
+    /// <summary>Per word of one tile's certified segment tape and its slab workspace.</summary>
+    SegmentTapeWords = 11,
 }

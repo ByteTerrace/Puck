@@ -17,7 +17,7 @@ namespace Puck.World.Transpiler.Composition {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldCompileCache.Magic</c>, declared in <c>src/Puck.World.Transpiler/Composition/WorldCompileCache.cs</c>.</summary>
-        public const string WorldCompileCacheMagic = "7e0bf140e1ac5fd7";
+        public const string WorldCompileCacheMagic = "c7d723f8a7bc7448";
     }
 }
 

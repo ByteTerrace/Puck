@@ -60,7 +60,7 @@ public sealed partial class SdfPassPlanLawTests {
     // once: at 1920x1080 and half scale over three frame slots, 124,416,000 bytes of history and 2,073,600 of reactivity.
     [Fact]
     public void ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph() {
-        var counts = new ShaderPipelineStorageCounts(Height: 1080, Width: 1920) { InstanceMaskWords = 1, Instances = 5, RenderHeight = 540, RenderWidth = 960, Tiles = 8160, Viewports = 1 };
+        var counts = new ShaderPipelineStorageCounts(Height: 1080, Width: 1920) { InstanceMaskWords = 1, Instances = 5, RenderHeight = 540, RenderWidth = 960, SegmentTapeWords = 36, Tiles = 8160, Viewports = 1 };
         const ulong History = ((1920UL * 1080) * (8 + (4 * SdfWorldPackage.HistorySurfaceWords)));
         const ulong Reactivity = ((960UL * 540) * 4);
 

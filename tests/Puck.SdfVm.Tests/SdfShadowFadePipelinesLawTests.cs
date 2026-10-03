@@ -12,7 +12,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>Reachable shadow capacities acquire only their own variants, before handoffs, through residency readiness.</summary>
 public sealed class SdfShadowFadePipelinesLawTests {
-    // The F=0 residency owns fourteen base kernels (including environment and reduction) plus three shared passes.
+    // The F=0 residency owns fifteen base kernels (including tape, environment and reduction) plus three shared passes.
     [InlineData(SdfShadowFadeVariants.None, 0, 0)]
     [InlineData(SdfShadowFadeVariants.One, 0, 1)]
     [InlineData(SdfShadowFadeVariants.Two, 0, 2)]
@@ -38,9 +38,9 @@ public sealed class SdfShadowFadePipelinesLawTests {
             }
         }
         Assert.Equal(expected: expected.Order(), actual: created.Where(predicate: static name => name.Contains(comparisonType: StringComparison.Ordinal, value: "-fade")).Order());
-        Assert.Equal(expected: (17 + expected.Count), actual: catalog.Pipelines.SharedPipelines);
+        Assert.Equal(expected: (18 + expected.Count), actual: catalog.Pipelines.SharedPipelines);
         Assert.True(condition: catalog.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var pipelines));
-        Assert.Equal(expected: (17L + expected.Count), actual: pipelines);
+        Assert.Equal(expected: (18L + expected.Count), actual: pipelines);
     }
     [Fact]
     public async Task NewPolicyCapacityWaitsForItsPipelinesBeforeAnyHandoffAndCrossingsCreateNothing() {
@@ -79,7 +79,7 @@ public sealed class SdfShadowFadePipelinesLawTests {
                 Assert.Equal(expected: capacity, actual: residency.Frame!.Lights.ShadowSlots.FadeCapacity);
                 Assert.Equal(expected: 0, actual: source.Frame.Lights.ShadowSlots.FadeCount);
                 Assert.True(condition: catalog.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var beforeCrossing));
-                Assert.Equal(actual: beforeCrossing, expected: (17L + (4L * capacity)));
+                Assert.Equal(actual: beforeCrossing, expected: (18L + (4L * capacity)));
 
                 foreach (var active in new[] { true, false, true }) {
                     var lights = Lights(capacity: capacity);

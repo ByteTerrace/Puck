@@ -196,7 +196,8 @@ public sealed partial class SdfProgram {
             ));
             placement.Add(item: new PartBinding(
                 DynamicSlot: slot,
-                Material: shape.Material
+                Material: shape.Material,
+                ShapeInstruction: cursor
             ));
             cursor++;
         }
@@ -289,6 +290,7 @@ public sealed partial class SdfProgram {
             foreach (var binding in placement.Bindings) {
                 m_words[(cursor * WordsPerVector)] = PackTransformSlot(slot: binding.DynamicSlot);
                 m_words[((cursor * WordsPerVector) + 1)] = binding.Material;
+                m_words[((cursor * WordsPerVector) + 2)] = ((uint)binding.ShapeInstruction);
                 cursor++;
             }
         }
@@ -310,7 +312,7 @@ public sealed partial class SdfProgram {
         }
     }
     private readonly record struct PartLeafPlan(int ShapeInstruction, int DomainInstruction);
-    private readonly record struct PartBinding(int DynamicSlot, uint Material);
+    private readonly record struct PartBinding(int DynamicSlot, uint Material, int ShapeInstruction);
     private sealed record PartInstancePlan(int Asset, PartBinding[] Bindings, float Scale);
     private sealed record PartProgramPlan(List<PartLeafPlan[]> Assets, PartInstancePlan?[] Instances,
         int LeafCount, int BindingCount, int CompiledCount) {

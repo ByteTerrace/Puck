@@ -7,8 +7,8 @@ namespace Puck.World.Client;
 /// <summary>
 /// The rest state of a band of dynamic-transform owners — catalog bodies, stamp registrations — which decides which
 /// owners an emitter repacks on an incremental frame. An owner wakes when an input it was last packed from moves, and
-/// stays restless until one repack leaves its slots unchanged; a frame that advanced no time never puts an owner to
-/// rest, because its followers did not step. See <see cref="SdfMovedTransforms"/> for the table's side.
+/// stays restless until one advancing repack leaves its slots unchanged. An unchanged zero-time frame skips packing
+/// while preserving the owner's pending follower work. See <see cref="SdfMovedTransforms"/> for the table's side.
 /// </summary>
 public sealed class WorldTransformOwners {
     private readonly bool[] m_casts;
@@ -39,19 +39,20 @@ public sealed class WorldTransformOwners {
     /// <param name="position">The owner's root position this frame.</param>
     /// <param name="orientation">The owner's root orientation this frame.</param>
     /// <param name="castsSoftShadow">The owner's soft-shadow participation this frame.</param>
+    /// <param name="deltaSeconds">The seconds available to advance the owner's followers this frame.</param>
     /// <param name="discontinuity">Whether the owner's pose jumped this frame (a teleport, a reused body index), which
     /// always repacks it.</param>
     /// <param name="version">Any other input the owner's pack reads, as a counter that moves when it does (a state
     /// delivery); zero when there is none.</param>
     /// <returns><see langword="true"/> when the owner repacks.</returns>
-    public bool Wake(int owner, SdfMovedTransforms moved, Vector3 position, Quaternion orientation, bool castsSoftShadow, bool discontinuity = false, int version = 0) {
+    public bool Wake(int owner, SdfMovedTransforms moved, Vector3 position, Quaternion orientation, bool castsSoftShadow, float deltaSeconds, bool discontinuity = false, int version = 0) {
         ArgumentNullException.ThrowIfNull(argument: moved);
 
         var wake = (
             discontinuity ||
             moved.Everything ||
             !m_resident[owner] ||
-            m_restless[owner] ||
+            (m_restless[owner] && (deltaSeconds > 0f)) ||
             (m_position[owner] != position) ||
             (m_orientation[owner] != orientation) ||
             (m_casts[owner] != castsSoftShadow) ||
@@ -72,14 +73,14 @@ public sealed class WorldTransformOwners {
     /// <param name="owner">The owner's index in the band.</param>
     /// <returns><see langword="true"/> when the repack reseats the owner's slots.</returns>
     public bool Reseats(int owner) => m_reseated[owner];
-    /// <summary>Records an owner's repack: it stays restless while the repack moved its slots, or while the frame
-    /// advanced no time.</summary>
+    /// <summary>Records an owner's repack: an advancing frame settles unchanged slots; a zero-time frame preserves
+    /// pending follower work and adds any new movement.</summary>
     /// <param name="owner">The owner's index in the band.</param>
     /// <param name="moved">Whether the repack changed any of the owner's slots.</param>
     /// <param name="deltaSeconds">The seconds the frame advanced the owner's followers by.</param>
     public void Settle(int owner, bool moved, float deltaSeconds) {
         m_resident[owner] = true;
-        m_restless[owner] = (moved || (deltaSeconds <= 0f));
+        m_restless[owner] = (moved || ((deltaSeconds <= 0f) && m_restless[owner]));
     }
     /// <summary>Forgets an owner that no longer draws, reporting whether its slots still hold a packed pose that must
     /// be parked and owed.</summary>

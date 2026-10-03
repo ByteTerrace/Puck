@@ -77,6 +77,7 @@ public sealed class SdfKernelSet {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kernel"/> names no kernel.</exception>
     public static string StemOf(SdfKernel kernel) => kernel switch {
         SdfKernel.Beam => "sdf-beam",
+        SdfKernel.Tape => "sdf-tape",
         SdfKernel.InstanceCull => "sdf-instance-cull",
         SdfKernel.CullArgs => "sdf-cull-args",
         SdfKernel.Primary => "sdf-world-primary",

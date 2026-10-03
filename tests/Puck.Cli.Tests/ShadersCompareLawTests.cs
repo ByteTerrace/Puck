@@ -143,9 +143,9 @@ public sealed class ShadersCompareLawTests {
         var projects = Tracked(pattern: "*.csproj", repositoryRoot: repositoryRoot);
         var owners = new SortedSet<string>(comparer: StringComparer.Ordinal);
 
-        // A stage source belongs to the deepest tracked project whose directory holds it. A canary's fixture sources
-        // are compiled by the World the canary hands them to (a world.shaders.reload tree), never by a build.
-        foreach (var source in ((string[])["*.comp.hlsl", "*.vert.hlsl", "*.frag.hlsl"]).SelectMany(selector: pattern => Tracked(pattern: pattern, repositoryRoot: repositoryRoot)).Where(predicate: static source => !source.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/Puck.World.Canaries/"))) {
+        // A stage source belongs to the deepest tracked project whose directory holds it. Canary and counters fixture
+        // sources are compiled by the World they are handed to (a world.shaders.reload tree), never by a build.
+        foreach (var source in ((string[])["*.comp.hlsl", "*.vert.hlsl", "*.frag.hlsl"]).SelectMany(selector: pattern => Tracked(pattern: pattern, repositoryRoot: repositoryRoot)).Where(predicate: static source => !(source.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/Puck.World.Canaries/") || source.StartsWith(comparisonType: StringComparison.Ordinal, value: "tests/Puck.Counters/")))) {
             var owner = projects
                 .Where(predicate: project => source.StartsWith(comparisonType: StringComparison.Ordinal, value: (project[..(project.LastIndexOf(value: '/') + 1)])))
                 .MaxBy(keySelector: static project => project.Length);

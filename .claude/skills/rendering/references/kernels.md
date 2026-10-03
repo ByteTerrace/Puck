@@ -68,7 +68,7 @@ buffer-layout changes need a rebuild.
 
 An SDF view is an `sdf.world` instance of the render graph: the graph compiler
 splices its selected package fragment into the one-pass graph the runtime makes
-for the instance. `NativeFragment` has eleven passes, `sdf.world$mask` through
+for the instance. `NativeFragment` has twelve passes, `sdf.world$mask` through
 `sdf.world$views`, then `sdf.world$sky` and `sdf.world$composite`; `Fragment`,
 which a view below a native ceiling runs, puts `sdf.world$resolve` between views
 and the sky.
@@ -89,9 +89,15 @@ into its node's kernel counters through the generated `puckCountWork` (one
 wave-summed atomic a wave into the row `workCounterRow` names,
 `GpuKernelCounters`), which the node clears ahead of the first pass and copies
 to the slot's readback behind the last; `world.counters gpu` reads them as
-`march.steps` and `texels.written`, per-backend deterministic, and the sky and
-composite passes also count `sky.evaluations`, `sky.hashes` and `sky.texture-loads` into their named layer rows through
-`puckCountDetail`. The shadow stage
+`march.steps` and `texels.written`, per-backend deterministic. Generated
+`puckCountShapes` adds `sdfWorkShapes` and `sdfWorkGradients` to the same row as
+`shapes.evaluated` and `shapes.gradients`. The shape total includes tape
+construction, scalar winner selection, analytic derivatives and each
+finite-difference tap. The gradient counter includes analytic primitive
+derivatives only; local finite differences and whole-field curvature/normal
+probes count their scalar taps in the shape total. The sky and composite passes
+also count `sky.evaluations`, `sky.hashes` and `sky.texture-loads` into their named
+layer rows through `puckCountDetail`. The shadow stage
 also calls generated `puckCountShadow` for each marched slot; the existing kind
 dimension adds `shadow.slot0.steps` through `shadow.slot5.steps` to each pass
 row. The shadow columns partition that pass's march total. Slots past K + F,
@@ -106,6 +112,7 @@ of its passes. The upload and the view's passes, in order:
 | `upload` | `region-copy.comp` (`Puck.Shaders`, one pipeline a device) | Copies the words each staged table owes (program words, dynamic transforms, frame grid, screen surfaces, screen mappings, screen lights, volumes, decals, mesh draws, the lights, active shadow handoff controls and the sky's block, stops and softboxes) from the ring slot's staging buffer, which states the copy in a header and run table, into the region's device-local buffer, one dispatch per region that owes any, then transitions each copied buffer for reading (`SdfWorldTables.Regions.cs`). Under the ring policy nothing is copied and the kernels bind the slot's buffer. A view's camera, quality and levers, the light count, the shadow slot table and the curvature shading are no table: each pass writes them into its pass block (`SdfFrameBlock`). |
 | `mask` | `sdf-instance-cull.comp` | Builds each tile's instance mask from the `SdfInstanceGrid` CSR grid. Deliberately not fused into the beam. |
 | `beam` | `sdf-beam.comp` | Cone-marches the tile-masked field and writes the four tile planes and part bounds. |
+| `tape` | `sdf-tape.comp` | Evaluates masked candidates over eight depth-slab balls and writes the certified live-segment mask, summary words and covered balls. Unknown candidates stay live; camera queries consume the mask only inside its certified domain. |
 | `cull-args` | `sdf-cull-args.comp` | Reduces the indirect dispatch bounds. |
 | `mesh` | `sdf-mesh.vert`, `sdf-mesh.frag` | Rasterizes mesh visibility before primary; skips a frame with no mesh draws, its target and depth barriers with it (`Skips`). |
 | `primary` | `sdf-world-primary.comp` | Camera traversal; writes every active visibility record's V, C and L rows, misses included. |
@@ -122,7 +129,7 @@ The ceiling (`SdfViewSnapshot.RenderCeiling`) and the temporal ask
 and are the whole render-extent revision, so a fragment change is always a
 rebuild the node holds its last image through, never a frame of one graph at
 another's grid. A view at a native ceiling that asks for nothing temporal uses
-`SdfWorldPackage.NativeFragment`, eleven passes whose composite writes `color`,
+`SdfWorldPackage.NativeFragment`, twelve passes whose composite writes `color`,
 and ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
 `Fragment`, and a view asking for temporal reconstruction uses
 `SdfWorldPackage.TemporalFragment` at any ceiling (the reduced passes plus the

@@ -6,7 +6,7 @@ namespace Puck.Shaders.Tests;
 
 /// <summary>
 /// The <c>sdf.world</c> package's fragment (<see cref="SdfWorldPackage.NativeFragment"/>), spliced into a view's graph by the
-/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes mask, beam, cull
+/// graph compiler, is the one statement of an SDF view's dispatch set: the planner orders its passes mask, beam, tape, cull
 /// arguments, mesh, primary, surface, ambient, shadow, views, sky and composite, the sky's field runs and the composite
 /// after the hits are shaded, and plans between them exactly the buffer transitions the
 /// kernels' reads and writes need, each after the pass that last wrote or read what the next writes or reads. Every
@@ -22,6 +22,7 @@ public sealed partial class SdfPassPlanLawTests {
     private static readonly string[] Order = [
         SdfWorldPackage.Parts.Mask,
         SdfWorldPackage.Parts.Beam,
+        SdfWorldPackage.Parts.Tape,
         SdfWorldPackage.Parts.CullArgs,
         SdfWorldPackage.Parts.Mesh,
         SdfWorldPackage.Parts.Primary,
@@ -36,9 +37,10 @@ public sealed partial class SdfPassPlanLawTests {
     // before, and the accesses and stages on either side.
     private static readonly (string Buffer, string Producer, string Consumer, GpuAccess SourceAccess, GpuAccess DestinationAccess, GpuStage SourceStage, GpuStage DestinationStage)[] Edges = [
         (SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
-        (SdfWorldPackage.Parts.Tiles, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.Tiles, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.Tape, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Arguments, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, GpuAccess.ShaderWrite, GpuAccess.IndirectCommandRead, GpuStage.ComputeShader, GpuStage.DrawIndirect),
         (SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
+        (SdfWorldPackage.Parts.SegmentTapes, SdfWorldPackage.Parts.Tape, SdfWorldPackage.Parts.Primary, GpuAccess.ShaderWrite, GpuAccess.ShaderRead, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Ambient, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
         (SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Ambient, SdfWorldPackage.Parts.Shadow, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuStage.ComputeShader, GpuStage.ComputeShader),
@@ -70,6 +72,7 @@ public sealed partial class SdfPassPlanLawTests {
     // words, and one visibility record a pixel of every viewport.
     private static ulong BytesOf(string buffer, ShaderPipelineStorageCounts counts) => buffer switch {
         SdfWorldPackage.Parts.InstanceMasks => ((counts.Viewports * counts.Tiles) * (counts.InstanceMaskWords * sizeof(uint))),
+        SdfWorldPackage.Parts.SegmentTapes => ((counts.Viewports * counts.Tiles) * (counts.SegmentTapeWords * sizeof(uint))),
         SdfWorldPackage.Parts.Tiles => ((counts.Viewports * ((SdfWorldPackage.TilePlaneCount * counts.Tiles) + (SdfWorldPackage.PartBoundFloatCount * counts.Instances))) * sizeof(float)),
         SdfWorldPackage.Parts.Arguments => ShaderPipelineDispatch.ArgumentBytes,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBoundsByteLength,
@@ -102,7 +105,7 @@ public sealed partial class SdfPassPlanLawTests {
     // the mesh hit from the visibility record, whose version each stage forwards.
     [Fact]
     public void EachStageDeclaresExactlyItsReadsAndWrites() {
-        string[] hit = [SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles];
+        string[] hit = [SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles, SdfWorldPackage.Parts.SegmentTapes];
         string[] runs = [SdfWorldPackage.Parts.SkyBase, SdfWorldPackage.Parts.SkyUpper0, SdfWorldPackage.Parts.SkyUpper1, SdfWorldPackage.Parts.SkyUpper2];
 
         Assert.Equal(
@@ -114,6 +117,7 @@ public sealed partial class SdfPassPlanLawTests {
             expected: [
                 (SdfWorldPackage.Parts.Mask, "", SdfWorldPackage.Parts.InstanceMasks),
                 (SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles),
+                (SdfWorldPackage.Parts.Tape, $"{SdfWorldPackage.Parts.InstanceMasks},{SdfWorldPackage.Parts.Tiles}", SdfWorldPackage.Parts.SegmentTapes),
                 (SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Tiles, $"{SdfWorldPackage.Parts.Arguments},{SdfWorldPackage.Parts.CullBounds}"),
                 (SdfWorldPackage.Parts.Mesh, "", $"{SdfWorldPackage.Parts.MeshTarget},{SdfWorldPackage.Parts.MeshDepth}"),
                 (SdfWorldPackage.Parts.Primary, string.Join(separator: ",", values: [.. hit, SdfWorldPackage.Parts.MeshTarget]), SdfWorldPackage.Parts.Visibility),
@@ -170,6 +174,7 @@ public sealed partial class SdfPassPlanLawTests {
         ) {
             InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: instances)),
             Instances = ((ulong)instances),
+            SegmentTapeWords = ((ulong)SdfWorldPackage.SegmentTapeWordCountFor(segments: instances, tokens: (instances * 4))),
             Tiles = (((ulong)((width + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)) * ((height + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)),
             Viewports = 1,
         };
@@ -180,6 +185,7 @@ public sealed partial class SdfPassPlanLawTests {
                 SdfWorldPackage.Parts.Arguments,
                 SdfWorldPackage.Parts.CullBounds,
                 SdfWorldPackage.Parts.InstanceMasks,
+                SdfWorldPackage.Parts.SegmentTapes,
                 SdfWorldPackage.Parts.Tiles,
                 SdfWorldPackage.Parts.Visibility,
             }.Order(comparer: StringComparer.Ordinal)
@@ -205,6 +211,7 @@ public sealed partial class SdfPassPlanLawTests {
                 SdfWorldPackage.Parts.Arguments,
                 SdfWorldPackage.Parts.CullBounds,
                 SdfWorldPackage.Parts.InstanceMasks,
+                SdfWorldPackage.Parts.SegmentTapes,
                 SdfWorldPackage.Parts.Lit,
                 SdfWorldPackage.Parts.MeshDepth,
                 SdfWorldPackage.Parts.MeshTarget,

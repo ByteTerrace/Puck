@@ -127,9 +127,22 @@ public static class SdfIsaHlsl {
         declarations.Lane(lane: SdfProgram.SegmentCountLane, name: "SDF_SEGMENT_COUNT");
         declarations.Lane(lane: SdfProgram.SegmentStepScaleLane, name: "SDF_SEGMENT_STEP_SCALE");
         declarations.Lane(lane: SdfProgram.SegmentRigidPlanLane, name: "SDF_SEGMENT_RIGID_PLAN_OFFSET");
+        declarations.Lane(lane: SdfProgram.SegmentTapeLane, name: "SDF_SEGMENT_TAPE_OFFSET");
+        declarations.Count(name: "SDF_TAPE_INSTRUCTION_THRESHOLD", value: SdfProgram.TapeInstructionThreshold);
+        declarations.Count(name: "SDF_TAPE_SLAB_COUNT", value: SdfWorldPackage.TapeSlabCount);
+        declarations.Count(name: "SDF_TAPE_HEADER_WORDS", value: SdfWorldPackage.TapeHeaderWords);
+        declarations.Bits(name: "SDF_TAPE_CERTIFIED", value: SdfTapeCertificate.Certified);
+        declarations.Bits(name: "SDF_TAPE_OMISSIBLE", value: SdfTapeCertificate.OmissibleSegment);
+        declarations.Bits(name: "SDF_TAPE_DYNAMIC_FRAME", value: SdfTapeCertificate.DynamicFrame);
+        declarations.Bits(name: "SDF_TAPE_CENTERED_NORM_ENVELOPE", value: SdfTapeCertificate.CenteredNormEnvelope);
+        declarations.Count(name: "SDF_TAPE_TOKEN_SHIFT", value: SdfProgram.TapeTokenShift);
+        declarations.Real(name: "SDF_TAPE_COORDINATE_LIMIT", value: SdfTapeCertificate.CoordinateLimit);
+        declarations.Real(name: "SDF_TAPE_INTERMEDIATE_LIMIT", value: SdfTapeCertificate.IntermediateLimit);
+        declarations.Real(name: "SDF_TAPE_BLEND_ROUNDOFF_MARGIN", value: SdfTapeCertificate.BlendRoundoffMargin);
         declarations.Lane(lane: SdfProgram.InstanceCountLane, name: "SDF_INSTANCE_COUNT");
         declarations.Lane(lane: SdfProgram.InstancePartProgramsLane, name: "SDF_INSTANCE_PART_PROGRAMS");
         declarations.Lane(lane: SdfProgram.InstanceFlagsLane, name: "SDF_INSTANCE_FLAGS");
+        declarations.Lane(lane: SdfProgram.InstanceTapeTokenCountLane, name: "SDF_INSTANCE_TAPE_TOKENS");
         declarations.Lane(lane: SdfProgram.WorldSegmentCountLane, name: "SDF_WORLD_SEGMENT_COUNT");
         declarations.Section(title: "Shape-lane flags and the type mask on a ShapeBlend instruction's header.");
         declarations.Bits(

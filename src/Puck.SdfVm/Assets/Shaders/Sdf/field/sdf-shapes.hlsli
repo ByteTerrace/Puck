@@ -36,6 +36,24 @@ float sdfEllipsoidGauge(float3 p, float3 radii, float3 inverseRadii) {
     return ((length(p * inverseRadii) - 1.0) * minRadius);
 }
 #ifndef SDF_STRIP_HEAVY
+float sdfSuperellipsoidNormFactor(float exponent) {
+    return 1.0 - (7.0 / 25.0) * (exponent - 2.0);
+}
+bool sdfSuperellipsoidNormIsClamped(float approximate, float norm, float exponent) {
+    return ((asuint(approximate) & 0x7F800000u) == 0x7F800000u)
+        || approximate < sdfSuperellipsoidNormFactor(exponent) * norm || approximate > norm;
+}
+// For 2 < e <= 3 the exact Lp norm lies between (1-(7/25)*(e-2))*L2 and L2. The rational lower
+// factor follows from convexity of 3^(1/e-1/2) and ln(3)/4 < 7/25. The tape certificate charges
+// the complete band width plus endpoint arithmetic error, without assuming an error bound for pow.
+float sdfClampSuperellipsoidNorm(float approximate, float norm, float exponent) {
+    if ((asuint(approximate) & 0x7F800000u) == 0x7F800000u) { return norm; }
+    return clamp(approximate, sdfSuperellipsoidNormFactor(exponent) * norm, norm);
+}
+float sdfSuperellipsoidPowerNorm(float3 q, float m, float exponent) {
+    float3 u = pow(q / m, exponent);
+    return m * pow((u.x + u.y) + u.z, 1.0 / exponent);
+}
 // The superellipsoid: q = pow(abs(p) * inverseRadii, e); d = (pow(q.x+q.y+q.z, 1/e) - 1) * min(r). EXACTLY
 // 1-Lipschitz for every radius and every e >= 1 (see SdfProgramBuilder.Superellipsoid's remarks for the proof) — no
 // AnalyzeLipschitz step clamp is needed. e == 2 (every ellipsoid) takes sdfEllipsoidGauge's pow-free form, the same
@@ -59,9 +77,11 @@ float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float expon
         return -minRadius;
     }
 
-    float3 u = pow(q / m, exponent);
-
-    return ((m * pow((u.x + u.y) + u.z, (1.0 / exponent))) - 1.0) * minRadius;
+    float norm = sdfSuperellipsoidPowerNorm(q, m, exponent);
+    if (exponent > 2.0 && exponent <= 3.0) {
+        norm = sdfClampSuperellipsoidNorm(norm, length(q), exponent);
+    }
+    return (norm - 1.0) * minRadius;
 }
 #endif
 // slope b = (lowerRadius - upperRadius)/height and its complement a = sqrt(1 - b*b) are HOST-BAKED (data0.w / data1.y).
@@ -656,6 +676,7 @@ float sdfSweep(float3 p, float4 data0, float4 data1) {
 // each `case` separately, so a duplicated arm duplicates the whole primitive (the Box/ScreenSlab and Polygon/Star pairs
 // cost ~10% of this kernel's instructions when written twice).
 float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
+    sdfWorkShapes++;
     float result = SDF_FAR_DISTANCE;
 
     switch (shapeType) {

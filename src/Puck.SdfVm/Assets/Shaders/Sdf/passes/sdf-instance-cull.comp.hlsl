@@ -257,4 +257,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // The masks are buffers and the cull walks no field, so its row stays zero.
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+    puckCountShapes(sdfWorkShapes, sdfWorkGradients);
 }

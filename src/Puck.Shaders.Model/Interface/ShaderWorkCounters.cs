@@ -79,6 +79,8 @@ public static class ShaderWorkCounters {
                 }
                 void puckCountShadow(uint slot, uint steps) {
                 }
+                void puckCountShapes(uint shapes, uint gradients) {
+                }
                 void puckCountFragmentWork(uint steps, uint texels) {
                 }
 
@@ -93,7 +95,7 @@ public static class ShaderWorkCounters {
 
             // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
             // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-            // sky texture loads, then six shadow-slot step counts, as a
+            // sky texture loads, then six shadow-slot step counts, shape evaluations and shape gradients, as a
             // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
             // empty.
             static const uint PuckWorkRowWords = {{number(GpuKernelCounters.RowWords)}}u;
@@ -104,6 +106,8 @@ public static class ShaderWorkCounters {
             static const uint PuckWorkSkyTextureLoadsWord = {{number((4 * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkShadowWord = {{number((GpuWork.ShadowStepsFirstKind * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkShadowSlots = {{number(GpuWork.ShadowSlotCount)}}u;
+            static const uint PuckWorkShapesWord = {{number((GpuWork.KernelKinds.IndexOf(GpuWork.ShapesEvaluated) * GpuKernelCounters.CountWords))}}u;
+            static const uint PuckWorkGradientsWord = {{number((GpuWork.KernelKinds.IndexOf(GpuWork.ShapeGradients) * GpuKernelCounters.CountWords))}}u;
             // Adds to one count: the low word atomically, then the high word by one when that addition carries.
             void puckAddWork(uint word, uint amount) {
                 if (amount == 0u) {
@@ -143,6 +147,15 @@ public static class ShaderWorkCounters {
                 puckAddWork((row + PuckWorkSkyWord), evaluations);
                 puckAddWork((row + PuckWorkSkyHashesWord), hashes);
                 puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
+            }
+            void puckCountShapes(uint shapes, uint gradients) {
+                uint waveShapes = WaveActiveSum(shapes);
+                uint waveGradients = WaveActiveSum(gradients);
+                if (WaveIsFirstLane()) {
+                    uint row = passGroup.{{Row}} * PuckWorkRowWords;
+                    puckAddWork(row + PuckWorkShapesWord, waveShapes);
+                    puckAddWork(row + PuckWorkGradientsWord, waveGradients);
+                }
             }
             // The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
             void puckCountShadow(uint slot, uint steps) {

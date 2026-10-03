@@ -24,11 +24,11 @@ namespace Puck.World {
         /// <summary>The shape fingerprint of <c>WorldCounterpartAttestation.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCounterpartAttestation.cs</c>.</summary>
         public const string WorldCounterpartAttestationSchemaVersion = "0b8d3db0201510b6";
         /// <summary>The shape fingerprint of <c>WorldCountersCeilings.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCountersCeilings.cs</c>.</summary>
-        public const string WorldCountersCeilingsSchemaVersion = "d966feb0465e5cdf";
+        public const string WorldCountersCeilingsSchemaVersion = "313564dc51296f07";
         /// <summary>The shape fingerprint of <c>WorldCountersReport.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCountersReport.cs</c>.</summary>
-        public const string WorldCountersReportSchemaVersion = "aad199b55a1aa6d0";
+        public const string WorldCountersReportSchemaVersion = "2933adc331733034";
         /// <summary>The shape fingerprint of <c>WorldDefinition.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldDefinition.cs</c>.</summary>
-        public const string WorldDefinitionSchemaVersion = "c090dbdf56beabe6";
+        public const string WorldDefinitionSchemaVersion = "bf08ea4b89434467";
         /// <summary>The shape fingerprint of <c>WorldProjectionDocument.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldProjection.cs</c>.</summary>
         public const string WorldProjectionDocumentSchemaVersion = "a50d8daa1d027e5d";
         /// <summary>The shape fingerprint of <c>WorldScheduleSection.ManifestSchemaId</c>, declared in <c>src/Puck.World.Schema/WorldSchedule.cs</c>.</summary>

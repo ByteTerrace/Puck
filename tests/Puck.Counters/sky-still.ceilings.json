@@ -123,7 +123,7 @@
               "pass": "upload",
               "kind": "gpu.uploads.host-visible",
               "class": "per-backend-deterministic",
-              "ceiling": 7321308,
+              "ceiling": 7323212,
               "detail": null
             },
             {
@@ -151,6 +151,38 @@
               "detail": null
             },
             {
+              "node": "sdf:world",
+              "pass": "environment",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 4105,
+              "detail": "plain"
+            },
+            {
+              "node": "sdf:world",
+              "pass": "environment",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 4096,
+              "detail": "gradient"
+            },
+            {
+              "node": "sdf:world",
+              "pass": "environment",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 4105,
+              "detail": null
+            },
+            {
+              "node": "sdf:world",
+              "pass": "environment",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 4096,
+              "detail": null
+            },
+            {
               "node": "world",
               "pass": "sdf.world$beam",
               "kind": "gpu.march.steps",
@@ -160,10 +192,18 @@
             },
             {
               "node": "world",
+              "pass": "sdf.world$beam",
+              "kind": "gpu.shapes.evaluated",
+              "class": "per-backend-deterministic",
+              "ceiling": 12844,
+              "detail": null
+            },
+            {
+              "node": "world",
               "pass": "sdf.world$primary",
               "kind": "gpu.march.steps",
               "class": "per-backend-deterministic",
-              "ceiling": 476615,
+              "ceiling": 476616,
               "detail": null
             },
             {
@@ -172,6 +212,14 @@
               "kind": "gpu.texels.written",
               "class": "per-backend-deterministic",
               "ceiling": 147968,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$primary",
+              "kind": "gpu.shapes.evaluated",
+              "class": "per-backend-deterministic",
+              "ceiling": 583179,
               "detail": null
             },
             {
@@ -188,6 +236,22 @@
               "kind": "gpu.texels.written",
               "class": "per-backend-deterministic",
               "ceiling": 147968,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$surface",
+              "kind": "gpu.shapes.evaluated",
+              "class": "per-backend-deterministic",
+              "ceiling": 276156,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$surface",
+              "kind": "gpu.shapes.gradients",
+              "class": "per-backend-deterministic",
+              "ceiling": 14644,
               "detail": null
             },
             {
@@ -211,8 +275,24 @@
               "pass": "sdf.world$sky",
               "kind": "gpu.texels.written",
               "class": "per-backend-deterministic",
-              "ceiling": 1166400,
-              "detail": null
+              "ceiling": 58111,
+              "detail": "plain"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 1108289,
+              "detail": "run0"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 2216578,
+              "detail": "run1"
             },
             {
               "node": "world",
@@ -220,7 +300,95 @@
               "kind": "gpu.sky.evaluations",
               "class": "per-backend-deterministic",
               "ceiling": 1108289,
+              "detail": "gradient"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 289440,
+              "detail": "clouds"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.sky.hashes",
+              "class": "per-backend-deterministic",
+              "ceiling": 6946560,
+              "detail": "clouds"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 3382978,
               "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 1397729,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.sky.hashes",
+              "class": "per-backend-deterministic",
+              "ceiling": 6946560,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 2073600,
+              "detail": "plain"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.texture-loads",
+              "class": "per-backend-deterministic",
+              "ceiling": 7875296,
+              "detail": "run0"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.texture-loads",
+              "class": "per-backend-deterministic",
+              "ceiling": 15750592,
+              "detail": "run1"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 1968824,
+              "detail": "disc"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 516480,
+              "detail": "stars"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.hashes",
+              "class": "per-backend-deterministic",
+              "ceiling": 576110,
+              "detail": "stars"
             },
             {
               "node": "world",
@@ -235,7 +403,23 @@
               "pass": "sdf.world$composite",
               "kind": "gpu.sky.evaluations",
               "class": "per-backend-deterministic",
-              "ceiling": 110135,
+              "ceiling": 2485304,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.hashes",
+              "class": "per-backend-deterministic",
+              "ceiling": 576110,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.texture-loads",
+              "class": "per-backend-deterministic",
+              "ceiling": 23625888,
               "detail": null
             },
             {
@@ -1112,6 +1296,24 @@
         },
         {
           "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
           "pass": "upload",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
@@ -1204,6 +1406,24 @@
           "node": "sdf:world",
           "pass": "upload",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -1343,7 +1563,7 @@
           "pass": "environment",
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 3256,
+          "ceiling": 3848,
           "detail": "plain"
         },
         {
@@ -1422,6 +1642,24 @@
           "node": "sdf:world",
           "pass": "environment",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -1657,6 +1895,24 @@
         {
           "node": "sdf:world",
           "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -1884,6 +2140,24 @@
         {
           "node": "sdf:world",
           "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -2111,6 +2385,24 @@
         {
           "node": "sdf:world",
           "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -2321,6 +2613,24 @@
           "node": "sdf:world",
           "pass": "environment",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -2556,6 +2866,24 @@
         {
           "node": "sdf:world",
           "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -2783,6 +3111,24 @@
         {
           "node": "sdf:world",
           "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -3002,6 +3348,24 @@
           "node": "sdf:world",
           "pass": "environment",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -3141,7 +3505,7 @@
           "pass": "environment",
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 3256,
+          "ceiling": 3848,
           "detail": null
         },
         {
@@ -3211,6 +3575,24 @@
           "node": "sdf:world",
           "pass": "environment",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -3438,6 +3820,24 @@
           "node": "sdf:world",
           "pass": null,
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -3672,6 +4072,24 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$beam",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -3890,6 +4308,260 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.dispatches",
+          "class": "deterministic",
+          "ceiling": 1,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.dispatches.indirect",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.draws",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.render-passes",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.command-buffers",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.barriers.image",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.barriers.memory",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.barriers.buffer",
+          "class": "deterministic",
+          "ceiling": 2,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.binds.pipeline",
+          "class": "deterministic",
+          "ceiling": 1,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.binds.descriptor-set",
+          "class": "deterministic",
+          "ceiling": 3,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.push-constants",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.descriptor-writes",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.uploads.host-visible",
+          "class": "deterministic",
+          "ceiling": 280,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.clears",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.copies",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.march.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.texels.written",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.copies.buffer-bytes",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.sky.hashes",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.sky.texture-loads",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$cull-args",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -3949,7 +4621,7 @@
           "pass": "sdf.world$cull-args",
           "kind": "gpu.barriers.buffer",
           "class": "deterministic",
-          "ceiling": 3,
+          "ceiling": 2,
           "detail": null
         },
         {
@@ -4117,6 +4789,24 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$primary",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -4176,7 +4866,7 @@
           "pass": "sdf.world$primary",
           "kind": "gpu.barriers.buffer",
           "class": "deterministic",
-          "ceiling": 3,
+          "ceiling": 4,
           "detail": null
         },
         {
@@ -4319,6 +5009,15 @@
           "node": "world",
           "pass": "sdf.world$primary",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -4746,6 +5445,24 @@
           "node": "world",
           "pass": "sdf.world$views",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -4964,6 +5681,24 @@
           "node": "world",
           "pass": "sdf.world$resolve",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -5190,6 +5925,24 @@
         {
           "node": "world",
           "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -5408,6 +6161,24 @@
         {
           "node": "world",
           "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -5618,6 +6389,24 @@
           "node": "world",
           "pass": "sdf.world$sky",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -5853,6 +6642,24 @@
         {
           "node": "world",
           "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -6063,6 +6870,24 @@
           "node": "world",
           "pass": "sdf.world$sky",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -6298,6 +7123,24 @@
         {
           "node": "world",
           "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -6525,6 +7368,24 @@
         {
           "node": "world",
           "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -6726,6 +7587,24 @@
           "node": "world",
           "pass": "sdf.world$sky",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -6933,6 +7812,24 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -7152,6 +8049,24 @@
         {
           "node": "world",
           "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -7370,6 +8285,24 @@
         {
           "node": "world",
           "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -7580,6 +8513,24 @@
           "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -7815,6 +8766,24 @@
         {
           "node": "world",
           "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -8042,6 +9011,24 @@
         {
           "node": "world",
           "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -8260,6 +9247,24 @@
         {
           "node": "world",
           "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -8461,6 +9466,24 @@
           "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -8688,6 +9711,24 @@
           "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -8879,6 +9920,24 @@
           "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -9027,7 +10086,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 2464,
+          "ceiling": 3016,
           "detail": null
         },
         {
@@ -9106,6 +10165,24 @@
           "node": "world",
           "pass": null,
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -9333,6 +10410,24 @@
           "node": "main",
           "pass": "main$view$1",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -9567,6 +10662,24 @@
         },
         {
           "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
           "pass": "main$view$3",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -9794,6 +10907,24 @@
         },
         {
           "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -10014,6 +11145,24 @@
           "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -10162,7 +11311,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 352,
+          "ceiling": 416,
           "detail": null
         },
         {
@@ -10241,6 +11390,24 @@
           "node": "main",
           "pass": null,
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -10340,6 +11507,24 @@
           "node": "sdf:world",
           "pass": "bricks",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -10574,6 +11759,24 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$ambient",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -10801,6 +12004,24 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$shadow",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -11021,6 +12242,24 @@
           "node": "world",
           "pass": "sdf.world$shadow",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -11147,7 +12386,7 @@
               "pass": "upload",
               "kind": "gpu.uploads.host-visible",
               "class": "per-backend-deterministic",
-              "ceiling": 7321596,
+              "ceiling": 7323500,
               "detail": null
             },
             {
@@ -11175,11 +12414,51 @@
               "detail": null
             },
             {
+              "node": "sdf:world",
+              "pass": "environment",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 4105,
+              "detail": "plain"
+            },
+            {
+              "node": "sdf:world",
+              "pass": "environment",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 4096,
+              "detail": "gradient"
+            },
+            {
+              "node": "sdf:world",
+              "pass": "environment",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 4105,
+              "detail": null
+            },
+            {
+              "node": "sdf:world",
+              "pass": "environment",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 4096,
+              "detail": null
+            },
+            {
               "node": "world",
               "pass": "sdf.world$beam",
               "kind": "gpu.march.steps",
               "class": "per-backend-deterministic",
               "ceiling": 15058,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$beam",
+              "kind": "gpu.shapes.evaluated",
+              "class": "per-backend-deterministic",
+              "ceiling": 12844,
               "detail": null
             },
             {
@@ -11200,6 +12479,14 @@
             },
             {
               "node": "world",
+              "pass": "sdf.world$primary",
+              "kind": "gpu.shapes.evaluated",
+              "class": "per-backend-deterministic",
+              "ceiling": 583179,
+              "detail": null
+            },
+            {
+              "node": "world",
               "pass": "sdf.world$surface",
               "kind": "gpu.march.steps",
               "class": "per-backend-deterministic",
@@ -11212,6 +12499,22 @@
               "kind": "gpu.texels.written",
               "class": "per-backend-deterministic",
               "ceiling": 147968,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$surface",
+              "kind": "gpu.shapes.evaluated",
+              "class": "per-backend-deterministic",
+              "ceiling": 276156,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$surface",
+              "kind": "gpu.shapes.gradients",
+              "class": "per-backend-deterministic",
+              "ceiling": 14644,
               "detail": null
             },
             {
@@ -11235,8 +12538,24 @@
               "pass": "sdf.world$sky",
               "kind": "gpu.texels.written",
               "class": "per-backend-deterministic",
-              "ceiling": 1166400,
-              "detail": null
+              "ceiling": 58111,
+              "detail": "plain"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 1108289,
+              "detail": "run0"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 2216578,
+              "detail": "run1"
             },
             {
               "node": "world",
@@ -11244,7 +12563,95 @@
               "kind": "gpu.sky.evaluations",
               "class": "per-backend-deterministic",
               "ceiling": 1108289,
+              "detail": "gradient"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 289440,
+              "detail": "clouds"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.sky.hashes",
+              "class": "per-backend-deterministic",
+              "ceiling": 6946560,
+              "detail": "clouds"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 3382978,
               "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 1397729,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$sky",
+              "kind": "gpu.sky.hashes",
+              "class": "per-backend-deterministic",
+              "ceiling": 6946560,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.texels.written",
+              "class": "per-backend-deterministic",
+              "ceiling": 2073600,
+              "detail": "plain"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.texture-loads",
+              "class": "per-backend-deterministic",
+              "ceiling": 7875296,
+              "detail": "run0"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.texture-loads",
+              "class": "per-backend-deterministic",
+              "ceiling": 15750592,
+              "detail": "run1"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 1968824,
+              "detail": "disc"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.evaluations",
+              "class": "per-backend-deterministic",
+              "ceiling": 516480,
+              "detail": "stars"
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.hashes",
+              "class": "per-backend-deterministic",
+              "ceiling": 576110,
+              "detail": "stars"
             },
             {
               "node": "world",
@@ -11259,7 +12666,23 @@
               "pass": "sdf.world$composite",
               "kind": "gpu.sky.evaluations",
               "class": "per-backend-deterministic",
-              "ceiling": 110135,
+              "ceiling": 2485304,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.hashes",
+              "class": "per-backend-deterministic",
+              "ceiling": 576110,
+              "detail": null
+            },
+            {
+              "node": "world",
+              "pass": "sdf.world$composite",
+              "kind": "gpu.sky.texture-loads",
+              "class": "per-backend-deterministic",
+              "ceiling": 23625888,
               "detail": null
             },
             {
@@ -12136,6 +13559,24 @@
         },
         {
           "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "fillers",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
           "pass": "upload",
           "kind": "gpu.march.steps",
           "class": "per-backend-deterministic",
@@ -12228,6 +13669,24 @@
           "node": "sdf:world",
           "pass": "upload",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "upload",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -12367,7 +13826,7 @@
           "pass": "environment",
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 3256,
+          "ceiling": 3848,
           "detail": "plain"
         },
         {
@@ -12446,6 +13905,24 @@
           "node": "sdf:world",
           "pass": "environment",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -12681,6 +14158,24 @@
         {
           "node": "sdf:world",
           "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -12908,6 +14403,24 @@
         {
           "node": "sdf:world",
           "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -13135,6 +14648,24 @@
         {
           "node": "sdf:world",
           "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -13345,6 +14876,24 @@
           "node": "sdf:world",
           "pass": "environment",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -13580,6 +15129,24 @@
         {
           "node": "sdf:world",
           "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -13807,6 +15374,24 @@
         {
           "node": "sdf:world",
           "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -14026,6 +15611,24 @@
           "node": "sdf:world",
           "pass": "environment",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -14165,7 +15768,7 @@
           "pass": "environment",
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 3256,
+          "ceiling": 3848,
           "detail": null
         },
         {
@@ -14235,6 +15838,24 @@
           "node": "sdf:world",
           "pass": "environment",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -14462,6 +16083,24 @@
           "node": "sdf:world",
           "pass": null,
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": null,
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -14696,6 +16335,24 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mask",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$beam",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -14914,6 +16571,260 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$beam",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.dispatches",
+          "class": "deterministic",
+          "ceiling": 1,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.dispatches.indirect",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.draws",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.render-passes",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.command-buffers",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.barriers.image",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.barriers.memory",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.barriers.buffer",
+          "class": "deterministic",
+          "ceiling": 2,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.binds.pipeline",
+          "class": "deterministic",
+          "ceiling": 1,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.binds.descriptor-set",
+          "class": "deterministic",
+          "ceiling": 3,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.push-constants",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.descriptor-writes",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.uploads.host-visible",
+          "class": "deterministic",
+          "ceiling": 280,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.clears",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.copies",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.march.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.texels.written",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.copies.buffer-bytes",
+          "class": "deterministic",
+          "ceiling": 0,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.sky.hashes",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.sky.texture-loads",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot0.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot1.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot2.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot3.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot4.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$tape",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$cull-args",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -14973,7 +16884,7 @@
           "pass": "sdf.world$cull-args",
           "kind": "gpu.barriers.buffer",
           "class": "deterministic",
-          "ceiling": 3,
+          "ceiling": 2,
           "detail": null
         },
         {
@@ -15141,6 +17052,24 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$cull-args",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$primary",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -15200,7 +17129,7 @@
           "pass": "sdf.world$primary",
           "kind": "gpu.barriers.buffer",
           "class": "deterministic",
-          "ceiling": 3,
+          "ceiling": 4,
           "detail": null
         },
         {
@@ -15343,6 +17272,15 @@
           "node": "world",
           "pass": "sdf.world$primary",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$primary",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -15770,6 +17708,24 @@
           "node": "world",
           "pass": "sdf.world$views",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$views",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -15988,6 +17944,24 @@
           "node": "world",
           "pass": "sdf.world$resolve",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$resolve",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -16214,6 +18188,24 @@
         {
           "node": "world",
           "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -16432,6 +18424,24 @@
         {
           "node": "world",
           "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -16642,6 +18652,24 @@
           "node": "world",
           "pass": "sdf.world$sky",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -16877,6 +18905,24 @@
         {
           "node": "world",
           "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -17087,6 +19133,24 @@
           "node": "world",
           "pass": "sdf.world$sky",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -17322,6 +19386,24 @@
         {
           "node": "world",
           "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -17549,6 +19631,24 @@
         {
           "node": "world",
           "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -17750,6 +19850,24 @@
           "node": "world",
           "pass": "sdf.world$sky",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -17957,6 +20075,24 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$sky",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -18176,6 +20312,24 @@
         {
           "node": "world",
           "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "plain"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -18394,6 +20548,24 @@
         {
           "node": "world",
           "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run0"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -18604,6 +20776,24 @@
           "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run1"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -18839,6 +21029,24 @@
         {
           "node": "world",
           "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "run2"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -19066,6 +21274,24 @@
         {
           "node": "world",
           "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "gradient"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -19284,6 +21510,24 @@
         {
           "node": "world",
           "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "disc"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
           "kind": "gpu.dispatches",
           "class": "deterministic",
           "ceiling": 0,
@@ -19485,6 +21729,24 @@
           "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "stars"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -19712,6 +21974,24 @@
           "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": "clouds"
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -19903,6 +22183,24 @@
           "node": "world",
           "pass": "sdf.world$composite",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$composite",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -20051,7 +22349,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 2464,
+          "ceiling": 3016,
           "detail": null
         },
         {
@@ -20130,6 +22428,24 @@
           "node": "world",
           "pass": null,
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": null,
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -20357,6 +22673,24 @@
           "node": "main",
           "pass": "main$view$1",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$1",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -20591,6 +22925,24 @@
         },
         {
           "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$2",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
           "pass": "main$view$3",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -20818,6 +23170,24 @@
         },
         {
           "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$3",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -21038,6 +23408,24 @@
           "node": "main",
           "pass": "main$view$4",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": "main$view$4",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -21186,7 +23574,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 352,
+          "ceiling": 416,
           "detail": null
         },
         {
@@ -21265,6 +23653,24 @@
           "node": "main",
           "pass": null,
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "main",
+          "pass": null,
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -21364,6 +23770,24 @@
           "node": "sdf:world",
           "pass": "bricks",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "sdf:world",
+          "pass": "bricks",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,
@@ -21598,6 +24022,24 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$mesh",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$ambient",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -21825,6 +24267,24 @@
         },
         {
           "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$ambient",
+          "kind": "gpu.shapes.gradients",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
           "pass": "sdf.world$shadow",
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -22045,6 +24505,24 @@
           "node": "world",
           "pass": "sdf.world$shadow",
           "kind": "gpu.shadow.slot5.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shapes.evaluated",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true,
+          "detail": null
+        },
+        {
+          "node": "world",
+          "pass": "sdf.world$shadow",
+          "kind": "gpu.shapes.gradients",
           "class": "per-backend-deterministic",
           "ceiling": 0,
           "requiredZero": true,

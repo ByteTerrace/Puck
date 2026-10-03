@@ -129,4 +129,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // The beam writes tile planes, no texel: it counts its cone march's steps.
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+    puckCountShapes(sdfWorkShapes, sdfWorkGradients);
 }

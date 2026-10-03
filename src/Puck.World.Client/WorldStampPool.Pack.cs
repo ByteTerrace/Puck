@@ -127,6 +127,7 @@ public sealed partial class WorldStampPool {
 
             if (Wake(
                 client: client,
+                deltaSeconds: deltaSeconds,
                 index: index,
                 live: live,
                 moved: moved,
@@ -227,7 +228,7 @@ public sealed partial class WorldStampPool {
         }
     }
     // Decides whether a live registration repacks this frame; one new to its pool entry always does.
-    private bool Wake(IWorldStampSource client, int index, Registration live, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootRotation) {
+    private bool Wake(IWorldStampSource client, int index, Registration live, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootRotation, float deltaSeconds) {
         var swapped = !ReferenceEquals(
             objA: m_packedRegistrations[index],
             objB: live
@@ -255,6 +256,7 @@ public sealed partial class WorldStampPool {
 
         return m_owners.Wake(
             castsSoftShadow: false,
+            deltaSeconds: deltaSeconds,
             discontinuity: discontinuity,
             moved: moved,
             orientation: rootRotation,

@@ -47,6 +47,8 @@ public static class SdfEncodingProbe {
                 Name: name
             ));
 
+        Call(name: "tape certificate", inputs: [0.2f, 0.3f, 0.4f, 0.5f], emit: static (b, m, v) => b.ResetPoint()
+            .Translate(offset: new Vector3(x: v[0], y: v[1], z: v[2])).Sphere(radius: v[3], material: m));
         // Point operations, each ahead of a unit sphere.
         Call(name: "translate", inputs: [0.31f, 0.37f, 0.41f], emit: static (b, m, v) => Shape(b: b.ResetPoint().Translate(offset: new Vector3(x: v[0], y: v[1], z: v[2])), material: m));
         Call(name: "rotate", inputs: [0.4f, 0.5f, 0.6f, 0.7f], emit: static (b, m, v) => Shape(b: b.ResetPoint().Rotate(rotation: new Quaternion(w: v[3], x: v[0], y: v[1], z: v[2])), material: m));

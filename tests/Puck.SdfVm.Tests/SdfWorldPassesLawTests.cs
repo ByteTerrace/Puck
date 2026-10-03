@@ -73,8 +73,8 @@ public sealed partial class SdfWorldPassesLawTests {
             .ToDictionary(elementSelector: static group => group.Count(), keySelector: static group => group.Key);
 
         Assert.Equal(
-            actual: new[] { "arguments", "cullBounds", "instanceMasks", "tiles", "visibility" }.Select(selector: scratch => buffers.GetValueOrDefault(key: $"{SdfTestView.Instance}/sdf.world${scratch}")),
-            expected: [1, 1, 1, 1, 1]
+            actual: new[] { "arguments", "cullBounds", "instanceMasks", "segmentTapes", "tiles", "visibility" }.Select(selector: scratch => buffers.GetValueOrDefault(key: $"{SdfTestView.Instance}/sdf.world${scratch}")),
+            expected: [1, 1, 1, 1, 1, 1]
         );
 
         var scheduled = new RenderGraphFrame(

@@ -607,6 +607,7 @@ public sealed class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
 
                 if (!m_motionOwners.Wake(
                     castsSoftShadow: true,
+                    deltaSeconds: 1f,
                     discontinuity: (
                     !m_motionSeeded[motionIndex] ||
                     (m_motionAddresses[motionIndex] != address)

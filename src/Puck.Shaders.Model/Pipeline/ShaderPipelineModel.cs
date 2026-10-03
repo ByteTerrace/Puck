@@ -307,6 +307,8 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
     public ulong DynamicTransforms { get; init; }
     /// <summary>Gets the words of one tile's instance mask, which the host derives from its instances.</summary>
     public ulong InstanceMaskWords { get; init; }
+    /// <summary>Gets the words of one tile's certified segment tape and its slab workspace.</summary>
+    public ulong SegmentTapeWords { get; init; }
     /// <summary>Gets the words of the instance grid, which the host derives from its instances.</summary>
     public ulong InstanceGridWords { get; init; }
     /// <summary>Gets the voxels of the SDF brick pool the host provisions for its world.</summary>
@@ -325,6 +327,7 @@ public readonly record struct ShaderPipelineStorageCounts(uint Width, uint Heigh
         ShaderPipelineCountBasis.Tiles => Tiles,
         ShaderPipelineCountBasis.DynamicTransforms => DynamicTransforms,
         ShaderPipelineCountBasis.InstanceMaskWords => InstanceMaskWords,
+        ShaderPipelineCountBasis.SegmentTapeWords => SegmentTapeWords,
         ShaderPipelineCountBasis.InstanceGridWords => InstanceGridWords,
         ShaderPipelineCountBasis.BrickPoolVoxels => BrickPoolVoxels,
         _ => throw new ArgumentOutOfRangeException(

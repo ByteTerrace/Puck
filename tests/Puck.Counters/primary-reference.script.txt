@@ -1,0 +1,10 @@
+# The floor workload's same camera, extent and completed tick with primary's tape reads compiled out.
+world.cadence off
+world.quality low
+world.rate pause
+world.wait ready 180
+world.shaders.reload tests/Puck.Counters/primary-reference
+world.wait ready 180
+world.rate resume
+world.wait 120
+world.counters --json

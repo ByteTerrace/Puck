@@ -6,6 +6,8 @@ namespace Puck.SdfVm;
 public enum SdfKernel {
     /// <summary>The tile prepass, cone-marching each tile's field into its march planes and part bounds.</summary>
     Beam,
+    /// <summary>The certified per-tile live-segment mask.</summary>
+    Tape,
     /// <summary>The per-tile instance mask.</summary>
     InstanceCull,
     /// <summary>The reduction of the surviving tiles to the hit passes' indirect arguments and dispatch box.</summary>

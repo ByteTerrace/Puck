@@ -674,6 +674,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
             if (!m_avatarOwners.Wake(
                 castsSoftShadow: m_castsAvatarShadows,
+                deltaSeconds: 1f,
                 discontinuity: (
                 !m_avatarPoseSeeded[index] ||
                 (m_avatarMotionAddresses[index] != address)

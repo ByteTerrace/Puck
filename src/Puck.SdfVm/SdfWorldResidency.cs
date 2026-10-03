@@ -605,8 +605,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public SdfSkyDetails SkyDetails => m_skyDetails;
 
     /// <summary>Returns the counts a view of the residency allocates its counted scratch by at an extent: one viewport,
-    /// its tiles, and the instances the tables are provisioned for (<see cref="CapacityRevision"/>) and their per-tile
-    /// mask words.</summary>
+    /// its tiles, the provisioned instances and their mask words, and the current program's segment tape words
+    /// (<see cref="CapacityRevision"/>).</summary>
     /// <param name="width">The view's width, in pixels.</param>
     /// <param name="height">The view's height, in pixels.</param>
     /// <returns>The counts.</returns>
@@ -618,6 +618,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             Width: width
         ) {
             InstanceMaskWords = ((ulong)SdfProgram.InstanceMaskStorageWordCountFor(instanceCount: instances)),
+            SegmentTapeWords = ((ulong)CountedTapeWords),
             Instances = ((ulong)instances),
             Tiles = (((ulong)((width + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)) * ((height + (SdfWorldPackage.TileSize - 1)) / SdfWorldPackage.TileSize)),
             Viewports = 1,
@@ -625,11 +626,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
 
     /// <summary>Gets a revision that moves whenever <see cref="CountsAt"/> would return another value at an unchanged
-    /// extent: the instance count the counts are sized by, the tables' capacity once they are built and, before, the
-    /// capacity they will be built with for the frame the residency captured, so building them moves it only when the
-    /// capacity differs.</summary>
-    public long CapacityRevision => CountedInstances;
+    /// extent: the provisioned instance count and the captured program's tape storage. Before the tables exist,
+    /// the instance count is the capacity they will receive for that captured frame.</summary>
+    public long CapacityRevision => (((long)CountedInstances) << 32) | ((uint)CountedTapeWords);
 
+    private int CountedTapeWords => SdfWorldPackage.SegmentTapeWordCountFor(
+        segments: (m_frame?.Program.SkipSegmentCount ?? 0), tokens: (m_frame?.Program.TapeTokenCount ?? 0));
     // The instances a view's counted scratch is sized for: the tables' capacity, or before they are built the one they are
     // built with, the larger of the captured program's instances and the residency's floor.
     private int CountedInstances => (m_tables?.InstanceCapacity ?? Math.Max(

@@ -2,7 +2,7 @@
 
 After a march accepts a surface hit, the shading epilogue turns its position,
 material id, and field data into a lit pixel. Puck computes the surface normal
-with one dual field evaluation instead of four probe taps, estimates soft
+from the shapes that decide the hit's field value, estimates soft
 shadow penumbrae, and treats diegetic CRT screens as both pictures and lights.
 Runtime switches let a user isolate these terms for measurement or restyle the
 frame.
@@ -41,7 +41,7 @@ its ratio lives in the march's own clamped units, so de-scaling it would be the
 bug, not the fix.) Keep this rule in your pocket; it explains a comment on
 nearly every function below.
 
-## The surface normal uses one dual walk
+## The surface normal follows the deciding shapes
 
 Shading needs a surface normal—the field's gradient, normalized. The textbook
 way to get it from an SDF is a **finite-difference tetrahedron**: evaluate the
@@ -55,21 +55,21 @@ interprets, walking a `uint[]` tape op by op. The interpreter's real cost is
 *memory traffic*: fetching and decoding each program word. A four-tap normal
 re-walks that whole tape four times, four separate fetch streams for one normal.
 
-The default instead carries a **forward-mode dual** through a single walk: a
-`float3` tangent rides alongside the scalar distance, and each op updates the
-tangent with a hand-written derivative rule at the same moment it updates the
-distance—reusing the subexpressions the distance already computed. One fetch
-of each word updates all four accumulator components. One shared fetch stream
-beats four.
+The default first finds which shapes have a nonzero derivative weight at the
+hit, following the existing interpreter's scalar and blend decisions. Hard
+blends retain the deciding side; smooth blends retain both sides only inside
+their blend band. A second walk evaluates just the selected shape derivatives.
+Their `float3` tangents pass through the same hand-written transform and blend
+rules as a full forward-mode dual walk. This replaces repeated work on losing
+shapes with one scalar selection and a smaller derivative set.
 
 ```text
-  Four-tap FD:                          Analytic dual:
-    walk tape → f(p+dx)                   walk tape ONCE, carrying
-    walk tape → f(p+dy)                     (distance, ∂x, ∂y, ∂z)
-    walk tape → f(p+dz)                   each op updates all four
-    walk tape → f(p+dw)                   → gradient falls out directly
+  Four-tap finite difference:           Selected analytic derivatives:
+    walk tape → f(p+dx)                   walk tape → values and blend weights
+    walk tape → f(p+dy)                   replay selected shape derivatives
+    walk tape → f(p+dz)                   combine weighted tangents
+    walk tape → f(p+dw)                   normalize
     subtract, normalize
-    (4 fetch streams)                     (1 fetch stream)
 ```
 
 The second reason is **determinism**, and it's the stronger one. A finite
@@ -95,6 +95,9 @@ orthonormal matrix; folds apply their own reflection—each derivative
 hand-derived once per op. Common primitives have analytic leaf gradients; the
 remaining exotic primitives use a shape-local four-tap difference at the leaf,
 and the transform and blend chain still carries that gradient analytically.
+If the bounded contributor set fills, the interpreter takes the full dual
+walk, retaining every contributor. The [gradient reference](../reference/gradients-and-normals.md)
+describes the selection contract and the shape counters that include its cost.
 
 ## Soft shadows: the penumbra cone
 
@@ -271,7 +274,10 @@ four-tap normal (`UseFiniteDifferenceNormals`); no `Puck.World` verb sets them.
 and ink lines where curvature spikes. The authored `render.lighting.curvature`
 gains enable it at runtime; all three at zero disable it. It uses four nearby
 field samples and a center distance to estimate a discrete Laplacian, since
-the analytic normal alone provides no second derivative. Programs without
+the analytic normal alone provides no second derivative. These samples also
+supply the surface normal. This path counts scalar shape evaluations and no
+analytic shape gradients; the courtyard's inherited curvature gains select it.
+Programs without
 shading-only detail reuse the center distance the visibility record holds. See
 the [renderer README](../../../../src/Puck.SdfVm/README.md) for that reuse.
 

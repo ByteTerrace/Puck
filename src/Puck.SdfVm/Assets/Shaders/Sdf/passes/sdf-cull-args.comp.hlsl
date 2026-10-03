@@ -59,6 +59,7 @@ void CSMain(uint threadIndex : SV_GroupIndex) {
 
     // The reduction walks no field and writes no texel, so its row stays zero.
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
+    puckCountShapes(sdfWorkShapes, sdfWorkGradients);
 
     if (0u != threadIndex) {
         return;

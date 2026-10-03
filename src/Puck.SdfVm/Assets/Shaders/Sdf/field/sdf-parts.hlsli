@@ -14,7 +14,7 @@ bool sdfCanTracePartsIndependently() {
 
 // Compiled whole-scope programs: entry = (shared leaf run, placement binding run, count|dynamic flag, scope scale).
 // Each leaf = (canonical shape instruction, optional domain instruction + 1, 0, 0); each placement binding =
-// (packed pose slot (SDF_TRANSFORM_SLOT_UNPACK), material, 0, 0). Geometry payloads and flags come from the canonical instructions, not the
+// (packed pose slot (SDF_TRANSFORM_SLOT_UNPACK), material, original shape instruction, 0). Geometry payloads and flags come from the canonical instructions, not the
 // placement that first happened to render. KEEP IN SYNC with SdfProgram.PartPrograms.cs.
 void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part, uint dataOffset, int instanceIndex, bool trackMaterial) {
     float parentWeight = sdfMaterialBlendWeight;
@@ -39,6 +39,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
             continue;
         }
         uint4 binding = sdfWords[part.y + leaf];
+        if (!sdfTapeShapeLive(binding.z)) { sdfTapeSkippedShape(shape); continue; }
         float3 localPosition = worldPosition;
         float4 lanes = 0.0;
         int slot = SDF_TRANSFORM_SLOT_NONE;
@@ -88,6 +89,7 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         float4 shapeData0 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x]);
         float4 shapeData1 = asfloat(sdfWords[dataOffset + SDF_INSTRUCTION_DATA_VECTORS * code.x + 1u]);
         float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape) & SDF_SHAPE_TYPE_MASK, localPosition, shapeData0, shapeData1) * distanceScale;
+        if (sdfTapeDecided(binding.z)) { child.distance = sdfTapeWinnerSeed(SDF_INSTRUCTION_BLEND(shape)); }
         sdfComposeCandidate(child, candidate, SDF_INSTRUCTION_BLEND(shape), trackMaterial ? (int)binding.y : 0,
             lanes, instanceIndex, slot, shapeData1.x, trackMaterial);
     }

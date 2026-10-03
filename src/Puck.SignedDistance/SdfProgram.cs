@@ -10,7 +10,7 @@ namespace Puck.SignedDistance;
 //   [materialOffset ..) = material layers, 20 uint4 per entry; see PackMaterials and sdfMaterialLoad.
 //   [materialOffset + 20*materialCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
 //                         b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot, index, index+1).
-//   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, 0) header uvec4, then 2
+//   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, tapeOffset) header uvec4, then 2
 //                         uvec4 per segment — s0 = center/offset.xyz + radius (float bits), s1 = (mode, dynamicSlot,
 //                         first, end) — the chain-level skip map()'s outer loop walks. The header's .y lane (float
 //                         bits) is the per-PROGRAM Lipschitz STEP SCALE (1/L, AnalyzeLipschitz): mapCore multiplies
@@ -18,7 +18,7 @@ namespace Puck.SignedDistance;
 //                         (twist/bend) or an overestimating blend and hole — == 1.0 for an isometric program, so its
 //                         scenes stay byte-identical. Both tables' offsets derive from word[0]'s existing lanes, so
 //                         the header is unchanged. See PackBounds.
-//   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, shadingFlags, 0)
+//   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, shadingFlags, tapeTokens)
 //                         header uvec4, then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius (float
 //                         bits), i1 = (mode, dynamicSlot, segmentFirst, segmentEnd) — segmentFirst/segmentEnd index
 //                         the SEGMENT directory above (not raw instructions): every segment in that range is
@@ -47,6 +47,8 @@ namespace Puck.SignedDistance;
 //                         Repeat, RepeatLimited): its leaf is flagged folded and the NEXT slot holds the pose before the
 //                         folds (position + first fold instruction, quaternion, fold count). A zero leaf count retains the
 //                         full interpreter for that segment.
+//   [.. after rigid leaves ..) = one tape certificate uvec4 per instruction: three float bounds and a flag byte,
+//                         with the compact ShapeBlend/PopField token index in the upper 24 bits of the last word.
 // Screen surfaces are a SEPARATE fixed-size side table (ScreenSurfaceWords), not part of the sdfWords stream above —
 // they are shading-only data the world renderer's Stage 1 binds into its own buffer, ALWAYS sized to
 // SdfProgramBuilder.MaxScreenSurfaces and indexed DIRECTLY by screen index (KEEP IN SYNC with SdfWorldTables and
@@ -323,7 +325,8 @@ public sealed partial class SdfProgram {
         var worldSegmentOffsetVectors = ((instanceOffsetVectors + DirectoryHeaderVectors) + (BoundRecordVectors * m_instances.Length));
         var gridOffsetVectors = ((worldSegmentOffsetVectors + DirectoryHeaderVectors) + worldSegmentCount);
         var rigidPlanOffsetVectors = (gridOffsetVectors + (gridBlock.Length / WordsPerVector));
-        var convexPolygonOffsetVectors = ((rigidPlanOffsetVectors + segments.Count) + (3 * rigidPlan.Leaves.Count));
+        var tapeOffsetVectors = ((rigidPlanOffsetVectors + segments.Count) + (3 * rigidPlan.Leaves.Count));
+        var convexPolygonOffsetVectors = (tapeOffsetVectors + instructionCount);
         var convexPolygonProfileOffsets = new int[m_convexPolygonProfiles.Length];
         var convexPolygonWords = 0;
 
@@ -471,6 +474,7 @@ public sealed partial class SdfProgram {
             plan: rigidPlan,
             rigidPlanOffsetVectors: rigidPlanOffsetVectors
         );
+        PackTapeCertificates(offset: tapeOffsetVectors, rigid: rigidPlan, segmentOffset: segmentOffsetVectors, segments: segments);
         PackConvexPolygonProfiles(profileOffsets: convexPolygonProfileOffsets);
         PackPaths(offset: pathOffsetVectors);
         PackSweepCurves(curveOffsets: sweepCurveOffsets);

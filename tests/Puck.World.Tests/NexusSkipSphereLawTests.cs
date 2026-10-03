@@ -1,10 +1,6 @@
 using System.Numerics;
 
-using Puck.SdfVm;
 using Puck.SignedDistance;
-using Puck.World.Client;
-using Puck.World.Protocol;
-using Puck.World.Server;
 
 using Xunit;
 
@@ -15,49 +11,9 @@ namespace Puck.World.Tests;
 /// <see cref="SdfOp.Scale"/>, so these laws hold that a uniform scale costs no sphere: every Union shape whose chain
 /// carries only rigid ops and uniform scales, and whose primitive has a local sphere at all, is bounded.</summary>
 public sealed class NexusSkipSphereLawTests {
-    private static readonly Lazy<SdfProgram> Nexus = new(valueFactory: Compose);
+    private static readonly Lazy<SdfProgram> Nexus = new(valueFactory: static () =>
+        ComposedSdfWorldFixture.Capture(relativePath: "src/Puck.World/Assets/worlds/puck.world.json").Program);
 
-    private static SdfProgram Compose() {
-        const string Path = "src/Puck.World/Assets/worlds/puck.world.json";
-        var definition = AuthoredGameFixtures.Load(relativePath: Path);
-        var routes = new WorldSeatAuthorityRouter();
-        var client = new WorldClient(
-            composition: new WorldCompositionState(),
-            definition: definition,
-            roster: new PlayerRoster(
-                definition: definition,
-                link: new SilentLink(definition: definition),
-                seatBindings: new WorldSeatBindings(definition: definition)
-            ),
-            seatRouter: routes
-        );
-        var text = new WorldTextCatalog(source: new(
-            Definition: definition,
-            SourcePath: System.IO.Path.Combine(path1: AuthoredGameFixtures.Root, path2: Path)
-        ));
-
-        text.Reconcile(definition: definition);
-
-        var scene = new WorldSceneEmitter(
-            anchor: new WorldPerceptionAnchor(),
-            animator: new WorldStampPool(),
-            audio: new SilentAudio(),
-            client: client,
-            continuum: new WorldContinuum(client, routes, new NoNeighbours()),
-            settings: new WorldRenderSettings(defaults: definition.Render),
-            text: text
-        );
-        var dresser = new CapturingDresser();
-        var frames = new SdfCompositionFrameSource(
-            dresser: dresser,
-            emitters: [scene, new WorldSdfDocumentEmitter(), new WorldFieldEmitter(client: client)]
-        );
-
-        scene.Tick(deltaSeconds: (1f / 60f));
-        _ = frames.CaptureFrame(deltaSeconds: (1f / 60f), height: 1080, interpolationAlpha: 0f, width: 1920);
-
-        return (dresser.Program ?? throw new InvalidOperationException(message: "The frame source dressed no program."));
-    }
     // Whether a primitive has a local sphere at all, asked of a one-shape program. A primitive that needs a side table
     // the probe cannot supply (a sweep's curve, a convex profile, a path) is refused and left out of the law.
     private static bool? HasLocalSphere(SdfInstruction shape) {
@@ -193,37 +149,4 @@ public sealed class NexusSkipSphereLawTests {
         return false;
     }
 
-    private sealed class CapturingDresser : ISdfFrameDresser {
-        public SdfProgram? Program { get; private set; }
-
-        public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) {
-            Program = program;
-
-            return new SdfFrame(Program: program, ProgramChanged: false, Time: 0f, Views: []) {
-                DynamicTransforms = transforms,
-                MeshDraws = meshDraws,
-                MeshDrawsRevision = meshDrawsRevision,
-                MovedTransforms = moved,
-            };
-        }
-    }
-    private sealed class SilentAudio : IWorldAudioCueSink {
-        public void SubmitCue(string eventToken, Vector3? site) { }
-    }
-    private sealed class NoNeighbours : IWorldAdjacencySource {
-        public void BeginTick(ulong tick) { }
-        public WorldBodyContactMode LocalBodyContact(int index) => WorldBodyContactMode.Solid;
-        public WorldEntityAddress LocalEntityAddress(int index) => default;
-        public bool TryResolve(string adjacencyName, out IWorldAdjacencyNeighbour? neighbour) {
-            neighbour = null;
-
-            return false;
-        }
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => [];
-        public bool TryLocalDepartedFrom(int index, out WorldEntityAddress departedFrom) {
-            departedFrom = default;
-
-            return false;
-        }
-    }
 }

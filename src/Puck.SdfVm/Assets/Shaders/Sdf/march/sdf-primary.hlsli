@@ -21,6 +21,8 @@ struct SdfPrimaryMarch {
 SdfHit sdfPrimarySample(float3 position, uint mask, uint4 part, bool localPart) {
 #ifndef SDF_VM_DISABLE_PART_PROGRAMS
     if (localPart) {
+        sdfTapeTrackMaterial = true;
+        sdfTapeSample(position, mask);
         sdfMaterialBlendWeight = 0.0;
         sdfMaterialBlendOther = 0;
         sdfMapStepBound = SDF_STEP_BOUND_NONE;
