@@ -1,0 +1,42 @@
+schema: "puck.world.definition.v1"
+documentId: "symmetry-channel-canary"
+
+simulation {
+  rateHz: 240
+}
+
+state {
+  world {
+    slot node = 5
+
+    slot mirror = 17
+
+    slot ringOf = -2
+
+    slot antipodeOf = -2
+
+    slot canonicalOf = -2
+
+    slot walked = -2
+
+    slot reflected = -2
+
+    slot orthogonalFlag = -2
+
+    slot pairing = -3
+
+    slot projX = 0.0
+  }
+}
+
+rule "probe" {
+  when $tick >= 1
+  mode: Edge
+  ringOf = node
+  antipodeOf = node
+  canonicalOf = node
+  walked = node
+  reflected = node
+  orthogonalFlag = node
+  pairing = node
+}
