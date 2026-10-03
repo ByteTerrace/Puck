@@ -87,6 +87,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format token, or checks it with `--check`. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds the affected canaries and parity. |
+| [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) | reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE` and `CAPACITY` lines an agent admits or holds work by; `--watch` streams one line per change. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in a worktree of its own, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
@@ -819,6 +820,50 @@ machine.
 
 Exit codes: 0 every step passed, 1 the build or a step failed, 2 refused (no
 merge base, or a CLI running from the checkout it would rebuild).
+
+## `puck host load`—admission lines for the machine
+
+`puck host load` reports whether the machine an agent runs on has room for more
+work and whether its GPU is in use. It prints lines, each carrying the CPU
+figure, free memory, free disk on the working directory's drive and the
+number of MSBuild nodes left running for reuse:
+
+```text
+GPU idle cpu=4% freeRAM=4.8GB freeDisk=50.3GB reuseNodes=0
+GPU busy (Puck.World 4242) cpu=61% freeRAM=3.1GB freeDisk=50.2GB reuseNodes=0
+PRESSURE freeRAM<2.0GB cpu=35% freeRAM=1.6GB freeDisk=50.2GB reuseNodes=2
+CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
+```
+
+- `GPU busy` or `GPU idle` appears at the first reading and on every change
+  after. GPU work is the World (`Puck.World` or `Puck.World.dll`), a
+  `canary`, `parity` or `counters` verb, or a test host for
+  `Puck.DirectX.Tests`, `Puck.Vulkan.Tests` or `Puck.World.Tests`, whose
+  device laws open the GPU. Builds, restores, MSBuild nodes, compilers and
+  shells never count, whatever project they name, and the verb never counts
+  itself.
+- `PRESSURE` appears while free memory is under `--pressure-ram` or free disk
+  is under `--pressure-disk`, at most once every five minutes.
+- Otherwise `CAPACITY` appears while the CPU mean is under `--capacity-cpu` and
+  free memory is over `--capacity-ram`, at most once every ten minutes.
+  `PRESSURE` wins over `CAPACITY` within one reading.
+
+A threshold left out is never judged, so with none the verb reports only the GPU
+state. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
+documents the thresholds for each machine class and what an agent does on each
+line. `reuseNodes` counts MSBuild nodes a build or restore left running because
+it ran without `-nodeReuse:false`.
+
+Without `--watch` the verb takes one reading over one second, judges that
+reading's own CPU figure, and exits. With `--watch` it reads every
+`--interval` seconds (default 10) until cancelled, judges the CPU mean over the
+last `--window` readings (default 6), and prints a line only when one is due,
+so its output works as an event stream for a monitor. The readings are cheap
+operating-system queries: kernel CPU time, the memory status, the process list
+and each process's command line on Windows, and `/proc` on Linux. The verb
+starts no process and is never itself heavy or GPU work.
+
+Exit codes: 0 done, 2 refused (an interval or window below 1), 130 cancelled.
 
 ## `puck laws prove`—a law against its fix
 
