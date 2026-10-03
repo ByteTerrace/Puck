@@ -252,7 +252,12 @@ the same leaf the crossing log writes
 rolled the landings back (a refused member, or a record that could not be made
 durable), and, for a commit that stood, the projection each traveler coming home
 was bound to once its owned identity adopted what it carried, a partial adoption
-included. Read refuses an arrival no commit could have decided: a malformed
+included, projected after every traveler of the arrival has adopted, since
+travelers coming home under one owned identity id bind the same object live. A
+re-drive binds travelers whose taped projections name one identity id to one
+shared detached identity, so they alias as they did live
+(`CrossingIdentityPrivacyLawTests.TwoTravelersHomeUnderOneIdentityReplayTheirSharedBinding`).
+Read refuses an arrival no commit could have decided: a malformed
 cohort, an outcome that does not fit it, or a handoff token arriving again after
 its commit stood. The re-drive decodes it against the recorded world's player
 defaults and lands it again through the shadow's own escrow

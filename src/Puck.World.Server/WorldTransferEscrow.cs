@@ -770,9 +770,9 @@ public sealed partial class WorldTransferEscrow {
                 m_server.ArrivalTap?.Invoke(
                     arg1: arrival,
                     arg2: new WorldArrivalOutcome(
+                        Adopted: [],
                         Generations: [.. generations],
-                        RolledBack: true,
-                        Adopted: []
+                        RolledBack: true
                     )
                 );
             }
@@ -890,9 +890,9 @@ public sealed partial class WorldTransferEscrow {
         m_server.ArrivalTap?.Invoke(
             arg1: arrival,
             arg2: new WorldArrivalOutcome(
+                Adopted: adopted,
                 Generations: [.. generations],
-                RolledBack: false,
-                Adopted: adopted
+                RolledBack: false
             )
         );
         reason = string.Empty;
@@ -990,8 +990,14 @@ public sealed partial class WorldTransferEscrow {
     // a taped rollback never reaches this point. Returns, in member order, the projection each traveler that came home
     // is bound to (what its owned identity holds once the adoption stands, a partial one included) and null for a
     // traveler that did not; the tape records it as part of the arrival's outcome.
+    // Several travelers of one arrival may come home under one owned identity: live, they bind the one object, so each
+    // adoption writes into what the others hold, and the tape records every binding once every adoption has run. A
+    // re-drive binds travelers whose taped projections name one identity to one shared detached identity, so they
+    // alias exactly as they did live.
     private WorldIdentityProjection?[] AdoptHomeProfiles(WorldCrossingArrival arrival) {
         var adopted = new WorldIdentityProjection?[arrival.Slots.Count];
+        var bound = new WorldIdentity?[arrival.Slots.Count];
+        Dictionary<string, WorldIdentity>? detachedById = null;
 
         for (var index = 0; (index < arrival.Slots.Count); index++) {
             var slot = arrival.Slots[index];
@@ -1009,17 +1015,28 @@ public sealed partial class WorldTransferEscrow {
                     continue;
                 }
 
-                var detached = WorldIdentity.FromProjection(
-                    defaults: m_server.Definition.PlayerDefaults,
-                    projection: in taped
-                );
+                detachedById ??= new Dictionary<string, WorldIdentity>(comparer: StringComparer.Ordinal);
 
-                if (owned is not null) {
-                    WorldReplaySnapshot.ReportAdoptionDrift(
-                        current: owned,
-                        narrationHub: m_server.Profiles.NarrationHub,
-                        taped: detached
+                if (!detachedById.TryGetValue(
+                    key: taped.Id,
+                    value: out var detached
+                )) {
+                    detached = WorldIdentity.FromProjection(
+                        defaults: m_server.Definition.PlayerDefaults,
+                        projection: in taped
                     );
+                    detachedById.Add(
+                        key: taped.Id,
+                        value: detached
+                    );
+
+                    if (owned is not null) {
+                        WorldReplaySnapshot.ReportAdoptionDrift(
+                            current: owned,
+                            narrationHub: m_server.Profiles.NarrationHub,
+                            taped: detached
+                        );
+                    }
                 }
                 BindHomeProfile(profile: detached, slot: slot);
                 adopted[index] = taped;
@@ -1041,7 +1058,15 @@ public sealed partial class WorldTransferEscrow {
                 );
             }
             BindHomeProfile(profile: owned, slot: slot);
-            adopted[index] = owned.Project();
+            bound[index] = owned;
+        }
+
+        // Projected after every adoption: a later traveler's adoption into a shared identity is part of what each
+        // traveler bound to it holds.
+        for (var index = 0; (index < bound.Length); index++) {
+            if (bound[index] is { } identity) {
+                adopted[index] = identity.Project();
+            }
         }
 
         return adopted;

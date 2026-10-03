@@ -27,6 +27,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
     private static readonly string[] Markers = [PrivateRow, PrivatePayload, PrivatePanel];
 
     private static CellName Name(string value) => CellName.Parse(candidate: value);
+
     internal static WorldDefinition OwnedDocument() {
         var basis = Fixtures.BuildDocument();
 
@@ -79,6 +80,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         );
         return owned;
     }
+
     private static long? Fact(WorldIdentity identity, string key) =>
         ((identity.Facts?.Cells?.FirstOrDefault(predicate: cell => (cell.Key == Name(value: key))) is { } cell)
             ? cell.Value.AsInt
@@ -677,7 +679,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         var factsRow = owned.FactsDefinition.State;
 
         owned.ReplaceDocument(document: owned.Document! with {
-            Identity = owned.Document!.Identity! with { Facts = new WorldIdentityFacts(State: factsRow, Capacity: 1) },
+            Identity = owned.Document!.Identity! with { Facts = new WorldIdentityFacts(Capacity: 1, State: factsRow) },
         });
         Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "homeFact"), reason: out var reason, value: 3), userMessage: reason);
         Assert.True(condition: catalog.TrySave(identity: owned, reason: out reason), userMessage: reason);
@@ -1014,5 +1016,90 @@ public sealed class CrossingIdentityPrivacyLawTests {
             (narration.Channel == "identity") &&
             narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: $"could not save identity '{owned.Id}'")
         ));
+    }
+    // THE LAW: two travelers of one arrival come home to seats 0 and 1 under the same owned identity, one carrying
+    // score 1 and the other score 2. Live, both seats bind the one owned identity, so the second adoption is what both
+    // hold; a rule then writes the score through seat 0 alone, which seat 1 observes because it holds the same
+    // identity. The tape records each binding after every adoption, and the re-drive binds both seats to one detached
+    // identity, so the live and replayed authoritative hashes agree on every tick: the arrival's own and the write's.
+    // The red legs: a binding taped before the later adoption gives seat 0 score 1 on the re-drive, and two detached
+    // identities leave seat 1 without the write.
+    [Fact]
+    public void TwoTravelersHomeUnderOneIdentityReplayTheirSharedBinding() {
+        const int LaneCapacity = 16;
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-shared-");
+        var definition = Fixtures.BuildDocument() with {
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(
+                Name: Name(value: WorldIdentityFactLane.RowName),
+                Kind: CellKind.Int,
+                Capacity: LaneCapacity
+            )]),
+            Rules = [new WorldRule(
+                Name: Name(value: "write"),
+                Effects: [new WorldEffect.SetIdentityFact(
+                    Key: "0",
+                    Fact: "score",
+                    Value: 7m
+                )],
+                Gate: new ActionPredicate.CompareState(
+                    State: RuleFacts.Tick,
+                    Comparison: ExpressionOp.GreaterOrEqual,
+                    Value: 4m
+                )
+            )],
+        };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var server = fixture.Server;
+        var owned = server.Profiles.BootProfile;
+        var carried = new WorldIdentityProjection[2];
+
+        for (var index = 0; (index < carried.Length); index++) {
+            var traveller = WorldIdentity.FromProjection(defaults: server.Definition.PlayerDefaults, projection: owned.Project());
+
+            Assert.True(condition: traveller.TrySetFact(changed: out _, key: Name(value: "score"), reason: out var factReason, value: (index + 1)), userMessage: factReason);
+            carried[index] = traveller.Project();
+        }
+
+        var tape = Tape(directory: directory.RootPath, server: server);
+
+        Assert.True(condition: tape.TryBeginRecording(name: "arrivals", refusal: out var refusal), userMessage: refusal);
+        fixture.Step();
+        tape.NoteTick();
+
+        var request = new WorldTransferReservationRequest(
+            TransferId: 1, SourceAuthority: "away", SourceRateHz: 240, SourceTick: 0,
+            DeadlineSourceTick: 60, Border: "", BorderCapacity: null, PartyAllOrNothing: true,
+            PeerAdmission: false, Members: [.. carried.Select(selector: (projection, slot) => {
+                var address = new WorldEntityAddress(Authority: server.AuthorityIdentity, Generation: 1, Index: slot);
+
+                return new WorldTransferReservationMember(
+                    Principal: Principal.Console, PreferredSlot: slot, Identity: projection,
+                    Source: IntentSource.Live, BodyColor: owned.Color, CatalogRig: 0,
+                    Mobility: new WorldMobilityIdentity(DepartedFrom: address, Epoch: 1, Incarnation: address)
+                );
+            })]
+        );
+
+        Assert.True(condition: server.ReserveTransfer(request: request).Accepted);
+        Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: request.SourceAuthority,
+            transferId: request.TransferId, reason: out _, members: [.. carried.Select(selector: static projection => new WorldTransferCommitMember(
+                Profile: projection, HasMappedArrival: false, BodyMotionProgramName: "", Position: default, YawRadians: default,
+                PlanarVelocity: default, VerticalVelocity: default))]));
+        for (var tick = 0; (tick < 5); tick++) {
+            fixture.Step();
+            tape.NoteTick();
+        }
+        _ = tape.StopRecording();
+
+        // Live: both seats hold the one identity, which holds the last adoption and then the write through seat 0.
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 1)!.Profile);
+        Assert.Equal(7L, Fact(identity: owned, key: "score"));
+
+        var verdict = tape.Verify(name: "arrivals");
+
+        Assert.True(condition: verdict.Primary.Match, userMessage: verdict.Primary.Describe());
+        Assert.Equal(expected: -1, actual: verdict.Primary.DivergedAt);
+        Assert.Equal(expected: 6, actual: verdict.Primary.Ticks);
     }
 }

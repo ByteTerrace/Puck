@@ -673,7 +673,11 @@ identity, so neither the departure's facts nor owner writes made while recovery 
 Replay verification saves no identity. A replay is a function of its tape: the tape records the
 projection a home arrival's seat was bound to once its owned identity adopted what it carried, a
 partial adoption included, and a re-driven home arrival binds exactly that projection, its facts and
-records included, in a detached identity, and takes nothing from the live catalog. It reports on `replay.profile` where the owned identity as it
+records included, in a detached identity, and takes nothing from the live catalog. Travelers of one
+arrival that come home under one owned identity bind that one identity live, so a later traveler's
+adoption is what every one of them holds: the tape records each binding once every adoption has run,
+and the re-drive binds them to one shared detached identity, so a write through one seat reaches the
+others exactly as it did live. It reports on `replay.profile` where the owned identity as it
 stands now differs from the taped projection, as a pinned seat's drifted rate is reported, so an
 owner's edit since the recording is named without making the replay diverge. A live
 `replay.drive` refuses a tape that lands travelers.
