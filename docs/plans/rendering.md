@@ -183,8 +183,11 @@ section, with a filter and a one-line `--json` form. The `gpu` section's header
 carries the device's `GpuDeviceIdentity` (backend, adapter, PCI ids, driver and
 API versions, Vulkan's driver properties), recorded at device creation and
 never branched on. A live `world.counters` prints the identity on both
-backends and, windowed on Vulkan, the `presentation.vulkan` section with its
-`presentation.skipped` count.
+backends and a `presentation.vulkan` or `presentation.directx` section with its
+`presentation.skipped` count, the presenter's counts registered in the composition
+under the backend's key, so a readout never resolves a renderer. Vulkan counts a
+frame its swapchain could not take this tick; Direct3D 12 counts a present that
+reached the compositor before it had a swap chain.
 
 The counter collector has landed. Every `WorkKind` declares its
 `WorkClass` (deterministic, per-backend-deterministic, or pacing), and

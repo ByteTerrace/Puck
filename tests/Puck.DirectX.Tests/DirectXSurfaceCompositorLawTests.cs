@@ -22,7 +22,8 @@ public sealed class DirectXSurfaceCompositorLawTests {
         using var compositor = new DirectXSurfaceCompositor(
             commandListRecorder: new DirectXCommandListRecorder(),
             presentationOptions: new PresentationOptions(),
-            pipelines: new GpuPassPipelineCache()
+            pipelines: new GpuPassPipelineCache(),
+            presentation: new PresentationWork(name: "presentation.directx")
         );
 
         typeof(DirectXSurfaceCompositor).GetField(bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic, name: "m_bindings")!.SetValue(obj: compositor, value: bindings);

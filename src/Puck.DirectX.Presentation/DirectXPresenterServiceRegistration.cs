@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.DirectX.Apis;
@@ -21,6 +22,7 @@ namespace Puck.DirectX.Presentation;
 public static class DirectXPresenterServiceRegistration {
     // The key the backend's GpuPipelineCacheWork is registered under, and the name its counts report.
     private const string PipelineCacheBackend = "directx";
+    private const string PresentationWorkName = "presentation.directx";
 
     /// <summary>
     /// Registers the Direct3D 12 backend: the device context, which creates its neutral services
@@ -31,6 +33,14 @@ public static class DirectXPresenterServiceRegistration {
     public static IServiceCollection AddDirectXPresenter(this IServiceCollection services) {
         services.AddGpuPipelineCacheWork(backend: PipelineCacheBackend);
         services.AddGpuDeviceMemoryWork(backend: PipelineCacheBackend);
+        // The presenter's presentation counters live in the composition, keyed by backend, and are the counter source
+        // world.counters reads, as the Vulkan backend's are, so a readout never resolves the device or the compositor.
+        if (!services.Any(predicate: static descriptor => (descriptor.IsKeyedService && (descriptor.ServiceType == typeof(PresentationWork)) && Equals(objA: descriptor.ServiceKey, objB: PipelineCacheBackend)))) {
+            var presentation = new PresentationWork(name: PresentationWorkName);
+
+            services.AddKeyedSingleton(implementationInstance: presentation, serviceKey: PipelineCacheBackend);
+            services.AddSingleton<IWorkCounterSource>(implementationInstance: presentation);
+        }
         // The device is created lazily on the default adapter; its pipeline library lives under the host's
         // GpuPipelineCacheStore when one is registered, and in memory otherwise. The debug layer follows the host's
         // GpuDeviceOptions, and is off when none is registered. Its services pass through the host's GpuCreationFaults
@@ -58,6 +68,7 @@ public static class DirectXPresenterServiceRegistration {
         services.TryAddSingleton<DirectXSurfaceCompositor>(implementationFactory: static sp => new DirectXSurfaceCompositor(
             commandListRecorder: sp.GetRequiredService<IDirectXCommandListRecorder>(),
             pipelines: sp.GetRequiredService<GpuPassPipelineCache>(),
+            presentation: sp.GetRequiredKeyedService<PresentationWork>(serviceKey: PipelineCacheBackend),
             presentationOptions: sp.GetRequiredService<PresentationOptions>()
         ));
         services.TryAddSingleton(implementationFactory: static sp => new DirectXSurfacePresenter(
