@@ -1,4 +1,7 @@
 using System.Numerics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
@@ -693,5 +696,175 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         Assert.False(condition: File.Exists(path: request.Path));
         Assert.Empty(collection: run.Scheduler.Entries);
         run.AssertNothingReachedDisposal();
+    }
+    /// <summary>Law 7, over the production offscreen loop: a screenshot armed after the first tick while the engine's
+    /// build holds that tick's frame spends its pipeline-build budget during the frame hold, is refused by name once the
+    /// budget is spent while the build is still held, and the run then steps on to its last tick and quits once the
+    /// build lands. The host's frames cost a second each of its own clock, so the budget is spent in about as many
+    /// frames as it has seconds.</summary>
+    [Fact]
+    public async Task AScreenshotArmedDuringAHeldBuildIsRefusedWithinTheBuildBudgetAndTheRunReachesQuit() {
+        var clock = new VirtualClock();
+
+        using var row = HostRow.Build(
+            definition: Fixtures.BuildDocument(),
+            name: "boot"
+        );
+
+        var root = new BuildHeldRoot(
+            clock: clock,
+            path: Path.Combine(
+                path1: m_directory.RootPath,
+                path2: "shot.png"
+            ),
+            server: row.Server
+        );
+        var scheduler = new WorldCaptureScheduler(
+            backend: "vulkan",
+            captureTarget: null,
+            directory: string.Empty,
+            readiness: root,
+            server: row.Server,
+            worldFile: "fixture.world.json"
+        );
+        var simulation = new CaptureStepSimulation(
+            scheduler: scheduler,
+            server: row.Server
+        );
+
+        root.Scheduler = scheduler;
+
+        var builder = Host.CreateApplicationBuilder(settings: new HostApplicationBuilderSettings {
+            DisableDefaults = true,
+        });
+
+        builder.Logging.ClearProviders();
+        // A backstop on the host's clock, so a run whose script never reaches quit ends rather than spinning.
+        builder.Services.AddSingleton(implementationInstance: new LauncherOptions {
+            ExitAfter = BuildHeldRoot.Backstop,
+        });
+        builder.Services.AddSingleton(implementationInstance: new OffscreenRenderOptions(
+            height: Extent,
+            width: Extent
+        ));
+        builder.Services.AddSingleton<IRenderRoot>(implementationInstance: root);
+        builder.Services.AddSingleton<TimeProvider>(implementationInstance: clock);
+        builder.Services.AddSingleton<IPrincipalResolver, ConsolePrincipal>();
+        builder.Services.AddSingleton(implementationInstance: simulation);
+        builder.Services.AddFixedStepSimulation<CaptureStepSimulation>(bindings: new NoBindings());
+        builder.Services.AddLauncherOffscreenTerminal();
+        // No standard-input reader: the law arms the screenshot itself, between the first tick and its frame, where the
+        // console drain arms one. The reader is the terminal's one hosted service made by a factory.
+        for (var index = (builder.Services.Count - 1); (index >= 0); index--) {
+            if (
+                (builder.Services[index].ServiceType == typeof(IHostedService)) &&
+                (builder.Services[index].ImplementationFactory is not null)
+            ) {
+                builder.Services.RemoveAt(index: index);
+            }
+        }
+
+        using var host = builder.Build();
+
+        root.Terminal = host.Services.GetRequiredService<TerminalControl>();
+        await host.RunAsync(token: TestContext.Current.CancellationToken).WaitAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            timeout: TimeSpan.FromMinutes(value: 2)
+        );
+
+        var request = Assert.IsType<FrameCaptureRequest>(@object: root.Request);
+        var error = Assert.IsType<OperationCanceledException>(@object: (await request.Completion).Error);
+
+        Assert.Equal(
+            expected: $"{BuildHeldRoot.HeldReason} (the host held its clock at tick 1 while the engine's pipeline set built, until its {WorldCaptureScheduler.BuildHoldBudgetSeconds}-second pipeline-build hold budget was spent)",
+            actual: error.Message
+        );
+        Assert.True(condition: root.RefusedWhileHeld);
+        Assert.Equal(
+            expected: 1UL,
+            actual: root.LastHeldTick
+        );
+        Assert.Equal(
+            expected: BuildHeldRoot.QuitTick,
+            actual: (row.Server.NextInputTick - 1UL)
+        );
+        Assert.True(condition: root.Quit);
+    }
+
+    // A render root whose engine build holds every frame NotYetRenderable until its clock reaches ReleaseAt, past the
+    // pipeline-build hold budget. It arms one screenshot after the first tick, as world.screenshot does, serves a capture
+    // armed on it on a frame it renders, costs each frame a second of the host's clock, and ends the run at QuitTick.
+    private sealed class BuildHeldRoot(VirtualClock clock, string path, WorldServer server) : IRenderRoot, ICaptureRequestTarget, IWorldEngineReadiness {
+        public const string HeldReason = "the law's engine build is held";
+        public const ulong QuitTick = 3UL;
+
+        public static readonly TimeSpan Backstop = TimeSpan.FromSeconds(value: (2 * WorldCaptureScheduler.BuildHoldBudgetSeconds));
+        public static readonly TimeSpan ReleaseAt = TimeSpan.FromSeconds(value: (WorldCaptureScheduler.BuildHoldBudgetSeconds + 20));
+
+        private readonly CaptureRequestSlot m_slot = new();
+
+        private TimeSpan m_elapsed;
+
+        public bool CapturesSettled => (m_slot.PendingPath is null);
+        public bool IsReady => (m_elapsed >= ReleaseAt);
+        public ulong LastHeldTick { get; private set; }
+        public string? NotReadyReason => (IsReady
+            ? null
+            : HeldReason);
+        public string? PendingCapturePath => m_slot.PendingPath;
+        public bool Quit { get; private set; }
+        public bool RefusedWhileHeld { get; private set; }
+        public FrameCaptureRequest? Request { get; private set; }
+        public WorldCaptureScheduler? Scheduler { get; set; }
+        public TerminalControl? Terminal { get; set; }
+
+        public void Dispose() => m_slot.Refuse(error: new ObjectDisposedException(objectName: nameof(BuildHeldRoot)));
+        public RootFrame ProduceFrame(in FrameContext context) {
+            var tick = (server.NextInputTick - 1UL);
+
+            if (
+                (Request is null) &&
+                (tick >= 1UL)
+            ) {
+                Request = new FrameCaptureRequest(path: path);
+                Scheduler!.ArmUnscheduled(
+                    request: Request,
+                    target: this
+                );
+            }
+
+            clock.Advance(by: TimeSpan.FromSeconds(value: 1));
+            m_elapsed += TimeSpan.FromSeconds(value: 1);
+
+            if (!IsReady) {
+                LastHeldTick = tick;
+                RefusedWhileHeld |= (Request?.Completion.IsCompleted ?? false);
+
+                return new RootFrame(
+                    Render: FrameRender.Waiting(reason: HeldReason),
+                    Surface: default
+                );
+            }
+
+            m_slot.Serve(
+                failureLabel: "[capture] failed",
+                tick: tick,
+                writer: static _ => { }
+            );
+
+            if (tick >= QuitTick) {
+                Quit = true;
+                Terminal?.RequestExit();
+            }
+
+            return new RootFrame(
+                Render: FrameRender.Rendered,
+                Surface: default
+            );
+        }
+        public void RequestCapture(FrameCaptureRequest request) => m_slot.Arm(
+            pendingPath: m_slot.PendingPath,
+            request: request
+        );
     }
 }

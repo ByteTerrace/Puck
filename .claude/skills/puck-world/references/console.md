@@ -348,8 +348,8 @@ the whole truth, and a script reading only one of them reads a half-answer:
   any frame served it (armed after tick A, last completed tick T)` before the
   render root is disposed (`WorldCaptureScheduler.Drain`).
 
-The verb arms through `WorldCaptureScheduler.ArmUnscheduled`, so the offscreen
-host holds its clock for it exactly as for a scheduled capture: no tick past
+The verb arms through `WorldCaptureScheduler.ArmUnscheduled`, so both rendered
+hosts hold their clock for it exactly as for a scheduled capture: no tick past
 the one it was armed after runs until a frame serves it or a hold budget
 refuses it, and a `world.wait <ticks>` after it has the capture behind it.
 

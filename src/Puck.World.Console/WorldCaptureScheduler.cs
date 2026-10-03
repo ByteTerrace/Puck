@@ -85,7 +85,7 @@ public sealed record WorldCaptureManifest(string Schema, string Backend, string 
 /// state the entry's state hash describes. A frame that served the capture after a later tick had completed is
 /// refused as <see cref="WorldCaptureRefusal.Stale"/>, naming the armed tick and the tick shown.
 /// <para>
-/// A host that holds its clock (the offscreen host) goes further: <see cref="HoldsClock"/> withholds every step while
+/// A host that holds its clock (both rendered hosts, windowed and offscreen) goes further: <see cref="HoldsClock"/> withholds every step while
 /// a capture armed at the last published tick is neither served nor refused, whatever keeps the render chain from
 /// serving it, so no tick past the armed one runs before the capture is decided. The capture hold counts from
 /// readiness: host time held while the engine is not ready (<see cref="IWorldEngineReadiness"/>: its pipeline set not
@@ -252,9 +252,10 @@ public sealed class WorldCaptureScheduler {
     /// <summary>Gets the kind counting the host time a holding host withheld steps for while a capture was owed, in
     /// engine ticks: <c>world.captures.held</c>. Paced by the wall clock, so two runs may differ.</summary>
     public static WorkKind HeldTicks { get; } = new(name: "world.captures.held", unit: "engine-ticks", workClass: WorkClass.Pacing);
-    /// <summary>Gets the kind counting ticks published while a capture armed at an earlier tick was still neither
-    /// served nor refused: <c>world.captures.ticks-while-armed</c>. A holding host keeps it at zero; a host paced to a
-    /// display steps on and counts whatever its frames were late for.</summary>
+    /// <summary>Gets the kind counting ticks published while a scheduled capture armed at an earlier tick was still
+    /// neither served nor refused: <c>world.captures.ticks-while-armed</c>. A host that holds its clock, as both rendered
+    /// hosts do, keeps it at zero; a pump that does not hold steps on and counts whatever its frames were late
+    /// for.</summary>
     public static WorkKind TicksWhileArmed { get; } = new(name: "world.captures.ticks-while-armed", unit: "count", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the scheduler's counters, under <see cref="WorkSourceName"/>.</summary>

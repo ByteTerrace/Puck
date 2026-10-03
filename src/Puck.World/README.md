@@ -365,14 +365,17 @@ refuses until the renderer is ready, and with no argument it echoes the current
 extent. A windowed display keeps its document extent, which
 presentation scales to the window.
 
-Because its frames are its only output, the offscreen host holds its clock
-for them: it never steps past an armed capture's tick until that capture is
-served or refused. Whatever keeps the render chain from serving the capture
+Both rendered hosts, windowed and offscreen, hold their clock for captures:
+neither steps past an armed capture's tick, a scheduled row's or a
+`world.screenshot`'s, until that capture is served or refused. Whatever keeps the render chain from serving the capture
 (the engine's pipelines still building on a cold driver shader cache, the
 creation bakes still settling, or a device being rebuilt), the host keeps
 producing frames and answering the
 console but steps no further tick, and the time it waits is spent, not owed,
-so serving the capture releases no burst. The hold is bounded, and counts
+so serving the capture releases no burst. The offscreen host's own hold on a
+frame that has not rendered spends the same budget, so a capture armed during
+a long build is refused once it is spent, while that frame hold continues
+until the frame renders. The hold is bounded, and counts
 from readiness: while the engine's pipeline set builds (or rebuilds after a
 device loss), the run may hold its clock for 180 seconds in all
 (`WorldCaptureScheduler.BuildHoldBudgetSeconds`), and once the engine is ready
@@ -384,9 +387,9 @@ sdf-world-views)", and a later capture the chain still
 cannot serve is refused at once. `world.counters`
 reports the hold under `world.captures`: `world.captures.held` (engine ticks
 withheld) and `world.captures.ticks-while-armed` (ticks stepped while a
-capture waited, which stays 0 offscreen). A capture still waiting when the run
-ends is refused as `unserved` before the render chain is disposed. The windowed
-host paces to its display and never holds.
+capture waited, which stays 0 in both rendered hosts). A capture still waiting
+when the run ends is refused as `unserved` before the render chain is disposed.
+A headless host has no render chain and never holds.
 
 A capture row can set `converge` to 1–256 to render that many temporal samples
 at its armed tick before writing the last one; zero, the default, captures the
@@ -2165,7 +2168,7 @@ and the capture reads that. Arming a second capture while one is still
 pending is REFUSED by name—the earlier path would never be written—and a
 request still outstanding when the run ends is refused as `[capture] refused
 <path>: the run ended before any frame served it …` before the render root is
-disposed. Offscreen, the host steps no tick past the one a capture was armed
+disposed. A rendered host steps no tick past the one a capture was armed
 after until a frame serves it or its hold budget refuses it, so a
 `world.wait <ticks>` after it has the capture behind it. A
 scripted caller can therefore distinguish a reported write from an unserved
