@@ -1,5 +1,5 @@
 {
-  "workload": "tests/Puck.Counters/sky-drift.world.json",
+  "workload": "tests/Puck.Counters/sky-drift.puck",
   "script": "tests/Puck.Counters/sky.script.txt",
   "runs": [
     {
