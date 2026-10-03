@@ -148,14 +148,30 @@ public static class WorldWireLeaves {
         writer.WriteUInt64(value: continuum.ConsumedThroughEngineTick);
         writer.WriteByte(value: continuum.BoundaryEvents);
     }
-    public static WorldContinuumTrajectory ReadContinuum(ref WireReader reader) => new(
-        PreviousPosition: reader.ReadFixedVector(),
-        SourceTick: reader.ReadUInt64(),
-        ContinuumStartEngineTick: reader.ReadUInt64(),
-        ContinuumEndEngineTick: reader.ReadUInt64(),
-        ConsumedThroughEngineTick: reader.ReadUInt64(),
-        BoundaryEvents: reader.ReadByte()
-    );
+    /// <summary>Reads what <see cref="WriteContinuum"/> writes, refusing a segment that is not
+    /// <see cref="WorldContinuumTrajectory.IsWellFormed"/>.</summary>
+    public static WorldContinuumTrajectory ReadContinuum(ref WireReader reader) {
+        var continuum = new WorldContinuumTrajectory(
+            PreviousPosition: reader.ReadFixedVector(),
+            SourceTick: reader.ReadUInt64(),
+            ContinuumStartEngineTick: reader.ReadUInt64(),
+            ContinuumEndEngineTick: reader.ReadUInt64(),
+            ConsumedThroughEngineTick: reader.ReadUInt64(),
+            BoundaryEvents: reader.ReadByte()
+        );
+
+        if (
+            !reader.Failed &&
+            !continuum.IsWellFormed
+        ) {
+            reader.Fail(
+                detail: $"continuum trajectory has invalid interval [{continuum.ContinuumStartEngineTick},{continuum.ContinuumEndEngineTick}), consumed-through {continuum.ConsumedThroughEngineTick}, or boundary count {continuum.BoundaryEvents}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return continuum;
+    }
 
     private static void WriteChannelEdge(WireWriter writer, WorldTransferChannelEdge edge) {
         writer.WriteString(value: edge.Name);
@@ -232,7 +248,8 @@ public static class WorldWireLeaves {
         );
     }
     /// <summary>Writes a <see cref="WorldTransferCommitMember"/>'s arrival motion: everything but its profile, which
-    /// each carrier records in its own form (a checkpoint its identity, a tape its pinned rates).</summary>
+    /// each carrier records in its own form (a checkpoint and a federation commit its identity projection, a tape its
+    /// pinned rates). It is the one encoding of a member's motion every carrier uses.</summary>
     public static void WriteCommitMemberMotion(WireWriter writer, WorldTransferCommitMember member) {
         writer.WriteBoolean(value: member.HasMappedArrival);
         writer.WriteString(value: member.BodyMotionProgramName);
@@ -241,9 +258,9 @@ public static class WorldWireLeaves {
         writer.WriteFixedVector(value: member.PlanarVelocity);
         writer.WriteFixed(value: member.VerticalVelocity);
         writer.WriteFixed(value: member.TravelTurn);
-        writer.WriteOptionalClass(
-            value: member.ActionContinuity,
-            writeValue: WriteActionContinuity
+        WriteActionContinuity(
+            continuity: member.ActionContinuity,
+            writer: writer
         );
         writer.WriteOptional(
             value: member.Continuum,
@@ -265,9 +282,7 @@ public static class WorldWireLeaves {
             field: "commit member travel turn",
             reader: ref reader
         );
-        var actionContinuity = reader.ReadOptionalClass(
-            readValue: static (ref WireReader r) => ReadActionContinuity(reader: ref r)
-        );
+        var actionContinuity = ReadActionContinuity(reader: ref reader);
         var continuum = reader.ReadOptional(
             readValue: static (ref WireReader r) => ReadContinuum(reader: ref r)
         );
