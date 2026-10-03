@@ -32,7 +32,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
     private const string Pane = "pane";
     private const string SecondCamera = "second";
     private const ulong StepTicks = 1680;
-    private const string World = "tests/Puck.Counters/counters.world.json";
+    private const string World = "tests/Puck.Counters/counters.puck";
     // The shipped ink pipeline, relative to the counters world's directory.
     private const string InkPipeline = "../../src/Puck.World/Assets/pipelines/ink.graph.json";
 

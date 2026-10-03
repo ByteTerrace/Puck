@@ -9,7 +9,7 @@ using Puck.World;
 namespace Puck.Cli.Counters;
 
 /// <summary><c>puck counters</c> — the work-counter collector. It boots the authored counters workload
-/// (<c>tests/Puck.Counters/counters.world.json</c>, driven by <c>counters.script.txt</c> beside it, unless
+/// (<c>tests/Puck.Counters/counters.puck</c>, driven by <c>counters.script.txt</c> beside it, unless
 /// <c>--world</c> and <c>--script</c> select another workload) offscreen once per
 /// backend through the shared leg machinery, reads the one <c>world.counters --json</c> response the script asks for,
 /// and writes a <c>puck.counters.report.v1</c> report: per backend the device identity, the offscreen resolution, the
@@ -21,7 +21,7 @@ internal static class CountersCommand {
     /// <summary>The workload's console script, repository-relative.</summary>
     public const string ScriptPath = "tests/Puck.Counters/counters.script.txt";
     /// <summary>The workload's world document, repository-relative.</summary>
-    public const string WorldPath = "tests/Puck.Counters/counters.world.json";
+    public const string WorldPath = "tests/Puck.Counters/counters.puck";
 
     private const string ReportFileName = "counters.report.json";
     private const string ScratchPrefix = "puck-counters-";

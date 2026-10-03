@@ -154,7 +154,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             }),
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: state,
-            world: "tests/Puck.Counters/counters.world.json"
+            world: "tests/Puck.Counters/counters.puck"
         ).Build());
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var client = host.Services.GetRequiredService<WorldClient>();

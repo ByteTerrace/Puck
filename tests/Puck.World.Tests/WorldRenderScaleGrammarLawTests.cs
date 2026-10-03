@@ -19,7 +19,7 @@ public sealed class WorldRenderScaleGrammarLawTests : IDisposable {
         var host = m_state.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_state,
-            world: "tests/Puck.Counters/counters.world.json").Build());
+            world: "tests/Puck.Counters/counters.puck").Build());
 
         host.Services.GetRequiredService<WorldClient>().AttachSessionLevers(levers: host.Services.GetRequiredService<WorldSessionLeverSink>());
         return (host.Services.GetRequiredService<CommandRegistry>(), host.Services.GetRequiredService<WorldRenderSettings>(),

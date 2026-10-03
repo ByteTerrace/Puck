@@ -198,7 +198,7 @@ names the GC mode. The World registers the server's `state.arena`,
 `state.rules` and `state.search` sources; the arena and search sit behind
 forwarders that carry a retired instance's totals across a definition rebuild,
 so their readings never go down. `puck counters` boots
-`tests/Puck.Counters/counters.world.json` offscreen once per backend through
+`tests/Puck.Counters/counters.puck` offscreen once per backend through
 the leg machinery it shares with `puck parity`, writes a
 `puck.counters.report.v1` report whose schema `puck schema` generates, and exits
 1 naming the kind, pass and node of any deterministic count or pass state the
@@ -5100,7 +5100,7 @@ layering check shown failing once on a deliberate upward include; `puck search
 Each pass is held under a counted-cost ceiling: its deterministic
 counters (dispatches, march steps, texels written and bytes uploaded) are
 recorded over `puck counters`' pinned workload
-(`tests/Puck.Counters/counters.world.json`, its camera and views) at the floor
+(`tests/Puck.Counters/counters.puck`, its camera and views) at the floor
 tier and the RTX 2060's 1920x1080, and held as calibrated ceilings that
 workload may not exceed. A ceiling is re-recorded only in the change that
 explains why the count moved, and never from wall-clock or GPU timing. P15-1
@@ -5114,7 +5114,7 @@ The march runs in floats, so that kind is `PerBackendDeterministic`, held per
 backend like the residency's `upload` pass. Texels written come from the same
 kernel counters, not from host extents, because an indirectly dispatched pass
 writes only the tiles culling leaves it. The workload is pinned: the RTX 2060
-floor runs a 1920x1080 display, which `tests/Puck.Counters/counters.world.json`
+floor runs a 1920x1080 display, which `tests/Puck.Counters/counters.puck`
 presents offscreen with its one camera at that extent, and the floor tier is the
 world's own `low` preset (shadows off, ambient occlusion off, render scale
 `half`), which `tests/Puck.Counters/counters.script.txt` selects with

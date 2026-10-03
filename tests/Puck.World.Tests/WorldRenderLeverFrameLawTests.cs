@@ -17,7 +17,7 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class WorldRenderLeverFrameLawTests : IDisposable {
     private const uint Display = 64;
-    private const string World = "tests/Puck.Counters/counters.world.json";
+    private const string World = "tests/Puck.Counters/counters.puck";
 
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-render-levers-");
 

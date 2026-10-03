@@ -1222,7 +1222,7 @@ submits the volume count you expect. Disassembly and code-path inspection are
 the tools for a question `world.counters`' counts cannot answer directly.
 
 For a repeatable before-and-after reading, `puck counters` boots
-`tests/Puck.Counters/counters.world.json` offscreen on both backends, writes a
+`tests/Puck.Counters/counters.puck` offscreen on both backends, writes a
 `puck.counters.report.v1` report, and exits 1 naming the kind, pass and node of
 any deterministic count the backends disagree on;
 `puck counters compare <before> <after>` holds two reports to each other.

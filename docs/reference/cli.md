@@ -1788,7 +1788,7 @@ puck counters [--world <file>] [--script <file>] [--output <file>] [--check | --
 puck counters compare <left> <right>       compare two reports
 ```
 
-The run boots `tests/Puck.Counters/counters.world.json` once per backend
+The run boots `tests/Puck.Counters/counters.puck` once per backend
 (Vulkan, then Direct3D 12) with `host.presentation: offscreen`, so no window is
 shown. It uses the same World build and leg machinery as `puck parity` (see
 [where the World artifact is built](#where-the-world-artifact-is-built)). Each

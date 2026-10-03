@@ -24,7 +24,7 @@ namespace Puck.World.Tests;
 public sealed class WorldDisplayResizeProjectionLawTests : IDisposable {
     private const string Instance = "world";
     private const ulong StepTicks = 1680;
-    private const string World = "tests/Puck.Counters/counters.world.json";
+    private const string World = "tests/Puck.Counters/counters.puck";
 
     private readonly TemporaryDirectory m_stateDirectory = new(prefix: "puck-resize-projection-");
 
