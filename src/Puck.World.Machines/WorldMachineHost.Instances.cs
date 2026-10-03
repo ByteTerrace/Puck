@@ -120,7 +120,7 @@ public sealed partial class WorldMachineHost {
         ) {
             refusal = new(
                 MachineOperationStatus.Unsupported,
-                reason: $"Machine '{instance}' provider does not support operations."
+                reason: $"Machine '{instance}' provider does not support operations ({nameof(WorldMachineOperationRefusal.ProviderWithoutOperations)})."
             );
             return false;
         }

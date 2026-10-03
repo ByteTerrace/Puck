@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
@@ -19,9 +20,6 @@
         <PackageReference Include="FSharp.Core" Version="[11.*, )" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*, )" />
         <PackageReference Include="Resharp" Version="[1.*, )" />
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
-        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
-        <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
         <!-- Reference the engine seams directly. -->
@@ -81,6 +79,7 @@
         <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
         <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
         <Compile Include="../Shared/TestRecords.cs" Link="TestRecords.cs" />
@@ -93,7 +92,6 @@
         <Compile Include="../Shared/SpirvEdits.cs" Link="SpirvEdits.cs" />
         <Compile Include="../Shared/SdfTestView.cs" Link="SdfTestView.cs" />
         <Compile Include="../Shared/ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
-        <Compile Include="../Shared/WarpDeviceApi.cs" Link="WarpDeviceApi.cs" />
         <Compile Include="../Shared/DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
         <Compile Include="../Shared/HeadlessVulkanDevice.cs" Link="HeadlessVulkanDevice.cs" />
         <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />

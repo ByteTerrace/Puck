@@ -26,7 +26,7 @@ public sealed partial class RefusalCatalogAnchorLawTests {
 
         var tagged = projects.Sum(selector: project => Directory
             .EnumerateFiles(path: Path.Combine(path1: root, path2: "src", path3: project), searchPattern: "*.cs", searchOption: SearchOption.AllDirectories)
-            .Where(predicate: static file => !file.Replace(oldChar: '\\', newChar: '/').Contains(value: "/obj/", comparisonType: StringComparison.Ordinal) && !file.Replace(oldChar: '\\', newChar: '/').Contains(value: "/bin/", comparisonType: StringComparison.Ordinal))
+            .Where(predicate: static file => (!file.Replace(newChar: '/', oldChar: '\\').Contains(comparisonType: StringComparison.Ordinal, value: "/obj/") && !file.Replace(newChar: '/', oldChar: '\\').Contains(comparisonType: StringComparison.Ordinal, value: "/bin/")))
             .Sum(selector: static file => RefusalTag().Count(input: File.ReadAllText(path: file))));
 
         Assert.Equal(expected: tagged, actual: RefusalCatalog.All().Count);

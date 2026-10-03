@@ -24,6 +24,7 @@ public sealed class ConsoleErrorCollection {
 /// driver or validation layer.
 /// </summary>
 [Collection(name: nameof(ConsoleErrorCollection))]
+[Trait("Category", "Gpu")]
 public sealed class VulkanValidationLivenessTests {
     [Fact]
     public unsafe void ADeliberateViolationReachesTheValidationMessenger() {

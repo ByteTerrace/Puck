@@ -30,7 +30,7 @@ internal static partial class RefusalDeclaringProjects {
 
         return [.. closure.Where(predicate: name => Directory
             .EnumerateFiles(path: Path.Combine(path1: repositoryRoot, path2: "src", path3: name), searchPattern: "*.cs", searchOption: SearchOption.AllDirectories)
-            .Where(predicate: static file => !file.Replace(oldChar: '\\', newChar: '/').Contains(value: "/obj/", comparisonType: StringComparison.Ordinal) && !file.Replace(oldChar: '\\', newChar: '/').Contains(value: "/bin/", comparisonType: StringComparison.Ordinal))
+            .Where(predicate: static file => (!file.Replace(newChar: '/', oldChar: '\\').Contains(comparisonType: StringComparison.Ordinal, value: "/obj/") && !file.Replace(newChar: '/', oldChar: '\\').Contains(comparisonType: StringComparison.Ordinal, value: "/bin/")))
             .Any(predicate: static file => RefusalTag().IsMatch(input: File.ReadAllText(path: file))))];
     }
 }

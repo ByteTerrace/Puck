@@ -33,7 +33,7 @@ namespace Puck.Abstractions.Gpu;
 /// have grown to the configured pass count.
 /// </para>
 /// </summary>
-public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
+public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     private const int Columns = GpuWork.SubmissionColumnCount;
 
     private readonly WorkCount[] m_lifetime = new WorkCount[GpuWork.LifetimeKindCount];
@@ -44,6 +44,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     private int m_currentPass = -1;
     private WorkClass[] m_classes = [];
     private string[] m_labels = [];
+    private GpuWorkDetail[] m_details = [];
 
     private long m_lastSealed;
     private Record? m_open;
@@ -144,6 +145,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
 
         m_labels = passLabels.ToArray();
+        m_details = [];
         m_classes = (passClasses.IsEmpty
             ? new WorkClass[passLabels.Length]
             : passClasses.ToArray()
@@ -319,12 +321,13 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         if (submission > m_published) {
             completed.Readback?.AddTo(
                 counts: completed.Counts.AsSpan(
-                    length: ((completed.Labels.Length + 1) * Columns),
+                    length: (((completed.Labels.Length + completed.Details.Length) + 1) * Columns),
                     start: 0
                 ),
-                passCount: completed.Labels.Length,
+                rowCount: (completed.Labels.Length + completed.Details.Length),
                 slot: completed.ReadbackSlot
             );
+            ReconcileDetails(record: completed);
             Publish(record: completed);
             m_published = submission;
         }
@@ -388,6 +391,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             labels: m_labels,
             revision: m_revision
         );
+        chosen.BindDetails(details: m_details);
         m_open = chosen;
 
         return chosen;
@@ -396,9 +400,10 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         var passCount = record.Labels.Length;
 
         m_snapshots[((int)((m_version + 1L) & 1L))].Load(
+            details: record.Details,
             classes: record.Classes,
             counts: record.Counts.AsSpan(
-                length: ((passCount + 1) * Columns),
+                length: (((passCount + record.Details.Length) + 1) * Columns),
                 start: 0
             ),
             labels: record.Labels,
@@ -435,6 +440,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         public bool HasPassActivity;
 
         public string[] Labels = [];
+        public GpuWorkDetail[] Details = [];
 
         public IGpuWorkReadback? Readback;
         public int ReadbackSlot;
@@ -468,6 +474,7 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         }
         // Keeps the outside row, which does not depend on the passes; clears every pass row and state.
         public void Rebind(string[] labels, WorkClass[] classes, long revision) {
+            Details = [];
             Classes = classes;
             var countLength = ((labels.Length + 1) * Columns);
 
@@ -495,6 +502,13 @@ public sealed class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             ).Clear();
             Labels = labels;
             Revision = revision;
+        }
+        public void BindDetails(GpuWorkDetail[] details) {
+            var length = checked((((Labels.Length + details.Length) + 1) * Columns));
+
+            if (Counts.Length < length) { Array.Resize(array: ref Counts, newSize: length); }
+            Counts.AsSpan(start: ((Labels.Length + 1) * Columns), length: (details.Length * Columns)).Clear();
+            Details = details;
         }
     }
 }

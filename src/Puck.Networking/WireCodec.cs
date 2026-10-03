@@ -76,6 +76,7 @@ public delegate T WireReadItem<T>(ref WireReader reader);
 /// <summary>A bounded, forward-only reader over one already-framed payload. Every read is checked against the
 /// remaining span; the first underflow latches a refusal and every later read is inert, so a leaf decoder reads its
 /// whole shape and asks once — at <see cref="TryFinish"/> — whether the bytes were honest.</summary>
+[FormatLeaf]
 public ref struct WireReader {
     private readonly ReadOnlySpan<byte> m_bytes;
 
@@ -574,6 +575,7 @@ public static class WireLimits {
 /// <see cref="WireReader"/>; an encoder and its decoder are read side by side. The written bytes are reachable two
 /// ways: <see cref="ToArray"/> copies them out for anything stored or queued, and <see cref="WrittenMemory"/> /
 /// <see cref="WrittenSpan"/> alias the writer's own buffer for immediate consumption.</summary>
+[FormatLeaf]
 public sealed class WireWriter {
     private byte[] m_buffer;
     private int m_length;

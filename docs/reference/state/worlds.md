@@ -455,16 +455,17 @@ The authoritative scope is built from a fixed, ordered list of named components
 deliberate edit to that list. Rule scheduling caches are never part of any hash.
 
 A checkpoint carries the same state, and search progress rides along through
-`ArenaSearch.Capture`. The replay tape records submissions and the rate history
-and reproduces the authoritative trajectory. A recording armed before the world's
-first step starts from the document's boot image. One armed later starts from a
-checkpoint taken at the arm, so it re-drives cleanly from its first tick. That
-checkpoint leaves out the owned identity documents, so a seat's identity
-travels as its projection. When the live state is one no checkpoint can capture
-(a mounted or pumped addon guest, a screen operation, a stepped machine without
-checkpoint support, a coupled link or rewind history, a live session, an
-engagement in flight, or an edit not yet applied), `replay.record` refuses by
-name (`StartNotCheckpointable`). A matching replay proves the hashed
+`ArenaSearch.Capture`. The replay tape records each tick's intent submissions and
+authority inputs, stamps the simulation rate in its header, and notes each pause or
+resume of the rate lever. It reproduces the authoritative trajectory. A recording
+armed before the world's first step starts from the document's boot image. One
+armed later starts from a checkpoint taken at the arm, so it re-drives cleanly
+from its first tick. That checkpoint leaves out the owned identity documents, so
+a seat's identity travels as its projection. When the live state is one no
+checkpoint can capture (a mounted or pumped addon guest, a screen operation, a
+stepped machine without checkpoint support, a coupled link or rewind history, a
+live session, an engagement in flight, or an edit not yet applied),
+`replay.record` refuses by name (`StartNotCheckpointable`). A matching replay proves the hashed
 authoritative state; the document, the grant table, and the HUD are outside that
 hash. The world-level rules for transfer,
 determinism, and replay are in [Worlds and federation](../../architecture/worlds.md),
@@ -507,8 +508,8 @@ on it, each kept branch is a fork raised above it, and the cursor is a taller
 mark labelled with its tick. The row draws nothing that `world.history row`
 does not echo, and the pointer reads the same rectangle the overlay draws.
 
-The history records a full checkpoint (a keyframe) every few seconds of
-simulation at most, and each tick's input and authoritative hash in between. A
+The history records a full checkpoint (a keyframe) between an eighth of a
+second and four seconds of simulation apart, and each tick's input and authoritative hash in between. A
 seek restores the nearest keyframe at or before its target and re-simulates the
 recorded input, so every tick it reaches is checked against the hash the live
 run recorded; a disagreement is reported by tick and the verb fails. Machine

@@ -6,8 +6,9 @@ namespace Puck.World;
 /// conversion; GPU captures answer from the platform's completed copy. Reading an answer produces no work.</summary>
 public static class WorldCaptureFrame {
     /// <summary>Answers the current capture image, with an ended source taking precedence over an earlier frame.</summary>
-    /// <param name="pixels">The CPU route's captured pixels.</param>
-    /// <param name="gpuRoute">Whether the sampled image is a platform GPU copy.</param>
+    /// <param name="pixels">The captured frames a frame samples once converted: the CPU route's pixels, or an HDR
+    /// display's GPU copies.</param>
+    /// <param name="gpuRoute">Whether a frame samples the platform's GPU copy directly, an SDR display's.</param>
     /// <param name="gpuHandle">The currently attached ring's latest published image, or zero before its first copy.</param>
     /// <param name="ended">Whether the capture source is unavailable.</param>
     /// <param name="fault">The source's reason for waiting or refusing, or <see langword="null"/>.</param>

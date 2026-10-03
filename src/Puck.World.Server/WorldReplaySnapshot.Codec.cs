@@ -40,6 +40,24 @@ public sealed partial class WorldReplaySnapshot {
             throw ReplayRefusal.ShapeMismatch.Raise(message: $"Not a Puck replay tape, or an older shape this build does not read — re-record it. (found magic 0x{magic:x8}, shape token {shapeToken}; this build reads magic 0x{Magic:x8}, shape token {ShapeToken} only)");
         }
 
+        // The token cannot tell two tape layouts apart once it stops moving; the fingerprint puck formats records for this
+        // source can. It is checked before any other field is read, so a tape of another shape changes nothing.
+        var shapeFingerprint = reader.ReadString(
+            field: "tape shape fingerprint",
+            maxBytes: MaxFingerprintChars
+        );
+
+        if (reader.Failed) {
+            throw Corrupt(failure: reader.Failure);
+        }
+        if (!string.Equals(
+            a: shapeFingerprint,
+            b: FormatShapes.WorldReplaySnapshotShapeToken,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            throw ReplayRefusal.ShapeMismatch.Raise(message: $"A Puck replay tape of another shape — re-record it. (tape shape fingerprint {shapeFingerprint}, expected {FormatShapes.WorldReplaySnapshotShapeToken})");
+        }
+
         var simulationRate = reader.ReadUInt32();
         var forkedFrom = reader.ReadOptional(readValue: static (ref WireReader r) => {
             var parentName = r.ReadString(field: "fork provenance parent");
@@ -336,6 +354,7 @@ public sealed partial class WorldReplaySnapshot {
 
         writer.WriteUInt32(value: Magic);
         writer.WriteUInt32(value: ShapeToken);
+        writer.WriteString(value: FormatShapes.WorldReplaySnapshotShapeToken);
         // Right after the shape header, before anything else: the rate is simulation INPUT the same way the
         // definition and seats are, and Drive needs it before it can honestly derive a step size.
         writer.WriteUInt32(value: recording.SimulationRate);

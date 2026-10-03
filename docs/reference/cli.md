@@ -101,9 +101,9 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
-| [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format token, or checks it with `--check`. |
-| [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds the affected canaries and parity. |
-| [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE` and `CAPACITY` lines an agent admits or holds work by; `--watch` streams each line when due. |
+| [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format's token and shape, and each project's generated `FormatShapes.g.cs`, or checks them with `--check`. |
+| [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
+| [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in a worktree of its own, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
@@ -130,6 +130,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlibwasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library: `FixedQ4816`'s Rust port and known-answer vectors, and the addon ABI's Rust mirror. |
 | [`puck worktree-base`](#puck-worktree-baseworktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
+| [`puck worktree-report`](#puck-worktree-reportremoval-report) | reports which local branches and worktrees have landed and are safe to remove. |
 | [`puck world`](#automation-commands) | prepare hosted world documents, prepare release manifests, inspect deployment-group state, or probe a QUIC endpoint. |
 
 The table follows the root listing: every verb once, in the same order.
@@ -632,9 +633,6 @@ retain all 256 bits.
 The artifact producer runs this check after its Release build, before packaging,
 using the built candidate CLI and the restored source graph.
 
-The next slices cover other compiled-world chunk versions, shader packages,
-`GpuPipelineCacheStore` content keys and kernel sets.
-
 ## `puck shaders`—shader compilation
 
 ```sh
@@ -748,7 +746,7 @@ base, so passing both is refused.
 - **The catalog**: a change to a shipped world under
   `src/Puck.World/Assets/worlds`, a World pipeline source, the compile verb, or
   a project the composer, the SDF baker, the shader packager or the texture
-  codecs are built from, chooses `puck compile --tree … --check` over the
+  codecs are built from, chooses `puck compile --tree … --output … --check` over the
   game's Release catalog.
 - **Worlds**: a changed `.puck` source that declares `test` blocks is run with
   [`puck test`](#puck-testtest-worlds).
@@ -804,19 +802,23 @@ base, so passing both is refused.
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`
   and `experimental/` choose nothing.
 
-The plan prints one line per choice, each naming what `--run` does with it:
+The plan names each choice and prints the catalog's build and check commands:
 
 ```text
 suite Puck.World.Tests
 test src/Puck.World/Assets/worlds/games/reversi.puck
 canary pipeline-ink
-catalog src/Puck.World/bin/Release/net10.0/Assets/worlds (puck compile --tree src/Puck.World/Assets/worlds --check)
+catalog src/Puck.World/bin/Release/net10.0/Assets/worlds
+dotnet build --disable-build-servers src/Puck.World/Puck.World.csproj -c Release -nodeReuse:false -v q -nologo
+puck compile --tree src/Puck.World/Assets/worlds --output src/Puck.World/bin/Release/net10.0/Assets/worlds --check
 parity
 ```
 
 A `test` line is a `.puck` source run with `puck test`. The `catalog` line
 names the game's Release catalog, the compiled worlds the build writes, which
-holds no test worlds: `--run` checks it with the compile the line names.
+holds no test worlds. The following two lines are the exact commands `--run`
+uses to build that catalog and check it, in that order. Each runs from the
+repository root; the compile selects the tree's sources itself.
 
 `--run` builds and runs the chosen suites, then `puck test` on the chosen
 worlds, then the catalog check, and exits 1 when any of them fails. A suite
@@ -835,6 +837,12 @@ carries the recorder), runs the full canary set on it, and maps each leg's
 methods to their source files through the build's portable PDBs. It is a full
 run, so it happens when the owner asks for one; between recordings a new or
 moved source shows up as `unmapped`.
+A nonzero inner canary exit refuses recording with exit 2, naming that exit and
+the kept transcript, and leaves the coverage file byte-identical. Only a successful
+inner run can replace coverage. Every named leg directory must be readable; a missing leg,
+unreadable method record or failed coverage write refuses with exit 2 and names the
+kept transcript. Coverage is replaced atomically after all legs are read, and leg
+evidence is removed only after that replacement succeeds.
 The recording runs in one run directory that holds the recording World and
 `canary.transcript.txt`, the inner canary run's exit code, standard output and
 standard error. The inner run keeps its legs (`--keep-transcripts`) until the
@@ -844,61 +852,76 @@ and named (see [Conventions](#conventions)).
 
 ## `puck gate`—the change-scoped gate
 
-`puck gate` verifies a branch's change before it merges. It reads the change
-against the merge base of `HEAD` and the branch it lands on, `--merge-base`
-(default `origin/features/gfx-pipeline`), and runs these steps in order:
+`puck gate` is the batch qualification for a branch. It reads the change
+against the merge base of `HEAD` and `--merge-base` (default
+`origin/features/gfx-pipeline`). The plan runs serially in this order:
 
-1. `dotnet build Puck.slnx -c Release`. A failed build prints its error lines
-   and stops the gate, so no later step runs against output an earlier build
-   left behind.
-2. Copy the CLI that build wrote into the run's own temporary directory. Every
-   later step runs that copy, so it runs the candidate's code, and no other
-   run's build or copy can replace it mid-gate.
-3. `puck affected --merge-base <merge base> --run`: the suites, `.puck` test
-   worlds and catalog check the change reaches. `--gpu` adds `--gpu`, which
-   runs the chosen canaries and then parity.
-4. The repository checks, each in its check form only: `puck format --check`
-   over the changed C# and `.puck` sources, `puck lengths --check`,
-   `puck comment-smells --check`, `puck docs links`, `puck schema --check`,
-   `puck architecture --check`, `puck registry --check`, `puck vocabulary --check`,
-   `puck shaders generate --check`, `puck branding --check`, `puck formats --check`
-   and `puck canary-ceilings --check`.
-   Nothing in the checkout is rewritten.
+1. `build`: `dotnet build Puck.slnx -c Release -nodeReuse:false -v q -nologo`.
+   A failed build stops the gate before it can use stale binaries.
+2. `copy CLI`: copy the freshly built CLI into the run's own directory.
+   Subsequent puck steps use this candidate copy.
+3. `affected`: `puck affected --merge-base <merge base> --run`, adding `--gpu`
+   when selected, for the chosen canaries followed by parity.
+4. `format`: `puck format --check --file-list <file list>` over changed C# and
+   `.puck` sources; skipped when no such source changed.
+5. `lengths`: `puck lengths --check`.
+6. `comment-smells`: `puck comment-smells --check`.
+7. `docs links`: `puck docs links`.
+8. `schema`: `puck schema --check`.
+9. `architecture`: `puck architecture --check`.
+10. `registry`: `puck registry --check`.
+11. `vocabulary`: `puck vocabulary --check`.
+12. `shaders generate`: `puck shaders generate --check`.
+13. `branding`: `puck branding --check`.
+14. `formats`: `puck formats --check`.
+15. `canary-ceilings`: `puck canary-ceilings --check`.
+16. `derivations`: `puck derivations --check`.
+17. `Puck.World.Tests`: device suite, only with `--gpu`.
+18. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+19. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+20. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+21. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.world.json`
+    with matching `<name>.ceilings.json`, in ordinal order. Each runs
+    `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
+    `<name>.script.txt` supplies `--script` when present; otherwise the script
+    recorded in the ceilings supplies it, or the verb's default when absent.
+22. `docs citations`: `puck docs citations`, only with `--gpu`.
+23. `affected record`: `puck affected --record`, only with `--gpu --record`
+    and only after every earlier step passes. It refreshes canary coverage.
 
-A failed step fails the gate, and the later steps still run. Each step's full
-output goes to `gate.log` in the run's directory, which the summary names and
-the run keeps; the console carries one verdict line a step and the tail of a
-failed one. The CLI copy and the format file list are removed when the run
-ends.
+The device suites run `dotnet test --project <suite> -c Release --no-build` over the
+solution build's binaries, as affected's suites do, since Microsoft.Testing.Platform hands
+MSBuild switches to the test application, which refuses them. Each selects its device laws
+with `--filter-trait Category=Gpu`, the trait GPU001 holds every class that opens a device to,
+and affected's CPU runs take the complement, `--filter-not-trait Category=Gpu`. One list
+holds that selection (`GatePlan.DeviceSuites`). A law walks the complete
+root command tree: every `--check` command has a step or an explicit reasoned
+exclusion beside the plan. Another law holds this ordered list and help to that
+plan.
 
-```text
-gate: 12 changed file(s) against <merge base>, the merge base of HEAD and origin/features/gfx-pipeline; full output in ../../Temp/puck-gate-x1y2/gate.log.
-gate: build passed
-gate: affected passed
-gate: format passed
-gate: lengths passed
-gate: comment-smells passed
-gate: docs links passed
-gate: schema passed
-gate: architecture passed
-gate: registry passed
-gate: vocabulary passed
-gate: shaders generate passed
-gate: branding passed
-gate: formats passed
-gate: canary-ceilings passed
-gate: passed; full output in ../../Temp/puck-gate-x1y2/gate.log
-```
+Before the solution build, affected run, each device suite, each counters
+workload, citations and recording, admission uses
+[`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s default
+classification in-process. Capacity with an idle GPU admits immediately.
+Otherwise the gate reports waiting on stderr, samples every ten seconds for
+at most thirty minutes, and reports when capacity returns. Expiry refuses the
+remaining run. Completed child processes do not hold admission; builds and
+reusable MSBuild nodes are not GPU holders.
 
-Run the gate from a CLI outside the checkout, such as a copy of
-`src/Puck.Cli/bin/Release/net10.0` in a directory of its own: the build
-rewrites that output, so a CLI running from it is refused. `--gpu` boots real
-Worlds on both GPU backends; run it with no competing build or GPU work on the
-machine.
+A failed build or CLI copy stops the gate. Other failed steps allow later checks
+to run, but prevent recording. Checks leave their ledgers untouched;
+`--record` requires `--gpu` and writes coverage only after successful qualification.
+`gate.log` keeps every step's full output. Beside it, `gate.steps` flushes a line
+at each start and exit, naming the step, its exit code (`-` until it exits),
+elapsed whole seconds and an ISO-8601 UTC time from the CLI host's clock. The
+console summary names both files. The CLI copy and format list are removed.
 
-Exit codes: 0 every step passed, 1 the build or a step failed, 2 refused (no
-merge base, or a CLI running from the checkout it would rebuild).
+Run from a CLI copy outside the checkout, because the build rewrites
+`src/Puck.Cli/bin/Release/net10.0`. GPU work runs serially on a machine with no
+competing GPU work.
 
+Exit codes: 0 every step passed, 1 a step failed, 2 refused (invalid record,
+missing merge base, admission timeout, or a CLI running from the checkout).
 ## `puck host load`—admission lines for the machine
 
 `puck host load` reports whether the machine an agent runs on has room for more
@@ -916,21 +939,24 @@ CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
 - `GPU busy` or `GPU idle` appears at the first reading and on every change
   after. GPU work is the World (`Puck.World` or `Puck.World.dll`), a
   `canary`, `parity` or `counters` verb, or a test host for
-  `Puck.DirectX.Tests`, `Puck.Vulkan.Tests` or `Puck.World.Tests`, whose
+  `Puck.DirectX.Tests`, `Puck.Vulkan.Tests`, `Puck.World.Tests` or
+  `Puck.Platform.Windows.Tests`, whose
   device laws open the GPU. Builds, restores, MSBuild nodes, compilers and
   shells never count, whatever project they name, and the verb never counts
   itself. The classifier uses the running executable or managed entry assembly;
   a `dotnet run` wrapper does not count; its World child counts once it starts.
   Canary `--list` and `--plan`, parity/counters `compare`, and help count no GPU work.
-- `PRESSURE` appears while free memory is under `--pressure-ram` or free disk
-  is under `--pressure-disk`, at most once every five minutes.
-- Otherwise `CAPACITY` appears while the CPU mean is under `--capacity-cpu` and
-  free memory is over `--capacity-ram`, at most once every ten minutes.
-  It waits for a full CPU window. `PRESSURE` wins over `CAPACITY` within one
-  reading.
+- `PRESSURE` appears when free memory falls under `--pressure-ram` or free
+  disk under `--pressure-disk`, and again when those reasons change.
+- Otherwise `CAPACITY` appears when the CPU mean falls under `--capacity-cpu`
+  with free memory over `--capacity-ram`, and `LOADED` when that ends without
+  pressure. Both wait for a full CPU window. `PRESSURE` wins over `CAPACITY`
+  within one reading.
+- Each line marks a transition: while a state holds, `--watch` prints nothing
+  more, so a watcher sees each change once.
 
-A threshold left out is never judged, so with none the verb reports only the GPU
-state. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
+The default thresholds require CPU below 50% and free RAM above 5GB for capacity;
+pressure means free RAM below 2GB or free disk below 10GB. Options override these defaults. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
 documents the thresholds for each machine class and what an agent does on each
 line. `reuseNodes` counts MSBuild nodes a build or restore left running because
 it ran without `-nodeReuse:false`.
@@ -938,7 +964,7 @@ it ran without `-nodeReuse:false`.
 Without `--watch` the verb takes one reading over one second, judges that
 reading's own CPU figure, and exits. With `--watch` it reads every
 `--interval` seconds (default 10) until cancelled, judges the CPU mean over the
-last `--window` readings (default 6), and prints a line only when one is due,
+last `--window` readings (default 6), and prints a line only on a transition,
 so its output works as an event stream for a monitor. The readings are cheap
 operating-system queries: kernel CPU time, the memory status, the process list
 and each process's command line on Windows, and `/proc` on Linux. The verb
@@ -957,8 +983,8 @@ Exit codes: 0 done, 2 refused (invalid thresholds or an interval or window below
 
 `puck laws prove <law>` shows that a law fails without its fix and passes
 with it, and prints the evidence for the commit that lands them. The law is a
-test name of dotted identifiers, `Class` or `Class.Method`, selected as
-`FullyQualifiedName~<law>`; its project is the test project whose sources
+test name of dotted identifiers, `Class` or `Class.Method`, matched anywhere in
+each test's fully qualified method name (`--filter-method "*<law>*"`); its project is the test project whose sources
 declare that class, or `--project`.
 
 The fix is one of:
@@ -995,7 +1021,8 @@ solution, once for all tests the law name selects. Outcomes come from the test r
 TRX report together with the process's completion verdict. A run that selects
 no test, skips a selected test, aborts or executes different tests between legs
 is refused. Both legs execute the same tests, and every selected test must
-finish with a passed or failed outcome. Caller Git hooks are disabled, and
+finish with a passed or failed outcome; an explicit test the run did not opt into
+was never selected. Caller Git hooks are disabled, and
 projects outside the proof tree and links in it are refused.
 
 An exclusive lock file beside the clone leases it for the whole proof. A
@@ -1182,7 +1209,7 @@ backend never reads as a run on both. The option refuses any other value by
 name. It is refused with `--merge`, because the merge gate holds both
 backends, and with `--list`, which runs nothing.
 The `pipeline-feedback`, `pipeline-ink`, `pipeline-edit`, `pipeline-supersede`,
-`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault` and `pipeline-geometry` canaries use this shape to test shader
+`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault`, `pipeline-geometry` and `pipeline-echo` canaries use this shape to test shader
 pipelines, and `source-conversion` uses it to run the shipped image-source
 conversion kernels; the [World guide](../../src/Puck.World/README.md#shader-pipelines)
 covers the `pipeline.wait` phases their scripts use.
@@ -1460,7 +1487,7 @@ its own build output:
 
 ```text
 dotnet build src/Puck.Cli -c Release
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
 ```
 
 ---
@@ -1821,7 +1848,7 @@ The report is a `puck.counters.report.v1` document. Its schema,
 source revision (the `HEAD` commit and the World build's source-state key) and,
 for each backend, the device identity, the offscreen resolution, the shader
 toolchain identity, the World's GC mode, each render node's pass states, and
-every count. Each count names its section, node, pass and kind, and carries a
+every count. Each count names its section, node, pass, detail and kind, and carries a
 class:
 
 | Class | Meaning | Compared |
@@ -1838,6 +1865,16 @@ Each pass there also carries a class, `deterministic` or
 a deterministic kind counted in a per-backend-deterministic pass is recorded as
 per-backend-deterministic. A node's submission and revision identities are not
 kinds; the collector records them as `pacing`.
+
+An explicit null detail identifies a pass total or work outside named rows.
+Sky layers and shadow slots have labels within their pass, alongside its
+`plain` remainder; all detail rows sum to that pass's totals. Skipped and
+standing passes retain their labels with no counts. Comparisons include those
+labels, and ceilings record their zero rows using the same class and
+`requiredZero` rules as the totals. Detail identities and frame-slot buffer
+capacity grow during the installed graph's run. The sky counts each layer
+evaluation, each procedural hash and each field-run texture load under
+`gpu.sky.evaluations`, `gpu.sky.hashes` and `gpu.sky.texture-loads`.
 
 The run prints the report's path, then one line for each deterministic count or
 pass state that differs between the two backends, naming its kind, pass and
@@ -2646,11 +2683,12 @@ a converter-hidden shape the exporter cannot introspect on its own (a
 document-identifier list); a raw `JsonElement` slot decided by an id named
 elsewhere in the document (`views.post[].config`, `probes[].config`,
 `metadata.custom`) stays open but carries a `$comment` saying so. The root
-carries `x-puck: {schemaVersion, generator, commit}` (the silo root carries
+carries `x-puck: {schemaVersion, generator}` (the silo root carries
 its own) and `properties.schema.const` pins the exact tag a well-formed
-document's own `schema` field must equal; `--check` masks `x-puck.commit`
-before comparing, since the commit a checked-in file was generated at can
-never equal the commit that first introduces the file.
+document's own `schema` field must equal. A checked-in file names no commit,
+since the commit a file was generated at can never equal the commit that first
+introduces it; only the `--bundle` output, which nothing checks in, adds
+`x-puck.commit`, the commit the generator was built at.
 
 The output is SPLIT, not one file: a small root plus one file per top-level
 document section (`kits.schema.json`, `screens.schema.json`, …), plus
@@ -2726,7 +2764,7 @@ sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
 ```text
-puck compile <source.puck|document.world.json>... [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--bake-cache <directory> | --check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
+puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--bake-cache <directory> | --check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
 puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--sql] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
@@ -2735,8 +2773,11 @@ puck lsp
 puck migrate <name> <path> [--check]
 ```
 
-`compile` accepts several source paths and compiles them in the supplied order
-within one process. Each source gets its normal adjacent `.world.json` or
+`compile` requires source paths unless `--tree <root>` is supplied. With
+`--tree` and no source paths, it selects every `.puck` and `.world.json` file
+under `<root>` recursively, in ordinal path order. With source paths, it
+compiles only those paths, in the supplied order within one process. Each
+source gets its normal adjacent `.world.json` or
 `.cartridge.json` output; the first failure stops the batch, leaving earlier
 successful outputs in place. `--output` and `--watch` require exactly one
 source, except with `--tree <root>`: every source must lie under `<root>`, each
@@ -3371,14 +3412,25 @@ low cost. CI runs `puck canary-ceilings --check` in the `ledgers` job of `verify
 ## `puck formats`—strict format tokens
 
 `FormatVersions.json` at the repository root lists every strictly versioned wire, persisted, or cache format the
-tracked `src/` tree declares, each with its current token and declaring file. It is generated from the source, so
-the constants remain the one source of truth and the ledger is their checked-in mirror.
+tracked `src/` tree declares, each with its current token, declaring file and shape fingerprint. It is generated
+from the source, so the constants remain the one source of truth and the ledger is their checked-in mirror. The
+fingerprint, not the token, tells two layouts apart: each project that declares a format also holds a generated
+`FormatShapes.g.cs` with one constant per ledger entry, and the codec that owns the format writes that constant in its
+header or handshake and refuses data of any other shape by name (`… shape fingerprint X, expected Y`) before any state
+changes. A store that is content-identified, such as a bake keyed by its derivation fingerprint, already rejects by
+content and needs no header.
 
 ```text
-puck formats            write FormatVersions.json from the source
-puck formats --check    write nothing; exit 1 for an unrecorded, stale, bumped, reshaped, or moved format,
-                        or a ledger whose bytes differ from what the verb writes
+puck formats            write FormatVersions.json and every FormatShapes.g.cs from the source
+puck formats --check    write nothing; exit 1 for an unrecorded, stale, retokened, reshaped, or moved format,
+                        an open call the ledger does not record, a ledger whose bytes differ from what the verb
+                        writes, or a FormatShapes.g.cs that disagrees with it
+puck formats --explain ID   print what one format's shape covers, by file, and the calls it leaves open
 ```
+
+The check records shape and never demands a token bump: a format whose source changed is `reshaped` until
+`puck formats` records the new fingerprint, and the generated constant moves with it, so the codec that reads it
+refuses what was written under the old one.
 
 Both forms refuse with exit 2 before discovery if non-ignored, untracked C# sources exist under `src/`, excluding
 `*.g.cs` files. The refusal writes nothing and lists every such file in sorted, repository-relative paths with forward
@@ -3399,18 +3451,48 @@ whose initializer is one of two things:
 Declarations under a `*.Post` project and generated files are outside the ledger. An entry that is none of these
 needs its member added to the recognized names in `FormatVersionsLedger`, which is a deliberate edit of the verb.
 
-An entry holds its id (`Type.Member`), the file declaring it, its token and a `shape` digest, each on a line of its
-own. The digest covers canonical syntax of the declaring file and its partial siblings (`Stem.cs` and
-`Stem.*.cs` beside it), source-declared field and property types, record constructor types and base types,
-including their data dependencies. Shared World wire leaves also feed the wire, replay, checkpoint, federation
-and journal digests; snapshot identities cover their machine project's source and the shared state reader,
-writer and image layout. A version-shaped string inside an object initializer is an identity, not a schema literal.
-The digest is what lets two lanes collide. Git merges two identical edits of one line without a conflict,
-and two lanes that bump a codec to the same next token write the same token line; they changed the codec
-differently, so their digest lines differ and conflict. A lane that edits a codec without bumping its token fails
-`--check` with a `reshaped` finding until the author reruns `puck formats`, which is the moment to decide whether
-the encoding changed and the token should too. This also covers document schemas: a field change under an
-unchanged schema token requires recording its new shape.
+An entry holds its id (`Type.Member`), the file declaring it, its token, a `shape` digest and, when the format's boundary
+has open calls, an `open` list, each on a line of its own. The digest covers canonical syntax of the format's *closure*,
+computed with the Roslyn semantic model over units: a type's layout (header and data members: fields, constants, enum
+members, auto-properties, static constructors) and each code member on its own. The roots are where encoding is: the
+layouts of the declaring file and its partial siblings (`Stem.cs` and `Stem.*.cs` beside it), those files' members that
+touch bytes (a byte buffer, stream or binary reader or writer, a `u8` literal, a `[FormatLeaf]` member), and each unit
+anywhere that names the token. The rest of those files is neighbouring code: a method that drives the engine from decoded
+data is not the format's shape and is not open, and a helper an encoding member calls joins the closure through that
+call. A unit covers:
+
+- every enum it names, whole, and every constant it reads, so a reordered or renumbered enum a codec casts moves the
+  digest;
+- any other repository type it names, one level deep: the type's header and data members, never the types those members
+  name in turn;
+- a repository member it calls that is marked `[FormatLeaf]`, on the member or on a type that holds it, with that
+  member's own units in turn, and every override or implementation of a covered virtual or interface member, whether or
+  not the slot's own declaration has a body (an abstract property, an auto-property an override replaces, a static
+  abstract interface member); and a property whose body calls nothing in the repository.
+
+The depth limit applies to the types a layout names, not to what its initializers read: a covered layout's constants,
+enum values and method groups are followed whole, so a constant that chains through other classes, or a delegate a static
+field binds, is covered or open like any call. The calls the syntax does not name count too: a `foreach`'s
+`GetEnumerator`, `MoveNext` and `Current`, a `using`'s disposal, an `await`'s awaiter, a deconstruction, user-defined
+operators and conversions, and a method-group conversion.
+
+A closure over every call reaches the whole engine (a world codec's would hold ten thousand units), so the boundary is
+explicit. A call into any other repository member is *open*: the shape cannot see what it does. A member that is not part
+of any wire is marked `[FormatSeam("its behaviour sets no byte because …")]`, which is not followed and not open, and
+`puck formats` refuses a seam with an empty reason. Prefer moving the call out of the codec (decode to data, apply
+outside) to marking it. `puck formats` records each format's open calls in the ledger, so a call that joins or leaves
+the list is a reviewable ledger diff, and `--check` reports the difference as `open` drift until the ledger is
+re-recorded. `puck formats --explain <id>`
+prints the units a format covers, by file, and the calls it leaves open. Platform and package members are outside the
+repository and outside the digest.
+
+A version-shaped string inside an object initializer is an identity, not a schema literal. The generated files are
+`.g.cs`, which the digest never reads, so a fingerprint never depends on the file that holds it. Each is the nearest
+project's `FormatShapes.g.cs`, with one `internal static class FormatShapes` per namespace its declaring files use,
+holding a constant per entry named by the declaring symbol alone (`Type.Member` as `TypeMember`, whatever `@path` the
+ledger adds to tell two files' identical ids apart); a codec reads it unqualified from its own namespace. Two lanes that
+edit one codec differently write different digest lines, which conflict in the ledger, and git merges two identical edits
+without a conflict.
 
 The digest uses the existing formatter's syntactic and null-pattern normalizers before hashing syntax structure
 without trivia. Parentheses do not contribute an extra node, but operator grouping remains in the tree. Resolved
@@ -3418,7 +3500,11 @@ call arguments are identified by parameter position, and only expressions the fo
 are sorted. Local and parameter names are replaced by declaration identities; `nameof` retains its resulting text.
 Formatting, comments and local renames preserve the digest, while changed argument binding and evaluation order
 move it. Unresolved calls retain their written syntax. These are conservative source fingerprints: an implementation
-edit within the covered files can require recording even when its encoding stays the same.
+edit within the covered units moves the fingerprint even when its encoding stays the same, and data written before it
+is refused.
+
+An authored document carries no shape field: its schema token and the JSON-schema refusal of an unknown or missing
+member are its shape check, so a document format records a shape in the ledger and nothing writes it into the text.
 
 CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
 
@@ -3533,6 +3619,66 @@ the target worktree (default `--path`: the current directory) and shells out to
 prints the worktree's toplevel path it acted on, relative to the working
 directory when at or beneath it, and absolute otherwise. Shells out to `git`
 rather than adding a git library dependency.
+
+## `puck worktree-report`—removal report
+
+`puck worktree-report --into <branch>` helps a lead review accumulated local
+branches and worktrees before removing them. `--into` is the required
+integration branch's exact name, local or remote-tracking (`origin/main`), with
+no default. An exact local name takes precedence over a remote-tracking name.
+Tags, bare commits, revision expressions and paths are refused. The command is
+report-only: it never
+deletes, prunes, fetches, pushes, or writes refs, objects, configuration, or
+indexes, and it never contacts a remote. Removal remains a human or lead act.
+
+Stdout contains one indented JSON document with `into`, `entries`, and `errors`.
+Each local branch has an entry; a checked-out branch carries its worktree in
+that entry, and a detached worktree has its own entry with `branch: null`.
+If a branch is checked out in several worktrees, each worktree is retained.
+Entries sort ordinally by branch name, or by the full forward-slashed worktree
+path for a detached tree, then by worktree path. Member order is stable.
+
+The `landed` field checks the worktree or branch `head` in this order:
+
+- `ancestor`: the head is an ancestor of the integration branch.
+- `patch-equivalent`: `git cherry <into> <head>` contains no `+` commits and
+  `<into>..<head>` contains no merge commits;
+  individual commits have equivalent patches on the integration branch.
+  Cherry omits merges, so it cannot establish that merge-resolution work lands.
+- `squash-equivalent`: the stable patch id of `git diff <merge-base> <head>`
+  matches the patch id of one commit on `<merge-base>..<into>`. This recognizes
+  a branch whose multiple commits land together as one squash commit.
+- `no`: none of those checks establishes that the work has landed.
+
+`unlanded` counts the `+` commits from cherry, including for a squash-equivalent
+branch. `dirty` contains `modified` (tracked, staged, or conflicted paths) and
+`untracked` file counts; a rename counts once. It is null without a worktree
+or when status is unreadable. `lastCommit` is the head's committer date with
+its offset, and `ageDays` counts complete elapsed days, clamped to zero for a
+future commit. `upstream` contains the locally recorded `name` and `track`
+strings, or null when none is configured. No fetch refreshes those values.
+
+`locked` and `prunable` contain Git's reasons when present, including an empty
+string for a flag without a reason. Missing directories and Git read failures
+remain listed with an `unreadable` reason. Unknown history values are null
+and `landed` is `no`. Inventory warnings or a failed worktree inventory appear in
+`errors` and block removal of every branch because its checkout status is unknown.
+
+`removable` is true only for landed, clean, readable entries that are unlocked
+and protect neither the main worktree nor its branch nor the integration branch,
+which for a remote-tracking `--into` is its local counterpart: `origin/main`
+protects `main`, while a lane that only tracks `origin/main` is not protected.
+The counterpart comes from locally configured fetch mappings, including custom
+destinations and remote names containing slashes. A symbolic remote ref uses its
+target's mapping. Missing or ambiguous counterpart mappings appear in `errors`
+and block every removal because the integration branch's local name is unknown.
+`blockers` uses these stable spellings, in this order when applicable:
+`unlanded`, `dirty`, `locked`, `main-worktree`, `integration-branch`,
+`main-worktree-branch`, `unreadable`. A prunable flag alone does not grant removal.
+
+Exit **0** means the report is produced, even with no removable entries or with
+unreadable worktrees. Missing or unknown `--into`, or failure to read the local
+branch inventory, exits **2** with a reason on stderr.
 
 ## `puck branding`—maintained assets
 

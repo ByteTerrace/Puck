@@ -154,11 +154,14 @@ sample again, and the Nth counted sample, the one captured, is at index N − 1
 however many such frames come first.
 A capture can request up to 256 samples; zero retains ordinary capture behavior.
 The `temporal-jitter` canary checks the center and offset samples repeating
-after eight renders on each backend. Color reconstruction is not enabled yet.
+after eight renders on each backend. A view whose quality asks for it resolves
+its samples into color over its history
+([temporal reconstruction](frame-rendering.md#temporal-reconstruction)).
 
 Each instance keeps its own history epoch. A camera cut, resolved-view change
 (including a follow in place), output extent or render ceiling change, debug
-mode change or sampling switch resets the sample count, and so do previous
+mode change, sampling switch, or the instance being shown again after the
+render graph parked it resets the sample count, and so do previous
 transform tables that no longer hold the poses of the instance's preceding
 render, as when another view of the same residency moved a pose between two of
 its renders. Frames the instance stood through break nothing. Resetting changes
@@ -167,7 +170,9 @@ CPU state without clearing or reallocating GPU storage.
 Cadence lets a view stand only while a render taken now would feed its passes
 the temporal inputs its standing render was given
 (`SdfTemporalHistory.Stands`): the same jitter and, for the `motion` debug
-view, the same previous view and previous poses. A still view that rendered a
+view, the same previous view and previous poses. A temporally resolved view instead
+stands once its history holds one period of samples and it has rendered a period
+since its inputs last changed. A still view that rendered a
 converging capture's last sample renders once more at the pixel center when
 the capture ends, then stands; the `motion` view renders until its previous
 view and poses settle, then stands on the stationary motion.
@@ -192,6 +197,8 @@ another world as a view instance (`WorldViewInstances`).
   last filmed from. Its first frame uses the rig at the default anchor when
   that anchor is unresolved, or the world origin when there is no rig.
   It films an already-lit world and contributes no light of its own.
+  Its render scale stays native until a `world.render-scale <camera>` lever or a
+  `views.quality` row names it.
   Each instance records at its requested extent. The presenter's own cameras
   and viewports use the display extent, so a larger probe export does not
   change their aspect ratios or pointer mapping.

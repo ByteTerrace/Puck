@@ -84,20 +84,20 @@ public sealed class DisplayedSourceLawTests {
             var screens = Run(line: "world.screens");
             var first = screens["[world.screens: ".Length..].Split(separator: " | ")[0];
 
-            Assert.StartsWith(expectedStartString: "0 ", actualString: first, comparisonType: StringComparison.Ordinal);
+            Assert.StartsWith(actualString: first, comparisonType: StringComparison.Ordinal, expectedStartString: "0 ");
             return first;
         }
         public int Census() {
             var refresh = Run(line: "world.view-refresh");
-            var count = refresh[(refresh.IndexOf(value: "; ", comparisonType: StringComparison.Ordinal) + 2)..].Split(separator: ' ')[0];
+            var count = refresh[(refresh.IndexOf(comparisonType: StringComparison.Ordinal, value: "; ") + 2)..].Split(separator: ' ')[0];
 
             return int.Parse(s: count, provider: System.Globalization.CultureInfo.InvariantCulture);
         }
     }
 
     // The mapping's source instance: its name and handle, the first token of the mapping segment.
-    private static string Source(string line) => line[(line.IndexOf(value: " mapping ", comparisonType: StringComparison.Ordinal) + " mapping ".Length)..].Split(separator: ' ')[0];
-    private static string Input(string line) => line.Split(separator: ' ').Single(predicate: static token => token.StartsWith(value: "input:", comparisonType: StringComparison.Ordinal));
+    private static string Source(string line) => line[(line.IndexOf(comparisonType: StringComparison.Ordinal, value: " mapping ") + " mapping ".Length)..].Split(separator: ' ')[0];
+    private static string Input(string line) => line.Split(separator: ' ').Single(predicate: static token => token.StartsWith(comparisonType: StringComparison.Ordinal, value: "input:"));
     private static void Route(Boot boot, string input) => _ = boot.Run(line: $"world.row.set screens 0 route.input \"{input}\"");
 
     [Fact]

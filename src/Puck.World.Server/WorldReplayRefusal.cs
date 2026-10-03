@@ -1,10 +1,11 @@
 namespace Puck.World;
 
-/// <summary>The <c>replay.tape</c> door's covered refusal vocabulary — the tape's shape-identity gate
+/// <summary>The <c>replay.tape</c> door's covered refusal vocabulary, thirteen members — the tape's shape-identity gate
 /// (<see cref="WorldReplaySnapshot.Read"/>'s leading magic/shape-token check), its mount-pin gate
-/// (<see cref="WorldReplaySnapshot"/>'s <c>VerifyMountedAddons</c>), and its rate pin
-/// (<see cref="WorldReplaySnapshot.Drive"/>'s leading simulation-rate check), which together are what keeps a
-/// re-drive from silently running a world the tape never recorded. Not the whole codec: the many per-enum "unknown wire value"
+/// (<see cref="WorldReplaySnapshot"/>'s <c>VerifyMountedAddons</c>), its rate pin
+/// (<see cref="WorldReplaySnapshot.Drive"/>'s leading simulation-rate check), its rebuild, transfer-integrity and
+/// mutation-outcome checks, and the crossing and seat-switch records a re-drive cannot reproduce, which together are
+/// what keeps a re-drive from silently running a world the tape never recorded. Not the whole codec: the many per-enum "unknown wire value"
 /// guards and the plain corruption checks (truncated length prefixes, a duplicate mounted-addon name, an out-of-range
 /// seat slot) stay bare <see cref="InvalidDataException"/>s outside this catalog — see
 /// <see cref="ReplayRefusalExtensions"/>'s remarks for why this door's v1 scope stops here.</summary>
@@ -13,7 +14,7 @@ internal enum ReplayRefusal {
     /// and that state is one no authority checkpoint captures: a mounted or pumped addon guest, a screen operation, a
     /// stepped machine without checkpoint support, a coupled link or rewind history, a live session, an engagement in
     /// flight, or an edit not yet applied. Arming refuses rather than produce a tape that cannot re-drive.</summary>
-    [Refusal(door: "replay.record", condition: "the world has stepped and its live state is one no authority checkpoint captures", kind: RefusalKind.Verdict)]
+    [Refusal(door: "replay.record", condition: "the world has stepped and its live state is one no authority checkpoint captures", kind: RefusalKind.Verdict, Unsupported = true)]
     StartNotCheckpointable,
 
     /// <summary>The leading magic or shape token does not match this build's pinned <c>.puckreplay</c> shape.</summary>

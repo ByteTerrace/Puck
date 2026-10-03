@@ -12,7 +12,7 @@ namespace Puck.World;
 /// clock and key count. The sections are authored through <c>world.row.set render</c>; every field is optional and an
 /// absent one reads <c>default</c>, which is the engine's pinned value for that field of that kind, not zero.
 /// </summary>
-public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
+public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority, Func<WorldDefinition, string?>? shadowReport = null) : ICommandModule {
     private static string Describe(float? value) => ((value is { } number)
         ? number.ToString(
             format: "0.####",
@@ -248,8 +248,8 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
             value: Describe(value: directional.AngularRadius)
         )
                 .Field(
-            key: "shadows",
-            value: Describe(value: directional.Shadows)
+            key: "shadow",
+            value: (directional.Shadow ?? WorldShadowMode.Never).ToString().ToLowerInvariant()
         ),
             WorldRenderLight.Hemisphere hemisphere => echo
                 .Field(
@@ -464,8 +464,8 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
-            description: "Reports the render.lighting, render.sky, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, the grounding strength/radius, the tonemap mode, and the clock and key count of each keyed section. A keyed value reads keys(clock: <name>, <n> keys); an unauthored field reads 'default' — the engine's pinned value for it, not zero.",
-            describe: server => DescribeLighting(definition: server.Definition),
+            description: "Reports the render.lighting, render.sky, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the last presented named shadow holders with their selection ranks and transition state, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, the grounding strength/radius, the tonemap mode, and the clock and key count of each keyed section. A keyed value reads keys(clock: <name>, <n> keys); an unauthored field reads 'default' — the engine's pinned value for it, not zero.",
+            describe: server => ((DescribeLighting(definition: server.Definition) + " | ") + (shadowReport?.Invoke(server.Definition) ?? "shadowSlots unavailable: no presented frame of this authority")),
             name: "world.lighting"
         );
     }

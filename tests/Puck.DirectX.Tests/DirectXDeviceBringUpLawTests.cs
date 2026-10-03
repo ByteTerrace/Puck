@@ -4,6 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interfaces;
 using Puck.DirectX.Interop;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.DirectX.Tests;
@@ -76,6 +77,10 @@ public sealed class DirectXDeviceBringUpLawTests {
     }
     [Fact]
     public void ABringUpThatFailsAfterCreatingItsDeviceReleasesItAndStaysRetryable() {
+        // The capability is established first and on its own: a host without a software device skips here, and only
+        // here, so that nothing the bring-up throws afterwards can be mistaken for the host lacking one.
+        DirectXTestDevices.Warp().Dispose();
+
         var api = new UnreadableDeviceApi();
         using var context = new DirectXDeviceContext(
             adapterLuid: 7L,
@@ -83,12 +88,17 @@ public sealed class DirectXDeviceBringUpLawTests {
             minimumFeatureLevel: DirectXFeatureLevel.Level110
         );
 
-        _ = Assert.Throws<ArgumentException>(testCode: () => context.Device);
+        var failure = Record.Exception(testCode: () => { _ = context.Device; });
 
-        if (api.Created.Count == 0) {
-            Assert.Skip(reason: "no Direct3D 12 software device on this host");
-        }
+        // The software device exists on this host, so the fake creates it and the bring-up fails reading it: nothing
+        // else is the expected outcome, and any other exception fails the law.
+        var unreadable = Assert.IsType<ArgumentException>(@object: failure);
 
+        Assert.Equal(
+            actual: unreadable.Message,
+            expected: UnreadableDeviceApi.UnreadableMessage
+        );
+        Assert.NotEmpty(collection: api.Created);
         Assert.False(condition: context.IsInitialized);
         Assert.Null(@object: context.Identity);
         Assert.Null(@object: context.Capabilities);
@@ -131,12 +141,13 @@ public sealed class DirectXDeviceBringUpLawTests {
         }
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
-        public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) => throw new NotSupportedException();
     }
     // Creates a real software device, then refuses to read it the way a capability probe refused by an older runtime
     // surfaces through CsWin32's throwing wrappers.
     private sealed class UnreadableDeviceApi : IDirectXDeviceApi {
-        private readonly DirectXNativeDeviceApi m_native = new();
+        private readonly DirectXWarpDeviceApi m_software = new();
+
+        public const string UnreadableMessage = "Value does not fall within the expected range.";
 
         public List<DirectXDevice> Created { get; } = [];
 
@@ -144,7 +155,7 @@ public sealed class DirectXDeviceBringUpLawTests {
             DirectXDevice device;
 
             try {
-                device = m_native.CreateWarpDevice(minimumFeatureLevel: minimumFeatureLevel);
+                device = m_software.CreateWarpDevice(minimumFeatureLevel: minimumFeatureLevel);
             } catch (DirectXException) {
                 throw new ArgumentException(message: "no software device");
             }
@@ -155,9 +166,8 @@ public sealed class DirectXDeviceBringUpLawTests {
         }
         public DirectXDevice CreateWarpDevice(DirectXFeatureLevel minimumFeatureLevel) => throw new NotSupportedException();
         public long GetAdapterLuid(nint deviceHandle) => throw new NotSupportedException();
-        public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) => throw new ArgumentException(message: "Value does not fall within the expected range.");
+        public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) => throw new ArgumentException(message: UnreadableMessage);
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
-        public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) => throw new NotSupportedException();
     }
 }

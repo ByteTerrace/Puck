@@ -24,7 +24,14 @@ namespace Puck.World.Client;
 /// </list>
 /// The world's text screens draw through its own font catalog (<see cref="GlyphAtlas"/>, <see cref="ScreenDecals"/>).
 /// </summary>
-public sealed class WorldRoutedScene : ISdfFrameDresser {
+public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
+    /// <summary>Releases this scene's delivered-tick subscription.</summary>
+    public void Dispose() => m_emitter.Dispose();
+    /// <summary>Reads this authority's last presented shadow slots.</summary>
+    /// <param name="definition">The queried definition.</param>
+    /// <returns>The census, or null before a matching frame.</returns>
+    public string? DescribeShadowSlots(WorldDefinition definition) => m_emitter.DescribeShadowSlots(definition: definition);
+
     private readonly WorldSessionSceneEmitter m_emitter;
     private readonly Func<SdfFrame?> m_hostFrame;
     private readonly List<SdfViewSnapshot> m_views = [];
@@ -44,8 +51,9 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     /// scene's frame takes; <see langword="null"/> before the first.</param>
     /// <param name="bodyColor">The color each avatar is painted with by body index: a local seat keeps the color the
     /// boot presentation paints it with.</param>
+    /// <param name="shadowSettings">The presentation's live slot policy.</param>
     /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
-    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains) {
+    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null) {
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: endpoint);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
@@ -55,6 +63,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
         m_hostFrame = hostFrame;
         m_emitter = new WorldSessionSceneEmitter(
             bodyColor: bodyColor,
+            shadowSettings: shadowSettings,
             castsAvatarShadows: true,
             domains: domains,
             effectiveCameraName: null,

@@ -37,7 +37,7 @@ long CorrelationId, Principal Principal, WorldSubmissionPayload Payload)`.
   a wire exists. `LoopbackTransport.Query` stamps `Principal.Console`;
   `WorldPeerHost` stamps its admitted peer on the envelope.
 
-## The payload union: exactly 12 kinds
+## The payload union: exactly 13 kinds
 
 `WorldSubmissionPayload` (private ctor, nested sealed records):
 `Command(WorldCommand)`, `Grant(WorldGrant)`, `Revoke(WorldGrant)`,
@@ -57,14 +57,18 @@ an addon rides this leaf too — `UpsertAddon`/`RemoveAddon`, see
 `.link`/`.unlink`, see [engagement.md](engagement.md)),
 `Designation(WorldDesignation)` (a subject-bearing target-register write —
 `Server.WorldServer.ApplyDesignation`; applies synchronously, same row as
-`Command`/`Grant`/etc. below).
+`Command`/`Grant`/etc. below), and `Operation(WorldMachineOperation)` (a generic
+ordered operation on one named machine instance; `WorldServer.ApplyMachineOperation`
+checks `Control` on the machine subject, completes with a typed
+`WorldSubmissionResult.MachineOperation`, and refuses while a recording is armed,
+because the tape does not capture it).
 `IntentSubmission` is deliberately NOT a payload —
 intents ride their own buffer (below).
 
 `WorldSubmissionKind` wire discriminants are fixed: `Command = 1`,
 `Grant = 2`, `Revoke = 3`, `Session = 4`, `Rebuild = 5`, `Mutation = 6`,
 `Undo = 7`, `Composition = 8`, `Lever = 9`, `Query = 10`,
-`ScreenOp = 12`, `Designation = 13`; `11` is unassigned.
+`ScreenOp = 11`, `Designation = 12`, `Operation = 13`.
 
 Each kind has exactly one canonical encoder/decoder pair in
 `WorldSubmissionCodec.cs`. `WorldFrameCodec.cs` wraps a leaf as little-endian
@@ -78,10 +82,12 @@ is an opaque wire identity checked by `WorldHelloDoor` and echoed in
 ## Completions, not return values
 
 No submission returns a value. `IWorldServerHost.Submit(envelope,
-Action<WorldSubmissionResult>? completion)` — three result kinds:
+Action<WorldSubmissionResult>? completion)` — six result kinds:
 `Ack` (`Ack.Instance`; says only "the envelope finished draining" — the
 accept/reject outcome travels on stderr and through `WorldServer.EchoTap`),
-`Session(SessionReply)`, `Query(QueryAnswer)`. On loopback the completion has
+`Session(SessionReply)`, `Query(QueryAnswer)`,
+`MachineOperation(MachineOperationResult)`, `Mutation(WorldMutationOutcome)` and
+`Refusal(Code, Detail)` (an ingress or transport refusal that forms no mutation outcome). On loopback the completion has
 already fired before `Submit` returns; console verbs format their result
 lines FROM the reply the callback receives, never from a live read after the
 call.
@@ -94,7 +100,7 @@ drain rather than recursing). Per-kind application:
 
 | Kind | Applies |
 |---|---|
-| Command, Grant, Revoke, Session, Composition, Lever, Query, ScreenOp, Designation | synchronously at ordered-domain submit |
+| Command, Grant, Revoke, Session, Composition, Lever, Query, ScreenOp, Designation, Operation | synchronously at ordered-domain submit |
 | Rebuild, Mutation, Undo | buffer (`WorldPendingOp.Rebuild`/`Mutate`/`Undo`) to the tick boundary; drained FIFO by `DrainPendingOps` at the top of `Step`, before intents |
 
 Consequences for scripts: within one stdin batch, a grant submitted before a
@@ -197,7 +203,9 @@ rejection and on stdout for an acceptance.
   two server-event cases after their point of effect. `WorldServer.RebuildTap`
   and `ScreenOpTap` capture rebuilds and screen operations at their server apply
   points instead of at submission, because their CAS pin is not knowable any
-  earlier. Every ordered-domain payload kind is therefore covered.
+  earlier. Every ordered-domain payload kind is therefore covered except `Lever`
+  (the boot instance's schedule lever rides the `RateLever` entry) and `Operation`
+  (refused while recording).
 
 ## Intents — the separate buffer
 

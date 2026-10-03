@@ -139,6 +139,14 @@
                   "description": "Whether the ceiling is a zero that holds on every device: the kind is a magnitude that varies with the device (a kernel kind such as the march steps), and the pass never does that kind of work, so zero is a structural contract and not one device\u0027s reading. A per-backend-deterministic ceiling is judged on a foreign device only when it is a required zero. Only a zero ceiling of a per-backend-deterministic class carries it; a deterministic ceiling is judged everywhere by its class, and a count loosened to its pass\u0027s class is a reading of the recording device alone.",
                   "type": "boolean",
                   "default": false
+                },
+                "detail": {
+                  "description": "The label within the pass, or null for its total or work outside every pass.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -146,7 +154,8 @@
                 "pass",
                 "kind",
                 "class",
-                "ceiling"
+                "ceiling",
+                "detail"
               ],
               "additionalProperties": false,
               "title": "WorldCountCeiling"

@@ -42,7 +42,7 @@ internal static class LawsCommand {
         );
     }
     private static Command CreateProve() {
-        var lawArgument = new Argument<string>(name: "law") { Description = "The law: a test name of dotted identifiers (Class or Class.Method), selected as FullyQualifiedName~<law>." };
+        var lawArgument = new Argument<string>(name: "law") { Description = "The law: a test name of dotted identifiers (Class or Class.Method), matched anywhere in each test's fully qualified method name." };
         var fixOption = new Option<string>(name: "--fix") { Description = "The commit whose change is the fix; its first-parent change is reversed, and it must be in HEAD's history." };
         var fileListOption = CliOptions.FileList(description: "The paths to withhold: with --fix, the subset of the commit's change to reverse; without it, the paths whose uncommitted change is the fix.");
         var projectOption = new Option<string>(name: "--project") { Description = "The law's test project or its directory (default: the test project whose sources declare the law's class)." };

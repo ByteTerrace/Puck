@@ -5,18 +5,18 @@ using Xunit;
 namespace Puck.Maths.Tests;
 
 /// <summary>The four execution tiers. Plain <c>dotnet test</c> runs <see cref="Smoke"/> and <see cref="Default"/>;
-/// <see cref="Deep"/> and <see cref="Exhaustive"/> are excluded by the default runsettings and selected by their
-/// committed per-tier <c>*.runsettings</c> (see the project README). No tier measures time: cost is <c>puck bench</c>'s.</summary>
+/// <see cref="Deep"/> and <see cref="Exhaustive"/> rows are explicit, and a run opts into one with
+/// <c>--explicit on --filter-trait tier=&lt;tier&gt;</c> (see the project README). No tier measures time: cost is <c>puck bench</c>'s.</summary>
 internal enum Tier {
     /// <summary>A handful of tiny facts, under two seconds — the fastest confidence check.</summary>
     Smoke,
     /// <summary>Everything but <see cref="Deep"/> and <see cref="Exhaustive"/>; the plain-run set, under thirty seconds.</summary>
     Default,
-    /// <summary>Exhaustive edge batteries and larger sweeps, in minutes; the pre-commit guardian. Opt in with <c>deep.runsettings</c>.</summary>
+    /// <summary>Exhaustive edge batteries and larger sweeps, in minutes; the pre-commit guardian. Opt in with <c>--explicit on --filter-trait tier=Deep</c>.</summary>
     Deep,
     /// <summary>
     /// Full-width sweeps — every value of a carrier rather than a sample of one. Opt in with
-    /// <c>exhaustive.runsettings</c>; expect tens of minutes and run it on demand or nightly, never in a change loop.
+    /// <c>--explicit on --filter-trait tier=Exhaustive</c>; expect tens of minutes and run it on demand or nightly, never in a change loop.
     /// </summary>
     /// <remarks>
     /// This is the only tier whose statements do NOT come from a <see cref="Domain"/>. A domain hands out an edge

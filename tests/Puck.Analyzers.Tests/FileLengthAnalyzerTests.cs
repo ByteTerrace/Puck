@@ -8,7 +8,7 @@ namespace Puck.Analyzers.Tests;
 public sealed class FileLengthAnalyzerTests {
     // Above the brand attribute source the harness embeds in every compilation, so only the subject file can trip the rule.
     private const int Ceiling = 100;
-    private const string LedgerPath = @"X:\repo\FileLengths.json";
+    private const string LedgerPath = "X:/repo/FileLengths.json";
 
     private static string Ledger(params (string Path, int Lines)[] recorded) {
         var builder = new StringBuilder(value: "{ \"format\": 1, \"ceiling\": 100, \"recorded\": {");
@@ -67,7 +67,7 @@ public sealed class FileLengthAnalyzerTests {
     [Fact]
     public void AFileUnderTheLedgerDirectoryIsKeyedRelativeToIt() {
         var result = Run(
-            fileName: @"X:\repo\src\Thing\Long.cs",
+            fileName: "X:/repo/src/Thing/Long.cs",
             lines: 130,
             ledgerJson: Ledger(("src/Thing/Long.cs", 130))
         );

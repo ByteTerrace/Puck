@@ -17,30 +17,31 @@ internal readonly record struct HostSample(DateTimeOffset At, double CpuPercent,
 /// <param name="CapacityRamGb">CAPACITY needs free memory above this.</param>
 /// <param name="PressureRamGb">PRESSURE when free memory is below this.</param>
 /// <param name="PressureDiskGb">PRESSURE when free disk is below this.</param>
-internal sealed record HostLoadThresholds(double? CapacityCpuPercent, double? CapacityRamGb, double? PressureRamGb, double? PressureDiskGb);
+internal sealed record HostLoadThresholds(double? CapacityCpuPercent, double? CapacityRamGb, double? PressureRamGb, double? PressureDiskGb) {
+    public static readonly HostLoadThresholds Default = new(CapacityCpuPercent: 50, CapacityRamGb: 5, PressureDiskGb: 10, PressureRamGb: 2);
+}
 /// <summary>
 /// Turns a stream of <see cref="HostSample"/>s into the lines an agent admits or holds work by. It reads nothing itself,
 /// so every rule is a law over injected samples:
 /// <list type="bullet">
 /// <item><c>GPU busy (&lt;holder&gt;) …</c> or <c>GPU idle …</c> once at the first sample and on every change after;</item>
-/// <item><c>PRESSURE &lt;why&gt; …</c> while free memory or disk is under its pressure threshold, at most once per
-/// <see cref="PressureEvery"/>;</item>
-/// <item>otherwise <c>CAPACITY …</c> while the CPU mean over the last <c>cpuSamples</c> readings is under its threshold
-/// and free memory is over its own, at most once per <see cref="CapacityEvery"/>, and only once that many readings
-/// exist. PRESSURE wins over CAPACITY within one reading.</item>
+/// <item><c>PRESSURE &lt;why&gt; …</c> when free memory or disk falls under its pressure threshold, and again when the
+/// reasons change;</item>
+/// <item><c>CAPACITY …</c> when, without pressure, the CPU mean over the last <c>cpuSamples</c> readings falls under its
+/// threshold and free memory is over its own, once that many readings exist;</item>
+/// <item><c>LOADED …</c> when, without pressure, that window shows no capacity, so a watcher sees capacity end.</item>
 /// </list>
+/// One line per transition: a state that holds prints nothing more. PRESSURE wins over CAPACITY within one reading.
 /// </summary>
 internal sealed class HostLoadMonitor(HostLoadThresholds thresholds, int cpuSamples) {
-    /// <summary>The shortest gap between two PRESSURE lines.</summary>
-    public static readonly TimeSpan PressureEvery = TimeSpan.FromMinutes(minutes: 5);
-    /// <summary>The shortest gap between two CAPACITY lines.</summary>
-    public static readonly TimeSpan CapacityEvery = TimeSpan.FromMinutes(minutes: 10);
-
     private readonly Queue<double> m_cpu = new();
 
     private bool? m_gpuBusy;
-    private DateTimeOffset? m_lastCapacity;
-    private DateTimeOffset? m_lastPressure;
+    // The admission state last printed (PRESSURE with its reasons, CAPACITY or LOADED), or null before the first.
+    private string? m_admission;
+
+    /// <summary>Whether the latest reading has capacity, whether or not this reading printed its CAPACITY line.</summary>
+    public bool HasCapacity { get; private set; }
 
     private static string Number(double value) => value.ToString(format: "0.0", provider: CultureInfo.InvariantCulture);
 
@@ -78,22 +79,26 @@ internal sealed class HostLoadMonitor(HostLoadThresholds thresholds, int cpuSamp
             pressure.Add(item: $"freeDisk<{Number(value: disk)}GB");
         }
 
-        if (pressure.Count != 0) {
-            if ((m_lastPressure is not { } lastPressure) || ((sample.At - lastPressure) >= PressureEvery)) {
-                lines.Add(item: $"PRESSURE {string.Join(separator: ',', values: pressure)} {values}");
-                m_lastPressure = sample.At;
-            }
-        } else if (
+        HasCapacity = ((pressure.Count == 0) &&
             (thresholds.CapacityCpuPercent is { } cpu) &&
             (thresholds.CapacityRamGb is { } free) &&
-            (m_cpu.Count == cpuSamples) &&
-            (mean < cpu) &&
-            (sample.FreeRamGb > free)
-        ) {
-            if ((m_lastCapacity is not { } lastCapacity) || ((sample.At - lastCapacity) >= CapacityEvery)) {
-                lines.Add(item: $"CAPACITY {values}");
-                m_lastCapacity = sample.At;
+            (m_cpu.Count == cpuSamples) && (mean < cpu) && (sample.FreeRamGb > free));
+
+        // Capacity is judged only with both its thresholds and a full window; until then a reading without pressure has
+        // no admission state, and the next one that does prints.
+        var judged = ((thresholds.CapacityCpuPercent is not null) && (thresholds.CapacityRamGb is not null) && (m_cpu.Count == cpuSamples));
+        var admission = ((pressure.Count != 0)
+            ? $"PRESSURE {string.Join(separator: ',', values: pressure)}"
+            : (HasCapacity
+                ? "CAPACITY"
+                : (judged ? "LOADED" : null)));
+
+        if (admission != m_admission) {
+            if (admission is not null) {
+                lines.Add(item: $"{admission} {values}");
             }
+
+            m_admission = admission;
         }
 
         return lines;

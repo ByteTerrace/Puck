@@ -32,9 +32,9 @@ internal static class RefusalCensus {
 
         foreach (var project in Projects) {
             foreach (var file in Directory.EnumerateFiles(path: Path.Combine(path1: repositoryRoot, path2: "src", path3: project), searchPattern: "*.cs", searchOption: SearchOption.AllDirectories)) {
-                var relative = file.Replace(oldChar: '\\', newChar: '/');
+                var relative = file.Replace(newChar: '/', oldChar: '\\');
 
-                if (relative.Contains(value: "/obj/", comparisonType: StringComparison.Ordinal) || relative.Contains(value: "/bin/", comparisonType: StringComparison.Ordinal)) {
+                if (relative.Contains(comparisonType: StringComparison.Ordinal, value: "/obj/") || relative.Contains(comparisonType: StringComparison.Ordinal, value: "/bin/")) {
                     continue;
                 }
 
@@ -49,7 +49,7 @@ internal static class RefusalCensus {
                         var door = (attribute.ArgumentList?.Arguments.FirstOrDefault(predicate: static argument => (argument.NameColon?.Name.Identifier.Text == "door"))
                             ?? attribute.ArgumentList?.Arguments.FirstOrDefault());
 
-                        if (door?.Expression is not LiteralExpressionSyntax { RawKind: (int)SyntaxKind.StringLiteralExpression } literal) {
+                        if (door?.Expression is not LiteralExpressionSyntax { RawKind: ((int)SyntaxKind.StringLiteralExpression) } literal) {
                             throw new InvalidDataException(message: $"{file}: '{member.Identifier.Text}' names its refusal door with no string literal.");
                         }
 

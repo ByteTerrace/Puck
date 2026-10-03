@@ -82,6 +82,7 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
         m_live[index] = source;
         ReconcileMappings();
     }
+
     /// <summary>Gives a screen back the source its row authors, dropping the live bind a presentation verb made over it:
     /// the <c>screen.source &lt;index&gt; row</c> path. A camera view the live bind registered is released; a row that
     /// authors a camera view binds it again, as the view self-heal does. A machine the row's screen displays is not a
@@ -114,6 +115,7 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
 
         return (Ok: true, Message: $"screen {index} showing its row's source");
     }
+
     // The one path a live retarget takes: the slot stops filming the camera view it held, releasing the registration
     // when nothing else shows it, and the screen then shows the live source, or its row's when there is none.
     private void Rebind(ScreenSlot slot, WorldScreenSource? live) {

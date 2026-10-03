@@ -15,9 +15,9 @@ namespace Puck.World.Tests;
 /// traveller's projection, whether the crossing is colocated or federated.
 /// </summary>
 public sealed class FederatedCommitPrivacyLawTests {
-    private const string InboxLine = "private-inbox-line";
-    private const string HudText = "private-hud-text";
     private const string BindingLabel = "private-binding-label";
+    private const string HudText = "private-hud-text";
+    private const string InboxLine = "private-inbox-line";
 
     private static readonly string[] Markers = [
         .. CrossingIdentityPrivacyLawTests.Markers,

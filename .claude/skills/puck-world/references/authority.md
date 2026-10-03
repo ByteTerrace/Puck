@@ -28,14 +28,16 @@ ONE server-side table authorizes every write: `WorldGrants`
   identity a command context, a submission envelope, a mutation, an intent and
   a replay entry carry. Kinds: `Unspecified` (0, no door stamped it — never an
   identity; `CommandContext` refuses one at construction), `Console`,
-  `Seat` (index 0–3), `Addon(name)`, `Peer(index, generation)`, `World`.
+  `Seat` (index 0–3), `Addon(name)`, `Peer(index, generation)`, `World`, and
+  `Session(ordinal, epoch)` (an unembodied joined viewer; the ordinals are not body
+  indices, and the admission verdict mints its grants, which end with the session).
   Admitted peers occupy indices the document's authored local-seat count
   through its population ceiling and carry a positive generation. A zero-seat
   world can admit peer 0. Shared console/JSON and wire parsers check only the
   representation bound through `WorldBodiesLimits.IsBodyIndex`; the receiving
   authority owns census, occupancy, and generation checks. Tokens
   (`PrincipalTokens`, the inverse of `Principal.Describe()`): `seat1..seat4`
-  (1-based), `console`, `world`, `addon:<name>`, `peer:<n>:<generation>`.
+  (1-based), `console`, `world`, `addon:<name>`, `peer:<n>:<generation>`, `session:<n>:<epoch>`.
 - `Grantee` (`Puck.World.Schema`, `GranteeKind`): what a grant row names as its
   holder — a `Principal`, a `Group(id)` or a `Document(id)`. Every principal
   converts implicitly to a grantee. A group or a document never acts, and the
@@ -52,7 +54,7 @@ ONE server-side table authorizes every write: `WorldGrants`
   `TryReadDurableState`), never off the runtime table, and never off the visited
   world's `grants` either. It therefore never enters the LIVE table at all:
   both document-`grants` replays skip a `document:` row
-  (`WorldServer.IsDocumentChannelRow`) and the grant door refuses one by name
+  (`WorldTick.IsDocumentChannelRow`) and the grant door refuses one by name
   (`Conflicts` rule (-1b)), because a live row would be budget-less, mask-less,
   and read by nothing. The live wire has no value for it and refuses it BY NAME, pointing at
   the document's own authored `grants` section as where a `document:` capability
@@ -86,7 +88,8 @@ ONE server-side table authorizes every write: `WorldGrants`
   index), `screen:<n>`, `section:<name>`, `state:<name>` (string-keyed,
   naming a state row — there is no `profile:<id>` kind; `GrantSubjectKind`
   declares All/Body/Screen/Section/Composition/State/Region/Seat/Creation/
-  Placement/Adjacency and nothing else), `creation:<id>`/`placement:<id>` (one
+  Placement/Adjacency/Machine and nothing else), `machine:<name>` (a named
+  machine instance, `Control`-only), `creation:<id>`/`placement:<id>` (one
   creations/placements row apiece — the ROW-SCOPED `Mutate` subjects, an
   ALTERNATIVE to the section hold rather than a narrowing beneath it; the id
   is shape-checked, never bound-checked, because authoring a row that does
@@ -237,10 +240,11 @@ future client-hosted addon) stay pooled under `Reach ∧ Consent`, unaffected.
 
 `IsLegitimateSubject` is a POSITIVE per-capability rule — a new subject
 shape is refused by default: Drive takes `body:<n>` (bounded by the
-population) or `all` (trusted only); Observe takes `body:<n>`, plus
+population) or `all` (trusted only); Observe takes `body:<n>`, `state:<name>`, plus
 `screen:<n>`/`region:<name>`/`seat:<n>`/`adjacency:<name>` for untrusted event
 consumers, or
-`all` for trusted principals; Control takes `screen:<n>` (any),
+`all` for trusted principals and `Session` principals; Control takes `screen:<n>` (any),
+`machine:<name>` (any, a nonblank name),
 `body:<n>` (any, bounded by the population — a control-application possession
 target, [engagement.md](engagement.md)), `composition` (trusted), `history` (trusted:
 the in-session history timeline every bindable `world.history` form is checked
@@ -457,8 +461,8 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   the row), `[world.mutation rejected: …]`, contention
   `[world.grant: body:<n> driven by both … this tick — …]`.
 - `world.refusals [door]` prints the DECLARED refusal catalog
-  (`src/Puck.State/RuleRefusal.cs` + `RefusalCatalog.cs`) across the doors: `addon.mutate`,
-  `grant.authority`, `hud.validate`, `replay.tape`, `sdf.decode`,
+  (`RefusalAttribute` in `src/Puck.State/RuleRefusal.cs`, collected by `src/Puck.World/RefusalCatalog.cs`) across the doors: `addon.mutate`,
+  `grant.authority`, `hud.validate`, `pipeline.overrides`, `replay.tape`, `sdf.decode`,
   `state.rule.compile`, `state.rule.fire`, `state.transform`,
   `world.rule.compile`, `world.interaction.compile`, `world.rule.effect` — run
   `puck search "\[Refusal\(" src -M 0` for the current declaration count per
@@ -494,9 +498,11 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   principal's `allowed (structural)` branch.
 - `world.grant` grammar: `<grantee> <capability> <subject> [exclusive]
   [budget:<n>] [events:<n>] [channels:<name,...>] [ceiling:<f>]
-  [verbs:<name,...>]`; trailing tokens may appear in any
-  order, each at most once. `channels:` with `ceiling:` authors consent;
-  `channels:` alone authors reach. `world.revoke` takes the bare triple and
+  [hold:<seconds>] [verbs:<name,...>] [writes:<name,...>]`
+  (`world.grant` alone also accepts `registers:<name,...>`); trailing tokens may
+  appear in any order, each at most once. `channels:` with `ceiling:` authors
+  consent; `channels:` alone authors reach; `hold:` is the Drive row's
+  `HoldCeiling` and `writes:` its State Mutate row's `WriteMask`. `world.revoke` takes the bare triple and
   clears budget/reach/ceilings with it. Both verbs are `Simulation`-routed,
   return `CommandResult.None`, and let the SERVER print the loud line.
 - **No new decision surface lands without its read-back verb, in the same

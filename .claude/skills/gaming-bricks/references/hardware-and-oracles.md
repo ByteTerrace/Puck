@@ -157,8 +157,8 @@ alias in that project's `GlobalUsings.cs` — searching for a declared
 - `ComponentSnapshotLayoutLawTests` in `tests/Puck.HumbleGamingBrick.Tests` and
   `tests/Puck.AdvancedGamingBrick.Tests` pins every component's layout by
   seeding each field from its name. A deliberate layout change re-records that
-  component's value and bumps `MachineIdentity.CurrentVersion` (Humble) or
-  `AgbMachineIdentity.CurrentVersion` (Advanced) in the same change.
+  component's value in the same change, and `puck formats` records the moved shape of
+  `MachineIdentity` (Humble) or `AgbMachineIdentity` (Advanced).
 - `--hash-divergence` localizes a mismatch between two executions in one
   process and one build.
 - Use `--dump-snapshot` and an offline section-table diff for cross-build byte

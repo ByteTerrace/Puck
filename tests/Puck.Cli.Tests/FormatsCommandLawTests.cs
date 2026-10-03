@@ -6,7 +6,7 @@ namespace Puck.Cli.Tests;
 /// <summary>CONTRACT UNDER TEST: formats refuses untracked sources before reading or writing its ledger, names
 /// every omitted source, and permits recording and checking once sources are tracked, ignored, or generated.</summary>
 public sealed class FormatsCommandLawTests {
-    private const string Source = "public static class DemoCodec { public const string SchemaVersion = \"puck.demo.v1\"; }";
+    private const string Source = "namespace Puck.Demo;\npublic static class DemoCodec { public const string SchemaVersion = \"puck.demo.v1\"; }";
     private const string SourcePath = "src/Puck.Demo/DemoCodec.cs";
     private const string UntrackedPrefix = "formats: untracked source: ";
 
@@ -14,7 +14,8 @@ public sealed class FormatsCommandLawTests {
         var checkout = new GitScratchCheckout();
 
         checkout.Write(name: SourcePath, text: Source);
-        _ = checkout.Git("add", "--", SourcePath);
+        checkout.Write(name: "src/Puck.Demo/Puck.Demo.csproj", text: "<Project />");
+        _ = checkout.Git("add", "--", SourcePath, "src/Puck.Demo/Puck.Demo.csproj");
 
         return checkout;
     }
@@ -98,9 +99,9 @@ public sealed class FormatsCommandLawTests {
     [Fact]
     public void StagingTheUntrackedSourceAllowsRecordingItsFormat() {
         using var checkout = Checkout();
-        const string Added = "src/Added.cs";
+        const string Added = "src/Puck.Demo/Added.cs";
 
-        checkout.Write(name: Added, text: "public class Added { public const int FormatVersion = 7; }");
+        checkout.Write(name: Added, text: "namespace Puck.Demo;\npublic class Added { public const int FormatVersion = 7; }");
         AssertRefused(checkout, false, Added);
 
         _ = checkout.Git("add", "--", Added);

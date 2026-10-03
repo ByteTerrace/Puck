@@ -13,7 +13,7 @@ internal static partial class CompileCommand {
         var catalog = Path.GetFullPath(path: output);
 
         if (!Directory.Exists(path: catalog)) {
-            Console.Error.WriteLine(value: $"error: '{catalog}' does not exist, so there is no output to check.");
+            Console.Error.WriteLine(value: $"error: '{CliPaths.ToDisplay(fullPath: catalog)}' does not exist, so there is no output to check.");
 
             return 2;
         }
@@ -48,7 +48,7 @@ internal static partial class CompileCommand {
             var shipped = Path.Combine(path1: catalog, path2: relative);
 
             if (!File.Exists(path: shipped)) {
-                problems.Add(item: $"missing {relative}: a fresh run writes it and '{catalog}' does not hold it.");
+                problems.Add(item: $"missing {relative}: a fresh run writes it and '{CliPaths.ToDisplay(fullPath: catalog)}' does not hold it.");
             } else if (!File.ReadAllBytes(path: shipped).AsSpan().SequenceEqual(other: File.ReadAllBytes(path: Path.Combine(path1: fresh, path2: relative)))) {
                 problems.Add(item: $"differs {relative}: its bytes are not what a fresh run writes.");
             }
@@ -78,12 +78,12 @@ internal static partial class CompileCommand {
                 Console.Error.WriteLine(value: $"tree check: {problem}");
             }
 
-            Console.Error.WriteLine(value: $"tree check: '{catalog}' is not what a fresh run of '{Path.GetFullPath(path: tree)}' writes ({problems.Count} problem(s)).");
+            Console.Error.WriteLine(value: $"tree check: '{CliPaths.ToDisplay(fullPath: catalog)}' is not what a fresh run of '{CliPaths.ToDisplay(fullPath: tree)}' writes ({problems.Count} problem(s)).");
 
             return 1;
         }
 
-        Console.WriteLine(value: $"tree check: '{catalog}' holds exactly the {written.Length:N0} files a fresh run of '{Path.GetFullPath(path: tree)}' writes.");
+        Console.WriteLine(value: $"tree check: '{CliPaths.ToDisplay(fullPath: catalog)}' holds exactly the {written.Length:N0} files a fresh run of '{CliPaths.ToDisplay(fullPath: tree)}' writes.");
 
         run.Conclude(passed: true);
 

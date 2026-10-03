@@ -30,10 +30,11 @@ signatures, parameters, return values, and exceptions.
 The runners locate their committed manifests with
 `CorpusManifest.InRepository(projectName)`; the Humble battery resolves its
 expectations ledger in the same checkout. The shared runtime locator walks to
-`Puck.slnx` from the executable directory, then the working directory, so CI's
-deterministic compiler source paths do not affect corpus selection or ledger
-updates. A runner launched outside the checkout must use a working directory
-inside it.
+`Puck.slnx` from the working directory first, then from the executable
+directory, so CI's deterministic compiler source paths do not affect corpus
+selection or ledger updates, and a runner built in one checkout and run from
+another acts on the one it was run from. A runner with neither directory inside
+a checkout throws `DirectoryNotFoundException`.
 
 ## Individually pinned corpus files
 

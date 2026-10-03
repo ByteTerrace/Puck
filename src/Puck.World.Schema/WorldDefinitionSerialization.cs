@@ -940,7 +940,7 @@ internal abstract class TokenEnumJsonConverter<T>(string fieldName, IReadOnlyLis
 /// <summary>
 /// Reads and writes a <see cref="WorldBackendPreference"/> as an explicit lowercase token (<c>auto</c> / <c>directx</c>
 /// / <c>vulkan</c>), which would otherwise emit <c>directX</c> — a spelling no one types and gratuitously divergent
-/// from World's token style. The <c>--backend</c> boot flag, the <c>host.backendDraw</c> resolver and the
+/// from World's token style. The <c>--backend</c> boot flag, the <c>host.backendRow</c> resolver and the
 /// <c>world.host</c> read-back all speak the same map.
 /// </summary>
 internal sealed class WorldBackendPreferenceJsonConverter() : TokenEnumJsonConverter<WorldBackendPreference>(

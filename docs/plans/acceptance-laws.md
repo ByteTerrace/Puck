@@ -12,11 +12,9 @@ fail if any one system drifts from the others.
 This page specifies the six laws: the claim, the exact scenario, the observable
 that decides it, the systems it crosses, what it adds over the laws that already
 exist, where it lives, and whether it needs a GPU. It also names the gaps found
-while designing them, each a defect the coming integration batch fixes with laws
-of its own. Implementation starts
-once the integration batch that carries the projection, time-travel and
-portal-unification lanes lands; until then several entry points named here exist
-only on those lanes, and each is marked.
+while designing them. The projection, time-travel and portal-unification lanes
+have landed, so every entry point named here exists, and five of the seven gaps
+are fixed with laws of their own.
 
 ## Implementation status
 
@@ -26,25 +24,27 @@ law 2's local walked crossing in
 sequences, without its federated, rollback and shared-identity variants;
 law 3's write, read and collision legs in
 `tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; law 4's headless
-legs in `tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; and law 5 in
-`tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. The rest are not
-yet. The design was read against the
-integration branch and the lanes the coming integration batch lands, and a
-review checked that no law can pass while its claim is false. Designing the
-laws found seven gaps. The coming integration batch fixes five of them (G1 to
-G5) with laws of their own, so the six laws are written against the fixed
-contracts:
+legs in `tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; law 5 in
+`tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`; and law 6 in
+`tests/Puck.World.Tests/UnsupportedOperationLawTests.cs`, over the refusals
+classified so far. The design was read against the integration branch, and a
+review checked that no law can pass while its claim is false. Designing the laws
+found seven gaps. Five of them (G1 to G5) are fixed in code, each held by laws of
+its own, so the six laws are written against the fixed contracts:
 
-- G1 and G2 decide law 1: a seek delivers once, and a viewer never keeps a
-  future clock anchor.
+- G1 and G2 decide law 1: a seek delivers once
+  (`HistorySeekDeliveryLawTests`), and a viewer never keeps a future clock
+  anchor (`ProjectionAnchorLawTests`).
 - G3 decides law 2: a crossing's mobility credential is minted where the tape
-  sees it.
-- G4 decides law 5: only the identity projection crosses a seam.
-- G5 decides law 3: a checkpoint carries what the bindings last saw.
+  sees it (`CrossingTapeOrderLawTests`).
+- G4 decides law 5: only the identity projection crosses a seam
+  (`CrossingIdentityPrivacyLawTests`).
+- G5 decides law 3: a checkpoint carries what the bindings last saw
+  (`MachineBindingCheckpointLawTests`).
 
-Once the batch lands, each law also confirms its gap's fix on the integration
-head. The other two land with their laws: G6 is part of law 6, which enumerates
-a classification the refusals declare in code rather than a list it carries, and
+Each law, once written, also confirms its gap's fix on the integration head.
+The other two land with their laws: G6 is part of law 6, which enumerates a
+classification the refusals declare in code rather than a list it carries, and
 G7 is the return seam law 4 needs.
 
 The open items are in [the plan checklist](open-items.md#cross-plan-maintenance).
@@ -75,7 +75,7 @@ time travel and recipients agree.
 **Scenario.** A world with one clock row that advances every tick, a fog
 density bound to it, and a row only another seat may read. At tick 0 a
 federation projection sink attaches at the Presentation tier, the way the
-projection lane's jump laws attach theirs, and is drained as the world steps
+other `ProjectionAnchorLawTests` laws attach theirs, and is drained as the world steps
 past the history's second keyframe. `world.history seek` then returns to that
 keyframe, and the sink's stream is decoded into a projection hold.
 
@@ -128,11 +128,10 @@ Four variants run the same steps:
 
 - Time travel: `WorldHistory.TrySeek`, which restores a keyframe through
   `RestoreCheckpoint`, re-simulates the recorded ticks and presents the
-  restored timeline (`WorldTick.PresentRestoredTimeline`). It is on the
-  time-travel lane.
+  restored timeline (`WorldTick.PresentRestoredTimeline`).
 - Delivery: the one delivery door in `WorldDocument.Delivery.cs`
-  (`MarkDefinitionDeliveryPending`, `DeliverPending`). On the projection lane,
-  every jump of the authoritative state is delivered through one mark.
+  (`MarkDefinitionDeliveryPending`, `DeliverPending`). Every jump of the
+  authoritative state is delivered through one mark.
 - The recipient: `WorldFederationProjectionSink`, `WorldProjectionFeed.Compose`
   (a whole projection first, member deltas after), and the clock anchors in
   `WorldClockAnchorLedger`.
@@ -148,17 +147,22 @@ The contract it proves:
 
 **Not a duplicate of.**
 
-- The projection lane's jump laws prove that a bare restore, reset, load,
-  reload, undo or replay reaches an attached observer.
-- The time-travel lane's seek laws prove that a seek reproduces every recorded
-  tick, but none attaches a viewer.
+- The projection anchor jump laws (`ProjectionAnchorLawTests`) prove that a bare
+  restore, reset, load, reload, undo or replay reaches an attached observer.
+- The history seek laws prove that a seek reproduces every recorded tick.
+  `HistorySeekDeliveryLawTests` attaches a counting sink and holds that a seek
+  delivers once through both restore doors, and a `ProjectionAnchorLawTests` law
+  attaches a federation projection sink, seeks to a keyframe and holds that the
+  decoded hold keeps no future anchor.
 
-This law adds the seek path itself, through both restore doors, the
-forward-only anchor rule across a backward jump, and disclosure after the jump.
+This law adds the composed scenario: the federation sink through all four
+variants, the eased value and the authoritative hash against the live run,
+disclosure after the jump, and the structural projection equal to a fresh
+sink's.
 
 **Lives in** `tests/Puck.World.Tests`, as a partial of the projection anchor laws
-so it reuses their document and anchor helpers, driven by the time-travel lane's
-history harness. **GPU:** none.
+so it reuses their document and anchor helpers, driven by `WorldHistoryHarness`.
+**GPU:** none.
 
 ## Law 2: a crossing replays to the same traveller
 
@@ -177,8 +181,8 @@ record a replay tape, with the companion set recorded.
 A federated variant runs the same walk across the in-process federation harness.
 A rollback variant refuses the commit, so the traveller stays and the source seat
 is restored. A shared-identity variant seats seats 0 and 1 under one identity and
-walks both into the door in one transfer: the integration batch's contract is
-that a shared identity is one detached binding, not one per seat.
+walks both into the door in one transfer: the contract is that a shared
+identity is one detached binding, not one per seat.
 
 **Decided by.**
 
@@ -201,15 +205,16 @@ that a shared identity is one detached binding, not one per seat.
   `WorldPopulation.TryDetachSeatForTransfer`, `MapArrival`, commit or
   rollback through `RestoreDetachedSeat`) and the escrow landing in
   `WorldTransferEscrow`.
-- The tape: `WorldReplayEntry.Arrival` at the destination, and the departure
-  and restore entries the portal-unification lane tapes where the authority
-  decides them.
+- The tape: `WorldReplayEntry.Arrival` at the destination, and the
+  `Departure` entry (its `Restored` flag marks a rollback) the tape records
+  where the authority decides it.
 - Replay: `WorldReplaySnapshot`'s reland and re-driven departure, and the
   authoritative hash composition.
 
 **Not a duplicate of.** The crossing replay laws verify a local crossing taped at
 both authorities and a federated arrival replayed from the destination tape alone,
-and the portal-unification lane's federation replay laws compare pose, rig, turn,
+the crossing tape order laws replay a refused, aborted or rolled-back crossing
+tick for tick, and the federation transfer replay laws compare pose, rig, turn,
 grants and census across an arrival and a rollback. No law asserts the mobility
 credential or the velocity after replay. This law adds them, on a walked, mapped
 crossing with a profiled traveller, through both tapes.
@@ -302,8 +307,13 @@ The contract it proves:
 **Not a duplicate of.** The cartridge laws prove that a world checkpoint
 preserves a stepped machine and its continuation, but in a world with no memory
 bindings and without comparing the journal. The named machine memory laws cover
-write policy and replacement, but not a checkpoint. No law crosses the binding
-memo with a checkpoint.
+write policy and replacement, but not a checkpoint.
+`MachineBindingCheckpointLawTests` crosses the binding memo with a checkpoint
+for Write bindings: a history seek over a running machine and a server restored
+through `FromCheckpoint` leave the byte the guest's program rewrote alone, as the
+uninterrupted run does, and the checkpoint carries the memo in binding order.
+This law adds the Read leg, the collision leg over shared names and ordinals,
+and the comparison of the journal and the document bytes.
 
 **Lives in** `tests/Puck.World.Tests`. **GPU:** none.
 
@@ -388,9 +398,11 @@ own source again ([gap G7](#g7-a-screen-has-no-way-back-to-its-authored-source))
 composition is unavailable on a host without a GPU device. Headless, only screen
 0, the machine's video, publishes a mapping with a known extent, so the law runs
 on screen 0 and reads the mapping's source instance, the first token of its
-mapping segment. A pipeline node has no rendered instance to pause and the views
-are not configured, so the pipeline pause, the camera-view retarget and a census
-that moves stay uncovered; the census is still read before and after. The
+mapping segment. A pipeline node has no rendered instance to pause headless, and
+only the render root configures the views, so the pipeline pause, the
+camera-view retarget and a census that moves are the offscreen canary
+`displayed-source-render-root`, which requires a GPU and is owed on a GPU host;
+the headless law still reads the census before and after. The
 retarget is a QR source, and under it the route leg also reads the QR's
 authoring back, which proves the live bind survived. Red legs: a `row` form that
 leaves the live bind fails the return; a route change that drops the live bind
@@ -443,12 +455,15 @@ a HUD panel text and a binding overlay, each with its own marker.
   `WorldIdentityProjectionWire`, and a destination never saves a foreign
   identity.
 
-**Not a duplicate of.** The identity projection wire laws prove that the
-reservation carries the projection and never the owned document, and the
-federation identity privacy lane's crossing privacy laws prove each seam on its
-own. This law adds the one end-to-end case the milestone names: a commit that
-crosses, federated and colocated, read at the bytes on the wire and at the seat
-it lands in.
+**Not a duplicate of.** The identity projection wire laws
+(`IdentityProjectionWireLawTests`) prove that the reservation carries the
+projection and never the owned document, and `CrossingIdentityPrivacyLawTests`
+proves each seam on its own: a remote commit, a colocated crossing and a retried
+commit install the projection and write no private bytes into the destination's
+crossing log, arrival tape or checkpoint. No law reads the commit's own encoded
+bytes (`WorldFederationCodec.EncodeCommit`). This law adds the one end-to-end
+case the milestone names: a commit that crosses, federated and colocated, read
+at the bytes on the wire and at the seat it lands in.
 
 **Lives in** `tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. The
 federated leg skips itself on a host without QUIC; the federation harness has no
@@ -476,7 +491,7 @@ reproduce:
 
 | Operation | Refusal |
 |---|---|
-| An op-id-preserving mutation on a basic link | `world.transport.operation_metadata_unsupported` |
+| An op-id-preserving mutation on a basic link | `world.transport.operation-metadata-unsupported` |
 | An external transfer into a closed rewind group | "closed rewind group refuses an external transfer" |
 | A machine operation while recording | `MachineOperationStatus.Refused` |
 | A machine operation on a provider without operations | `MachineOperationStatus.Unsupported` |
@@ -487,7 +502,7 @@ reproduce:
 | A vector-cell effect kind | `RuleRefusal.VectorEffectNotAdmitted` |
 | An addon mutation it never requested | `AddonMutateRefusal.NotRequested` |
 | A transfer by an undeclared producer | the transfer's named refusal |
-| A history seek while a session is live | `world.history: seek refused — …` (on the time-travel lane) |
+| A history seek while a session is live | `world.history: seek refused — …` |
 | A transfer of a rigid body | the transfer's named refusal |
 | A transfer while the traveller carries another body | the transfer's named refusal |
 
@@ -524,7 +539,24 @@ field or the verdict. None compares a whole-state hash with a twin, and nothing
 enumerates the unsupported operations. This law adds both: the twin comparison,
 with witnesses for what a checkpoint misses, over a set read from the code.
 
-**Lives in** `tests/Puck.World.Tests`. **GPU:** none.
+**Lives in** `tests/Puck.World.Tests/UnsupportedOperationLawTests.cs`.
+**GPU:** none.
+
+**As implemented.** G6's classification is `RefusalAttribute.Unsupported`,
+carried on `RefusalCatalogEntry` and tagged `, unsupported` in `world.refusals`.
+The theory's rows are the classified set, and an arrangement names how both
+twins are arranged, the operation, a witness over what the checkpoint does not
+capture, and the legal variant on its own twin. A classified refusal without an
+arrangement fails by name, and an arrangement naming no classified refusal fails
+`EveryArrangementNamesAClassifiedRefusal`. Five refusals are classified so far:
+`replay.record/StartNotCheckpointable`, `storage.pull/PullWhileRecording`,
+`world.undo/PastHorizon`, `machine.operation/WhileRecording` and
+`machine.operation/ProviderWithoutOperations`. The machine-operation rows witness
+the operated machine's generation and configuration; the provider row's twins
+run an engine without operations and its legal variant one with them. The rest
+of the table above joins as each refusal gains a code and an arrangement;
+`IdentityUnbound` refuses inside a rule firing whose scope rewinds it, so its
+arrangement needs a gate the twins can hold apart.
 
 **Scope.** Delivered effect arms (a cue, a pose, a body motion, a rigid impulse,
 a field paint, a save) are outside the atomic promise by contract: they fire
@@ -536,38 +568,40 @@ classification says so for each of their refusals.
 
 ### G1: a seek delivers more than once
 
-A seek that restores a keyframe delivers repeatedly:
+Fixed. A seek that restored a keyframe delivered repeatedly:
 
 - the definition at the keyframe, inside the checkpoint restore, and again
   through the load door's install;
 - a snapshot for every re-simulated tick;
-- then the restored timeline's presentation sends the definition again and
-  repeats the target tick's snapshot.
+- then the restored timeline's presentation sent the definition again and
+  repeated the target tick's snapshot.
 
-The fix, in the coming integration batch, makes `PresentRestoredTimeline` the
-single delivery point: one definition and one snapshot at the target tick,
-through both restore doors, held by a law with a counting sink. Law 1 checks
-the same count from an existing viewer.
+`PresentRestoredTimeline` is now the single delivery point: one definition and
+one snapshot at the target tick, through both restore doors, with the seek's
+span withheld from every viewer (`WorldOutputHub.WithholdsTimeline`). A law with
+a counting sink holds it (`HistorySeekDeliveryLawTests`). Law 1 checks the same
+count from an existing viewer.
 
 ### G2: a rewound clock can leave the viewer a future anchor
 
-Suppose a clock row holds no number at the keyframe, and the viewer already holds
-an anchor sent after it. A seek back then leaves that anchor in place: the
-ledger carries a held anchor it has no newer number to replace, and steps over
-a clock with no number. The viewer holds an anchor later than the authority's
-engine tick and presents a frozen phase.
+Fixed. Suppose a clock row holds no number at the keyframe, and the viewer
+already holds an anchor sent after it. A seek back used to leave that anchor in
+place: the ledger carried a held anchor it had no newer number to replace, and
+stepped over a clock with no number. The viewer held an anchor later than the
+authority's engine tick and presented a frozen phase.
 
-The fix, in the coming integration batch, treats a held anchor ahead of the
-authority's tick as stale: it is dropped and re-seeded the way a fresh recipient
-is, with a ledger law and an end-to-end seek law. Law 1's third variant
-composes it with the other systems.
+`WorldClockAnchorLedger` now treats a held anchor ahead of the authority's tick
+as stale: it is dropped and re-seeded the way a fresh recipient is, on the next
+composition or step. `ProjectionAnchorLawTests` holds it at the ledger and
+end to end through a seek. Law 1's third variant composes it with the other
+systems.
 
 ### G3: a reservation mints mobility the tape never sees
 
-`WorldPopulation.EnsureMobility` stores a body's mobility credential and its
-generation. A crossing's reservation calls it before `Reserve`, in its own
-authority operation, so no tape records it. Neither detach nor admission clears
-it. It is harmless while the mint and the detach fall in the same
+Fixed. `WorldPopulation.EnsureMobility` stores a body's mobility credential and
+its generation. A crossing's reservation used to call it before `Reserve`, in its
+own authority operation, so no tape recorded it. Neither detach nor admission
+cleared it. It was harmless while the mint and the detach fell in the same
 `ApplyTransfer` call. They separate when:
 
 - a reservation is refused with retry, so the mint stays on a body that has not
@@ -579,74 +613,69 @@ it. It is harmless while the mint and the detach fall in the same
 - a slot is reused after a committed departure, with the stale credential still
   in its entry (inferred).
 
-The determinism attestation's body continuation component, landing first in
-the coming integration batch, folds a slot's mobility and its generation into
-the authoritative hash every recorded tick, so each case diverges in replay.
-That batch fixes it the re-derive way:
+The authoritative hash folds a slot's mobility and its generation every recorded
+tick, so each case diverged in replay. The fix re-derives the credential:
 
-- the reservation reads the credential without minting it, as
-  `ResolveIncarnation` already computes it;
+- the reservation reads it without minting it (`WorldPopulation.ReadMobility`),
+  as `ResolveIncarnation` computes it;
 - only the departure's detach mints it, and the replay's re-driven departure
   calls the same detach;
-- one law covers each case above, matching the re-drive to the live run.
+- `CrossingTapeOrderLawTests` covers each case above, matching the re-drive to
+  the live run.
 
 Law 2's rollback variant composes it with a walked crossing.
 
 ### G4: the commit carries the private profile
 
-The reservation carries only the identity projection, as its contract says, but
-the commit does not:
+Fixed. The reservation carried only the identity projection, as its contract
+says, but the commit did not:
 
-- The source puts the body's live `WorldIdentity` into
+- The source put the body's live `WorldIdentity` into
   `WorldTransferCommitMember.Profile`.
-- The federation codec serializes that identity's whole owned document into the
+- The federation codec serialized that identity's whole owned document into the
   commit: the chat allow-list, the chat log and inbox rows, controller history,
   bindings and the private HUD panel.
-- At the destination, the escrow seats `member.Profile` ahead of the
-  reservation's redacted identity, so the full document wins.
-- A colocated crossing hands over the same object directly.
+- At the destination, the escrow seated `member.Profile` ahead of the
+  reservation's redacted identity, so the full document won.
+- A colocated crossing handed over the same object directly.
 
-The commit law in the federation transfer laws pins this on purpose, so
-federated and colocated crossings match, and asserts only the profile's id and
-name.
-
-The federation identity privacy lane, in the coming integration batch, fixes it
-at every seam: the commit member carries a `WorldIdentityProjection`, written
-through `WorldIdentityProjectionWire`, and a destination never saves a foreign
-identity. When it lands, check two things: law 5 passes on the integration head,
-and the commit law no longer asserts a full profile anywhere.
+The federation identity privacy lane fixed it at every seam: the commit member
+carries a `WorldIdentityProjection`, written through
+`WorldIdentityProjectionWire`, and a destination never saves a foreign identity
+(`CrossingIdentityPrivacyLawTests`). The federation transfer laws no longer
+assert a full profile. Law 5 adds the commit's own bytes on the wire.
 
 ### G5: a checkpoint forgets what the bindings last saw
 
-The named-binding observations, the memo that lets an onChange binding skip a
-value it has already seen, live only in the server. The world checkpoint does
-not capture them, and a restore does not touch them.
+Fixed. The named-binding observations, the memo that lets an onChange binding
+skip a value it has already seen, live only in the server. The world checkpoint
+did not capture them, and a restore did not touch them.
 
-On the integration branch a restore builds a fresh server, so every observation
-starts unavailable:
+A restore built a fresh server, so every observation started unavailable:
 
-- every onChange Write binding fires again, overwriting any guest edit (the
-  restored guest reads 99 where the uninterrupted one reads 7), and a bus
-  write's side effects repeat;
-- every Read binding issues a same-value state upsert, which the journal and
-  the tape record.
+- every onChange Write binding fired again, overwriting any guest edit (the
+  restored guest read 99 where the uninterrupted one read 7), and a bus write's
+  side effects repeated;
+- every Read binding issued a same-value state upsert, which the journal and the
+  tape recorded.
 
-An in-place history restore without the fix is worse: it keeps the memo from
-the future, so a Write whose restored world value equals a value only the future
-saw is skipped against hardware that differs.
+An in-place history restore without the fix was worse: it kept the memo from the
+future, so a Write whose restored world value equalled a value only the future
+saw was skipped against hardware that differed.
 
-The fix, from the time-travel lane in the coming integration batch, carries the
-observations in the server checkpoint and replaces the memo on every restore
-door, as [law 3](#law-3-a-restored-machine-runs-on-as-if-never-restored)
-states. Laws pin the divergence it removes.
+The server checkpoint now carries the observations (`WorldMachineBindingEntry`,
+in binding order) and every restore door replaces the memo, as
+[law 3](#law-3-a-restored-machine-runs-on-as-if-never-restored) states.
+`MachineBindingCheckpointLawTests` pins the divergence it removes for Write
+bindings.
 
 ### G6: the catalogue is assembled by hand
 
 Refusal tagging runs one way, from a refusal to its code. Nothing classifies a
 refusal as "intentionally unsupported", so law 6's catalogue is assembled by
 hand and a new unsupported operation could be missed. Many refusals are free
-text rather than codes, and the code spelling moves from underscores to hyphens
-when the projection lane lands.
+text rather than codes, and the code spelling moved from underscores to hyphens
+when the projection lane landed (`world.transport.operation-metadata-unsupported`).
 
 The fix is part of law 6, not follow-up work. Every refusal declares in code
 whether it is an intentionally unsupported operation: one classification on the
@@ -659,19 +688,19 @@ the set gain codes as they are classified.
 
 ### G7: a screen has no way back to its authored source
 
-`screen.source` bound a camera view, a QR source or another source, but had no
-form that cleared the live override and returned the screen to the source its
-row authors, so a return was an explicit bind of the original source, which a
-law cannot tell apart from a rebind. `screen.source <index> row` is that seam
-now: it drops the live bind, releases a camera view the bind registered, and
-re-binds the row's own view when the row authors one
-(`WorldScreenBinder.TryShowRow`). Law 4 proves a retarget undone through it.
+`screen.source` binds a camera view, a QR source or another source.
+`screen.eject` returns a screen showing external content (a camera, a capture, a
+desktop or a probe output) to its row's source, but refuses a screen showing a
+camera view or a QR source, so a return from those was an explicit bind of the
+original source, which a law cannot tell apart from a rebind.
+`screen.source <index> row` is the return seam: it drops the live bind, releases
+a camera view the bind registered, and re-binds the row's own view when the row
+authors one (`WorldScreenBinder.TryShowRow`). Law 4 proves a retarget undone
+through it.
 
 ## Order of work
 
-1. When the integration batch lands, implement laws 1 to 5 against it. Each
-   confirms its gap's fix on the integration head. For law 5, also confirm the
-   commit law in the federation transfer laws no longer asserts a full profile.
-   Law 4 lands with G7's return seam.
+1. Implement laws 1 to 5 on the integration head. Each confirms its gap's fix
+   there. Law 4 lands with G7's return seam.
 2. Land G6's classification and law 6 together, the law enumerating the
    classified set.

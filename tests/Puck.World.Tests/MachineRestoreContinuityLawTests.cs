@@ -17,17 +17,16 @@ namespace Puck.World.Tests;
 /// the uninterrupted run never does.
 /// </summary>
 public sealed class MachineRestoreContinuityLawTests {
-    private const ulong ValueAddress = 0x10UL;
     private const ulong OtherAddress = 0x20UL;
+    private const ulong ValueAddress = 0x10UL;
 
     private static readonly string[] Machines = ["left", "right"];
 
     // The world value each binding's row starts at, and the value each guest then rewrites it to: all eight distinct,
     // so a memo carried under another binding's key never holds the value its own binding last saw.
-    private static long WorldValue(string machine, ulong address) => ((machine == "left") ? 11L : 13L) + ((address == ValueAddress) ? 0L : 1L);
-    private static ulong GuestEdit(string machine, ulong address) => ((machine == "left") ? 7UL : 5UL) + ((address == ValueAddress) ? 0UL : 1UL);
+    private static long WorldValue(string machine, ulong address) => (((machine == "left") ? 11L : 13L) + ((address == ValueAddress) ? 0L : 1L));
+    private static ulong GuestEdit(string machine, ulong address) => (((machine == "left") ? 7UL : 5UL) + ((address == ValueAddress) ? 0UL : 1UL));
     private static string Row(string machine, string binding) => $"{machine}{char.ToUpperInvariant(c: binding[0])}{binding[1..]}";
-
     private static WorldDefinition Document(WorldMachineMemoryDirection direction) {
         var access = ((direction == WorldMachineMemoryDirection.Write) ? "patch" : "inspect");
         var machines = Machines.Select(selector: (machine, seed) => new WorldMachine(
@@ -82,13 +81,13 @@ public sealed class MachineRestoreContinuityLawTests {
         // A read binding mirrors what each guest starts with; a write binding pokes each row's value into its guest.
         foreach (var machine in Machines) {
             foreach (var address in new[] { ValueAddress, OtherAddress }) {
-                engineA.Runtime(machine: machine).SetOwn(address: address, value: (ulong)WorldValue(address: address, machine: machine));
+                engineA.Runtime(machine: machine).SetOwn(address: address, value: ((ulong)WorldValue(address: address, machine: machine)));
             }
         }
         a.Step();
         foreach (var machine in Machines) {
             foreach (var address in new[] { ValueAddress, OtherAddress }) {
-                Assert.Equal(expected: (ulong)WorldValue(address: address, machine: machine), actual: engineA.Runtime(machine: machine).ValueAt(address: address));
+                Assert.Equal(expected: ((ulong)WorldValue(address: address, machine: machine)), actual: engineA.Runtime(machine: machine).ValueAt(address: address));
                 engineA.Runtime(machine: machine).SetOwn(address: address, value: GuestEdit(address: address, machine: machine));
             }
         }
@@ -110,7 +109,7 @@ public sealed class MachineRestoreContinuityLawTests {
 
             Assert.Equal(expected: tick, actual: Completed(server: b.Server));
             Assert.Equal(expected: Guests(engine: engineA), actual: Guests(engine: engineB));
-            Assert.Equal(expected: journaledA, actual: journaledB);
+            Assert.Equal(actual: journaledB, expected: journaledA);
             Assert.Equal(
                 expected: WorldStateHashComposition.HashAuthoritative(server: a.Server, tick: tick),
                 actual: WorldStateHashComposition.HashAuthoritative(server: b.Server, tick: tick)
@@ -139,6 +138,7 @@ public sealed class MachineRestoreContinuityLawTests {
         private readonly Dictionary<long, GuestRuntime> m_created = [];
 
         public string Id => EngineId;
+
         public MachineEngineDescriptor Descriptor { get; } = new(
             EngineId,
             "Synthetic checkpointable guest",

@@ -61,6 +61,7 @@ public static partial class WorldDefinitionValidator {
     // Judges a section after its keys are expanded (WorldRenderKeys.Expand), so every value a key states is judged as
     // the field it lands in: a literal by itself, a keyed field by each of its keys' values.
     private static void ValidateRenderLighting(WorldDefinition definition, WorldRenderLighting? lighting, List<string> errors, string path = "render.lighting") {
+        ValidateShadowPolicies(render: definition.Render, errors: errors);
         if (lighting is null) {
             return;
         }
@@ -69,8 +70,6 @@ public static partial class WorldDefinitionValidator {
             if (lights.Count > SdfLights.MaxLights) {
                 errors.Add(item: $"{path}.lights carries {lights.Count} lights; at most {SdfLights.MaxLights} fit the lights table.");
             }
-
-            var shadowing = 0;
 
             for (var index = 0; (index < lights.Count); index++) {
                 var light = lights[index];
@@ -104,8 +103,8 @@ public static partial class WorldDefinitionValidator {
                                 scalar: directional.AngularRadius?.Value
                             );
 
-                            if (directional.Shadows == true) {
-                                shadowing++;
+                            if ((directional.Shadow is WorldShadowMode.Always or WorldShadowMode.Auto) && string.IsNullOrWhiteSpace(value: directional.Name)) {
+                                errors.Add(item: $"{lightPath}.name is required when shadow is always or auto; a shadow-capable light needs a name.");
                             }
 
                             break;
@@ -213,9 +212,6 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
-            if (shadowing > 1) {
-                errors.Add(item: $"{path}.lights names {shadowing} shadowing lights; the soft-shadow march runs once per lit pixel, so at most one light shadows.");
-            }
         }
 
         if (lighting.Curvature is { } curvature) {

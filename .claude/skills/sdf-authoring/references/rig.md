@@ -110,7 +110,7 @@ transform naming a missing shape id is refused, not dropped.
 | `behavior` | `{ locomotion, faces, sounds }` | a face is `{ name, shapeId, defaultSource }` with a source of `none`, `test`, `camera:<name>`, or `feed:<name>`; a sound carries an inline `puck.synth.v1` patch with `level` capped at 8 |
 | `textRuns` | `{ text, position, rotation, emHeight, depth, mode, material, font, maxWidth, align, tracking, lineSpacing, shapeId }` | local +X advances, +Y is ascent, +Z is the relief normal. `mode` is `emboss` (default) or `engrave`; engrave forces the creation-wide scope. Each non-whitespace glyph charges the shape budget |
 | `noise` | `{ frequency, amplitude, octaves, gain, lacunarity, seed }` | frequency in (0, 8], amplitude in (0, 4], octaves 1 to 8. Static stamps only — framed, attached, inhabited, and body-look placements refuse it. Forces the creation-wide scope. Render only |
-| `volumes` | see `surface.md` | up to 8 |
+| `volumes` | see `surface.md` | up to 64 |
 
 ## What crosses the author frame
 

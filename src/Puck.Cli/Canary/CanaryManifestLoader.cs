@@ -1492,7 +1492,7 @@ internal static partial class CanaryManifestLoader {
     // Spells a line expectation's census token as the header the source census computes, so the running World's
     // reflective scan is held to an independent count rather than to a number written into the manifest.
     private static CanaryLeg WithRefusalCensus(CanaryLeg leg, string repositoryRoot) {
-        if (!leg.Assertions.Any(predicate: static assertion => (assertion is CanaryLineAssertion line) && line.Text.Contains(value: RefusalCensus.Token, comparisonType: StringComparison.Ordinal))) {
+        if (!leg.Assertions.Any(predicate: static assertion => ((assertion is CanaryLineAssertion line) && line.Text.Contains(comparisonType: StringComparison.Ordinal, value: RefusalCensus.Token)))) {
             return leg;
         }
 
@@ -1500,7 +1500,7 @@ internal static partial class CanaryManifestLoader {
 
         return leg with {
             Assertions = [.. leg.Assertions.Select(selector: assertion => ((assertion is CanaryLineAssertion line)
-                ? (line with { Text = line.Text.Replace(oldValue: RefusalCensus.Token, newValue: header, comparisonType: StringComparison.Ordinal) })
+                ? (line with { Text = line.Text.Replace(comparisonType: StringComparison.Ordinal, newValue: header, oldValue: RefusalCensus.Token) })
                 : assertion))],
         };
     }

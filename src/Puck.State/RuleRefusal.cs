@@ -30,6 +30,7 @@ public sealed class RefusalAttribute(string door, string condition, RefusalKind 
     public string Condition { get; } = condition;
     /// <summary>Gets a value indicating whether this is a protocol fault or a verdict.</summary>
     public RefusalKind Kind { get; } = kind;
+
     /// <summary>Gets or sets a value indicating whether this refusal declines an intentionally unsupported operation:
     /// an operation the engine deliberately does not perform, which refuses before it changes any state. Acceptance
     /// law 6 enumerates every refusal so declared and proves that promise for each, so a new one joins the law by being

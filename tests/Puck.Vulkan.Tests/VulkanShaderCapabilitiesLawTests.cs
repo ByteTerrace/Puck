@@ -42,6 +42,11 @@ public sealed class VulkanShaderCapabilitiesLawTests {
         }
     }
     [Fact]
+    public void ShadowStorageFormatsRequireTheirEnabledCapability() {
+        Assert.True(condition: VulkanShaderCapabilities.IsEnabled(capability: VulkanShaderCapabilities.StorageImageExtendedFormats));
+        VulkanShaderCapabilities.Require(module: "shadow-fade", spirv: Module(49u));
+    }
+    [Fact]
     public void A_malformed_module_is_refused() {
         var module = Module(VulkanShaderCapabilities.Shader);
 

@@ -24,8 +24,8 @@ commits on the next boundary `MusicClock` reports; a segment's conditional
 audio layers recompute whole every `Step`, level-triggered off that tick's
 edges rather than queued like a transition—`ActiveLayerTuneIds` names every
 tune active this tick; a segment's director embellishments fire instantaneously
-on a matching edge, recorded in `LastEmbellishmentPatchId`/`LastEmbellishmentTick`),
-. Neither type references
+on a matching edge, recorded in `LastEmbellishmentPatchId`/`LastEmbellishmentTick`).
+Neither type references
 `WorldEventFeed`/`WorldEventEdge` (the project that declares them sits above
 this one in the layering)—`Puck.World.Server.MusicDirectorFactory` compiles
 an authored `puck.music.v1` document into these shapes and

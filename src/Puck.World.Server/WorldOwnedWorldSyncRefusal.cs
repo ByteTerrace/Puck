@@ -5,6 +5,6 @@ namespace Puck.World.Server;
 public enum WorldOwnedWorldSyncRefusal : byte {
     /// <summary>A tape reading the catalog is recording. A pull would change an owned identity mid-recording, and a tape
     /// never carries an owned document, so the re-drive could not reproduce it.</summary>
-    [Refusal(door: "storage.pull", condition: "a tape reading the owned-world catalog is recording", kind: RefusalKind.Verdict)]
+    [Refusal(door: "storage.pull", condition: "a tape reading the owned-world catalog is recording", kind: RefusalKind.Verdict, Unsupported = true)]
     PullWhileRecording,
 }

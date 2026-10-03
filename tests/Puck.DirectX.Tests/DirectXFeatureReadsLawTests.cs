@@ -153,7 +153,7 @@ public sealed unsafe class DirectXFeatureReadsLawTests {
                 adapter: in adapter,
                 support: noOptions16
             ),
-            expected: DirectXNativeDeviceApi.MemoryProfile(
+            expected: DirectXFeatureReads.MemoryProfile(
                 adapter: in adapter,
                 architecture: in architecture,
                 options16: default
@@ -170,7 +170,7 @@ public sealed unsafe class DirectXFeatureReadsLawTests {
                 adapter: in adapter,
                 support: answering
             ),
-            expected: DirectXNativeDeviceApi.MemoryProfile(
+            expected: DirectXFeatureReads.MemoryProfile(
                 adapter: in adapter,
                 architecture: in architecture,
                 options16: in uploadHeaps

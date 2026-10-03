@@ -123,10 +123,12 @@ public sealed partial class WorldEditorCommandModule(WorldEditorSeats seats, IWo
 
         var server = instance.Server;
 
+        // A server-direct editor sees one world for the instance's whole life: a replacement retires the instance, so its
+        // delivered lifetime never advances.
         world = new EditWorld(
             Authority: server.AuthorityIdentity,
             Definition: server.Definition,
-            Delivered: () => new WorldDeliveredDocument(Definition: server.Definition, Version: server.DocumentVersion),
+            Delivered: () => new WorldDeliveredDocument(Definition: server.Definition, Lifetime: 0, Version: server.DocumentVersion),
             Guard: (stepGuard, () => WorldRowStepWindow.Of(server: server)),
             Lifetime: instance.Retired,
             Link: instance.SubmissionLink,
