@@ -462,7 +462,7 @@ legal baseline. Acceptance commits its bookkeeping in one transaction. See the
 [chess authoring notes](../Puck.World/README.md#the-world-as-data) for promotion,
 castling rights, duplicate occupancy, and diagnostic limitations.
 
-The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
+The [tabletop state fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.puck)
 and its [positive script](../../tests/Puck.World.Canaries/tabletop-state/positive.script.txt)
 exercise movement, pile order, ray flips, phase progression, and replay through
 the real headless application. The [control script](../../tests/Puck.World.Canaries/tabletop-state/discriminating.script.txt)

@@ -2229,7 +2229,7 @@ calling principal's explicitly disclosed literal observations.
 `world.state.similar <row> <key> <table> [top]` ranks a vector table's cells
 against a query vector by cosine similarity and dot product, reading through
 the caller's visibility and writing nothing. The headless
-[tabletop fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.world.json)
+[tabletop fixture](../../tests/Puck.World.Canaries/tabletop-state/fixture.puck)
 includes legal/blocked moves, ray flips, ordered card transfer, and replay.
 
 [Decision policies](../Puck.World.Schema/README.md#decision-policies) let a world

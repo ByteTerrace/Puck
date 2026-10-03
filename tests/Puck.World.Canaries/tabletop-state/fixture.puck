@@ -1,0 +1,245 @@
+schema: "puck.world.definition.v1"
+documentId: "tabletop-state-canary"
+
+bodies {
+  capacity: 1
+  localSeats: 0
+  networkPlayers: 1
+}
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "still"
+    operations [CommitPose]
+    version: "puck.body.program.v1"
+  }
+]
+
+channels []
+
+collision {
+  contactSkin: 0.02
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
+}
+
+kits {
+  rows [
+    {
+      bodyMotionProgram: "still"
+      motion {
+        holds [
+          {
+            bond: Free
+            envelope {
+              sinkSpeed: 20
+            }
+            gravity {
+              fall: 23
+              rise: 14
+            }
+            hold: Gravity
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 1
+        }
+        turn {
+          rate: 1
+        }
+      }
+      name: "defaultKit"
+    }
+  ]
+}
+
+pattern capture: Int {
+  symbols {
+    through = 2
+    until = 1
+  }
+  match: through+ until
+}
+
+rule "move-scout" {
+  when positions[scout] != destination[scout] and board(pathCost, terrain, cell, destination, scout, 100, 16)[positions[scout]] >= 0 and board(pathCost, terrain, cell, destination, scout, 100, 16)[positions[scout]] <= moves[scout]
+  mode: Edge
+  transaction {
+    moves[scout] += -board(pathCost, terrain, cell, destination, scout, 100, 16)[positions[scout]]
+    occupancy[positions[scout]] = 0
+    terrain[positions[scout]] = 1
+    setState(fromKey: scout, fromState: destination, key: scout, state: positions)
+    occupancy[positions[scout]] = 1
+    terrain[positions[scout]] = -1
+  }
+}
+
+simulation {
+  rateHz: 60
+}
+
+state {
+  lattices [
+    grid(cellSize: 1, depth: 4, name: "map", origin: [0, 0, 0], width: 4)
+  ]
+
+  world {
+    table units capacity(2) {
+      scout = 1
+      guard = 2
+    }
+
+    row {
+      cells [
+        {
+          key: "scout"
+          value: 0
+        }
+        {
+          key: "guard"
+          value: 15
+        }
+      ]
+      domain: keysOf(row: units)
+      kind: "Int"
+      name: "positions"
+      phaseOf: "turns"
+      valuesFrom: "map"
+      visibility {}
+    }
+
+    row {
+      cells [
+        {
+          key: "scout"
+          value: 3
+        }
+        {
+          key: "guard"
+          value: 3
+        }
+      ]
+      domain: keysOf(row: units)
+      kind: "Int"
+      name: "moves"
+      phaseOf: "turns"
+    }
+
+    row {
+      cells [
+        {
+          key: "scout"
+          value: 0
+        }
+        {
+          key: "guard"
+          value: 15
+        }
+      ]
+      domain: keysOf(row: units)
+      kind: "Int"
+      name: "destination"
+    }
+
+    row {
+      cells [
+        {
+          key: "0"
+          value: -1
+        }
+        {
+          key: "15"
+          value: -1
+        }
+      ]
+      domain: cellsOf(empty: 1, topology: map)
+      kind: "Int"
+      name: "terrain"
+    }
+
+    row {
+      cells [
+        {
+          key: "0"
+          value: 1
+        }
+        {
+          key: "15"
+          value: 1
+        }
+      ]
+      domain: cellsOf(empty: 0, topology: map)
+      kind: "Int"
+      name: "occupancy"
+    }
+
+    row {
+      cells [
+        {
+          key: "0"
+          value: 1
+        }
+        {
+          key: "1"
+          value: 2
+        }
+        {
+          key: "2"
+          value: 2
+        }
+        {
+          key: "3"
+          value: 1
+        }
+      ]
+      domain: cellsOf(topology: map)
+      kind: "Int"
+      name: "discs"
+    }
+
+    table cards capacity(2) {
+      copyA = 7
+      copyB = 7
+    }
+
+    pile deck of cards {
+      copyA
+      copyB
+    }
+
+    pile hand of cards
+
+    row {
+      cells []
+      kind: "Int"
+      name: "turns"
+      phase {}
+    }
+  }
+}
+
+views {
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "table-view" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 16, pitch: 0.6, pivotOffset: [0, 0, 0], yaw: 0)
+      lookAt(subject: reference(), targetOffset: [0, 0, 0], worldAxes: true)
+      fieldOfView(fieldOfViewRadians: 0.96)
+    ]
+  }
+}

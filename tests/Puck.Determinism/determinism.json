@@ -39,7 +39,7 @@
         },
         {
             "name": "tabletop-state",
-            "world": "../Puck.World.Canaries/tabletop-state/fixture.world.json",
+            "world": "../Puck.World.Canaries/tabletop-state/fixture.puck",
             "ticks": 60,
             "seats": [],
             "intents": [],
