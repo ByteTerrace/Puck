@@ -55,15 +55,14 @@ public sealed class SdfWorkDetailLawTests {
         Assert.Matches(actualString: runs, expectedRegexPattern: @"skyUpper0.Load\(tap\);\s*float4 upper1 = skyUpper1.Load\(tap\);\s*puckCountDetail\(1u, 0u, 0u, 0u, 0u, 2u\);");
         Assert.Matches(actualString: runs, expectedRegexPattern: @"skyUpper2.Load\(tap\);\s*puckCountDetail\(2u, 0u, 0u, 0u, 0u, 1u\);");
     }
-
     // Clouds at the low tier hash at most a quarter of what they hash at the high tier a covered pixel: one thickness tap
     // of three octaves (two fractal sums of four lattice corners an octave) against four taps of the kind's octaves, and
     // the low tier returns before any lighting tap.
     [Fact]
     public void CloudsAtTheLowTierHashAQuarterOrLessOfTheirHighTierHashes() {
         var clouds = Source(path: "sky/kinds/clouds.hlsli");
-        var low = clouds.IndexOf(value: "if (sample.tier == SDF_SKY_TIER_LOW) {", comparisonType: StringComparison.Ordinal);
-        var firstTap = clouds.IndexOf(value: "float thicknessX", comparisonType: StringComparison.Ordinal);
+        var low = clouds.IndexOf(comparisonType: StringComparison.Ordinal, value: "if (sample.tier == SDF_SKY_TIER_LOW) {");
+        var firstTap = clouds.IndexOf(comparisonType: StringComparison.Ordinal, value: "float thicknessX");
 
         Assert.InRange(actual: low, high: firstTap, low: 0);
         Assert.Contains(actualString: clouds, expectedSubstring: "uint octaves = ((sample.tier >= SDF_SKY_TIER_HIGH) ? clamp(clouds.Octaves, 1u, 8u) : 3u);");
