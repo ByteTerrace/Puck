@@ -102,9 +102,11 @@ optional `world.gpu-timing` readout (bindable, off by default) records named
 pass timestamp pairs through `IGpuTimestampFactory` on both backends, after
 submission fences (`ShaderPipelineRenderNodeLawTests.Timing.cs`, the
 `gpu-pass-timing` canary). Timing never judges correctness. Its one rendering
-reader is dynamic resolution (rendering plan P15-6), off by default, which holds
-the views' GPU frame time to the display period and asks for the timestamps
-while it is on.
+reader is dynamic resolution (`world.render-scale [view] auto`,
+`WorldDynamicResolution`; [rendering plan P15-6](rendering.md#p15--temporal-reconstruction)),
+off by default, which holds each view's GPU frame time to the display period and
+asks for the timestamps while it is on; `world.gpu-timing off` then stops only
+the readout.
 
 The building blocks the packages reuse are in place. The overlay draws rects,
 rings, wedges, panels, icons and text (`OverlayFrameBuilder`), and has no line
@@ -742,7 +744,8 @@ is enabled anew, the operator's GPU faults move, or the device is lost. Each
 recorded pass gets one pair;
 readback waits for its submission fence, rejects a replaced graph or an earlier
 enable epoch, and averages at most 32 completed pairs. Disabling hides readings
-immediately and releases pools after their fences. Device loss releases all
+immediately and releases pools after their fences, unless dynamic resolution
+still asks for the timestamps. Device loss releases all
 query/readback ownership. GPU timestamp readback and retained CPU sample payloads
 are reported separately. Times and FPS never become correctness assertions;
 dynamic resolution is the one quality input that reads the timing.

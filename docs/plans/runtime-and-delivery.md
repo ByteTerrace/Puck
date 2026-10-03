@@ -493,8 +493,8 @@ cores, held input, pacing, instance generations, and each binding's on-change
 memo, and restore only against the same firmware, cartridge, and core format
 identity ([the server README](../../src/Puck.World.Server/README.md#hosted-release-records)).
 Pumped addon guest state, applied screen operations, live coupled machine links,
-enabled machine rewind history, and `screens[].memory` access refuse capture by
-name, so a world exercising one cannot pass qualification yet. Release pairs own
+and enabled machine rewind history refuse capture by name, so a world
+exercising one cannot pass qualification yet. Release pairs own
 deciding, state by state, whether each gains capture or stays excluded by that
 refusal.
 

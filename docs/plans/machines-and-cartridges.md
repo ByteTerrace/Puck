@@ -45,12 +45,11 @@ machine family, the NES and Famicom core, has its own page:
   group lists screen indices; no rule effect invokes a machine operation, no
   execution or content receipt exists, and a tape arms only before any cabinet
   has stepped; checkpoints still refuse pumped addon guests, applied screen
-  operations, live coupled links, enabled rewind history and
-  `screens[].memory` access; addon memory watches are keyed by screen; no
-  reusable cabinet module exists; `Puck.World` references both bricks and both
-  forges directly; the cartridge document declares no procedure, typed region,
-  or interrupt body, and every frame-shaped ceiling stands. Each package below
-  names its part.
+  operations, live coupled links and enabled rewind history; addon memory
+  watches are keyed by screen; no reusable cabinet module exists; `Puck.World`
+  references both bricks and both forges directly; the cartridge document
+  declares no procedure, typed region, or interrupt body, and every
+  frame-shaped ceiling stands. Each package below names its part.
 
 ## The forcing artifact
 
@@ -126,10 +125,10 @@ hardware observations, addon watches, the execution and content receipt,
    deterministic rule and binding work is re-executed once. The world checkpoint
    carries named handheld cores, held input, pacing, instance generations and
    binding memos; its refusal stays, by name, for a pumped addon guest, an
-   applied screen operation, a live coupled link, enabled rewind history and
-   `screens[].memory` access until full restoration round-trips for them. Until
-   the receipt exists and those round-trip, a tape can only arm before any
-   cabinet has stepped, which is why the quilt canaries arm at tick 0.
+   applied screen operation, a live coupled link and enabled rewind history until
+   full restoration round-trips for them. Until the receipt exists and those
+   round-trip, a tape can only arm before any cabinet has stepped, which is why
+   the quilt canaries arm at tick 0.
 4. **Cabinets are priced.** A colocated quilt runs every cabinet of every
    instance it starts — fifteen emulators for the four corners and the island —
    and the tick waits on their workers, so the headless quilt ticks at about a

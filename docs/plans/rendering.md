@@ -164,18 +164,18 @@ with the zero clears in the first pass and the preview and output finalization
 outside every pass. `pipeline.inspect` prints the newest completed
 submission's per-pass counts and the node's creation counts, `pipeline.status`
 its counters, and `pipeline.wait <name> counted <n>` waits for the nth
-completed submission since the last reset; the node reports no milliseconds.
+completed submission since the last reset; none of these reads a duration.
 The node's laws derive the feedback graph's exact per-pass counts
 at the initialization, second and steady-state submissions without a device, and
 check the `pipeline-counters` canary's expected lines against the same fixtures,
 and the canary reads exactly those lines on both backends. The
 node writes its own `pipeline.inspect` record
 (`ShaderPipelineRenderNode.TryAppendInspection`), so the law replays the text the
-verb prints. GPU timestamp timing and every CPU and GPU millisecond readout
-are deleted: the neutral timing contracts and both backends' pools and
-recorders, the render engine's and views' pass timing, and the World's timing
-verb, host timing, and CPU digests. Every
-`world.counters`, `pipeline.inspect`, and `pipeline.status` reading is a
+verb prints. No count is a duration. Optional GPU pass
+timestamps live apart from the counted work: `world.gpu-timing` reads them for
+inspection, they are off by default and create no timestamp objects until a
+reader asks, and dynamic resolution asks for them as its load signal (P15-6).
+Every `world.counters`, `pipeline.inspect`, and `pipeline.status` reading is a
 deterministic per-pass count. `world.counters` discovers every
 `IWorkCounterSource` registered in the World (each carries a stable dotted
 `Name`) and folds the render nodes' GPU work into its `gpu`
@@ -1004,8 +1004,8 @@ view an `sdf.world` instance of its own over the world's one residency.
   sky and views kernels write one bound `output`, and a view's
   viewport row carries its render extent, read through `worldViewDims`. A
   view's output was sized to the extent the render graph scheduled for it, or
-  before that to `SdfWorldEngine.DefaultViewExtent` (its rect at its render
-  scale, quantized by `RenderGraphExtent`), and was reallocated only when that
+  before that to `SdfWorldEngine.DefaultViewExtent` (its rect's native extent,
+  quantized by `RenderGraphExtent`), and was reallocated only when that
   extent changed. A cadence-skipped frame recorded no view set, so each view's
   previous output stood. `SdfEngineNode` was the producer `world` (view 0), and
   `SdfEngineNode.ViewProducer` gave the producers `world$2..world$K`, each
@@ -1013,10 +1013,12 @@ view an `sdf.world` instance of its own over the world's one residency.
   non-instance slots of any `views.layouts` row or `PlayerRoster.MaxSlots`,
   with no fixed cap. With K above one, the scene `main` runs one
   `place` pass per view ahead of the pane passes, and
-  `WorldFramePresenter.PrepareGraph` sets each view's footprint to its rect at
-  its render scale, so `place` also does the render-scale reconstruction. A
-  lone full-window view at native scale is not placed, so `main` stands for
-  `world` and parity holds. The `split-seats` canary shows two seats of the
+  `WorldFramePresenter.PrepareGraph` sets each view's footprint to its rect's
+  native extent; a view below native reconstructs its reduced grid in its own
+  `resolve` pass, and `place` copies or resamples the result. A
+  lone full-window view is not placed unless a temporal view's sharpening
+  or the filmic tonemap needs the pass, so `main` stands for `world` and
+  parity holds. The `split-seats` canary shows two seats of the
   split layout drawing different content.
 - 10c: a chain of package passes that draw nothing resolves to the first input
   it stands for, since a later package pass reading a stand-in's output is
@@ -1352,7 +1354,7 @@ display hands its CPU pixels over in. Both swapchains choose a display output th
 `DisplayOutput.TrySelect` and take an HDR one only when the host section's
 `colorSpace` requests it and the display reports it, and both write the root's
 frame through the display encode in the output they took. The tonemap is each
-view's place pass in the root graph, over the view it reconstructs.
+view's place pass in the root graph, over the view it places.
 A temporal view jitters its rays, derives motion from the visibility record and
 resolves over its own history; a spatial view resolves to its output extent
 without history, and the graph's `place` pass places the result.
@@ -1665,7 +1667,9 @@ engine, and the overlay node; `pipeline.inspect`, `pipeline.status`, and
 **Delivers:** performance is judged by code, disassembly, and deterministic
 counts. Wall-clock time and GPU timestamps never decide a count, a ceiling or a
 check; the editor's `world.gpu-timing` readout reads paired timestamp queries per
-render node for inspection only (`ShaderPipelineRenderNode.Timing.cs`). A counter is a
+render node for inspection (`ShaderPipelineRenderNode.Timing.cs`), and dynamic
+resolution (P15-6) reads the same timestamps as its load signal, which moves a
+render grid and never a count. A counter is a
 named count owned by one instance; it only goes up and is never reset, and a
 reader takes a window by reading it twice. Any engine service can expose
 counters through one source interface, and a collector reads them without
@@ -1724,7 +1728,7 @@ meaning.
 On both backends, the `pipeline-counters` canary reads exact per-pass counts
 for the feedback graph at its initialization and steady-state submissions,
 identical on Vulkan and Direct3D 12, with a changed graph as the negative
-control. `puck search -M 0` finds no timing type left.
+control. No count carries a duration.
 
 ### P1b — Foundation qualification
 
@@ -2575,10 +2579,11 @@ bounce and the computed one are never added together.
   residency and per change; receiver lookups are paid by each view that
   renders, and a still view pays reads only. Four seats, every camera view, a
   mirror and a routed portal window read one cache, and a mirror, a portal
-  window and the main view agree on how bright a wall is. The view-local
-  scales the light stage applies today (`sunScale`, `ambientScale`) become
-  inputs of the residency's solve: views with equal inputs share it, and views
-  with different ones need source-separated radiance or a cache of their own.
+  window and the main view agree on how bright a wall is. The lights and the
+  sky are regions of the residency's tables that every view of it reads (P18-4),
+  with no view-local light scale left, so they are the residency's solve
+  inputs: views with equal inputs share it, and a view lit differently would
+  need source-separated radiance or a cache of its own.
 - **Levels.** A level is a lattice of one spacing. Fine levels trace short rays
   and dense probes near the views, coarse levels long rays over everything near
   geometry. Each level allocates bricks of 4×4×4 probes from a pool of its own
@@ -3317,8 +3322,8 @@ bundles collapse into the one device-bound set: `IGpuComputeServices` and
 `GpuComputeServices`, `IFullscreenPassServices` and
 `WorldPostRenderExtensionServices`, `OverlayServices`, and
 `SdfViewGpuServices` are deleted. The pipeline factories have merged into the
-one `IGpuPipelineFactory`: both swapchain compositors lease their blit from the
-pass-pipeline cache, which creates it through it for a render pass in the
+one `IGpuPipelineFactory`: both swapchain compositors lease the display encode from
+the pass-pipeline cache, which creates it through it for a render pass in the
 swapchain's format.
 The closed set of binding kinds replaces `GpuComputeBindingKind`,
 `ShaderSetManifestBindingKind` and every binding index set by hand, such as the
@@ -3591,7 +3596,7 @@ Phase 3, the groups, follows phase 2:
       every Direct3D 12 canary: the coverage index is recorded on Vulkan and
       does not map Direct3D 12 sources.
       The surface compositor and the surface upload create no shader-visible
-      heap of their own: the compositor's blit set is a pool of the device's
+      heap of their own: the compositor's encode set is a pool of the device's
       heaps, and the upload holds no descriptor
       ([P16](#p16--display-output)).
 
@@ -3676,12 +3681,13 @@ Phase 3, the groups, follows phase 2:
       `GpuCreationFaultsLawTests`. `DirectXGroupedLayoutDebugLayerTests`
       also writes and binds a film grain pass-group set under the debug
       layer.
-    - 14b-2, done: the Vulkan presenter. `blit.frag.hlsl` reads a separate
-      image and sampler in the pass group, set 3 (the image at binding 0, the
-      sampler at 1, each register equal to its binding). `SurfaceCompositor`
-      creates its blit through `IGpuPipelineFactory` from that one group; its
-      ring sets are allocated against the
-      pass group's set layout, each takes the sampler once, a blit writes only
+    - 14b-2, done: the Vulkan presenter. `display-encode.frag.hlsl` (the shader
+      that began as the blit) reads a separate image and sampler in the pass
+      group, set 3 (the image at binding 0, the sampler at 1, the encode block
+      at 2, each register equal to its binding; `DisplayEncodeLayout`). The
+      compositor creates its encode through `IGpuPipelineFactory` from that one
+      group; its ring sets are allocated against the
+      pass group's set layout, each takes the sampler once, a draw writes only
       the image, and a `VulkanDrawCommand` binds its set at its
       `DescriptorSetGroup`. Canaries: the 14b-1 set without
       `world-seat-binding-recompose`, and the windowed `post-pass`,
@@ -3692,9 +3698,9 @@ Phase 3, the groups, follows phase 2:
       `Layout`, which pushes nothing but a 4-byte index, so the node's sources
       split their samplers as their frame block moved into the frame group.
       Every document pass reads a `Texture2D` and a `SamplerState` its
-      generated interface declares; the float preview
-      (`pipeline-preview.frag.hlsl`) reads a separate image and sampler in
-      the pass group, set 3. Canaries: `no-device-compile`, every
+      generated interface declares; the float preview draws the display
+      encode (`display-encode.frag.hlsl`), which reads a separate image and
+      sampler in the pass group, set 3. Canaries: `no-device-compile`, every
       `pipeline-*`, `source-conversion` and `resample-reconstruction`.
     - 14b-4, done with step 18: the overlay. `overlay-unified.frag.hlsl`
       reads its source image, its eight frame-slot images and one
@@ -3800,8 +3806,9 @@ Phase 3, the groups, follows phase 2:
     package's include to the generator by name.
 19. Done: the SDF tables upload through `GpuRegion`
     (`SdfWorldTables.Regions.cs`). Their program words, dynamic
-    transforms, frame instance grid, screen surfaces, screen lights, volumes,
-    glyph decals and mesh draws are each a region under the policy
+    transforms, frame instance grid, screen surfaces, screen mappings, screen
+    lights, volumes, glyph decals, mesh draws, lights, and the sky's block, stops
+    and softboxes are each a region under the policy
     `GpuResidency.Select` chooses for its size with a reader in
     flight (a view's viewport row went to a region of its pass's own in P14-6),
     a ring's buffers in the memory `GpuResidency.RingMemory` chooses: the
@@ -3838,8 +3845,8 @@ Phase 3, the groups, follows phase 2:
     external destination and its retarget), `SdfWorldTablesUploadLawTests`
     (restated in words owed, headers and run entries; a program past 4.19M words
     uploads byte-exact; an aperture profile's rings live in the aperture and a
-    unified one's in host memory), `SdfWorldTablesWorkLawTests` (eight copies
-    and eight transitions in a first frame's upload, which also counts the
+    unified one's in host memory), `SdfWorldTablesWorkLawTests` (thirteen copies
+    and thirteen transitions in a first frame's upload, which also counts the
     region writes, and nothing written on the second), `CountersLawTests` and
     `GpuWorkReportLawTests` (the pass class on the wire and in comparison),
     `GpuDeviceMemoryWorkLawTests` (the aperture role counts),
@@ -3868,9 +3875,9 @@ Phase 3, the groups, follows phase 2:
 22. Done: the P7 deletions no earlier step owns. Vulkan has one
     pipeline factory, `VulkanGpuPipelineFactory`, which creates graphics
     pipelines through `IVulkanGraphicsPipelineApi` itself. Both swapchain
-    compositors bind one group, `SurfaceBlitLayout` (the source at `t0` and its
-    sampler at `s1`, space 3), and lease their blit from the device's
-    `GpuPassPipelineCache` for a render pass in the swapchain's format, opaque
+    compositors bind one group, `DisplayEncodeLayout` (the source at `t0`, its
+    sampler at `s1` and the encode block at `b2`, space 3), and lease the display
+    encode from the device's `GpuPassPipelineCache` for a render pass in the swapchain's format, opaque
     and with the neutral dynamic viewport the presenter's recorder sets. A
     Vulkan swapchain is created only in a `DisplayOutput`
     (`VulkanSwapchain.Output`): `VulkanSwapchainFactory.SelectOutput` chooses
@@ -4436,10 +4443,10 @@ same way. Four facts shaped the order:
   included, is sampled under a lease its producer cannot overwrite (step 2).
 - Only the test pattern and the QR code write upload regions, which a source
   instance's graph converts and a screen showing the source samples.
-- Few canaries reach this path. The coverage index maps no canary to the
-  capture feed, the camera converter, the QR binder or the descriptor, and the
-  62 it maps to `WorldScreenBinder.cs` mostly construct the binder, because the
-  index is per file. By document, `hud-frame-slots` names a camera producer
+- Few canaries reach this path. The coverage index maps one canary
+  (`uploaded-sources`) to the Windows capture feed and none to the camera
+  converter or the QR binder, and the 99 it maps to `WorldScreenBinder.cs`
+  mostly construct the binder, because the index is per file. By document, `hud-frame-slots` names a camera producer
   (offscreen, it opens no device), `instrument-clock-source` a machine output,
   `view-screens` view screens, and `source-conversion` the palette and NV12
   kernels; no canary names a test pattern, a QR code, a capture, a probe or a
@@ -4777,7 +4784,7 @@ Each commit is marked with what it waits on.
    `ShaderInterfaceLawTests.An_image_or_sampler_array_takes_its_length_in_registers`,
    `WorldScreenMappingLawTests.ARowsFilterReachesItsMappingAndItsDrawFormAndMovesNoHit`,
    `SourceMappingLawTests.TheDrawFormsLetterboxIsHalfOpenAtTheCropsEdgesAsTheHitsIs`,
-   `VulkanGroupedBindingFloorLawTests.ADeviceWithoutSampledImageArrayDynamicIndexingIsRefusedByName`,
+   `VulkanGroupedBindingFloorLawTests.ADeviceWithoutARequiredBaseFeatureIsRefusedByName`,
    `WorldFaceCatalogLawTests.AFaceRowsFilterReachesItsDerivedScreenAndAnUndefinedOneIsRefused`
    and the sampler lane of
    `SdfWorldTablesUploadLawTests.TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing`.
@@ -5774,7 +5781,7 @@ resolution, and stay there.
   (`WorldDynamicResolution`) consumes one load signal and sets each view's
   per-frame render extent from it. Against a known display rate the signal is
   the GPU's own time for the world's views' latest timed frame, the pass
-  timestamps `world.gpu-timing` reads (`ShaderPipelineRenderNode.Timing`), held
+  timestamps `world.gpu-timing` reads (`ShaderPipelineRenderNode.Timings`), held
   to the display period: a present-paced (FIFO) swapchain reports every kept
   present as exactly its period, so present timing can lower the grid on a miss
   but never shows the headroom to raise it again. Where the device times
@@ -6092,7 +6099,7 @@ counted rows recorded in the same change.
    - Counted-cost gate: with reconstruction on, the resolve's dispatch, its
      texels, the history's barriers and its device-local bytes; a still view's
      rendered frames stop after one period (`world.cadence on`).
-6. **P15-6, dynamic resolution.** The decision is A: `renderScale` is a
+6. **P15-6, dynamic resolution.** Landed. The decision is A: `renderScale` is a
    scalar ceiling, with no object form. Per-view `views.quality` rows author
    the floor through `renderScaleFloor` or an authored quality `tier`;
    Quarter is the default. `quality.puck` supplies each preset's floor.
@@ -6122,7 +6129,8 @@ counted rows recorded in the same change.
      unified lever and compares each capture with its tier allocated alone,
      holding `gpu.created.*` and graph revision unchanged across the sweep.
    - GPU evidence: the dynamic-resolution canary on both backends with debug
-     layers and parity judge the rendered grid and its counted work.
+     layers and parity judge the rendered grid and its counted work, and
+     `quality.puck` carries `dynamicResolution: false` in every preset.
 7. **P15-7, march seeding.** Investigated and not pursued; the engine has no
    march seeding ([rendering decisions](../decisions/rendering.md)).
    - What was measured: primary took a candidate start from the history
@@ -6150,6 +6158,9 @@ counted rows recorded in the same change.
      so an accepted seed lands within the acceptance band, is the formulation
      worth studying before seeding returns.
 8. **P15-8, the floor tier's defaults.** The lead's call from the counted rows.
+   `quality.puck` carries the rows today: `temporal` is off at `low` and on at
+   `medium` and `high`, and `dynamicResolution` is off at all three, so the
+   counted comparison below decides whether any of them changes.
    - Delivers: the counters workload recorded with each lever off and on at the
      floor tier, in the configurations the first open decision below lists, and `quality.puck`'s `low`, `medium` and `high`
      rows for the two levers as the lead decides.
@@ -6203,7 +6214,9 @@ and P14.
   device's pair, two per device (`DirectXShaderVisibleHeapsLawTests`). A
   steady upload reuses its texture's image view and allocates nothing, and
   replaces the view only when a new extent, format or level count rebuilds the
-  texture (`DirectXSurfaceUploadLawTests`).
+  texture. A rebuild creates the replacement before it retires the current
+  texture, which is released once the queue's fence passes the work submitted
+  before the swap (`DirectXSurfaceUploadLawTests`).
 - HDR swapchain selection. `DisplayOutput`, a `GpuPixelFormat` and a
   `DisplayColorSpace` (`Srgb`, `Hdr10`, `ScRgb`), is the one description of
   what a swapchain presents, `DisplayOutput.TrySelect` the one choice, and
@@ -6448,9 +6461,9 @@ packaging, and compiled worlds in the runtime and delivery programme.
 - **Coverage.** The parity world's sky station, the `sky-layers`, `sky-cycle`,
   `sky-clock` and `sky-coverage` canaries and the four counted sky workloads
   (`tests/Puck.Counters/sky-*.world.json`) author and draw the current layers,
-  the clocks and a keyed blend. `moth-courtyard.puck` and
-  `tools/hgb-mirror.puck` author `render.sky` among the shipped worlds, and
-  only the courtyard keys it.
+  the clocks and a keyed blend. `moth-courtyard.puck`, `avatars/moth.puck` and
+  `tools/hgb-mirror.puck` (under `src/Puck.World/Assets/worlds/`) author
+  `render.sky` among the shipped worlds, and only the courtyard keys it.
 
 A portal session or window already draws its destination under the
 destination's own sky and sky clock. Routed seats and fully disclosed windows
@@ -6585,7 +6598,7 @@ render {
 The same clock and key vocabulary spells three very different skies once the
 steps below land their `bodies`, further layer kinds and `atmosphere`. The
 spellings of those three are targets. **An Earth day and night**, which a
-shipped `skies.puck` module also offers as a template
+`skies.puck` module (P18-8) would also offer as a template
 (`skies.earth(latitude: 40deg, day: day)`):
 
 ```puck
@@ -7286,9 +7299,9 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      pass set per ring slot (13 descriptor writes) and its two blocks (128
      host-visible bytes), so nothing lands outside every pass; construction
      creates them and a counter and a readback buffer of 96 bytes per ring
-     slot. The device law,
-     the `sky-environment` canary, parity's re-record and the counters
-     ceilings await a GPU run.
+     slot. The device law and the `sky-environment` canary hold on both
+     backends, parity's captures hold, and the environment pass's rows are
+     recorded in `sky-still.ceilings.json` and `sky-cycle.ceilings.json`.
    - Delivers: `views` shading hits only into `lit`, premultiplied, with
      coverage in its alpha; `sky` evaluating the sky's field runs where
      coverage is below one, with a one-pixel dilation, into their scale and

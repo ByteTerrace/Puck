@@ -269,9 +269,11 @@ destination `Simulation` screen, a rule addressing one session rather than
 `any`, and hover feedback; issuer-qualified group and document claims, and
 hydrate, suspend, and migrate for persisted worlds; retry-safe
 cross-document write-back (an operation id, a precondition, atomic persistence,
-an observable receipt); cloud-catalog discovery through
-`storage.discoveryEndpoint`; latency equalisation from a real round-trip
-source; and local `Join`'s pre-allocation as enforceable admission semantics.
+an observable receipt); latency equalisation from a real round-trip source; and
+local `Join`'s pre-allocation as enforceable admission semantics. Cloud-catalog
+discovery is in place: a whole-catalog pull lists the cloud namespace
+through `storage.discoveryEndpoint` and refuses by name when none is authored
+(`WorldOwnedWorldSync`, [owned worlds and storage](../../src/Puck.World.Server/README.md#owned-worlds-and-storage)).
 
 **The gated ladder**, each row waiting on the one before: the extension
 registry as the selection mechanism; extensions validating their own
