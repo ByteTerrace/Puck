@@ -220,6 +220,7 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
             var recorder = recording.Recorder;
             var pipeline = m_built.Pipeline;
             var set = m_sets.PassSet(slot: recording.Slot);
+
             BinaryPrimitives.WriteSingleLittleEndian(
                 destination: recording.PassBlock[m_paperWhiteOffset..],
                 value: m_paperWhiteNits

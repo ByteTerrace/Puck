@@ -104,7 +104,6 @@ public sealed partial class RenderGraphRuntime {
             )
         );
     }
-
     // Makes the one-pass graph that converts an imported image of a descriptor's format, encoding and extent on the
     // device, or returns why none can be made: the image bound to the graph's external input for each conversion, read
     // whole by the conversion ImageSourceConversion.ImagePassOf names.

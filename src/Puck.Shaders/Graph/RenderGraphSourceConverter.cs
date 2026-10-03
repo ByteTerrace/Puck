@@ -143,7 +143,6 @@ public sealed class RenderGraphSourceConverter : IDisposable {
 
         return true;
     }
-
     /// <summary>Converts one imported image: binds it to the graph's external input for one frame and records the
     /// conversion. The frame that records holds <paramref name="lease"/> and retires it once that submission has
     /// completed, adding the wait the lease carries to that submission; a conversion that records nothing retires it at

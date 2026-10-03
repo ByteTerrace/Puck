@@ -626,12 +626,12 @@ public sealed partial class RenderGraphRuntimeLawTests {
             .Select(selector: static barrier => (barrier.Barrier.OldLayout, barrier.Barrier.NewLayout))
             .ToArray();
 
-        Assert.Contains(expected: (GpuImageLayout.External, GpuImageLayout.ShaderReadOnly), collection: transitions);
+        Assert.Contains(collection: transitions, expected: (GpuImageLayout.External, GpuImageLayout.ShaderReadOnly));
         Assert.Equal(expected: GpuImageLayout.External, actual: transitions[^1].NewLayout);
         // Every lease the converter was handed is held by a submission or retired; disposing the converter retires the rest.
         Assert.True(condition: (released <= acquired));
         converter.Dispose();
-        Assert.Equal(expected: acquired, actual: released);
+        Assert.Equal(actual: released, expected: acquired);
 
         // An image of another extent is refused, its lease retired at once.
         using var other = runtime.CreateImageConverter(
@@ -644,11 +644,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
             image: (image with { Width = (Extent * 2U) }),
             lease: Acquire()
         ));
-        Assert.Equal(expected: acquired, actual: released);
+        Assert.Equal(actual: released, expected: acquired);
         Assert.Equal(expected: FrameCompletion.Refused, actual: other.Render.Completion);
         Assert.Throws<InvalidOperationException>(testCode: () => other.TryConvert(
             context: default,
-            planes: new byte[(Extent * Extent * 8U)]
+            planes: new byte[((Extent * Extent) * 8U)]
         ));
 
         // No image conversion reads an 8-bit sRGB import; the descriptor is refused by name and converts nothing.
@@ -670,7 +670,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             image: image,
             lease: Acquire()
         ));
-        Assert.Equal(expected: acquired, actual: released);
+        Assert.Equal(actual: released, expected: acquired);
 
         // A converter of CPU pixels takes no imported image, and retires its lease.
         using var pixels = runtime.CreateConverter(
@@ -683,7 +683,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             image: image,
             lease: Acquire()
         ));
-        Assert.Equal(expected: acquired, actual: released);
+        Assert.Equal(actual: released, expected: acquired);
     }
     [Fact]
     public void ARefusedUploadRendersNothingAndNamesItsFault() {

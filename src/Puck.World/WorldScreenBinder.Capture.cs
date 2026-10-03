@@ -610,8 +610,10 @@ internal sealed partial class WorldScreenBinder {
         // into (null until the source's extent is known and the first attach runs); GpuAttachedSource is the source it is
         // attached to (identity guards re-attach).
         public SharedTargetRing? GpuTargets { get; set; }
+
         // The platform's GPU revision whose copy the HDR route last converted, or -1 before one has.
         public long ConvertedRevision { get; set; } = -1L;
+
         // The human label a fault reads under: a window title, or a whole-monitor index.
         public string Label => ((MonitorIndex is { } monitor)
             ? $"monitor {monitor}"

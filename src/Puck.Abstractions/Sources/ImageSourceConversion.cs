@@ -137,7 +137,7 @@ public static class ImageSourceConversion {
     /// <returns><see cref="ScRgbImagePass"/> for <see cref="ImagePixelFormat.R16G16B16A16Float"/> scRGB content: linear,
     /// BT.709 primaries.</returns>
     /// <exception cref="ArgumentOutOfRangeException">No conversion reads such an image.</exception>
-    public static string ImagePassOf(ImagePixelFormat format, ImageColorEncoding color) => (
+    public static string ImagePassOf(ImagePixelFormat format, ImageColorEncoding color) => ((
         (format == ImagePixelFormat.R16G16B16A16Float) &&
         (color.Transfer == ImageTransferFunction.Linear) &&
         (color.Primaries == ImageColorPrimaries.Bt709)
@@ -147,7 +147,7 @@ public static class ImageSourceConversion {
             actualValue: format,
             message: $"No conversion pass reads an imported {format} image with the {color.Transfer} transfer function and {color.Primaries} primaries.",
             paramName: nameof(format)
-        );
+        ));
     /// <summary>Returns the perceptual quantizer's decoded luminance for an encoded value (SMPTE ST 2084).</summary>
     /// <param name="value">The encoded value, 0 to 1.</param>
     /// <returns>The luminance in cd/m², 0 to 10,000.</returns>

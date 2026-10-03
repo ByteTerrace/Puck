@@ -108,7 +108,6 @@ public sealed class WorldViewOutputRegions {
             ? Union(first: start, second: end)
             : (start with { X = 0f, Y = 0f }));
     }
-
     private static NormalizedRect Union(NormalizedRect first, NormalizedRect second) => new(
         Height: MathF.Max(x: first.Height, y: second.Height),
         Width: MathF.Max(x: first.Width, y: second.Width),

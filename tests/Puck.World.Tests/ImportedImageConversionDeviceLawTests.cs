@@ -277,7 +277,7 @@ public sealed class ImportedImageConversionDeviceLawTests {
             format: GpuPixelFormat.R16G16B16A16Float,
             height: Extent,
             name: default,
-            usage: (GpuImageUsage.Sampled | GpuImageUsage.Storage),
+            usage: GpuImageUsage.Sampled | GpuImageUsage.Storage,
             width: Extent
         );
         using var shared = export?.CreateSimultaneousAccessImage(
@@ -285,6 +285,7 @@ public sealed class ImportedImageConversionDeviceLawTests {
             height: Extent,
             width: Extent
         );
+
         var (image, stored) = Fill(
             filled: filled,
             hostsOnDirectX: hostsOnDirectX,
@@ -371,6 +372,7 @@ public sealed class ImportedImageConversionDeviceLawTests {
 
         for (var texel = 0; (texel < (stored.Length / 4)); texel++) {
             var at = (texel * 4);
+
             var (r, g, b) = ImageSourceConversion.ToWorking(
                 b: ((double)stored[(at + 2)]),
                 color: color,
@@ -387,7 +389,7 @@ public sealed class ImportedImageConversionDeviceLawTests {
                     : (0.002 + (0.002 * Math.Abs(value: expected[channel]))));
 
                 if (Math.Abs(value: (actual - expected[channel])) > tolerance) {
-                    failures.Add(item: $"{backend}: texel {texel} channel {channel} held {(double)stored[(at + channel)]}, converted to {actual}, expected {expected[channel]}");
+                    failures.Add(item: $"{backend}: texel {texel} channel {channel} held {((double)stored[(at + channel)])}, converted to {actual}, expected {expected[channel]}");
                 }
             }
         }
@@ -413,7 +415,6 @@ public sealed class ImportedImageConversionDeviceLawTests {
             Transport: ImageSourceTransport.Uploaded,
             Width: 1U
         );
-
         public string? Fault => null;
 
         public void Dispose() { }

@@ -284,6 +284,7 @@ internal sealed partial class WorldScreenBinder {
                 planes: planes
             ) && Show(current: current));
         }
+
         // The converter for an image of the given shape, made when the images change shape.
         private Entry Ensure(RenderGraphRuntime runtime, ImagePixelFormat format, ImageColorEncoding color, uint width, uint height, bool imported) {
             if (
