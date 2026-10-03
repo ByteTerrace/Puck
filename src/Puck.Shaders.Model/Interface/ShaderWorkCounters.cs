@@ -79,6 +79,8 @@ public static class ShaderWorkCounters {
                 }
                 void puckCountShadow(uint slot, uint steps) {
                 }
+                void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {
+                }
                 void puckCountFragmentWork(uint steps, uint texels) {
                 }
 
@@ -104,6 +106,7 @@ public static class ShaderWorkCounters {
             static const uint PuckWorkSkyTextureLoadsWord = {{number((4 * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkShadowWord = {{number((GpuWork.ShadowStepsFirstKind * GpuKernelCounters.CountWords))}}u;
             static const uint PuckWorkShadowSlots = {{number(GpuWork.ShadowSlotCount)}}u;
+            static const uint PuckWorkIndirectWord = {{number((GpuWork.IndirectFirstKind * GpuKernelCounters.CountWords))}}u;
             // Adds to one count: the low word atomically, then the high word by one when that addition carries.
             void puckAddWork(uint word, uint amount) {
                 if (amount == 0u) {
@@ -143,6 +146,15 @@ public static class ShaderWorkCounters {
                 puckAddWork((row + PuckWorkSkyWord), evaluations);
                 puckAddWork((row + PuckWorkSkyHashesWord), hashes);
                 puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
+            }
+            // Each invocation names its level or proof detail; those rows sum into the pass once at readback.
+            void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {
+                uint row = ((passGroup.{{DetailRow}} == 0u)
+                    ? passGroup.{{Row}}
+                    : (passGroup.{{DetailRow}} + detail)) * PuckWorkRowWords;
+                puckAddWork((row + PuckWorkIndirectWord), hits);
+                puckAddWork((row + PuckWorkIndirectWord + {{number(GpuKernelCounters.CountWords)}}u), samples);
+                puckAddWork((row + PuckWorkIndirectWord + {{number((2 * GpuKernelCounters.CountWords))}}u), unresolved);
             }
             // The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
             void puckCountShadow(uint slot, uint steps) {

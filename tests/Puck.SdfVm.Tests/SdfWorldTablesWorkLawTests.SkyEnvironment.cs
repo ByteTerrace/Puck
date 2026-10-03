@@ -163,7 +163,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         );
         // Its kernel counters: a counter and a readback buffer a ring slot, a row an upload pass and the environment's two
         // named rows (plain and gradient), each row eleven 64-bit counters, six of them shadow slots.
-        Assert.Equal(expected: 528, actual: ((SdfWorldTables.PassLabels.Length + 2) * GpuKernelCounters.RowBytes));
+        Assert.Equal(expected: 672, actual: ((SdfWorldTables.PassLabels.Length + 2) * GpuKernelCounters.RowBytes));
     }
 
     // The sky evaluations a report's environment line carries.

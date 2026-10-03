@@ -42,7 +42,7 @@ public static partial class GpuWork {
     internal const int SkyEvaluationsColumn = 18;
     internal const int SkyHashesColumn = 19;
     internal const int SkyTextureLoadsColumn = 20;
-    internal const int SubmissionColumnCount = (ShadowStepsFirstColumn + ShadowSlotCount);
+    internal const int SubmissionColumnCount = (IndirectUnresolvedColumn + 1);
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
 
@@ -124,7 +124,8 @@ public static partial class GpuWork {
 
     /// <summary>Gets the kinds a pass's kernels count on the GPU, in the order a counter row holds them
     /// (<see cref="GpuKernelCounters"/>): <see cref="MarchSteps"/>, <see cref="TexelsWritten"/>, then
-    /// <see cref="SkyEvaluations"/>, <see cref="SkyHashes"/> and <see cref="SkyTextureLoads"/>, then <see cref="ShadowSteps"/> in slot order.</summary>
+    /// <see cref="SkyEvaluations"/>, <see cref="SkyHashes"/> and <see cref="SkyTextureLoads"/>, then <see cref="ShadowSteps"/> in slot order,
+    /// followed by <see cref="IndirectHits"/>, <see cref="IndirectSamples"/> and <see cref="IndirectUnresolved"/>.</summary>
     public static ReadOnlySpan<WorkKind> KernelKinds =>
         Order.Kernel;
     /// <summary>Gets the lifetime kinds, in the order a report lists them.</summary>
@@ -138,7 +139,7 @@ public static partial class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
-        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps];
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps, IndirectHits, IndirectSamples, IndirectUnresolved];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -179,6 +180,9 @@ public static partial class GpuWork {
             kinds[SkyEvaluationsColumn] = SkyEvaluations;
             kinds[SkyHashesColumn] = SkyHashes;
             kinds[SkyTextureLoadsColumn] = SkyTextureLoads;
+            kinds[IndirectHitsColumn] = IndirectHits;
+            kinds[IndirectSamplesColumn] = IndirectSamples;
+            kinds[IndirectUnresolvedColumn] = IndirectUnresolved;
             for (var slot = 0; (slot < ShadowSlotCount); slot++) {
                 kinds[(ShadowStepsFirstColumn + slot)] = ShadowSteps[slot];
             }

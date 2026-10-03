@@ -14,6 +14,30 @@ namespace Puck.Abstractions.Tests;
 /// every pass, and the Direct3D 12 buffer states the barriers name replay without a conflict.
 /// </summary>
 public sealed class GpuKernelCountersLawTests {
+    [Fact]
+    public void IndirectKindsHaveIndependentColumnsAndReadTheirFullCounts() {
+        var gpu = new UploadModelGpu();
+        using var counters = new GpuKernelCounters(gpu.Services.BufferFactory, 1, 1, "indirect-law", "counters");
+        var kinds = new[] { GpuWork.IndirectHits, GpuWork.IndirectSamples, GpuWork.IndirectUnresolved };
+        var memory = gpu.Memory(counters.RowOf(0, 0).Buffer.BufferHandle);
+
+        for (var index = 0; (index < kinds.Length); index++) {
+            Assert.Equal(WorkClass.PerBackendDeterministic, kinds[index].Class);
+            var offset = (GpuWork.KernelKinds.IndexOf(kinds[index]) * sizeof(ulong));
+
+            BinaryPrimitives.WriteUInt64LittleEndian(memory.AsSpan(offset), (0x1_0000_0001UL + ((ulong)index)));
+        }
+        var command = gpu.Services.CommandPoolFactory.Create(name: default).CommandBufferHandle;
+
+        counters.RecordCopy(gpu.Services.Recorder, command, 0);
+        var counts = new long[(GpuWork.SubmissionKinds.Length * 2)];
+
+        counters.AddTo(0, counts, 1);
+        for (var index = 0; (index < kinds.Length); index++) {
+            Assert.Equal((0x1_0000_0001L + index), counts[(GpuWork.SubmissionKinds.Length + GpuWork.SubmissionKinds.IndexOf(kinds[index]))]);
+        }
+    }
+
     private static int MarchStepsColumn => GpuWork.SubmissionKinds.ToArray().ToList().IndexOf(item: GpuWork.MarchSteps);
     private static int SkyEvaluationsColumn => GpuWork.SubmissionKinds.ToArray().ToList().IndexOf(item: GpuWork.SkyEvaluations);
     private static int TexelsWrittenColumn => GpuWork.SubmissionKinds.ToArray().ToList().IndexOf(item: GpuWork.TexelsWritten);
