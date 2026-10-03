@@ -1,0 +1,521 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+export action
+export binding cgbScreen, agbScreen, handheldScreen
+export read cgbScreen, agbScreen, handheldScreen
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "arcadePad"
+    operations [ResolveYawAttitudeAndPlanarFrame, ResolveHold, ComputePlanarTargetVelocity, ShapeVelocity, SnapYawToPlanarIntent, RunActionTriggers, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]
+    version: "puck.body.program.v1"
+  }
+]
+
+kits {
+  rows [
+    {
+      name: "arcadePad"
+      bodyMotionProgram: "arcadePad"
+      motion {
+        holds [
+          {
+            bond: Free
+            envelope {
+              sinkSpeed: 20
+            }
+            gravity {
+              fall: 23
+              rise: 14
+            }
+            hold: Gravity
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 4
+        }
+        turn {
+          rate: 2.5
+        }
+      }
+      pad {
+        forward: "LeftStickY"
+        strafe: "LeftStickX"
+        turn: "RightStickX"
+        jump: "South"
+        rise: "East"
+      }
+    }
+  ]
+}
+
+navigation {
+  domains [
+    {
+      agentHeight: 0.5
+      agentRadius: 0.2
+      arrivalDistance: 0.45
+      cellSize: 0.5
+      depth: 20
+      kind: Surface
+      layers: 1
+      maxExpandedNodes: 480
+      maxPathNodes: 64
+      maxSlopeDegrees: 60
+      maxStepHeight: 0.5
+      name: "arcadeFloor"
+      origin [-6, -1, -5]
+      probeDown: 2.5
+      probeUp: 2
+      width: 24
+    }
+  ]
+}
+
+placements {
+  placement "arcadeCourt" {
+    prototype: "arcadeCourt"
+    position [0, 0, 0]
+    solid
+  }
+
+  placement "cabinetCgb" {
+    prototype: "cabinetCgb"
+    parent: "arcadeCourt"
+    position [-1.5, 0, -3]
+    solid
+  }
+
+  placement "cabinetAgb" {
+    prototype: "cabinetAgb"
+    parent: "arcadeCourt"
+    position [1.5, 0, -3]
+    solid
+  }
+
+  placement "handheldStand" {
+    prototype: "handheldStand"
+    parent: "arcadeCourt"
+    position [4, 0, -2]
+    region {
+      radius: 1.5
+    }
+    solid
+  }
+
+  placement "handheld" {
+    prototype: "handheld"
+    parent: "handheldStand"
+    position [0, 1.08, 0.03]
+  }
+}
+
+prototypes {
+  prototype "arcadeCourt" {
+    document {
+      schema: "puck.creation.v1"
+      name: "arcadeCourt"
+      palette [
+        {
+          color: "#2A2631"
+          specular: 0.08
+          roughness: 0.875
+        }
+        {
+          color: "#17141C"
+        }
+        {
+          color: "#C9A227"
+          emissive: 0.35
+        }
+      ]
+      shape Box "floor" {
+        position [0, -0.1, 0]
+        scale [6, 0.1, 5]
+        material: 0
+      }
+
+      shape Box "backwall" {
+        position [0, 1.2, -5]
+        scale [6, 1.2, 0.12]
+        material: 1
+      }
+
+      shape Box "strip" {
+        position [0, 2.45, -4.9]
+        scale [6, 0.05, 0.03]
+        material: 2
+      }
+    }
+  }
+
+  prototype "cabinetCgb" {
+    document {
+      schema: "puck.creation.v1"
+      name: "cabinetCgb"
+      palette [
+        {
+          color: "#1A1417"
+          specular: 0.15
+          roughness: 0.823
+        }
+        {
+          color: "#0B0A0D"
+        }
+        {
+          color: "#2E6FD9"
+          emissive: 0.8
+        }
+        {
+          color: "#4A4650"
+          specular: 0.3
+          roughness: 0.783
+        }
+      ]
+      shape Box "body" {
+        position [0, 0.9, 0]
+        scale [0.45, 0.9, 0.4]
+        material: 0
+      }
+
+      shape Box "bezel" {
+        position [0, 1.25, 0.42]
+        scale [0.42, 0.34, 0.05]
+        material: 1
+      }
+
+      shape Box "deck" {
+        position [0, 0.98, 0.47]
+        scale [0.42, 0.04, 0.12]
+        material: 3
+      }
+
+      shape Box "marquee" {
+        position [0, 1.95, 0.2]
+        scale [0.47, 0.13, 0.28]
+        material: 2
+      }
+
+      shape Box "kick" {
+        position [0, 0.06, 0.42]
+        scale [0.42, 0.06, 0.04]
+        material: 1
+      }
+    }
+  }
+
+  prototype "cabinetAgb" {
+    document {
+      schema: "puck.creation.v1"
+      name: "cabinetAgb"
+      palette [
+        {
+          color: "#1A1417"
+          specular: 0.15
+          roughness: 0.823
+        }
+        {
+          color: "#0B0A0D"
+        }
+        {
+          color: "#D9552E"
+          emissive: 0.8
+        }
+        {
+          color: "#4A4650"
+          specular: 0.3
+          roughness: 0.783
+        }
+      ]
+      shape Box "body" {
+        position [0, 0.9, 0]
+        scale [0.45, 0.9, 0.4]
+        material: 0
+      }
+
+      shape Box "bezel" {
+        position [0, 1.25, 0.42]
+        scale [0.42, 0.34, 0.05]
+        material: 1
+      }
+
+      shape Box "deck" {
+        position [0, 0.98, 0.47]
+        scale [0.42, 0.04, 0.12]
+        material: 3
+      }
+
+      shape Box "marquee" {
+        position [0, 1.95, 0.2]
+        scale [0.47, 0.13, 0.28]
+        material: 2
+      }
+
+      shape Box "kick" {
+        position [0, 0.06, 0.42]
+        scale [0.42, 0.06, 0.04]
+        material: 1
+      }
+    }
+  }
+
+  prototype "handheldStand" {
+    document {
+      schema: "puck.creation.v1"
+      name: "handheldStand"
+      palette [
+        {
+          color: "#3B3540"
+          specular: 0.2
+          roughness: 0.823
+        }
+        {
+          color: "#6E6878"
+        }
+      ]
+      shape Box "base" {
+        position [0, 0.03, 0]
+        scale [0.22, 0.03, 0.18]
+        material: 0
+      }
+
+      shape Box "post" {
+        position [0, 0.5, -0.04]
+        scale [0.03, 0.47, 0.03]
+        material: 0
+      }
+
+      shape Box "cradle" {
+        position [0, 0.9, 0]
+        scale [0.12, 0.02, 0.06]
+        material: 1
+      }
+
+      shape Box "lip" {
+        position [0, 0.95, 0.05]
+        scale [0.12, 0.04, 0.01]
+        material: 1
+      }
+    }
+  }
+
+  prototype "handheld" {
+    document {
+      schema: "puck.creation.v1"
+      name: "handheld"
+      palette [
+        {
+          color: "#B9B4C4"
+          specular: 0.25
+          roughness: 0.802
+        }
+        {
+          color: "#1A1417"
+        }
+        {
+          color: "#C63A3A"
+        }
+        {
+          color: "#2E6FD9"
+        }
+      ]
+      shape Box "chassis" {
+        position [0, 0, 0]
+        scale [0.09, 0.15, 0.02]
+        material: 0
+      }
+
+      shape Box "dpad-bar" {
+        position [-0.05, -0.06, 0.024]
+        scale [0.026, 0.008, 0.006]
+        material: 1
+      }
+
+      shape Box "dpad-post" {
+        position [-0.05, -0.06, 0.024]
+        scale [0.008, 0.026, 0.006]
+        material: 1
+      }
+
+      shape Sphere "button-a" {
+        position [0.062, -0.052, 0.024]
+        scale [0.011, 0.011, 0.011]
+        material: 2
+      }
+
+      shape Sphere "button-b" {
+        position [0.038, -0.066, 0.024]
+        scale [0.011, 0.011, 0.011]
+        material: 3
+      }
+
+      shape Box "start" {
+        position [0, -0.115, 0.023]
+        scale [0.012, 0.004, 0.004]
+        material: 1
+      }
+
+      shape Box "select" {
+        position [-0.03, -0.115, 0.023]
+        scale [0.012, 0.004, 0.004]
+        material: 1
+      }
+    }
+  }
+}
+
+rule "handheld-pickup" {
+  when handheldHeld == 0 and region(handheldStand) >= 1 and channel(1, jump) >= 1
+  mode: Edge
+  handheldHeld[0] = 1
+  upsertPlacement(placement: {
+    attach {
+      bodyIndex: 0
+      localOffset [0.22, 1.02, 0.34]
+      localYawDegrees: 0
+    }
+    id: "handheld"
+    parent: handheldStand
+    position [0, 0, 0]
+    prototypeId: handheld
+    scale: 1
+    yawDegrees: 0
+  }
+  )
+}
+
+rule "handheld-release" {
+  when handheldHeld == 1 and region(handheldStand) < 1
+  mode: Edge
+  handheldHeld[0] = 0
+  upsertPlacement(placement: {
+    id: "handheld"
+    parent: handheldStand
+    position [0, 1.08, 0.03]
+    prototypeId: handheld
+    scale: 1
+    yawDegrees: 0
+  }
+  )
+}
+
+machines [
+  {
+    name: "cgb-screen"
+    engine: "gaming-brick"
+    configuration {
+      schema: "puck.gaming-brick.configuration.v1"
+      model: "cgb"
+      content {
+        path: "../../cartridges/hgb-mirror.cgb.cartridge.json"
+      }
+    }
+  }
+  {
+    name: "agb-screen"
+    engine: "advanced-gaming-brick"
+    configuration {
+      schema: "puck.advanced-gaming-brick.config.v1"
+      boot: "fast"
+      content {
+        path: "../../cartridges/pip.agb.cartridge.json"
+      }
+    }
+  }
+  {
+    name: "handheld-screen"
+    engine: "gaming-brick"
+    configuration {
+      schema: "puck.gaming-brick.configuration.v1"
+      model: "cgb"
+      content {
+        path: "../../cartridges/hgb-mirror.cgb.cartridge.json"
+      }
+    }
+  }
+]
+
+screens [
+  {
+    index: 8
+    origin [-1.5, 1.25, -2.52]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.3
+    halfHeight: 0.27
+    halfDepth: 0.03
+    round: 0.005
+    source: machine(instance: `cgb-screen`, output: "video")
+    route {
+      engageable: true
+      engageRadius: 2.2
+      engageChannel: "jump"
+      kit: "arcadePad"
+    }
+  }
+  {
+    index: 9
+    origin [1.5, 1.25, -2.52]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.33
+    halfHeight: 0.22
+    halfDepth: 0.03
+    round: 0.005
+    source: machine(instance: `agb-screen`, output: "video")
+    route {
+      engageable: true
+      engageRadius: 2.2
+      engageChannel: "jump"
+      kit: "arcadePad"
+    }
+  }
+  {
+    index: 10
+    origin [4, 1.13, -1.949]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.06
+    halfHeight: 0.054
+    halfDepth: 0.03
+    round: 0.005
+    source: machine(instance: `handheld-screen`, output: "video")
+    route {
+      engageable: true
+      engageRadius: 2.2
+      engageChannel: "jump"
+      kit: "arcadePad"
+    }
+  }
+]
+
+spawnPoints [
+  {
+    id: "arcade-arrival"
+    position [0, 0, 2]
+    yawDegrees: 0
+  }
+]
+
+state {
+  world {
+    slot cgbScreen = 8 bounds(0..63)
+
+    slot agbScreen = 9 bounds(0..63)
+
+    slot handheldScreen = 10 bounds(0..63)
+
+    slot handheldHeld = 0 bounds(0..1)
+  }
+}

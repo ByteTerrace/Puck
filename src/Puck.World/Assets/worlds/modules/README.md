@@ -18,7 +18,7 @@ count); it reads the island's.
 | Alias | File | District |
 |---|---|---|
 | `granaries` | `granaries.puck` | The platform twin's storage court, dealt from the deployment's inventory rows |
-| `arcade` | `arcade.world.json` | Two cabinets and a handheld, each booting an authored cartridge |
+| `arcade` | `arcade.puck` | Two cabinets and a handheld, each booting an authored cartridge |
 | `dive` | `dive.world.json` | The pool: a medium lattice, a diver kit, fish, a depth row |
 | `kart` | `kart.puck` | A track on a curve, a kart kit, gates, a lap counter |
 | `jump` | `jump.puck` | A platform course rising from the shard steps, a vaulter kit, a trophy |
@@ -444,7 +444,7 @@ without it `setIdentityFact`/`$identity:` both refuse by name at compile, and
 
 ## The arcade
 
-`modules/arcade.world.json` is the arcade district: two cabinets and a handheld
+`modules/arcade.puck` is the arcade district: two cabinets and a handheld
 on a stand, each booting an authored `puck.cartridge.v1` document from
 `src/Puck.World/Assets/cartridges/` rather than a ROM file. The game is the
 same on both bricks: a pip walks a room whose four walls are the district

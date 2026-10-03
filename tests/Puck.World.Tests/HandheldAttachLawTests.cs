@@ -21,7 +21,7 @@ namespace Puck.World.Tests;
 /// already carries is the only body-relative anchor a rig with no joint transforms can honor (see this suite's own
 /// finding recorded in <c>modules/README.md</c>'s handheld section).
 ///
-/// Proven here against an isolated document first, then shipped for real in <c>modules/arcade.world.json</c>
+/// Proven here against an isolated document first, then shipped for real in <c>modules/arcade.puck</c>
 /// (<c>arcade$handheld-pickup</c>/<c>arcade$handheld-release</c> once composed under the island's <c>arcade</c>
 /// alias) — <see cref="RealArcadeModuleLawTests"/> below proves the shipped pair against the actual island document.
 /// An attach-only placement's <c>upsertPlacement</c> costs <see cref="Puck.World.WorldPlacementEffectCost.DocumentCost"/>
