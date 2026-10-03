@@ -81,6 +81,7 @@
         <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
     </ItemGroup>
     <ItemGroup>
+        <Compile Include="../Shared/FormatLedgerShapes.cs" Link="FormatLedgerShapes.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
         <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />
         <Compile Include="../Shared/TestRecords.cs" Link="TestRecords.cs" />

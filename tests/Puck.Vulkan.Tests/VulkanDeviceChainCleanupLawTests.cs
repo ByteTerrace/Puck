@@ -183,6 +183,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             },
             physicalDeviceApi: driver,
             physicalDeviceSelector: new VulkanPhysicalDeviceSelector(physicalDeviceApi: driver),
+            presentation: new PresentationWork(name: "presentation.vulkan"),
             presentationOptions: new PresentationOptions(),
             renderPassFactory: null!,
             surfaceFactory: new VulkanSurfaceFactory(surfaceApi: driver),

@@ -25,7 +25,9 @@ pixels, and turn the SDF engine into one pass package among others. They also
 add temporal reconstruction, a minimal HDR output path, and meshes and textures
 derived from SDFs. P18 rebuilds the sky and the atmosphere as typed, layered
 parts an artist composes and keys on clocks, evaluated once where they are seen
-and counted per layer and per shadowed light.
+and counted per layer and per shadowed light. P19 lifts the wallpaper fold's
+refusal of its thirteen discontinuous groups with a bound on the neighbouring
+cells' content, and rebuilds the symmetry LOD on it.
 
 The implemented contract is owned by
 [the shader guide](../reference/shaders.md#shader-pipelines-and-live-development)
@@ -7914,6 +7916,57 @@ shared environment instance and retained resources; P12's image sources for
 windows, and camera views of the world's own residency, for P18-11;
 P15-5 for P18-13; and E5, E9, E10 and E11 for
 P18-12.
+
+### P19 — Neighbour-content bounds for wallpaper folds
+
+**Problem.** A wallpaper fold reads only the sample's own cell's copy. A program
+folds only through a group whose fold is continuous (PMM, P4M, P3M1, P6M),
+because only a fold built from reflections never reads past the nearest copy;
+`SdfProgram` refuses the other thirteen groups by name. The symmetry LOD,
+which dropped the in-cell folds past a distance from the camera, is deleted for
+the same reason: past its switch every group became a translation lattice. A
+scratch port of the kernel fold, stepped a thousandth of a cell across walls at
+200,000 points, measured each group's worst stretch of a pair's distance:
+
+| Group | Fold | Worst stretch |
+|---|---|---|
+| PMM, P4M, P3M1, P6M | continuous | at most 1 |
+| P1, P2, PM, PG, CM, PMG, PGG, CMM, P4, P4G, P3, P31M, P6 | jumps | 2,000 to 17,000 |
+
+**Walls do not lift it.** Making a march stop at every cell wall it has not
+measured across is sound but costs at least one step a wall: about 1.2 steps a
+unit of ray over a unit lattice. The shipped ground (`standard.world.json`'s
+`groundTexture`, a P4M lattice of unit tiles with no limit) would spend more
+than the primary march's 128 steps on any pixel past about 100 units, and a ray
+running beside a wall would creep a tolerance a step under a ball-gap fallback.
+
+**The bound.** Each fold bakes the bounding box of its content in the fold's
+local frame, widened over the group's in-cell images (P4G's offset mirror maps
+the cell center to a corner, so its content can sit there). At each sample the
+kernel publishes the distance to the nearest neighbouring cell's box as a ball
+bound, never a wall to cross; content that reaches a wall still needs a crossing
+or a refusal. The ground's tiles stand 0.05 from every wall, so it pays nothing,
+and the off-centre P2 lattice reads 1.0 from x = -1.75 to cell -1's copy at -3.
+
+- The boxes must be tight. A sphere about the ground's 0.45 x 0.25 x 0.45 tile
+  (the shape bound `TryGetLocalBound` gives) reaches 0.68 vertically, which
+  would add steps above the tiles and creep through the gaps between them at
+  the horizon. Math's certified interval rules (`FixedInterval`) may already
+  derive tight local boxes; check them before writing per-shape bound code.
+- A wallpaper instruction has only Data1.w free, so the box needs a side table.
+- The in-cell rotation seams (P4G's quadrant walls, P6's sectors) need the same
+  bound over the sectors' images.
+- The symmetry LOD returns on the bound: past its switch the translation lattice
+  is sound once the neighbour bound covers it, and the march crosses the switch
+  as it crosses a log-sphere shell.
+
+**Done when** each of the seventeen groups builds and holds the brute-force
+distance sweep of `SdfWallpaperFoldLawTests` with off-centre prototypes, the
+ground's counted march steps do not rise (`puck counters --check`), parity holds,
+and the symmetry LOD's switch is crossed under the device law.
+
+**Depends on:** the march's fold-wall crossing (`sdfMarchAdvance`) and, for
+tight boxes, Math's interval rules.
 
 ## Sequencing
 

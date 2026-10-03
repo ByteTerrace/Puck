@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using Puck.Networking.Peers;
@@ -96,11 +97,13 @@ internal static class PeerTestSupport {
     /// <summary>Creates the real QUIC transport over <paramref name="certificate"/>, which the transport then owns —
     /// any certificate, so a law can dial with a key no <see cref="PeerIdentity"/> could ever be built over.</summary>
     public static QuicPeerTransport NewTransport(X509Certificate2 certificate) {
-        if (!QuicPeerTransport.IsSupported) {
-            throw new PlatformNotSupportedException(message: "the peer laws need QUIC (msquic with TLS 1.3) on this host");
+        if (QuicPeerTransport.IsSupported) {
+            return new QuicPeerTransport(certificate: certificate);
         }
 
-        return new QuicPeerTransport(certificate: certificate);
+        Assert.Skip(reason: "the peer laws need QUIC (msquic with TLS 1.3 and dual-mode sockets) on this host");
+
+        throw new UnreachableException();
     }
     /// <summary>Reads the next event <paramref name="link"/> publishes, bounded only by the test's own token: a law
     /// calls this for an event that must arrive, so no wall-clock budget can decide it.</summary>

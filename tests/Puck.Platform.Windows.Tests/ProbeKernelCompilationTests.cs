@@ -15,6 +15,8 @@ public sealed class ProbeKernelCompilationTests {
     [MemberData(memberName: nameof(ShippedKinds))]
     [Theory]
     public void Every_kernel_entry_point_a_shipped_kind_names_has_precompiled_bytecode(string manifestName) {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Direct3D 11 kernels compile at build only on Windows."); return; }
+
         var manifest = ProbeKindManifest.Load(manifestPath: RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders/Assets/Probes/{manifestName}"));
 
         if (manifest.Kernel is not { } kernel) {

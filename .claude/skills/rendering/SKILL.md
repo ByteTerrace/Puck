@@ -220,15 +220,67 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Path (shape 21) is presentation-only.** The fixed-point evaluator refuses
   it.
 - **A fold wall is crossed, never bounded by a floor.** `mapCore` publishes the
-  sample's walls: the wallpaper LOD shell (`sdfMapLodGap`, `sdfMapLodInner`,
-  `sdfMapLodOuter`), the nearest log-sphere shell whose chain is a similarity
-  (`sdfMapFoldGap`, `sdfMapFoldCenter`, `sdfMapFoldInner`, `sdfMapFoldOuter`),
-  and every other log-sphere wall as a ball gap (`sdfMapStepBound`). Every march
-  takes its next sample from `sdfMarchAdvance` (`field/sdf-map.hlsli`), passing
-  its own proven clearance (the field, never limited by a wall), intended
-  advance, acceptance distance and end; a new march does the same. A ball proof
-  reads `sdfMapBallClearance`, a cone `sdfMapConeClearance`. A crossing is a
-  proven step: a relaxed march resets its relaxation after one.
+  sample's walls: the nearest log-sphere shell whose chain is a similarity
+  (`sdfMapFoldGap`, `sdfMapFoldCenter`, `sdfMapFoldInner`, `sdfMapFoldOuter`)
+  and every other log-sphere wall as a ball gap (`sdfMapStepBound`). Every fine
+  march takes its next sample from `sdfMarchAdvance` (`field/sdf-map.hlsli`),
+  passing its own proven clearance (the field, never limited by a wall),
+  intended advance, acceptance distance and end; a new march does the same. A
+  ball proof, the beam's cone included, reads `sdfMapBallClearance`. A crossing
+  is a proven step: a relaxed march resets its relaxation after one.
+- **A wallpaper fold has no wall to cross.** A program folds only through a
+  group whose fold is continuous (`SdfWallpaperFold.IsContinuous`: PMM, P4M,
+  P3M1, P6M), which never reads past the nearest copy; `SdfProgram` refuses the
+  others by name. A kernel change to `sdfWallpaperFoldCell` changes
+  `SdfWallpaperFold` with it. The lattice is held to the same rule in three
+  places through one statement (`SdfWallpaperFold.LimitRefusal` and
+  `CellRefusal`: the builder, `SdfProgram` admission, the creation
+  canonicalizer): a square limit is whole, a hex group takes the unbounded
+  limit and no clamp, and `Data0.zw` is exactly `InverseCell`. A fold with an
+  unbounded limit (`SdfWallpaperFold.IsUnbounded`, one axis at the sentinel) has
+  no bound: `SdfProgram.HasUnmaskableInfluence` and `ShapeDomainOps.Reach` both
+  answer it, never a number of cells. An infinite `Repeat`, or a `RepeatLimited`
+  with a limit at `SdfDomainOps.UnboundedRepeatLimit` on any axis
+  (`SdfDomainOps.IsUnboundedRepeat`, `ShapeDomainOp.Repeat.IsUnbounded`), is the
+  same answer, and no 1e6-cells radius exists anywhere.
+- **Unbounded is a state, not a number.** `SdfBoundAlgebra.Unbounded` (positive
+  infinity) is what `Reach`, `RenderReach` and an authored instance radius carry;
+  composition, a margin and a positive scale keep it, so no arithmetic runs on a
+  large stand-in that a scale could overflow or shrink. `BeginInstance` admits it,
+  `SdfProgram.IsUnmaskable` is the one classification every reader of an instance's
+  bound asks (a declared `Unbounded` radius, or a tree whose composed bound is
+  unbounded), and only the packing writes `UnmaskableBoundRadius`.
+- **A segment starts from the world point, and the program enforces it.** The
+  directory and the instance mask skip or compile segments apart from their
+  neighbours, and a skipped segment passes the point before it along, so a stream
+  that may carry a moved point into a segment that reads it without its own
+  `ResetPoint` refuses by name (`RequireSegmentsStartAtTheWorldPoint`); an emitter
+  begins every chain with `ResetPoint` rather than trusting what ran before. The
+  classifier, the skip spheres and the part compiler start from the world point
+  because of it. `SdfOpRoles.Of` is the one table of point ops, field ops and
+  lattices, and a new op is classified there first. `SegmentRanges` is the one
+  definition of a segment (before each `ResetPoint` and at every instance's first
+  and end instruction, an empty instance included) that the directory and the
+  refusal both read. A scope's compose radius reaches `L` times as far when the
+  scope's field joins its parent divided by its Lipschitz factor
+  (`PopField.Data1.Y = 1/L`), and the halo says so; an instance bound contains the
+  surface and the blends' influence, and the field outside it is at least its
+  distance to the bound over `SdfInstanceCost.FieldRescale`, not the distance. The
+  `sdf-lattice-cull` canary pins on the GPU what the CPU laws hold: a hex
+  wallpaper with no edge clipped by a box in one scoped placement is bounded by
+  the box and still draws across all of it.
+- **Bounds compose through the set operations.** `SdfBoundAlgebra` is the one
+  statement: an intersection takes the smaller operand bound (unbounded and
+  finite is finite), a subtraction its subject's, a union the larger (one
+  unbounded operand makes it unbounded), a smooth variant the same plus the
+  halo the program adds. `HasUnmaskableInfluence` folds a field scope's shapes
+  through it, so an unbounded lattice clipped inside a scope packs its clipper's
+  bound; at depth 0 a fold with no edge, an intersection, a field op and a
+  `Plane` stay unmaskable, because they read the one global accumulator. An
+  authored bound is composed the same way only for an instance that holds the
+  whole creation as one scope (`RenderReach`'s `composeBlends`, passed by
+  `WorldPlacementStamper` for a scoped placement); the dynamic pool's per-shape
+  and per-group instances hold subsets and keep the largest shape's reach.
 
 ## Prototype bakes
 

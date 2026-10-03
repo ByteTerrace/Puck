@@ -7966,13 +7966,17 @@ export type WorldPrototype = {
          */
         spacing: unknown;
         /**
-         * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedLimit per axis, far past any authored reach).
+         * The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null = UnboundedRepeatLimit per axis, a lattice with no edge).
          */
         limit?: unknown;
         /**
          * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
          */
         origin?: unknown;
+        /**
+         * Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program's own answer (IsUnboundedRepeat) decides it.
+         */
+        isUnbounded?: boolean;
       } | {
         $type?: "polar";
         /**
@@ -7998,7 +8002,7 @@ export type WorldPrototype = {
       } | {
         $type?: "wallpaper";
         /**
-         * The wallpaper group.
+         * The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.
          */
         group: "P1" | "P2" | "Pm" | "Pg" | "Cm" | "Pmm" | "Pmg" | "Pgg" | "Cmm" | "P4" | "P4M" | "P4G" | "P3" | "P3M1" | "P31M" | "P6" | "P6M";
         /**
@@ -8006,7 +8010,7 @@ export type WorldPrototype = {
          */
         cell: unknown;
         /**
-         * The repeat-cell limit per plane axis (null = UnboundedLimit per axis).
+         * The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal).
          */
         limit?: unknown;
         /**
@@ -8017,10 +8021,6 @@ export type WorldPrototype = {
          * The parity-material stride (null = 0, geometric only).
          */
         materialStride?: number | null;
-        /**
-         * The symmetry-LOD distance threshold (null = 0, off).
-         */
-        lodDistance?: number | null;
       } | null)[] | null;
       /**
        * The driver-fed rotations this shape rides (ShapeSwingDocument), at most MaxSwings (null = none).

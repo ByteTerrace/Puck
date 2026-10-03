@@ -95,8 +95,8 @@ and AGB (Advanced GamingBrick) binaries
 on Linux, its exact deployable AppBundle under Node, and its candidate CLI for
 the generated schema, name-registry, project-map layering, and branding
 distribution checks, and for the two generated ledgers `puck formats --check`
-(`FormatVersions.json`, the token and source digest of every strictly versioned
-format) and `puck canary-ceilings --check` (`CanaryCeilings.json`, the recorded
+(`FormatVersions.json` and the generated `FormatShapes.g.cs` files, the token and
+shape fingerprint of every strictly versioned format) and `puck canary-ceilings --check` (`CanaryCeilings.json`, the recorded
 cost of the automatic and merge canary selections; a count must equal its plan).
 `puck schema --check` also compares the dashboard portal's
 generated world types, which `puck schema` writes from the same schema, so that

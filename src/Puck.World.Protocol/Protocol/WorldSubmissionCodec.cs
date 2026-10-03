@@ -77,6 +77,8 @@ public readonly record struct WorldCodecFailure(WorldCodecRefusal Refusal, strin
 /// The one canonical encoder/decoder pair for each declared <see cref="WorldSubmissionPayload"/> leaf. The
 /// wire framer, loopback, and replay tape all call these methods; none owns a second command/grant vocabulary.
 /// </summary>
+[FormatLeaf]
+[FormatPart("WorldProtocol.WireProtocolKey")]
 public static partial class WorldSubmissionCodec {
     private const int MaxDurableStateValues = 256;
 

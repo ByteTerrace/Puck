@@ -660,11 +660,21 @@ meant to establish.
   [ratchet ledgers](../reference/cli.md#puck-lengths-and-puck-comment-smellsratchet-ledgers).
 - A strictly versioned format token (a wire key, checkpoint or journal
   version, replay shape token, baker version, magic, or `puck.<name>.vN`
-  schema) is recorded in `FormatVersions.json`. Tokens stay fixed until release.
-  After a deliberate shape change, run `puck formats` to record its new digest
-  in the same change; formatting preserves the canonical digest.
-  `puck formats --check` fails on any disagreement. Two lanes that change one
-  format conflict on its digest even when they retain the same token.
+  schema) is recorded in `FormatVersions.json` with the shape fingerprint of its
+  source. Edit the source, then run `puck formats`, which rewrites the ledger and
+  each project's generated `FormatShapes.g.cs`; formatting preserves the
+  fingerprint. `puck formats --check` fails on any disagreement but never asks
+  for a token bump: the codec writes its fingerprint in its header or handshake
+  and refuses data of any other shape by name before any state changes, so a
+  token cannot say what the fingerprint does not. The fingerprint covers the
+  codec's layouts and the members of its files that touch bytes, the enums it
+  casts and the members it calls that carry `[FormatLeaf]`; a call into any other
+  repository member is recorded as open in the ledger, so a helper that decides a byte is marked
+  `[FormatLeaf]`, one that decides none is marked
+  `[FormatSeam("its behaviour sets no byte because …")]`, and a codec that
+  drives the engine moves that work out. Two lanes that edit one codec
+  differently conflict on its shape line in the ledger instead of colliding at
+  run time.
   [`puck formats`](../reference/cli.md#puck-formatsstrict-format-tokens).
 - The cost of the canary gate selections is recorded in `CanaryCeilings.json`,
   never declared by hand. A change that adds or removes canary cost runs

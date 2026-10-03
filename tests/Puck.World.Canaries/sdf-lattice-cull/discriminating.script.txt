@@ -1,0 +1,6 @@
+# The same creation moved far behind the wall's frame, so the box's footprint shows only the sky.
+world.wait ready 180
+world.row.set placements lattice position [0,0,-200]
+world.wait 10
+world.screenshot {run}/lattice.png
+world.wait captures 30

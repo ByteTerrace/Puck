@@ -52,6 +52,11 @@ internal sealed unsafe class SharedFenceWriter : IDisposable {
     /// <param name="warp">Whether the device is the software renderer.</param>
     /// <returns>The writer, owned by the caller, or <see langword="null"/>.</returns>
     public static SharedFenceWriter? TryCreate(bool warp) {
+        // Direct3D 11 exists only on Windows: elsewhere there is no device, and a caller skips.
+        if (!OperatingSystem.IsWindows()) {
+            return null;
+        }
+
         nint device;
         nint context;
         var levels = stackalloc uint[2] { 0xB100u, 0xB000u };

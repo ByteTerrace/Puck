@@ -8,87 +8,97 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Every shipped march crosses a wallpaper fold's symmetry-LOD switch soundly on Vulkan and Direct3D 12
-/// hardware: the primary march (<c>sdfTracePrimaryField</c>), the beam's cone (<c>coneMarchTileBounds</c>, whose
-/// last phase proves the far bound) and the soft shadow (<c>softShadowVisibilityMarch</c>). Past the camera-centered switch
-/// sphere the fold drops its mirrors, so a copy can stand where the mirrored lattice put none: a step sized on one side
-/// would jump straight through it. Each march steps through <c>sdfMarchAdvance</c>, which lands a step that reaches the
-/// switch just past it, within the march's own acceptance distance, and samples the other side there. Wallpaper has no
-/// fixed evaluator, so the cases have an analytic oracle: a P2 lattice whose prototype is a sphere off its cell's
-/// center, so an odd cell turns its copy half way inside the switch and keeps it upright past it. A mirror alone (PM)
-/// cannot show the hazard: dropping a mirror only removes copies, so nothing stands past the switch that the mirrored
-/// lattice lacks. The thin cases each sample within a hundredth of a wall, where a step floored at a fixed fraction of
-/// the LOD distance or of a log-sphere fold's radius, or a soft shadow's minimum stride, jumps the copy. A log-sphere
-/// fold's shells are the other wall a march crosses: spheres about the fold's center, exactly crossed when the chain
-/// before the fold is a similarity.</summary>
+/// <summary>The shipped fine marches cross a log-sphere fold's shell walls soundly on Vulkan and Direct3D 12 hardware,
+/// and the kernels fold wallpaper lattices as <see cref="SdfWallpaperFold"/> states. A log-sphere fold holds the
+/// prototype at a different scale in each shell, so a step sized by one shell's field would jump a copy that only the
+/// next shell holds; the primary march (<c>sdfTracePrimaryField</c>) and the soft shadow (<c>softShadowVisibilityMarch</c>)
+/// step through <c>sdfMarchAdvance</c>, which lands a step that reaches a wall just past it, within the march's own
+/// acceptance distance, and samples the next shell there. Each march case samples within a few thousandths of a wall,
+/// where a step floored at a thousandth of the radius, or a soft shadow's minimum stride, jumps the copy. The field
+/// cases evaluate <c>map()</c> under every wallpaper group a program accepts and hold it to the CPU fold.</summary>
 [Collection(DebugLayerCollection.Name)]
 [SupportedOSPlatform("windows10.0.15063")]
-public sealed class SdfMarchLodDeviceLawTests {
-    private const string Kernel = "sdf-march-lod.comp";
-    private const float FarDistance = 100;
+public sealed class SdfLogSphereMarchDeviceLawTests {
+    private const string Kernel = "sdf-march-log-sphere.comp";
     private const float Footprint = (1f / 1024);
     // The shadow's penumbra sharpness: a key light's 1 / penumbra slope, the slope of a light with none authored.
     private const float ShadowSharpness = 9;
+    // The wallpaper field cases' prototype: a sphere of this radius off its cell's center.
+    private const float WallpaperRadius = 0.2f;
 
-    // A camera inside the wide lattice's cell -1, four units from its turned copy's cell center.
-    private static readonly Vector3 InCell = new(x: -12, y: 0, z: 0);
+    private static readonly Vector3 WallpaperOffset = new(x: 0.31f, y: 0.05f, z: 0.12f);
 
-    // The march the probe runs, as its kernel numbers them.
+    // The probe's modes, as its kernel numbers them.
     private enum MarchMode {
         Primary = 0,
-        Cone = 1,
-        ConeFar = 2,
-        Shadow = 3,
+        Shadow = 1,
+        Field = 2,
     }
-    // A march along one ray: its origin and unit direction, the program, the far distance, the pixel footprint, the march's
-    // own input (the primary or far-bound march's start, the cone's near distance, or the shadow's reach), the cone's
-    // chord and the camera (the LOD origin), and the range the result must land in: the primary hit's depth (null for a
-    // miss), the cone's entry, its far bound, or the shadow's visibility.
+    // A march along one ray, or a field read at one point: its origin and unit direction, the program, the far distance,
+    // the pixel footprint and the march's own input (the primary march's start or the shadow's reach), and the range the
+    // result must land in: the primary hit's depth (null for a miss), the shadow's visibility, or the field's value.
     private sealed record MarchCase(string Name, MarchMode Mode, Vector3 Origin, Vector3 Direction, SdfProgram Field, (float Low, float High)? Expected,
-        float Far = FarDistance, float Footprint = Footprint, float Input = 0, float Chord = 0, Vector3 Camera = default);
+        float Far = 30, float Footprint = Footprint, float Input = 0);
 
     private static MarchCase[] Cases() => [
-        // A P2 lattice of sixteen-unit cells whose sphere of radius 0.25 sits at the cell's x = 1, seen from a camera at
-        // x = -12 in cell -1, whose copy stands at x = -17 inside the switch and at x = -15 past it. The ray never leaves
-        // the cell, so the folded field is exact along it. Inside a switch at 2.9 the field at 2.25 reads the turned copy
-        // 2.5 away, and a step that long lands at 4.75, past the upright one, whose surface the camera sees from 2.9 on.
-        new("a copy past the switch is not stepped over", MarchMode.Primary, InCell, -Vector3.UnitX, WideLattice(lodDistance: 2.9f), (2.89f, 2.95f), Camera: InCell),
-        new("the even cell's copy inside the switch", MarchMode.Primary, Vector3.Zero, Vector3.UnitX, Lattice(lodDistance: 4), (0.74f, 0.76f)),
-        new("the upright copy with the ray past the switch", MarchMode.Primary, InCell, -Vector3.UnitX, WideLattice(lodDistance: 0.5f), (2.74f, 2.76f), Camera: InCell),
-        new("nothing beside the lattice's plane", MarchMode.Primary, Vector3.Zero, Vector3.UnitY, Lattice(lodDistance: 2.9f), null),
-        new("a Lipschitz clamp does not trap the ray at the switch", MarchMode.Primary, Vector3.Zero, Vector3.UnitY, ClampedProgram(), (4.68f, 4.75f)),
-        // P2 cells 160 wide with a sphere of radius 0.002 at x = 60: cell -1's upright copy spans 99.998 to 100.002 past
-        // a switch at 99.999. A march starting 0.001 inside the switch reads the turned copy 120 away; a step floored at
-        // 0.01 lands at 100.008, past the upright copy, which is only 0.004 thick.
-        new("a thin copy just past the switch is hit", MarchMode.Primary, Vector3.Zero, -Vector3.UnitX, ThinLattice(), (99.998f, 100.0005f),
-            Far: 101, Footprint: 1e-6f, Input: 99.998f),
-        // The same thin copy bounds a ray-thin cone's entry at the switch, never past it or nowhere.
-        new("a cone does not take the switch gap as clearance", MarchMode.Cone, Vector3.Zero, -Vector3.UnitX, ThinLattice(), (99.99f, 99.9995f),
-            Far: 101, Footprint: 1e-6f, Input: 99.998f),
-        // From inside the switch, the cone's far bound lies past the thin copy, which the fine march would accept.
-        new("a cone's far bound does not claim the copy past the switch", MarchMode.ConeFar, Vector3.Zero, -Vector3.UnitX, ThinLattice(), (100.002f, 101f),
-            Far: 101, Footprint: 1e-6f, Input: 99.998f),
         // A log-sphere fold of ratio two about the origin, whose prototype is a sphere of radius 0.0003125 at x = 1.41406:
         // shell 4's copy, scaled by 16, spans 22.620 to 22.630, and the shell ends at 2^4.5 = 22.6274. A march from
         // 0.0016 past that wall reads shell 5's copy 16 away; a step floored at 1e-3 of the radius (0.016 after the
         // fold's step scale) lands at 22.613, past the 0.0075 of the copy that lies in shell 4.
-        new("a thin copy just inside a log-sphere shell is hit", MarchMode.Primary, new Vector3(x: 22.629f, y: 0, z: 0), -Vector3.UnitX, DrosteProgram(), (0.0015f, 0.003f),
-            Far: 30),
-        // P2 four-unit cells with a sphere of radius 0.006 at the cell's x = 1.095: cell -1's upright copy spans 2.899 to
-        // 2.911 past a switch at 2.9. The shadow's first sample sits at -2.899, 0.001 inside the switch, reading the turned
-        // copy 2.19 away; a 0.02 minimum stride lands at -2.919, past the copy, and the ray then reads open space.
-        new("a soft shadow's minimum stride does not jump the switch", MarchMode.Shadow, new Vector3(x: -2.859f, y: 0, z: 0), -Vector3.UnitX, ShadowLattice(), (0f, 0.01f),
+        new("a thin copy just inside a log-sphere shell is hit", MarchMode.Primary, new Vector3(x: 22.629f, y: 0, z: 0), -Vector3.UnitX, DrosteProgram(), (0.0015f, 0.003f)),
+        // The shadow's first sample sits 0.0011 past the same wall, reading shell 5's copy; a 0.02 minimum stride lands
+        // at 22.6085, past the copy, and the ray then reads open space.
+        new("a soft shadow's minimum stride does not jump a shell wall", MarchMode.Shadow, new Vector3(x: 22.6685f, y: 0, z: 0), -Vector3.UnitX, DrosteProgram(), (0f, 0.01f),
             Input: 1),
+        .. WallpaperCases(),
     ];
+    // Eight points over three cells each way under every wallpaper group a program accepts, each held to the CPU fold's
+    // distance to the prototype.
+    private static IEnumerable<MarchCase> WallpaperCases() {
+        foreach (var group in Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous)) {
+            var cell = ((group == SdfWallpaperGroup.Pmm) ? new Vector2(x: 1.7f, y: 1.3f) : new Vector2(value: 1.7f));
+            var limit = new Vector2(value: ((group >= SdfWallpaperGroup.P3) ? SdfWallpaperFold.UnboundedLimit : 3f));
+            var program = WallpaperProgram(cell: cell, group: group, limit: limit);
+
+            for (var index = 1; (index <= 8); index++) {
+                var point = new Vector3(
+                    x: ((((index * 0.7548777f) % 1f) * 8f) - 4f),
+                    y: 0.1f,
+                    z: ((((index * 0.5698403f) % 1f) * 8f) - 4f)
+                );
+                var folded = SdfWallpaperFold.Fold(cell: cell, cellIndex: out _, group: group, limit: limit, point: new Vector2(x: point.X, y: point.Z));
+                var expected = (Vector3.Distance(value1: new Vector3(x: folded.X, y: point.Y, z: folded.Y), value2: WallpaperOffset) - WallpaperRadius);
+
+                yield return new MarchCase($"{group} folds {point} as the CPU fold does", MarchMode.Field, point, Vector3.UnitX, program, ((expected - 1.0e-4f), (expected + 1.0e-4f)));
+            }
+        }
+        // A hex fold far past its coordinate bound: world (-3, 0, 3) reaches the fold as (-3e20, 3e20), where the axial
+        // sums overflowed to infinity before the kernel clamped the point (SDF_WALLPAPER_HEX_COORDINATE_MAX). The five
+        // scales and the one after the fold cancel, so a finite fold leaves the unit sphere's field at -1 to float precision.
+        yield return new MarchCase("a hex fold far past its coordinate bound reads a finite field", MarchMode.Field, new Vector3(x: -3f, y: 0f, z: 3f), Vector3.UnitX, FarHexProgram(), (-1.001f, -0.999f));
+    }
+    private static SdfProgram FarHexProgram() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        for (var scale = 0; (scale < 5); scale++) {
+            _ = builder.Scale(scale: new Vector3(value: 1.0e-4f));
+        }
+        _ = builder.WallpaperFold(cell: new Vector2(value: 1.2e-18f), group: SdfWallpaperGroup.P6M, limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit))
+            .Scale(scale: new Vector3(value: 1.0e20f))
+            .Sphere(material: material, radius: 1f);
+
+        return builder.Build();
+    }
 
     [Fact]
-    public void VulkanMarchesAcrossTheLodSwitch() {
-        using var device = HeadlessVulkanDevice.Create(applicationName: nameof(SdfMarchLodDeviceLawTests));
+    public void VulkanMarchesAcrossFoldWalls() {
+        using var device = HeadlessVulkanDevice.Create(applicationName: nameof(SdfLogSphereMarchDeviceLawTests));
 
         Verify(extension: ".spv", services: device.Services);
     }
     [Fact]
-    public void DirectXMarchesAcrossTheLodSwitch() {
+    public void DirectXMarchesAcrossFoldWalls() {
         using var output = new StringWriter();
 
         using (var device = DirectXTestDevices.Debug(output: output)) {
@@ -138,16 +148,14 @@ public sealed class SdfMarchLodDeviceLawTests {
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R32G32B32A32Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: ((uint)cases.Length));
         using var readback = services.SurfaceTransferFactory.CreateReadback();
         using var commands = services.CommandPoolFactory.Create(name: default);
-        var rows = new Vector4[(cases.Length * 4)];
+        var rows = new Vector4[(cases.Length * 3)];
 
-        // The probe's four rows per case; the LOD origin is the case's camera, as a view's position is.
         for (var index = 0; (index < cases.Length); index++) {
             var item = cases[index];
 
-            rows[(index * 4)] = new Vector4(value: item.Origin, w: item.Far);
-            rows[((index * 4) + 1)] = new Vector4(value: item.Direction, w: item.Footprint);
-            rows[((index * 4) + 2)] = new Vector4(value: item.Camera, w: ((float)item.Mode));
-            rows[((index * 4) + 3)] = new Vector4(x: item.Input, y: item.Chord, z: ShadowSharpness, w: 0);
+            rows[(index * 3)] = new Vector4(value: item.Origin, w: item.Far);
+            rows[((index * 3) + 1)] = new Vector4(value: item.Direction, w: item.Footprint);
+            rows[((index * 3) + 2)] = new Vector4(x: ((float)item.Mode), y: item.Input, z: ShadowSharpness, w: 0);
         }
         using var inputs = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: rows.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         var buffers = new List<IGpuStorageBuffer>();
@@ -200,22 +208,6 @@ public sealed class SdfMarchLodDeviceLawTests {
             }
         }
     }
-    // The relief vanishes on the Y ray because its X/Z sine factors are zero, but its global Lipschitz factor is 20.
-    // The ray stays in cell zero, so either LOD branch has the same sphere with its front surface at 4.75.
-    private static SdfProgram ClampedProgram() {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
-
-        _ = builder.WallpaperFold(cell: new Vector2(value: 4), group: SdfWallpaperGroup.P2, limit: new Vector2(value: 2), lodDistance: 3)
-            .Translate(offset: new Vector3(x: 0, y: 5, z: 0)).Sphere(material: material, radius: 0.25f)
-            .Displace(frequency: Vector3.One, amplitude: 19);
-
-        var program = builder.Build();
-
-        Assert.Equal(expected: 0.05f, actual: program.StepScale);
-
-        return program;
-    }
     // Shells of ratio two about the origin, each holding the sphere of radius 0.0003125 at x = 1.41406 scaled by its shell.
     private static SdfProgram DrosteProgram() {
         var builder = new SdfProgramBuilder();
@@ -226,24 +218,19 @@ public sealed class SdfMarchLodDeviceLawTests {
 
         return builder.Build();
     }
-    // A P2 lattice of four-unit cells in the XZ plane, two cells either way, whose prototype is a sphere at the cell's
-    // x = 1: cell 0 holds it at x = 1, and cell -1 at x = -5 inside the switch and x = -3 past it.
-    private static SdfProgram Lattice(float lodDistance) => Lattice(cell: 4, lodDistance: lodDistance, offset: 1, radius: 0.25f);
-    // The same prototype in sixteen-unit cells: cell -1 spans x = -24 to -8.
-    private static SdfProgram WideLattice(float lodDistance) => Lattice(cell: 16, lodDistance: lodDistance, offset: 1, radius: 0.25f);
-    // Cells 160 wide with a sphere of radius 0.002 at the cell's x = 60, switching at 99.999: cell -1's upright copy
-    // spans 99.998 to 100.002 along -x, and its turned copy stands at x = -220.
-    private static SdfProgram ThinLattice() => Lattice(cell: 160, lodDistance: 99.999f, offset: 60, radius: 0.002f);
-    // Four-unit cells with a sphere of radius 0.006 at the cell's x = 1.095, switching at 2.9: cell -1's upright copy
-    // spans 2.899 to 2.911 along -x, and its turned copy stands at x = -5.095.
-    private static SdfProgram ShadowLattice() => Lattice(cell: 4, lodDistance: 2.9f, offset: 1.095f, radius: 0.006f);
-    private static SdfProgram Lattice(float cell, float lodDistance, float offset, float radius) {
+    // A wallpaper lattice in the XZ plane whose prototype is a sphere off its cell's center; its step scale is one, so
+    // map() returns the folded distance itself.
+    private static SdfProgram WallpaperProgram(SdfWallpaperGroup group, Vector2 cell, Vector2 limit) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
-        _ = builder.WallpaperFold(cell: new Vector2(value: cell), group: SdfWallpaperGroup.P2, limit: new Vector2(value: 2), lodDistance: lodDistance)
-            .Translate(offset: new Vector3(x: offset, y: 0, z: 0)).Sphere(material: material, radius: radius);
+        _ = builder.WallpaperFold(cell: cell, group: group, limit: limit)
+            .Translate(offset: WallpaperOffset).Sphere(material: material, radius: WallpaperRadius);
 
-        return builder.Build();
+        var program = builder.Build();
+
+        Assert.Equal(expected: 1f, actual: program.StepScale);
+
+        return program;
     }
 }

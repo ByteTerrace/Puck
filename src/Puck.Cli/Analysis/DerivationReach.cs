@@ -21,7 +21,7 @@ public static class DerivationReach {
             .GroupBy(keySelector: root => root.Name, comparer: StringComparer.Ordinal);
 
         return roots.OrderBy(keySelector: group => group.Key, comparer: StringComparer.Ordinal)
-            .Select(selector: group => new Walk(sources: sources, types: types).Run(name: group.Key, roots: group.Select(selector: root => root.Symbol))).ToArray();
+            .Select(selector: group => new Walk(sources: sources).Run(name: group.Key, roots: group.Select(selector: root => root.Symbol))).ToArray();
     }
 
     private static IEnumerable<INamedTypeSymbol> Types(INamespaceOrTypeSymbol container) {
@@ -35,7 +35,7 @@ public static class DerivationReach {
         }
     }
 
-    private sealed class Walk(Dictionary<string, Compilation> sources, INamedTypeSymbol[] types) {
+    private sealed class Walk(Dictionary<string, Compilation> sources) {
         private static readonly HashSet<string> CompilerPatterns = new(collection: [
             "Current", "Deconstruct", "Dispose", "DisposeAsync", "GetAwaiter", "GetEnumerator",
             "GetResult", "IsCompleted", "MoveNext", "OnCompleted", "UnsafeOnCompleted",
@@ -47,7 +47,11 @@ public static class DerivationReach {
         private readonly Dictionary<SyntaxNode, IReadOnlyList<string>> m_bindings = [];
         private readonly Dictionary<SyntaxTree, SemanticModel> m_models = [];
         private readonly HashSet<ITypeSymbol> m_genericArguments = new(comparer: SymbolEqualityComparer.Default);
-        private INamedTypeSymbol[] m_dispatchTypes = [];
+        private readonly HashSet<string> m_constructed = new(comparer: StringComparer.Ordinal);
+        private readonly List<INamedTypeSymbol> m_constructedTypes = [];
+        private readonly List<ISymbol> m_dispatched = [];
+        private readonly HashSet<string> m_dispatchedKeys = new(comparer: StringComparer.Ordinal);
+        private HashSet<string> m_dispatchAssemblies = new(comparer: StringComparer.Ordinal);
 
         private static string Id(ISymbol symbol) => (symbol.GetDocumentationCommentId() ?? symbol.ToDisplayString(format: SymbolDisplayFormat.FullyQualifiedFormat));
         private static string Key(ISymbol symbol) => $"{symbol.ContainingAssembly?.Name}:{Id(symbol: symbol)}";
@@ -61,7 +65,7 @@ public static class DerivationReach {
                 if (!assemblies.Add(item: assembly) || !sources.TryGetValue(key: assembly, value: out var compilation)) { continue; }
                 foreach (var reference in compilation.ReferencedAssemblyNames) { pending.Enqueue(item: reference.Name); }
             }
-            m_dispatchTypes = types.Where(predicate: type => assemblies.Contains(item: type.ContainingAssembly.Name)).ToArray();
+            m_dispatchAssemblies = assemblies;
             foreach (var root in entries) { Add(symbol: root); }
             while (m_pending.TryDequeue(result: out var symbol)) {
                 try { Visit(symbol: symbol); } catch (InvalidOperationException exception) { throw new InvalidOperationException(message: $"{exception.Message}; reached from {Key(symbol: symbol)}", innerException: exception); }
@@ -86,11 +90,14 @@ public static class DerivationReach {
                 if (method.MethodKind is MethodKind.LocalFunction or MethodKind.AnonymousFunction) { Add(symbol: method.ContainingSymbol); return; }
                 if (method.AssociatedSymbol is { } associated) { Add(symbol: associated); return; }
                 symbol = (method.ReducedFrom ?? method);
+                if (symbol is IMethodSymbol { MethodKind: MethodKind.Constructor } constructor) { Construct(type: constructor.ContainingType); }
             }
             if (symbol is INamedTypeSymbol named) {
                 if (named.TypeKind == TypeKind.Error) { throw new InvalidOperationException(message: $"derivations: unresolved type {named}"); }
                 if (named.ToDisplayString() == FingerprintType) { return; }
                 foreach (var type in named.TypeArguments.Where(predicate: type => (type is not ITypeParameterSymbol))) { AddGenericArgument(type: type); }
+                // A value is its own instance: no constructor call stands between a struct or enum and its use.
+                if (named.IsValueType) { Construct(type: named); }
             }
             if ((symbol.ContainingType?.ToDisplayString() == FingerprintType) || (symbol is INamespaceSymbol)) { return; }
             Add(symbol: symbol.ContainingType);
@@ -291,23 +298,42 @@ public static class DerivationReach {
                 foreach (var nested in info.Nested) { AddDeconstruction(bind: bind, info: nested); }
             }
         }
+        // Rapid type analysis: a virtual or interface member's overrides and implementations join the reach only in types the
+        // reach constructs, so a call through a System.Object member does not pull in every override in the repository. A type is
+        // constructed when one of its constructors is reached, when it is a value type, or when it is the argument of a type
+        // parameter that a new() constraint lets generic code instantiate. Dispatch is re-resolved whenever a type is added.
         private void AddDispatch(ISymbol symbol) {
             if (!symbol.IsVirtual && !symbol.IsAbstract && (symbol.ContainingType.TypeKind != TypeKind.Interface)) { return; }
-            foreach (var type in m_dispatchTypes) {
-                if (symbol.ContainingType.TypeKind == TypeKind.Interface) {
-                    foreach (var contract in type.AllInterfaces.Where(predicate: contract => (Key(symbol: contract.OriginalDefinition) == Key(symbol: symbol.ContainingType)))) {
-                        foreach (var member in contract.GetMembers(name: symbol.Name).Where(predicate: member => (Id(symbol: member.OriginalDefinition) == Id(symbol: symbol)))) {
-                            Add(symbol: type.FindImplementationForInterfaceMember(interfaceMember: member));
-                        }
-                    }
-                } else {
-                    foreach (var member in type.GetMembers(name: symbol.Name)) {
-                        ISymbol? overridden = member switch { IMethodSymbol method => method.OverriddenMethod, IPropertySymbol property => property.OverriddenProperty, _ => null };
+            if (!m_dispatchedKeys.Add(item: Key(symbol: symbol))) { return; }
 
-                        while (overridden is not null) {
-                            if (Key(symbol: overridden.OriginalDefinition) == Key(symbol: symbol)) { Add(symbol: member); break; }
-                            overridden = overridden switch { IMethodSymbol method => method.OverriddenMethod, IPropertySymbol property => property.OverriddenProperty, _ => null };
-                        }
+            m_dispatched.Add(item: symbol);
+
+            for (var index = 0; (index < m_constructedTypes.Count); index++) { Dispatch(symbol: symbol, type: m_constructedTypes[index]); }
+        }
+        private void Construct(INamedTypeSymbol type) {
+            type = type.OriginalDefinition;
+
+            if (!m_constructed.Add(item: Key(symbol: type))) { return; }
+
+            m_constructedTypes.Add(item: type);
+
+            for (var index = 0; (index < m_dispatched.Count); index++) { Dispatch(symbol: m_dispatched[index], type: type); }
+        }
+        private void Dispatch(ISymbol symbol, INamedTypeSymbol type) {
+            if (!m_dispatchAssemblies.Contains(item: (type.ContainingAssembly?.Name ?? string.Empty))) { return; }
+            if (symbol.ContainingType.TypeKind == TypeKind.Interface) {
+                foreach (var contract in type.AllInterfaces.Where(predicate: contract => (Key(symbol: contract.OriginalDefinition) == Key(symbol: symbol.ContainingType)))) {
+                    foreach (var member in contract.GetMembers(name: symbol.Name).Where(predicate: member => (Id(symbol: member.OriginalDefinition) == Id(symbol: symbol)))) {
+                        Add(symbol: type.FindImplementationForInterfaceMember(interfaceMember: member));
+                    }
+                }
+            } else {
+                foreach (var member in type.GetMembers(name: symbol.Name)) {
+                    ISymbol? overridden = member switch { IMethodSymbol method => method.OverriddenMethod, IPropertySymbol property => property.OverriddenProperty, _ => null };
+
+                    while (overridden is not null) {
+                        if (Key(symbol: overridden.OriginalDefinition) == Key(symbol: symbol)) { Add(symbol: member); break; }
+                        overridden = overridden switch { IMethodSymbol method => method.OverriddenMethod, IPropertySymbol property => property.OverriddenProperty, _ => null };
                     }
                 }
             }

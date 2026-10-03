@@ -877,7 +877,7 @@ can use in a running World:
 | Analytic or finite-difference normals, the shadow cull and the grid cull (`SetFiniteDifferenceNormals`, `SetShadowCull`, `SetGridCull`) | E4's shading levers; the grid cull is either a lever there or shown to have no remaining consumer |
 | Carving: add, pop, clear, the pad carve chord, the meteor shower and the brick bake (`AddCarve`, `PopCarve`, `ClearCarves`, `StartMeteors`, `AdvanceBricks`) | E13's carve brush, `world.carve erase`, undo, and the bake over the world's brick pool; the meteor shower as a gallery row that authors a dense carve cluster |
 | The orbit camera, pan, zoom and pose (`SdfDebugController`, `SdfOrbitInput`, `PoseCamera`) | E8's editor camera |
-| The gallery tour: each `SdfGalleryExhibit` (`LiarSpiral`, `DrosteTunnel`, `CellJitterCreases`, `NotchHorizon`, `SmoothChain`, `WallpaperP4G`, `CarveCeiling`, `LogSphereRunDoc`, `DriftMonolith`) with its framing pose and plaque | One gallery area per exhibit with an authored camera, its plaque as a text screen or HUD panel, and a bindable next and previous exhibit through `view.override camera` |
+| The gallery tour: each `SdfGalleryExhibit` (`LiarSpiral`, `DrosteTunnel`, `CellJitterCreases`, `NotchHorizon`, `SmoothChain`, `WallpaperP4M`, `CarveCeiling`, `LogSphereRunDoc`, `DriftMonolith`) with its framing pose and plaque | One gallery area per exhibit with an authored camera, its plaque as a text screen or HUD panel, and a bindable next and previous exhibit through `view.override camera` |
 
 **Touches:** `Puck.SdfVm` (the deletion, `SdfCarveBakePlanner`),
 `src/Puck.World/Assets/worlds/tools`, `Puck.World.Client` (the isolate filter),

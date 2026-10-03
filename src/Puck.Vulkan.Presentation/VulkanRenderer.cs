@@ -20,6 +20,7 @@ namespace Puck.Vulkan.Presentation;
 public sealed class VulkanRenderer(
     VulkanRendererOptions options,
     PresentationOptions presentationOptions,
+    PresentationWork presentation,
     IVulkanInstanceFactory instanceFactory,
     IVulkanSurfaceFactory surfaceFactory,
     IVulkanPhysicalDeviceSelector physicalDeviceSelector,
@@ -33,7 +34,6 @@ public sealed class VulkanRenderer(
     IVulkanFramePresenter framePresenter,
     IVulkanCommandBufferRecorder commandBufferRecorder,
     IVulkanPhysicalDeviceApi physicalDeviceApi,
-    PresentationWork presentation,
     Func<IVulkanDeviceContext, GpuDeviceServices> createServices
 ) : IDisposable, IVulkanDeviceContext, IGpuDeviceContext, IGpuPipelineCache {
     /// <summary>The presentation frame-ring depth: how many presented frames may be in flight before
