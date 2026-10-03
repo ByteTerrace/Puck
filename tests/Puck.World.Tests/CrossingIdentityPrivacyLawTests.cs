@@ -18,6 +18,7 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class CrossingIdentityPrivacyLawTests {
     internal const string OwnerId = "privacy-owner";
+
     private const string PrivatePanel = "private-hud-panel";
     private const string PrivatePayload = "private-payload";
     private const string PrivateRow = "private-secret-row";
@@ -1125,7 +1126,6 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.Equal(expected: -1, actual: verdict.Primary.DivergedAt);
         Assert.Equal(expected: (separateArrivals ? 8 : 6), actual: verdict.Primary.Ticks);
     }
-
     // Records one tick on a fresh server whose catalog owns the boot profile, seat 0 joined as that identity.
     private static (WorldReplayTape Tape, WorldIdentity Owned) RecordOwnedSeat(WorldFixture fixture, string directory) {
         var server = fixture.Server;

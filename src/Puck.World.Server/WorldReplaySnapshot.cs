@@ -1064,9 +1064,9 @@ public sealed partial class WorldReplaySnapshot {
             maximum: WorldBodiesLimits.CapacityCeiling
         );
         var outcome = new WorldArrivalOutcome(
+            Adopted: adopted,
             Generations: generations,
-            RolledBack: rolledBack,
-            Adopted: adopted
+            RolledBack: rolledBack
         );
         var refused = new WorldReplayEntry.Arrival(
             Encoded: encoded,

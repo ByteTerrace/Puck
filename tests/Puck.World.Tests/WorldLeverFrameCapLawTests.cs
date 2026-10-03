@@ -12,9 +12,9 @@ namespace Puck.World.Tests;
 /// </summary>
 public sealed class WorldLeverFrameCapLawTests {
     private static IEnumerable<string> RegisteredNames() => typeof(WorldSessionLevers)
-        .GetFields(bindingAttr: (System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
-        .Where(field => (field.IsLiteral && (field.FieldType == typeof(string))))
-        .Select(field => ((string)field.GetRawConstantValue()!));
+        .GetFields(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+        .Where(predicate: field => (field.IsLiteral && (field.FieldType == typeof(string))))
+        .Select(selector: field => ((string)field.GetRawConstantValue()!));
 
     [Fact]
     public void TheLargestValidLeverOfEveryKindEncodesWithinTheCap() {
@@ -26,13 +26,13 @@ public sealed class WorldLeverFrameCapLawTests {
         foreach (var section in Enum.GetValues<WorldSection>()) {
             foreach (var name in names) {
                 var lever = new WorldSessionLever(
-                    Section: section,
-                    Name: name,
                     A: double.MinValue,
                     B: double.MaxValue,
                     C: double.MinValue,
                     D: double.MaxValue,
+                    Name: name,
                     Seat: int.MinValue,
+                    Section: section,
                     View: view
                 );
 

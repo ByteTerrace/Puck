@@ -13,8 +13,7 @@ public sealed partial class SdfWorldTables {
     private const int EnvironmentPass = 3;
 
     // The environment's named rows, in kernel index order after its plain row (SdfWorldWorkDetails.Sky's gradient).
-    private static readonly GpuWorkDetail[] EnvironmentDetails = [new(Pass: EnvironmentPass, Detail: "plain"), new(Pass: EnvironmentPass, Detail: "gradient")];
-
+    private static readonly GpuWorkDetail[] EnvironmentDetails = [new(Detail: "plain", Pass: EnvironmentPass), new(Detail: "gradient", Pass: EnvironmentPass)];
     private static readonly string[] PassLabelTable = ["fillers", "bricks", "upload", "environment"];
     private static readonly WorkClass[] PassClassTable = [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic];
 

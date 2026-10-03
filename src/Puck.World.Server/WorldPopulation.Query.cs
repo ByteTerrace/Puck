@@ -822,6 +822,7 @@ public sealed partial class WorldPopulation {
         ? m_entries[bodyIndex].PressRefusal
         : string.Empty
     );
+
     // The shared body-construction pattern ActivateInhabitant/ActivateSimulated/RestoreDetachedSeat each already
     // run for their own kit index — factored out here so a restore reconstructs an arbitrary slot's body under
     // ITS OWN captured kit, not just the local-seat kit RestoreDetachedSeat assumes.

@@ -86,7 +86,6 @@ public sealed partial class SdfWorldPassesLawTests {
 
         return (Ran(part: SdfWorldPackage.Parts.Ambient), Ran(part: SdfWorldPackage.Parts.Shadow));
     }
-
     // The host-visible bytes each part of a view's latest completed frame wrote, by part.
     private static Dictionary<string, long> HostBytesOf(SdfFrame frame) {
         var gpu = new FakeGpuDevice();
@@ -155,7 +154,6 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.Equal(expected: (mask + 4L), actual: bytes[$"sdf.world${part}"]);
         }
     }
-
     [Fact]
     public void ZeroStableSlotsSkipShadowsEvenWithShadowCastingLights() {
         var frame = Frame();

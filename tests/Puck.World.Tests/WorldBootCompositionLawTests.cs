@@ -181,7 +181,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
         services.AddDirectXPresenter();
 
         var names = services
-            .Where(predicate: static descriptor => (descriptor.ServiceType == typeof(Puck.Abstractions.Counting.IWorkCounterSource)) && (descriptor.ImplementationInstance is Puck.Abstractions.Presentation.PresentationWork))
+            .Where(predicate: static descriptor => ((descriptor.ServiceType == typeof(Puck.Abstractions.Counting.IWorkCounterSource)) && (descriptor.ImplementationInstance is Puck.Abstractions.Presentation.PresentationWork)))
             .Select(selector: static descriptor => ((Puck.Abstractions.Counting.IWorkCounterSource)descriptor.ImplementationInstance!).Name)
             .Order(comparer: StringComparer.Ordinal)
             .ToArray();

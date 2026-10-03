@@ -357,6 +357,7 @@ public static partial class WorldSubmissionCodec {
             WriteMask: writeMask
         );
     }
+
     /// <summary>The longest UTF-8 text a lever's name or view may carry: a validated name is at most
     /// <see cref="SafeName.MaxLength"/> characters and a UTF-16 character encodes to at most three UTF-8 bytes (a
     /// surrogate pair is two characters and four bytes).</summary>
@@ -364,7 +365,8 @@ public static partial class WorldSubmissionCodec {
     /// <summary>The largest lever leaf the layout below can write: the section tag, the name and view behind their
     /// 16-bit length prefixes at their longest, the four value lanes and the seat. The frame cap for the lever kind
     /// is this number, so the cap follows the layout rather than a figure beside it.</summary>
-    public const int MaxLeverBytes = (sizeof(byte) + (2 * (sizeof(ushort) + MaxLeverTextBytes)) + (4 * sizeof(double)) + sizeof(int));
+    public const int MaxLeverBytes = (((sizeof(byte) + (2 * (sizeof(ushort) + MaxLeverTextBytes))) + (4 * sizeof(double))) + sizeof(int));
+
     private static void WriteLeverText(WireWriter writer, string field, string value) {
         if (Encoding.UTF8.GetByteCount(s: value) > MaxLeverTextBytes) {
             throw new LeafCodecException(failure: Fail(

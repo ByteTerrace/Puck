@@ -304,7 +304,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
             refusal: out _
         ));
         Assert.False(condition: WorldHelloDoor.TryAccept(
-            offeredKey: (WorldProtocol.WireProtocolKey ^ 1UL),
+            offeredKey: WorldProtocol.WireProtocolKey ^ 1UL,
             refusal: out var helloRefusal
         ));
         Assert.Equal(

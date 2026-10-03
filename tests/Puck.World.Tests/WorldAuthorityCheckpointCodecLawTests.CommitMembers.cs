@@ -34,6 +34,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
         VerticalVelocity: FixedQ4816.FromDouble(value: -1.5),
         YawRadians: FixedQ4816.FromDouble(value: 1.25)
     );
+
     private static WorldTransferActionContinuity Carried { get; } = new(
         Channels: [
             new WorldTransferChannelEdge(HeldValue: FixedQ4816.One, Name: "move", PreviousBit: true),
@@ -67,10 +68,10 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
         return Assert.Single(collection: decoded);
     }
 
-    [Theory]
     [InlineData("carried")]
     [InlineData("empty")]
     [InlineData("absent")]
+    [Theory]
     public void TheCheckpointAndTheFederationCommitCarryAMemberTheSameWay(string continuity) {
         var member = EveryField(continuity: continuity switch {
             "carried" => Carried,
@@ -90,7 +91,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
         var commit = WorldFederationCodec.EncodeCommit(members: [member], sourceAuthority: "row-a", transferId: 7UL);
 
         Assert.False(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: checkpoint, checkpoint: out _, reason: out var reason));
-        Assert.Contains(expectedSubstring: "continuum trajectory has invalid interval", actualString: reason);
+        Assert.Contains(actualString: reason, expectedSubstring: "continuum trajectory has invalid interval");
         Assert.False(condition: WorldFederationCodec.TryDecodeCommit(body: commit, failure: out var failure, members: out _, sourceAuthority: out _, transferId: out _));
         Assert.Contains(expectedSubstring: "continuum trajectory has invalid interval", actualString: failure.ToString());
     }
