@@ -222,7 +222,7 @@ public sealed class DerivationLawTests {
             }
             public static class Producer {
                 [Puck.Derivation("bake")]
-                public static int Bake({{receiver}} calculator) => calculator.Evaluate();
+                public static int Bake() { {{receiver}} calculator = new FixedCalculator(); return calculator.Evaluate(); }
             }
             """;
         var original = SingleSource(source: source);
@@ -240,7 +240,7 @@ public sealed class DerivationLawTests {
             }
             public static class Producer {
                 [Puck.Derivation("bake")]
-                public static int Bake(System.IComparable<int> value) => value.CompareTo(1);
+                public static int Bake() { System.IComparable<int> value = new Sample(); return value.CompareTo(1); }
             }
             """;
         var original = SingleSource(source: Source);
@@ -258,7 +258,82 @@ public sealed class DerivationLawTests {
             }
             public static class Producer {
                 [Puck.Derivation("bake")]
-                public static int Bake(object value) => value.GetHashCode();
+                public static int Bake() { object value = new Sample(); return value.GetHashCode(); }
+            }
+            """;
+        var original = SingleSource(source: Source);
+        var edited = SingleSource(source: Source.Replace(comparisonType: StringComparison.Ordinal, newValue: "GetHashCode() => 8", oldValue: "GetHashCode() => 7"));
+
+        Assert.NotEqual(actual: edited.Fingerprint, expected: original.Fingerprint);
+        Assert.Contains(collection: original.Symbols, filter: static symbol => (!symbol.External && (symbol.Id == "M:Fixture.Sample.GetHashCode")));
+    }
+    [Fact]
+    public void AnOverrideInATypeTheReachNeverConstructsIsNotReachedThroughAnObjectMember() {
+        const string Source = """
+            namespace Fixture;
+            public sealed class Sample {
+                public override int GetHashCode() => 7;
+                public override string ToString() => "seven";
+            }
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static int Bake(object value) => (value.GetHashCode() + value.ToString().Length);
+            }
+            """;
+        var original = SingleSource(source: Source);
+        var edited = SingleSource(source: Source.Replace(comparisonType: StringComparison.Ordinal, newValue: "GetHashCode() => 8", oldValue: "GetHashCode() => 7"));
+
+        Assert.Equal(actual: edited.Fingerprint, expected: original.Fingerprint);
+        Assert.DoesNotContain(collection: original.Symbols, filter: static symbol => (!symbol.External && symbol.Id.StartsWith(value: "M:Fixture.Sample.", comparisonType: StringComparison.Ordinal)));
+    }
+    [Fact]
+    public void AnOverrideInATypeConstructedLaterInTheReachIsStillReached() {
+        const string Source = """
+            namespace Fixture;
+            public sealed class Sample {
+                public override int GetHashCode() => 7;
+            }
+            public static class Factory {
+                public static object Make() => new Sample();
+            }
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static int Bake(object value) => (value.GetHashCode() + Factory.Make().GetHashCode());
+            }
+            """;
+        var original = SingleSource(source: Source);
+        var edited = SingleSource(source: Source.Replace(comparisonType: StringComparison.Ordinal, newValue: "GetHashCode() => 8", oldValue: "GetHashCode() => 7"));
+
+        Assert.NotEqual(actual: edited.Fingerprint, expected: original.Fingerprint);
+    }
+    [Fact]
+    public void AValueTypeOverrideIsReachedWithoutAConstructorCall() {
+        const string Source = """
+            namespace Fixture;
+            public struct Sample {
+                public override int GetHashCode() => 7;
+            }
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static int Bake(Sample sample) { object boxed = sample; return boxed.GetHashCode(); }
+            }
+            """;
+        var original = SingleSource(source: Source);
+        var edited = SingleSource(source: Source.Replace(comparisonType: StringComparison.Ordinal, newValue: "GetHashCode() => 8", oldValue: "GetHashCode() => 7"));
+
+        Assert.NotEqual(actual: edited.Fingerprint, expected: original.Fingerprint);
+    }
+    [Fact]
+    public void AnOverrideInATypeAGenericNewConstraintInstantiatesIsReached() {
+        const string Source = """
+            namespace Fixture;
+            public sealed class Sample {
+                public override int GetHashCode() => 7;
+            }
+            public static class Producer {
+                private static T Make<T>() where T : new() => new T();
+                [Puck.Derivation("bake")]
+                public static int Bake() => ((object)Make<Sample>()).GetHashCode();
             }
             """;
         var original = SingleSource(source: Source);
