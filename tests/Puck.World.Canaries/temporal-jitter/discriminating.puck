@@ -1,0 +1,187 @@
+schema: "puck.world.definition.v1"
+documentId: "temporal-jitter"
+
+cameras [
+  {
+    anchor: null
+    name: "counters-cam"
+    renderHeight: 1080
+    renderWidth: 1920
+    rig {
+      name: "counters-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 64
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 64
+}
+
+placements {
+  placement "blockA" {
+    prototype: "block"
+    position [-1.5, 0, 0]
+  }
+
+  placement "blockB" {
+    prototype: "block"
+    position [1.5, 0, 0]
+    yawDegrees: 30deg
+  }
+}
+
+prototypes {
+  prototype "block" {
+    document {
+      frames [
+        {
+          name: "idle"
+          transforms []
+        }
+      ]
+      name: "block"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "base" {
+        chamfer: 0.2
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.6, 0.6, 0.6]
+      }
+
+      shape Sphere "cap" {
+        material: 1
+        position [0, 1.5, 0]
+        scale [0.4, 0.4, 0.4]
+      }
+    }
+  }
+}
+
+render {
+  low {
+    shadows: Off
+    ambientOcclusion: false
+    renderScale: 0.70980394
+  }
+}
+
+simulation {
+  rateHz: 30
+}
+
+views {
+  layout "counters" {
+    seatCount: 0
+    slots [
+      {
+        camera: "counters-cam"
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "counters-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}
+
+captures {
+  rows [
+    {
+      station: center
+      ticks [60]
+      instance: "world"
+      converge: 1
+      palette [
+        {
+          color: "#FFFFFF"
+          material: 0
+        }
+      ]
+    }
+    {
+      station: offset
+      ticks [65]
+      instance: "world"
+      converge: 2
+      palette [
+        {
+          color: "#FFFFFF"
+          material: 0
+        }
+      ]
+    }
+    {
+      station: wrap
+      ticks [70]
+      instance: "world"
+      converge: 9
+      palette [
+        {
+          color: "#FFFFFF"
+          material: 0
+        }
+      ]
+    }
+    {
+      station: `offset-wrap`
+      ticks [75]
+      instance: "world"
+      converge: 9
+      palette [
+        {
+          color: "#FFFFFF"
+          material: 0
+        }
+      ]
+    }
+  ]
+}

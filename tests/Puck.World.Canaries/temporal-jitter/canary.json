@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/temporal-jitter/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/temporal-jitter/fixture.puck",
     "script": "capture.script.txt",
     "commands": [
       {
@@ -57,7 +57,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/temporal-jitter/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/temporal-jitter/discriminating.puck",
     "script": "capture.script.txt",
     "commands": [
       {
