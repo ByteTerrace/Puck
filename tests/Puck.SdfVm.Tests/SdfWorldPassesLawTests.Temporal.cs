@@ -3,6 +3,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Shaders;
+using Puck.SignedDistance;
 using Puck.Testing;
 using Xunit;
 
@@ -389,13 +390,14 @@ public sealed partial class SdfWorldPassesLawTests {
         private long m_index;
         private ulong m_rendered;
 
-        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f) {
+        public TemporalRig(int views, bool cadence = false, bool feed = false, bool secondResidency = false, bool temporal = false, float renderScale = 1f, Action<SdfSky>? sky = null) {
             var pipelines = SdfTestPipelines.Cache(regionCopy: UploadModelGpu.RegionCopyBytecode);
             var frame = Frame() with { EnableCadenceGate = cadence };
 
             frame = frame with { Views = [frame.Views[0] with { Quality = new SdfViewQuality { Temporal = temporal }, RenderScale = renderScale }] };
 
             frame = frame with { Views = [.. Enumerable.Repeat(element: frame.Views[0], count: views)] };
+            sky?.Invoke(obj: frame.Sky);
             m_sourceFrame = frame;
             Selected = Residency(name: "first");
             Second = (secondResidency ? Residency(name: "second") : null);

@@ -23,6 +23,7 @@ namespace Puck.Cli.Host;
 /// </summary>
 internal static class HostProcesses {
     private static readonly string[] DeviceTestAssemblies = [.. GatePlan.Steps.Where(predicate: step => (step.Kind == GateStepKind.DeviceSuite)).Select(selector: step => step.Name)];
+    private static readonly string[] HeavyTestAssemblies = ["Puck.World.Tests"];
     private static readonly string[] NeverWork = ["powershell", "pwsh", "bash", "sh", "cmd", "grep", "conhost", "MSBuild", "csc", "VBCSCompiler"];
     private static readonly string[] ExecValueOptions = ["--depsfile", "--runtimeconfig", "--additionalprobingpath", "--additional-deps", "--fx-version", "--roll-forward", "--roll-forward-on-no-candidate-fx"];
 
@@ -39,9 +40,9 @@ internal static class HostProcesses {
     private static bool IsDeviceTest(string program) => DeviceTestAssemblies.Contains(value: program, comparer: StringComparer.OrdinalIgnoreCase);
     // Only dotnet's entry assembly is executable work. Build/run/test/tool wrappers are not. A managed testhost's
     // runtimeconfig identifies its test assembly rather than a build's project path.
-    private static string EntryPoint(string[] arguments, out int next, out bool deviceTestHost) {
+    private static string EntryPoint(string[] arguments, out int next, out string? hostAssembly) {
         next = 1;
-        deviceTestHost = false;
+        hostAssembly = null;
 
         if (!ProgramName(path: arguments[0]).Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "dotnet")) { return ProgramName(path: arguments[0]); }
         if ((next < arguments.Length) && (arguments[next] == "exec")) { next++; }
@@ -56,7 +57,7 @@ internal static class HostProcesses {
             var value = ((separator < 0) ? arguments[next++] : token[(separator + 1)..]);
 
             if ((option == "--runtimeconfig") && FileName(path: value).EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".runtimeconfig.json")) {
-                deviceTestHost = IsDeviceTest(program: FileName(path: value)[..^19]);
+                hostAssembly = FileName(path: value)[..^19];
             }
         }
         if (next == arguments.Length) { return string.Empty; }
@@ -136,12 +137,12 @@ internal static class HostProcesses {
         if (IsDeviceTest(program: program)) { return ((arguments.Length == 0) || SelectsGpuTests(arguments: arguments, start: 1)); }
         if (arguments.Length == 0) { return false; }
 
-        var entry = EntryPoint(arguments: arguments, deviceTestHost: out var deviceTestHost, next: out var next);
+        var entry = EntryPoint(arguments: arguments, hostAssembly: out var hostAssembly, next: out var next);
 
         if (entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return true; }
         if (IsDeviceTest(program: entry)) { return SelectsGpuTests(arguments: arguments, start: next); }
         if (entry.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "testhost")) {
-            return (deviceTestHost || arguments.Skip(count: next).Any(predicate: static argument => IsDeviceTest(program: ProgramName(path: argument))));
+            return (((hostAssembly is not null) && IsDeviceTest(program: hostAssembly)) || arguments.Skip(count: next).Any(predicate: static argument => IsDeviceTest(program: ProgramName(path: argument))));
         }
 
         return ((entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "puck") || entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.Cli")) && RunningGpuVerb(arguments: arguments, start: next));
@@ -155,8 +156,58 @@ internal static class HostProcesses {
 
         var arguments = Arguments(commandLine: commandLine);
 
-        return ((arguments.Length != 0) && EntryPoint(arguments: arguments, deviceTestHost: out _, next: out _).Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "MSBuild") &&
+        return ((arguments.Length != 0) && EntryPoint(arguments: arguments, hostAssembly: out _, next: out _).Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "MSBuild") &&
             arguments.Any(predicate: static argument => argument.TrimStart(trimChars: ['/', '-']).Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "nodemode:1")) &&
             arguments.Any(predicate: static argument => argument.TrimStart(trimChars: ['/', '-']).Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "nodeReuse:true")));
+    }
+    /// <summary>Whether a test assembly's full run is heavy: the machine takes one at a time, whoever starts it.</summary>
+    /// <param name="assembly">The test assembly's name, without extension.</param>
+    /// <returns><see langword="true"/> for <c>Puck.World.Tests</c>.</returns>
+    public static bool IsHeavyTestAssembly(string assembly) => HeavyTestAssemblies.Contains(value: assembly, comparer: StringComparer.OrdinalIgnoreCase);
+    /// <summary>Whether a process runs a heavy test assembly (<see cref="IsHeavyTestAssembly"/>), whatever its filter:
+    /// its apphost, <c>dotnet exec</c> of its assembly, or a test host running it. A build, a <c>dotnet test</c> driver
+    /// or a shell naming it runs no test.</summary>
+    /// <param name="name">The process name, without extension.</param>
+    /// <param name="commandLine">Its Windows command line or Linux NUL-delimited argv; empty when unreadable.</param>
+    /// <returns><see langword="true"/> for a running heavy test assembly.</returns>
+    public static bool IsHeavyTest(string name, string commandLine) {
+        var program = ProgramName(path: name);
+
+        if (IsHeavyTestAssembly(assembly: program)) { return true; }
+        if (NeverWork.Contains(value: program, comparer: StringComparer.OrdinalIgnoreCase)) { return false; }
+
+        var arguments = Arguments(commandLine: commandLine);
+
+        if (arguments.Length == 0) { return false; }
+
+        var entry = EntryPoint(arguments: arguments, hostAssembly: out var hostAssembly, next: out var next);
+
+        if (IsHeavyTestAssembly(assembly: entry)) { return true; }
+
+        return (entry.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "testhost") &&
+            (((hostAssembly is not null) && IsHeavyTestAssembly(assembly: hostAssembly)) || arguments.Skip(count: next).Any(predicate: static argument => IsHeavyTestAssembly(assembly: ProgramName(path: argument)))));
+    }
+    /// <summary>Returns the processes descended from <paramref name="root"/>: its children, theirs, and so on. A process
+    /// is a child only when it started no earlier than its parent, so a recycled parent id never adopts an older
+    /// process.</summary>
+    /// <param name="root">The process whose descendants are wanted.</param>
+    /// <param name="processes">Each running process's parent id and start time; a start time that cannot be read is
+    /// <see cref="DateTime.MinValue"/>, which no process is ever started after.</param>
+    /// <returns>The descendants' ids, without <paramref name="root"/>.</returns>
+    public static IReadOnlySet<int> Descendants(int root, IReadOnlyDictionary<int, (int Parent, DateTime Started)> processes) {
+        var found = new HashSet<int>();
+        var frontier = new Queue<int>(collection: [root]);
+
+        while (frontier.TryDequeue(result: out var parent)) {
+            var started = (processes.TryGetValue(key: parent, value: out var entry) ? entry.Started : DateTime.MinValue);
+
+            foreach (var (id, process) in processes) {
+                if ((process.Parent == parent) && (id != root) && (process.Started >= started) && found.Add(item: id)) {
+                    frontier.Enqueue(item: id);
+                }
+            }
+        }
+
+        return found;
     }
 }

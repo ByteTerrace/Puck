@@ -1,7 +1,7 @@
 {
   "id": "sky-layers",
-  "title": "Each authored sky layer contributes pixels and disappears when removed",
-  "binding": "A still empty scene presents a black gradient. The script adds a uniform blue gradient, a star field, a directional disc and a static cloud layer one at a time, capturing each against the same black base and removing it before the next. The upper half of each present capture must contain light; every pixel of that region is black after removal. The discriminating leg changes only the star brightness to zero, so the stars presence bound fails while every other layer and absence bound holds. The camera then turns to a red sphere outside the earlier views: dense cyan distance fog must cover its center, while the same region without fog must fail the cyan bound.",
+  "title": "Every sky layer kind contributes pixels and disappears when removed, under each blend and a tilted frame",
+  "binding": "A still empty scene presents a black gradient. The script adds each layer kind one at a time over the same black base and removes it before the next: a uniform blue gradient, a star field, a directional disc, a static cloud layer, aurora curtains, a noise field, a checker pattern, a panorama of a test-pattern screen and a disc textured with that screen. The upper half of each present capture must contain light; every pixel of that region is black after removal. A gradient lit only above the sky frame's horizon lights the upper half under a level frame and leaves it black under a frame turned upside down. A uniform half-grey gradient over a quarter-grey one composes by each blend's rule: over 0.5, add 0.75, multiply 0.125, screen 0.625. The discriminating leg changes only the star brightness to zero, so the stars presence bound fails while every other bound holds. The camera then turns to a red sphere outside the earlier views: dense cyan distance fog must cover its center, while the same region without fog must fail the cyan bound. Each layer kind adds its label to the sky's detail rows mid-run, growing every view pass's counter buffer, and no device is lost on either leg.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -202,7 +202,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.row.set",
+        "verb": "world.screenshot",
         "occurrence": 10,
         "outcome": "accepted"
       },
@@ -212,7 +212,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.screenshot",
+        "verb": "world.row.set",
         "occurrence": 10,
         "outcome": "accepted"
       },
@@ -222,7 +222,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.row.set",
+        "verb": "world.screenshot",
         "occurrence": 11,
         "outcome": "accepted"
       },
@@ -232,7 +232,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.screenshot",
+        "verb": "world.row.set",
         "occurrence": 11,
         "outcome": "accepted"
       },
@@ -240,9 +240,337 @@
         "verb": "world.wait",
         "occurrence": 23,
         "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 24,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 25,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 26,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 27,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 28,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 29,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 30,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 31,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 32,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 33,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 34,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 35,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 36,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 37,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 38,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 39,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 40,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 41,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 42,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 43,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 22,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 44,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 22,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 45,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 23,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 46,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 23,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 47,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 24,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 48,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 24,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 49,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 25,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 50,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 25,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 51,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 26,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 52,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 26,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 53,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 27,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 54,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 27,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 55,
+        "outcome": "accepted"
       }
     ],
     "expect": [
+      {
+        "type": "line",
+        "name": "no-device-is-lost",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[device-lost]",
+        "present": false
+      },
       {
         "type": "imageRegion",
         "name": "gradient-is-present",
@@ -433,6 +761,414 @@
           1
         ],
         "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "aurora-is-present",
+        "capture": "aurora.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "aurora-is-absent",
+        "capture": "aurora-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "noise-is-present",
+        "capture": "noise.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "noise-is-absent",
+        "capture": "noise-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "pattern-is-present",
+        "capture": "pattern.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "pattern-is-absent",
+        "capture": "pattern-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "panorama-is-present",
+        "capture": "panorama.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "panorama-is-absent",
+        "capture": "panorama-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "texture-is-present",
+        "capture": "texture.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "texture-is-absent",
+        "capture": "texture-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "a-level-frame-lights-the-upper-half",
+        "capture": "frame-level.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "a-frame-turned-over-darkens-the-upper-half",
+        "capture": "frame-tilted.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "blend-over-composes-by-its-rule",
+        "capture": "blend-over.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.25,
+          0.1,
+          0.75,
+          0.4
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.48,
+          0.48,
+          0.48,
+          1
+        ],
+        "maximum": [
+          0.52,
+          0.52,
+          0.52,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "blend-add-composes-by-its-rule",
+        "capture": "blend-add.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.25,
+          0.1,
+          0.75,
+          0.4
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.73,
+          0.73,
+          0.73,
+          1
+        ],
+        "maximum": [
+          0.77,
+          0.77,
+          0.77,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "blend-multiply-composes-by-its-rule",
+        "capture": "blend-multiply.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.25,
+          0.1,
+          0.75,
+          0.4
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.11,
+          0.11,
+          0.11,
+          1
+        ],
+        "maximum": [
+          0.14,
+          0.14,
+          0.14,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "blend-screen-composes-by-its-rule",
+        "capture": "blend-screen.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.25,
+          0.1,
+          0.75,
+          0.4
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.6,
+          0.6,
+          0.6,
+          1
+        ],
+        "maximum": [
+          0.65,
+          0.65,
+          0.65,
+          1
+        ],
+        "toleranceCodes": 2,
         "holds": true
       },
       {
@@ -675,7 +1411,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.row.set",
+        "verb": "world.screenshot",
         "occurrence": 10,
         "outcome": "accepted"
       },
@@ -685,7 +1421,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.screenshot",
+        "verb": "world.row.set",
         "occurrence": 10,
         "outcome": "accepted"
       },
@@ -695,7 +1431,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.row.set",
+        "verb": "world.screenshot",
         "occurrence": 11,
         "outcome": "accepted"
       },
@@ -705,7 +1441,7 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.screenshot",
+        "verb": "world.row.set",
         "occurrence": 11,
         "outcome": "accepted"
       },
@@ -713,9 +1449,337 @@
         "verb": "world.wait",
         "occurrence": 23,
         "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 24,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 12,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 25,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 26,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 13,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 27,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 28,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 14,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 29,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 30,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 15,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 31,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 32,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 16,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 33,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 34,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 17,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 35,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 36,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 18,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 37,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 38,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 19,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 39,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 40,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 41,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 42,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 21,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 43,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 22,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 44,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 22,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 45,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 23,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 46,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 23,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 47,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 24,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 48,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 24,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 49,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 25,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 50,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 25,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 51,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 26,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 52,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 26,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 53,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 27,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 54,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 27,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 55,
+        "outcome": "accepted"
       }
     ],
     "expect": [
+      {
+        "type": "line",
+        "name": "no-device-is-lost",
+        "stream": "stderr",
+        "match": "contains",
+        "text": "[device-lost]",
+        "present": false
+      },
       {
         "type": "imageRegion",
         "name": "gradient-is-present",
@@ -906,6 +1970,414 @@
           1
         ],
         "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "aurora-is-present",
+        "capture": "aurora.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "aurora-is-absent",
+        "capture": "aurora-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "noise-is-present",
+        "capture": "noise.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "noise-is-absent",
+        "capture": "noise-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "pattern-is-present",
+        "capture": "pattern.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "pattern-is-absent",
+        "capture": "pattern-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "panorama-is-present",
+        "capture": "panorama.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "panorama-is-absent",
+        "capture": "panorama-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "texture-is-present",
+        "capture": "texture.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "texture-is-absent",
+        "capture": "texture-absent.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "a-level-frame-lights-the-upper-half",
+        "capture": "frame-level.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "mean",
+        "minimum": [
+          0.0001,
+          0.0001,
+          0.0001,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "a-frame-turned-over-darkens-the-upper-half",
+        "capture": "frame-tilted.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0,
+          0,
+          1,
+          0.5
+        ],
+        "reduce": "every",
+        "maximum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "toleranceCodes": 0,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "blend-over-composes-by-its-rule",
+        "capture": "blend-over.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.25,
+          0.1,
+          0.75,
+          0.4
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.48,
+          0.48,
+          0.48,
+          1
+        ],
+        "maximum": [
+          0.52,
+          0.52,
+          0.52,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "blend-add-composes-by-its-rule",
+        "capture": "blend-add.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.25,
+          0.1,
+          0.75,
+          0.4
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.73,
+          0.73,
+          0.73,
+          1
+        ],
+        "maximum": [
+          0.77,
+          0.77,
+          0.77,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "blend-multiply-composes-by-its-rule",
+        "capture": "blend-multiply.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.25,
+          0.1,
+          0.75,
+          0.4
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.11,
+          0.11,
+          0.11,
+          1
+        ],
+        "maximum": [
+          0.14,
+          0.14,
+          0.14,
+          1
+        ],
+        "toleranceCodes": 2,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "blend-screen-composes-by-its-rule",
+        "capture": "blend-screen.png",
+        "extent": [
+          256,
+          256
+        ],
+        "region": [
+          0.25,
+          0.1,
+          0.75,
+          0.4
+        ],
+        "reduce": "every",
+        "minimum": [
+          0.6,
+          0.6,
+          0.6,
+          1
+        ],
+        "maximum": [
+          0.65,
+          0.65,
+          0.65,
+          1
+        ],
+        "toleranceCodes": 2,
         "holds": true
       },
       {

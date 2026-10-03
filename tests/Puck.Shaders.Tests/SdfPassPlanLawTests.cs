@@ -103,7 +103,7 @@ public sealed partial class SdfPassPlanLawTests {
     [Fact]
     public void EachStageDeclaresExactlyItsReadsAndWrites() {
         string[] hit = [SdfWorldPackage.Parts.CullBounds, SdfWorldPackage.Parts.InstanceMasks, SdfWorldPackage.Parts.Tiles];
-        string[] runs = [SdfWorldPackage.Parts.SkyBase, SdfWorldPackage.Parts.SkyScale, SdfWorldPackage.Parts.SkyOffset];
+        string[] runs = [SdfWorldPackage.Parts.SkyBase, SdfWorldPackage.Parts.SkyUpper0, SdfWorldPackage.Parts.SkyUpper1, SdfWorldPackage.Parts.SkyUpper2];
 
         Assert.Equal(
             actual: SdfWorldPackage.NativeFragment.Passes.Select(selector: static pass => (
@@ -209,8 +209,9 @@ public sealed partial class SdfPassPlanLawTests {
                 SdfWorldPackage.Parts.MeshDepth,
                 SdfWorldPackage.Parts.MeshTarget,
                 SdfWorldPackage.Parts.SkyBase,
-                SdfWorldPackage.Parts.SkyOffset,
-                SdfWorldPackage.Parts.SkyScale,
+                SdfWorldPackage.Parts.SkyUpper0,
+                SdfWorldPackage.Parts.SkyUpper1,
+                SdfWorldPackage.Parts.SkyUpper2,
                 SdfWorldPackage.Parts.Tiles,
                 SdfWorldPackage.Parts.Visibility,
             }.Select(selector: static part => RenderGraphPackageFragment.Spliced(name: part, pass: Sdf)).Order(comparer: StringComparer.Ordinal)

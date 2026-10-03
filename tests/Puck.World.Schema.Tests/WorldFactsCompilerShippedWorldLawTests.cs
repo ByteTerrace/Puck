@@ -11,7 +11,8 @@ namespace Puck.World.Schema.Tests;
 /// arena-addressed compiler with no refusal, needs that name the facet of every arm it can fire, and a program
 /// carrying ordinal addresses alone. A document with a <c>.puck</c> source is that source, as the game resolves it. A
 /// document the door does not load standalone is accounted for by name: another shipped document imports it, so its
-/// rules reach the compiler through that one.</summary>
+/// rules reach the compiler through that one. A module library emits no document, so no door loads it: it is accounted
+/// for when it compiles alone, and the sources importing it carry its declarations into their own documents.</summary>
 public sealed class WorldFactsCompilerShippedWorldLawTests {
     private static IEnumerable<string> ShippedWorlds() => ShippedWorldDocuments.Files(directory: RepositoryPaths.Resolve(relativePath: ShippedWorldDocuments.WorldDirectory));
 
@@ -93,8 +94,15 @@ public sealed class WorldFactsCompilerShippedWorldLawTests {
     }
     // Why a document the load door refuses is still covered, or null when nothing accounts for it.
     private static string? Unloadable(string path, HashSet<string> imported) {
-        return (imported.Contains(item: Path.GetFullPath(path: path))
-            ? "another shipped document imports it"
+        if (imported.Contains(item: Path.GetFullPath(path: path))) {
+            return "another shipped document imports it";
+        }
+
+        return ((WorldDocumentName.IsSourceFile(path: path) && (WorldSourceIndex.Declaration(path: path) is { EmitsDocument: false, Worlds.Count: 0 }) && Transpiler.WorldCompiler.CompileFile(
+            allowMultiple: true,
+            path: path
+        ).Success)
+            ? "a module library, which emits no document and compiles alone"
             : null
         );
     }

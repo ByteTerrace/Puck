@@ -27,6 +27,7 @@ public sealed partial class SdfWorldTables {
 
         // Publishes the newest upload whose fence has already signaled.
         m_work.Poll();
+        ConfigureSkyDetails();
 
         var slot = ((int)(m_uploads % FrameRingSize));
 

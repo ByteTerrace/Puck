@@ -24,14 +24,14 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("camera", true)]
     [Theory]
     public void CadenceRunsExactlyTheChangedClass(string change, bool reduced) {
-        using var rig = new TemporalRig(views: 1, cadence: true, renderScale: (reduced ? 0.25f : 1f));
+        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, renderScale: (reduced ? 0.25f : 1f));
         var frame = rig.SourceFrame;
         string[] executed = [SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite];
 
         switch (change) {
-            case "drift": frame.Sky.Block.CloudDriftOffset = new Vector2(x: 0.125f, y: 0.25f); break;
-            case "twinkle": frame.Sky.Block.TwinklePhase = 0.37f; break;
-            case "fog-color": frame.Sky.SetStop(index: 0, stop: new SdfSkyStop(Color: new Vector3(x: 0.2f, y: 0.1f, z: 0.3f), Elevation: -1f)); break;
+            case "drift": frame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.125f, y: 0.25f); break;
+            case "twinkle": frame.Sky.First<SdfSkyStars>().TwinklePhase = 0.37f; break;
+            case "fog-color": frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(x: 0.2f, y: 0.1f, z: 0.3f), elevation: -1f, index: 0); break;
             case "volume":
                 frame = frame with {
                     Volumes = [new SdfVolume(Kind: SdfVolumeKind.Cloud, Position: Vector3.Zero,
@@ -84,14 +84,14 @@ public sealed partial class SdfWorldPassesLawTests {
     }
     [Fact]
     public void CadenceVisualChangesLeaveConvergedHistoryAndItsRingStanding() {
-        using var rig = new TemporalRig(views: 1, cadence: true, temporal: true);
+        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, temporal: true);
 
         for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
         Assert.True(condition: rig.Stood());
         var frames = rig.HistoryFrames();
 
         for (var frame = 0; (frame < 12); frame++) {
-            rig.SourceFrame.Sky.Block.CloudDriftOffset = new Vector2(x: (frame + 0.1f), y: 0f);
+            rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: (frame + 0.1f), y: 0f);
             rig.SourceFrame = rig.SourceFrame with { };
             rig.Produce();
             Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
@@ -102,7 +102,7 @@ public sealed partial class SdfWorldPassesLawTests {
     }
     [Fact]
     public void CadenceLightingChangesOweAFullTemporalSettlingPeriod() {
-        using var rig = new TemporalRig(views: 1, cadence: true, temporal: true);
+        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, temporal: true);
 
         for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
         Assert.True(condition: rig.Stood());
@@ -118,11 +118,11 @@ public sealed partial class SdfWorldPassesLawTests {
     }
     [Fact]
     public void CadenceCanBeDisabledAndDoesNotAllocateOnAStillView() {
-        using var rig = new TemporalRig(views: 1, cadence: true);
+        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true);
 
         for (var frame = 0; (frame < 8); frame++) { rig.Produce(); }
         Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: () => rig.Produce()));
-        rig.SourceFrame.Sky.Block.CloudDriftOffset = new Vector2(x: 0.1f, y: 0f);
+        rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.1f, y: 0f);
         rig.SourceFrame = rig.SourceFrame with { };
         rig.Produce();
         Assert.Equal(expected: 2, actual: Executed(work: CadenceWork(rig: rig)).Length);
@@ -132,17 +132,22 @@ public sealed partial class SdfWorldPassesLawTests {
     }
     [Fact]
     public void CadenceAtTheFloorLeavesMarchAndShadowStandingOnDrift() {
-        using var rig = new TemporalRig(views: 1, cadence: true, renderScale: 0.25f);
+        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, renderScale: 0.25f);
 
         rig.SourceFrame = rig.SourceFrame with { Views = [rig.SourceFrame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true, DisableSoftShadows = true } }] };
         rig.Produce();
         Assert.Equal(expected: 9, actual: Executed(work: CadenceWork(rig: rig)).Length);
-        rig.SourceFrame.Sky.Block.CloudDriftOffset = new Vector2(x: 0.15f, y: 0f);
+        rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.15f, y: 0f);
         rig.SourceFrame = rig.SourceFrame with { };
         rig.Produce();
         Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
     }
 
+    // A sky whose stack drifts and twinkles over the default gradient: a point run of stars and a field run of clouds.
+    private static void Layered(SdfSky sky) {
+        _ = sky.Add(blend: SdfSkyBlend.Add, label: "stars", parameters: new SdfSkyStars { Brightness = 1f });
+        _ = sky.Add(label: "clouds", parameters: new SdfSkyClouds { Coverage = 0.5f });
+    }
     private static GpuWorkSample CadenceWork(TemporalRig rig) {
         var sample = new GpuWorkSample();
 

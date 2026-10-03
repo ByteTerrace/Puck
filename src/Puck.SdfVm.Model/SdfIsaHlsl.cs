@@ -40,13 +40,14 @@ public static class SdfIsaHlsl {
     public const string FingerprintSourcePath = "src/Puck.SdfVm/SdfIsaFingerprint.cs";
 
     /// <summary>Returns the fingerprint of the model's instruction set: <see cref="FingerprintOf"/> of the generated
-    /// include and the model's described encoding. It moves with any member, value, lane or constant the kernels read
-    /// from the model, and with any change to where the builder puts a field or the packer a word.</summary>
+    /// includes (this one and the sky's kind table, <see cref="SdfSkyKindsHlsl"/>) and the model's described encoding. It
+    /// moves with any member, value, lane or constant the kernels read from the model, with any sky kind's value or
+    /// parameter layout, and with any change to where the builder puts a field or the packer a word.</summary>
     /// <returns>The fingerprint.</returns>
     public static uint DescribeFingerprint() =>
         FingerprintOf(
             encoding: SdfEncodingProbe.Describe(),
-            include: Generate()
+            include: ((Generate() + SdfSkyKindsHlsl.Generate()) + SdfSkyKindsHlsl.GenerateTable())
         );
     /// <summary>Generates the source that records a fingerprint as <c>SdfIsaFingerprint.Value</c>.</summary>
     /// <param name="fingerprint">The fingerprint (<see cref="DescribeFingerprint"/>).</param>
@@ -269,10 +270,11 @@ public static class SdfIsaHlsl {
 
         return declarations.Text();
     }
+
     // A C# member name's HLSL spelling: upper snake case, with a word break before an upper-case letter that follows a
     // lower-case one, or that starts a new word after an upper-case letter or a digit (P4M stays P4M, LogSphere becomes
     // LOG_SPHERE, F2MinusF1 becomes F2_MINUS_F1).
-    private static string UpperSnake(string name) {
+    internal static string UpperSnake(string name) {
         var text = new StringBuilder(capacity: (name.Length * 2));
 
         for (var index = 0; (index < name.Length); index++) {
