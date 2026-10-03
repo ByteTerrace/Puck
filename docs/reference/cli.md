@@ -841,7 +841,11 @@ run, so it happens when the owner asks for one; between recordings a new or
 moved source shows up as `unmapped`.
 A nonzero inner canary exit refuses recording with exit 2, naming that exit and
 the kept transcript, and leaves the coverage file byte-identical. Only a successful
-inner run can replace coverage. The recording runs in one run directory that holds the recording World and
+inner run can replace coverage. Every named leg directory must be readable; a missing leg,
+unreadable method record or failed coverage write refuses with exit 2 and names the
+kept transcript. Coverage is replaced atomically after all legs are read, and leg
+evidence is removed only after that replacement succeeds.
+The recording runs in one run directory that holds the recording World and
 `canary.transcript.txt`, the inner canary run's exit code, standard output and
 standard error. The inner run keeps its legs (`--keep-transcripts`) until the
 recording has read them. When the recording and the inner run both pass, the
