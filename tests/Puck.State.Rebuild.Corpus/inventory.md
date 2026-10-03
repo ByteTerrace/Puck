@@ -195,7 +195,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `InterpolatedStringNode` | 84 | 0 | `avatars/moth`, `games/freecell`, `games/go`, `games/hiddenranks`, `games/klondike` and 6 more |
 | `LambdaExpressionNode` | 46 | 0 | `games/freecell`, `games/hiddenranks`, `games/klondike`, `games/reversi`, `games/spider` and 3 more |
 | `LetNode` | 173 | 8 | `avatars/moth`, `games/go`, `games/hiddenranks`, `games/paddleball`, `games/reversi` and 7 more |
-| `LiteralExpressionNode` | 14648 | 173 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 28 more |
+| `LiteralExpressionNode` | 14651 | 173 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 28 more |
 | `LocalStatementNode` | 131 | 1 | `games/go`, `games/hiddenranks`, `games/mancala`, `games/poker`, `games/snake` and 2 more |
 | `NotPredicateNode` | 4 | 1 | `modules/granaries` |
 | `ObjectExpressionNode` | 1455 | 15 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 26 more |
@@ -204,7 +204,7 @@ source's syntax nodes by type. A discriminated union's arms are listed whether o
 | `OrPredicateNode` | 22 | 0 | `games/arena`, `games/backgammon`, `games/freecell`, `games/go`, `games/hiddenranks` and 6 more |
 | `PatternDeclarationNode` | 1 | 0 | `games/tetromino` |
 | `PatternSymbolDeclarationNode` | 1 | 0 | `games/tetromino` |
-| `PropertyNode` | 9952 | 115 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 27 more |
+| `PropertyNode` | 9955 | 115 | `avatars/moth`, `games/arena`, `games/backgammon`, `games/billiards`, `games/bowling` and 27 more |
 | `PushStatementNode` | 18 | 0 | `games/go`, `games/poker`, `games/snake`, `games/tetromino` |
 | `RangeExpressionNode` | 174 | 3 | `games/arena`, `games/backgammon`, `games/go`, `games/hexlines`, `games/hiddenranks` and 12 more |
 | `RecordDeclarationNode` | 4 | 0 | `games/arena`, `games/paddleball` |

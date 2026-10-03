@@ -135,7 +135,9 @@ public sealed partial class SdfVisibilityLawTests {
         var resolve = CodeOf(path: "passes/sdf-resolve.comp.hlsl");
 
         Assert.Matches(actualString: resolve, expectedRegexPattern: @"hitIdentity\s*=\s*visibility\.identity\s*;");
-        Assert.Matches(actualString: resolve, expectedRegexPattern: @"accepted\s*=\s*\(\(historyIdentity\s*==\s*hitIdentity\)");
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @"accepted\s*=\s*\(hit\s*\?\s*sdfHistoryReceiverMatches\(hitIdentity,\s*historyIdentity,");
+        Assert.Matches(actualString: resolve, expectedRegexPattern: @":\s*\(historyIdentity\s*==\s*hitIdentity\)\);");
+        Assert.Matches(actualString: CodeOf(path: "frame/sdf-reprojection.hlsli"), expectedRegexPattern: @"return\s*\(\(identity\s*==\s*previousIdentity\)\s*&&");
         Assert.Matches(actualString: resolve, expectedRegexPattern: @"historySurfaceRW\[word\]\s*=\s*hitIdentity\s*;");
     }
     [Fact]
