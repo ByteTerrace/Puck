@@ -1029,7 +1029,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "e802fd2c8e8cb8bb",
+            "shape": "51811c41abf60ce0",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "1"
         },
@@ -1048,7 +1048,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "e802fd2c8e8cb8bb",
+            "shape": "51811c41abf60ce0",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "PWBK"
         },

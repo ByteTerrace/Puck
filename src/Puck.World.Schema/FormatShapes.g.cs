@@ -16,9 +16,9 @@ namespace Puck.World {
         /// <summary>The shape fingerprint of <c>DefinitionChunk.Version</c>, declared in <c>src/Puck.World.Schema/CompiledWorldChunks.cs</c>.</summary>
         public const string DefinitionChunkVersion = "9f572b1bbe9d74e8";
         /// <summary>The shape fingerprint of <c>WorldBakePack.FormatVersion</c>, declared in <c>src/Puck.World.Schema/WorldBakePack.cs</c>.</summary>
-        public const string WorldBakePackFormatVersion = "e802fd2c8e8cb8bb";
+        public const string WorldBakePackFormatVersion = "51811c41abf60ce0";
         /// <summary>The shape fingerprint of <c>WorldBakePack.Magic</c>, declared in <c>src/Puck.World.Schema/WorldBakePack.cs</c>.</summary>
-        public const string WorldBakePackMagic = "e802fd2c8e8cb8bb";
+        public const string WorldBakePackMagic = "51811c41abf60ce0";
         /// <summary>The shape fingerprint of <c>WorldCameraProgram.CurrentVersion</c>, declared in <c>src/Puck.World.Schema/WorldCameraProgram.cs</c>.</summary>
         public const string WorldCameraProgramCurrentVersion = "b60def7d0ad2e09f";
         /// <summary>The shape fingerprint of <c>WorldCounterpartAttestation.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCounterpartAttestation.cs</c>.</summary>

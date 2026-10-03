@@ -835,8 +835,8 @@ public sealed class FormatVersionsLedgerLawTests {
                 """)
         );
         var shape = Format(sources: sources).Shape;
-        var edited = Format(sources: Edited(sources: sources, path: "Payload.cs", from: "+ 1", to: "+ 2")).Shape;
+        var edited = Format(sources: Edited(from: "+ 1", path: "Payload.cs", sources: sources, to: "+ 2")).Shape;
 
-        Assert.Equal(expected: moves, actual: (shape != edited));
+        Assert.Equal(actual: (shape != edited), expected: moves);
     }
 }
