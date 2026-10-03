@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 using Puck.World.Server;
 using Xunit;
 
@@ -9,8 +10,8 @@ namespace Puck.World.Tests;
 /// vertical velocity along that up (<see cref="WorldBody.ApproximateWorldVelocity"/>), and every write that moves it in
 /// world space splits it back against that up, never against world Y. Under a tilted up: a body-pair push leaves the
 /// pushed body's world velocity exactly its velocity before less the approach along the push; an adjacency arrival with
-/// nothing to sweep against keeps the world velocity it arrived with; and a continuum clamp removes exactly the
-/// velocity leaving the owner.
+/// nothing to sweep against keeps the world velocity it arrived with; a continuum clamp removes exactly the velocity
+/// leaving the owner; and a taut tether leaves exactly the world velocity its constraint solves to.
 /// </summary>
 public sealed class BodyUpRelativeVelocityLawTests {
     private static FixedVector3 TiltedUp { get; } = new FixedVector3(
@@ -132,5 +133,28 @@ public sealed class BodyUpRelativeVelocityLawTests {
         );
 
         Assert.Equal(expected: (before - (normal * outward)), actual: body.ApproximateWorldVelocity());
+    }
+    [Fact]
+    public void ATautTetherLeavesExactlyTheWorldVelocityItsConstraintSolvesTo() {
+        // Tethered to a world point two units away on a one-unit rope, the body falls along a tilted up with a planar
+        // velocity tangent to it, partly away from the anchor. The population's tether pass must leave the body where
+        // and moving as the constraint alone solves that world state: pulled onto the rope, the outward part removed.
+        using var fixture = Fixtures.FreshServer(definition: SolidPairWorld());
+        var at = new FixedVector3(X: FixedQ4816.FromInteger(value: 4L), Y: FixedQ4816.FromInteger(value: 8L), Z: FixedQ4816.FromInteger(value: 4L));
+        var body = PoseFaller(at: at, body: fixture.JoinSeat(slot: 0), fallSpeed: FixedQ4816.FromInteger(value: 2L), planar: Tangent, up: TiltedUp);
+        var outward = new FixedVector3(X: -FixedQ4816.One, Y: FixedQ4816.Zero, Z: FixedQ4816.One).Normalize();
+        var anchor = (at - (outward * FixedQ4816.FromInteger(value: 2L)));
+        var expectedPosition = at;
+        var expectedVelocity = body.ApproximateWorldVelocity();
+        var constraint = new FixedTetherConstraint(length: FixedQ4816.One, minLength: FixedQ4816.Zero);
+
+        Assert.True(condition: (FixedVector3.Dot(left: expectedVelocity, right: outward) > FixedQ4816.Zero), userMessage: "the control: the body moves away from the anchor");
+        Assert.True(condition: constraint.Solve(anchor: in anchor, position: ref expectedPosition, velocity: ref expectedVelocity).Taut, userMessage: "the control: the rope is taut");
+
+        body.SetTetherToWorldPoint(anchor: anchor, length: FixedQ4816.One, minLength: FixedQ4816.Zero);
+        fixture.Server.Population.ResolveTethers();
+
+        Assert.Equal(expected: expectedPosition, actual: body.FixedPosition);
+        Assert.Equal(expected: expectedVelocity, actual: body.ApproximateWorldVelocity());
     }
 }
