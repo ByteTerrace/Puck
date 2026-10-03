@@ -1,0 +1,23 @@
+{
+  "seed": 4045387051,
+  "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (3 draws in all) until train held 8 or 9 of the 14 cases; the redraw looked at case counts only, before any case had been run.",
+  "train": [
+    "o02-landed-batch-and-denied-merge",
+    "o03-machines-by-capability",
+    "o05-partner-message",
+    "o07-write-review-into-a-gpu-tree",
+    "o09-contracts-collide-at-merge",
+    "o11-third-round-findings",
+    "o12-nudge-must-not-harden",
+    "o14-lane-asks-to-merge-to-main"
+  ],
+  "test": [
+    "o01-base-claim-from-two-dot",
+    "o04-owner-steering-and-review-close",
+    "o06-batch-owes-a-gpu-rerecord",
+    "o08-peer-recommends-reclassifying",
+    "o10-stale-ceiling-or-regression",
+    "o13-done-message-without-trailer"
+  ]
+}

@@ -467,7 +467,7 @@ frontmatter names its `type`: `regex` (`match`, `flags`, the pattern as body),
 `llm` (the criterion as body) or `tool_used` (`tool: Skill`, which also shows
 whether the skill fired at all). Write every criterion from the grade side, as a
 statement about what the reply contains ("The response states …"), one fact per
-grader. A criterion phrased as a pass/fail instruction ("Pass only when … fail
+grader. Phrase a step as what the answer says or lists ("The response says the lead checks …"): a criterion that asks the answer to have performed an action fails a correct answer that describes it, under every judge tried. A criterion phrased as a pass/fail instruction ("Pass only when … fail
 if …") fails correct answers.
 
 **Split before running.** `split.json` records a random 32-bit seed and the
