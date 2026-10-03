@@ -255,7 +255,8 @@ public sealed class OverlayChannelLeases {
             (hudPanels, ((hudWorldElements + hudSeatElements) * HudElementCost), hudPanels, ((hudWorldElements + hudSeatElements) * HudTextWordCost)),
             (seats, ((((UInt128)CursorElementsPerSeat) * seats) + CursorPaneElements), 0, (((UInt128)CursorTextWordsPerSeat) * seats)),
             (seats, (wheelElementsPerSeat * seats), 0, (wheelTextWordsPerSeat * seats)),
-            (seats, ((InspectorWriter.MaxLines + 1) * seats), 0, ((InspectorWriter.MaxLines * InspectorWriter.MaxLineChars) * seats)),
+            // The editor channel: each seat's inspector and its history scrubber row, each in a clip of its own.
+            ((seats * 2), (((InspectorWriter.MaxLines + 1) + HistoryRowWriter.ElementsPerSeat) * seats), 0, (((InspectorWriter.MaxLines * InspectorWriter.MaxLineChars) + HistoryRowWriter.MaxLabelChars) * seats)),
         ];
 
         UInt128 totalClips = 0;

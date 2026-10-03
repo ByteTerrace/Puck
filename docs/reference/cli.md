@@ -3754,9 +3754,17 @@ and block every removal because the integration branch's local name is unknown.
 `unlanded`, `dirty`, `locked`, `main-worktree`, `integration-branch`,
 `main-worktree-branch`, `unreadable`. A prunable flag alone does not grant removal.
 
+Git reads run with `--no-lazy-fetch` where git accepts it (2.44 and later), so a
+partial clone never fetches a missing object during a report. An older git has no
+way to forbid that fetch. With such a git, the report still reads a repository
+that has no promisor remote, since nothing there can be fetched lazily, but it
+refuses a partial clone (`extensions.partialClone` or a `remote.<name>.promisor`
+setting).
+
 Exit **0** means the report is produced, even with no removable entries or with
-unreadable worktrees. Missing or unknown `--into`, or failure to read the local
-branch inventory, exits **2** with a reason on stderr.
+unreadable worktrees. Missing or unknown `--into`, failure to read the local
+branch inventory, or a partial clone under a git without `--no-lazy-fetch` exits
+**2** with a reason on stderr.
 
 ## `puck branding`—maintained assets
 

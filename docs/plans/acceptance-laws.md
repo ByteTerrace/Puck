@@ -222,11 +222,10 @@ crossing with a profiled traveller, through both tapes.
 **Lives in** `tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`.
 **GPU:** none.
 
-**As implemented.** The recording starts at the rows' first tick: a tape
-re-establishes the document and the seats, never a pose or other state a row
-reached before it was armed, so arming after the world's first step refuses by
-name (`ArmedAfterFirstStep`, `ReplayArmingLawTests`). Row A's document therefore
-authors seat 0's spawn a short walk in front of its door. The isolated reland is the companion tape's own
+**As implemented.** The recording starts at the rows' first tick, so each tape
+starts from its row's boot image. Row A's document authors seat 0's spawn a
+short walk in front of its door. A recording armed later would start from a
+checkpoint of its row instead (`ReplayArmingLawTests`). The isolated reland is the companion tape's own
 re-drive: at every recorded tick the replayed destination is read through
 `DriveTraces`' tick observer and compared with the live destination, field for
 field. A reservation that mints the credential is not red on this walk, because
@@ -549,12 +548,17 @@ The theory's rows are the classified set, and an arrangement names how both
 twins are arranged, the operation, a witness over what the checkpoint does not
 capture, and the legal variant on its own twin. A classified refusal without an
 arrangement fails by name, and an arrangement naming no classified refusal fails
-`EveryArrangementNamesAClassifiedRefusal`. Five refusals are classified so far:
-`replay.record/ArmedAfterFirstStep`, `storage.pull/PullWhileRecording`,
-`world.undo/PastHorizon`, `machine.operation/WhileRecording` and
-`machine.operation/ProviderWithoutOperations`. The machine-operation rows witness
+`EveryArrangementNamesAClassifiedRefusal`. Six refusals are classified so far:
+`replay.record/StartNotCheckpointable`, `storage.pull/PullWhileRecording`,
+`world.undo/PastHorizon`, `machine.operation/WhileRecording`,
+`machine.operation/ProviderWithoutOperations` and
+`state.rule.compile/VectorEffectNotAdmitted`. The machine-operation rows witness
 the operated machine's generation and configuration; the provider row's twins
-run an engine without operations and its legal variant one with them. The rest
+run an engine without operations and its legal variant one with them. The
+vector row submits a rule adding to a vector cell, and its legal variant adds to
+an integer cell. `HudRefusal.SeatPanelReplaceRefused` refuses only through
+`identity.hud`, which needs a joined seat's roster profile, so its arrangement
+needs a twin that can join one. The rest
 of the table above joins as each refusal gains a code and an arrangement;
 `IdentityUnbound` refuses inside a rule firing whose scope rewinds it, so its
 arrangement needs a gate the twins can hold apart.

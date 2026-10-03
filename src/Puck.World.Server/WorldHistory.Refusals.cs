@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -8,6 +9,31 @@ public sealed partial class WorldHistory {
     // anything moved, by the recorded entry that names them. The re-simulation installs these rather than reading the
     // file again, so a file that changes mid-operation can never refuse from inside a step.
     private readonly Dictionary<WorldReplayEntry.Rebuild, WorldDefinition> m_verifiedRebuilds = new(comparer: ReferenceEqualityComparer.Instance);
+
+    /// <summary>Checks a principal's authority over the shared timeline, the check every bindable form of
+    /// <c>world.history</c> runs at dispatch under the pressing seat's principal: <see cref="WorldCapability.Control"/>
+    /// over <see cref="GrantSubject.History"/>, held concretely or through the Control wildcard every seat and the
+    /// console are seeded with, and lost to another principal's exclusive reservation.</summary>
+    /// <param name="principal">The acting principal.</param>
+    /// <param name="refusal">The grant table's denial, naming the principal and the rule, when it is refused.</param>
+    /// <returns><see langword="true"/> when the principal may move the timeline.</returns>
+    public bool TryAuthorize(Principal principal, out string refusal) {
+        var verdict = m_server.GrantTable.Allows(
+            capability: WorldCapability.Control,
+            principal: principal,
+            subject: GrantSubject.History
+        );
+
+        refusal = (verdict.IsAllowed
+            ? string.Empty
+            : verdict.DescribeRefusal(
+                actor: principal,
+                subject: GrantSubject.History.Describe(),
+                verb: "control"
+            ));
+
+        return verdict.IsAllowed;
+    }
 
     private string? UncapturableLiveState() {
         if (m_server.AnyAddonEverPumped || (m_server.Addons is { MountedCount: > 0 })) {

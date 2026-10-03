@@ -401,6 +401,7 @@ public sealed partial class WorldHistory {
         }
 
         m_cursor = target;
+        PublishRow();
         m_counters = (m_counters with { Seeks = (m_counters.Seeks + 1L) });
         m_server.Tick.PresentRestoredTimeline();
         m_tape.RaiseTimelineRestored();
