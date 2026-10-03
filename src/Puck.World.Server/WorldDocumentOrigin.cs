@@ -92,13 +92,13 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
         ));
     }
     /// <summary>Resolves a path exactly like <c>--world</c>: rooted, or relative to the current directory, and naming
-    /// a file that exists. A path a document authors never reaches here relative; it is resolved beside that document
+    /// a document that exists, as a file or, for a document path with none, as the <c>.puck</c> source of its name. A path a document authors never reaches here relative; it is resolved beside that document
     /// first (<see cref="WorldDocumentPaths"/>).</summary>
     public static bool TryResolveCanonicalPath(string path, out string resolved) {
         try {
             var direct = Path.GetFullPath(path: path);
 
-            if (File.Exists(path: direct)) {
+            if (WorldDefinitionFileSource.DocumentFileExists(path: direct)) {
                 resolved = direct;
 
                 return true;
