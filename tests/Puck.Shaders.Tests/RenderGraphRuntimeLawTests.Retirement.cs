@@ -8,6 +8,18 @@ namespace Puck.Shaders.Tests;
 // each render is handed over once.
 public sealed partial class RenderGraphRuntimeLawTests {
     [Fact]
+    public void ANamedRetirementReadLeavesOtherViewsForTheirOwnPolicies() {
+        using var views = new PackageViews(grids: [(PackageView, 0.625d), ("second", 0.5d), ("third", 0.75d)]);
+
+        views.Clear();
+        views.Frame();
+        Assert.True(condition: views.Reconfigure(PackageView));
+        Assert.Equal(new ShaderPipelineCompletions(Grid: 0.5d, Renders: 1), views.Runtime.TakeRetiredCompletions(instance: "second"));
+        Assert.Equal(default, views.Runtime.TakeRetiredCompletions(instance: "second"));
+        Assert.Equal(new ShaderPipelineCompletions(Grid: 0.75d, Renders: 1), views.Runtime.TakeRetiredCompletions(instance: "third"));
+        Assert.Equal(default, views.Runtime.TakeRetiredCompletions());
+    }
+    [Fact]
     public void ARemovedViewsUnreadRenderIsHandedOverWithItsGrid() {
         using var views = new PackageViews(grids: [(PackageView, 0.625d), ("second", 0.5d)]);
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env dotnet
 #:sdk Microsoft.NET.Sdk
-#:package Azure.Deployments.Expression@1.683.0
+#:package Azure.Deployments.Expression@1.765.0
 #:package Azure.Identity@1.21.0
 #:package Azure.ResourceManager.Authorization@1.1.7
 #:package Azure.ResourceManager.ManagedServiceIdentities@1.4.1
 #:package Azure.ResourceManager.Resources@1.12.0
-#:package Microsoft.Graph@6.6.0
+#:package Microsoft.Graph@6.7.0
 #:package Microsoft.Kiota.Abstractions@2.1.2
 #:package Microsoft.TeamFoundationServer.Client@20.256.2
 #:package Microsoft.VisualStudio.Services.Client@20.256.2

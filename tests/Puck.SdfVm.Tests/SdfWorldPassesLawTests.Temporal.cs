@@ -344,6 +344,36 @@ public sealed partial class SdfWorldPassesLawTests {
         rig.Produce();
         Assert.True(condition: rig.Stood());
     }
+    // A render whose submission fails after its passes recorded commits no temporal sample: the retry takes the same
+    // jitter sample the failed attempt took.
+    [Fact]
+    public void ARetryAfterAFailedSubmissionTakesTheSameSample() {
+        using var rig = new TemporalRig(views: 1, temporal: true);
+
+        rig.Produce();
+        var frames = rig.HistoryFrames();
+
+        rig.RefuseRenderSubmission();
+        Assert.Throws<InvalidOperationException>(testCode: () => rig.Produce());
+        rig.Produce();
+        Assert.Equal(expected: (frames + 1u), actual: rig.HistoryFrames());
+    }
+    // A still view whose input changed on a frame whose submission failed renders again rather than standing on an
+    // image that was never written.
+    [Fact]
+    public void AStillViewChangedOnAFailedSubmissionRendersAgain() {
+        using var rig = new TemporalRig(views: 1, cadence: true);
+
+        rig.Produce();
+        Assert.True(condition: rig.Stood());
+        rig.Selected.DebugMode = 1;
+        rig.RefuseRenderSubmission();
+        Assert.Throws<InvalidOperationException>(testCode: () => rig.Produce());
+        rig.Produce();
+        Assert.False(condition: rig.Stood());
+        rig.Produce();
+        Assert.True(condition: rig.Stood());
+    }
 
     // One sdf.world instance, "world", over a frame on the upload model, optionally reading a feed that hands out a
     // tainted image until it fills. Construction produces until the view has rendered its installed graph.
@@ -435,6 +465,9 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         // Whether the latest frame let the view's previous output stand.
         public bool Stood() => (World.FrameCounter == m_rendered);
+        // Refuses the next frame's render submission, after its passes recorded: the residency's table upload is the
+        // frame's first fenced submission and the view's node submits second.
+        public void RefuseRenderSubmission() => m_gpu.FencedSubmissionsBeforeRefusal = 1;
         public uint HistoryFrames() => BitConverter.ToUInt32(value: Block(), startIndex: Offset(member: SdfWorldPackage.HistoryFrames));
         public bool Temporal() => (BitConverter.ToUInt32(value: Block(), startIndex: Offset(member: SdfWorldPackage.Temporal)) != 0u);
         public Vector2 Jitter() {

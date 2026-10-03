@@ -19,6 +19,28 @@ public static partial class WorldDefinitionFileSource {
         return new DirectoryDocumentSource(read: read);
     }
 
+    // The module an import is named by in every refusal about it: its file, with the alias it is brought in under. Two
+    // imports whose files share a name (one in each of two directories) keep their authored spelling instead, so they stay
+    // two owners of what they author.
+    private static string DescribeImport(HashSet<string> taken, string? alias, string resolvedName, string importName) {
+        var described = ((alias is null)
+            ? WorldDocumentLabel.Of(path: resolvedName)
+            : $"{WorldDocumentLabel.Of(path: resolvedName)} as {alias}"
+        );
+
+        if (taken.Add(item: described)) {
+            return described;
+        }
+
+        described = ((alias is null)
+            ? importName
+            : $"{importName} as {alias}"
+        );
+        _ = taken.Add(item: described);
+
+        return described;
+    }
+
     // The directory-backed IWorldDocumentSource every local load walks over — the one place Path.Combine/
     // Path.GetFullPath/File.Exists/File.ReadAllBytes for a basis reference live, so TryLoad's directory behavior and
     // TryResolveChainFiles' push-side walk can never drift apart.
@@ -45,13 +67,13 @@ public static partial class WorldDefinitionFileSource {
             }
 
             if (Exists(path: sourcePath)) {
-                reason = $"document '{name}' (named by {referrerName}) has a .puck source at {sourcePath}, and no composer is installed to compile it; this host resolves .world.json documents only.";
+                reason = $"document '{name}' (named by {WorldDocumentLabel.Of(path: referrerName)}) has a .puck source, and no composer is installed to compile it; this host resolves .world.json documents only.";
 
                 return false;
             }
 
             if (!Exists(path: resolvedName)) {
-                reason = $"basis document {resolvedName} (named by {referrerName}) does not exist.";
+                reason = $"basis document '{name}' (named by {WorldDocumentLabel.Of(path: referrerName)}) does not exist.";
 
                 return false;
             }
@@ -61,7 +83,7 @@ public static partial class WorldDefinitionFileSource {
                     ? File.ReadAllBytes(path: resolvedName)
                     : read(arg: resolvedName));
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                reason = $"cannot read basis document {resolvedName}: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+                reason = $"cannot read basis document '{name}': {WorldDocumentLabel.Failure(exception: exception)}";
 
                 return false;
             }

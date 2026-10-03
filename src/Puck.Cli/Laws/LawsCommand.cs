@@ -37,6 +37,7 @@ internal static class LawsCommand {
                 : CliPaths.ToDisplay(fullPath: Path.GetFullPath(path: project), relativeTo: repositoryRoot)),
             repositoryRoot: repositoryRoot,
             runner: new DotnetLawRunner(),
+            lawTreesRoot: LawProofTree.DefaultRoot,
             scratchRoot: Path.GetTempPath()
         );
     }
@@ -51,25 +52,34 @@ internal static class LawsCommand {
         ) { lawArgument, fixOption, fileListOption, projectOption };
 
         command.Detail(detail: """
-              The proof never touches the working tree. It adds a detached git worktree of HEAD under a
-              scratch directory, copies the working tree's uncommitted and untracked files into it, and
+              The proof never touches the working tree. It keeps a shared-object git clone under the
+              per-user Puck/law-trees directory, keyed by the repository's common git directory, so
+              every worktree of one repository shares it. This clone
+              is never registered as a worktree. It checks out HEAD, removes unignored strays, retains
+              its own obj/bin outputs, copies the caller's uncommitted and untracked files, and
               withholds the fix there:
                 --fix <revision>          reverse the commit's first-parent change (three-way, over
                                           HEAD) on every path it changes outside tests/, or on the
                                           --file-list paths when given
                 --file-list <json>        put each listed path back to HEAD, removing one HEAD lacks
               It then builds the law's project in Release and runs the law, which must fail; restores the
-              fix, builds and runs again, and the law must pass. Cleanup runs on success, refusal,
-              exception and cancellation, removing the worktree, scratch directory and only this
-              proof's registration. Git commands that write or remove the proof tree enable long
-              paths for that command alone. Cleanup failures are reported on standard error with the
-              failed operation and scratch directory; cleanup never changes the proof's exit code.
+              fix, builds and runs again, and the law must pass. Each side builds only that project's
+              dependency closure, once for all selected tests. An exclusive lock leases the clone;
+              a concurrent proof uses a fresh scratch worktree (cold). A missing, corrupt or wrongly
+              sourced clone is recreated cold; an unavailable cache also uses the scratch fallback.
+              Cleanup keeps the clone on every outcome, removes per-proof scratch and any fallback
+              worktree and its own registration, and never changes the proof's exit code. Git commands
+              enable long paths. Cleanup failures name their operation and scratch on standard error.
               Caller Git hooks are disabled; links in the proven tree and projects outside it are refused.
               Every selected test must execute, and both legs must execute the same tests. A skipped
               test, an aborted process or an inconsistent report refuses the proof.
 
               Standard output carries the evidence block for a commit body: the law and its project,
               what was withheld, each failure's first message line without the fix, and the pass with it.
+              Standard error reports each side's build work as:
+                laws prove: built with the fix withheld: <n> project(s) compiled, <m> up to date, <t> target(s)
+              The restored side uses "with the fix restored". Counts come from MSBuild events;
+              up-to-date CoreCompile targets are not counted as compilations or executed targets.
 
               Exit codes: 0 proven; 1 the law cannot fail (it passes with the fix withheld) or fails with
               the fix in place; 2 a build failed in either phase, the law selects no test, or the fix

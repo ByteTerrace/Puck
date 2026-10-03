@@ -17,8 +17,8 @@ public enum WorldDynamicResolutionSignal {
     Present,
     /// <summary>The counted march steps against the step budget, where neither timing is available.</summary>
     Steps,
-    /// <summary>A forced grid (<c>world.dynamic-resolution &lt;fraction&gt;</c>), which no load moves.</summary>
-    Forced,
+    /// <summary>A pinned grid (<c>world.render-scale pin &lt;scale&gt;</c>), which no load moves.</summary>
+    Pin,
 }
 /// <summary>The load the dynamic-resolution controller reads each frame, from the world's views: the GPU's time for their
 /// renders timed since the last reading, the presenter's latest confirmed present, the counted march steps of their
@@ -71,7 +71,7 @@ public interface IWorldFrameLoadSource {
 /// present timing, a new present's interval against the display period. Where neither is available, it is the counted
 /// march steps: the views' newly completed renders' steps against the step budget, the floor-tier ceiling rows' steps
 /// per output pixel (<see cref="StepBudgetPerPixel"/>) times the output's pixels, and without a budget the step path
-/// holds the ceiling. A forced grid overrides all three.
+/// holds the ceiling. A pin grid overrides all three.
 /// </para>
 /// <para>
 /// The views render the grid quantized (<see cref="GridOf"/>), so a sample is taken only at the grid the views are
@@ -101,6 +101,7 @@ public sealed class WorldDynamicResolution {
     private double m_overGrid;
     private double m_presentGrid;
     private float m_scale;
+    private bool m_wasPinned;
 
     /// <summary>Gets the scale the latest <see cref="Advance"/> chose, or zero before the first.</summary>
     public float Scale => m_scale;
@@ -176,26 +177,44 @@ public sealed class WorldDynamicResolution {
 
         return (((double)steps) / (((long)run.Width) * run.Height));
     }
+    /// <summary>Forgets the grid, the pin and the over-budget mark, for a view whose policy is off and renders its ceiling:
+    /// the next <see cref="Advance"/> starts from that ceiling, so a policy resumed after a pin or an off switch moves from
+    /// the grid the view last rendered, by at most one step.</summary>
+    public void Reset() {
+        m_scale = 0f;
+        m_wasPinned = false;
+        m_overGrid = 0d;
+        m_presentGrid = 0d;
+        m_completedGrid = 0d;
+        Grid = 0d;
+        Signal = WorldDynamicResolutionSignal.Off;
+        StepBudget = 0d;
+    }
     /// <summary>Chooses this frame's render grid.</summary>
     /// <param name="load">The frame's load, or <see langword="null"/> for none, which holds the grid.</param>
     /// <param name="displayHertz">The display's presented frames a second, or zero when unknown.</param>
     /// <param name="ceiling">The render-scale ceiling, in (0, 1]: the grid never exceeds it.</param>
     /// <param name="floor">The lowest grid the load may move to; the ceiling when it is higher.</param>
     /// <param name="outputPixels">The output's pixels, which scale the step budget.</param>
-    /// <param name="forced">A forced grid in (0, 1], which the load does not move, or zero for none.</param>
+    /// <param name="pin">A pin grid in (0, 1], which the load does not move, or zero for none.</param>
     /// <returns>The scale, in (0, <paramref name="ceiling"/>], which the views render at its grid
     /// (<see cref="GridOf"/>).</returns>
-    public float Advance(IWorldFrameLoadSource? load, int displayHertz, float ceiling, float floor, long outputPixels, float forced) {
-        if (forced > 0f) {
-            Signal = WorldDynamicResolutionSignal.Forced;
+    public float Advance(IWorldFrameLoadSource? load, int displayHertz, float ceiling, float floor, long outputPixels, float pin) {
+        if (pin > 0f) {
+            m_wasPinned = true;
+            Signal = WorldDynamicResolutionSignal.Pin;
             StepBudget = 0d;
             m_overGrid = 0d;
             m_presentGrid = 0d;
 
-            return Choose(ceiling: ceiling, scale: Math.Min(val1: forced, val2: ceiling));
+            return Choose(ceiling: ceiling, scale: Math.Clamp(pin, Math.Min(val1: floor, val2: ceiling), ceiling));
         }
 
         var scale = ((m_scale > 0f) ? Math.Clamp(value: m_scale, min: Math.Min(val1: floor, val2: ceiling), max: ceiling) : ceiling);
+        var previous = scale;
+        var released = m_wasPinned;
+
+        m_wasPinned = false;
         var present = (load?.LastPresentTiming ?? PresentTimingSample.Unavailable);
 
         if ((displayHertz > 0) && (load is not null) && load.TryReadGpuFrame(reading: out var frame)) {
@@ -214,6 +233,13 @@ public sealed class WorldDynamicResolution {
             scale = AdvanceSteps(budget: StepBudget, ceiling: ceiling, floor: floor, load: load, scale: scale);
         }
 
+        // Releasing a pin keeps the view's policy history. Even a fallback with no budget may not jump from the
+        // pinned grid to its ceiling in that first automatic step.
+        if (released) {
+            scale = Math.Clamp(scale,
+                Math.Max(val1: Math.Min(val1: floor, val2: ceiling), val2: ((float)(previous * (1d - MaximumFall)))),
+                Math.Min(val1: ceiling, val2: ((float)(previous * (1d + MaximumRise)))));
+        }
         return Choose(ceiling: ceiling, scale: scale);
     }
 

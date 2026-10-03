@@ -1229,18 +1229,6 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Key
         ),
         new(
-            typeof(WorldScreenMemory),
-            nameof(WorldScreenMemory.Row),
-            WorldNameKind.State,
-            WorldNameRole.Names
-        ),
-        new(
-            typeof(WorldScreenMemory),
-            nameof(WorldScreenMemory.Key),
-            WorldNameKind.State,
-            WorldNameRole.Key
-        ),
-        new(
             typeof(WorldNavigationDomain),
             nameof(WorldNavigationDomain.Medium),
             WorldNameKind.Field,
@@ -1594,12 +1582,9 @@ public static partial class WorldNameRegistry {
             nameof(WorldKit.BodyMotionProgram),
             "a body motion program name"
         ),
-        new(
-            typeof(WorldViewLayout),
-            nameof(WorldViewLayout.Name),
-            "a view layout name"
-        ),
+        new(typeof(WorldViewLayout), nameof(WorldViewLayout.Name), "a view layout name"),
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Name), "a view graph instance name"),
+        new(typeof(WorldViewQuality), nameof(WorldViewQuality.Name), "a render view instance name or the default selector *"),
         new(typeof(WorldViewGraph), nameof(WorldViewGraph.Source), "a view graph's source is a document path"),
         new(
             typeof(WorldCameraProgram),

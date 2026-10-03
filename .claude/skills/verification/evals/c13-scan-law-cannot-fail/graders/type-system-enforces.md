@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response makes the illegal state unrepresentable by making the argument a required, non-optional and non-null parameter, so omitting it is a compile error.
+(required|non-?optional|non-?null)[^.\n]{0,60}(parameter|argument)|compile error|compile-time

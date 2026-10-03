@@ -126,6 +126,10 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <param name="recording">The frame's command buffer and bound versions.</param>
     /// <returns>Whether the recording wrote its outputs, or left each to stand for its input.</returns>
     RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording);
+    /// <summary>Commits package-owned history metadata after the frame's submission succeeds. Called only for a pass
+    /// that recorded, before any export handoff. Recording and submission failures, skipped passes and standing passes
+    /// call nothing. The default has no metadata to commit.</summary>
+    void Submitted() { }
     /// <summary>Returns whether the pass records nothing this frame: neither its work nor the planned barriers of its
     /// accesses, which the instance asks before it records them. Every storage the pass would have accessed stays in the
     /// state its last recorded access left it in, which the next access starts from, so a pass that skips must be one
@@ -139,7 +143,8 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// borrowed dependencies here, preserving that preparation's counting and queue ordering; it records no access to
     /// this pass's graph-bound versions. Include borrowed regions, view state, config, unbound reads and every other input not
     /// represented by graph versions; return null when an input has no reliable identity or the pass is forced.
-    /// Equal signatures permit standing only while every graph input's last write and the retained output contents
+    /// A previous-frame input creates no demand for a write. Equal signatures permit standing only while every
+    /// current-frame graph input's last write and the retained or history output contents
     /// also remain valid. A standing pass records neither work nor barriers; its consumers read its retained result.</summary>
     /// <param name="context">The frame being recorded.</param>
     /// <returns>The output's package-input identity, or null to force execution.</returns>

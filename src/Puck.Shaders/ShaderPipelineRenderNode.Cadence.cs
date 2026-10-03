@@ -37,6 +37,8 @@ public sealed partial class ShaderPipelineRenderNode {
             }
             foreach (var output in pass.Outputs) {
                 var resource = m_resourceLookup[output.Name];
+                // A new history instance contains no predecessor; every forwarding writer must execute.
+                canStand &= (!resource.History || (resource.Storage.Versions.Count == 1));
                 var version = Array.FindIndex(array: resource.Cadence, match: item => (item.Name == output.Name));
 
                 if (version < 0) { canStand = false; continue; }
@@ -51,8 +53,10 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private bool AddCadenceInput(string name, bool previous, List<CadenceVersion> inputs) {
         var resource = m_resourceLookup[name];
-        // A host/temporal/rotating input has no stable content identity in this retained-only path. Its reader executes.
-        if (previous || resource.History || resource.Spec.IsExternal || !resource.Spec.Retained) { return false; }
+        // Previous history feeds a requested write but creates no demand for another one. The package signature
+        // states whether a sample is owed. A current read follows the last successful write's content identity.
+        if (previous && resource.History) { return true; }
+        if (resource.Spec.IsExternal || (!resource.Spec.Retained && !resource.History)) { return false; }
         var version = Array.Find(array: resource.Cadence, match: item => (item.Name == name))!;
 
         if (!inputs.Contains(item: version)) { inputs.Add(item: version); }

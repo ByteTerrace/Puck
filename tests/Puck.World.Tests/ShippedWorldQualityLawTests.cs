@@ -69,7 +69,7 @@ public sealed class ShippedWorldQualityLawTests(ShippedWorldQualityLawTests.Stag
             actual: table.Preset(tier: QualityTier.Low),
             expected: new WorldQualityPreset(
                 AmbientOcclusion: false,
-                RenderScale: WorldRenderScaleTier.Half,
+                RenderScale: WorldRenderScaleTiers.Scale(tier: WorldRenderScaleTier.Half),
                 Shadows: ShadowTier.Off,
                 Temporal: false
             )

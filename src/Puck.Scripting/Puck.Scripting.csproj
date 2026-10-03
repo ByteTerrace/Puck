@@ -11,7 +11,7 @@
         <!-- Exact pin — fuel counting is Cranelift-codegen-dependent (basic-block granularity,
              upstream #4109); a silent bump can shift the fuel-exhaustion tick and break stored
              replays. Bumping is a deliberate, re-gated change, never an incidental restore. -->
-        <PackageReference Include="Wasmtime" Version="[44.0.0]" />
+        <PackageReference Include="Wasmtime" Version="[48.0.2]" />
     </ItemGroup>
     <ItemGroup>
         <!-- Deliberately NO Puck.Commands or Puck.Input reference: this is the neutral channel/WASM core of

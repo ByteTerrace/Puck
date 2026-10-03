@@ -547,6 +547,8 @@ public sealed partial class WorldInstanceHost {
                 sourceSlot: sourceSlot,
                 sourceName: transfer.SourceInstance,
                 actingPrincipal: memberPrincipal,
+                reservedMobility: reservationMembers[index].Mobility!.Value,
+                mobility: out var mobility,
                 profile: out var profile,
                 bodyColor: out var bodyColor,
                 position: out var position,
@@ -574,7 +576,7 @@ public sealed partial class WorldInstanceHost {
                 AdmissionGrants: admissionGrants,
                 SourceGrants: sourceGrants,
                 SourcePrincipal: memberPrincipal,
-                Mobility: reservationMembers[index].Mobility!.Value,
+                Mobility: mobility,
                 FollowedSeatMask: CaptureFollowedSeats(
                     sourceInstance: transfer.SourceInstance,
                     sourceSlot: sourceSlot
@@ -1449,7 +1451,7 @@ public sealed partial class WorldInstanceHost {
     // source out from under a transfer still in flight) — see WorldPopulation.TryDetachSeatForTransfer. The
     // Drive/leave standing re-check here is defensive: ApplyTransfer's own pre-check loop already proved it
     // for every still-active member immediately before this runs, and is never load-bearing on its own.
-    private static bool TryDetachAndCaptureMember(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMember(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, WorldMobilityIdentity reservedMobility, out WorldMobilityIdentity mobility, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
         var captured = source.Server.ExecuteAuthorityOperation(operation: () => {
             var success = TryDetachAndCaptureMemberCore(
                 actingPrincipal: actingPrincipal,
@@ -1457,9 +1459,11 @@ public sealed partial class WorldInstanceHost {
                 bodyColor: out var capturedBodyColor,
                 designations: out var capturedDesignations,
                 dynamicState: out var capturedState,
+                mobility: out var capturedMobility,
                 peer: out var capturedPeer,
                 position: out var capturedPosition,
                 profile: out var capturedProfile,
+                reservedMobility: reservedMobility,
                 source: source,
                 sourceGrants: out var capturedSourceGrants,
                 sourceName: sourceName,
@@ -1468,9 +1472,10 @@ public sealed partial class WorldInstanceHost {
                 yaw: out var capturedYaw
             );
 
-            return (Success: success, Profile: capturedProfile, BodyColor: capturedBodyColor, Position: capturedPosition, Yaw: capturedYaw, State: capturedState, Designations: capturedDesignations, Peer: capturedPeer, AdmissionGrants: capturedAdmissionGrants, SourceGrants: capturedSourceGrants);
+            return (Success: success, Mobility: capturedMobility, Profile: capturedProfile, BodyColor: capturedBodyColor, Position: capturedPosition, Yaw: capturedYaw, State: capturedState, Designations: capturedDesignations, Peer: capturedPeer, AdmissionGrants: capturedAdmissionGrants, SourceGrants: capturedSourceGrants);
         });
 
+        mobility = captured.Mobility;
         profile = captured.Profile;
         bodyColor = captured.BodyColor;
         position = captured.Position;
@@ -1482,7 +1487,8 @@ public sealed partial class WorldInstanceHost {
         sourceGrants = captured.SourceGrants;
         return captured.Success;
     }
-    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, ulong transferId, int sourceSlot, string sourceName, Principal actingPrincipal, WorldMobilityIdentity reservedMobility, out WorldMobilityIdentity mobility, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBodyTransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+        mobility = default;
         profile = null;
         bodyColor = default;
         position = default;
@@ -1512,6 +1518,19 @@ public sealed partial class WorldInstanceHost {
                 source.Server.Output.Narrate(
                     channel: "world.transfer",
                     text: $"[world.transfer: refused ({TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} is not active in '{sourceName}')]"
+                );
+            }
+
+            return false;
+        }
+
+        // The reservation released this gate for the peer call. Compare the complete credential, including this
+        // slot's generation, while holding the gate through detach so a replacement can never inherit its crossing.
+        if (source.Server.Population.ReadMobility(index: sourceSlot, authority: source.Server.AuthorityIdentity) != reservedMobility) {
+            if (source.Server.Output.HasNarrationSink) {
+                source.Server.Output.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: refused ({TravellerName(index: sourceSlot, localSeatCount: source.Server.Population.LocalSeatCount)} in '{sourceName}' — the reserved traveler is no longer live at this authority)]"
                 );
             }
 
@@ -1578,6 +1597,7 @@ public sealed partial class WorldInstanceHost {
         }
 
         profile = detached.Profile;
+        mobility = detached.Mobility;
         bodyColor = detached.BodyColor;
         position = detached.Position;
         yaw = detached.Yaw;

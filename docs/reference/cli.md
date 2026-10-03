@@ -103,6 +103,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format token, or checks it with `--check`. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds the affected canaries and parity. |
+| [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE` and `CAPACITY` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in a worktree of its own, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
@@ -897,6 +898,60 @@ machine.
 Exit codes: 0 every step passed, 1 the build or a step failed, 2 refused (no
 merge base, or a CLI running from the checkout it would rebuild).
 
+## `puck host load`—admission lines for the machine
+
+`puck host load` reports whether the machine an agent runs on has room for more
+work and whether its GPU is in use. It prints lines, each carrying the CPU
+figure, free memory, free disk on the working directory's drive and the
+number of MSBuild nodes left running for reuse:
+
+```text
+GPU idle cpu=4% freeRAM=4.8GB freeDisk=50.3GB reuseNodes=0
+GPU busy (Puck.World 4242) cpu=61% freeRAM=3.1GB freeDisk=50.2GB reuseNodes=0
+PRESSURE freeRAM<2.0GB cpu=35% freeRAM=1.6GB freeDisk=50.2GB reuseNodes=2
+CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
+```
+
+- `GPU busy` or `GPU idle` appears at the first reading and on every change
+  after. GPU work is the World (`Puck.World` or `Puck.World.dll`), a
+  `canary`, `parity` or `counters` verb, or a test host for
+  `Puck.DirectX.Tests`, `Puck.Vulkan.Tests` or `Puck.World.Tests`, whose
+  device laws open the GPU. Builds, restores, MSBuild nodes, compilers and
+  shells never count, whatever project they name, and the verb never counts
+  itself. The classifier uses the running executable or managed entry assembly;
+  a `dotnet run` wrapper does not count; its World child counts once it starts.
+  Canary `--list` and `--plan`, parity/counters `compare`, and help count no GPU work.
+- `PRESSURE` appears while free memory is under `--pressure-ram` or free disk
+  is under `--pressure-disk`, at most once every five minutes.
+- Otherwise `CAPACITY` appears while the CPU mean is under `--capacity-cpu` and
+  free memory is over `--capacity-ram`, at most once every ten minutes.
+  It waits for a full CPU window. `PRESSURE` wins over `CAPACITY` within one
+  reading.
+
+A threshold left out is never judged, so with none the verb reports only the GPU
+state. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
+documents the thresholds for each machine class and what an agent does on each
+line. `reuseNodes` counts MSBuild nodes a build or restore left running because
+it ran without `-nodeReuse:false`.
+
+Without `--watch` the verb takes one reading over one second, judges that
+reading's own CPU figure, and exits. With `--watch` it reads every
+`--interval` seconds (default 10) until cancelled, judges the CPU mean over the
+last `--window` readings (default 6), and prints a line only when one is due,
+so its output works as an event stream for a monitor. The readings are cheap
+operating-system queries: kernel CPU time, the memory status, the process list
+and each process's command line on Windows, and `/proc` on Linux. The verb
+starts no process and is never itself heavy or GPU work.
+
+Thresholds must be finite and nonnegative; `--capacity-cpu` must be at most 100.
+A `NaN` CPU or memory reading cannot produce `CAPACITY`; a failed CPU reading
+stays in the mean until it leaves the window.
+An unreadable process command line cannot identify a managed entry assembly or
+CLI verb; a recognizable World or device-test apphost still counts by name.
+
+Exit codes: 0 done, 2 refused (invalid thresholds or an interval or window below
+1), 130 cancelled.
+
 ## `puck laws prove`—a law against its fix
 
 `puck laws prove <law>` shows that a law fails without its fix and passes
@@ -914,25 +969,66 @@ The fix is one of:
 - `--file-list <json>` alone: the working tree's uncommitted change to the
   listed paths, each put back to `HEAD` (a path `HEAD` lacks is removed).
 
-The proof never touches the working tree. It adds a detached git worktree of
-`HEAD` under a temporary directory and copies the working tree's uncommitted
-and untracked files into it. There it withholds the fix, builds the law's
-project in Release and runs the law, which must fail. It then restores the fix,
-builds and runs again, and the law must pass. Outcomes come from the test run's
+The proof never touches the working tree. It keeps one persistent proof clone
+per repository under `law-trees` in the [per-user Puck
+directory](../development/contributing.md#per-user-directory), in a subdirectory
+named by the SHA-256 of the repository's common Git directory
+(`git rev-parse --git-common-dir`, case folded on Windows), so every worktree
+of one repository shares one clone. The clone is made from that common Git
+directory and shares its objects through alternates; it is never a worktree
+and never registers in the caller's worktree list.
+
+Each proof fetches the caller's `HEAD` by object id, checks it out detached,
+removes untracked files Git does not ignore, and mirrors the caller's
+uncommitted and untracked files. Ignored build outputs stay in the clone at
+the paths where MSBuild produced them. Nothing copies or links the caller's
+`obj` or `bin`. Git rewrites changed tracked files; unchanged files retain
+their timestamps, so MSBuild's ordinary incremental checks apply.
+
+There the proof withholds the fix, builds the law's project in Release and
+runs the law, which must fail. It then restores the fix, builds and runs
+again, and the law must pass. Rewritten inputs are touched newer than the
+tree's outputs before each build, including after restoring the fix. Each
+side builds only the selected project's dependency closure, never the
+solution, once for all tests the law name selects. Outcomes come from the test run's
 TRX report together with the process's completion verdict. A run that selects
 no test, skips a selected test, aborts or executes different tests between legs
 is refused. Both legs execute the same tests, and every selected test must
 finish with a passed or failed outcome; an explicit test the run did not opt into
 was never selected. Caller Git hooks are disabled, and
-projects outside the proof tree and links in it are refused. Cancellation kills
-and waits for the active child process before cleanup. Cleanup attempts to remove
-the proof's worktree, its own registration and its temporary directory. Git
-commands that write or remove the proof tree enable long-path support for that
-command alone, since a built tree's paths pass the Windows 260-character limit.
-Cleanup never prunes another worktree's registration. A cleanup failure is
-reported on standard error with the failed operation and scratch directory;
+projects outside the proof tree and links in it are refused.
+
+An exclusive lock file beside the clone leases it for the whole proof. A
+concurrent proof immediately falls back to a fresh detached scratch worktree
+and reports the cold build on standard error. A missing or corrupt clone,
+or one whose origin names another caller, is recreated cold. If the cache
+cannot be opened or repaired, the proof also uses the scratch fallback.
+
+Cancellation kills and waits for the active child process before cleanup.
+The persistent clone survives success, refusal, exceptions and cancellation;
+per-proof scratch holds results, build counts, patches and the empty hooks
+directory and is removed on every outcome. A fallback worktree and only its
+own registration are removed too. Git operations enable long-path support
+for that command alone. Cleanup never prunes another worktree's registration.
+A cleanup failure is reported on standard error with the failed operation and
+scratch directory;
 files or the proof's registration may remain. Cleanup never changes the exit
 code, which reports the proof, even if standard error cannot receive the warning.
+
+Each side reports this stable work-count line on standard error (the second
+side says `with the fix restored`):
+
+```text
+laws prove: built with the fix withheld: <n> project(s) compiled, <m> up to date, <t> target(s)
+```
+
+Counts come from MSBuild events across the selected closure, including restore.
+A compiled project executes a C#, F# or Visual Basic compiler task; an
+up-to-date project skips `CoreCompile` because its outputs are current and
+executes no compiler task in any of its target frameworks. Projects are
+counted distinctly, and targets count executions, excluding skipped targets.
+A failed build's partial counts do not establish a proof. A successful build
+without a valid count report is refused.
 
 ```text
 Law: BackgroundBuildLawTests (tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj)
@@ -1175,7 +1271,9 @@ A selection with an offscreen or windowed proof on a named backend warms the
 engine's pipeline cache before any leg starts. The runner boots the first
 offscreen proof whose positive leg is one plain World process, once per
 backend those proofs boot, into one state directory: each boot waits for the
-engine to be ready, prints its `pipeline-cache.<backend>` counts, and quits,
+engine to be ready, captures one frame (`<backend>-encode.png`, read back
+through the display encode, so no leg's first capture builds the encode's
+pipeline), prints its `pipeline-cache.<backend>` counts, and quits,
 under a 180-second timeout of its own (`CanaryCommand.WarmSeconds`). Every
 offscreen and windowed leg then starts with a copy of that `pipeline-cache`
 directory in its fresh state directory, so no leg builds the engine's
@@ -1186,8 +1284,8 @@ and the leg budget, and the run's closing counts report how many seeded legs
 exited with the cache byte for byte as they received it: a pipeline the cache
 did not answer is written back to it, so an unchanged cache means every
 pipeline the leg created was a hit. A warm boot that times out, exits nonzero,
-never narrates the engine ready, or prints no counts fails the selection with
-exit 2, naming its backend, before any leg starts.
+never narrates the engine ready, never lands its capture, or prints no counts
+fails the selection with exit 2, naming its backend, before any leg starts.
 
 The selection forms are mutually exclusive and every execution selection must
 be nonempty. `--jobs` combines with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
@@ -3260,6 +3358,11 @@ puck formats            write FormatVersions.json from the source
 puck formats --check    write nothing; exit 1 for an unrecorded, stale, bumped, reshaped, or moved format,
                         or a ledger whose bytes differ from what the verb writes
 ```
+
+Both forms refuse with exit 2 before discovery if non-ignored, untracked C# sources exist under `src/`, excluding
+`*.g.cs` files. The refusal writes nothing and lists every such file in sorted, repository-relative paths with forward
+slashes. Run `git add` on those files or remove them first: the ledger is computed from tracked sources only and
+cannot describe what will be committed while those sources are omitted.
 
 A declaration is a format when it is a `const`, a `static readonly` field, or a static or expression-bodied property
 whose initializer is one of two things:

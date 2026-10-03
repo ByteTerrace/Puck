@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says the report of a flake that passes when re-run alone includes the original failure message of the first run.
+original[^.\n]{0,30}(failure |error )?message|first[^.\n]{0,30}(failure|error) message

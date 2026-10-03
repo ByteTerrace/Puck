@@ -85,12 +85,59 @@ public sealed partial class WorldReplayTape {
         EndDriveCore(completed: completed);
         m_liveServer.EndUnobservedSessions();
     }
+    // A drive seats each profiled seat on a detached copy of the identity its tape pinned, so a replayed identity write
+    // lands on the copy and never in the catalog. When the drive ends the copy is discarded: a seat this authority's own
+    // catalog owns returns to the live owned identity, where a later write is saved again, and where the copy differs from
+    // it the difference is narrated as drift. A seat the catalog does not own (a visitor, or an id it holds no document
+    // for) keeps what it carries.
+    private HashSet<int> RebindOwnedSeats() {
+        var population = m_liveServer.Population;
+        var profiles = m_liveServer.Profiles;
+        var rebound = new HashSet<int>();
+
+        for (var slot = 0; (slot < population.LocalSeatCount); slot++) {
+            if (
+                !population.IsActive(index: slot) ||
+                (population.EntryBody(index: slot)?.Profile is not { } detached) ||
+                profiles.Owns(identity: detached) ||
+                (m_liveServer.HomeSeatIdentity(
+                    id: detached.Id,
+                    mobility: population.CurrentMobility(index: slot),
+                    slot: slot
+                ) is not { } live)
+            ) {
+                continue;
+            }
+
+            WorldReplaySnapshot.ReportAdoptionDrift(
+                current: live,
+                narrationHub: profiles.NarrationHub,
+                taped: detached,
+                used: WorldReplaySnapshot.DriveEndTapedUsed
+            );
+
+            var color = population.BodyColor(index: slot);
+
+            population.SetSeatProfile(
+                profile: live,
+                slot: slot
+            );
+            population.SetBodyColor(
+                color: color,
+                slot: slot
+            );
+            _ = rebound.Add(item: slot);
+        }
+
+        return rebound;
+    }
     private void EndDriveCore(bool completed) {
         var drive = m_drive!;
 
         m_drive = null;
         m_liveServer.Extensions.CompleteReplay();
         m_transport.InputMasked = false;
+        var rebound = RebindOwnedSeats();
 
         var verdict = ((drive.DivergedAt < 0)
             ? "every driven tick matched the recording"
@@ -141,6 +188,17 @@ public sealed partial class WorldReplayTape {
             ParentName: drive.SourceName,
             Tick: drive.Target
         );
+        // The seats the drive rebound continue as the live owned identity, which is not the identity this recording's boot
+        // image pins: the fork's own tape switches them at the head of its first tick, where the live fork switched.
+        foreach (var slot in rebound.Order()) {
+            if (m_liveServer.Body(index: slot)?.Profile?.Project() is { } continued) {
+                m_recordPrefix.Add(item: new WorldReplayEntry.SeatIdentity(
+                    Profile: continued,
+                    Slot: slot
+                ));
+            }
+        }
+
         m_mode = WorldReplayMode.Recording;
         RefreshCapture();
         if (m_liveServer.Output.HasNarrationSink) {

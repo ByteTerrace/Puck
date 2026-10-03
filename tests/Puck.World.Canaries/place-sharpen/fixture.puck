@@ -1,0 +1,40 @@
+schema: "puck.world.definition.v1"
+documentId: "place-sharpen"
+
+host {
+  backend: auto
+  surfaceFormat: r8g8b8a8
+  fullscreen: false
+  exitAfterSeconds: 0
+  presentation: offscreen
+  width: 64
+  height: 64
+  targetHertz: 0
+  presentMode: Immediate
+}
+
+views {
+  seatControl {
+    maxPitch: 0.01
+    minPitch: -0.01
+    yawReference: World
+  }
+  layout "sharpen" {
+    seatCount: 0
+    slots [{ instance: "sharpen", x: 0, y: 0, width: 1, height: 1 }]
+    transitionSeconds: 0
+    transitionRenderScale: 1
+  }
+  seatRig "sharpen" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 0.01, pitch: 0, yaw: 0)
+      fieldOfView(fieldOfViewRadians: 0.001)
+    ]
+  }
+  graph "sharpen" {
+    camera: null
+    source: "sharpen.graph.json"
+    timeScale: 0
+  }
+}

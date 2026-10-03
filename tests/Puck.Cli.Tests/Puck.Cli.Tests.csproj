@@ -15,6 +15,9 @@
         <!-- TestCommandLawTests boots the real Puck.World executable out of its own Release output, so that
              output has to exist before the suite runs; nothing here links against the assembly. -->
         <ProjectReference Include="../../src/Puck.World/Puck.World.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <!-- AzureHostTelemetryShutdownLawTests reads each Azure host's built runtimeconfig.json; nothing links them. -->
+        <ProjectReference Include="../../src/Puck.Actors/Puck.Actors.csproj" ReferenceOutputAssembly="false" Private="false" />
+        <ProjectReference Include="../../src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" ReferenceOutputAssembly="false" Private="false" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />

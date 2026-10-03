@@ -682,10 +682,153 @@ public sealed class OwnedWorldDisposalLawTests {
                 values: files.Select(selector: Path.GetFileName)
             )
         );
-        Assert.DoesNotContain(
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: narration
+        );
+    }
+    /// <summary>The discard line and a failed move's reason name the quarantine by its directory name under the
+    /// catalog and the failure by its kind, never by a rooted path: a retired document is moved aside (or, with a file
+    /// standing where the quarantine belongs, cannot be), and neither the stderr line nor any read-back reason carries
+    /// the catalog's own directory.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DiscardNarration_CarriesNoAbsolutePath(bool moveFails) {
+        using var dir = new TemporaryDirectory();
+        var files = Populate(dir: dir);
+        var originalError = Console.Error;
+        using var captured = new StringWriter();
+
+        foreach (var path in files) {
+            RetireCameraProgram(path: path);
+        }
+        if (moveFails) {
+            File.WriteAllText(
+                contents: "occupied",
+                path: QuarantineDirectory(dir: dir)
+            );
+        }
+
+        WorldOwnedWorlds swept;
+
+        try {
+            Console.SetError(newError: captured);
+
+            swept = Open(dir: dir);
+        } finally {
+            Console.SetError(newError: originalError);
+        }
+
+        var narration = captured.ToString();
+
+        Assert.Contains(
             actualString: narration,
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: dir.RootPath
+            expectedSubstring: "unloadable owned world(s)"
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: narration
+        );
+
+        foreach (var entry in swept.Discarded) {
+            NarrationPaths.AssertNone(
+                root: dir.RootPath,
+                text: entry.Reason
+            );
+        }
+        if (moveFails) {
+            Assert.All(
+                action: static entry => Assert.Contains(
+                    actualString: entry.Reason,
+                    comparisonType: StringComparison.Ordinal,
+                    expectedSubstring: "it could not be moved aside"
+                ),
+                collection: swept.Discarded
+            );
+        }
+    }
+    /// <summary>A refusal that names a file the loader composed beyond the document itself — here the basis the document
+    /// links to, which does not exist — names it relative to the catalog or not at all, on the read-back and on
+    /// stderr.</summary>
+    [Fact]
+    public void MissingBasisRefusal_CarriesNoAbsolutePath() {
+        using var dir = new TemporaryDirectory();
+        var files = Populate(dir: dir);
+        var originalError = Console.Error;
+        using var captured = new StringWriter();
+
+        File.WriteAllText(
+            contents: /*lang=json*/ """{ "basis": "basis/shared" }""",
+            path: files[0]
+        );
+
+        WorldOwnedWorlds opened;
+
+        try {
+            Console.SetError(newError: captured);
+
+            opened = Open(dir: dir);
+        } finally {
+            Console.SetError(newError: originalError);
+        }
+
+        var refused = Assert.Single(collection: opened.Refused);
+
+        Assert.Equal(
+            expected: Path.GetFileName(path: files[0]),
+            actual: refused.FileName
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: refused.Reason
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: captured.ToString()
+        );
+    }
+    /// <summary>A basis reference spelled as a rooted UNC path names the authored reference exactly, and never the file
+    /// the host resolved it to: the document's own words are content, the resolved path is not.</summary>
+    [Fact]
+    public void MissingUncBasisRefusal_NamesTheAuthoredReferenceAndNoHostPath() {
+        using var dir = new TemporaryDirectory();
+        var files = Populate(dir: dir);
+        var originalError = Console.Error;
+        using var captured = new StringWriter();
+
+        File.WriteAllText(
+            contents: /*lang=json*/ """{ "basis": "//files/private/shared" }""",
+            path: files[0]
+        );
+
+        WorldOwnedWorlds opened;
+
+        try {
+            Console.SetError(newError: captured);
+
+            opened = Open(dir: dir);
+        } finally {
+            Console.SetError(newError: originalError);
+        }
+
+        var refused = Assert.Single(collection: opened.Refused);
+
+        Assert.Contains(
+            actualString: refused.Reason,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "'//files/private/shared'"
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: refused.Reason,
+            hostPaths: "//files/private/shared.world.json"
+        );
+        NarrationPaths.AssertNone(
+            root: dir.RootPath,
+            text: captured.ToString(),
+            hostPaths: "//files/private/shared.world.json"
         );
     }
 }

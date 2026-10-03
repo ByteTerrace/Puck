@@ -297,6 +297,20 @@ output at the host's paper-white level once, and writes the source image through
 tables, which `DirectXCommandListRecorder` binds at the group's `ViewTableIndex`
 and `SamplerTableIndex`. A CPU surface reaches the encode through the device's
 `IGpuSurfaceUpload`, whose texture holds no descriptor of its own.
+The upload refuses a width or height past the two-dimensional texture limit,
+`D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION`, with an `ArgumentOutOfRangeException` before it
+touches its texture, because the device creates a larger texture and refuses only
+the copy recorded into it. A recording that fails leaves its command list open, so
+the next upload replaces the allocator and the list before it records.
+A rebuild for a new extent or format creates the replacement texture and staging
+buffer before it retires the current ones and their image view, so a creation the
+device refuses leaves the current texture and view in place.
+Each upload first waits for the queue to finish the previous submission, even when its
+wait failed, before it writes staging memory, reuses or replaces its command
+allocator, or releases a replaced texture; the rebuild publishes its replacement
+texture, buffer, view and extent together, and releases the replaced texture and
+buffer only after the queue's fence passes the work submitted before it, because
+another consumer's submission may still read them.
 
 The compositor creates its swap chain as SDR in the preferred 8-bit unsigned
 normalized format, then chooses its `DisplayOutput` through

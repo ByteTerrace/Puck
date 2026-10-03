@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/29c5894d92cad97ac996f4f080b2113ed718c011259b087640cbbcb0ff5b0639). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/63beba3510f0554583538275a32668fac2fe097d7db07f1419ebcb2468f78bfd). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -116,6 +116,7 @@ struct SdfResolveFrame {
 #define sdfSkyStops sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224
 [[vk::binding(28, 1)]] StructuredBuffer<SdfSoftbox> sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf : register(t28, space1);
 #define sdfSoftboxes sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf
+[[vk::binding(29, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t29, space1);
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfResolvePass {

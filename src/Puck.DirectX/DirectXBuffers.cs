@@ -23,10 +23,12 @@ public static unsafe class DirectXBuffers {
     /// <param name="memory">The device-local counts a <c>DEFAULT</c>- or <c>GPU_UPLOAD</c>-heap buffer joins, or
     /// <see langword="null"/>; the
     /// owner counts its release through <see cref="DirectXDeviceMemory.CountReleased"/>.</param>
+    /// <param name="calls">The answerer of the creation call, or <see langword="null"/> for the device's own
+    /// (<see cref="DirectXDeviceCommandCalls"/>); a law gives it one that fails.</param>
     /// <returns>The buffer, owned by the caller.</returns>
     /// <exception cref="Puck.Abstractions.Gpu.DeviceLostException">The device was removed.</exception>
     /// <exception cref="DirectXException">The creation failed for another reason.</exception>
-    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, ulong sizeBytes, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, GpuDeviceMemoryWork? memory = null) {
+    public static ID3D12Resource* CreateCommitted(ID3D12Device* device, ulong sizeBytes, D3D12_HEAP_TYPE heapType, D3D12_RESOURCE_STATES initialState, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAGS.D3D12_RESOURCE_FLAG_NONE, GpuDeviceMemoryWork? memory = null, IDirectXCommandCalls? calls = null) {
         var heapProperties = new D3D12_HEAP_PROPERTIES {
             Type = heapType,
         };
@@ -42,7 +44,7 @@ public static unsafe class DirectXBuffers {
             Width = sizeBytes,
         };
         var buffer = DirectXCommandCalls.CreateCommittedResource(
-            calls: new DirectXDeviceCommandCalls(device: device),
+            calls: (calls ?? new DirectXDeviceCommandCalls(device: device)),
             clearValue: null,
             description: in description,
             heapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,

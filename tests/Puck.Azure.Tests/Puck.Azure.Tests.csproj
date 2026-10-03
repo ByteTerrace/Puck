@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+        <OutputType>Exe</OutputType>
+        <IsAotCompatible>false</IsAotCompatible>
+        <IsPackable>false</IsPackable>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Puck.Azure/Puck.Azure.csproj" />
+    </ItemGroup>
+</Project>

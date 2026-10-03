@@ -29,7 +29,7 @@ world.budget
   output, so a still scene would read near zero.
 - **`world.counters gpu`** echoes what each render node counted for its newest
   completed submission: per labeled pass (`fillers`, `bricks`, `upload`,
-  `sky`, `mask`, `beam`, `cull-args`, `mesh`, `primary`, `surface`, `ambient`,
+  `environment`, `sky`, `mask`, `beam`, `cull-args`, `mesh`, `primary`, `surface`, `ambient`,
   `shadow`, `views`) the dispatches, barriers, binds, push-constant bytes and
   uploads it recorded and the march steps and texels written its kernels
   counted, or `skipped` for a pass that did not run, and, for a render-graph
