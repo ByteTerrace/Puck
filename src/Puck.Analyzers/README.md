@@ -40,8 +40,12 @@ Every member of a marked type is a way onto the GPU too. A helper that reaches
 a marked member carries the mark and hands the obligation to its callers. A test
 class takes the trait as xUnit gives it, from itself or a base type and never
 from a type enclosing it, so a nested class that declares tests carries the
-trait itself; the mark never stands in for the trait on a test class or a test
-method. The rule runs only in assemblies that reference xUnit v3. A device
+trait itself. The mark never stands in for the trait on what the runner calls
+itself: a test class, a test method, or a test class's constructors and
+lifecycle members. A test class built on a marked base type, or handed a class,
+collection or assembly fixture that is marked or has a marked constructor or
+lifecycle member, carries the trait. The rule runs only in assemblies that
+reference xUnit v3. A device
 reached through a composed host, or through a native entry point no mark names,
 is outside what it sees.
 

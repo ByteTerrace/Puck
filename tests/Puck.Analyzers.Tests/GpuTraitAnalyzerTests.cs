@@ -285,6 +285,102 @@ public sealed class GpuTraitAnalyzerTests {
         Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'MarkedMethodTests.OpensEach(int)'"));
     }
     [Fact]
+    public void TheMarkDoesNotAdmitATestClassConstructorOrLifecycleMember() {
+        // xUnit constructs the class, initializes it and disposes it with no analyzed caller to hand the obligation to.
+        var result = Run(body: """
+            public sealed class ConstructedTests : System.IDisposable {
+                [Puck.OpensGpuDevice]
+                public ConstructedTests() => _ = Devices.Open();
+
+                [Fact]
+                public void Runs() { }
+                [Puck.OpensGpuDevice]
+                public void Dispose() => _ = Devices.Open();
+            }
+            public sealed class InitializedTests : IAsyncLifetime {
+                [Puck.OpensGpuDevice]
+                public System.Threading.Tasks.ValueTask InitializeAsync() {
+                    _ = Devices.Open();
+
+                    return default;
+                }
+                public System.Threading.Tasks.ValueTask DisposeAsync() => default;
+                [Fact]
+                public void Runs() { }
+            }
+            """);
+        var refused = result.WithId(id: Id).Select(selector: static diagnostic => diagnostic.GetMessage()).ToArray();
+
+        Assert.Equal(
+            actual: refused.Length,
+            expected: 3
+        );
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'ConstructedTests.ConstructedTests()'"));
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'ConstructedTests.Dispose()'"));
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'InitializedTests.InitializeAsync()'"));
+    }
+    [Fact]
+    public void ATestClassBuiltOnAMarkedBaseOrHandedAMarkedFixtureNeedsTheTrait() {
+        // The runner builds the base type and the fixtures itself, so no analyzed call site carries the obligation.
+        var result = Run(body: """
+            [Puck.OpensGpuDevice]
+            public abstract class DeviceLaws {
+                protected DeviceLaws() => _ = Devices.Open();
+            }
+            public abstract class OpenedInConstruction {
+                [Puck.OpensGpuDevice]
+                protected OpenedInConstruction() => _ = Devices.Open();
+            }
+            [Puck.OpensGpuDevice]
+            public sealed class DeviceFixture {
+                public DeviceFixture() => _ = Devices.Open();
+            }
+            public sealed class LifetimeFixture : IAsyncLifetime {
+                [Puck.OpensGpuDevice]
+                public System.Threading.Tasks.ValueTask InitializeAsync() {
+                    _ = Devices.Open();
+
+                    return default;
+                }
+                public System.Threading.Tasks.ValueTask DisposeAsync() => default;
+            }
+            [CollectionDefinition("devices")]
+            public sealed class DeviceCollection : ICollectionFixture<LifetimeFixture> { }
+            public sealed class InheritedTests : DeviceLaws {
+                [Fact]
+                public void Runs() { }
+            }
+            public sealed class InheritedConstructorTests : OpenedInConstruction {
+                [Fact]
+                public void Runs() { }
+            }
+            public sealed class ClassFixtureTests(DeviceFixture device) : IClassFixture<DeviceFixture> {
+                [Fact]
+                public void Runs() => _ = device;
+            }
+            [Collection("devices")]
+            public sealed class CollectionFixtureTests {
+                [Fact]
+                public void Runs() { }
+            }
+            [Trait("Category", "Gpu")]
+            public sealed class TraitedTests : DeviceLaws, IClassFixture<DeviceFixture> {
+                [Fact]
+                public void Runs() { }
+            }
+            """);
+        var refused = result.WithId(id: Id).Select(selector: static diagnostic => diagnostic.GetMessage()).ToArray();
+
+        Assert.Equal(
+            actual: refused.Length,
+            expected: 4
+        );
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'InheritedTests' reaches the GPU through 'DeviceLaws'"));
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'InheritedConstructorTests' reaches the GPU through 'OpenedInConstruction.OpenedInConstruction()'"));
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'ClassFixtureTests' reaches the GPU through 'DeviceFixture'"));
+        Assert.Contains(collection: refused, filter: static message => message.StartsWith(comparisonType: StringComparison.Ordinal, value: "'CollectionFixtureTests' reaches the GPU through 'LifetimeFixture.InitializeAsync()'"));
+    }
+    [Fact]
     public void AnotherCategoryDoesNotAdmitAReach() {
         var result = Run(body: """
             [Trait("Category", "Docker")]
