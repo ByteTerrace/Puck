@@ -1,0 +1,10 @@
+schema: "puck.world.definition.v1"
+documentId: "comprehensive-synthetic-arcade-v1"
+
+state {
+  world {
+    table arcadeCredits capacity(1) {
+      count = 0
+    }
+  }
+}
