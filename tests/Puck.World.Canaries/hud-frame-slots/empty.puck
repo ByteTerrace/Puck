@@ -1,0 +1,145 @@
+schema: "puck.world.definition.v1"
+documentId: "hud-frame-slots"
+
+cameras [
+  {
+    anchor: null
+    name: "grain-cam"
+    renderHeight: 144
+    renderWidth: 256
+    rig {
+      name: "grain-cam"
+      operations [
+        anchor(subject: worldPoint(point: [0, 2.5, 7]))
+        lookAt(subject: worldPoint(point: [0, 0.8, 0]))
+        fieldOfView(fieldOfViewRadians: 0.9)
+      ]
+      version: "puck.camera.program.v1"
+    }
+  }
+]
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 144
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: windowed
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 256
+}
+
+hud {
+  defaults {
+    enabled: true
+  }
+  panels [
+    {
+      elements []
+      id: "slot"
+      layer: Replace
+      rect {
+        x: 0.25
+        y: 0.25
+        width: 0.5
+        height: 0.5
+      }
+      style: Panel
+    }
+  ]
+}
+
+placements {
+  placement "anchor" {
+    prototype: "block"
+    position [-2.5, 0, 0]
+  }
+
+  placement "mover" {
+    prototype: "block"
+    position [0, 0, 0]
+  }
+}
+
+prototypes {
+  prototype "block" {
+    document {
+      frames [
+        {
+          name: "idle"
+          transforms []
+        }
+      ]
+      name: "block"
+      palette [
+        {
+          color: "#8C7A5D"
+          roughness: 0.55
+          sheen: 0
+          specular: 0.25
+        }
+        {
+          color: "#3E8FB0"
+          roughness: 0.35
+          sheen: 0.15
+          specular: 0.4
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "base" {
+        chamfer: 0.2
+        material: 0
+        position [0, 0.6, 0]
+        scale [0.6, 0.6, 0.6]
+      }
+
+      shape Sphere "cap" {
+        material: 1
+        position [0, 1.5, 0]
+        scale [0.4, 0.4, 0.4]
+      }
+    }
+  }
+}
+
+simulation {
+  rateHz: 30
+}
+
+views {
+  layout "grain" {
+    seatCount: 0
+    slots [
+      {
+        camera: "grain-cam"
+        height: 1
+        width: 1
+        x: 0
+        y: 0
+      }
+    ]
+    transitionRenderScale: 1
+    transitionSeconds: 0
+  }
+
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "grain-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5, pitch: 0.3, yaw: 0)
+      lookAt(subject: reference())
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}
