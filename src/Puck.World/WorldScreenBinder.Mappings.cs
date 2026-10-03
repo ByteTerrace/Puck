@@ -82,6 +82,38 @@ internal sealed partial class WorldScreenBinder : IWorldScreenImages {
         m_live[index] = source;
         ReconcileMappings();
     }
+    /// <summary>Gives a screen back the source its row authors, dropping the live bind a presentation verb made over it:
+    /// the <c>screen.source &lt;index&gt; row</c> path. A camera view the live bind registered is released; a row that
+    /// authors a camera view binds it again, as the view self-heal does. A machine the row's screen displays is not a
+    /// live bind and is left alone. Fails for an undeclared screen, or one already showing its row's source.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    /// <returns>Whether the screen returned to its row's source, and a message describing the outcome.</returns>
+    public (bool Ok, string Message) TryShowRow(int index) {
+        if (!m_slots.TryGetValue(
+            key: index,
+            value: out var slot
+        )) {
+            return (Ok: false, Message: $"no screen {index} declared");
+        }
+        if (!m_live.ContainsKey(key: index)) {
+            return (Ok: false, Message: $"screen {index} already shows its row's source");
+        }
+
+        ReleaseSlotView(slot: slot);
+        if (
+            (slot.DeclaredSource is WorldScreenSource.View declared) &&
+            (ResolveCamera(name: declared.CameraName) is not null) &&
+            (m_viewPipelines is not null)
+        ) {
+            _ = TryView(
+                cameraName: declared.CameraName,
+                index: index
+            );
+        }
+        ShowRow(index: index);
+
+        return (Ok: true, Message: $"screen {index} showing its row's source");
+    }
     // Gives a screen back its row's source.
     private void ShowRow(int index) {
         if (m_live.Remove(key: index)) {

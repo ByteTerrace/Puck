@@ -666,7 +666,8 @@ camera's registration and a session by its screen's session view. A view's and
 a session's extent is document data, and a source instance's is the running
 image's. `WorldScreenMappingSet` holds them, republishing a steady frame's
 mappings without allocating. A live presentation source bound with
-`screen.source` over a row publishes the bound source's mapping. A screen
+`screen.source` over a row publishes the bound source's mapping, and
+`screen.source <index> row` returns the screen to its row's source. A screen
 showing no image or text, or an image whose extent is not known yet, publishes
 none. `world.screens` prints each screen's mapping in the line
 `world.view.panes` prints for a pane, or why it has none. Each view's world

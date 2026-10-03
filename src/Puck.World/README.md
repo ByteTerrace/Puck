@@ -1410,7 +1410,9 @@ presentation verb bound over the row (`screen.source <index> <kind>`, a
 each frame its `sdf.world` passes bind the image the runtime hands them for a
 source to every screen showing it, under a lease their node holds until the
 submission that sampled it has finished. A live bind publishes its source's
-mapping as a row does. A screen
+mapping as a row does. `screen.source <index> row` drops the live bind and the
+screen shows its row's source again, releasing a camera view the bind
+registered and re-binding the row's own view when the row authors one. A screen
 showing a view or a session reads that view's own `sdf.world` instance
 (`WorldViewInstances`), which renders at its footprint's extent.
 
@@ -1623,7 +1625,8 @@ screen index removed and later restored by `world.reset`/`.load` exactly as
 world's residency binds every frame through the binder's `ISdfScreenSources`). It still
 OWNS the genuinely presentation sources bound through `screen.source <index>
 <kind>` (`camera`, `capture`, `desktop`, `probe`, `view`, `qr`; it ejects a
-present machine first, through the ordered domain)—a jumbotron view it renders
+present machine first, through the ordered domain, and `row` returns the
+screen to its row's source)—a jumbotron view it renders
 itself, any other a source instance it shows over the row—and `screen.eject`
 (which routes to whichever half—machine or presentation source—actually holds
 the slot). A camera source row picks its

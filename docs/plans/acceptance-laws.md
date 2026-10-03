@@ -25,7 +25,8 @@ law 2's local walked crossing in
 `tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs` and its identity
 sequences, without its federated, rollback and shared-identity variants;
 law 3's write, read and collision legs in
-`tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; and law 5 in
+`tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; law 4's headless
+legs in `tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; and law 5 in
 `tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. The rest are not
 yet. The design was read against the
 integration branch and the lanes the coming integration batch lands, and a
@@ -380,10 +381,21 @@ keep the source bound.
 
 **What "back" means.** `screen.source` has no "row" kind, so the only way back
 is an explicit bind of the original source, which proves a rebind, not a return
-to what the row authored. The law needs a return seam: a `screen.source` form
-that clears the live override and lets the row's own source show again
-([gap G7](#g7-a-screen-has-no-way-back-to-its-authored-source)). Until it exists,
-the return step uses the explicit bind and says so.
+to what the row authored. The law uses the return seam G7 added:
+`screen.source <index> row` drops the live bind and the screen shows its row's
+own source again ([gap G7](#g7-a-screen-has-no-way-back-to-its-authored-source)).
+
+**As implemented.** The fixture boots headless, where the offscreen boot's
+composition is unavailable on a host without a GPU device. Headless, only screen
+0, the machine's video, publishes a mapping with a known extent, so the law runs
+on screen 0 and reads the mapping's source instance, the first token of its
+mapping segment. A pipeline node has no rendered instance to pause and the views
+are not configured, so the pipeline pause, the camera-view retarget and a census
+that moves stay uncovered; the census is still read before and after. The
+retarget is a QR source, and under it the route leg also reads the QR's
+authoring back, which proves the live bind survived. Red legs: a `row` form that
+leaves the live bind fails the return; a route change that drops the live bind
+fails the retargeted route leg.
 
 **What the destination change does not prove.** A Simulation route maps through
 the row's own mapping, not the live bind, so the change proves only that the
@@ -648,19 +660,19 @@ the set gain codes as they are classified.
 
 ### G7: a screen has no way back to its authored source
 
-`screen.source` binds a camera view, a QR source or another source, but has no
-form that clears the live override and returns the screen to the source its row
-authors. A return is therefore an explicit bind of the original source, which a
-law cannot tell apart from a rebind. Law 4 needs the return seam, a
-`screen.source` form that drops the override, to prove that a retarget can be
-undone.
+`screen.source` bound a camera view, a QR source or another source, but had no
+form that cleared the live override and returned the screen to the source its
+row authors, so a return was an explicit bind of the original source, which a
+law cannot tell apart from a rebind. `screen.source <index> row` is that seam
+now: it drops the live bind, releases a camera view the bind registered, and
+re-binds the row's own view when the row authors one
+(`WorldScreenBinder.TryShowRow`). Law 4 proves a retarget undone through it.
 
 ## Order of work
 
 1. When the integration batch lands, implement laws 1 to 5 against it. Each
    confirms its gap's fix on the integration head. For law 5, also confirm the
    commit law in the federation transfer laws no longer asserts a full profile.
-   Law 4 lands with G7's return seam, or names its explicit-bind return until
-   the seam exists.
+   Law 4 lands with G7's return seam.
 2. Land G6's classification and law 6 together, the law enumerating the
    classified set.
