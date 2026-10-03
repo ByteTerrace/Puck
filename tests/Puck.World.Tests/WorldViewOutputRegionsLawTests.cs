@@ -4,9 +4,10 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
-/// <summary>Each view and pane reserves every rect it reaches over the layout transition in flight, the spectator
-/// fallback fits inside its reservation, interrupted transitions retain reservations until the chain settles, and a
-/// settled composition requests exactly its rects.</summary>
+/// <summary>Each view and pane reserves every rect it reaches over the layout transition in flight whose endpoints
+/// nest, keeps its start's extent through one whose endpoints oppose, the spectator fallback fits inside its
+/// reservation, interrupted transitions retain reservations until the chain settles, and a settled composition requests
+/// exactly its rects.</summary>
 public sealed class WorldViewOutputRegionsLawTests {
     private static readonly WorldCamera[] Cameras = [new(
         Anchor: null,
@@ -181,6 +182,47 @@ public sealed class WorldViewOutputRegionsLawTests {
         }
         composer.Compose(cameraOverride: null, elapsedSeconds: 11f, joinedCount: 1, layoutOverride: "tiny", views: views);
         Assert.Equal(expected: reserved with { Width = 0.125f }, actual: Envelope());
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void AnOppositeAxisTransitionKeepsItsStartUntilItSettles(bool pane) {
+        WorldViewSlot Slot(float width, float height) => (pane
+            ? new WorldViewSlot(Height: height, Instance: "pane", Width: width)
+            : new WorldViewSlot(Camera: "camera", Height: height, Width: width));
+        var views = new WorldViewDefaults {
+            Layouts = [
+                new WorldViewLayout(Name: "wide", Slots: [Slot(height: 0.25f, width: 0.75f)], TransitionSeconds: 1f),
+                new WorldViewLayout(Name: "tall", Slots: [Slot(height: 0.75f, width: 0.25f)], TransitionSeconds: 1f),
+            ],
+        };
+        var composer = new WorldViewComposer();
+        var regions = new WorldViewOutputRegions();
+        var envelopes = new List<NormalizedRect>();
+        var wide = new NormalizedRect(Height: 0.25f, Width: 0.75f, X: 0f, Y: 0f);
+        var tall = new NormalizedRect(Height: 0.75f, Width: 0.25f, X: 0f, Y: 0f);
+        var allocations = new List<NormalizedRect>();
+
+        NormalizedRect Envelope() {
+            regions.Views(cameras: Cameras, composer: composer, envelopes: envelopes, joinedCount: 1);
+            return (pane ? regions.Pane(composer: composer, instance: "pane", region: composer.Slots[0].Region) : envelopes[0]);
+        }
+
+        composer.Compose(cameraOverride: null, elapsedSeconds: 0f, joinedCount: 1, layoutOverride: "wide", views: views);
+        allocations.Add(item: Envelope());
+        for (var step = 0; (step <= 12); step++) {
+            composer.Compose(cameraOverride: null, elapsedSeconds: (step * 0.1f), joinedCount: 1, layoutOverride: "tall", views: views);
+            var envelope = Envelope();
+
+            // The eased rect grows past the start's height, which it resamples from until the transition settles.
+            Assert.Equal(expected: ((composer.TransitionProgress < 1f) ? wide : tall), actual: envelope);
+            if (envelope != allocations[^1]) {
+                allocations.Add(item: envelope);
+            }
+        }
+        // One allocation per transition: the wide start, then the tall rect it settles at, never the 0.75-by-0.75
+        // envelope of both.
+        Assert.Equal(actual: allocations, expected: [wide, tall]);
     }
     [Fact]
     public void ASettledSplitAllocatesEachSeatItsHalfAndATransitionHoldsItsLargerEndpoint() {

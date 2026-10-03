@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Puck.Abstractions.Gpu;
@@ -10,8 +11,51 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>The canary's CPU-recorded pass states and upload bytes follow its real boot frame. The boot's device seal
-/// rejects every physical device activation, and the render graph records over the upload model.</summary>
+/// rejects every physical device activation, and the render graph records over the upload model. Every executed pass line
+/// the canary holds exactly is a line <see cref="GpuWorkReport"/> can write: each submission kind once, in column order,
+/// each count a canonical decimal.</summary>
 public sealed class WorldCounterUploadLawTests {
+    [Fact]
+    public void CanaryExactPassLinesNameEverySubmissionKindOnceInColumnOrder() {
+        using var manifest = JsonDocument.Parse(json: File.ReadAllText(path: Path.Combine(
+            path1: AuthoredGameFixtures.Root, path2: "tests/Puck.World.Canaries/world-counters/canary.json")));
+        var kinds = new List<string>();
+
+        foreach (var kind in GpuWork.SubmissionKinds) {
+            kinds.Add(item: (kind.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "gpu.") ? kind.Name["gpu.".Length..] : kind.Name));
+        }
+        var checkedLines = 0;
+
+        foreach (var observation in manifest.RootElement.GetProperty(propertyName: "positive").GetProperty(propertyName: "expect").EnumerateArray()) {
+            if ((observation.GetProperty(propertyName: "type").GetString() != "lines") || !observation.TryGetProperty(propertyName: "match", value: out var match) || (match.GetString() != "exact")) {
+                continue;
+            }
+            foreach (var element in observation.GetProperty(propertyName: "lines").EnumerateArray()) {
+                var line = element.GetString()!;
+                var colon = line.IndexOf(comparisonType: StringComparison.Ordinal, value: " executed:");
+
+                if (colon < 0) {
+                    continue;
+                }
+                var keys = new List<string>();
+
+                foreach (var pair in line[(colon + " executed:".Length)..].Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ')) {
+                    var equals = pair.IndexOf(value: '=');
+
+                    Assert.True(condition: (equals > 0), userMessage: $"'{pair}' is no count in: {line}");
+                    var value = pair[(equals + 1)..];
+
+                    Assert.True(condition: (long.TryParse(s: value, provider: CultureInfo.InvariantCulture, style: NumberStyles.None, result: out var count)
+                        && (count.ToString(provider: CultureInfo.InvariantCulture) == value)), userMessage: $"'{pair}' is no canonical count in: {line}");
+                    keys.Add(item: pair[..equals]);
+                }
+                Assert.True(condition: keys.SequenceEqual(second: kinds), userMessage:
+                    $"The line names {string.Join(separator: ' ', values: keys)}; a report line names {string.Join(separator: ' ', values: kinds)}: {line}");
+                checkedLines++;
+            }
+        }
+        Assert.True(condition: (checkedLines > 0), userMessage: "The canary holds no exact pass line.");
+    }
     [Fact]
     public void CanaryPassUploadsMatchItsDeviceSealedFirstFrame() {
         const string Canary = "tests/Puck.World.Canaries/world-counters";

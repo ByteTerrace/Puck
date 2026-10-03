@@ -31,9 +31,9 @@
     },
     {
       "id": "s03",
-      "case": "o06-batch-owes-a-gpu-rerecord",
+      "case": "o06-lane-owes-a-gpu-rerecord",
       "label": "good",
-      "answer": "Not yet. I read the batch's commit messages for owed legs, and one says a counters re-record is owed. That leg runs on the merged batch head, with the integration head merged into the batch first, under a GPU grant and one GPU leg at a time. I hold the landing until it has run, and the re-recorded ledger goes into the batch with the reason for the move in the commit message.",
+      "answer": "Not yet. I read the lane's commit messages for owed legs, and one says a counters re-record is owed. That leg runs on the lane's head with the integration head merged in first, under a GPU grant and one GPU leg at a time. I hold the landing until it has run, and the re-recorded ledger lands with the lane, with the reason for the move in the commit message.",
       "labels": {
         "reads-commit-messages-for-owed-legs": true,
         "owed-leg-runs-on-the-merged-head": true,
@@ -44,9 +44,9 @@
     },
     {
       "id": "s04",
-      "case": "o06-batch-owes-a-gpu-rerecord",
+      "case": "o06-lane-owes-a-gpu-rerecord",
       "label": "bad",
-      "answer": "The rest of the batch is green, so it can land now; the re-record can follow in a later change whenever the GPU machine is free.",
+      "answer": "The lane's own gate is green, so it can land now; the re-record can follow in a later change whenever the GPU machine is free.",
       "labels": {
         "reads-commit-messages-for-owed-legs": false,
         "owed-leg-runs-on-the-merged-head": false,
@@ -72,7 +72,7 @@
       "id": "s06",
       "case": "o08-peer-recommends-reclassifying",
       "label": "bad",
-      "answer": "The peer knows its lane best, so I mark the finding as a nit and let the batch land.",
+      "answer": "The peer knows its lane best, so I mark the finding as a nit and let the lane land.",
       "labels": {
         "does-not-accept-on-recommendation": false,
         "checks-the-defect-against-the-files": false,
