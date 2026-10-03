@@ -1,7 +1,7 @@
+using System.Diagnostics;
 using System.Text;
 using Puck.Assets;
 using Puck.Scripting;
-using Wasmtime;
 using Xunit;
 
 namespace Puck.World.Tests;
@@ -68,29 +68,32 @@ public sealed class AddonGuestLawTests {
         }
     }
 
+    // Serves one module's bytes at one path, so a guest reaches the host through the real loader.
+    private sealed class OneModule(string path, byte[] bytes) : IAssetSource {
+        public bool Exists(string path1) => string.Equals(a: path1, b: path, comparisonType: StringComparison.Ordinal);
+        public ReadOnlyMemory<byte> Read(string path1) => (Exists(path1: path1) ? bytes : throw new FileNotFoundException(message: path1));
+    }
+
+    private static ScriptingModuleInfo Load(ScriptingEngine engine, byte[] bytes) {
+        var path = Path.GetFullPath(path: "guest.wasm");
+
+        return new WasmModuleLoader(
+            assetSource: new OneModule(bytes: bytes, path: path),
+            engine: engine
+        ).Load(path: path);
+    }
     private static AddonInstance Mount(ScriptingEngine engine, string wat, long fuelPerTick = AddonAbi.DefaultFuelPerTick) {
-        var bytes = Encoding.UTF8.GetBytes(s: wat);
-        var module = Module.FromText(
-            engine: engine.Engine,
-            name: "guest",
-            text: wat
-        );
         var instance = new AddonInstance(
             channelResolver: new NoChannels(),
             descriptor: new AddonDescriptor(
                 Enabled: true,
                 FuelPerTick: fuelPerTick,
                 ModuleHash: null,
-                ModulePath: "guest.wat",
+                ModulePath: "guest.wasm",
                 Name: "guest"
             ),
             engine: engine,
-            moduleInfo: new ScriptingModuleInfo(
-                ByteLength: bytes.Length,
-                ContentHash: AssetContentHash.Compute(content: bytes),
-                Module: module,
-                Path: "guest.wat"
-            )
+            moduleInfo: Load(bytes: Encoding.UTF8.GetBytes(s: wat), engine: engine)
         );
 
         if (instance.State == AddonState.Enabled) {
@@ -161,6 +164,32 @@ public sealed class AddonGuestLawTests {
         Assert.Equal(expected: AddonState.Enabled, actual: atCeiling.State);
         Assert.Equal(expected: AddonState.Faulted, actual: pastCeiling.State);
         Assert.Equal(expected: AddonFaultKind.MemoryLimit, actual: pastCeiling.Fault.Kind);
+    }
+    [Fact]
+    public void AGuestDeclaringTheWholeAddressSpaceIsRefusedWithoutAllocatingIt() {
+        // 65,536 pages is every byte a 32-bit memory can address, four gibibytes. The refusal is read from the binary,
+        // so neither the managed heap nor the process's committed memory grows by anything near that.
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        using var process = Process.GetCurrentProcess();
+        var managedBefore = GC.GetTotalAllocatedBytes(precise: true);
+        var privateBefore = process.PrivateMemorySize64;
+        using var guest = Mount(engine: engine, wat: MemoryOf(pages: 65_536));
+
+        process.Refresh();
+
+        Assert.Equal(expected: AddonState.Faulted, actual: guest.State);
+        Assert.Equal(expected: AddonFaultKind.MemoryLimit, actual: guest.Fault.Kind);
+        Assert.InRange(actual: (GC.GetTotalAllocatedBytes(precise: true) - managedBefore), high: (16L << 20), low: 0L);
+        Assert.InRange(actual: (process.PrivateMemorySize64 - privateBefore), high: (256L << 20), low: long.MinValue);
+    }
+    [Fact]
+    public void AMalformedMemorySectionIsRefusedByNameBeforeCompiling() {
+        // A memory section of one entry whose limits flags carry a bit no proposal declares.
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        byte[] module = [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x05, 0x03, 0x01, 0x10, 0x01];
+        var refusal = Assert.Throws<InvalidDataException>(testCode: () => Load(bytes: module, engine: engine));
+
+        Assert.Contains(expectedSubstring: "memory section entry 0: its limits flags 0x10 are not declared", actualString: refusal.Message);
     }
     [Fact]
     public void AGuestThatNeverReturnsRunsOutOfFuelAndSpendsTheSameFuelEveryRun() {

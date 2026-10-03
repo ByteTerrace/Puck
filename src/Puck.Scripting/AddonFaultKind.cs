@@ -32,7 +32,7 @@ public enum AddonFaultKind {
     /// <summary>The guest trapped for any other reason.</summary>
     Trap,
 
-    /// <summary>One of the guest's linear memories, exported or not, declares more pages than the store's ceiling
-    /// admits, so instantiation is refused.</summary>
+    /// <summary>One of the guest's linear memories, exported or not, declares more than the store's ceiling admits,
+    /// read from the module's binary, so it is refused before instantiation.</summary>
     MemoryLimit,
 }

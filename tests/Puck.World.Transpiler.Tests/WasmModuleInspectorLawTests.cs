@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.World.Transpiler.Addons;
 using Xunit;
 

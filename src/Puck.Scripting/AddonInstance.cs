@@ -35,6 +35,7 @@ public sealed class AddonInstance : IDisposable {
     private readonly ScriptingEngine? m_engine;
     private readonly long m_fuelPerTick;
     private readonly AssetContentHash m_hash;
+    private readonly IReadOnlyList<WasmMemoryDeclaration> m_memories;
     private readonly Module? m_module;
     private readonly string m_name;
 
@@ -75,6 +76,7 @@ public sealed class AddonInstance : IDisposable {
         m_fault = AddonFault.None;
         m_fuelPerTick = (descriptor.FuelPerTick ?? AddonAbi.DefaultFuelPerTick);
         m_hash = moduleInfo.ContentHash;
+        m_memories = moduleInfo.Memories;
         m_module = moduleInfo.Module;
         m_name = descriptor.Name;
 
@@ -93,6 +95,7 @@ public sealed class AddonInstance : IDisposable {
         m_fault = fault;
         m_fuelPerTick = (descriptor.FuelPerTick ?? AddonAbi.DefaultFuelPerTick);
         m_hash = hash;
+        m_memories = [];
         m_module = null;
         m_name = descriptor.Name;
         m_state = AddonState.Faulted;
@@ -191,6 +194,18 @@ public sealed class AddonInstance : IDisposable {
             return;
         }
 
+        // Every memory the binary declares, exported or not, was read before the module was compiled, so one past
+        // the store's ceiling is refused by name here and never handed to Wasmtime to allocate.
+        for (var index = 0; (index < m_memories.Count); index++) {
+            if (m_memories[index].MinimumBytes > MaxMemoryBytes) {
+                SetFault(
+                    kind: AddonFaultKind.MemoryLimit,
+                    reason: $"MemoryLimit — memory {index} declares {m_memories[index].MinimumPages} pages of 2^{m_memories[index].PageSizeLog2} bytes, past the {(MaxMemoryBytes / WasmPageBytes)}-page ceiling"
+                );
+                return;
+            }
+        }
+
         Store? store = null;
 
         try {
@@ -199,31 +214,10 @@ public sealed class AddonInstance : IDisposable {
             store.SetLimits(memorySize: MaxMemoryBytes);
             store.Fuel = ((ulong)m_fuelPerTick);
 
-            Instance instance;
-
-            try {
-                instance = new Instance(
-                    store: store,
-                    module: m_module
-                );
-            } catch (WasmtimeException refusal) when (refusal is not TrapException) {
-                store.Dispose();
-
-                // The limiter reports its refusal only as an error message, so the store names it by elimination.
-                if (InstantiatesWithoutTheMemoryCeiling()) {
-                    SetFault(
-                        kind: AddonFaultKind.MemoryLimit,
-                        reason: $"MemoryLimit — a memory declares more than the {(MaxMemoryBytes / WasmPageBytes)}-page ceiling ({refusal.Message})"
-                    );
-                } else {
-                    SetFault(
-                        kind: AddonFaultKind.BadExport,
-                        reason: $"BadExport — {refusal.Message}"
-                    );
-                }
-
-                return;
-            }
+            var instance = new Instance(
+                store: store,
+                module: m_module
+            );
 
             if (!TryHandshake(
                 instance: instance,
@@ -254,27 +248,6 @@ public sealed class AddonInstance : IDisposable {
             store?.Dispose();
 
             throw;
-        }
-    }
-    // Whether the module instantiates in a store that differs from the guest's only by having no memory ceiling: one
-    // that gets past creating its memories, whether it then runs its start function to the end or traps in it, was
-    // refused by the ceiling alone.
-    private bool InstantiatesWithoutTheMemoryCeiling() {
-        using var probe = new Store(engine: m_engine!.Engine);
-
-        probe.Fuel = ((ulong)m_fuelPerTick);
-
-        try {
-            _ = new Instance(
-                store: probe,
-                module: m_module!
-            );
-
-            return true;
-        } catch (TrapException) {
-            return true;
-        } catch (WasmtimeException) {
-            return false;
         }
     }
     private static bool RangeFits(long length, int start, long memoryLength, string name, out string error) {

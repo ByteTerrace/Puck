@@ -616,11 +616,13 @@ deliberately carries no span.
   discipline).
 - **Memory cap:** each store gets a hard `SetLimits(memorySize: …)` ceiling of 256 pages for each
   linear memory, plus a load-time region-bounds pre-flight; `memory.grow` is fuel-charged. A guest
-  that declares any memory past the ceiling, exported or not, fails instantiation as `MemoryLimit`.
-  Wasmtime reports the limiter's refusal only as an error message, so the host names it by
-  elimination: it instantiates the module again in a store without the ceiling, and if that gets
-  past creating the memories, the ceiling refused it. A `memory.grow` past the ceiling returns -1
-  to the guest, which faults only if the guest traps on it.
+  that declares any memory past the ceiling, exported or not, is refused as `MemoryLimit` before a
+  store exists. The loader reads every defined and imported memory's limits from the binary
+  (`WasmModuleDeclarations` in `Puck.Assets`; WAT is converted to its binary first) before Wasmtime
+  compiles it, so a guest declaring four gibibytes allocates none of them. A malformed import,
+  memory or export section is refused by the loader with the section and entry named, and the
+  host reports it as `BadExport`. A `memory.grow` past the ceiling returns -1 to the guest, which
+  faults only if the guest traps on it.
 
 | `AddonFaultKind` | Raised by |
 |---|---|
@@ -630,7 +632,7 @@ deliberately carries no span.
 | `HashMismatch` | Module content does not match the descriptor's declared `moduleHash` pin. |
 | `OutOfFuel` | The tick exhausted its fuel budget and trapped deterministically. |
 | `StackOverflow` / `MemoryOutOfBounds` / `Unreachable` / `Trap` | Guest traps, classified in that order of specificity. |
-| `MemoryLimit` | One of the guest's memories, exported or not, declares more pages than the 256-page ceiling, refused at instantiation. |
+| `MemoryLimit` | One of the guest's memories, exported or not, declares more than the 256-page ceiling, read from the binary and refused before instantiation. |
 
 Every fault is loud and attributed. Detail lines are formatted for the console and keyed by the
 addon's **name**, so an operator reading a run log sees which addon failed, why, and what to do:
