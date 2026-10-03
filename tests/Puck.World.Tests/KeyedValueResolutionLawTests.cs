@@ -18,7 +18,7 @@ public sealed class KeyedValueResolutionLawTests {
     public static TheoryData<string> ShippedKeyedWorlds => [
         "src/Puck.World/Assets/worlds/moth-courtyard.puck",
         "tests/Puck.Parity/parity.world.json",
-        "tests/Puck.Counters/sky-cycle.world.json",
+        "tests/Puck.Counters/sky-cycle.puck",
         "tests/Puck.World.Canaries/sky-cycle/fixture.world.json",
     ];
 

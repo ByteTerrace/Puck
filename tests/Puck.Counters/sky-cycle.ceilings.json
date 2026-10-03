@@ -1,5 +1,5 @@
 {
-  "workload": "tests/Puck.Counters/sky-cycle.world.json",
+  "workload": "tests/Puck.Counters/sky-cycle.puck",
   "script": "tests/Puck.Counters/sky.script.txt",
   "runs": [
     {
