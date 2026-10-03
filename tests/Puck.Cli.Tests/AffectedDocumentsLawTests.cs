@@ -123,4 +123,53 @@ public sealed class AffectedDocumentsLawTests {
             expected: ["src/Puck.Platform.Windows/Win32D3D11CameraFrameConverter.cs"]
         );
     }
+
+    /// <summary>A module authored only as a <c>.puck</c> source (no <c>.world.json</c> beside it) is a layer the importing
+    /// world composes from, so a world authored as a source reaches it, in the working tree and in a revision.</summary>
+    private static void WriteModuleTree(string root) {
+        var modules = Directory.CreateDirectory(path: Path.Combine(path1: root, path2: "mods"));
+
+        File.Copy(
+            destFileName: Path.Combine(path1: modules.FullName, path2: "ttt.puck"),
+            sourceFileName: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck")
+        );
+        File.WriteAllText(
+            contents: "schema: \"puck.world.definition.v1\"\n\nimport \"mods/ttt\" as a\n",
+            path: Path.Combine(path1: root, path2: "host.puck")
+        );
+    }
+
+    [Fact]
+    public void AModuleAuthoredOnlyAsASourceIsReachedThroughTheImportThatNamesIt() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-affected-module-");
+
+        WriteModuleTree(root: scratch.RootPath);
+
+        var reached = AffectedDocuments.Reach(path: "host.puck", tree: new AffectedWorkingTree(root: scratch.RootPath));
+
+        Assert.Contains(collection: reached, expected: "host.puck");
+        Assert.Contains(collection: reached, expected: "mods/ttt.puck");
+    }
+    [Fact]
+    public void AModuleAuthoredOnlyAsASourceIsReachedFromTheRevisionThatRecordedIt() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-affected-module-revision-");
+
+        WriteModuleTree(root: scratch.RootPath);
+
+        foreach (var arguments in new[] {
+            new[] { "init", "-q" },
+            new[] { "add", "." },
+            new[] { "-c", "user.name=law", "-c", "user.email=law@example.invalid", "commit", "-q", "-m", "the tree" },
+        }) {
+            Assert.Equal(actual: CliGit.Run(scratch.RootPath, arguments).ExitCode, expected: 0);
+        }
+
+        // The working tree no longer holds the files: only the revision does, and it composes them from an export.
+        File.Delete(path: Path.Combine(path1: scratch.RootPath, path2: "mods", path3: "ttt.puck"));
+
+        using var revision = new AffectedRevisionTree(revision: "HEAD", root: scratch.RootPath);
+        var reached = AffectedDocuments.Reach(path: "host.puck", tree: revision);
+
+        Assert.Contains(collection: reached, expected: "mods/ttt.puck");
+    }
 }
