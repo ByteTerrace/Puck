@@ -109,7 +109,7 @@ public sealed partial record WorldDefinition(
     [JsonIgnore]
     public WorldRowAssignment? AssignmentRaw { get => KitsRaw?.Assignment; init => KitsRaw = ((KitsRaw ?? new WorldKitsSection()) with { Assignment = value }); }
     /// <summary>Gets the audio host-section defaults — ABSENT resolves to <see cref="WorldAudioDefaults.Absent"/>
-    /// (silent); the standard values are authored in <c>standard.world.json</c>.</summary>
+    /// (silent); a world authors its own or inherits its basis's.</summary>
     [JsonIgnore]
     public WorldAudioDefaults Audio => (AudioRaw ?? WorldAudioDefaults.Absent);
     /// <summary>Gets the editor/authoring policy row — ABSENT derives from the placement rows
@@ -154,8 +154,8 @@ public sealed partial record WorldDefinition(
     [JsonIgnore]
     public IReadOnlyList<WorldCamera> Cameras => (CamerasRaw ?? []);
     /// <summary>Gets the world's channel table — ABSENT resolves to none. The engine declares no channel of its own:
-    /// the standard movement set is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world inherits it by
-    /// naming that document as its basis. A binding or kit naming a channel the composed document does not declare
+    /// a world AUTHORS its movement set (the island does) or
+    /// inherits its basis's. A binding or kit naming a channel the composed document does not declare
     /// refuses by name.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldChannel> Channels => (ChannelsRaw ?? []);
@@ -229,15 +229,15 @@ public sealed partial record WorldDefinition(
     [JsonIgnore]
     public WorldGravity Gravity => (GravityRaw ?? WorldGravity.Default);
     /// <summary>Gets the host-section defaults — ABSENT resolves to <see cref="WorldHostDefaults.Absent"/> (no
-    /// presentation); the standard windowed boot is authored in <c>standard.world.json</c>.</summary>
+    /// presentation); a world authors its windowed boot (the island does) or inherits its basis's.</summary>
     [JsonIgnore]
     public WorldHostDefaults Host => (HostRaw ?? WorldHostDefaults.Absent);
     /// <summary>Gets the <c>hud</c> section — ABSENT resolves to <see cref="WorldHudSection.Absent"/> (disabled, no
-    /// cursor, no panels); the standard enabled row is authored in <c>standard.world.json</c>.</summary>
+    /// cursor, no panels); a world authors its own row or inherits its basis's.</summary>
     [JsonIgnore]
     public WorldHudSection Hud => (HudRaw ?? WorldHudSection.Absent);
     /// <summary>Gets the <c>icons</c> section — ABSENT resolves to <see cref="WorldIconographySection.Absent"/> (no
-    /// icons); the standard repertoire is authored in <c>standard.world.json</c>.</summary>
+    /// icons); a world authors its own repertoire or inherits its basis's.</summary>
     [JsonIgnore]
     public WorldIconographySection Icons => (IconsRaw ?? WorldIconographySection.Absent);
     /// <summary>Gets the identity-owned state declarations compiled into every body's ordinal register file and
@@ -351,8 +351,8 @@ public sealed partial record WorldDefinition(
     [JsonIgnore]
     public IReadOnlyList<WorldProbe> Probes => (ProbesRaw ?? []);
     /// <summary>Gets the render-lever boot defaults and quality-preset table — ABSENT resolves to
-    /// <see cref="WorldRenderDefaults.Absent"/> (inert levers, no presets); the standard posture is authored in
-    /// <c>standard.world.json</c>.</summary>
+    /// <see cref="WorldRenderDefaults.Absent"/> (inert levers, no presets); the shipped presets are authored in
+    /// <c>quality.puck</c>, which <c>standard.puck</c> imports.</summary>
     [JsonIgnore]
     public WorldRenderDefaults Render => (RenderRaw ?? WorldRenderDefaults.Absent);
     /// <summary>Gets the document schema tag — <see cref="SchemaVersion"/> for a well-formed document.</summary>
@@ -451,7 +451,7 @@ public sealed partial record WorldDefinition(
     public IReadOnlyList<WorldTargetRegister> TargetRegisters => (TargetRegistersRaw ?? []);
     /// <summary>Gets the <c>theme</c> section — ABSENT resolves to <see cref="WorldThemeSection.Absent"/> (a zeroed
     /// token block, no chrome); the standard "Instrument + grafts" recipe is authored in
-    /// <c>standard.world.json</c>.</summary>
+    /// <c>standard.puck</c>.</summary>
     [JsonIgnore]
     public WorldThemeSection Theme => (ThemeRaw ?? WorldThemeSection.Absent);
     /// <summary>Gets the <c>timeline</c> section, the world's named presentation clocks — ABSENT resolves to

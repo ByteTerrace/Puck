@@ -317,7 +317,7 @@ public sealed record WorldAudioCue(
 /// <summary>
 /// The world's audio host-section defaults — document defaults with the same absence-coalesce convention every
 /// defaults section uses (see <see cref="WorldStorageDefaults"/>): absent-in-JSON coalesces to <see cref="Absent"/>
-/// (silent); the standard values are authored in <c>Assets/worlds/standard.world.json</c>.
+/// (silent); a world authors its own or inherits its basis's.
 /// These are document data, not editor policy; live master volume is the <c>world.volume</c> session lever: the lever
 /// owns "now" once touched, <see cref="MasterGain"/> owns boot, and <c>world.save</c> folds the lever back into
 /// <see cref="MasterGain"/> (the render-levers asymmetry).
@@ -354,9 +354,8 @@ public sealed record WorldAudioDefaults(
     private readonly IReadOnlyList<WorldAudioCue> m_cues = (Cues ?? []);
 
     /// <summary>Gets the inert absence — zero master gain (silent), zero speaker radius, no fade, no cues. The
-    /// engine holds no audio posture of its own: the standard values are AUTHORED, in
-    /// <c>Assets/worlds/standard.world.json</c>, and a world inherits them by naming that document as its
-    /// basis.</summary>
+    /// engine holds no audio posture of its own: a world AUTHORS its values or inherits them from
+    /// its basis.</summary>
     public static WorldAudioDefaults Absent { get; } = new WorldAudioDefaults(
         Cues: [],
         DefaultBedFadeSeconds: 0f,

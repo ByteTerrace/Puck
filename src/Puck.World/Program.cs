@@ -322,7 +322,7 @@ if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFi
     }
 }
 // Resolve the effective host settings: the world doc's host defaults (absence coalesced to WorldHostDefaults.Absent —
-// no presentation; the standard windowed boot is authored in standard.world.json) overlaid by the nullable CLI flags.
+// no presentation; a world authors its windowed boot or inherits its basis's) overlaid by the nullable CLI flags.
 // Backend authority differs by source — a CLI
 // assertion the OS cannot satisfy hard-exits (World's current behavior), a document preference degrades to Vulkan loudly.
 var directXAvailable = OperatingSystem.IsWindowsVersionAtLeast(

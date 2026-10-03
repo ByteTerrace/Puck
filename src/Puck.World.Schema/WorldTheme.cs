@@ -468,7 +468,7 @@ public sealed record WorldThemeSection(
 ) {
     /// <summary>Gets the inert absence — a fully zeroed token block (no authored theme, no chrome). The engine holds
     /// no theme of its own: the standard "Instrument + grafts" recipe is AUTHORED, in
-    /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis.</summary>
+    /// <c>Assets/worlds/standard.puck</c>, and a world inherits it by naming that document as its basis.</summary>
     public static WorldThemeSection Absent { get; } = new(
         Chrome: WorldThemeChrome.Absent,
         Color: WorldThemeColor.Absent,

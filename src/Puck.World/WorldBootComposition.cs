@@ -982,9 +982,8 @@ public static class WorldBootComposition {
             worlds: provider.GetRequiredService<WorldOwnedWorlds>()
         ));
 
-        // The player's controls as DATA: the world's binding overlays (the engine ships none — a world names
-        // Assets/worlds/standard.world.json as its basis for the standard movement rows, or authors its own, or has
-        // none), composed per seat with the seat's profile bindings and its live session rebinds. One WorldSeatBindings
+        // The player's controls as DATA: the world's binding overlays (the engine ships none — a world authors its own
+        // movement rows, inherits its basis's, or has none), composed per seat with the seat's profile bindings and its live session rebinds. One WorldSeatBindings
         // resolves every seat's input, feeding the ONE input consumer there is: the per-seat sim-fold (the
         // IInputBindings handed to AddFixedStepSimulation), whose router stamps each lane's acting principal.
         // Constructed before the container builds, with the boot overlays; the roster, the rebind verbs, and the

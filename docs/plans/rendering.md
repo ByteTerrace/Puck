@@ -7958,7 +7958,7 @@ scratch port of the kernel fold, stepped a thousandth of a cell across walls at
 
 **Walls do not lift it.** Making a march stop at every cell wall it has not
 measured across is sound but costs at least one step a wall: about 1.2 steps a
-unit of ray over a unit lattice. The shipped ground (`standard.world.json`'s
+unit of ray over a unit lattice. The shipped ground (`standard.puck`'s
 `groundTexture`, a P4M lattice of unit tiles with no limit) would spend more
 than the primary march's 128 steps on any pixel past about 100 units, and a ray
 running beside a wall would creep a tolerance a step under a ball-gap fallback.
