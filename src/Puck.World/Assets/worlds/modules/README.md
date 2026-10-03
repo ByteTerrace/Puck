@@ -21,7 +21,7 @@ count); it reads the island's.
 | `arcade` | `arcade.world.json` | Two cabinets and a handheld, each booting an authored cartridge |
 | `dive` | `dive.world.json` | The pool: a medium lattice, a diver kit, fish, a depth row |
 | `kart` | `kart.puck` | A track on a curve, a kart kit, gates, a lap counter |
-| `jump` | `jump.world.json` | A platform course rising from the shard steps, a vaulter kit, a trophy |
+| `jump` | `jump.puck` | A platform course rising from the shard steps, a vaulter kit, a trophy |
 | `arena` | `arena.puck` | The hp/targeting/attack and elemental suites in a walled yard |
 | `studio` | `studio.world.json` | A flat stage for character work, look cycling, a mirror wall, a gate that opens once awakened |
 
@@ -296,7 +296,7 @@ first gate—`kart$gateStage` stays 0 and `kart$lap` never reaches 1—proving t
 discriminate on ORDER, not mere proximity.
 ## The jump district
 
-`modules/jump.world.json` is a course of platforms rising from a starting deck: `jumpCourt` (the one root
+`modules/jump.puck` is a course of platforms rising from a starting deck: `jumpCourt` (the one root
 placement every other row parents under, so the island moves the whole district by restating that row's
 position and yaw alone), four stepped platforms and a wall panel climbing away from it, a trophy floating
 in open air off to one side, and a wide catch net well below the whole course. The `vaulter` kit is the
@@ -347,7 +347,7 @@ qualified row (`jump$reached`/`jump$falls`).
 ## Verifying headless
 
 `tests/Puck.World.Canaries/jump-trophy/host.world.json` is a minimal `standard.world.json`-based world that
-imports `modules/jump.world.json` under alias `jump` and spawns its one local seat on `jump-arrival` with
+imports `modules/jump.puck` under alias `jump` and spawns its one local seat on `jump-arrival` with
 the `vaulter` kit—the same shape a future island import uses. Drive it directly:
 
 ```text
