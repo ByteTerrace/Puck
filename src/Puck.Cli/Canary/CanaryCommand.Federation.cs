@@ -681,21 +681,28 @@ internal static partial class CanaryCommand {
     // names its own endpoint (host.authority is its signing subject and the address its peers dial), which a port
     // bound after boot could not be written into. A port lost between this probe and the World's bind ends the leg as
     // an infrastructure failure (see ListenerRefusal).
-    internal static int GetFreeLoopbackPort() {
-        while (true) {
-            int port;
+    internal static int GetFreeLoopbackPort() => IssueLoopbackPort(probe: static () => {
+        using var probe = new System.Net.Sockets.Socket(
+            addressFamily: System.Net.Sockets.AddressFamily.InterNetwork,
+            protocolType: System.Net.Sockets.ProtocolType.Udp,
+            socketType: System.Net.Sockets.SocketType.Dgram
+        );
 
-            using (var probe = new System.Net.Sockets.Socket(
-                addressFamily: System.Net.Sockets.AddressFamily.InterNetwork,
-                protocolType: System.Net.Sockets.ProtocolType.Udp,
-                socketType: System.Net.Sockets.SocketType.Dgram
-            )) {
-                probe.Bind(localEP: new System.Net.IPEndPoint(
-                    address: System.Net.IPAddress.Loopback,
-                    port: 0
-                ));
-                port = ((System.Net.IPEndPoint)probe.LocalEndPoint!).Port;
-            }
+        probe.Bind(localEP: new System.Net.IPEndPoint(
+            address: System.Net.IPAddress.Loopback,
+            port: 0
+        ));
+
+        return ((System.Net.IPEndPoint)probe.LocalEndPoint!).Port;
+    });
+    /// <summary>Returns the first port <paramref name="probe"/> finds that this process has not handed out before, so
+    /// no two legs, however many run at once, are given one endpoint: the probe's socket is closed by the time the port
+    /// returns, and the operating system may offer the same free port to the next probe.</summary>
+    /// <param name="probe">Finds a port free on the machine now.</param>
+    /// <returns>The port, recorded as handed out.</returns>
+    internal static int IssueLoopbackPort(Func<int> probe) {
+        while (true) {
+            var port = probe();
 
             lock (IssuedLoopbackPorts) {
                 if (IssuedLoopbackPorts.Add(item: port)) {

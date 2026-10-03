@@ -76,7 +76,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
         // orphanDirectory deliberately gets no canary.json — the "has no canary.json" refusal.
     }
 
-    private static string LegManifest(string id, string worldPrefix, string relaunch = "") =>
+    private static string LegManifest(string id, string worldPrefix, string relaunch = "", string root = "") =>
         $$"""
         {
           "id": "{{id}}",
@@ -84,7 +84,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
           "binding": "a synthetic manifest for the loader's own tolerance law",
           "bootShape": "headless",
           "requirements": [],
-          "timeoutSeconds": 10,
+          "timeoutSeconds": 10,{{root}}
           "positive": {
             "world": "{{worldPrefix}}positive-world.json",
             "script": "positive.script.txt",
@@ -100,6 +100,28 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
         }
         """;
 
+    [InlineData("", false)]
+    [InlineData("\n\"exclusive\": true,", true)]
+    [InlineData("\n\"exclusive\": false,", null)]
+    [InlineData("\n\"exclusive\": \"yes\",", null)]
+    [Theory]
+    public void AnExclusiveProofSaysSoAndEveryOtherLeavesTheMemberOut(string member, bool? exclusive) {
+        var directory = Path.Combine(path1: m_directory.RootPath, path2: "tests", path3: "Puck.World.Canaries", path4: "good-one");
+
+        File.WriteAllText(path: Path.Combine(path1: directory, path2: "canary.json"), contents: LegManifest(
+            id: "good-one", root: member,
+            worldPrefix: "tests/Puck.World.Canaries/good-one/"));
+        var loaded = CanaryManifestLoader.TryLoadAll(error: out _, manifests: out var manifests,
+            refused: out var refused, repositoryRoot: m_directory.RootPath, strict: false);
+
+        Assert.Equal(expected: exclusive.HasValue, actual: loaded);
+        if (exclusive is { } expected) {
+            Assert.Equal(expected: expected, actual: manifests[0].Exclusive);
+        } else {
+            Assert.Empty(collection: manifests);
+            Assert.Contains(collection: refused, filter: refusal => refusal.Reason.Contains(comparisonType: StringComparison.Ordinal, value: "exclusive must be true when present"));
+        }
+    }
     [Fact]
     public void ANamedStrictListLoadsOnlyItsManifestAndRefusesUnknownIds() {
         Assert.True(condition: CanaryManifestLoader.TryLoadAll(repositoryRoot: m_directory.RootPath, strict: true,

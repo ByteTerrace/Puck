@@ -860,13 +860,20 @@ Each `baseline <artifact>` line is followed by its exact
 `affected --run` does not run them a second time.
 
 `--run` first strictly loads and lists the prose-edited manifests, then builds
-and runs the chosen suites, then `puck test` on the chosen
-worlds, then the catalog check, and exits 1 when any of them fails. A suite
-prints one verdict line; a failed one follows it with its whole report, each
-failed test with its message and stack or the build errors that stopped it, so
-the log `puck gate` keeps names every failure. `--gpu`,
-which needs `--run`, then runs the chosen canaries and then parity, one after
-the other: they boot real Worlds and hold both GPU backends, so they run only
+the chosen suites once, in one build over a solution filter of exactly those
+projects, then runs their CPU tests (`--filter-not-trait Category=Gpu`) side by
+side on that build, then `puck test` on the chosen worlds, then the catalog
+check, and exits 1 when any of them fails. At most `--suite-jobs` suites run at
+once (default: a quarter of the logical processors). A heavy suite
+(`Puck.World.Tests`) starts first and, before its run, waits on the one
+machine-wide heavy-suite admission the gate uses (see
+[`puck gate`](#puck-gatethe-change-scoped-gate)): no other process running a
+heavy suite, and memory and disk headroom. Each suite prints one verdict line with its wall time
+as it ends; a failed one follows it with its whole report, each failed test
+with its message and stack, and a failed build prints its errors and runs no
+suite, so the log `puck gate` keeps names every failure. `--gpu`, which needs
+`--run`, then runs the chosen canaries, up to `--gpu-jobs` legs on the GPU at
+once, and then parity: they boot real Worlds and hold both GPU backends, so they run only
 when asked for, on a machine with no competing build or GPU work.
 [`puck gate`](#puck-gatethe-change-scoped-gate) runs this step on the
 candidate's own CLI.
@@ -900,8 +907,9 @@ against the merge base of `HEAD` and `--merge-base` (default
    A failed build stops the gate before it can use stale binaries.
 2. `copy CLI`: copy the freshly built CLI into the run's own directory.
    Subsequent puck steps use this candidate copy.
-3. `affected`: `puck affected --merge-base <merge base> --run` for the selected
-   suites, worlds and catalog check.
+3. `affected`: `puck affected --merge-base <merge base> --run --suite-jobs <n>`
+   for the selected suites, side by side, worlds and catalog check. The gate's
+   `--suite-jobs` sets the bound.
 4. `format`: `puck format --check --file-list <file list>` over changed C# and
    `.puck` sources; skipped when no such source changed.
 5. `lengths`: `puck lengths --check`.
@@ -920,7 +928,7 @@ against the merge base of `HEAD` and `--merge-base` (default
 18. `baselines corpus-inventory`: `puck baselines corpus-inventory --check` when reached.
 19. `baselines maths-ledger`: `puck baselines maths-ledger --check` when reached.
 20. `baselines state`: `puck baselines state --check` when reached.
-21. `affected canaries`: `puck canary <canaries>` for the selected canaries, only with `--gpu`.
+21. `affected canaries`: `puck canary --gpu-jobs <n> <canaries>` for the selected canaries, side by side, only with `--gpu`.
 22. `parity`: `puck parity` when selected, only with `--gpu`.
 23. `Puck.World.Tests`: device suite, only with `--gpu`.
 24. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
@@ -1204,20 +1212,29 @@ started, starts no further leg, and exits with code 2. A leg that fails with
 an exception stops the run the same way. The runner waits for the other legs'
 processes to die before it reports the failure.
 
-Legs run concurrently, up to `--jobs` World processes at once. The default is
-half the processor count, at most eight and at least one. A leg holds one slot
-for each process it runs: two for a companion-authority leg, one for each
-listener in an `authorities` leg. A windowed or offscreen leg, and a leg whose
-manifest declares any requirement (`gpu`, `audio-output`, or input hardware),
-holds every slot, so its GPU, window, or device never shares the machine with
-another leg. Legs start in authored
-order, and each proof's report prints whole and in authored order.
-`--jobs 1` runs the legs one at a time.
+Legs run concurrently under two bounds. `--jobs` bounds the World processes
+running at once; the default is the logical processor count. A leg holds one
+of them for each process it runs: two for a companion-authority leg, one for
+each listener in an `authorities` leg. `--gpu-jobs` bounds the legs on the GPU
+at once, a windowed or offscreen leg or one that requires `gpu`; the default
+is 4. Every leg runs in its own run directory, state directory and loopback
+endpoints, so legs side by side share nothing they write. A manifest that
+declares `"exclusive": true` runs each of its legs alone, before every other
+leg; a proof says so when what it observes depends on how busy the machine
+is, as `four-corners-sharded` does, whose five processes keep independent
+wall clocks that its crossing must line up. Otherwise legs start in authored
+order as their bounds allow, a leg that does not fit yet never holding back a
+smaller one behind it. Each leg prints one line with its wall time as it ends
+(`canary: [12/332] pipeline-ink on vulkan positive held in 9.4s`), each
+proof's report prints whole and in authored order, and the closing `FAIL` line
+names the failed proofs in authored order. `--jobs 1 --gpu-jobs 1` runs the
+legs one at a time.
 
 After the last proof the runner prints what the run started and how its legs
 ended: the World boots, the processes it started for legs (World, stub
-launcher, and `shaders package`), whether it built `Puck.World`, and how many
-legs ended at their script's `quit`, at their timeout, or otherwise.
+launcher, and `shaders package`), whether it built `Puck.World`, how many
+legs ended at their script's `quit`, at their timeout, or otherwise, and the
+legs' summed time against the run's wall time.
 
 A `bootShape: "stub"` manifest runs its leg through `Puck.Launcher.Stub` from a
 leg-private, disposable `<run>/install/` tree, never the shared build path,
@@ -1339,6 +1356,7 @@ puck canary --capability <class>    filter automatic/headless/windowed/offscreen
 puck canary --merge                 run the merge gate: the automatic set plus every proof requiring gpu
 puck canary --backend <name> ...    run every backend-declaring proof on vulkan or directx only
 puck canary --jobs <n>              run at most n World processes at once (n ≥ 1)
+puck canary --gpu-jobs <n>          run at most n legs on the GPU at once (n ≥ 1)
 puck canary --plan                  print a selection's counts and ceiling without building or running
 puck canary --keep-transcripts ...  keep every leg's run directory whatever its verdict
 ```
@@ -1359,8 +1377,8 @@ Like the automatic set and `--all`, a merge run fails when a manifest was
 skipped as unreadable.
 
 `--plan` counts a selection from its manifests alone and prints it without
-building or running anything: one line per proof, then the legs (serial and
-parallel), the World boots, the processes the run would start for its legs,
+building or running anything: one line per proof, then the legs (alone, on
+the GPU, and headless), the World boots, the processes the run would start for its legs,
 the builds, and the summed per-leg timeouts. Every value is a count of the
 manifests, so the output is the same on every machine, and a GPU selection can
 be costed on a machine without a GPU. The two gate selections, the automatic
@@ -1393,7 +1411,7 @@ never narrates the engine ready, never lands its capture, or prints no counts
 fails the selection with exit 2, naming its backend, before any leg starts.
 
 The selection forms are mutually exclusive and every execution selection must
-be nonempty. `--jobs` combines with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
+be nonempty. `--jobs` and `--gpu-jobs` combine with any of them, `--plan` with any but `--list`, and `--backend` with any but `--merge` and `--list`. Manifest tokens are case-sensitive. Every non-comment script
 command declares `accepted` or intentionally expected `refused`, bound to its
 verb and occurrence; an accepted claim may add `"stream": "stderr"` to expect
 its confirmation there instead of stdout—the shape server narration

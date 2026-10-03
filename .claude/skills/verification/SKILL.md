@@ -208,7 +208,10 @@ World run with effective `host.presentation: none` uses no GPU; the
 `puck-world` skill owns the presentation modes and deployment overrides.
 
 - A GPU runs one GPU leg at a time. Legs compete for the device, the ports and
-  the frame budget, and a contended leg times out.
+  the frame budget, and a contended leg times out. One `puck canary` run (or
+  `puck affected --gpu`, `puck gate --gpu`) is one GPU leg: it schedules its
+  own canary legs side by side up to its `--gpu-jobs` bound, so nothing else
+  GPU-bound runs beside it.
 - While another GPU leg runs, run test suites with
   `--filter-not-trait Category=Gpu` and list the skipped `Gpu` classes as
   owed. Every class that opens a hardware GPU device carries

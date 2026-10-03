@@ -1515,6 +1515,7 @@ internal static partial class CanaryManifestLoader {
                 "binding",
                 "bootShape",
                 "discriminating",
+                "exclusive",
                 "fixtures",
                 "id",
                 "positive",
@@ -1569,6 +1570,14 @@ internal static partial class CanaryManifestLoader {
                 member: "timeoutSeconds",
                 refusal: Refusal
             );
+            var exclusive = false;
+
+            if (root.TryGetProperty(propertyName: "exclusive", value: out var exclusiveElement)) {
+                exclusive = exclusiveElement.ValueKind switch {
+                    JsonValueKind.True => true,
+                    _ => throw new CanaryManifestRefusal(message: $"canary '{id}' exclusive must be true when present; a proof that may share the machine leaves it out."),
+                };
+            }
 
             var positive = ReadLeg(
                 element: CliStrictJson.ReadRequiredObject(
@@ -1661,6 +1670,7 @@ internal static partial class CanaryManifestLoader {
                 BootShape: bootShape,
                 DirectoryPath: directory,
                 Discriminating: discriminating,
+                Exclusive: exclusive,
                 Fixtures: fixtures,
                 Id: id,
                 Positive: positive,
