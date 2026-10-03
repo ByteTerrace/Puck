@@ -47,9 +47,6 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        // The upload two before this one counted into this ring slot's readback. The previous upload's fence, which this
-        // upload has waited, signals after it, so the ledger reads it now, before this recording copies over it.
-        m_work.Poll();
         m_work.EnterPass(pass: EnvironmentPass);
         m_skyEnvironment.Record(
             commandBuffer: commandBuffer,

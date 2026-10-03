@@ -7274,8 +7274,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      √(4π) within 1e-6 and every other under 2e-3 of its colour, the default
      look's linear gradient to its analytic first two coefficients within 1e-3,
      a lookup of the default look to the gradient within half a display code in
-     every direction, a field linear in the direction to within 0.007 where a
-     filter tap reaches past an edge, read across the octahedral fold, and fog toward a disc fifty times the sky to the gradient
+     every direction, two lookups a hair either side of a seam of the octahedral
+     fold to within 1e-3 of each other (a texel step, 0.045, with taps clamped
+     to the edge), a refresh two uploads after another to never overwriting the
+     earlier refresh's unread counts, and fog toward a disc fifty times the sky to the gradient
      within the same bound; `SdfWorldTablesWorkLawTests` hold a still sky to
      one render, only a gradient move to another, an unfogged sky to none until
      its fog reads the map, and an installed reload to one more, with the

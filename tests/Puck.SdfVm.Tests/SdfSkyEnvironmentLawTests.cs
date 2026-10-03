@@ -1,7 +1,6 @@
 using System.Numerics;
 using System.Text.RegularExpressions;
 using Puck.SignedDistance;
-using Puck.SignedDistance.Illumination;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -13,17 +12,17 @@ namespace Puck.SdfVm.Tests;
 /// constant sky projects to its colour times √(4π) in the first coefficient within 1e-6 and to under 2e-3 of its colour in
 /// every other; the default look's linear gradient projects to its analytic first and second coefficients within 1e-3 and
 /// to under 1e-3 of the first in the rest. A lookup reads the default look within half a display code (1/510) in every
-/// direction; a field linear in the direction reads within 0.007 where a filter tap reaches past an edge, read from the
-/// texel the octahedral fold puts there; and fog toward a bright body reads the gradient alone within half a display
+/// direction; two lookups a hair either side of a seam of the octahedral fold read within 1e-3 of each other over a map of
+/// the direction itself, since a tap past an edge reads the texel the fold puts there; and fog toward a bright body reads the gradient alone within half a display
 /// code, since the map holds no body. The map's size and coefficient count in <c>shade/sdf-sky-environment.hlsli</c>
 /// are the reference's.
 /// </summary>
 public sealed partial class SdfSkyEnvironmentLawTests {
     // Half an 8-bit display code of a unit channel.
     private const float HalfDisplayCode = (0.5f / 255f);
-    // The filter's error over a field linear in the direction, where a tap reaches past an edge: 0.0062 with the taps the
-    // fold puts there, against 0.0082 with taps clamped to the edge, which reads the mirrored direction's neighbour.
-    private const float FoldBound = 0.007f;
+    // The most two lookups a hair either side of a seam may differ by over a map of the direction itself: 2.0e-5 with the
+    // taps the fold puts there, against 0.045 with taps clamped to the edge, which read a texel step apart.
+    private const float FoldBound = 1e-3f;
 
     private static readonly double SphereRoot = Math.Sqrt(d: (4.0 * Math.PI));
 
@@ -80,30 +79,41 @@ public sealed partial class SdfSkyEnvironmentLawTests {
     }
     [Fact]
     public void ATapPastAnEdgeReadsTheDirectionTheFoldPutsThere() {
-        // A smooth map that varies across every axis, so a tap past an edge read from any texel but the one the fold puts
-        // there reads another direction's colour: a gradient varies with elevation alone, which the fold's mirror keeps.
-        static Vector3 Field(Vector3 direction) => (new Vector3(value: 0.5f) + (0.4f * direction));
-
+        // The map's edges are the lower hemisphere's seams, the half-planes z = 0 (u = 0 and 1) and x = 0 (v = 0 and 1),
+        // each glued to itself mirrored about its midpoint. Two directions a hair either side of a seam are one direction
+        // to within the hair, so a lookup reads them alike when the taps past the edge read the texels the fold puts there:
+        // the four taps either side of the seam are then the same four texels with the same weights. Read from the texel
+        // at the edge instead, each side reads only its own half a texel inward, so in a map steep across the seam the two
+        // sides differ by its whole texel step. The map is the direction itself, each channel steep across one seam.
         var map = new Vector3[SdfSkyEnvironment.Texels];
 
         for (var y = 0; (y < SdfSkyEnvironment.Size); y++) {
             for (var x = 0; (x < SdfSkyEnvironment.Size); x++) {
-                map[((y * SdfSkyEnvironment.Size) + x)] = Field(direction: SdfSkyEnvironment.Direction(x: x, y: y));
+                map[((y * SdfSkyEnvironment.Size) + x)] = SdfSkyEnvironment.Direction(x: x, y: y);
             }
         }
 
+        const int Steps = 1000;
+        const float Hair = 1e-5f;
         var worst = 0f;
 
-        foreach (var direction in Directions()) {
-            // Only a direction whose filter reaches past an edge: within half a texel of one.
-            var (u, v) = IrradianceLattice.Encode(direction: new Double3(X: direction.X, Y: direction.Y, Z: direction.Z));
-            var edge = (0.5 / SdfSkyEnvironment.Size);
+        // Every seam point below the horizon, away from the pole the four corners share, at each side of each seam.
+        for (var step = 0; (step < Steps); step++) {
+            var angle = ((float)(((step + 0.5) / Steps) * (2.0 * Math.PI)));
 
-            if ((u > edge) && (u < (1.0 - edge)) && (v > edge) && (v < (1.0 - edge))) {
+            var (sin, cos) = MathF.SinCos(x: angle);
+
+            if ((sin > -0.05f) || (sin < -0.95f)) {
                 continue;
             }
 
-            worst = MathF.Max(x: worst, y: Error(actual: SdfSkyEnvironment.Sample(direction: direction, map: map), expected: Field(direction: direction)));
+            foreach (var seam in ((ReadOnlySpan<Vector3>)[new Vector3(x: cos, y: sin, z: 0f), new Vector3(x: 0f, y: sin, z: cos)])) {
+                var across = ((seam.Z == 0f) ? Vector3.UnitZ : Vector3.UnitX);
+                var one = SdfSkyEnvironment.Sample(direction: Vector3.Normalize(value: (seam + (Hair * across))), map: map);
+                var other = SdfSkyEnvironment.Sample(direction: Vector3.Normalize(value: (seam - (Hair * across))), map: map);
+
+                worst = MathF.Max(x: worst, y: Error(actual: one, expected: other));
+            }
         }
         Assert.InRange(actual: worst, high: FoldBound, low: 0f);
     }

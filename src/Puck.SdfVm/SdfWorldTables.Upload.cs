@@ -30,6 +30,9 @@ public sealed partial class SdfWorldTables {
 
         var slot = ((int)(m_uploads % FrameRingSize));
 
+        // Waiting an upload completes it in the ledger (GpuWorkCountingFence.Wait), which reads its sky environment's
+        // counters from its ring slot's readback: the upload two before this one, whose slot this one takes, was waited by
+        // the previous upload, so its counts are read before this upload records a copy over them.
         if (m_uploads > 0UL) {
             m_frameFences[((int)((m_uploads - 1UL) % FrameRingSize))].Wait();
         }

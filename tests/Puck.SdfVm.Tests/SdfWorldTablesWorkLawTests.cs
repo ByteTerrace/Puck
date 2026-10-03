@@ -309,8 +309,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         "work submission=2 revision=1\nwork fillers skipped\nwork bricks skipped\nwork upload executed: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=0 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0\nwork environment skipped\nwork outside: dispatches=0 dispatches.indirect=0 draws=0 render-passes=0 command-buffers=1 barriers.image=0 barriers.memory=0 barriers.buffer=0 binds.pipeline=0 binds.descriptor-set=0 push-constants=0 descriptor-writes=0 uploads.host-visible=0 clears=0 copies=0 march.steps=0 texels.written=0 copies.buffer-bytes=0 sky.evaluations=0\n";
 
     private sealed class Rig : IDisposable {
-        public Rig(GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0) {
-            var gpu = new FakeGpuDevice();
+        public Rig(GpuWorkLedger? ledger = null, int brickPoolVoxelCapacity = 0, bool holdFences = false) {
+            var gpu = new FakeGpuDevice(holdFences: holdFences);
 
             Gpu = gpu;
 
