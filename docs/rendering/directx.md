@@ -304,6 +304,9 @@ The upload refuses a width or height past the two-dimensional texture limit,
 touches its texture, because the device creates a larger texture and refuses only
 the copy recorded into it. A recording that fails leaves its command list open, so
 the next upload replaces the allocator and the list before it records.
+A rebuild for a new extent or format creates the replacement texture and staging
+buffer before it retires the current ones and their image view, so a creation the
+device refuses leaves the current texture and view in place.
 
 The compositor creates its swap chain as SDR in the preferred 8-bit unsigned
 normalized format, then chooses its `DisplayOutput` through

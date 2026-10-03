@@ -21,7 +21,9 @@ namespace Puck.DirectX.Interop;
 /// binds <see cref="TextureHandle"/> through a set of its own pool, a range of the device's shader-visible heaps, so the
 /// upload holds no descriptor. This is the Direct3D 12 peer of <c>VulkanSurfaceUpload</c> — the consumer/ingest half that
 /// lets a DirectX host sample a surface that arrived as host memory. A recording that fails is discarded: the next
-/// <see cref="Upload"/> replaces the command allocator and list, so one failed upload never wedges the instance.
+/// <see cref="Upload"/> replaces the command allocator and list, so one failed upload never wedges the instance. A
+/// rebuild creates the replacement texture and buffer before it retires the current ones, so a refused creation leaves
+/// the current texture and its view in place.
 /// Single-thread affine.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -310,24 +312,8 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             WaitForGpu();
         }
 
-        DisposeImageResources();
-
-        m_texture = ((nint)DirectXTextures.CreateCommitted(
-            calls: m_calls,
-            device: device,
-            format: dxgiFormat,
-            height: height,
-            initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
-            memory: m_deviceContext.Memory,
-            mipLevels: checked((ushort)levels),
-            width: width
-        ));
-        m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
-        m_imageViewHandle = DirectXImageViews.Register(view: new DirectXImageView {
-            Format = dxgiFormat,
-            ResourceHandle = m_texture,
-        });
-
+        // The replacement is built whole before anything is swapped, so a creation that fails leaves the current
+        // texture, its buffer and its view as they were.
         var description = DirectXTextures.Describe(
             format: dxgiFormat,
             height: height,
@@ -354,16 +340,47 @@ public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
             );
         }
 
+        var texture = DirectXTextures.CreateCommitted(
+            calls: m_calls,
+            device: device,
+            format: dxgiFormat,
+            height: height,
+            initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST,
+            memory: m_deviceContext.Memory,
+            mipLevels: checked((ushort)levels),
+            width: width
+        );
+        ID3D12Resource* uploadBuffer;
+
+        try {
+            uploadBuffer = DirectXBuffers.CreateCommitted(
+                calls: m_calls,
+                device: device,
+                heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
+                initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+                sizeBytes: uploadBytes
+            );
+        } catch {
+            DirectXDeviceMemory.CountReleased(
+                memory: m_deviceContext.Memory,
+                resource: ((nint)texture)
+            );
+            _ = ((IUnknown*)texture)->Release();
+
+            throw;
+        }
+
+        DisposeImageResources();
+        m_texture = ((nint)texture);
+        m_uploadBuffer = ((nint)uploadBuffer);
+        m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
+        m_imageViewHandle = DirectXImageViews.Register(view: new DirectXImageView {
+            Format = dxgiFormat,
+            ResourceHandle = m_texture,
+        });
         m_layouts = layouts;
         m_rowCounts = rowCounts;
         m_rowSizes = rowSizes;
-        m_uploadBuffer = ((nint)DirectXBuffers.CreateCommitted(
-            device: device,
-            heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD,
-            initialState: D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-            sizeBytes: uploadBytes
-        ));
-
         m_format = dxgiFormat;
         m_height = height;
         m_levels = levels;
