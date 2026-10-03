@@ -453,6 +453,15 @@ Cadence gaps in a consumer do not park its nested views. Every recording carries
 The count is part of the epoch, so a temporal view shown again starts
 a new epoch while a spatial view's still output stands without a render.
 
+The [`temporal-standing` canary](../../../../tests/Puck.World.Canaries/temporal-standing/canary.json)
+checks this through the real World's GPU counters. A camera pan starts another
+convergence period, during which the World submits new shading and resolve
+work. After settling, its completed submission stays unchanged across further
+frames while the root's submission advances. The counters retain the last
+completed sample's counts; an unchanged submission means no additional work,
+rather than a new sample reporting zero. The control pans again and observes
+another submission.
+
 A temporal view that follows a portal crossing into another world keeps
 reconstructing there. The other world's residency builds its resolve pipeline
 only on request, so when a followed view changes residency `SdfWorldPasses`
@@ -466,6 +475,13 @@ strength instead of its exact copy (`RenderGraphPlacement.Sharpen`), adding no
 pass and no texel written; at sharpness 0 the copy stays exact. A lone
 whole-display view that sharpens is placed by the root for that pass, as a
 tonemapped one is.
+
+The [`place-sharpen` canary](../../../../tests/Puck.World.Canaries/place-sharpen/canary.json)
+captures the production Place kernel's output at equal extent. It checks exact
+pixel codes derived from the kernel at zero, full, and partial strength, and
+checks flat colors and saturated edges. Disabling `sharpen` at full strength
+returns the source codes, making the sharpened-edge claims fail. Both canaries
+require a GPU and run in the merge selection on Vulkan and Direct3D 12.
 
 ## Frames in flight
 
