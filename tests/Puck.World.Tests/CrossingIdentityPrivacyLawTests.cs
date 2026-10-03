@@ -17,14 +17,14 @@ namespace Puck.World.Tests;
 /// from bytes is a real search.
 /// </summary>
 public sealed class CrossingIdentityPrivacyLawTests {
-    private const string OwnerId = "privacy-owner";
+    internal const string OwnerId = "privacy-owner";
     private const string PrivatePanel = "private-hud-panel";
     private const string PrivatePayload = "private-payload";
     private const string PrivateRow = "private-secret-row";
     // Steps long enough for any destination lease taken during a crossing to expire.
     private const int PastEveryLease = 90;
 
-    private static readonly string[] Markers = [PrivateRow, PrivatePayload, PrivatePanel];
+    internal static readonly string[] Markers = [PrivateRow, PrivatePayload, PrivatePanel];
 
     private static CellName Name(string value) => CellName.Parse(candidate: value);
 

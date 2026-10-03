@@ -20,8 +20,9 @@ only on those lanes, and each is marked.
 
 ## Implementation status
 
-Law 1 is implemented, in `tests/Puck.World.Tests/ProjectionAnchorLawTests.Seek.cs`;
-the rest are not yet. The design was read against the
+Law 1 is implemented, in `tests/Puck.World.Tests/ProjectionAnchorLawTests.Seek.cs`,
+and law 5 in `tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`; the rest
+are not yet. The design was read against the
 integration branch and the lanes the coming integration batch lands, and a
 review checked that no law can pass while its claim is false. Designing the
 laws found seven gaps. The coming integration batch fixes five of them (G1 to
@@ -359,8 +360,9 @@ destination.
 build, which already carries private markers. It also gets a `chat$inbox` cell,
 a HUD panel text and a binding overlay, each with its own marker.
 
-- Codec leg: encode a commit member carrying that identity with
-  `WorldFederationCodec.EncodeCommit`, then decode it.
+- Codec leg: take the commit members the source logged in its departure
+  record, the members it then sends, encode them with
+  `WorldFederationCodec.EncodeCommit`, and decode them.
 - End-to-end leg: seat the identity on the federation harness's source,
   walk it across to the remote destination, and drain.
 - A colocated twin runs the same crossing between two rows of one host.
@@ -397,11 +399,14 @@ own. This law adds the one end-to-end case the milestone names: a commit that
 crosses, federated and colocated, read at the bytes on the wire and at the seat
 it lands in.
 
-**Lives in** `tests/Puck.World.Tests`. The federated leg skips on a host without
-QUIC, as the federation harness does. **GPU:** none.
+**Lives in** `tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. The
+federated leg skips itself on a host without QUIC; the federation harness has no
+such skip, so the harness's own laws fail there instead. **GPU:** none.
 
-**Witness for G4:** on the integration branch today the commit bytes carry the
-whole owned document.
+**Witness for G4:** the law is red when the projection carries the owned
+document in its name, the one free text a projection has: the commit bytes then
+hold the private row. A projection's records cannot carry the document's world
+rows at all, because the projection wire refuses them.
 
 ## Law 6: an unsupported operation changes nothing before it refuses
 
