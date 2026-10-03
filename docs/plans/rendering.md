@@ -7408,13 +7408,16 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      both backends' map within a half-float step of the reference, their
      coefficients within 1e-4 of the reference's projection of it, their
      counts, and the same bytes on a second run; the `sky-environment` canary
-     holds fog before a bright disc to the gradient's grey, the composite to no
-     sky evaluation and a still sky's environment pass to skipped.
+     holds fog before a bright disc to the gradient's grey, the composite's
+     `gradient` row to no sky evaluation and a still sky's environment pass to
+     skipped.
    - Counted-cost gate: `gpu.sky.evaluations` includes about (1 − h) × P field
      evaluations per view, the dilated edge and composite fallbacks at output
-     resolution, and 4,096 in the residency's `environment` pass on the upload
-     that renders the map and none on any other; the composite's fog counts
-     none. Each pass reports its own row. The
+     resolution, the composite's point layers (its `disc` and `stars` rows, one
+     each a sky pixel where the layer is on), and 4,096 in the residency's
+     `environment` pass on the upload that renders the map and none on any
+     other; the composite's fog counts none, so its `gradient` row counts only
+     fallbacks. Each pass reports its own row. The
      surface transport adds no storage: its word replaces the surface distance's,
      and the history surface keeps three words by holding the distance and the
      gathered weight as half floats. An edge pixel whose media reach past its
