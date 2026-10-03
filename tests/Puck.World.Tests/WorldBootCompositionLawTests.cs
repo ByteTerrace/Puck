@@ -109,7 +109,7 @@ public sealed class WorldBootCompositionLawTests : IDisposable {
         );
         Assert.Equal(
             actual: UnansweredWorkloadVerbs(builder: builder),
-            expected: ["world.cadence", "world.quality"]
+            expected: ["world.cadence", "world.quality", "world.indirect"]
         );
     }
     [InlineData(WorldHostPresentation.Offscreen)]

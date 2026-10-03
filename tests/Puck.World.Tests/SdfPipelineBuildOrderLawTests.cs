@@ -7,7 +7,7 @@ namespace Puck.World.Tests;
 /// CONTRACT UNDER TEST: a set leases its pipelines longest bytecode first (<see cref="SdfWorldPipelines.BuildOrder"/>),
 /// so with at most <c>GpuPassPipelineCache.BuildConcurrency</c> creations at once the kernel whose cold translation
 /// decides when the set is ready takes a turn first instead of waiting behind every other build. Every kernel but the
-/// on-demand resolve kernel is leased exactly once when all fade capacities are reachable; equal lengths keep
+/// on-demand resolve and indirect kernels is leased exactly once when all fade capacities are reachable; equal lengths keep
 /// <see cref="SdfKernel"/> order. Over the build's
 /// own SPIR-V and DXIL every kernel starts in descending bytecode length, the longest of them first.
 /// </summary>
@@ -53,7 +53,7 @@ public sealed class SdfPipelineBuildOrderLawTests {
 
         Assert.Equal(
             actual: kernels[order[0]].Length,
-            expected: SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel != SdfKernel.Resolve)).Max(selector: kernel => kernels[kernel].Length)
+            expected: SdfKernelSet.Kernels.Where(predicate: static kernel => (kernel is not (SdfKernel.Resolve or SdfKernel.IndirectClassify or SdfKernel.IndirectTrace))).Max(selector: kernel => kernels[kernel].Length)
         );
         Assert.Equal(
             actual: order.Select(selector: kernel => kernels[kernel].Length),

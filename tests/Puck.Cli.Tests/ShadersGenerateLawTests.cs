@@ -20,10 +20,11 @@ public sealed class ShadersGenerateLawTests {
     private const string PlacePath = "src/Puck.Shaders/Assets/Shaders/Graph/place.interface.hlsli";
     private const string WorldPath = "src/Puck.SdfVm/Assets/Shaders/Sdf/isa/sdf-world.interface.hlsli";
 
-    // The SDF engine kernels' includes, each with the text its interface generates, the instruction set's recorded
-    // fingerprint and the build's shader recipe: owned whatever the tree holds.
+    // The SDF engine kernels' includes, each with the text its interface generates, the indirect cache's layout, the
+    // instruction set's recorded fingerprint and the build's shader recipe: owned whatever the tree holds.
     private static readonly (string Path, string Text)[] EngineKernels = [
         .. SdfWorldInterfaces.Includes.Select(selector: static include => (include.Path, ShaderInterfaceHlsl.Generate(shaderInterface: include.Interface))),
+        (SdfIndirectHlsl.Path, SdfIndirectHlsl.Generate()),
         (SdfIsaHlsl.FingerprintSourcePath, SdfIsaHlsl.GenerateFingerprintSource(fingerprint: SdfIsaFingerprint.Value)),
         (ShaderCompiler.BuildRecipePath, ShaderCompiler.GenerateBuildRecipe()),
     ];
@@ -232,12 +233,12 @@ public sealed class ShadersGenerateLawTests {
         );
 
         Assert.Empty(collection: problems);
-        // The checked set is the tracked interface includes plus the three generated files that are not named
+        // The checked set is the tracked interface includes plus the four generated files that are not named
         // *.interface.hlsli: the tree and the generator's own declaration are the two sources, so a new interface
         // needs no edit here, and one the generator skips or one nobody tracked fails.
         Assert.Equal(
             actual: includes.Select(selector: static include => include.Path).Order(comparer: StringComparer.Ordinal),
-            expected: tracked.Concat(second: [IsaPath, SdfIsaHlsl.FingerprintSourcePath, ShaderCompiler.BuildRecipePath]).Order(comparer: StringComparer.Ordinal)
+            expected: tracked.Concat(second: [IsaPath, SdfIndirectHlsl.Path, SdfIsaHlsl.FingerprintSourcePath, ShaderCompiler.BuildRecipePath]).Order(comparer: StringComparer.Ordinal)
         );
     }
 }
