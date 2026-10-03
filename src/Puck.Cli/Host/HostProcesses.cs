@@ -1,5 +1,6 @@
 using System.CommandLine.Parsing;
 
+using Puck.Cli.Affected;
 using Puck.Cli.Counters;
 using Puck.Cli.Gate;
 using Puck.Cli.Parity;
@@ -15,7 +16,9 @@ namespace Puck.Cli.Host;
 /// <c>restore</c>, <c>msbuild</c>, <c>publish</c> or <c>pack</c>, whatever project they name;</item>
 /// <item>GPU work is the World (<c>Puck.World</c> or <c>Puck.World.dll</c>), a <c>canary</c>, <c>parity</c> or
 /// <c>counters</c> verb of the CLI, or a test host running the device-law assemblies (<c>Puck.DirectX.Tests</c>,
-/// <c>Puck.Vulkan.Tests</c>, <c>Puck.World.Tests</c>, <c>Puck.Platform.Windows.Tests</c>).</item>
+/// <c>Puck.Vulkan.Tests</c>, <c>Puck.World.Tests</c>, <c>Puck.Platform.Windows.Tests</c>) whose arguments can select a
+/// <c>Gpu</c>-trait test: a run carrying the CPU selection (<see cref="AffectedCommand.CpuSelection"/>) opens no
+/// device.</item>
 /// </list>
 /// </summary>
 internal static class HostProcesses {
@@ -77,6 +80,24 @@ internal static class HostProcesses {
 
         return false;
     }
+    // A device-law test application runs GPU work only when its arguments can select a Gpu-trait test. The test
+    // framework's simple filters narrow one another, so the CPU selection leaves every device law out whatever else the
+    // run names. A response file's arguments are not on the command line, so a run naming one can select them.
+    private static bool SelectsGpuTests(string[] arguments, int start) {
+        var (option, value) = (AffectedCommand.CpuSelection[0], AffectedCommand.CpuSelection[1]);
+        var excluded = false;
+
+        for (var index = start; (index < arguments.Length); index++) {
+            var token = arguments[index];
+
+            if (token.StartsWith(value: '@')) { return true; }
+
+            excluded |= (((token == option) && ((index + 1) < arguments.Length) && (arguments[(index + 1)] == value)) ||
+                (token == $"{option}={value}") || (token == $"{option}:{value}"));
+        }
+
+        return !excluded;
+    }
     private static bool RunningGpuVerb(string[] arguments, int start) {
         if (start == arguments.Length) { return false; }
         if (arguments.Skip(count: start).Any(predicate: static token => (token is "--help" or "-h" or "-?"))) { return false; }
@@ -101,20 +122,24 @@ internal static class HostProcesses {
     /// <summary>Whether a process is GPU work.</summary>
     /// <param name="name">The process name, without extension.</param>
     /// <param name="commandLine">Its Windows command line or Linux NUL-delimited argv; empty when unreadable.</param>
-    /// <returns><see langword="true"/> for the World, a GPU verb, or a device-law test host.</returns>
+    /// <returns><see langword="true"/> for the World, a GPU verb, or a device-law test host whose arguments can select a
+    /// device law.</returns>
     public static bool IsGpuWork(string name, string commandLine) {
         var program = ProgramName(path: name);
 
         if (NeverWork.Contains(value: program, comparer: StringComparer.OrdinalIgnoreCase)) { return false; }
-        if (program.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World") || IsDeviceTest(program: program)) { return true; }
+        if (program.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return true; }
 
         var arguments = Arguments(commandLine: commandLine);
 
+        // An unreadable command line cannot show a CPU selection.
+        if (IsDeviceTest(program: program)) { return ((arguments.Length == 0) || SelectsGpuTests(arguments: arguments, start: 1)); }
         if (arguments.Length == 0) { return false; }
 
         var entry = EntryPoint(arguments: arguments, deviceTestHost: out var deviceTestHost, next: out var next);
 
-        if (entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World") || IsDeviceTest(program: entry)) { return true; }
+        if (entry.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "Puck.World")) { return true; }
+        if (IsDeviceTest(program: entry)) { return SelectsGpuTests(arguments: arguments, start: next); }
         if (entry.StartsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: "testhost")) {
             return (deviceTestHost || arguments.Skip(count: next).Any(predicate: static argument => IsDeviceTest(program: ProgramName(path: argument))));
         }

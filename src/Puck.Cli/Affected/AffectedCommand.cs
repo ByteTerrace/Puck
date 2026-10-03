@@ -258,6 +258,9 @@ internal static class AffectedCommand {
             ),
             worldClosure: closure,
             worldInput: WorldInput,
+            compiledUnchanged: AffectedCompiledWorlds.Unchanged(changed: changed, repositoryRoot: repositoryRoot, since: since).Contains,
+            triviaOnly: path => AffectedCSharpTrivia.IsUnchanged(after: workingTree, before: baseTree, path: path),
+            proseOnly: path => AffectedManifestProse.IsUnchanged(after: workingTree, before: baseTree, path: path),
             deleted: deleted,
             // A file deleted since the base is placed through the index the base recorded, which is the only one that
             // can still name it, or through the stand-ins the base's own tree gave it there.
@@ -303,6 +306,11 @@ internal static class AffectedCommand {
     /// <summary>Returns the shipped catalog check's arguments, with repository-relative, forward-slashed paths.</summary>
     /// <returns>The arguments both the printed plan and the in-process check use from the repository root.</returns>
     public static string[] CatalogCheckArguments() => ["compile", "--tree", ShippedTree, "--output", ShippedCatalog, "--check"];
+    /// <summary>The strict manifest check's shared printed and executed arguments.</summary>
+    public static string[] CanaryCheckArguments(IReadOnlyList<string> ids) => ["canary", "--list", .. ids];
+    /// <summary>Strictly loads and lists every prose-edited manifest through the root command, without a World.</summary>
+    public static int CheckCanaries(IReadOnlyList<string> ids, RootCommand root) => ((ids.Count == 0) ? CliExit.Success :
+        PuckRootCommand.Invoke(args: CanaryCheckArguments(ids: ids), root: root));
     /// <summary>Builds the shipped catalog and dispatches its check through the root command.</summary>
     /// <param name="build">Runs the prerequisite build with the supplied dotnet arguments.</param>
     /// <param name="root">The command tree that runs the catalog check.</param>
@@ -373,6 +381,10 @@ internal static class AffectedCommand {
 
     private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu) {
         var failed = new List<string>();
+
+        if (CheckCanaries(ids: plan.CanaryChecks, root: PuckRootCommand.Create(clock: TimeProvider.System)) != 0) {
+            failed.Add(item: "canary manifests");
+        }
 
         // Each suite builds first, leaving no MSBuild node behind (CliOptions.NoNodeReuse), and then runs its CPU tests
         // over the binaries that build wrote: Microsoft.Testing.Platform hands any option it does not own to the test
@@ -481,6 +493,13 @@ internal static class AffectedCommand {
 
         foreach (var canary in plan.Canaries) {
             into.WriteLine(value: $"canary {canary}");
+        }
+
+        foreach (var canary in plan.CanaryChecks) {
+            into.WriteLine(value: $"canary-check {canary}");
+        }
+        if (plan.CanaryChecks.Count > 0) {
+            into.WriteLine(value: $"puck {string.Join(separator: ' ', value: CanaryCheckArguments(ids: plan.CanaryChecks))}");
         }
 
         if (plan.Catalog) {
@@ -613,6 +632,19 @@ internal static class AffectedCommand {
               only when its project is one the World is built from. Build infrastructure (build/,
               Directory.Build.*, Directory.Packages.props, global.json, Puck.slnx, NuGet.config)
               reaches every suite, and every canary only when the file is an input of the World build.
+              A changed .puck or .world.json under {ShippedTree} reaches no canary when its stem's
+              document compiles to the same value at the base and in the working tree: object member
+              order and number spelling do not matter; array order does. Both paths of a JSON-to-source
+              replacement are judged. Its owner's suites, catalog check and changed test blocks still
+              run, and the path is neither unmapped nor unplaced deleted. Libraries, compositions,
+              missing documents and failed compilations keep ordinary selection.
+              A C# edit with equivalent syntax after stripping trivia reaches no suite or canary.
+              Comments, XML documentation, whitespace and regions are ignored; other directive tokens
+              must match. Files with conditional directives, parse errors, additions and deletions are
+              not judged. A manifest edit confined to root title and binding selects a canary-check
+              line and puck canary --list <id...>, which --run strictly loads without booting a World.
+              Gate repository checks remain: format, lengths, comment-smells and docs links, with
+              docs citations in the GPU gate.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test, and
               prints as a test line. A catalog line names the game's Release catalog, followed by the
@@ -623,7 +655,7 @@ internal static class AffectedCommand {
               file matches its declared data inputs. Each baseline line names its artifact and is
               followed by the exact puck baselines <artifact> --check command the gate runs.
 
-              --run runs the suites, the worlds and the catalog check; --run --gpu then runs the chosen
+              --run runs manifest checks, the suites, the worlds and the catalog check; --run --gpu then runs the chosen
               canaries and parity, one after the other. Baseline checks run only through puck gate.
 
               Exit codes: 0 planned or every chosen check passed, 1 a chosen check failed, 2 refused.

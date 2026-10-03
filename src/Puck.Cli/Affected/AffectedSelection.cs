@@ -18,6 +18,7 @@ internal sealed record AffectedCanary(string Directory, IReadOnlyList<string> Fi
 /// <summary>What a change needs run.</summary>
 /// <param name="Baselines">The committed baseline artifacts, in ordinal name order, checked by the gate.</param>
 /// <param name="Canaries">The canary ids, ordinal order.</param>
+/// <param name="CanaryChecks">The canary ids whose manifests need strict loading and listing, ordinal order.</param>
 /// <param name="Catalog">Whether the shipped world catalog must be checked against a fresh tree compile
 /// (<c>puck compile --tree … --check</c>): a shipped world source, or code whose output the compile writes, changed.</param>
 /// <param name="Everything">Whether build infrastructure changed, which reaches every suite.</param>
@@ -30,7 +31,7 @@ internal sealed record AffectedCanary(string Directory, IReadOnlyList<string> Fi
 /// recorded names, so no canary could be chosen for them and no recording ever can; ordinal order.</param>
 /// <param name="Worlds">Changed <c>.puck</c> sources that declare <c>test</c> blocks, for <c>puck test</c>; ordinal
 /// order.</param>
-internal sealed record AffectedPlan(IReadOnlyList<BaselineArtifact> Baselines, IReadOnlyList<string> Canaries, bool Catalog, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted);
+internal sealed record AffectedPlan(IReadOnlyList<BaselineArtifact> Baselines, IReadOnlyList<string> Canaries, IReadOnlyList<string> CanaryChecks, bool Catalog, bool Everything, bool Parity, IReadOnlyList<string> Suites, IReadOnlyList<string> Unmapped, IReadOnlyList<string> Worlds, IReadOnlyList<string> Deleted);
 /// <summary>
 /// Chooses the suites and canaries a set of changed files needs, and nothing wider. Suites follow the project graph:
 /// a changed project and every project that references it, transitively. Canaries follow what they were recorded
@@ -81,6 +82,11 @@ internal static class AffectedSelection {
     /// <param name="standInsFor">The indexed sources a changed file the index does not know stands for
     /// (<see cref="AffectedStandIns"/>): their canaries are its canaries, and a file with an indexed stand-in is not
     /// unmapped.</param>
+    /// <param name="compiledUnchanged">Whether a changed shipped world file compiles to the same document value at the
+    /// base and the head (<see cref="AffectedCompiledWorlds"/>): a canary boots the compiled world, so such a file reaches
+    /// its suites and the catalog check but no canary, and it is never unmapped.</param>
+    /// <param name="triviaOnly">Whether a C# edit changes only trivia, so reaches no execution.</param>
+    /// <param name="proseOnly">Whether a manifest edit changes only prose, so needs its strict load/list check.</param>
     /// <param name="deleted">The changed files deleted since the base, or <see langword="null"/> for none: nothing reads
     /// them, and one no index places is listed in <see cref="AffectedPlan.Deleted"/>, never as unmapped.</param>
     /// <param name="recorded">The index as the base recorded it, which places a deleted file the current index no longer
@@ -105,6 +111,9 @@ internal static class AffectedSelection {
         Func<string, IReadOnlyList<string>> standInsFor,
         Func<string, IReadOnlySet<string>> canariesReaching,
         Func<string, bool> worldInput,
+        Func<string, bool>? compiledUnchanged = null,
+        Func<string, bool>? triviaOnly = null,
+        Func<string, bool>? proseOnly = null,
         IReadOnlySet<string>? deleted = null,
         IReadOnlyDictionary<string, IReadOnlySet<string>>? recorded = null,
         Func<string, IReadOnlyList<string>>? recordedStandInsFor = null,
@@ -117,6 +126,8 @@ internal static class AffectedSelection {
         // Projects a change reaches alone, without the projects that reference them: a project's own restore lock.
         var alone = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         var selected = new SortedSet<string>(comparer: StringComparer.Ordinal);
+        var checks = new SortedSet<string>(comparer: StringComparer.Ordinal);
+        var effective = new List<string>();
         var unmapped = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var gone = new SortedSet<string>(comparer: StringComparer.Ordinal);
         var worlds = new SortedSet<string>(comparer: StringComparer.Ordinal);
@@ -124,6 +135,15 @@ internal static class AffectedSelection {
         var owners = projects.OrderByDescending(keySelector: static project => project.Directory.Length).ToArray();
 
         foreach (var path in changed) {
+            if (triviaOnly?.Invoke(arg: path) == true) {
+                continue;
+            }
+            if ((proseOnly?.Invoke(arg: path) == true) && (AffectedManifestProse.Id(path: path) is { } id)) {
+                _ = checks.Add(item: id);
+                continue;
+            }
+            effective.Add(item: path);
+
             if (StartsWithAny(path: path, prefixes: BuildInfrastructure)) {
                 everything = true;
                 worldBuild |= worldInput(arg: path);
@@ -154,6 +174,17 @@ internal static class AffectedSelection {
                 declaresTests(arg: path)
             ) {
                 _ = worlds.Add(item: path);
+            }
+
+            if (compiledUnchanged?.Invoke(arg: path) == true) {
+                var unchangedOwner = owners.FirstOrDefault(predicate: project => IsUnder(path: path, directory: project.Directory));
+
+                catalog |= catalogInputs(arg1: path, arg2: unchangedOwner?.Name);
+                if (unchangedOwner is not null) {
+                    _ = seeds.Add(item: unchangedOwner.Name);
+                }
+
+                continue;
             }
 
             var named = false;
@@ -268,12 +299,13 @@ internal static class AffectedSelection {
             var inputs = new Matcher(comparisonType: StringComparison.Ordinal);
 
             inputs.AddIncludePatterns(artifact.Inputs);
-            return (reachedProjects.Contains(item: artifact.Project) || inputs.Match(files: changed).HasMatches);
+            return (reachedProjects.Contains(item: artifact.Project) || inputs.Match(files: effective).HasMatches);
         }).OrderBy(keySelector: static artifact => artifact.Name, comparer: StringComparer.Ordinal);
 
         return new AffectedPlan(
             Baselines: [.. baselines],
             Canaries: [.. selected],
+            CanaryChecks: [.. checks],
             Catalog: (catalog || everything),
             Everything: everything,
             Parity: parity,

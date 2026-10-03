@@ -768,6 +768,32 @@ base, so passing both is refused.
   adjacencies or post-process packages need the host's resolvers still reaches
   them.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
+- A changed `.puck` or `.world.json` under `src/Puck.World/Assets/worlds`
+  chooses no canary when the document named by its stem compiles to the same
+  value at the base and in the working tree. Both sides use the world's document
+  reader, with the base's shipped assets extracted from git. Object member order
+  and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
+  array order and every member's value do. A JSON-to-source replacement judges
+  both paths. The owner's suites, catalog check and changed test blocks still
+  run, and neither path is listed as `unmapped` or unplaced `deleted`.
+  Libraries and compositions keep ordinary selection, as do missing documents
+  and failed compilations: none establishes that the compiled value is unchanged.
+- A C# edit whose syntax is equivalent after stripping trivia chooses no suite,
+  canary, catalog or baseline. Roslyn parses the base text from git and the
+  working text with the same options, without a base build. Comments, XML
+  documentation, whitespace and regions do not count; other directive tokens
+  must match. Files with conditional directives are not judged because the
+  comparison does not infer project preprocessor symbols. Added or deleted
+  files and parse errors keep ordinary selection.
+- A canary manifest edit confined to root `title` and `binding` chooses only
+  that canary's strict load/list check. Every other JSON field remains in the
+  comparison, including nested assertion names and text. The plan prints
+  `canary-check <id>` and the shared `puck canary --list <id...>` command;
+  `--run` executes it without building or booting a World. Invalid prose still
+  fails strict loading. An execution or verdict field change chooses the run.
+  These rules leave the gate's repository checks intact: lengths,
+  comment-smells and docs links, format for changed C# sources, and docs
+  citations in the GPU gate. JSON manifests are not formatter inputs.
 - A file no canary can execute is placed through the indexed C# sources it
   stands for. A project file or `NativeMethods.txt` stands for its project's
   sources. A restore lock (`packages.lock.json`) reaches its own project's
@@ -833,7 +859,8 @@ Each `baseline <artifact>` line is followed by its exact
 `puck baselines <artifact> --check` command. The gate owns these checks;
 `affected --run` does not run them a second time.
 
-`--run` builds and runs the chosen suites, then `puck test` on the chosen
+`--run` first strictly loads and lists the prose-edited manifests, then builds
+and runs the chosen suites, then `puck test` on the chosen
 worlds, then the catalog check, and exits 1 when any of them fails. A suite
 prints one verdict line; a failed one follows it with its whole report, each
 failed test with its message and stack or the build errors that stopped it, so
@@ -928,7 +955,11 @@ Before the solution build, affected run, each baseline check, selected canaries
 and parity, each device suite, each counters
 workload, citations and recording, admission uses
 [`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s default
-classification in-process. Capacity with an idle GPU admits immediately.
+classification in-process. A step that opens a device (the canaries, parity,
+each device suite, counters, citations and recording, the steps that run only
+with `--gpu`) waits for capacity and an idle GPU; the build, affected run and
+baseline checks run no `Gpu`-trait test and wait for CPU and memory capacity
+alone, whatever holds the GPU. A step with what it needs admits immediately.
 Otherwise the gate reports waiting on stderr, samples every ten seconds for
 at most thirty minutes, and reports when capacity returns. Expiry refuses the
 remaining run. Completed child processes do not hold admission; builds and
@@ -971,7 +1002,11 @@ CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
   `canary`, `parity` or `counters` verb, or a test host for
   `Puck.DirectX.Tests`, `Puck.Vulkan.Tests`, `Puck.World.Tests` or
   `Puck.Platform.Windows.Tests`, whose
-  device laws open the GPU. Builds, restores, MSBuild nodes, compilers and
+  device laws open the GPU, when its arguments can select a `Gpu`-trait test.
+  A run carrying affected's CPU selection, `--filter-not-trait Category=Gpu`,
+  opens no device whatever else it filters, so it counts no GPU work; a run
+  with no such exclusion, or one reading a response file (`@file`), counts.
+  Builds, restores, MSBuild nodes, compilers and
   shells never count, whatever project they name, and the verb never counts
   itself. The classifier uses the running executable or managed entry assembly;
   a `dotnet run` wrapper does not count; its World child counts once it starts.
@@ -1286,7 +1321,7 @@ manifest's own assertions.
 puck canary                         run the automatic set (headless, no environmental requirements)
 puck canary <id> ...                explicitly run named proofs
 puck canary --all                   explicitly run every proof; does not change automatic eligibility
-puck canary --list                  strictly load and list manifests without building or running
+puck canary --list [id ...]         strictly load and list named manifests, or all when unnamed, without building or running
 puck canary --capability <class>    filter automatic/headless/windowed/offscreen or an environmental requirement
 puck canary --merge                 run the merge gate: the automatic set plus every proof requiring gpu
 puck canary --backend <name> ...    run every backend-declaring proof on vulkan or directx only

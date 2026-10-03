@@ -21,6 +21,7 @@ public sealed partial class GateRunLawTests {
 
         public List<string[]> Steps { get; } = [];
         public List<string> Events { get; } = [];
+        public List<(string Step, bool Device)> Admissions { get; } = [];
         public List<string[]> Devices { get; } = [];
         public GateClock Clock { get; } = new();
         public bool Admitted { get; init; } = true;
@@ -33,8 +34,9 @@ public sealed partial class GateRunLawTests {
             Clock.Advance(duration: TimeSpan.FromMilliseconds(milliseconds: 2700));
         }
 
-        public bool WaitForCapacity(string repositoryRoot, string step) {
+        public bool WaitForCapacity(string repositoryRoot, string step, bool device) {
             Events.Add(item: ("admit " + step));
+            Admissions.Add(item: (step, device));
             return Admitted;
         }
         public GateStepResult Dotnet(string repositoryRoot, IReadOnlyList<string> arguments) {

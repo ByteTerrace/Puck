@@ -22,9 +22,10 @@ public sealed class AffectedSelectionLawTests {
     ];
     private static readonly HashSet<string> WorldClosure = new(collection: ["World", "Core"], comparer: StringComparer.OrdinalIgnoreCase);
 
-    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null, IReadOnlySet<string>? deleted = null, Dictionary<string, IReadOnlySet<string>>? recorded = null, Func<string, bool>? worldInput = null) => AffectedSelection.Select(
+    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null, IReadOnlySet<string>? deleted = null, Dictionary<string, IReadOnlySet<string>>? recorded = null, Func<string, bool>? worldInput = null, Func<string, bool>? compiledUnchanged = null) => AffectedSelection.Select(
         canaries: Canaries,
         changed: changed,
+        compiledUnchanged: compiledUnchanged,
         consumersOf: (consumersOf ?? (static _ => [])),
         coverage: (coverage ?? []),
         declaresTests: static path => path.Contains(comparisonType: StringComparison.Ordinal, value: "tested"),
@@ -55,7 +56,7 @@ public sealed class AffectedSelectionLawTests {
                 changed: ["src/World/Door.cs"],
                 coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) }
             ),
-            expected: new AffectedPlan(Baselines: [], Canaries: ["doors"], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
+            expected: new AffectedPlan(Baselines: [], Canaries: ["doors"], CanaryChecks: [], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
             comparer: new PlanComparer()
         );
     }
@@ -72,6 +73,35 @@ public sealed class AffectedSelectionLawTests {
         Assert.True(condition: Select(changed: ["src/Core/Thing.cs"]).Catalog);
         Assert.True(condition: Select(changed: ["build/Shaders.targets"]).Catalog);
         Assert.False(condition: Select(changed: ["src/Maths/Field.cs"]).Catalog);
+    }
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [Theory]
+    public void AnUnchangedCompiledValueKeepsSuitesAndCatalogButNoCanaryOrUnplacedPath(bool mapped, bool isDeleted) {
+        const string Path = "src/World/Assets/worlds/sample.world.json";
+        var plan = Select(
+            changed: [Path],
+            compiledUnchanged: static path => (path == Path),
+            coverage: (mapped ? new() { [Path] = new HashSet<string>(collection: ["ink"]) } : null),
+            canariesReaching: _ => new HashSet<string>(collection: (mapped ? ["doors"] : [])),
+            deleted: (isDeleted ? new HashSet<string>(collection: [Path]) : null)
+        );
+
+        Assert.Equal(expected: ["Cli.Tests", "World.Tests"], actual: plan.Suites);
+        Assert.True(condition: plan.Catalog);
+        Assert.Empty(collection: plan.Canaries);
+        Assert.False(condition: plan.Parity);
+        Assert.Empty(collection: plan.Unmapped);
+        Assert.Empty(collection: plan.Deleted);
+    }
+    [Fact]
+    public void AnUnchangedCompiledValueStillRunsChangedTestBlocks() {
+        const string Path = "src/World/Assets/worlds/tested.puck";
+        var plan = Select(changed: [Path], compiledUnchanged: static path => (path == Path));
+
+        Assert.Equal(expected: [Path], actual: plan.Worlds);
     }
     [Fact]
     public void ParityRunsWhenAChosenCanaryRendersOnAGpu() {
@@ -300,6 +330,7 @@ public sealed class AffectedSelectionLawTests {
             ((x is not null) && (y is not null) &&
             x.Baselines.SequenceEqual(second: y.Baselines) &&
             x.Canaries.SequenceEqual(second: y.Canaries) &&
+            x.CanaryChecks.SequenceEqual(second: y.CanaryChecks) &&
             (x.Catalog == y.Catalog) &&
             (x.Everything == y.Everything) &&
             (x.Parity == y.Parity) &&
