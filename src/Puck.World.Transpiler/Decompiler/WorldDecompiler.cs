@@ -196,9 +196,7 @@ public static partial class WorldDecompiler {
             root.TryGetPropertyValue(
             jsonNode: out var docIdNode,
             propertyName: "documentId"
-        ) &&
-            (docIdNode is not null)
-        ) {
+        )) {
             sb.AppendLine(
                 CultureInfo.InvariantCulture,
                 $"documentId: {FormatValue(
@@ -302,6 +300,25 @@ public static partial class WorldDecompiler {
             hasHeaders = true;
         }
 
+        // An imports list or exports object the document holds empty replaces what a basis brings, so it prints as the
+        // field it is where no statement would carry it.
+        foreach (var (rootKey, rootValue) in root) {
+            if ((string.Equals(a: rootKey, b: "imports", comparisonType: StringComparison.Ordinal) && (rootValue is null or JsonArray { Count: 0 })) ||
+                (string.Equals(a: rootKey, b: "exports", comparisonType: StringComparison.Ordinal) && (rootValue is null or JsonObject { Count: 0 }))) {
+                if (hasHeaders) {
+                    sb.AppendLine();
+                }
+
+                EmitField(
+                    indentLevel: 0,
+                    key: rootKey,
+                    sb: sb,
+                    value: rootValue
+                );
+                hasHeaders = true;
+            }
+        }
+
         // 4. Sections & Blocks
         var knownRootKeys = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase) {
             "schema", "basis", "documentId", "imports", "exports",
@@ -378,6 +395,18 @@ public static partial class WorldDecompiler {
                 sb.AppendLine(
                     CultureInfo.InvariantCulture,
                     $"{PuckPrinter.PrintPropertyName(level: 0, name: key)}: null"
+                );
+                continue;
+            }
+
+            // A list the document holds empty prints as the field it is: no section's statements would carry it, and
+            // dropping it would change what the document composes with.
+            if (value is JsonArray { Count: 0 }) {
+                EmitField(
+                    indentLevel: 0,
+                    key: key,
+                    sb: sb,
+                    value: value
                 );
                 continue;
             }
@@ -1199,6 +1228,30 @@ public static partial class WorldDecompiler {
             }
         }
     }
+    // An optional minus sign, digits, and an optional fraction: no exponent, which the number grammar spells differently.
+    private static bool IsPlainDecimal(string text) {
+        var index = (text.StartsWith(value: '-') ? 1 : 0);
+        var digits = 0;
+
+        while ((index < text.Length) && char.IsAsciiDigit(c: text[index])) {
+            ++index;
+            ++digits;
+        }
+        if ((digits == 0) || (index == text.Length)) {
+            return (digits > 0);
+        }
+        if (text[index++] != '.') {
+            return false;
+        }
+
+        digits = 0;
+        while ((index < text.Length) && char.IsAsciiDigit(c: text[index])) {
+            ++index;
+            ++digits;
+        }
+
+        return ((digits > 0) && (index == text.Length));
+    }
     private static string FormatValue(JsonNode? node, int indentLevel, Type? context = null) {
         if (node is null) {
             return "null";
@@ -1210,6 +1263,15 @@ public static partial class WorldDecompiler {
                     ? "true"
                     : "false"
                 );
+            }
+            // A number prints in the spelling the document holds it in when that is a plain decimal: `0.0` and `0` lower to
+            // different values where a member is untyped, so the point is part of what the document says.
+            if (val.GetValueKind() == System.Text.Json.JsonValueKind.Number) {
+                var spelled = val.ToJsonString();
+
+                if (IsPlainDecimal(text: spelled)) {
+                    return spelled;
+                }
             }
             if (val.TryGetValue<long>(value: out var l)) {
                 return l.ToString(provider: CultureInfo.InvariantCulture);

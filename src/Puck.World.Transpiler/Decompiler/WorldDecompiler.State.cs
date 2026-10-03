@@ -95,6 +95,20 @@ public static partial class WorldDecompiler {
         }
 
         foreach (var (k, v) in state) {
+            // A list the section holds empty prints as the field it is, where no declaration would carry it.
+            if (v is JsonArray { Count: 0 }) {
+                if (!first) {
+                    sb.AppendLine();
+                }
+                first = false;
+                EmitField(
+                    indentLevel: (indentLevel + 1),
+                    key: k,
+                    sb: sb,
+                    value: v
+                );
+                continue;
+            }
             if (string.Equals(a: k, b: "spaces", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 continue;
             }
