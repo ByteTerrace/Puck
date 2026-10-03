@@ -964,10 +964,17 @@ ran under; the gate never waits or refuses for CPU alone. A step that opens a
 device (the canaries, parity, each device suite, counters, citations and
 recording, the steps that run only with `--gpu`) also waits for an idle GPU; the
 build, affected run and baseline checks run no `Gpu`-trait test and never wait
-on a GPU holder. A step with what it needs admits immediately.
-Otherwise the gate reports waiting on stderr, samples every ten seconds for
-at most thirty minutes, and reports when capacity returns. Expiry refuses the
-remaining run. Completed child processes do not hold admission; builds and
+on a GPU holder. A heavy suite (`Puck.World.Tests`, whatever its filter) also
+waits while another process on the machine runs one, since two at once exhaust
+its memory: the gate's `Puck.World.Tests` device suite waits before it starts,
+and `affected --run` waits before each heavy suite's run, so a CPU run inside one
+gate and another gate's run never overlap. The waiting process's own descendants
+never hold it back. A step with what it needs admits immediately. Otherwise the
+gate reports waiting on stderr, naming the holder again when it changes, samples
+every ten seconds, prints a still-waiting line after ten silent minutes, and
+reports when capacity returns. A step waits at most thirty minutes and a heavy
+suite at most two hours, since a full `Puck.World.Tests` under load takes up to
+half an hour and a gate can queue behind two; expiry refuses the remaining run. Completed child processes do not hold admission; builds and
 reusable MSBuild nodes are not GPU holders.
 
 A failed build or CLI copy stops the gate. Other failed steps allow later checks

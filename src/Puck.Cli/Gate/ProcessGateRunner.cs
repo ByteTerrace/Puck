@@ -27,10 +27,10 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
         timeout: ((arguments[0] == "build") ? BuildTimeout : StepTimeout)
     );
     /// <inheritdoc/>
-    public bool WaitForCapacity(string repositoryRoot, string step, bool device) {
+    public bool WaitForCapacity(string repositoryRoot, string step, bool device, bool heavySuite) {
         var probe = new HostProbe(checkoutRoot: repositoryRoot);
 
-        return HostAdmission.Wait(step, device, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock,
+        return HostAdmission.Wait(step, device, heavySuite, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock,
             delay => Task.Delay(cancellationToken: cancellationToken, delay: delay, timeProvider: clock).GetAwaiter().GetResult(), Console.Error, cancellationToken);
     }
     public string CopyCli(string repositoryRoot, string directory) {
