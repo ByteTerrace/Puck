@@ -95,6 +95,6 @@ namespace Puck.Cli.Qualification {
         /// <summary>The shape fingerprint of <c>QualificationReport.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/QualificationReport.cs</c>.</summary>
         public const string QualificationReportSchemaVersion = "34345b59a34c3390";
         /// <summary>The shape fingerprint of <c>ReleaseProfile.SchemaVersion</c>, declared in <c>src/Puck.Cli/Qualification/ReleaseProfile.cs</c>.</summary>
-        public const string ReleaseProfileSchemaVersion = "485a3e0cd142acec";
+        public const string ReleaseProfileSchemaVersion = "a511536a62558cfc";
     }
 }

@@ -1320,20 +1320,29 @@ identity must match the ceilings; absent cadence samples are not measured zeros.
 `puck counters --check` holds every render node's deterministic and
 per-backend-deterministic submission counts, pass by pass and outside every
 pass, to `tests/Puck.Counters/counters.ceilings.json`
-(`puck.counters.ceilings.v1`): a count reads at most its ceiling, a ceiling of
-zero is a required zero, and a per-backend-deterministic count is judged only
-on the device its backend was recorded on, except a ceiling carrying
-`requiredZero` (a zero of a kernel kind such as the march steps or sky
-evaluations, which the recorder sets and the reader validates), a structural
-contract that is judged on every device; the foreign-device note says how many
-counts were not judged and how many zeros still were. `--record` rewrites the file, only
-in the change that explains the move, and writes nothing when the backends
-disagree on a deterministic count or pass state, or the recorded ceilings fail
-their own run. It uses atomic replacement; a write failure leaves the existing
-ceilings unchanged. A refused record prints `not written: …` and exits 1.
-`--output` names a different file from the ceilings with `--check` or `--record`.
-It needs a GPU on both backends, so it
-runs with the other GPU checks, never beside a build.
+(`puck.counters.ceilings.v1`): a count reads at most its ceiling, and a ceiling
+of zero is a required zero. Each backend's deterministic ceilings and its
+`requiredZero` ceilings (a zero of a kernel kind such as the march steps or sky
+evaluations, which the recorder sets and the reader validates: a structural
+contract) are shared by every device; every other per-backend-deterministic
+ceiling is one device's record (`WorldCountersDeviceCeilings`, keyed by
+`CountersCeilings.IsSameDevice`: backend, PCI vendor and device, driver
+implementation; the driver version is evidence, and a change of it is a note,
+not a new device). A run is judged against its own device's record, and a
+device with no record fails by name. `--record` replaces the shared ceilings and
+the running device's record and leaves every other device's record byte for
+byte, so a change that moves per-backend counts owes a record on every device
+the ledger holds; it records only in the change that explains the move, and
+writes nothing when the backends disagree on a deterministic count or pass
+state, a shared ceiling would be another device's own reading, or the merged
+ceilings fail their own run. It uses atomic replacement; a write failure leaves
+the existing ceilings unchanged. A refused record prints `not written: …` and
+exits 1. `--output` names a different file from the ceilings with `--check` or
+`--record`. `--report <file>` judges or records a saved report without a GPU;
+otherwise the verb needs a GPU on both backends, so it runs with the other GPU
+checks, never beside a build. The dynamic-resolution step budget reads the
+backend's first device record, the floor device's
+(`WorldDynamicResolution.StepBudgetPerPixel`).
 
 **Qualification judges a published package, not a change.** `puck qualify
 <package>` holds CI's published World (`artifacts/world`, never a source build)
