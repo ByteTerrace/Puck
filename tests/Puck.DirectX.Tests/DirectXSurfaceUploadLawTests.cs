@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Gpu;
@@ -14,7 +13,7 @@ namespace Puck.DirectX.Tests;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXSurfaceUploadLawTests {
     private static DirectXImageView ViewOf(nint handle) =>
-        ((DirectXImageView)GCHandle.FromIntPtr(value: handle).Target!);
+        DirectXImageViews.Resolve(handle: handle)!;
 
     [Fact]
     public void ASteadyUploadReusesItsViewAndAllocatesNothing() {
@@ -67,5 +66,21 @@ public sealed class DirectXSurfaceUploadLawTests {
             actual: largeView.ResourceHandle,
             expected: 0
         );
+    }
+    [Fact]
+    public void AFailedRebuildRetiresTheViewOfTheTextureItDestroyed() {
+        using var context = DirectXTestDevices.Warp(memory: null);
+        using var upload = context.Services.SurfaceTransferFactory.CreateUpload();
+        var first = upload.Upload(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, pixels: new byte[((4 * 4) * 4)], width: 4);
+
+        Assert.NotNull(@object: DirectXImageViews.Resolve(handle: first));
+
+        // Valid pixel data, but a width beyond Direct3D 12's two-dimensional texture limit: EnsureResources
+        // destroys the old texture before CreateCommittedResource refuses the replacement.
+        Assert.Throws<DirectXException>(testCode: () => upload.Upload(format: GpuPixelFormat.R8G8B8A8Unorm, height: 1, pixels: new byte[(16385 * 4)], width: 16385));
+        Assert.Null(@object: DirectXImageViews.Resolve(handle: first));
+        upload.Dispose();
+        upload.Dispose();
+        Assert.Null(@object: DirectXImageViews.Resolve(handle: first));
     }
 }

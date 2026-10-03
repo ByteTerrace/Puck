@@ -22,7 +22,7 @@ namespace Puck.DirectX.Interop;
 /// lets a DirectX host sample a surface that arrived as host memory. Single-thread affine.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
-public sealed unsafe class DirectXSurfaceUpload : IDisposable {
+public sealed unsafe class DirectXSurfaceUpload : IGpuSurfaceUpload {
     private readonly IDirectXDeviceContext m_deviceContext;
     // The device every object below lives on, from construction (DirectXDeviceOwnership).
     private readonly DirectXDevice m_heldDevice;
@@ -35,6 +35,7 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     private ulong m_fenceValue;
     private DXGI_FORMAT m_format;
     private uint m_height;
+    private nint m_imageViewHandle;
     // Each level's placement in the staging buffer, its row count (block rows for a block-compressed format) and its
     // tightly packed row size, as GetCopyableFootprints reports them for the texture.
     private D3D12_PLACED_SUBRESOURCE_FOOTPRINT[] m_layouts = [];
@@ -99,6 +100,11 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
     public nint TextureHandle => m_texture;
     /// <summary>Gets the <c>DXGI_FORMAT</c> the texture was last uploaded as.</summary>
     public DXGI_FORMAT TextureFormat => m_format;
+
+    nint IGpuSurfaceUpload.Upload(ReadOnlyMemory<byte> pixels, GpuPixelFormat format, uint width, uint height, uint levels) {
+        Upload(pixels: pixels.Span, format: format, width: width, height: height, levels: levels);
+        return m_imageViewHandle;
+    }
 
     /// <summary>Copies an image's levels into the SRV texture and leaves it sampleable by every shader stage.</summary>
     /// <param name="pixels">The image's levels from level 0, tightly packed and back to back
@@ -277,6 +283,10 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             width: width
         ));
         m_textureState = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST;
+        m_imageViewHandle = DirectXImageViews.Register(view: new DirectXImageView {
+            Format = dxgiFormat,
+            ResourceHandle = m_texture,
+        });
 
         var description = DirectXTextures.Describe(
             format: dxgiFormat,
@@ -363,6 +373,8 @@ public sealed unsafe class DirectXSurfaceUpload : IDisposable {
             queue: ((ID3D12CommandQueue*)m_deviceContext.CommandQueueHandle)
         );
     private void DisposeImageResources() {
+        DirectXImageViews.Release(handle: m_imageViewHandle);
+        m_imageViewHandle = 0;
         Release(pointer: ref m_uploadBuffer);
         DirectXDeviceMemory.CountReleased(
             memory: m_deviceContext.Memory,

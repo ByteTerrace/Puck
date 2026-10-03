@@ -317,8 +317,9 @@ These are one-line cautions; the owning pages hold the derivations.
 
 ## Engine seams that bite
 
-- **Host-owned image-view handles are not identities.** Both backends reuse
-  handle values for new objects, so an `sdf.world` pass rewrites every screen's
+- **Neutral image-view handles are not identities.** Vulkan can reuse
+  handle values for new objects; Direct3D 12 uses process-local generational
+  handles and retires exhausted slots. An `sdf.world` pass rewrites every screen's
   host image in its set every frame (`SdfWorldPassRecorder`'s `BindScreens`) and
   value-skips only the tables' filler. A
   stress test for handle reuse must render a frame between image swaps
