@@ -31,11 +31,15 @@ namespace Puck.SdfVm;
 /// identities keep increasing when the caller rebuilds the tables (after a device loss, say); created with
 /// <see cref="SdfWorldTables.FrameRingSize"/> frames in flight. The caller invalidates it when it drops the tables.
 /// When <see langword="null"/>, the tables create their own.</param>
+/// <param name="SkyDetails">The detail rows the sky's layers count in, shared by every residency of a composition
+/// (<see cref="SdfWorldPipelineCatalog.SkyDetails"/>) so a view's rows never move when it follows another residency.
+/// When <see langword="null"/>, the tables create their own.</param>
 public sealed record SdfWorldTablesOptions(
     SdfProgram Program,
     int DynamicTransformCapacity = 1,
     int ProgramWordCapacity = 0,
     int InstanceCapacity = 0,
     int BrickPoolVoxelCapacity = SdfWorldTables.DefaultBrickPoolVoxelCapacity,
-    GpuWorkLedger? WorkLedger = null
+    GpuWorkLedger? WorkLedger = null,
+    SdfSkyDetails? SkyDetails = null
 );

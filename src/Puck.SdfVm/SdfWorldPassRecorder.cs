@@ -17,8 +17,6 @@ namespace Puck.SdfVm;
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
     private const uint WorkgroupEdge = 8;
 
-    public IReadOnlyList<string> WorkDetails(in FrameContext context) => SdfWorldWorkDetails.Of(part: m_part);
-
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
     private static readonly string[] ScratchMembers = [
         SdfWorldPackage.InstanceMasks,
