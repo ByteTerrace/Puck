@@ -109,15 +109,7 @@ public sealed class BodySweepRefusalLawTests {
         // it wrote, so the body's whole captured state (integration residue, transfer state, pose and up) reads after
         // the tick exactly as before it. Both records are described member by member, so a field added to either is
         // compared without a change here.
-        var world = LatticeWorld() with {
-            GravityRaw = new WorldGravity(
-                Attractors: [],
-                GravitationalConstant: 0f,
-                SofteningLength: 0.5f,
-                Solver: WorldGravitySolver.Pairwise,
-                Uniform: new DocumentVector3(x: -3f, y: -4f, z: 0f)
-            ),
-        };
+        var world = TiltedLatticeWorld();
 
         if (shapedAtThirtyHertz) {
             world = world with {
@@ -127,16 +119,7 @@ public sealed class BodySweepRefusalLawTests {
         }
 
         using var fixture = Fixtures.FreshServer(definition: world);
-        var body = fixture.JoinSeat();
-
-        body.Pose(pitchRadians: FixedQ4816.Zero, position: new FixedVector3(X: FixedQ4816.One, Y: (FixedQ4816.MaxValue - Quarter), Z: FixedQ4816.One), rollRadians: FixedQ4816.Zero, yawRadians: FixedQ4816.Zero);
-        body.EnqueueRun(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One), seconds: 1f);
-
-        // The population admits each body to its tick (TryBeginOrdinaryAdvance) before the step begins. That latch is
-        // the tick's, not the step's, and a refused body keeps it, so it is seeded here as the admission leaves it,
-        // and the comparison is about the step alone.
-        body.ApplyIntegrationResidue(residue: body.CaptureIntegrationResidue() with { OrdinaryAdvanceAdmitted = true });
-
+        var body = PoseRefusedWalker(at: new FixedVector3(X: FixedQ4816.One, Y: (FixedQ4816.MaxValue - Quarter), Z: FixedQ4816.One), body: fixture.JoinSeat(), seconds: 1f);
         var before = WholeState(body: body);
 
         fixture.Step();
@@ -144,6 +127,50 @@ public sealed class BodySweepRefusalLawTests {
         Assert.Equal(expected: ContactRefusal.UnrepresentableSweep, actual: body.SweepRefusal);
         Assert.Equal(expected: before, actual: WholeState(body: body));
     }
+    [Fact]
+    public void TwoBodiesRefusedInTheSameTickEachRestoreTheirOwnState() {
+        // The population owns one step scratch, which each body's step captures into in turn. Two bodies under the
+        // carrier's top, at different places, with tapes of different lengths, are refused back to back in one tick:
+        // each must read after it exactly as it did before, its own state and never the other's.
+        using var fixture = Fixtures.FreshServer(definition: TiltedLatticeWorld());
+        var first = PoseRefusedWalker(at: new FixedVector3(X: FixedQ4816.One, Y: (FixedQ4816.MaxValue - Quarter), Z: FixedQ4816.One), body: fixture.JoinSeat(slot: 0), seconds: 1f);
+        var second = PoseRefusedWalker(at: new FixedVector3(X: FixedQ4816.FromInteger(value: 2L), Y: (FixedQ4816.MaxValue - FixedQ4816.FromDouble(value: 0.125)), Z: FixedQ4816.FromInteger(value: 3L)), body: fixture.JoinSeat(slot: 1), seconds: 2f);
+        var firstBefore = WholeState(body: first);
+        var secondBefore = WholeState(body: second);
+
+        Assert.NotEqual(actual: secondBefore, expected: firstBefore);
+
+        fixture.Step();
+
+        Assert.Equal(expected: ContactRefusal.UnrepresentableSweep, actual: first.SweepRefusal);
+        Assert.Equal(expected: ContactRefusal.UnrepresentableSweep, actual: second.SweepRefusal);
+        Assert.Equal(expected: firstBefore, actual: WholeState(body: first));
+        Assert.Equal(expected: secondBefore, actual: WholeState(body: second));
+    }
+
+    // The lattice world under a tilted uniform gravity, whose up is (0.6, 0.8, 0).
+    private static WorldDefinition TiltedLatticeWorld() => LatticeWorld() with {
+        GravityRaw = new WorldGravity(
+            Attractors: [],
+            GravitationalConstant: 0f,
+            SofteningLength: 0.5f,
+            Solver: WorldGravitySolver.Pairwise,
+            Uniform: new DocumentVector3(x: -3f, y: -4f, z: 0f)
+        ),
+    };
+    // Poses a walking body under the carrier's top, its core past it, with a forward run of the given length queued.
+    private static WorldBody PoseRefusedWalker(WorldBody body, FixedVector3 at, float seconds) {
+        body.Pose(pitchRadians: FixedQ4816.Zero, position: at, rollRadians: FixedQ4816.Zero, yawRadians: FixedQ4816.Zero);
+        body.EnqueueRun(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One), seconds: seconds);
+
+        // The population admits each body to its tick (TryBeginOrdinaryAdvance) before the step begins. That latch is
+        // the tick's, not the step's, and a refused body keeps it, so it is seeded here as the admission leaves it,
+        // and the comparison is about the step alone.
+        body.ApplyIntegrationResidue(residue: body.CaptureIntegrationResidue() with { OrdinaryAdvanceAdmitted = true });
+
+        return body;
+    }
+
     [Fact]
     public void ARigidBodyRefusedAcrossItsSubstepsKeepsTheVelocityAndPoseItBeganWith() {
         // A rigid ball rising at fifteen units a second takes seven substeps a tick. Posed a tenth of a unit under the
