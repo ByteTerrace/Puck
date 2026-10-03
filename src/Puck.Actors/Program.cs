@@ -1,13 +1,11 @@
 using Azure.Core;
 using Azure.Identity;
-using Azure.Monitor.OpenTelemetry.Exporter;
 using Azure.Storage.Blobs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Azure;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
-using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Puck.Actors;
@@ -64,7 +62,7 @@ if (!string.IsNullOrWhiteSpace(value: configuration.GetValue<string>(key: "APPLI
 
     services
         .AddOpenTelemetry()
-        .UseAzureMonitorExporter(configureAzureMonitor: azureMonitorOptions => {
+        .UseAzureMonitorExporterWithBoundedShutdown(configure: azureMonitorOptions => {
             azureMonitorOptions.Credential = tokenCredential;
         })
         .WithMetrics(configure: static meterProviderBuilder => {

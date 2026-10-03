@@ -1,6 +1,5 @@
 using Azure.Core;
 using Azure.Identity;
-using Azure.Monitor.OpenTelemetry.Exporter;
 using Azure.Storage.Blobs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Azure.Functions.Worker.Builder;
@@ -64,7 +63,7 @@ if (!string.IsNullOrWhiteSpace(value: configuration.GetValue<string>(key: "APPLI
     services
         .AddOpenTelemetry()
         .UseFunctionsWorkerDefaults()
-        .UseAzureMonitorExporter(configureAzureMonitor: azureMonitorOptions => {
+        .UseAzureMonitorExporterWithBoundedShutdown(configure: azureMonitorOptions => {
             azureMonitorOptions.Credential = tokenCredential;
         })
         .WithTracing(configure: static tracerProviderBuilder => {

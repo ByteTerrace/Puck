@@ -119,7 +119,7 @@ public sealed class BodySweepRefusalLawTests {
         }
 
         using var fixture = Fixtures.FreshServer(definition: world);
-        var body = PoseRefusedWalker(at: new FixedVector3(X: FixedQ4816.One, Y: (FixedQ4816.MaxValue - Quarter), Z: FixedQ4816.One), body: fixture.JoinSeat(), seconds: 1f);
+        var body = PoseRefusedWalker(at: new FixedVector3(X: FixedQ4816.One, Y: (FixedQ4816.MaxValue - Quarter), Z: FixedQ4816.One), body: fixture.JoinSeat());
         var before = WholeState(body: body);
 
         fixture.Step();
@@ -130,22 +130,38 @@ public sealed class BodySweepRefusalLawTests {
     [Fact]
     public void TwoBodiesRefusedInTheSameTickEachRestoreTheirOwnState() {
         // The population owns one step scratch, which each body's step captures into in turn. Two bodies under the
-        // carrier's top, at different places, with tapes of different lengths, are refused back to back in one tick:
-        // each must read after it exactly as it did before, its own state and never the other's.
+        // carrier's top, at different places, with tapes of one segment and of three, are refused back to back for two
+        // ticks: each must read after every tick exactly as it did before, its own state and never the other's. The
+        // tapes' arrays differ in length, so a scratch reusing an array of the wrong length shows; the second tick is
+        // the one where the scratch already holds the other body's arrays.
         using var fixture = Fixtures.FreshServer(definition: TiltedLatticeWorld());
-        var first = PoseRefusedWalker(at: new FixedVector3(X: FixedQ4816.One, Y: (FixedQ4816.MaxValue - Quarter), Z: FixedQ4816.One), body: fixture.JoinSeat(slot: 0), seconds: 1f);
-        var second = PoseRefusedWalker(at: new FixedVector3(X: FixedQ4816.FromInteger(value: 2L), Y: (FixedQ4816.MaxValue - FixedQ4816.FromDouble(value: 0.125)), Z: FixedQ4816.FromInteger(value: 3L)), body: fixture.JoinSeat(slot: 1), seconds: 2f);
+        var first = PoseRefusedWalker(at: new FixedVector3(X: FixedQ4816.One, Y: (FixedQ4816.MaxValue - Quarter), Z: FixedQ4816.One), body: fixture.JoinSeat(slot: 0), segments: 1);
+        var second = PoseRefusedWalker(at: new FixedVector3(X: FixedQ4816.FromInteger(value: 2L), Y: (FixedQ4816.MaxValue - FixedQ4816.FromDouble(value: 0.125)), Z: FixedQ4816.FromInteger(value: 3L)), body: fixture.JoinSeat(slot: 1), segments: 3);
         var firstBefore = WholeState(body: first);
         var secondBefore = WholeState(body: second);
 
         Assert.NotEqual(actual: secondBefore, expected: firstBefore);
+        _ = Assert.Single(collection: first.CaptureTransferState().TapeIntents);
+        Assert.Equal(expected: 3, actual: second.CaptureTransferState().TapeIntents.Length);
 
-        fixture.Step();
+        for (var tick = 0; (tick < 2); tick++) {
+            fixture.Step();
 
-        Assert.Equal(expected: ContactRefusal.UnrepresentableSweep, actual: first.SweepRefusal);
-        Assert.Equal(expected: ContactRefusal.UnrepresentableSweep, actual: second.SweepRefusal);
-        Assert.Equal(expected: firstBefore, actual: WholeState(body: first));
-        Assert.Equal(expected: secondBefore, actual: WholeState(body: second));
+            Assert.Equal(expected: ContactRefusal.UnrepresentableSweep, actual: first.SweepRefusal);
+            Assert.Equal(expected: ContactRefusal.UnrepresentableSweep, actual: second.SweepRefusal);
+            Assert.Equal(expected: firstBefore, actual: WholeState(body: first));
+            Assert.Equal(expected: secondBefore, actual: WholeState(body: second));
+        }
+    }
+    [Fact]
+    public void TheWholeStateDescriptionSeesEveryTapeChannel() {
+        // A tape's intents carry their channels inline (PlayerIntent's ChannelValues is an InlineArray, which exposes no
+        // property), so a description that reads properties alone reads every intent alike and could not see a tape
+        // whose channels were corrupted. Two intents differing in one channel must describe differently.
+        var resting = default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One);
+        var turned = resting.WithChannel(ordinal: 3, value: FixedQ4816.One);
+
+        Assert.NotEqual(expected: Describe(value: resting), actual: Describe(value: turned));
     }
 
     // The lattice world under a tilted uniform gravity, whose up is (0.6, 0.8, 0).
@@ -158,10 +174,14 @@ public sealed class BodySweepRefusalLawTests {
             Uniform: new DocumentVector3(x: -3f, y: -4f, z: 0f)
         ),
     };
-    // Poses a walking body under the carrier's top, its core past it, with a forward run of the given length queued.
-    private static WorldBody PoseRefusedWalker(WorldBody body, FixedVector3 at, float seconds) {
+    // Poses a walking body under the carrier's top, its core past it, with forward runs queued as that many tape segments,
+    // each a second long and each speaking a different strafe, so the segments' channels differ.
+    private static WorldBody PoseRefusedWalker(WorldBody body, FixedVector3 at, int segments = 1) {
         body.Pose(pitchRadians: FixedQ4816.Zero, position: at, rollRadians: FixedQ4816.Zero, yawRadians: FixedQ4816.Zero);
-        body.EnqueueRun(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One), seconds: seconds);
+
+        for (var segment = 0; (segment < segments); segment++) {
+            body.EnqueueRun(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One).WithChannel(ordinal: 1, value: (FixedQ4816.FromInteger(value: segment) / FixedQ4816.FromInteger(value: 4L))), seconds: 1f);
+        }
 
         // The population admits each body to its tick (TryBeginOrdinaryAdvance) before the step begins. That latch is
         // the tick's, not the step's, and a refused body keeps it, so it is seeded here as the admission leaves it,
@@ -297,6 +317,16 @@ public sealed class BodySweepRefusalLawTests {
 
         var type = value.GetType();
 
+        // An InlineArray exposes its elements to no property, so they are read as a span of its element type.
+        if (type.GetCustomAttributes(attributeType: typeof(System.Runtime.CompilerServices.InlineArrayAttribute), inherit: false) is [System.Runtime.CompilerServices.InlineArrayAttribute inline]) {
+            var element = type.GetFields(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)[0].FieldType;
+            var elements = typeof(BodySweepRefusalLawTests).GetMethod(bindingAttr: System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static, name: nameof(InlineElements))!
+                .MakeGenericMethod(typeArguments: [type, element])
+                .Invoke(obj: null, parameters: [value, inline.Length]);
+
+            return Describe(value: elements);
+        }
+
         if (
             type.IsPrimitive ||
             type.IsEnum ||
@@ -305,13 +335,19 @@ public sealed class BodySweepRefusalLawTests {
             return (Convert.ToString(provider: System.Globalization.CultureInfo.InvariantCulture, value: value) ?? string.Empty);
         }
 
-        var members = type.GetProperties(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
+        var properties = type.GetProperties(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
             .Where(predicate: static property => (property.GetIndexParameters().Length == 0))
-            .OrderBy(keySelector: static property => property.Name, comparer: StringComparer.Ordinal)
-            .Select(selector: property => $"{property.Name}={Describe(value: property.GetValue(obj: value))}");
+            .Select(selector: property => (property.Name, Value: property.GetValue(obj: value)));
+        var fields = type.GetFields(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
+            .Select(selector: field => (field.Name, Value: field.GetValue(obj: value)));
+        var members = properties.Concat(second: fields)
+            .OrderBy(keySelector: static member => member.Name, comparer: StringComparer.Ordinal)
+            .Select(selector: member => $"{member.Name}={Describe(value: member.Value)}");
 
         return $"{type.Name} {{ {string.Join(separator: ", ", values: members)} }}";
     }
+    private static TElement[] InlineElements<TArray, TElement>(TArray value, int length) where TArray : struct =>
+        System.Runtime.InteropServices.MemoryMarshal.CreateReadOnlySpan(length: length, reference: ref System.Runtime.CompilerServices.Unsafe.As<TArray, TElement>(source: ref value)).ToArray();
     // A carrier walking forward ten ticks beside the wall program, with the ball posed at the given x and carried or not.
     private static (FixedVector3 Carrier, ContactRefusal BallRefusal, FixedQ4816 BallX) CarrierWalk(FixedQ4816 ballX, bool carrying) {
         using var fixture = Fixtures.FreshServer(definition: WorldCarryTangibilityLawTests.WallCarryDocument(includeWall: true));
