@@ -158,7 +158,7 @@ count) — a
 decision's price stays legible instead of a silent frame tax. In the document vocabulary,
 `kits`/`looks`/`placements` are dealt-row sections (`{rows, assignment}`/`{rows, policy}`, with
 authoring defaults in placements' own policy block), and creations are `prototypes` rows that other
-rows reference by `prototypeId`. The dive district (`modules/dive.world.json`) is the worked example of the
+rows reference by `prototypeId`. The dive district (`modules/dive.puck`) is the worked example of the
 field spelling (a medium pool lattice a diver kit settles in) and the arena district
 (`modules/arena.puck`) carries the hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`StateCycle`, exclusive with `advance`, `dynamics` and `draw`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
 

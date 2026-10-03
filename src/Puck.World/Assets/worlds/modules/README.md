@@ -19,7 +19,7 @@ count); it reads the island's.
 |---|---|---|
 | `granaries` | `granaries.puck` | The platform twin's storage court, dealt from the deployment's inventory rows |
 | `arcade` | `arcade.puck` | Two cabinets and a handheld, each booting an authored cartridge |
-| `dive` | `dive.world.json` | The pool: a medium lattice, a diver kit, fish, a depth row |
+| `dive` | `dive.puck` | The pool: a medium lattice, a diver kit, fish, a depth row |
 | `kart` | `kart.puck` | A track on a curve, a kart kit, gates, a lap counter |
 | `jump` | `jump.puck` | A platform course rising from the shard steps, a vaulter kit, a trophy |
 | `arena` | `arena.puck` | The hp/targeting/attack and elemental suites in a walled yard |
@@ -573,7 +573,7 @@ screen.peek 8 0xC200
 press, and the second `screen.peek` reads a larger `x` than the first.
 ## Dive
 
-`modules/dive.world.json` is the pool: a `diveCourt` root placement (a small wooden
+`modules/dive.puck` is the pool: a `diveCourt` root placement (a small wooden
 dock, itself the district's whole moveable frame—every other row below carries
 `parent: "diveCourt"` and moves with it), a `diveBasin` placement (one floor-plus-walls
 creation, open at the top) holding a dedicated `pool` field lattice whose `water` row
@@ -620,7 +620,7 @@ to move the whole district (the convention every module here follows) must also
 translate the `pool` lattice's and navigation domain's own `origin` by the same offset;
 nothing does this automatically today.
 
-Prove the pool in isolation: a minimal host importing `modules/dive.world.json` under
+Prove the pool in isolation: a minimal host importing `modules/dive.puck` under
 alias `dive`, with a one-seat `diver` kit, boots headless, waits, and poses the seat body
 into the basin (`body.pose 0 -2.6 5 0 0 0` for the shipped basin's own coordinates).
 `body.where` reports `facts=grounded|inmedium`; `world.state dive$depth` reads positive

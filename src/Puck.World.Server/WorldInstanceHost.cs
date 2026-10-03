@@ -163,7 +163,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // so the host canonicalizes once, here, and threads the same canonical string into every resolver call
     // (TryResolve, TryGetActive, TryAdopt, DescribeActive) — never the raw WorldReference.Document string a
     // destination row spells, since two documents naming the identical underlying file through different
-    // spellings ("dive.world.json" beside it vs "../modules/dive.world.json") would otherwise mint two separate
+    // spellings ("dive.puck" beside it vs "../modules/dive.puck") would otherwise mint two separate
     // resolver cache entries even though they resolve to one file.
     // A path this probe cannot resolve to an existing file falls back to the raw string unchanged — the
     // resolver still needs some stable identity for its cache key, and an unresolvable document is about to
