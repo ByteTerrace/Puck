@@ -152,10 +152,9 @@ public sealed class InfinityViewFrameLawTests {
     public void ARegionBehindOrBesideTheViewerRendersNothing() {
         var viewer = Viewer(position: Vector3.Zero);
 
-        // Wholly behind: the cone stays on the far side of the horizon plane, which has no bound there and, with no part
-        // of it in the frustum, would be reported whole; the viewer's frustum is what it is clipped to.
+        // Wholly behind the camera plane: every direction of the cone has a negative forward component.
         var behind = InfinityViewFit.Fit(spec: Spec(mask: new InfinityViewMask(Axis: -viewer.Forward, HalfAngle: 0.2f)), tier: QualityTier.High, viewer: viewer, viewerHeight: ViewerHeight, viewerWidth: ViewerWidth);
-        // Wholly in front but outside the frustum: 60 degrees right of a 1 radian vertical field of view.
+        // Wholly in front but outside the frustum: 1.2 radians right of a 1 radian vertical field of view.
         var beside = InfinityViewFit.Fit(spec: Spec(mask: Mask(halfAngle: 0.1f, right: 1.2f, up: 0f, viewer: viewer)), tier: QualityTier.High, viewer: viewer, viewerHeight: ViewerHeight, viewerWidth: ViewerWidth);
 
         Assert.False(condition: beside.Visible);

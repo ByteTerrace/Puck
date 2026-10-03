@@ -22,8 +22,8 @@ public readonly record struct InfinityViewFrame(bool Visible, CameraSnapshot Cam
 /// (<see cref="InfinityViewMask"/>); seen from the viewer's camera, a cone wholly in front of the camera projects onto the
 /// camera plane as an ellipse, and the instance renders exactly the ellipse's bounding rectangle, clipped to the viewer's
 /// frustum, through an off-axis frustum of the viewer's own (<see cref="CameraSnapshot.FrustumOffset"/> carries the
-/// rectangle's centre), so every pixel of the instance casts the ray of the viewer pixel it covers. A cone that reaches
-/// the viewer's horizon plane has no bound on that plane and renders the viewer's whole frustum.
+/// rectangle's centre), so every pixel of the instance casts the ray of the viewer pixel it covers. A cone wholly behind the camera plane renders nothing, and one that reaches the
+/// viewer's horizon plane has no bound on that plane and renders the viewer's whole frustum.
 /// <para>With the cone's axis <c>a</c> at components <c>(aᵣ, aᵤ, a_f)</c> on the camera's right, up and forward, half-angle
 /// α, <c>s = sin α</c> and <c>d = a_f² − s²</c> (positive exactly when the cone is wholly in front), the ellipse's centre
 /// is <c>(a_f·aᵣ, a_f·aᵤ) / d</c> and its bounding half-extents are <c>s·√(d + aᵣ²) / d</c> and
@@ -62,6 +62,10 @@ public static class InfinityViewFit {
             var sine = Math.Sin(a: mask.HalfAngle);
             var reach = ((forward * forward) - (sine * sine));
 
+            // A cone every direction of which lies at or behind the camera plane has nothing in the frustum.
+            if (forward <= -sine) {
+                return default;
+            }
             if ((forward > 0.0) && (reach > 1e-9)) {
                 var centerX = ((forward * right) / reach);
                 var centerY = ((forward * up) / reach);
