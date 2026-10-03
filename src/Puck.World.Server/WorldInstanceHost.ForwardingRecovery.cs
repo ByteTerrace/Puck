@@ -5,6 +5,11 @@ namespace Puck.World;
 
 public sealed partial class WorldInstanceHost {
     /// <inheritdoc/>
+    public byte[]? FetchForwardedPrototype(WorldServer source, WorldTravelerObservation request, Puck.Assets.ContentPin pin) =>
+        (((request.RemainingHops > 1) && m_forwardedBodies.TryGetValue(key: (source, request.Mobility.Incarnation), value: out var route))
+            ? route.Authority.FetchPrototype(pin: pin, ceiling: request.Ceiling, remainingHops: ((byte)(request.RemainingHops - 1)))
+            : null);
+    /// <inheritdoc/>
     public Task<string?> StreamForwardedProjectionAsync(WorldServer source, WorldTravelerObservation request, Stream output, CancellationToken ct) {
         if (request.RemainingHops <= 1) { return Task.FromResult<string?>(result: "traveler projection exceeded its forwarding hop limit"); }
         return (m_forwardedBodies.TryGetValue(

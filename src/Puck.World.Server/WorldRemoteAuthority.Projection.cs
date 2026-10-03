@@ -4,6 +4,14 @@ using Puck.World.Server;
 namespace Puck.World;
 
 public sealed partial class WorldRemoteAuthority {
+    internal byte[]? FetchPrototype(Puck.Assets.ContentPin pin, WorldTravelerObservation? traveler) {
+        var answer = AwaitAnswer(sourceAuthority: (traveler?.SourceAuthority ?? string.Empty),
+            kind: WorldFederationRequest.Prototype,
+            body: WorldFederationCodec.EncodePrototypeRequest(pin: pin, traveler: traveler));
+
+        return ((answer.Kind == WorldFederationResponse.Prototype) ? answer.Body.ToArray() : null);
+    }
+
     private sealed class ObservationLease : IDisposable {
         private CancellationTokenSource? m_source;
 

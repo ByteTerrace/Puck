@@ -1,3 +1,4 @@
+using Puck.Assets;
 using Puck.Commands;
 using System.Buffers.Binary;
 using System.Text;
@@ -48,6 +49,8 @@ public enum WorldFederationRequest : byte {
     AcknowledgeTransfer = 12,
     /// <summary>Stream the current owner's projection through a committed traveler credential.</summary>
     ObserveTraveler = 13,
+    /// <summary>Fetch one prototype disclosed to this observer or traveler.</summary>
+    Prototype = 14,
 }
 /// <summary>The federation response kinds an authority writes back.</summary>
 public enum WorldFederationResponse : byte {
@@ -87,12 +90,16 @@ public enum WorldFederationResponse : byte {
     /// <summary>A presentation-tier recipient's projection delta: the members that changed, its state clocks' anchors
     /// among them, merged over the projection it holds.</summary>
     ProjectionDelta = 13,
+    /// <summary>The canonical bytes of one authorized prototype body.</summary>
+    Prototype = 14,
 }
 /// <summary>The stable names a federation authority refuses under. A refusal frame's text always opens with one of
 /// these, so a peer and a read-back can both count refusals by name rather than by sentence.</summary>
 public enum WorldFederationRefusal : byte {
     /// <summary>This authority carries no federation credentials, so it denies federation outright.</summary>
     AuthenticationUnconfigured,
+    /// <summary>The current projection does not authorize the requested prototype.</summary>
+    PrototypeUndisclosed,
 
     /// <summary>The presented source authority and proof did not verify against the issued challenge.</summary>
     AuthenticationFailed,
@@ -816,6 +823,7 @@ public static partial class WorldFederationCodec {
     /// <param name="kind">The request kind.</param>
     /// <returns>The maximum body bytes accepted.</returns>
     public static int MaxRequestBytes(WorldFederationRequest kind) => kind switch {
+        WorldFederationRequest.Prototype => (5 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Observe => 0,
         WorldFederationRequest.IntentStream => 0,
         WorldFederationRequest.IntentStreamHandoff => 0,
@@ -835,6 +843,7 @@ public static partial class WorldFederationCodec {
     /// <param name="kind">The response kind.</param>
     /// <returns>The maximum body bytes accepted.</returns>
     public static int MaxResponseBytes(WorldFederationResponse kind) => kind switch {
+        WorldFederationResponse.Prototype => WireLimits.MaxDocumentBytes,
         WorldFederationResponse.Ack => 0,
         WorldFederationResponse.ProjectionInvalidated => WireLimits.MaxStringBytes,
         WorldFederationResponse.Authenticated => (sizeof(int) + WireLimits.MaxStringBytes),
@@ -1004,7 +1013,8 @@ public static partial class WorldFederationCodec {
     /// <param name="hold">The recipient's hold a projection is held in, so a later projection delta merges over it,
     /// or <see langword="null"/> for a document no delta follows.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeDocument(ReadOnlySpan<byte> body, out WorldDefinition? definition, out WorldDocumentVersion version, out WorldDisclosureTier tier, out WireFailure failure, WorldProjectionHold? hold = null) {
+    /// <param name="fetch">The authorized fetch door for uncached prototype bodies.</param>
+    public static bool TryDecodeDocument(ReadOnlySpan<byte> body, out WorldDefinition? definition, out WorldDocumentVersion version, out WorldDisclosureTier tier, out WireFailure failure, WorldProjectionHold? hold = null, Func<ContentPin, byte[]?>? fetch = null) {
         definition = null;
         version = default;
         tier = WorldDisclosureTier.Frames;
@@ -1117,6 +1127,7 @@ public static partial class WorldFederationCodec {
         }
 
         if (!WorldProjection.TryToDefinition(
+            fetch: fetch,
             definition: out definition,
             projection: projection,
             reason: out var hydrationReason
@@ -1237,7 +1248,8 @@ public static partial class WorldFederationCodec {
     /// <param name="reply">The verdict on success.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeReservationReply(ReadOnlySpan<byte> body, out WorldTransferReservationReply? reply, out WireFailure failure) {
+    /// <param name="fetch">The authorized prototype fetch door.</param>
+    public static bool TryDecodeReservationReply(ReadOnlySpan<byte> body, out WorldTransferReservationReply? reply, out WireFailure failure, Func<ContentPin, byte[]?>? fetch = null) {
         var reader = new WireReader(bytes: body);
 
         reply = null;
@@ -1281,6 +1293,7 @@ public static partial class WorldFederationCodec {
         if (
             (definitionBytes.Length > 0) &&
             !TryDecodeDocument(
+            fetch: fetch,
             body: definitionBytes,
             definition: out definition,
             failure: out failure,
@@ -1309,7 +1322,8 @@ public static partial class WorldFederationCodec {
     /// <param name="route">The route on success.</param>
     /// <param name="failure">The named refusal on failure.</param>
     /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
-    public static bool TryDecodeRoute(ReadOnlySpan<byte> body, out WorldAuthorityRouteDescription route, out WireFailure failure) {
+    /// <param name="fetch">The authorized prototype fetch door.</param>
+    public static bool TryDecodeRoute(ReadOnlySpan<byte> body, out WorldAuthorityRouteDescription route, out WireFailure failure, Func<ContentPin, byte[]?>? fetch = null) {
         var reader = new WireReader(bytes: body);
 
         route = default;
@@ -1342,6 +1356,7 @@ public static partial class WorldFederationCodec {
 
         if (
             !TryDecodeDocument(
+            fetch: fetch,
             body: definitionBytes,
             definition: out var definition,
             failure: out failure,

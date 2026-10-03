@@ -54,6 +54,7 @@ namespace Puck.World;
 // puck.world.projection.v1 — the egress document (see WorldProjection). It rides this same context deliberately:
 // one strictness policy, one enum regime, one Vector3 spelling for both document families.
 [JsonSerializable(typeof(WorldProjectionDocument))]
+[JsonSerializable(typeof(WorldPrototypeContent))]
 [JsonSerializable(typeof(WorldProjectedKit))]
 // A projection's timeline travels alone in the delta that re-anchors its state clocks.
 [JsonSerializable(typeof(WorldTimelineSection))]
@@ -465,6 +466,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldProjectionDocument> WorldProjectionDocument => Get<WorldProjectionDocument>();
     /// <summary>Gets the type info for <see cref="WorldPrototype"/>.</summary>
     public JsonTypeInfo<WorldPrototype> WorldPrototype => Get<WorldPrototype>();
+    /// <summary>Gets the type info for a referenced prototype body.</summary>
+    public JsonTypeInfo<WorldPrototypeContent> WorldPrototypeContent => Get<WorldPrototypeContent>();
     /// <summary>Gets the type info for <see cref="WorldRenderDefaults"/>.</summary>
     public JsonTypeInfo<WorldRenderDefaults> WorldRenderDefaults => Get<WorldRenderDefaults>();
     /// <summary>Gets the type info for <see cref="WorldRule"/>.</summary>
