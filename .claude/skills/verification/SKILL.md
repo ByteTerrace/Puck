@@ -217,11 +217,11 @@ World run with effective `host.presentation: none` uses no GPU; the
 - With a grant, run the granted legs serially, nothing else GPU-bound beside
   them, and keep CPU-heavy work (solution builds, large suites) off the machine
   while they run.
-- Qualify the merged head, never a batch on its own. Before a batch's GPU run,
-  merge the current integration head into it. A stale batch can fail or pass
-  because it lacks changes already on the integration branch.
-  [`orchestration`](../orchestration/SKILL.md#assemble-and-refresh-batches)
-  owns batch assembly and merge sequencing.
+- Qualify the merged head. Before a lane's GPU run, merge the current
+  integration head into it: a stale lane can fail or pass because it lacks
+  changes already on the integration branch.
+  [`orchestration`](../orchestration/SKILL.md#land-each-lane-on-its-own) owns
+  landing order.
 - A per-change GPU check is one to four canaries on one backend: the backend
   the change touches, or Vulkan when it is backend-neutral. Parity runs when
   the change means to move pixels or simulation state, and otherwise once at
@@ -304,7 +304,7 @@ command for the parts it covers.
 
 | Skill | Route there for |
 |---|---|
-| [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, integration batches, machines and GPU grants. |
+| [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, per-lane landings, machines and GPU grants. |
 | [`review-passes`](../review-passes/SKILL.md) | Briefing a cross-family review-and-fix pass, and verifying and landing its fixes. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers, mutation probe and recorded registers. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The Humble and Advanced Post batteries. |
