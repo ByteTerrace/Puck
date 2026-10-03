@@ -23,12 +23,11 @@ internal sealed record FormatEntry(string Id, string Source, string Shape, strin
 /// declaration of a recognized shape and <c>puck formats</c> writes the result, so the constants stay the one source
 /// of truth and the ledger is their checked-in mirror.
 /// <para>
-/// A format bumped on two branches collides in the ledger's lines, not in the code: each entry spells its token on
-/// its own line, and every format carries a digest of its canonical source on a line of its own. Two
-/// branches that bump to the same new token merge their token lines cleanly, but they changed the codec differently,
-/// so their digest lines differ and conflict. A branch that changes the codec without a bump moves the digest and
-/// fails <c>puck formats --check</c> until the author re-records it, which is the moment to ask whether the encoding
-/// changed and the token should too.
+/// The ledger records each format's shape: a digest of its canonical source on a line of its own. The shape, not the
+/// token, is what tells two layouts apart, so each codec writes it (through the generated <c>FormatShapes.g.cs</c>,
+/// <see cref="FormatShapesFiles"/>) and refuses any other, and a token is never demanded to move. A branch that edits a
+/// codec moves its digest and fails <c>puck formats --check</c> until the author re-records it. Two branches that edit one
+/// codec differently write different digest lines, which conflict, even when their token lines would merge cleanly.
 /// </para>
 /// </summary>
 internal static partial class FormatVersionsLedger {
@@ -550,13 +549,13 @@ internal static partial class FormatVersionsLedger {
                 b: entry.Token,
                 comparisonType: StringComparison.Ordinal
             )) {
-                problems.Add(item: $"bumped: '{entry.Id}' ({entry.Source}) declares {entry.Token} but the ledger records {was.Token}");
+                problems.Add(item: $"retokened: '{entry.Id}' ({entry.Source}) declares {entry.Token} but the ledger records {was.Token}; run 'puck formats' to record it");
             } else if (!string.Equals(
                 a: was.Shape,
                 b: entry.Shape,
                 comparisonType: StringComparison.Ordinal
             )) {
-                problems.Add(item: $"reshaped: the source of '{entry.Id}' ({entry.Source}) changed while its token stayed {entry.Token}; if the encoding changed, bump the token, then record the new digest");
+                problems.Add(item: $"reshaped: the shape of '{entry.Id}' ({entry.Source}) is now {entry.Shape} and the ledger records {was.Shape}; run 'puck formats' to record it (its codec refuses any other shape by this fingerprint, so no token bump is owed)");
             } else if (!string.Equals(
                 a: was.Source,
                 b: entry.Source,

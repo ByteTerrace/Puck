@@ -21,6 +21,8 @@ public static partial class WorldAuthorityCheckpointCodec {
     private const uint Magic = 0x504B4350U;
     private const int MaxCollectionCount = 1_000_000;
     private const int MaxHashChars = 128;
+    // A shape fingerprint is sixteen hex digits (FormatShapes); the bound leaves room for none else.
+    private const int MaxFingerprintChars = 32;
     private const int MaxSectionBytes = ((64 * 1024) * 1024);
     // Version 5 bounded the complete body, including the server section and every other section, to MaxSectionBytes.
     // Version 6 adds at most one arena's MaxBytes-charged key ledger: its two bytes per UTF-16 code unit plus four
@@ -65,6 +67,9 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteUInt16(
             value: SupportedVersion
         );
+        // The shape fingerprint puck formats records for this codec's source: the version above cannot tell two layouts
+        // apart once it stops moving, so the blob names the shape it was written under and the reader refuses any other.
+        writer.WriteString(value: FormatShapes.WorldAuthorityCheckpointCodecSupportedVersion);
         // A whole-body content pin, over everything the envelope frames — the per-section decoders below also pin
         // the definition specifically (by its own sha256-64), but a corruption landing outside the definition bytes
         // (a section's own field, a length prefix, a discriminant) has no other structural reason to be caught, so
@@ -104,6 +109,25 @@ public static partial class WorldAuthorityCheckpointCodec {
         ) {
             reader.Fail(
                 detail: $"checkpoint version {version} is not the supported version {SupportedVersion}",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        var shape = reader.ReadRequiredString(
+            field: "shape fingerprint",
+            maxBytes: MaxFingerprintChars
+        );
+
+        if (
+            !reader.Failed &&
+            !string.Equals(
+                a: shape,
+                b: FormatShapes.WorldAuthorityCheckpointCodecSupportedVersion,
+                comparisonType: StringComparison.Ordinal
+            )
+        ) {
+            reader.Fail(
+                detail: $"checkpoint shape fingerprint {shape}, expected {FormatShapes.WorldAuthorityCheckpointCodecSupportedVersion}",
                 refusal: WireRefusal.PayloadMalformed
             );
         }

@@ -78,7 +78,8 @@ check form:
 
 Run the recording form only to apply a deliberate change: `puck lengths` after
 shrinking a recorded file, `puck format --file-list` over your own files,
-`puck formats` after bumping a format token, `puck canary-ceilings` after
+`puck formats` after editing a format's source (it records the shape and rewrites the generated
+`FormatShapes.g.cs` files; it never asks for a token bump), `puck canary-ceilings` after
 changing canary cost, a baseline whose movement the change explains. Review the rewritten file's diff
 and commit it in the same change. A ledger rewritten during verification hides
 the drift the check exists to report.

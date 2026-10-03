@@ -6,9 +6,9 @@ namespace Puck.Cli.Tests;
 
 /// <summary>
 /// Laws for <c>FormatVersions.json</c> and <c>puck formats</c> (<see cref="FormatVersionsLedger"/>): discovery reads
-/// the tokens the source declares; recording round-trips; a bumped, reshaped, unrecorded, stale, or moved format is
-/// drift; the shipped ledger equals the shipped source; and two branches that bump one format to the same new token
-/// with different codecs collide in the ledger even though their token lines merge cleanly.
+/// the tokens the source declares; recording round-trips; a retokened, reshaped, unrecorded, stale, or moved format is
+/// drift, and none of it demands a token bump; the shipped ledger and the generated <c>FormatShapes.g.cs</c> files equal
+/// the shipped source; and two branches that edit one codec differently collide in the ledger on its shape line.
 /// </summary>
 public sealed class FormatVersionsLedgerLawTests {
     private const string CodecPath = "src/Puck.Demo/DemoCodec.cs";
@@ -143,7 +143,7 @@ public sealed class FormatVersionsLedgerLawTests {
         );
     }
     [Fact]
-    public void ABumpedFormatIsDriftNamingItsOldAndNewToken() {
+    public void AChangedTokenIsDriftNamingItsOldAndNewTokenAndNeverDemandsABump() {
         var problems = Check(
             current: Sources(key: "0x364445464B435550UL"),
             recordedFrom: Sources()
@@ -151,27 +151,44 @@ public sealed class FormatVersionsLedgerLawTests {
 
         Assert.Contains(
             collection: problems,
-            filter: static problem => (problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "bumped: 'DemoCodec.WireKey'") && problem.Contains(comparisonType: StringComparison.Ordinal, value: "declares PUCKFED6 but the ledger records PUCKFED5"))
+            filter: static problem => (problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "retokened: 'DemoCodec.WireKey'") && problem.Contains(comparisonType: StringComparison.Ordinal, value: "declares PUCKFED6 but the ledger records PUCKFED5"))
+        );
+        Assert.DoesNotContain(
+            collection: problems,
+            filter: static problem => problem.Contains(
+                comparisonType: StringComparison.OrdinalIgnoreCase,
+                value: "bump the token"
+            )
         );
     }
     [Fact]
-    public void ACodecChangedWithoutABumpIsDriftAskingWhetherTheTokenShouldMove() {
+    public void ACodecChangeIsDriftNamingBothShapesAndNeverDemandsABump() {
+        var recorded = Sources();
+        var current = Sources(body: "return 2;");
         var problems = Check(
-            current: Sources(body: "return 2;"),
-            recordedFrom: Sources()
+            current: current,
+            recordedFrom: recorded
         );
 
         Assert.Equal(
-            expected: ["reshaped: the source of 'DemoCodec.Magic'", "reshaped: the source of 'DemoCodec.SchemaVersion'", "reshaped: the source of 'DemoCodec.WireKey'"],
+            expected: ["reshaped: the shape of 'DemoCodec.Magic'", "reshaped: the shape of 'DemoCodec.SchemaVersion'", "reshaped: the shape of 'DemoCodec.WireKey'"],
             actual: problems.Select(selector: static problem => problem[..problem.IndexOf(
                 comparisonType: StringComparison.Ordinal,
                 value: " (src")]).Order(comparer: StringComparer.Ordinal)
         );
+
+        var was = Entry(entries: FormatVersionsLedger.Discover(files: recorded), id: "DemoCodec.WireKey").Shape;
+        var now = Entry(entries: FormatVersionsLedger.Discover(files: current), id: "DemoCodec.WireKey").Shape;
+
         Assert.Contains(
+            collection: problems,
+            filter: problem => (problem.Contains(comparisonType: StringComparison.Ordinal, value: $"is now {now} and the ledger records {was}") && problem.Contains(comparisonType: StringComparison.Ordinal, value: "no token bump is owed"))
+        );
+        Assert.DoesNotContain(
             collection: problems,
             filter: static problem => problem.Contains(
                 comparisonType: StringComparison.Ordinal,
-                value: "if the encoding changed, bump the token"
+                value: "bump the token"
             )
         );
     }
@@ -280,7 +297,7 @@ public sealed class FormatVersionsLedgerLawTests {
     [InlineData("Model.cs", "int Value", "long Value")]
     [InlineData("Model.cs", "int Value", "int Renamed")]
     [Theory]
-    public void ADocumentFieldChangeWithoutATokenBumpIsDrift(string file, string before, string after) {
+    public void ADocumentFieldChangeIsDriftUntilItsShapeIsRecorded(string file, string before, string after) {
         var sources = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
             ["src/Puck.Demo/Document.cs"] = "public sealed class Document { public const string Schema = \"puck.demo.v1\"; public int Value { get; init; } public Model Child { get; init; } }",
             ["src/Puck.Demo/Model.cs"] = "public sealed record Model(int Value);",
@@ -291,7 +308,7 @@ public sealed class FormatVersionsLedgerLawTests {
         Assert.Contains(collection: Check(current: changed, recordedFrom: sources), filter: problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "reshaped:"));
     }
     [Fact]
-    public void ConcurrentDocumentSchemaBumpsWithDifferentFieldsConflict() {
+    public void ConcurrentDocumentEditsWithDifferentFieldsConflictOnTheShapeLine() {
         var sources = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
             ["src/Puck.Demo/Document.cs"] = "public sealed record Document(int Value) { public const string Schema = \"puck.demo.v1\"; }",
         };
@@ -324,7 +341,7 @@ public sealed class FormatVersionsLedgerLawTests {
         var changed = new Dictionary<string, string>(sources, StringComparer.Ordinal);
 
         changed[$"src/{project}/Device.cs"] = "public static class Device { public static int SaveState() => 2; }";
-        Assert.Contains(collection: Check(current: changed, recordedFrom: sources), filter: problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: $"reshaped: the source of '{identity}.CurrentVersion'"));
+        Assert.Contains(collection: Check(current: changed, recordedFrom: sources), filter: problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: $"reshaped: the shape of '{identity}.CurrentVersion'"));
     }
     [Fact]
     public void FormattingAndLocalRenamesPreserveTheShape() {
@@ -371,8 +388,8 @@ public sealed class FormatVersionsLedgerLawTests {
         changed["src/Puck.World.Protocol/Protocol/WorldWireCodec.cs"] = changed["src/Puck.World.Protocol/Protocol/WorldWireCodec.cs"].Replace(newValue: "=> 2", oldValue: "=> 1");
         var problems = Check(current: changed, recordedFrom: sources);
 
-        Assert.Contains(collection: problems, filter: problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "reshaped: the source of 'WorldProtocol.WireProtocolKey'"));
-        Assert.Contains(collection: problems, filter: problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "reshaped: the source of 'WorldReplaySnapshot.ShapeToken'"));
+        Assert.Contains(collection: problems, filter: problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "reshaped: the shape of 'WorldProtocol.WireProtocolKey'"));
+        Assert.Contains(collection: problems, filter: problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "reshaped: the shape of 'WorldReplaySnapshot.ShapeToken'"));
     }
     [Fact]
     public void TheStrictExtensionConfigurationTokenIsDiscovered() {
@@ -381,16 +398,10 @@ public sealed class FormatVersionsLedgerLawTests {
             filter: entry => ((entry.Id == "WorldExtensionConfiguration.CurrentSchema") && (entry.Token == "puck.world.extensions.v1")));
     }
     [Fact]
-    public void TwoBranchesThatBumpOneFormatToTheSameTokenWithDifferentCodecsCollideInTheLedger() {
+    public void TwoBranchesThatEditOneCodecDifferentlyCollideInTheLedgerWithNoTokenInvolved() {
         var baseText = Records(sources: Sources());
-        var ours = Records(sources: Sources(
-            body: "return 2;",
-            key: "0x364445464B435550UL"
-        ));
-        var theirs = Records(sources: Sources(
-            body: "return 3;",
-            key: "0x364445464B435550UL"
-        ));
+        var ours = Records(sources: Sources(body: "return 2;"));
+        var theirs = Records(sources: Sources(body: "return 3;"));
 
         var (conflicts, merged) = LedgerMergeProbe.Merge(
             baseText: baseText,
@@ -403,23 +414,99 @@ public sealed class FormatVersionsLedgerLawTests {
             actualString: merged,
             expectedSubstring: "<<<<<<<"
         );
+        Assert.Equal(
+            actual: ours.Split(separator: '\n').Count(predicate: static line => line.Contains(value: "\"token\"")),
+            expected: baseText.Split(separator: '\n').Count(predicate: static line => line.Contains(value: "\"token\""))
+        );
+    }
+    // Every format's fingerprint is generated, once, into the namespace of the file that declares it: a codec reads the
+    // constant unqualified, in one spelling, and the constant is the ledger's own digest.
+    [Fact]
+    public void EachFormatsShapeIsGeneratedIntoTheNamespaceThatDeclaresItInOneSpelling() {
+        var sources = Sources();
 
-        // The token lines alone would have merged: both branches wrote PUCKFED6.
-        var (tokenOnly, _) = LedgerMergeProbe.Merge(
-            baseText: baseText,
-            ours: baseText.Replace(
-                newValue: "PUCKFED6",
-                oldValue: "PUCKFED5"
-            ),
-            theirs: baseText.Replace(
-                newValue: "PUCKFED6",
-                oldValue: "PUCKFED5"
-            )
+        sources["src/Puck.Demo/Other.cs"] = "namespace Puck.Demo.Wire;\npublic static class Other { public const int FormatVersion = 3; }";
+        sources["src/Puck.Other/Elsewhere.cs"] = "namespace Puck.Other;\npublic static class Elsewhere { public const int FormatVersion = 7; }";
+
+        var entries = FormatVersionsLedger.Discover(files: sources);
+        var plan = FormatShapesFiles.Plan(
+            entries: entries,
+            projectOf: source => (source[..(source.LastIndexOf(value: '/') + 1)], System.Text.RegularExpressions.Regex.Match(input: sources[source], pattern: @"^namespace\s+([A-Za-z0-9_.]+)\s*;", options: System.Text.RegularExpressions.RegexOptions.Multiline).Groups[1].Value)
         );
 
         Assert.Equal(
-            actual: tokenOnly,
-            expected: 0
+            expected: ["src/Puck.Demo/FormatShapes.g.cs", "src/Puck.Other/FormatShapes.g.cs"],
+            actual: plan.Keys
         );
+
+        var demo = plan["src/Puck.Demo/FormatShapes.g.cs"];
+
+        Assert.Contains(actualString: demo, expectedSubstring: "namespace Puck.Demo {");
+        Assert.Contains(actualString: demo, expectedSubstring: "namespace Puck.Demo.Wire {");
+        Assert.Contains(actualString: demo, expectedSubstring: "// <auto-generated/>");
+
+        foreach (var entry in entries.Where(predicate: static entry => !entry.Source.Contains(value: "Puck.Other"))) {
+            Assert.Contains(
+                actualString: demo,
+                expectedSubstring: $"public const string {FormatShapesFiles.ConstantOf(id: entry.Id)} = \"{entry.Shape}\";"
+            );
+        }
+
+        Assert.Equal(
+            expected: "DemoCodecWireKey",
+            actual: FormatShapesFiles.ConstantOf(id: "DemoCodec.WireKey")
+        );
+    }
+    [Fact]
+    public void TwoFormatsOfOneNamespaceThatSpellOneConstantAreRefused() {
+        var entries = new[] {
+            new FormatEntry(Id: "A.BC", Shape: "0000000000000001", Source: "src/Puck.Demo/A.cs", Token: "1"),
+            new FormatEntry(Id: "AB.C", Shape: "0000000000000002", Source: "src/Puck.Demo/B.cs", Token: "1"),
+        };
+
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => FormatShapesFiles.Plan(
+            entries: entries,
+            projectOf: static _ => ("src/Puck.Demo/", "Puck.Demo")
+        ));
+
+        Assert.Contains(actualString: refusal.Message, expectedSubstring: "ABC");
+    }
+    [Fact]
+    public void AMissingStaleOrExtraShapeFileIsDriftAndAnIdenticalSetHolds() {
+        var plan = new Dictionary<string, string>(comparer: StringComparer.Ordinal) { ["src/Puck.Demo/FormatShapes.g.cs"] = "text" };
+
+        Assert.Empty(collection: FormatShapesFiles.Check(existing: plan, plan: plan));
+        Assert.Contains(
+            collection: FormatShapesFiles.Check(existing: new Dictionary<string, string>(), plan: plan),
+            filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "unrecorded: src/Puck.Demo/FormatShapes.g.cs")
+        );
+        Assert.Contains(
+            collection: FormatShapesFiles.Check(existing: new Dictionary<string, string> { ["src/Puck.Demo/FormatShapes.g.cs"] = "other" }, plan: plan),
+            filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "stale: src/Puck.Demo/FormatShapes.g.cs differs")
+        );
+        Assert.Contains(
+            collection: FormatShapesFiles.Check(existing: new Dictionary<string, string> { ["src/Puck.Demo/FormatShapes.g.cs"] = "text", ["src/Puck.Gone/FormatShapes.g.cs"] = "x" }, plan: plan),
+            filter: static problem => problem.StartsWith(comparisonType: StringComparison.Ordinal, value: "stale: src/Puck.Gone/FormatShapes.g.cs")
+        );
+    }
+    [Fact]
+    public void TheShippedShapeFilesAreExactlyWhatTheShippedLedgerPlans() {
+        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
+
+        var sources = FormatsCommand.ReadSources(repositoryRoot: repositoryRoot);
+        var plan = FormatsCommand.ShapeFiles(
+            entries: FormatVersionsLedger.Discover(files: sources),
+            repositoryRoot: repositoryRoot,
+            sources: sources
+        );
+
+        Assert.NotEmpty(collection: plan);
+
+        foreach (var (path, text) in plan) {
+            Assert.Equal(
+                actual: File.ReadAllText(path: Path.Combine(path1: repositoryRoot, path2: path)),
+                expected: text
+            );
+        }
     }
 }

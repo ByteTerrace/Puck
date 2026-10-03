@@ -214,9 +214,14 @@ public sealed class ReplayForkLawTests {
         );
 
         var bytes = buffer.ToArray();
-        // Header layout: magic u32, shape token u32, rate u32, fork-present bool, then the length-prefixed parent name
-        // ("parent" — a u16 byte length plus six characters) and the int32 tick, which this doctors from 3 to 4.
-        var tickOffset = (((((4 + 4) + 4) + 1) + sizeof(ushort)) + "parent".Length);
+        // Header layout: magic u32, shape token u32, the length-prefixed shape fingerprint (a u16 byte length plus its
+        // characters), rate u32, fork-present bool, then the length-prefixed parent name ("parent" — a u16 byte length plus
+        // six characters) and the int32 tick, which this doctors from 3 to 4.
+        var fingerprintLength = BitConverter.ToUInt16(
+            startIndex: (4 + 4),
+            value: bytes
+        );
+        var tickOffset = (((((((4 + 4) + sizeof(ushort)) + fingerprintLength) + 4) + 1) + sizeof(ushort)) + "parent".Length);
 
         Assert.Equal(
             expected: 3,
@@ -474,5 +479,47 @@ public sealed class ReplayForkLawTests {
         );
         // STANDALONE: the child verifies from its own boot image with the parent never consulted.
         Assert.True(condition: tape.Verify(name: child).Primary.Match);
+    }
+
+    // The tape header: the magic and the shape token (u32 each), then the shape fingerprint as a u16-prefixed string.
+    private const int FingerprintOffset = (4 + 4);
+
+    private static string HeaderFingerprint(byte[] tape) => System.Text.Encoding.UTF8.GetString(
+        bytes: tape.AsSpan(
+            length: BitConverter.ToUInt16(
+                startIndex: FingerprintOffset,
+                value: tape
+            ),
+            start: (FingerprintOffset + sizeof(ushort))
+        )
+    );
+
+    [Fact]
+    public void TheTapeHeaderCarriesTheShapeFingerprintTheLedgerRecordsForTheTape() {
+        Assert.Equal(
+            actual: HeaderFingerprint(tape: WorldReplaySnapshot.Encode(recording: Snapshot(forkedFrom: null, ticks: 2))),
+            expected: FormatLedgerShapes.Of(id: "WorldReplaySnapshot.ShapeToken")
+        );
+    }
+    // The same magic and shape token with another fingerprint is a tape of another shape: it is refused by name before the
+    // rest of the header is read, whatever follows.
+    [Fact]
+    public void ATapeOfTheSameShapeTokenAndAnotherFingerprintIsRefusedByName() {
+        var tape = WorldReplaySnapshot.Encode(recording: Snapshot(forkedFrom: null, ticks: 2));
+        var expected = HeaderFingerprint(tape: tape);
+        var other = ((expected[0] == '0') ? ('1' + expected[1..]) : ('0' + expected[1..]));
+
+        System.Text.Encoding.UTF8.GetBytes(
+            bytes: tape.AsSpan(start: (FingerprintOffset + sizeof(ushort))),
+            chars: other
+        );
+
+        using var stream = new MemoryStream(buffer: tape);
+        var refusal = Assert.Throws<InvalidDataException>(testCode: () => WorldReplaySnapshot.Read(stream: stream));
+
+        Assert.Contains(
+            actualString: refusal.Message,
+            expectedSubstring: $"tape shape fingerprint {other}, expected {expected}"
+        );
     }
 }

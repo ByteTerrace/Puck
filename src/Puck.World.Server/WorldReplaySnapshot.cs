@@ -289,6 +289,8 @@ public sealed partial class WorldReplaySnapshot {
     // target authority, arrivals, and federated input. Refuse earlier tapes at intake instead of reporting their old
     // shape as a simulation divergence.
     private const uint ShapeToken = 5u;
+    // A shape fingerprint is sixteen hex digits (FormatShapes); the bound leaves room for none else.
+    private const int MaxFingerprintChars = 32;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
