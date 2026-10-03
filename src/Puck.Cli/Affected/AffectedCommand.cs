@@ -273,11 +273,10 @@ internal static class AffectedCommand {
         return true;
     }
 
-    // Builds the game, whose build writes the catalog, then checks the catalog against a fresh tree compile of the
-    // sources build/WorldAssets.targets passes: every .puck and .world.json under the shipped tree.
-    private static int CheckCatalog(string repositoryRoot) {
+    // The game's build writes the catalog from the sources build/WorldAssets.targets passes.
+    private static int BuildCatalog(string repositoryRoot, string[] arguments) {
         var build = CliProcess.RunCaptured(
-            arguments: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", "-v", "q", "-nologo"],
+            arguments: arguments,
             fileName: "dotnet",
             input: string.Empty,
             timeout: TimeSpan.FromMinutes(minutes: 30),
@@ -290,19 +289,23 @@ internal static class AffectedCommand {
             return CliExit.Failed;
         }
 
-        var tree = Path.Combine(path1: repositoryRoot, path2: ShippedTree);
+        return CliExit.Success;
+    }
+    private static string[] CatalogBuildArguments() => ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", "-v", "q", "-nologo"];
 
-        return PuckRootCommand.Invoke(args: [
-            "compile",
-            "--tree",
-            tree,
-            "--output",
-            Path.Combine(path1: repositoryRoot, path2: ShippedCatalog),
-            "--check",
-            .. Directory.EnumerateFiles(path: tree, searchOption: SearchOption.AllDirectories, searchPattern: "*")
-                .Where(predicate: static file => (file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".puck") || file.EndsWith(comparisonType: StringComparison.Ordinal, value: ".world.json")))
-                .Order(comparer: StringComparer.Ordinal),
-        ]);
+    /// <summary>Returns the shipped catalog check's arguments, with repository-relative, forward-slashed paths.</summary>
+    /// <returns>The arguments both the printed plan and the in-process check use from the repository root.</returns>
+    public static string[] CatalogCheckArguments() => ["compile", "--tree", ShippedTree, "--output", ShippedCatalog, "--check"];
+    /// <summary>Builds the shipped catalog and dispatches its check through the root command.</summary>
+    /// <param name="build">Runs the prerequisite build with the supplied dotnet arguments.</param>
+    /// <param name="root">The command tree that runs the catalog check.</param>
+    /// <returns>The build's failure, or the check's exit code when the build succeeds.</returns>
+    public static int CheckCatalog(Func<string[], int> build, RootCommand root) {
+        var exit = build(CatalogBuildArguments());
+
+        return ((exit == 0)
+            ? PuckRootCommand.Invoke(args: CatalogCheckArguments(), root: root)
+            : exit);
     }
 
     /// <summary>Resolves the base a plan compares against: <paramref name="since"/> as given, or with
@@ -337,7 +340,20 @@ internal static class AffectedCommand {
         return true;
     }
 
+    // A plan line is repository-relative and runs from the root, so --run runs its in-process commands from the root
+    // whatever directory the verb starts in.
     private static int Execute(string repositoryRoot, AffectedPlan plan, bool gpu) {
+        var caller = Environment.CurrentDirectory;
+
+        Environment.CurrentDirectory = repositoryRoot;
+
+        try {
+            return ExecuteAtRoot(gpu: gpu, plan: plan, repositoryRoot: repositoryRoot);
+        } finally {
+            Environment.CurrentDirectory = caller;
+        }
+    }
+    private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu) {
         var failed = new List<string>();
 
         // dotnet test builds each suite and applies the settings its project binds (RunSettingsFilePath), so an
@@ -376,7 +392,10 @@ internal static class AffectedCommand {
             }
         }
 
-        if (plan.Catalog && (CheckCatalog(repositoryRoot: repositoryRoot) != 0)) {
+        if (plan.Catalog && (CheckCatalog(
+            build: arguments => BuildCatalog(arguments: arguments, repositoryRoot: repositoryRoot),
+            root: PuckRootCommand.Create(clock: TimeProvider.System)
+        ) != 0)) {
             failed.Add(item: "catalog");
         }
 
@@ -408,7 +427,7 @@ internal static class AffectedCommand {
     }
 
     /// <summary>Writes a plan as the verb prints it: one line per chosen suite (<c>suite</c>), world (<c>test</c>, run with
-    /// <c>puck test</c>) and canary (<c>canary</c>); the catalog, named with the check <c>--run</c> makes of it; parity; then
+    /// <c>puck test</c>) and canary (<c>canary</c>); the catalog, followed by the build and check <c>--run</c> makes of it; parity; then
     /// each unmapped and deleted source with the note that explains it.</summary>
     /// <param name="plan">The plan.</param>
     /// <param name="into">The writer.</param>
@@ -430,7 +449,9 @@ internal static class AffectedCommand {
         }
 
         if (plan.Catalog) {
-            into.WriteLine(value: $"catalog {ShippedCatalog} (puck compile --tree {ShippedTree} --check)");
+            into.WriteLine(value: $"catalog {ShippedCatalog}");
+            into.WriteLine(value: $"dotnet {string.Join(separator: ' ', value: CatalogBuildArguments())}");
+            into.WriteLine(value: $"puck {string.Join(separator: ' ', value: CatalogCheckArguments())}");
         }
 
         if (plan.Parity) {
@@ -552,8 +573,9 @@ internal static class AffectedCommand {
               never unmapped.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test, and
-              prints as a test line. A catalog line names the game's Release catalog, which --run checks
-              with the compile it names; it holds no test worlds. Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
+              prints as a test line. A catalog line names the game's Release catalog, followed by the
+              dotnet build and puck compile --check commands --run uses, runnable from the repository root;
+              it holds no test worlds. Prose, .claude/, .github/, editors/ and experimental/ choose nothing.
 
               --run runs the suites, the worlds and the catalog check; --run --gpu then runs the chosen
               canaries and parity, one after the other.

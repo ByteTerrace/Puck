@@ -1,3 +1,4 @@
+using System.CommandLine.Parsing;
 using Puck.Cli.Affected;
 using Xunit;
 
@@ -180,8 +181,76 @@ public sealed class AffectedSelectionLawTests {
         var lines = text.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: Environment.NewLine);
 
         Assert.Contains(collection: lines, expected: "test src/World/Assets/worlds/tested.puck");
-        Assert.Contains(collection: lines, expected: $"catalog {AffectedCommand.ShippedCatalog} (puck compile --tree {AffectedCommand.ShippedTree} --check)");
+        Assert.Contains(collection: lines, expected: $"catalog {AffectedCommand.ShippedCatalog}");
+        Assert.Contains(collection: lines, expected: $"puck compile --tree {AffectedCommand.ShippedTree} --output {AffectedCommand.ShippedCatalog} --check");
         Assert.DoesNotContain(collection: lines, filter: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: $"test {AffectedCommand.ShippedCatalog}"));
+    }
+    [Fact]
+    public void EveryPuckCommandInThePrintedPlanParses() {
+        var plan = Select(changed: ["build/WorldAssets.targets", "src/World/Assets/worlds/tested.puck", "src/World/Assets/ink.hlsl"]);
+        using var text = new StringWriter();
+
+        AffectedCommand.Describe(into: text, plan: plan);
+
+        var lines = text.ToString().Split(separator: Environment.NewLine, options: StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.NotEmpty(collection: plan.Suites);
+        Assert.NotEmpty(collection: plan.Worlds);
+        Assert.NotEmpty(collection: plan.Canaries);
+        Assert.True(condition: plan.Catalog);
+        Assert.True(condition: plan.Parity);
+
+        var commands = lines.Select(selector: PuckArguments).OfType<string[]>().ToArray();
+
+        Assert.Equal(expected: ((plan.Worlds.Count + plan.Canaries.Count) + 2), actual: commands.Length);
+
+        foreach (var args in commands) {
+            var parsed = PuckRootCommand.Create(clock: TimeProvider.System).Parse(args: args);
+
+            Assert.True(condition: (parsed.Errors.Count == 0),
+                userMessage: $"puck {string.Join(separator: ' ', value: args)}: {string.Join(separator: "; ", values: parsed.Errors.Select(selector: static error => error.Message))}");
+        }
+    }
+    [Fact]
+    public void TheCatalogRunInvokesExactlyThePrintedArgumentsAfterThePrintedBuild() {
+        using var text = new StringWriter();
+
+        AffectedCommand.Describe(plan: Select(changed: ["src/World/Assets/worlds/tested.puck"]), into: text);
+        var lines = text.ToString().Split(separator: Environment.NewLine, options: StringSplitOptions.RemoveEmptyEntries);
+        var printed = Assert.Single(collection: lines.Select(selector: PuckArguments).OfType<string[]>(), predicate: static args => (args[0] == "compile"));
+        var root = PuckRootCommand.Create(clock: TimeProvider.System);
+        var calls = new List<string[]>();
+
+        root.Subcommands.Single(predicate: static command => (command.Name == "compile")).SetAction(action: parsed => {
+            calls.Add(item: [.. parsed.Tokens.Select(selector: static token => token.Value)]);
+            return 37;
+        });
+
+        var exit = AffectedCommand.CheckCatalog(
+            build: arguments => { calls.Add(item: arguments); return 0; },
+            root: root
+        );
+
+        Assert.Equal(actual: exit, expected: 37);
+        Assert.Equal(expected: 2, actual: calls.Count);
+        Assert.Equal(expected: printed, actual: calls[1]);
+        Assert.Contains(collection: lines, expected: $"dotnet {string.Join(separator: ' ', value: calls[0])}");
+        Assert.All(collection: calls[1], action: static argument => Assert.DoesNotContain(actualString: argument, expectedSubstring: "\\"));
+    }
+
+    private static string[]? PuckArguments(string line) {
+        var start = ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "catalog ") || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "puck "))
+            ? line.IndexOf(comparisonType: StringComparison.Ordinal, value: "puck ")
+            : -1);
+
+        if (start >= 0) {
+            return [.. CommandLineParser.SplitCommandLine(commandLine: line[(start + "puck ".Length)..].TrimEnd(trimChar: ')'))];
+        }
+
+        return ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "test ") ||
+            line.StartsWith(comparisonType: StringComparison.Ordinal, value: "canary ") || (line == "parity"))
+            ? [.. CommandLineParser.SplitCommandLine(commandLine: line)]
+            : null);
     }
 
     private sealed class PlanComparer : IEqualityComparer<AffectedPlan> {

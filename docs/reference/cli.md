@@ -748,7 +748,7 @@ base, so passing both is refused.
 - **The catalog**: a change to a shipped world under
   `src/Puck.World/Assets/worlds`, a World pipeline source, the compile verb, or
   a project the composer, the SDF baker, the shader packager or the texture
-  codecs are built from, chooses `puck compile --tree … --check` over the
+  codecs are built from, chooses `puck compile --tree … --output … --check` over the
   game's Release catalog.
 - **Worlds**: a changed `.puck` source that declares `test` blocks is run with
   [`puck test`](#puck-testtest-worlds).
@@ -804,19 +804,23 @@ base, so passing both is refused.
   `Puck.slnx`) chooses every suite. Prose, `.claude/`, `.github/`, `editors/`
   and `experimental/` choose nothing.
 
-The plan prints one line per choice, each naming what `--run` does with it:
+The plan names each choice and prints the catalog's build and check commands:
 
 ```text
 suite Puck.World.Tests
 test src/Puck.World/Assets/worlds/games/reversi.puck
 canary pipeline-ink
-catalog src/Puck.World/bin/Release/net10.0/Assets/worlds (puck compile --tree src/Puck.World/Assets/worlds --check)
+catalog src/Puck.World/bin/Release/net10.0/Assets/worlds
+dotnet build --disable-build-servers src/Puck.World/Puck.World.csproj -c Release -v q -nologo
+puck compile --tree src/Puck.World/Assets/worlds --output src/Puck.World/bin/Release/net10.0/Assets/worlds --check
 parity
 ```
 
 A `test` line is a `.puck` source run with `puck test`. The `catalog` line
 names the game's Release catalog, the compiled worlds the build writes, which
-holds no test worlds: `--run` checks it with the compile the line names.
+holds no test worlds. The following two lines are the exact commands `--run`
+uses to build that catalog and check it, in that order. Each runs from the
+repository root; the compile selects the tree's sources itself.
 
 `--run` builds and runs the chosen suites, then `puck test` on the chosen
 worlds, then the catalog check, and exits 1 when any of them fails. A suite
@@ -2703,7 +2707,7 @@ sources are formatted by [`puck format`](#puck-formatthe-one-formatter), the one
 formatter for every source kind.
 
 ```text
-puck compile <source.puck|document.world.json>... [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--bake-cache <directory> | --check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
+puck compile [<source.puck|document.world.json>...] [-o <out.json-or-directory>] [--tree <root> [--written <report>] [--bake-cache <directory> | --check]] [--validate] [--bundle] [--strict] [--watch] [--update-assets]
 puck decompile <source.json>... [-o <out.puck>] [--overwrite] [--sql] [--embeddings <file.embeddings.json>]
 puck embed <path> [--check] [--provider <fixture|openai-compatible>] [--endpoint <url>] [--omit-dimensions] [--batch-size <n>] [--timeout-seconds <n>]
 puck embed probe <path> <text> [--space <name>] [--against <table>] [--top <n>]
@@ -2712,8 +2716,11 @@ puck lsp
 puck migrate <name> <path> [--check]
 ```
 
-`compile` accepts several source paths and compiles them in the supplied order
-within one process. Each source gets its normal adjacent `.world.json` or
+`compile` requires source paths unless `--tree <root>` is supplied. With
+`--tree` and no source paths, it selects every `.puck` and `.world.json` file
+under `<root>` recursively, in ordinal path order. With source paths, it
+compiles only those paths, in the supplied order within one process. Each
+source gets its normal adjacent `.world.json` or
 `.cartridge.json` output; the first failure stops the batch, leaving earlier
 successful outputs in place. `--output` and `--watch` require exactly one
 source, except with `--tree <root>`: every source must lie under `<root>`, each

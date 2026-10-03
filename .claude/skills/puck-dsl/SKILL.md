@@ -134,8 +134,10 @@ not a filename; one declaration may be written `entry world name = …`, the wor
 `Puck.World --world <source>.puck` boots (a composition with no entry is refused
 at boot by name). A world source that declares no world and lowers to an empty
 document (a module library, `WorldCompilation.EmitsDocument` false) writes
-nothing, prints nothing, and exits 0. `--tree <root> --output <directory> [--written <report>] <sources…>` mirrors every
-source under `<root>` into `<directory>` and removes any other `*.world.json` or
+nothing, prints nothing, and exits 0. `--tree <root> --output <directory> [--written <report>] [<sources…>]` mirrors the
+supplied sources under `<root>` into `<directory>`. Without sources it selects
+every `.puck` and `.world.json` under `<root>` recursively, in ordinal path
+order; explicit sources retain their supplied order. It removes any other `*.world.json` or
 `*.puckb` there. Every name under `<root>` resolves through the name index
 before anything is written; a hand-authored `.world.json` ships as it stands
 with its compiled world unless the `.puck` of its exact name emits that name, so
