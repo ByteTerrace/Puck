@@ -146,6 +146,12 @@ The release probe validates the public hostname and certificate before succeedin
 Azure availability tests check HTTPS readiness and seven days of certificate
 lifetime every fifteen minutes, alerting the existing World hosting action group.
 
+Caddy drops request header fields whose names contain `_` or `.`. It aborts a
+request-body read or response write that makes no progress for a minute; the pauses
+between streamed events don't count. The MCP endpoint's headers (`Authorization`,
+`Origin`, `Mcp-Session-Id`, `MCP-Protocol-Version`, `Last-Event-ID`) contain neither
+character. Caddy and the loopback listener both cap request headers at 16 KiB.
+
 This avoids an additional paid gateway and network hop for the current single
 worker. It does not turn the worker into a highly available cluster: the release
 lane still refuses multiple authoritative workers. The CLI hosts MCP as a silo
