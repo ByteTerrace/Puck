@@ -182,9 +182,9 @@ public sealed class CanaryOffscreenLawTests : IDisposable {
             actual: CanaryCommand.ExpandProofs(backends: WorldOffscreenLeg.Backends, manifests: [.. offscreen.Where(predicate: static manifest => (manifest.Id == "pipeline-feedback"))]).Select(selector: static proof => proof.Label)
         );
     }
-    [InlineData("pipeline-feedback/fixture.world.json", "feedback", 1f)]
-    [InlineData("pipeline-feedback/wrong-history.world.json", "feedback", 1f)]
-    [InlineData("pipeline-ink/fixture.world.json", "ink", 0f)]
+    [InlineData("pipeline-feedback/fixture.puck", "feedback", 1f)]
+    [InlineData("pipeline-feedback/wrong-history.puck", "feedback", 1f)]
+    [InlineData("pipeline-ink/fixture.puck", "ink", 0f)]
     [Theory]
     public void EveryOffscreenFixtureWorldValidatesAsAnOffscreenPipelineHost(string relativePath, string pipeline, float timeScale) {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));

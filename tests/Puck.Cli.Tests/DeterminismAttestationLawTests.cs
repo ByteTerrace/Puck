@@ -15,7 +15,7 @@ public sealed class DeterminismAttestationLawTests {
     private static string World(string name) {
         Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root));
 
-        return Path.Combine(path1: root, path2: $"tests/Puck.World.Canaries/{name}/fixture.world.json");
+        return Path.Combine(path1: root, path2: $"tests/Puck.World.Canaries/{name}/fixture.puck");
     }
 
     [InlineData("velocity")]
