@@ -62,6 +62,11 @@ batch lands, merge the integration head into every open batch before its
 qualification run ([`verification`](../verification/SKILL.md#gpu-legs) owns
 the run).
 
+A gate (a batch landing, a review slot) blocks a lane, never a partner: the
+partner takes its next work from its track or the ready queue. A lane's GPU legs
+run as soon as it is GPU-ready; the batch's GPU run re-confirms them and does not
+wait on them.
+
 The lead runs any merge an agent is denied. Agents resolve conflicts in
 generated files, including shader interfaces, fingerprints and generated
 schemas, by running their generators; never hand-merge those files.
