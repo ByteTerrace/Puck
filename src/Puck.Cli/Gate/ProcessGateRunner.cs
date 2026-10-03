@@ -27,10 +27,10 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
         timeout: ((arguments[0] == "build") ? BuildTimeout : StepTimeout)
     );
     /// <inheritdoc/>
-    public bool WaitForCapacity(string repositoryRoot, string step) {
+    public bool WaitForCapacity(string repositoryRoot, string step, bool device) {
         var probe = new HostProbe(checkoutRoot: repositoryRoot);
 
-        return HostAdmission.Wait(step, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock,
+        return HostAdmission.Wait(step, device, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock,
             delay => Task.Delay(cancellationToken: cancellationToken, delay: delay, timeProvider: clock).GetAwaiter().GetResult(), Console.Error, cancellationToken);
     }
     public string CopyCli(string repositoryRoot, string directory) {
@@ -60,7 +60,7 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
         );
     }
     /// <inheritdoc/>
-    public GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments) => Captured(
+    public GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments, Action<string>? progress = null) => Captured(
         run: CliProcess.RunCaptured(
             arguments: [cli, .. arguments],
             fileName: "dotnet",
@@ -68,7 +68,8 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
             clock: clock,
             cancellationToken: cancellationToken,
             timeout: StepTimeout,
-            workingDirectory: repositoryRoot
+            workingDirectory: repositoryRoot,
+            onOutput: ((progress is null) ? null : line => progress(obj: line.Line))
         ),
         timeout: StepTimeout
     );

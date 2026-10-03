@@ -1,0 +1,725 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+export action
+export binding hp, targeted
+export read hp, targeted, dead, elementLabel
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "grounded"
+    operations [ResolveYawAttitudeAndPlanarFrame, ResolveHold, ComputePlanarTargetVelocity, ShapeVelocity, SnapYawToPlanarIntent, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]
+    version: "puck.body.program.v1"
+  }
+]
+
+channels [
+  {
+    composition: true
+    name: "attack"
+    shape: Binary
+  }
+  {
+    composition: true
+    name: "target"
+    shape: Binary
+  }
+  {
+    composition: true
+    name: "element"
+    shape: Binary
+  }
+]
+
+interactions {
+  interactions [
+    {
+      coOccurrence: Region
+      effects [
+        scheduleState(delaySeconds: 3, key: $left, state: burning)
+      ]
+      left: flammable
+      mode: Edge
+      name: "pit-ignites"
+      range: 0
+      right: firePit
+    }
+    {
+      coOccurrence: Region
+      effects [
+        setState(key: $left, state: frozen, value: 1)
+        scheduleState(delaySeconds: 3, key: $left, state: frozenUntil)
+      ]
+      left: freezable
+      mode: Edge
+      name: "pool-chills"
+      range: 0
+      right: icePool
+    }
+  ]
+}
+
+kits {
+  rows [
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "grounded"
+      collider: capsule(endpoint: [0, 1.6, 0], radius: 0.35)
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: Surface
+            cone [0, 60]
+            envelope {
+              sinkSpeed: 20
+            }
+            gravity {
+              fall: 23
+              rise: 14
+            }
+            hold: Gravity
+            name: "ground"
+            reach: 1.2
+          }
+          {
+            bond: Free
+            envelope {
+              sinkSpeed: 20
+            }
+            gravity {
+              fall: 23
+              rise: 14
+            }
+            hold: Gravity
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {}
+          }
+        ]
+        speed {
+          value: 0.01
+        }
+        turn {
+          rate: 0.01
+        }
+      }
+      name: "dummyKit"
+    }
+  ]
+}
+
+navigation {
+  domains [
+    {
+      agentHeight: 1.8
+      agentRadius: 0.35
+      arrivalDistance: 0.5
+      cellSize: 1
+      depth: 20
+      kind: Surface
+      layers: 1
+      maxExpandedNodes: 400
+      maxPathNodes: 64
+      maxSlopeDegrees: 60
+      maxStepHeight: 0.55
+      name: "yard"
+      origin [-10, -2, -10]
+      probeDown: 3
+      probeUp: 2.5
+      width: 20
+    }
+  ]
+}
+
+placements {
+  placement "arenaCourt" {
+    prototype: "arenaYard"
+    position [0, 0, 0]
+    solid
+  }
+
+  placement "firePit" {
+    prototype: "firePit"
+    parent: "arenaCourt"
+    position [6, 0, -6]
+    region {
+      radius: 1.5
+    }
+  }
+
+  placement "icePool" {
+    prototype: "icePool"
+    parent: "arenaCourt"
+    position [-6, 0, -6]
+    region {
+      radius: 1.5
+    }
+  }
+
+  placement "dummyA" {
+    prototype: "trainingDummy"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.1
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "dummyKit"
+      look: null
+      source: "Idle"
+    }
+    parent: "arenaCourt"
+    position [3, 0, 4]
+    yawDegrees: 180deg
+  }
+
+  placement "dummyB" {
+    prototype: "trainingDummy"
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.1
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "dummyKit"
+      look: null
+      source: "Idle"
+    }
+    parent: "arenaCourt"
+    position [-3, 0, 4]
+    yawDegrees: 180deg
+  }
+}
+
+prototypes {
+  prototype "arenaYard" {
+    document {
+      name: "arenaYard"
+      palette [
+        {
+          color: "#8C8C77"
+        }
+        {
+          color: "#6B6B5E"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "floor" {
+        material: 0
+        position [0, -0.05, 0]
+        scale [10, 0.05, 10]
+      }
+
+      shape Box "wall-north" {
+        material: 1
+        position [0, 1, 10]
+        scale [10.3, 1, 0.15]
+      }
+
+      shape Box "wall-south" {
+        material: 1
+        position [0, 1, -10]
+        scale [10.3, 1, 0.15]
+      }
+
+      shape Box "wall-east" {
+        material: 1
+        position [10, 1, 0]
+        scale [0.15, 1, 10.3]
+      }
+
+      shape Box "wall-west" {
+        material: 1
+        position [-10, 1, 0]
+        scale [0.15, 1, 10.3]
+      }
+    }
+  }
+
+  prototype "trainingDummy" {
+    document {
+      name: "trainingDummy"
+      palette [
+        {
+          color: "#8A5A34"
+        }
+        {
+          color: "#C2A05A"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Cylinder "base" {
+        material: 0
+        position [0, 0.1, 0]
+        scale [0.3, 0.1, 0.3]
+      }
+
+      shape Cylinder "post" {
+        material: 0
+        position [0, 0.9, 0]
+        scale [0.08, 0.8, 0.08]
+      }
+
+      shape Box "torso" {
+        material: 1
+        position [0, 1.5, 0]
+        scale [0.35, 0.5, 0.25]
+      }
+
+      shape Sphere "head" {
+        material: 1
+        position [0, 2.05, 0]
+        scale [0.22, 0.22, 0.22]
+      }
+    }
+  }
+
+  prototype "firePit" {
+    document {
+      name: "firePit"
+      palette [
+        {
+          color: "#FF5A1F"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Cylinder "disc" {
+        material: 0
+        position [0, 0, 0]
+        scale [1.5, 0.08, 1.5]
+      }
+    }
+  }
+
+  prototype "icePool" {
+    document {
+      name: "icePool"
+      palette [
+        {
+          color: "#5AC8FA"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Cylinder "disc" {
+        material: 0
+        position [0, 0, 0]
+        scale [1.5, 0.08, 1.5]
+      }
+    }
+  }
+}
+
+rule "auto-target" {
+  when autoTarget[0] == 1
+  mode: Level
+  targeted[0] = nearest(body, 0, enemy)
+}
+
+rule "target-nearest" {
+  when channel(1, target) >= 1
+  mode: Edge
+  targeted[0] = nearest(body, 0, enemy)
+}
+
+rule "auto-attack-on" {
+  when autoAttackToggle[0] == 1 and autoAttackPrev[0] == 0
+  mode: Level
+  autoAttackOn[0] = 1
+  autoAttackToggle[0] = 0
+}
+
+rule "auto-attack-off" {
+  when autoAttackToggle[0] == 1 and autoAttackPrev[0] == 1
+  mode: Level
+  autoAttackOn[0] = 0
+  autoAttackToggle[0] = 0
+}
+
+rule "auto-attack-mirror" {
+  when autoAttackPrev[0] != autoAttackOn[0]
+  mode: Level
+  setState(fromKey: 0, fromState: autoAttackOn, key: 0, state: autoAttackPrev)
+}
+
+rule "target-of-target" {
+  when targeted[0] >= 0
+  mode: Level
+  setState(fromKey: targeted[0], fromState: targeted, key: 0, state: targetOfTarget)
+}
+
+rule "target-of-target-none" {
+  when targeted[0] < 0
+  mode: Level
+  targetOfTarget[0] = -1
+}
+
+rule "target-name" {
+  when targeted[0] >= 0
+  mode: Level
+  setState(fromKey: targeted[0], fromState: bodyName, key: 0, state: targetName)
+}
+
+rule "target-name-none" {
+  when targeted[0] < 0
+  mode: Level
+  targetName[0] = "none"
+}
+
+rule "target-of-target-name" {
+  when targetOfTarget[0] >= 0
+  mode: Level
+  setState(fromKey: targetOfTarget[0], fromState: bodyName, key: 0, state: targetOfTargetName)
+}
+
+rule "target-of-target-name-none" {
+  when targetOfTarget[0] < 0
+  mode: Level
+  targetOfTargetName[0] = "none"
+}
+
+rule "element-cycle" {
+  when channel(1, element) >= 1
+  mode: Edge
+  elementIndex[0] += 1
+}
+
+rule "element-wrap" {
+  when elementIndex[0] > 2
+  mode: Level
+  elementIndex[0] = 0
+}
+
+rule "element-label" {
+  mode: Level
+  setState(fromKey: elementIndex[0], fromState: elementName, key: 0, state: elementLabel)
+}
+
+rule "manual-attack" {
+  when channel(1, attack) >= 1 and targeted[0] >= 0 and distance(body, 0, cell, targeted, 0) <= 2.5 and $tick >= attackCooldown[0] and dead[0] != 1
+  mode: Edge
+  hp[targeted[0]] += -25
+  schedule hitRecently[targeted[0]] in 4s
+  targeted[targeted[0]] = 0
+  schedule attackCooldown[0] in 1s
+}
+
+rule "auto-attack" {
+  when autoAttackOn[0] == 1 and targeted[0] >= 0 and distance(body, 0, cell, targeted, 0) <= 2.5 and $tick >= attackCooldown[0] and dead[0] != 1
+  mode: Level
+  hp[targeted[0]] += -25
+  schedule hitRecently[targeted[0]] in 4s
+  targeted[targeted[0]] = 0
+  schedule attackCooldown[0] in 1s
+}
+
+rule "fire-strike" {
+  when channel(1, attack) >= 1 and elementIndex[0] == 1 and targeted[0] >= 0 and distance(body, 0, cell, targeted, 0) <= 2.5 and dead[0] != 1
+  mode: Edge
+  schedule burning[targeted[0]] in 4s
+}
+
+rule "frost-strike" {
+  when channel(1, attack) >= 1 and elementIndex[0] == 2 and targeted[0] >= 0 and distance(body, 0, cell, targeted, 0) <= 2.5 and dead[0] != 1
+  mode: Edge
+  frozen[targeted[0]] = 1
+  schedule frozenUntil[targeted[0]] in 4s
+}
+
+rule "burn" {
+  when $tick < burning[$each] and dead[$each] != 1
+  mode: Level
+  forEach: burning
+  hp[$each] += -3
+  hot[$each] = 1
+}
+
+rule "burn-out" {
+  when $tick >= burning[$each] and hot[$each] == 1
+  mode: Level
+  forEach: burning
+  hot[$each] = 0
+}
+
+rule "thaw" {
+  when frozen[$each] > 0
+  mode: Level
+  forEach: frozen
+  cold[$each] = 1
+}
+
+rule "thawed" {
+  when $tick >= frozenUntil[$each] and frozen[$each] == 1
+  mode: Level
+  forEach: frozenUntil
+  frozen[$each] = 0
+  cold[$each] = 0
+}
+
+rule "frost-quenches-fire" {
+  when frozen[$each] > 0 and $tick < burning[$each]
+  mode: Level
+  forEach: frozen
+  burning[$each] = 0
+}
+
+rule "regen" {
+  when $tick >= hitRecently[$each] and $tick >= burning[$each] and hp[$each] <= 995
+  mode: Level
+  forEach: regenerates
+  hp[$each] += 5
+}
+
+rule "death" {
+  when hp[$each] <= 0
+  mode: Edge
+  forEach: mortal
+  dead[$each] = 1
+  burning[$each] = 0
+  frozen[$each] = 0
+  schedule respawnIn[$each] in 3s
+}
+
+rule "respawn" {
+  when dead[$each] == 1 and $tick >= respawnIn[$each]
+  mode: Edge
+  forEach: mortal
+  hp[$each] = 300
+  dead[$each] = 0
+}
+
+rule "look-dead" {
+  when dead[$each] == 1
+  mode: Edge
+  forEach: dead
+  setState(fromKey: $each, fromState: deadLook, key: $each, state: lookOf)
+}
+
+rule "look-ice" {
+  when frozen[$each] > 0 and dead[$each] != 1
+  mode: Edge
+  forEach: frozen
+  setState(fromKey: $each, fromState: iceLook, key: $each, state: lookOf)
+}
+
+rule "look-fire" {
+  when $tick < burning[$each] and frozen[$each] <= 0 and dead[$each] != 1
+  mode: Edge
+  forEach: burning
+  setState(fromKey: $each, fromState: fireLook, key: $each, state: lookOf)
+}
+
+rule "look-normal" {
+  when $tick >= burning[$each] and frozen[$each] <= 0 and dead[$each] != 1
+  mode: Edge
+  forEach: dead
+  setState(fromKey: $each, fromState: normalLook, key: $each, state: lookOf)
+}
+
+spawnPoints [
+  {
+    id: "arena-arrival"
+    position [0, 0, 8]
+    yawDegrees: 180
+  }
+]
+
+state {
+  world {
+    table enemy {
+      "1" = 1
+      "2" = 1
+    }
+
+    table targeted capacity(8) bounds(-1..7) {
+      "0" = -1
+    }
+
+    table targetOfTarget capacity(8) bounds(-1..7) {
+      "0" = -1
+    }
+
+    table autoTarget capacity(8) bounds(0..1) {
+      "0" = 1
+    }
+
+    table autoAttackOn capacity(8) bounds(0..1) {
+      "0" = 0
+    }
+
+    table autoAttackPrev capacity(8) bounds(0..1) {
+      "0" = 0
+    }
+
+    table autoAttackToggle capacity(8) bounds(0..1) {
+      "0" = 0
+    }
+
+    table attackCooldown capacity(8) {
+      "0" = 0
+    }
+
+    table elementIndex capacity(8) bounds(0..2) {
+      "0" = 0
+    }
+
+    table elementName {
+      "0" = "plain"
+      "1" = "fire"
+      "2" = "frost"
+    }
+
+    table elementLabel {
+      "0" = "plain"
+    }
+
+    table bodyName {
+      "0" = "you"
+      "1" = "dummy-a"
+      "2" = "dummy-b"
+    }
+
+    table targetName {
+      "0" = "none"
+    }
+
+    table targetOfTargetName {
+      "0" = "none"
+    }
+
+    table hot capacity(8) {
+      "1" = 0
+      "2" = 0
+    }
+
+    table flammable capacity(8) {
+      "1" = 1
+      "2" = 1
+    }
+
+    table freezable capacity(8) {
+      "1" = 1
+      "2" = 1
+    }
+
+    table burning capacity(8) {
+      "1" = 0
+      "2" = 0
+    }
+
+    row {
+      capacity: 8
+      cells [
+        {
+          key: "1"
+          value: 0
+        }
+        {
+          key: "2"
+          value: 0
+        }
+      ]
+      gatesDrive: true
+      kind: "Int"
+      max: 1
+      min: 0
+      name: "frozen"
+    }
+
+    table frozenUntil capacity(8) {
+      "1" = 0
+      "2" = 0
+    }
+
+    table cold capacity(8) {
+      "1" = 0
+      "2" = 0
+    }
+
+    table hitRecently capacity(8) {
+      "1" = 0
+      "2" = 0
+    }
+
+    row {
+      capacity: 8
+      cells [
+        {
+          key: "0"
+          value: 0
+        }
+        {
+          key: "1"
+          value: 0
+        }
+        {
+          key: "2"
+          value: 0
+        }
+      ]
+      gatesDrive: true
+      kind: "Int"
+      name: "dead"
+    }
+
+    table respawnIn capacity(8) {
+      "1" = 0
+      "2" = 0
+    }
+
+    table mortal capacity(8) {
+      "1" = 1
+      "2" = 1
+    }
+
+    table regenerates capacity(8) {
+      "1" = 1
+      "2" = 1
+    }
+
+    table hp capacity(8) bounds(0..1000) {
+      "1" = 1000
+      "2" = 1000
+    }
+
+    table lookOf {
+      "1" = "dummy"
+      "2" = "dummy"
+    }
+
+    table normalLook {
+      "1" = "dummy"
+      "2" = "dummy"
+    }
+
+    table fireLook {
+      "1" = "dummy-fire"
+      "2" = "dummy-fire"
+    }
+
+    table iceLook {
+      "1" = "dummy-ice"
+      "2" = "dummy-ice"
+    }
+
+    table deadLook {
+      "1" = "dummy-down"
+      "2" = "dummy-down"
+    }
+  }
+}
