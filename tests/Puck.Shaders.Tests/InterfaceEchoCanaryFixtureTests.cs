@@ -46,9 +46,9 @@ public sealed class InterfaceEchoCanaryFixtureTests {
         ("sdf-film-grain", "package sdf.film-grain", static () => PackageOf(id: RenderGraphPackageCatalog.SdfFilmGrain)),
         ("place", "package place", static () => PackageOf(id: RenderGraphPackageCatalog.Place)),
         ("overlay", "package overlay", static () => PackageOf(id: RenderGraphPackageCatalog.Overlay)),
-        // Each source conversion package binds its region, its image and the work counters beside a pass block of the
-        // extent and its work counter row.
-        .. RenderGraphPackageCatalog.SourceConversions.Select(selector: static id => ("source", $"package {id}", ((Func<ShaderInterfaceLayout>)(() => PackageOf(id: id))))),
+        // Each source conversion package binds its region or its imported image, its image and the work counters beside a
+        // pass block of the extent and its work counter row.
+        .. RenderGraphPackageCatalog.SourceConversions.Concat(second: RenderGraphPackageCatalog.ImageConversions).Select(selector: static id => ("source", $"package {id}", ((Func<ShaderInterfaceLayout>)(() => PackageOf(id: id))))),
         // The SDF engine's two pass interfaces: every per-view dispatch's, and the brick baker's, whose pass block is its
         // slice extent alone, ink finish's.
         ("sdf-world", $"package {RenderGraphPackageCatalog.SdfWorld}", static () => PackageOf(id: RenderGraphPackageCatalog.SdfWorld)),

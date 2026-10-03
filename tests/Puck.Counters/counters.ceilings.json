@@ -1991,7 +1991,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 288,
+          "ceiling": 1936,
           "detail": null
         },
         {
@@ -2766,7 +2766,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 96,
+          "ceiling": 352,
           "detail": null
         },
         {
@@ -5414,7 +5414,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 288,
+          "ceiling": 1936,
           "detail": null
         },
         {
@@ -6189,7 +6189,7 @@
           "pass": null,
           "kind": "gpu.copies.buffer-bytes",
           "class": "deterministic",
-          "ceiling": 96,
+          "ceiling": 352,
           "detail": null
         },
         {
