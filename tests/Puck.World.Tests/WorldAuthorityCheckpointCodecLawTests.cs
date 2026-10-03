@@ -16,13 +16,13 @@ namespace Puck.World.Tests;
 
 /// <summary>Round-trip and refusal laws for <see cref="WorldAuthorityCheckpointCodec"/>, then the hermetic wiring
 /// through <see cref="WorldAuthorityBlobStore"/> over <see cref="FakeObjectBlobStore"/>.</summary>
-public sealed class WorldAuthorityCheckpointCodecLawTests {
+public sealed partial class WorldAuthorityCheckpointCodecLawTests {
     private static readonly ObjectStorageTarget Target = AzureBlobObjectStorageTarget.FromConnectionStringOrServiceUri(value: "UseDevelopmentStorage=true");
     // Capturing boots a server and steps it; the checkpoint is an immutable record, so one capture serves every law.
-    private static readonly Lazy<WorldAuthorityCheckpoint> Captured = new(valueFactory: Capture);
+    private static readonly Lazy<WorldAuthorityCheckpoint> Captured = new(valueFactory: static () => Capture());
 
     private static WorldAuthorityCheckpoint CapturedCheckpoint() => Captured.Value;
-    private static WorldAuthorityCheckpoint Capture() {
+    private static WorldAuthorityCheckpoint Capture(WorldTransferCommitMember? commitMember = null) {
         using var fixture = Fixtures.FreshServer();
 
         Assert.True(
@@ -51,7 +51,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         Assert.True(
             condition: fixture.Server.TryCaptureCheckpoint(
                 checkpoint: out var checkpoint,
-                hostRow: SampleHostRow(dynamicState: dynamicState),
+                hostRow: SampleHostRow(commitMember: commitMember, dynamicState: dynamicState),
                 reason: out var reason
             ),
             userMessage: reason
@@ -61,8 +61,8 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
     }
     // Carries one populated WorldInDoubtTransferCheckpoint (commit members AND landed members both non-empty) so the
     // round-trip laws below actually exercise every leaf the in-doubt shape added, not just its zero-length case.
-    private static WorldAuthorityHostRowCheckpoint SampleHostRow(WorldBodyTransferState dynamicState) {
-        var commitMember = new WorldTransferCommitMember(
+    private static WorldAuthorityHostRowCheckpoint SampleHostRow(WorldBodyTransferState dynamicState, WorldTransferCommitMember? commitMember = null) {
+        commitMember ??= new WorldTransferCommitMember(
             ActionContinuity: new WorldTransferActionContinuity(
                 Channels: [new WorldTransferChannelEdge(
                         Name: "move",

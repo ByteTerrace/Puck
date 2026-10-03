@@ -133,6 +133,25 @@ public sealed class CrossingReplayLawTests {
         }
     }
 
+    /// <summary>Copies a tape keeping only the authority entries <paramref name="keep"/> accepts, every other field as
+    /// recorded.</summary>
+    internal static WorldReplaySnapshot KeepingAuthority(WorldReplaySnapshot tape, Func<WorldReplayEntry, bool> keep) => new() {
+        Authority = tape.Authority,
+        DefinitionJson = tape.DefinitionJson,
+        DocumentDirectory = tape.DocumentDirectory,
+        DocumentPath = tape.DocumentPath,
+        Instance = tape.Instance,
+        MountedAddons = tape.MountedAddons,
+        PipelineSourceDirectory = tape.PipelineSourceDirectory,
+        RecordedAuthoritativeHashes = tape.RecordedAuthoritativeHashes,
+        RecordedHashes = tape.RecordedHashes,
+        Seats = tape.Seats,
+        SimulationRate = tape.SimulationRate,
+        Ticks = [.. tape.Ticks.Select(selector: tick => new WorldReplayTickInput(
+            Authority: [.. tick.Authority.Where(predicate: keep)],
+            Intents: tick.Intents
+        ))],
+    };
     private static bool IsArrival(WorldReplayEntry entry, WorldChannelTable channels) => WorldReplayEntryDescriber.Describe(
         channels: channels,
         entry: entry
@@ -303,26 +322,7 @@ public sealed class CrossingReplayLawTests {
         );
 
         // The red leg: the same tape with its arrival removed replays identically up to the arrival and diverges on it.
-        var stripped = new WorldReplaySnapshot {
-            Authority = destination.Authority,
-            DefinitionJson = destination.DefinitionJson,
-            DocumentDirectory = destination.DocumentDirectory,
-            DocumentPath = destination.DocumentPath,
-            Instance = destination.Instance,
-            MountedAddons = destination.MountedAddons,
-            PipelineSourceDirectory = destination.PipelineSourceDirectory,
-            RecordedAuthoritativeHashes = destination.RecordedAuthoritativeHashes,
-            RecordedHashes = destination.RecordedHashes,
-            Seats = destination.Seats,
-            SimulationRate = destination.SimulationRate,
-            Ticks = [.. destination.Ticks.Select(selector: tick => new WorldReplayTickInput(
-                Authority: [.. tick.Authority.Where(predicate: entry => !IsArrival(
-                    channels: channels,
-                    entry: entry
-                ))],
-                Intents: tick.Intents
-            ))],
-        };
+        var stripped = KeepingAuthority(keep: entry => !IsArrival(channels: channels, entry: entry), tape: destination);
 
         Assert.Equal(
             expected: arrivalTick,

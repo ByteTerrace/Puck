@@ -609,8 +609,8 @@ public sealed partial class FederationTransferLawTests {
             ) == WorldTransferStatus.Committed),
             userMessage: replay
         );
-        var alternatives = new WorldTransferActionContinuity?[] {
-            null, continuity with { Channels = [] }, continuity with { Registers = [] },
+        var alternatives = new WorldTransferActionContinuity[] {
+            WorldTransferActionContinuity.Empty, continuity with { Channels = [] }, continuity with { Registers = [] },
             continuity with { Channels = channels.Reverse().ToArray() }, continuity with { Registers = registers.Reverse().ToArray() },
             continuity with { Channels = [channels[0] with { Name = "other" }, channels[1]] },
             continuity with { Channels = [channels[0] with { PreviousBit = false }, channels[1]] },
