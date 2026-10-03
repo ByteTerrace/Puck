@@ -1911,6 +1911,8 @@ run, so a performance change can be judged by counted work rather than by time.
 ```text
 puck counters [--world <file>] [--script <file>] [--output <file>] [--check | --record] [--ceilings <file>]
                                            run the workload on both backends and write the report
+puck counters --report <file> [--check | --record] [--ceilings <file>]
+                                           judge or record a saved report
 puck counters compare <left> <right>       compare two reports
 ```
 
@@ -1932,8 +1934,8 @@ The `sky-still`, `sky-drift`, `sky-twinkle`, and `sky-cycle` worlds under
 `tests/Puck.Counters`, each run with `sky.script.txt`, hold the camera still
 and enable cadence. They isolate an unchanging sky, cloud drift, star twinkle,
 and a changing cycle value so their pass counts show which work each change
-requires. Each has its own ceilings beside it, recorded on the floor machine
-(`sky-still.ceilings.json` and so on); pass it with `--ceilings`, because the
+requires. Each has its own ceilings beside it, with a record for each device
+that ran it (`sky-still.ceilings.json` and so on); pass it with `--ceilings`, because the
 default ceilings cover only the default workload. A cadence-omitted node has no completed sample
 in the report, so missing rows must not be read as measured zeros.
 
@@ -1991,54 +1993,80 @@ different sources, a note on standard error says so.
 `--check` holds the run's report to the counted-cost ceilings in
 `tests/Puck.Counters/counters.ceilings.json`, a `puck.counters.ceilings.v1`
 document whose schema, `tests/Puck.Counters/puck.counters.ceilings.v1.schema.json`,
-`puck schema` generates. For each backend, recorded on one device at the
-workload's resolution, the file states what every render node's GPU submission
-kinds may read, pass by pass and outside every pass: each deterministic or
-per-backend-deterministic count reads at most its ceiling, and a ceiling of zero
-is a required zero. The SDF view's march steps (`gpu.march.steps`) and texels
-written (`gpu.texels.written`), which its kernels count on the GPU, are among
-them, so a pass that cannot do such work (`sdf.world$cull-args` marches
-nothing) and a pass the floor tier skips (the shadow and ambient passes, and
-the mesh pass of a meshless frame) hold required zeros. Every recorded ceiling must
-have been measured: its count read, of the class it was recorded as, or its pass
-reported and not executed, which reads zero. A per-backend-deterministic count's
-value is judged only on the device the backend's ceilings were recorded on, with
-one exception: a ceiling that carries `requiredZero` is a zero of a kernel kind
-(march steps, texels written, sky evaluations), a magnitude that follows the
-device, that its pass never counts, so zero is a structural contract and is
-judged on every device and backend. On any other device, one line says how many
-per-backend-deterministic counts were not judged and how many required zeros
-were still judged. A zero of a deterministic kind loosened to a device-following
-pass's class (the SDF `upload` and `bricks` passes) is one device's policy, not
-a required zero, and is not judged elsewhere. The run prints one line for
-each count over its ceiling, each required zero broken, each ceiling not measured
-or measured as another class, and each count no ceiling was recorded for, naming
-its backend, class, kind, pass and node, then whether the ceilings hold.
+`puck schema` generates. At the workload's resolution, the file states for each
+backend what every render node's GPU submission kinds may read, pass by pass
+and outside every pass: each deterministic or per-backend-deterministic count
+reads at most its ceiling, and a ceiling of zero is a required zero. The SDF
+view's march steps (`gpu.march.steps`) and texels written
+(`gpu.texels.written`), which its kernels count on the GPU, are among them, so
+a pass that cannot do such work (`sdf.world$cull-args` marches nothing) and a
+pass the floor tier skips (the shadow and ambient passes, and the mesh pass of
+a meshless frame) hold required zeros.
 
-`--record` writes the run's counts as the ceilings instead, each reading its own
-ceiling, and every submission kind of a pass that did not execute as a zero. A
-zero of a per-backend-deterministic kind is written with `requiredZero` set. A
-record is all or nothing: when the backends disagree on a deterministic count or
-a pass state, or the recorded ceilings would fail their own run, the verb writes
-no file, leaves an existing one byte for byte as it was, prints `not written: …`
-and exits 1. The write uses a flushed temporary file and atomic replacement;
-a write failure also leaves the existing ceilings unchanged, prints the reason
-and exits 1. `--output` names a different file from the ceilings when `--check`
-or `--record` is selected; a collision refuses before the workload runs.
-A ceiling is re-recorded only in the change that explains why its count
-moved, never from wall-clock or GPU timing. `--ceilings <file>` names another
-ceilings file for either option.
+Each backend's ceilings are in two parts. Its shared ceilings hold every
+deterministic count and every ceiling carrying `requiredZero`: a zero of a
+kernel kind (march steps, texels written, sky evaluations), a magnitude that
+follows the device, that its pass never counts, so zero is a structural
+contract on every device. Its `devices` hold one record per device, with every
+other per-backend-deterministic ceiling: the kernel kinds' magnitudes, and the
+counts of a pass whose work follows the device (the SDF `upload` and `bricks`
+passes), whose zeros are that device's policy rather than required zeros. A
+record is keyed by the backend, the adapter's PCI vendor and device, and the
+driver implementation (`driver.id`); it carries the whole device identity,
+driver version included, as recorded evidence. A run is held to its backend's
+shared ceilings and its own device's record.
+
+A run on a device with no record fails with one line naming it, `no ceilings
+recorded for <device>; run puck counters --record on it`, and is still held to
+the shared ceilings; no count goes unjudged without a failure. A driver update
+keeps the device's record, because the record's counts come from Puck's own
+recording and from loops the shaders count, which a driver's compiler can move
+only through floating-point results; a count it moves is judged against the
+recorded reading, and a line names the recorded and the running drivers. Every
+recorded ceiling must have been measured: its count read, of the class it was
+recorded as, or its pass reported and not executed, which reads zero. The run
+prints one line for each count over its ceiling, each required zero broken,
+each ceiling not measured or measured as another class, and each count no
+ceiling was recorded for, naming its backend, class, kind, pass and node, then
+whether the ceilings hold. A kind the current device's record lacks fails on
+that device, whichever other devices record it.
+
+`--record` writes the run's counts into the ceilings instead, each reading its
+own ceiling, and every submission kind of a pass that did not execute as a
+zero. A zero of a per-backend-deterministic kind is written with
+`requiredZero` set. It replaces each backend's shared ceilings, the resolution,
+and the record of the device each backend ran on, adds that record after the
+others when the device has none, and leaves every other device's record byte
+for byte as it was. Another device's record then still judges that device, so
+a change that moves its counts is recorded on it too. A record is all or
+nothing: when the backends disagree on a deterministic count or a pass state,
+the existing file holds another workload or script, a ceiling the record would
+share across devices is another device's own reading, or the recorded ceilings
+would fail their own run, the verb writes no file, leaves an existing one byte
+for byte as it was, prints `not written: …` and exits 1. An existing file that
+is not a ceilings document refuses before the workload runs. The write uses a
+flushed temporary file and atomic replacement; a write failure also leaves the
+existing ceilings unchanged, prints the reason and exits 1. `--output` names a
+different file from the ceilings when `--check` or `--record` is selected; a
+collision refuses before the workload runs. A ceiling is re-recorded only in
+the change that explains why its count moved, never from wall-clock or GPU
+timing. `--ceilings <file>` names another ceilings file for either option.
+
+`--report <file>` judges or records a saved `puck.counters.report.v1` report
+instead of running the workload, so it boots nothing and needs no GPU;
+`--world`, `--script` and `--output` select a run and refuse beside it.
 
 ```text
-puck counters --check [--ceilings <file>]   hold the counts to their ceilings
-puck counters --record [--ceilings <file>]  record the counts as the ceilings
+puck counters --check [--ceilings <file>] [--report <file>]   hold the counts to their ceilings
+puck counters --record [--ceilings <file>] [--report <file>]  record the counts into the ceilings
 ```
 
-Exit codes: `puck counters` exits 0 when the backends agree and every judged
-count holds its ceiling, 1 when a deterministic count or pass state differs or a
-ceiling fails, and 2 for a build, leg or reading refusal, including a missing GPU
-device or shader tool, or a ceilings file that is missing or not a ceilings
-document. `counters compare`
+Exit codes: `puck counters` exits 0 when the backends agree and every count
+holds its ceiling, 1 when a deterministic count or pass state differs or a
+ceiling fails, a device with no record included, and 2 for a build, leg or
+reading refusal, including a missing GPU device or shader tool, a ceilings file
+that is missing or not a ceilings document, or a saved report that is not a
+report. `counters compare`
 exits 0 when every comparable count agrees, 1 on a difference, and 2 for a usage
 error or a file that is not a readable report.
 

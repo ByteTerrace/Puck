@@ -348,7 +348,8 @@ with every count tagged by class, and fails when a deterministic count differs
 between the backends. Keep the report from before a change and compare it with
 the one after, using `puck counters compare`. `puck counters --check` also holds
 every pass's counts to the counted-cost ceilings in
-`tests/Puck.Counters/counters.ceilings.json`, and `--record` rewrites them in the
+`tests/Puck.Counters/counters.ceilings.json`, judging each device against its own
+record, and `--record` records the running device's counts into them in the
 change that explains why a count moved.
 
 Compare the same document, camera, resolution, quality settings, backend and
