@@ -155,6 +155,9 @@ public sealed class WorkCountingLawTests {
                 "gpu.shadow.slot3.steps",
                 "gpu.shadow.slot4.steps",
                 "gpu.shadow.slot5.steps",
+                "gpu.environment.projections",
+                "gpu.environment.projection-texels",
+                "gpu.environment.skipped",
             ],
             actual: GpuWork.SubmissionKinds.ToArray().Select(selector: kind => kind.Name)
         );
@@ -171,7 +174,10 @@ public sealed class WorkCountingLawTests {
             actual: GpuWork.LifetimeKinds.ToArray().Select(selector: kind => kind.Name)
         );
         Assert.Same(expected: GpuWork.Dispatches, actual: GpuWork.SubmissionKinds[0]);
-        Assert.Same(expected: GpuWork.ShadowSteps[^1], actual: GpuWork.SubmissionKinds[^1]);
+        Assert.Same(expected: GpuWork.ShadowSteps[^1], actual: GpuWork.SubmissionKinds[26]);
+        Assert.Same(expected: GpuWork.EnvironmentProjections, actual: GpuWork.SubmissionKinds[27]);
+        Assert.Same(expected: GpuWork.EnvironmentProjectionTexels, actual: GpuWork.SubmissionKinds[28]);
+        Assert.Same(expected: GpuWork.EnvironmentSkipped, actual: GpuWork.SubmissionKinds[29]);
         Assert.Equal(
             expected: [GpuWork.MarchSteps, GpuWork.TexelsWritten, GpuWork.SkyEvaluations, GpuWork.SkyHashes, GpuWork.SkyTextureLoads, .. GpuWork.ShadowSteps],
             actual: GpuWork.KernelKinds.ToArray()
