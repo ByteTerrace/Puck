@@ -745,7 +745,7 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
         var (exitCode, stdErr) = VerifyWithTamperedManifest(tamper: static manifest => {
             var arcade = manifest["documents"]!.AsArray().Single(predicate: static document => (((string?)document!["name"]) == "modules/arcade"))!;
 
-            arcade["source"] = "modules/kart.world.json";
+            arcade["source"] = "modules/kart.puck";
 
             return manifest;
         });
@@ -756,7 +756,7 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
         );
         Assert.Contains(
             actualString: stdErr,
-            expectedSubstring: "documents[modules/arcade]: source 'modules/kart.world.json' is another document's file."
+            expectedSubstring: "documents[modules/arcade]: source 'modules/kart.puck' is another document's file."
         );
     }
     [OfficialBuildFact]

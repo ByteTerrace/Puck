@@ -112,7 +112,7 @@ These are implementation entry points inspected while preparing this brief, not 
 | Dynamic emission, palette handling, body registration, transform packing and bounds | [WorldStampPool](../../../src/Puck.World.Client/WorldStampPool.cs) |
 | Primitive composition and scope behavior | [CreationStampEmitter](../../../src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs) |
 | Existing humanoid content example; inspect and validate before reuse | [adventurer.creation.json](../../examples/creations/adventurer.creation.json) |
-| Existing studio district for staging | [studio.world.json](../../../src/Puck.World/Assets/worlds/modules/studio.world.json) |
+| Existing studio district for staging | [studio.puck](../../../src/Puck.World/Assets/worlds/modules/studio.puck) |
 | Production world integration | [puck.world.json](../../../src/Puck.World/Assets/worlds/puck.world.json) |
 | Shared material and lighting implementation | [SdfMaterial](../../../src/Puck.SignedDistance/SdfMaterial.cs), [sdf-material.hlsli](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-material.hlsli), [sdf-lighting.hlsli](../../../src/Puck.SdfVm/Assets/Shaders/Sdf/shade/sdf-lighting.hlsli) |
 
