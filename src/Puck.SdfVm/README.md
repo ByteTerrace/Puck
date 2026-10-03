@@ -89,7 +89,12 @@ the lit image and the visibility records views left. Views whose render-scale
 ceiling is below native use `SdfWorldPackage.Fragment`: its `sdf-resolve.comp`
 reconstructs the lit image and each pixel's surface transport at the output extent
 from the render-grid color, which is one transient allocation, and the sky and
-composite follow it, so the sky is never resampled or kept in history. The graph
+composite follow it, so the sky is never resampled or kept in history. A view
+whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment`
+at any render scale: the views kernel also writes a reactivity buffer, and the
+resolve gathers the jittered samples of `SdfTemporalHistory` (an eight-sample
+Halton period) over the instance's history color and surface, which survive
+from frame to frame in the graph. The graph
 planner decides every barrier. `place` then places the output in its seat rect,
 copying the texels exactly when the output's scheduled extent equals the rect's
 pixels and resampling them otherwise. The residency counts its upload as four
@@ -121,13 +126,14 @@ The buffer reserves `renderWidth × renderHeight × 64` bytes at the view's rend
 view's instance allocates it again beside its installed graph when that extent
 changes. It is transient: one allocation shared by every frame slot, whose
 first use in a frame the planner orders after the frame before.
-The render ceiling (`SdfViewSnapshot.RenderScale`) alone chooses the fragment and
-allocates scratch once; a smaller current grid (`ResolvedRenderScale`, such as a
-layout transition's dip) changes dispatches and the packed visibility stride
+The render ceiling (`SdfViewSnapshot.RenderScale`) and the temporal ask choose the
+fragment, and the ceiling allocates scratch once; a smaller current grid (`ResolvedRenderScale`, which dynamic
+resolution and a layout transition's dip set) changes dispatches and the packed visibility stride
 without replacing storage or rebuilding. The full-output color is priced beside
 the ceiling targets in the node's memory account. The scheduler prices each pass
-at its current grid. Views at a native ceiling retain their eleven passes, allocate
-no resolve resources and ignore the current grid. The shared reconstruction module
+at its current grid. Views at a native ceiling that do not ask for temporal
+reconstruction retain their eleven passes, allocate no resolve resources and
+ignore the current grid. The shared reconstruction module
 serves both `place` and resolve; `SdfResolveDeviceLawTests` executes the shipped
 resolve kernel against the resample canary's analytic values.
 The existing resample canary exercises the shared filter through `place`; the
@@ -254,7 +260,11 @@ in the existing upload pass. A dynamic row contributes 48 bytes and a mesh matri
 frames contribute zero. Host-visible upload bytes remain unchanged.
 
 Each view instance retains the camera and sample grid of its last completed
-render. A cut, view change, or gap invalidates that correspondence.
+render. A cut, view change, or gap invalidates that correspondence, and so does
+a residency whose previous transform tables hold other poses than that render
+read. History commits only when a render completes: a render whose submission
+fails commits no sample, standing or poses, so its retry takes the same jitter
+sample and reprojects from the last render that was written.
 `frame/sdf-reprojection.hlsli` combines it with the visibility record's winning
 slot or mesh triangle to recover the previous pixel and ray distance.
 `world.debug-view motion` shows previous-minus-current motion: red and green
@@ -351,12 +361,6 @@ kernel reload request, or a device loss. A frame that changes none of these trie
 so a lasting failure is attempted once per change and never on a clock.
 Meanwhile no pass of the residency's views installs. The residency keeps its
 lease through the refusal.
-
-The unified overlay (`Puck.Overlays`) refuses its own resources the same way:
-a creation that fails releases what was created, `ResourceRefusal` names it,
-and the overlay presents the inner frame unchanged, forwarding any capture to
-it, until a device loss or a change to the operator's GPU faults, each of which
-tries the creation once more.
 
 Each backend also keeps a persistent pipeline cache per device, so a warm start
 translates nothing. See [Vulkan](../../docs/rendering/vulkan.md#pipeline-cache)

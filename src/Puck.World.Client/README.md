@@ -129,6 +129,23 @@ separate constraint on dense populations; reusable appearances do not remove it.
   path for scene rows and `puck.creation.v1` placements.
 - `WorldViewComposer.cs`—offscreen view composition (the diegetic world
   cameras): layout selection and eased transitions for the main window.
+- `WorldDynamicResolution.cs`, `WorldFramePresenter.DynamicResolution.cs`,
+  `WorldRenderSettings.Resolution.cs`—dynamic resolution, a presentation-only
+  policy that reads no simulation state. `WorldRenderSettings` keeps each view's
+  live state (`WorldRenderViewResolution`: its own `WorldDynamicResolution`
+  controller, an automatic-mode override and a pin) beside the view's authored
+  `views.quality` row, which gives its ceiling and tier floor. Each frame
+  `WorldFramePresenter.DressResolution` advances the view's controller and
+  carries the result as `SdfViewSnapshot.ResolvedRenderScale`, so the grid moves
+  inside the allocation the ceiling sized and no frame reallocates or resets
+  history. The controller reads one load signal: the views' GPU frame time, the
+  present timing where the device times nothing, or the counted march steps
+  against a budget the counters ceilings record
+  (`WorldDynamicResolution.StepBudgetPerPixel`); a pin overrides all three. The
+  `world.render-scale` grammar (`[view] [<scale>|floor <tier>|pin <scale>|auto
+  [on|off]]`) is parsed in `Puck.World`'s `WorldRenderScaleCommand` and applied
+  through `WorldSessionLevers`; pins and controllers are session state and never
+  enter a saved document or replay.
 - `WorldOverlayCapacity.cs`—`FromSchema()`, the one bridge from
   `WorldBodiesLimits.LocalSeatCount`, `WorldHudCapacity`,
   `WorldBindingBarCapacity`, `WorldMarkerCapacity`, and the
@@ -188,7 +205,10 @@ separate constraint on dense populations; reusable appearances do not remove it.
 - `WorldSessionLevers.cs`—the knob vocabulary (the `world.<knob>` verb names
   without their prefix) and the composition-time registration binding each to
   render settings, present pacing, the audio mix gain (`IWorldAudioLever`), or
-  the binding-bar visibility.
+  the binding-bar visibility. Its sibling `WorldSessionLevers.Fold.cs` folds the
+  live levers back into their document sections for a `world.save` snapshot,
+  creating a section only for a moved render ceiling, view quality or editor
+  value; pins never fold.
 - `WorldBindingBarVisibility.cs`—the live per-seat binding-bar visibility
   override the `binding-bar` lever writes and the root's bar-policy resolver
   reads.
