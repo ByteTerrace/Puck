@@ -831,7 +831,8 @@ composer, then places the views and panes of that same frame.
 For every instance a slot shows it places the pane at the slot's rect, with
 the sharpness `world.upscale-sharpness` sets, adds a footprint (consumer
 `main`, producer the pane, at its largest width and height over the layout
-transition in flight, retained through interruptions until the chain settles,
+transition in flight, or its start's extent when the transition grows it on
+one axis and shrinks it on the other, retained through interruptions until the chain settles,
 then its own rect subject to scheduler quantization and shrink hysteresis) so easing its rect never
 resizes a node, advances the pane's clock, and feeds its
 camera, pointer and time. A pane the active layout does not show is not shown:

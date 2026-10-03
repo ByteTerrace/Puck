@@ -1890,17 +1890,20 @@ bound parameters before publishing its mapping. A pane the active layout does
 not show draws nothing in its place pass and is not scheduled. A pane slot adds
 no SDF view. `WorldViewGraphHost.PlaceViews` and `Place` add footprints at the
 envelope the presenter hands them: the largest width and height each occupant
-reaches over the layout transition in flight (`WorldViewOutputRegions` over
-`WorldViewComposer.StartSlots` and `EndSlots`), including a whole-display
-spectator at an endpoint without a rendered slot. Reservations retain their largest
+reaches over the layout transition in flight when its endpoints nest
+(`WorldViewOutputRegions` over `WorldViewComposer.StartSlots` and `EndSlots`),
+including a whole-display spectator at an endpoint without a rendered slot, or
+its start's extent when they oppose, growing on one axis and shrinking on the
+other, which `place` resamples the eased rect from. Reservations retain their largest
 extent through interrupted transitions until the chain settles, then request the
 occupant's own rect, subject to scheduler quantization and shrink hysteresis.
 Placement uses the current eased rect with
 `world.upscale-sharpness`; the envelope holds through easing, so quantization
-and hysteresis rebuild nothing during an uninterrupted ease. Allocations grow as
-it starts and shrink as it settles; growth on one axis and shrinkage on the other
-rebuild at both boundaries
+and hysteresis rebuild nothing during an uninterrupted ease. A transition
+allocates at most once: a growing occupant as it starts, a shrinking one as it
+settles, and an opposite-axis one as it settles
 (`WorldCameraPlacementLawTests.AnEasedRectCrossesQuantizationStepsWithoutRebuildingItsNodeUntilTheTransitionSettles`,
+`AnOppositeAxisTransitionRebuildsItsNodeOnceWhenItSettles`,
 `ASteadySplitLayoutAllocatesItsFirstViewAtItsPlacedHalf`).
 The view package reconstructs a reduced render grid to that native output
 before `place` composes it, and `place` resamples it once more unless the
