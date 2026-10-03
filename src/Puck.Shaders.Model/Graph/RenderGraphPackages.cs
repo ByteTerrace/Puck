@@ -493,6 +493,9 @@ public sealed class RenderGraphPackageCatalog {
     /// <summary>The name of a conversion package's image in its pass group, its output: the storage image every consumer of
     /// the source reads.</summary>
     public const string SourceImage = "image";
+    /// <summary>The name of an image conversion package's input in its pass group (<see cref="ImageConversions"/>): the
+    /// imported image it reads texel by texel, at the extent it writes.</summary>
+    public const string SourceInput = "source";
     /// <summary>The name of a conversion package's pass-block value holding the paper-white level, in cd/m², the luminance
     /// a working value of one shows at, which its recorder writes every frame (<c>SourceConversionPackage</c>). Only
     /// <see cref="Puck.Abstractions.Sources.ImageSourceConversion.TransferPass"/> reads it: an 8-bit sRGB source is at
@@ -511,15 +514,28 @@ public sealed class RenderGraphPackageCatalog {
         ShaderInterfaceMember.StorageImage(format: format, group: ShaderInterfaceGroup.Pass, name: SourceImage, type: ShaderValueType.Float4),
         .. ShaderWorkCounters.Members,
     ];
+    /// <summary>Returns what an image conversion package's kernel reads from its pass group beside the extent: the
+    /// paper-white level (<see cref="SourcePaperWhite"/>), the imported image at binding 1 (<see cref="SourceInput"/>),
+    /// the image it writes at binding 2, and the work counters it counts every texel it writes into, as the kernels in
+    /// <c>Assets/Shaders/Sources</c> declare them.</summary>
+    /// <param name="format">The written image's format.</param>
+    /// <returns>The members.</returns>
+    public static IReadOnlyList<ShaderInterfaceMember> ImageSourceMembers(GpuPixelFormat format) => [
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: SourcePaperWhite, type: ShaderValueType.Float),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SourceInput, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.StorageImage(format: format, group: ShaderInterfaceGroup.Pass, name: SourceImage, type: ShaderValueType.Float4),
+        .. ShaderWorkCounters.Members,
+    ];
     /// <summary>Returns the format of the image a conversion package writes: half-float RGBA for
-    /// <see cref="Puck.Abstractions.Sources.ImageSourceConversion.TransferPass"/>, whose working values keep their
+    /// <see cref="Puck.Abstractions.Sources.ImageSourceConversion.TransferPass"/> and
+    /// <see cref="Puck.Abstractions.Sources.ImageSourceConversion.ScRgbImagePass"/>, whose working values keep their
     /// headroom above SDR white, and RGBA8 for every other.</summary>
-    /// <param name="package">The conversion package's id, one of <see cref="SourceConversions"/>.</param>
+    /// <param name="package">The conversion package's id, one of <see cref="SourceConversions"/> or
+    /// <see cref="ImageConversions"/>.</param>
     /// <returns>The format.</returns>
-    public static GpuPixelFormat SourceFormatOf(string package) => (string.Equals(
-        a: package,
-        b: Puck.Abstractions.Sources.ImageSourceConversion.TransferPass,
-        comparisonType: StringComparison.Ordinal
+    public static GpuPixelFormat SourceFormatOf(string package) => ((
+        string.Equals(a: package, b: Puck.Abstractions.Sources.ImageSourceConversion.TransferPass, comparisonType: StringComparison.Ordinal) ||
+        string.Equals(a: package, b: Puck.Abstractions.Sources.ImageSourceConversion.ScRgbImagePass, comparisonType: StringComparison.Ordinal)
     )
         ? GpuPixelFormat.R16G16B16A16Float
         : GpuPixelFormat.R8G8B8A8Unorm);
@@ -533,8 +549,15 @@ public sealed class RenderGraphPackageCatalog {
         Puck.Abstractions.Sources.ImageSourceConversion.RgbaPass,
         Puck.Abstractions.Sources.ImageSourceConversion.TransferPass,
     ];
+    /// <summary>Gets the image conversion packages, one per pass
+    /// <see cref="Puck.Abstractions.Sources.ImageSourceConversion.ImagePassOf"/> names, each package id the pass's name:
+    /// one compute dispatch of the build-compiled kernel of that name reading an imported image on the device, never an
+    /// upload's region, and writing the image its consumers read.</summary>
+    public static IReadOnlyList<string> ImageConversions { get; } = [
+        Puck.Abstractions.Sources.ImageSourceConversion.ScRgbImagePass,
+    ];
     /// <summary>Gets the engine's own packages: <see cref="SdfWorld"/>, <see cref="SdfBricks"/>, <see cref="Overlay"/>,
-    /// <see cref="Place"/>, the <see cref="SourceConversions"/> and the post-process package
+    /// <see cref="Place"/>, the <see cref="SourceConversions"/>, the <see cref="ImageConversions"/> and the post-process package
     /// <see cref="SdfFilmGrain"/>.</summary>
     public static RenderGraphPackageCatalog Engine { get; } = new(packages: EnginePackages());
     /// <summary>Gets the catalog of a host that offers no package, whose graphs are shader passes alone.</summary>
@@ -597,6 +620,13 @@ public sealed class RenderGraphPackageCatalog {
             Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
             Members: SourceMembers(format: SourceFormatOf(package: id)),
             Summary: $"The uploaded source's region converted by the shipped '{id}' kernel into the image its consumers read."
+        )),
+        .. ImageConversions.Select(selector: static id => new RenderGraphPackage(
+            Id: id,
+            Inputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeRead)],
+            Outputs: [RenderGraphPackagePort.Image(access: RenderGraphPortAccess.ComputeWrite)],
+            Members: ImageSourceMembers(format: SourceFormatOf(package: id)),
+            Summary: $"An imported image converted on the device by the shipped '{id}' kernel into the image its consumers read."
         )),
         new RenderGraphPackage(
             Config: SdfFilmGrainConfig,

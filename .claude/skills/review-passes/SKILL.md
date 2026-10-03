@@ -1,6 +1,6 @@
 ---
 name: review-passes
-description: Briefs, runs and closes cross-family review-and-fix passes in at most two rounds. Codex reviews Claude-written work; a Claude agent reviews Codex-written work, including Codex review fixes. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verification and red legs, fast-forward landing on the author's branch, round 2 over round 1's fix diff alone, and the lead's ruling on remaining findings. Use when briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result (including a pass that changed nothing or raised a compatibility finding) or a claim it makes, verifying and landing its fixes, closing a round, or removing a review worktree. Does not choose models, effort or concurrency. verification owns gates, red-leg proofs and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
+description: Decides when a lane gets a cross-family review (by default none; one verify-and-fix pass only for determinism, persisted formats or federation, never a second round) and briefs, runs and closes that pass. Codex reviews Claude-written work; a Claude agent reviews Codex-written work. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verification and red legs, fast-forward landing on the author's branch, and the lead's ruling on remaining findings. Use when deciding whether a lane needs review, briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result or a claim it makes, verifying and landing its fixes, or removing a review worktree. Does not choose models, effort or concurrency. verification owns gates, red-leg proofs and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
 ---
 
 # Review passes
@@ -13,20 +13,19 @@ concurrency; the lead's brief names those. The user's current instruction
 outranks this skill; a rule here that argues against a requested change is
 stale and is corrected in the same change.
 
-## Who reviews, and when it ends
+## When a lane gets a review
 
-- Review crosses families, with fixes enabled both ways. Codex reviews
-  Claude-written code. A Claude agent (Sonnet or Opus) reviews Codex-written
-  code, which includes the fixes a Codex pass made.
-- Round 1 reviews the lane. Round 2 reviews round 1's fix diff alone, by the
-  family that did not write those fixes. After a Codex round 1, the Claude
-  agent's verification (After the pass, step 3) is round 2.
-- The loop ends when a pass reports no blockers, and after round 2 at the
-  latest. The lead rules on what round 2 still raises: a scoped fix, an open
-  item, or a dismissal with its reason. There is never a third round.
-- Round 2 runs only when round 1 makes blocker fixes, documentation fixes
-  included. A non-blocking finding never extends the loop: report it, and
-  verify a non-blocking fix without another round.
+- By default a lane gets no review pass. Its implementer verifies its own work
+  (build, its laws with proved red legs, the suites `puck affected` selects) and
+  the lead lands it through `puck gate`. Code first: a review never stands
+  between finished code and its landing without one of the reasons below.
+- A lane gets one cross-family pass when it changes determinism (simulation
+  state, fixed-point numerics, replay), a persisted format, or federation
+  authority. Codex reviews Claude-written code; a Claude agent reviews
+  Codex-written code. The pass verifies and fixes in one run.
+- There is no second round. The lead reads the pass's fix diff and rules on
+  anything left: a scoped fix, a recorded open item, or a dismissal with its
+  reason.
 
 ## Before launching
 
@@ -150,14 +149,14 @@ no brief, so it raises compatibility findings and tries to run tests.
    build, test and format claims count only when its own environment could
    run them: a sandbox that could not reach the SDK proved nothing, so step 3
    builds and proves every law outside it.
-   Record the round and fix range before continuing. If the pass changes
-   nothing, skip steps 2 to 5; report remaining blockers to the lead in step 6,
-   or go to step 7 when it reports none. Never create an empty WIP.
+   Record the fix range before continuing. If the pass changes
+   nothing, skip steps 2 to 5; report remaining blockers to the lead,
+   or go to step 5 when it reports none. Never create an empty WIP.
 2. **Commit the pass as a WIP.** Stage the review worktree's changes
    explicitly and commit them unbuilt in that worktree
    (`review: <lane> pass, unverified`), so the output is never lost and its
    diff is one unit. Keep every commit that may be rewritten local, including
-   verification repairs; never push them before step 7.
+   verification repairs; never push them before step 5.
 3. **Verify the fixes.** Brief one agent, in the review worktree, to: build
    each touched project, then the solution; prove every new or changed law red
    with its fix withheld and green with it applied (`verification` § Prove
@@ -166,12 +165,7 @@ no brief, so it raises compatibility findings and tries to run tests.
    open finding. The agent reports each finding as verified, repaired, or
    rejected with the reason. For documentation-only fixes, use `documentation`
    checks; add no law and build only for changed XML comments.
-   After a Codex round 1 with blocker fixes, the agent is a Claude agent with
-   fixes enabled that also reviews round 1's fix diff alone: this is round 2.
-   After a Claude round 1, the agent is a Claude agent, so its repairs stay
-   Claude-written for the Codex round 2 in step 5. On round 2's output, the
-   lead rules on remaining blockers before any further repair; verifying round
-   2's fixes, or a scoped fix the lead directs, is never a third round.
+   The lead reads the verified diff; nothing here opens another pass.
 4. **Replace the WIP.** Rewrite the local WIP into commits with
    `area: sentence` subjects, and land them on the author's working branch (a
    fast-forward when the pass ran detached at its head). From the clean
@@ -181,15 +175,7 @@ no brief, so it raises compatibility findings and tries to run tests.
    history. Each message names the findings fixed, the law that pins each,
    and how its red leg was proved, or the documentation checks for doc-only
    fixes. No `Co-Authored-By` trailer.
-5. **Run round 2 when it is owed.** When a Claude agent's round 1 makes blocker
-   fixes, documentation fixes included, brief a Codex pass over the fix diff
-   alone (`git diff <wip parent> <replaced head>`), with the same rules and
-   instructions blocks. Its hunt is regressions the fixes introduced and laws
-   that cannot fail. Its output goes through steps 1 to 4; step 3 verifies its
-   fixes without opening a third round.
-6. **Close the loop.** Report what round 2 still raises to the lead, who rules
-   on each item (Who reviews, and when it ends).
-7. **Hand over.** Merge the integration branch's current tip into the working
+5. **Hand over.** Merge the integration branch's current tip into the working
    branch and run the final checks `verification` requires. Take any GPU legs
    under the lead's grant or report them as owed. Once the required gates
    pass, push the working branch, fast-forward only. Only the lead merges it

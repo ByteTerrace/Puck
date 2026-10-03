@@ -77,7 +77,8 @@ public sealed class AffectedPostPackageReachLawTests {
                 shaders: shaders,
                 tree: Tree
             ),
-            worldClosure: new HashSet<string>(collection: ["Engine"], comparer: StringComparer.OrdinalIgnoreCase)
+            worldClosure: new HashSet<string>(collection: ["Engine"], comparer: StringComparer.OrdinalIgnoreCase),
+            worldInput: static _ => false
         );
     }
 

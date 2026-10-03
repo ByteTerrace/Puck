@@ -19,15 +19,18 @@ same change. The user's current instruction outranks it.
 `puck gate` and `puck laws prove` are the routes. Run both from a CLI copy
 (below) outside the checkout.
 
-- **`puck gate --merge-base origin/<integration-branch>`** is the batch
+- **`puck gate --merge-base origin/<integration-branch>`** is the lane's
   qualification. Run it on the lane's final head against the integration branch
   the brief names and report its verdict; do not repeat steps it ran. `--gpu`
   adds the affected canaries and parity, the device suites, every recorded
   counters workload and docs citations, serially. `--record` requires `--gpu`
   and refreshes canary coverage only after every qualification step passes.
   Without a GPU grant, omit `--gpu` and list those GPU additions as owed.
-  Admission uses host load's defaults before heavy steps; `gate.log` and
-  `gate.steps` retain output and the flushed step timeline.
+  The affected map selects committed baseline checks from their owning projects
+  and declared data inputs. Each runs after the repository checks and before GPU
+  steps; `affected --run` leaves them to the gate. Admission uses host load's
+  defaults before heavy steps; `gate.log` and `gate.steps` retain output and the
+  flushed step timeline.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
   or changed law, with `--fix <commit>` or with `--file-list` for an
   uncommitted fix, instead of the manual withholding below: it withholds the
@@ -36,8 +39,7 @@ same change. The user's current instruction outranks it.
   selected test is skipped or the two legs ran different tests.
 
 Run covered steps by hand only where a brief rules a verb out, for example a
-machine that must not build the solution. Complete checks the gate omits:
-`puck baselines <artifact> --check` for affected committed baselines, explicit
+machine that must not build the solution. Complete checks the gate omits: explicit
 `puck docs links <document>...` for changed documents outside its default set,
 and `puck docs citations` when required below, under the GPU rules.
 
@@ -219,11 +221,11 @@ World run with effective `host.presentation: none` uses no GPU; the
 - With a grant, run the granted legs serially, nothing else GPU-bound beside
   them, and keep CPU-heavy work (solution builds, large suites) off the machine
   while they run.
-- Qualify the merged head, never a batch on its own. Before a batch's GPU run,
-  merge the current integration head into it. A stale batch can fail or pass
-  because it lacks changes already on the integration branch.
-  [`orchestration`](../orchestration/SKILL.md#assemble-and-refresh-batches)
-  owns batch assembly and merge sequencing.
+- Qualify the merged head. Before a lane's GPU run, merge the current
+  integration head into it: a stale lane can fail or pass because it lacks
+  changes already on the integration branch.
+  [`orchestration`](../orchestration/SKILL.md#land-each-lane-on-its-own) owns
+  landing order.
 - A per-change GPU check is one to four canaries on one backend: the backend
   the change touches, or Vulkan when it is backend-neutral. Parity runs when
   the change means to move pixels or simulation state, and otherwise once at
@@ -306,7 +308,7 @@ command for the parts it covers.
 
 | Skill | Route there for |
 |---|---|
-| [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, integration batches, machines and GPU grants. |
+| [`orchestration`](../orchestration/SKILL.md) | Coordinating lanes, per-lane landings, machines and GPU grants. |
 | [`review-passes`](../review-passes/SKILL.md) | Briefing a cross-family review-and-fix pass, and verifying and landing its fixes. |
 | [`maths-laws`](../maths-laws/SKILL.md) | The Maths law suite's tiers, mutation probe and recorded registers. |
 | [`gaming-bricks`](../gaming-bricks/SKILL.md) | The Humble and Advanced Post batteries. |

@@ -91,7 +91,7 @@ Button elements compare the RAW `FixedQ4816` value against
 `WorldChannelTable.DefaultBinaryThreshold`, never a float round-trip; stick axes
 canonicalize to -1..1 and triggers to 0..1 in the fixed-point domain first.
 
-The arcade district (`modules/arcade.world.json`) is the worked example: its
+The arcade district (`modules/arcade.puck`) is the worked example: its
 cabinet screens route engageable with kit `arcadePad`. No shipped world authors a
 portal face; the `portal-window` canary's fixture is the worked portal example, and
 a portal face shows its destination without being engageable.
