@@ -165,7 +165,7 @@ public sealed class WorldCameraPlacementLawTests : IDisposable {
         using var host = WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_directory,
-            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json",
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.puck",
             edit: definition => definition with { ViewsRaw = definition.Views with { Layouts = layouts } }).Build();
         var presenter = host.Services.GetRequiredService<WorldFramePresenter>();
         var graphs = host.Services.GetRequiredService<WorldViewGraphHost>();

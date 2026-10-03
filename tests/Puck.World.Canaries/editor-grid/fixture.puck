@@ -1,0 +1,228 @@
+schema: "puck.world.definition.v1"
+documentId: "editor-grid"
+
+bodies {
+  capacity: 1
+  localSeats: 1
+  networkPlayers: 0
+  seatSpawns [
+    "builder"
+  ]
+}
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "traverse"
+    operations [ResolveYawAttitudeAndPlanarFrame, ComputePlanarTargetVelocity, SnapYawToPlanarIntent, IntegratePlanarAndVerticalVelocity, CommitPose]
+    version: "puck.body.program.v1"
+  }
+]
+
+channels [
+  {
+    name: "forward"
+    role: MoveAdvance
+    shape: Bipolar
+  }
+  {
+    name: "strafe"
+    role: MoveStrafe
+    shape: Bipolar
+  }
+  {
+    name: "turn"
+    role: Turn
+    shape: Bipolar
+  }
+]
+
+collision {
+  contactSkin: 0.02
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
+}
+
+defaultSeatKit: "stander"
+
+host {
+  authority: null
+  backend: auto
+  exitAfterSeconds: 0
+  fullscreen: false
+  genlock: null
+  height: 144
+  journalDepth: 2000
+  listen: null
+  presentMode: Immediate
+  presentation: offscreen
+  surfaceFormat: r8g8b8a8
+  targetHertz: 0
+  width: 256
+}
+
+kits {
+  rows [
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "traverse"
+      collider: sphere(radius: 0.5)
+      motion {
+        holds [
+          {
+            bond: Free
+            hold: None
+            name: "air"
+          }
+        ]
+        speed {
+          value: 4
+        }
+        turn {
+          rate: 2.5
+        }
+      }
+      name: "stander"
+    }
+  ]
+}
+
+placements {
+  policy {
+    authoringHeadroomPlacements: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    derivedFaceScreens: 0
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  placement "floor" {
+    prototype: "floor"
+    position [0, -0.25, 0]
+    solid
+  }
+
+  placement "platform" {
+    prototype: "platform"
+    position [-2.5, 0.5, 0]
+    solid
+  }
+
+  placement "ramp" {
+    prototype: "ramp"
+    position [2.5, 0, 0.5]
+    solid
+  }
+
+  placement "wall" {
+    prototype: "wall"
+    position [0, 1.25, -3]
+    solid
+  }
+}
+
+prototypes {
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [
+        {
+          color: "#B03020"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "slab" {
+        material: 0
+        position [0, 0, 0]
+        scale [6, 0.25, 6]
+      }
+    }
+  }
+
+  prototype "platform" {
+    document {
+      name: "platform"
+      palette [
+        {
+          color: "#B03020"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "block" {
+        material: 0
+        position [0, 0, 0]
+        scale [1, 0.5, 1]
+      }
+    }
+  }
+
+  prototype "ramp" {
+    document {
+      name: "ramp"
+      palette [
+        {
+          color: "#B03020"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "slope" {
+        material: 0
+        position [0, 0, 0]
+        rotation [0.21644, 0, 0, 0.9763]
+        scale [1, 0.1, 1.5]
+      }
+    }
+  }
+
+  prototype "wall" {
+    document {
+      name: "wall"
+      palette [
+        {
+          color: "#B03020"
+        }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "face" {
+        material: 0
+        position [0, 0, 0]
+        scale [3, 1.25, 0.1]
+      }
+    }
+  }
+}
+
+simulation {
+  rateHz: 30
+}
+
+spawnPoints [
+  {
+    id: "builder"
+    position [0, 0, 20]
+    yawDegrees: 0
+  }
+]
+
+views {
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "builder-seat" {
+    version: "puck.camera.program.v1"
+    operations [
+      anchor(subject: worldPoint(point: [0, 0.5, 0]))
+      orbit(distance: 10.5475, pitch: 0.5486, yaw: 0)
+      lookAt(subject: worldPoint(point: [0, 0.5, 0]))
+      fieldOfView(fieldOfViewRadians: 0.9)
+    ]
+  }
+}

@@ -121,7 +121,7 @@ public sealed class WorldFramePresenterGraphLawTests : IDisposable {
         var host = m_stateDirectory.Own(owner: WorldBootHarness.Compose(
             presentation: WorldHostPresentation.Offscreen,
             stateDirectory: m_stateDirectory,
-            world: "tests/Puck.World.Canaries/editor-grid/fixture.world.json",
+            world: "tests/Puck.World.Canaries/editor-grid/fixture.puck",
             edit: definition => definition with {
                 CamerasRaw = [.. definition.Cameras, Filming(name: FirstCamera)],
                 ViewsRaw = definition.Views with {

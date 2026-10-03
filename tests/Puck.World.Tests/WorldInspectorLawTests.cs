@@ -19,7 +19,7 @@ public sealed class WorldInspectorLawTests {
     public void RealInspectorCommandAndPanelShareOneTextWithoutCreatingADevice() {
         using var files = new TemporaryDirectory();
         var builder = WorldBootHarness.Compose(files, WorldHostPresentation.Windowed,
-            "tests/Puck.World.Canaries/editor-grid/fixture.world.json");
+            "tests/Puck.World.Canaries/editor-grid/fixture.puck");
         // Exercise the registered inspector module with its real presentation dependencies. Recording and other
         // window-only commands consume Program's host inputs, outside this device-sealed composition fixture.
         for (var index = (builder.Services.Count - 1); (index >= 0); index--) {
