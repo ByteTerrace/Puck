@@ -1,4 +1,3 @@
-using Puck.Maths;
 using Puck.Physics;
 
 namespace Puck.World.Server;
@@ -195,8 +194,6 @@ public sealed partial class WorldPopulation {
             return;
         }
 
-        var half = FixedQ4816.FromInteger(value: 2L);
-
         for (var otherIndex = 0; (otherIndex < Capacity); otherIndex++) {
             if (
                 (otherIndex == targetIndex) ||
@@ -221,25 +218,23 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var shared = (correction / half);
+            // Half each, unless a side's sweep was refused this tick: a refused body is immovable for the rest of its
+            // tick, so the other side is resolved against it as static and takes the whole correction. A refused
+            // target's share is zero, so a carrier is never corrected through it.
+            var (targetShare, otherShare) = SplitPairCorrection(
+                correction: correction,
+                left: target,
+                right: other
+            );
 
-            target.ApplyRigidPositionalCorrection(correction: shared);
+            target.ApplyRigidPositionalCorrection(correction: targetShare);
 
             // A rigid other body must wake through the SAME door WorldPopulation.Rigid.cs's own pair path uses
             // (ApplyRigidPositionalCorrection) — ApplyDynamicContact is the locomotion body's own planar/vertical-
             // velocity channels, which a rigid body does not read, so a push through it would move the body's pose
             // while leaving world.rigid and $physics:quiescent reporting it resting at zero velocity.
-            if (other.IsRigid) {
-                other.ApplyRigidPositionalCorrection(correction: -shared);
-            } else {
-                other.ApplyDynamicContact(correction: -shared);
-            }
-
-            if (carrier.IsRigid) {
-                carrier.ApplyRigidPositionalCorrection(correction: shared);
-            } else {
-                carrier.ApplyDynamicContact(correction: shared);
-            }
+            ApplyPairShare(body: other, share: otherShare);
+            ApplyPairShare(body: carrier, share: targetShare);
         }
     }
     private void RebuildCarryRelationships() {

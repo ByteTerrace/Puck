@@ -93,6 +93,20 @@ public interface IContactField {
         return false;
     }
 }
+/// <summary>Why a contact field refused a step rather than resolve it. A refused step changes nothing: the body keeps
+/// the position it started the step from, and its velocity is returned as it came.</summary>
+public enum ContactRefusal {
+    /// <summary>The step was resolved.</summary>
+    None = 0,
+    /// <summary>The step's displacement, or the start of a core sphere the certified sweep would move along it, lies
+    /// outside the Q48.16 carrier, where its arithmetic would wrap to a point the sweep never proved.</summary>
+    UnrepresentableSweep = 1,
+    /// <summary>A capsule's core needs more sweep pieces than
+    /// <see cref="FixedFieldContactSolver.MaximumCapsuleSweepPieces"/>: its length in radii is past what one body's
+    /// certified sweep covers. Collider validation refuses such a capsule as authored, so only a body's runtime scale
+    /// reaches it.</summary>
+    OversizedCapsuleCore = 2,
+}
 /// <summary>The outcome of one <see cref="IContactField.Resolve"/> call — the grounded verdict every integrator
 /// consults, plus measured walkable and non-walkable contact normals. The obstruction normal is read-back only;
 /// an integrator may adopt the ground normal according to its own body-frame policy.</summary>
@@ -103,4 +117,9 @@ public interface IContactField {
 /// <param name="GroundNormal">The unit surface normal of the last WALKABLE push, or <see cref="FixedVector3.Zero"/>
 /// when the body did not ground. This is a measured contact fact, not an instruction to rotate the body; the
 /// consuming integrator's frame policy decides whether to adopt it.</param>
-public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default);
+/// <param name="Refusal">Why the step was refused, or <see cref="ContactRefusal.None"/> when it was resolved; a refused
+/// step reports no contact.</param>
+/// <param name="Unproved">Whether the step stopped short of its target where no contact was proved: the sweep that held
+/// it ran out of its bounds-query budget, or reached a box its field could not bound. The body keeps only the ground it
+/// proved, but the shortfall is no physical block, so nothing may treat it as a contact's correction.</param>
+public readonly record struct ContactResolution(bool Grounded, FixedVector3 ObstructionNormal, FixedVector3 GroundNormal = default, ContactRefusal Refusal = ContactRefusal.None, bool Unproved = false);

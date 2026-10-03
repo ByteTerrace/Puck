@@ -10,45 +10,51 @@ public sealed partial class WorldBody {
     /// before <see cref="Puck.World.Server.WorldPopulation.TryDetachSeatForTransfer"/> discards this body object, so
     /// the abort/restore path has something to reapply if the transfer unwinds. See <see cref="WorldBodyTransferState"/>'s own
     /// remarks for the complete field-by-field classification.</summary>
-    public WorldBodyTransferState CaptureTransferState() => TransferState(alias: false);
+    public WorldBodyTransferState CaptureTransferState() => TransferState(
+        alias: false,
+        reuse: default
+    );
 
     /// <summary>Reads this body's <see cref="WorldBodyTransferState"/> as a view for immediate encoding: its arrays are
     /// the body's own live storage, and the ones that need assembling are scratch the body reuses, so the read
     /// allocates nothing once the scratch has grown to this body's shape. The view is valid only until the body next
     /// changes or is viewed again; anything kept takes <see cref="CaptureTransferState"/>.</summary>
     /// <returns>The view.</returns>
-    internal WorldBodyTransferState ViewTransferState() => TransferState(alias: true);
+    internal WorldBodyTransferState ViewTransferState() => TransferState(
+        alias: true,
+        reuse: default
+    );
 
-    // The one statement of what the transfer state holds. A capture copies every array; a view aliases the live
-    // arrays and assembles the rest into the body's scratch.
-    private WorldBodyTransferState TransferState(bool alias) {
-        var laneLatch = Scratch(alias: alias, length: ActionLaneCount, scratch: ref m_viewLaneLatch);
-        var laneFactHeld = Scratch(alias: alias, length: ActionLaneCount, scratch: ref m_viewLaneFactHeld);
-        var laneRecency = Scratch(alias: alias, length: ActionLaneCount, scratch: ref m_viewLaneRecency);
+    // Captures into the arrays of an earlier capture wherever one still has the length it needs, so a capture taken
+    // every tick (the sweep refusal's snapshot, WorldBody.SweepRefusal.cs) allocates nothing in steady state. The
+    // default state reuses nothing. A reused capture is overwritten, so only the latest one is valid.
+    private WorldBodyTransferState CaptureTransferStateInto(in WorldBodyTransferState reuse) => TransferState(
+        alias: false,
+        reuse: in reuse
+    );
+    // The one statement of what the transfer state holds. A capture owns every array, written into the arrays of
+    // reuse wherever they have the length; a view aliases the live arrays and assembles the rest into the body's own
+    // view scratch, which no capture shares.
+    private WorldBodyTransferState TransferState(bool alias, in WorldBodyTransferState reuse) {
+        var laneLatch = Assembled(alias: alias, length: ActionLaneCount, reuse: reuse.LaneLatch, scratch: ref m_viewLaneLatch);
+        var laneFactHeld = Assembled(alias: alias, length: ActionLaneCount, reuse: reuse.LaneFactHeld, scratch: ref m_viewLaneFactHeld);
+        var laneRecency = Assembled(alias: alias, length: ActionLaneCount, reuse: reuse.LaneRecency, scratch: ref m_viewLaneRecency);
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             laneLatch[lane] = m_laneActions[lane].Latch;
             laneFactHeld[lane] = m_laneActions[lane].FactHeld;
             laneRecency[lane] = ((m_laneActions[lane].Recency is { } recency)
-                ? Own(alias: alias, live: recency)
+                ? Own(alias: alias, live: recency, reuse: laneRecency[lane])
                 : null
             );
         }
 
-        var actionState = Scratch(alias: alias, length: m_actionStateDefinitions.Length, scratch: ref m_viewActionState);
+        var actionState = Assembled(alias: alias, length: m_actionStateDefinitions.Length, reuse: reuse.ActionState, scratch: ref m_viewActionState);
 
         ReadActionState(image: actionState);
 
-        List<PlayerIntent> tapeIntents;
-        List<ulong> tapeRemainingTicks;
-
-        if (alias) {
-            (tapeIntents = (m_viewTapeIntents ??= [])).Clear();
-            (tapeRemainingTicks = (m_viewTapeRemainingTicks ??= [])).Clear();
-        } else {
-            tapeIntents = new List<PlayerIntent>(capacity: m_tapeCount);
-            tapeRemainingTicks = new List<ulong>(capacity: m_tapeCount);
-        }
+        var tapeIntents = Assembled(alias: alias, reuse: reuse.TapeIntents, scratch: ref m_viewTapeIntents);
+        var tapeRemainingTicks = Assembled(alias: alias, reuse: reuse.TapeRemainingTicks, scratch: ref m_viewTapeRemainingTicks);
 
         for (var offset = 0; (offset < m_tapeCount); offset++) {
             var segment = m_tape[((m_tapeHead + offset) % m_tape.Length)];
@@ -64,17 +70,17 @@ public sealed partial class WorldBody {
             DrivePitch: m_drivePitch,
             OverlayVelocity: m_overlayVelocity,
             OverlayRemainingTicks: m_overlayRemaining,
-            ChannelTimerTicks: Own(alias: alias, live: m_laneTimers),
-            ChannelTimerValues: Own(alias: alias, live: m_channelTimerValues),
+            ChannelTimerTicks: Own(alias: alias, live: m_laneTimers, reuse: reuse.ChannelTimerTicks),
+            ChannelTimerValues: Own(alias: alias, live: m_channelTimerValues, reuse: reuse.ChannelTimerValues),
             BodyMotionProgramName: m_bodyMotionProgram.Name,
             Source: m_source,
-            PreviousChannelBit: Own(alias: alias, live: m_previousChannelBit),
+            PreviousChannelBit: Own(alias: alias, live: m_previousChannelBit, reuse: reuse.PreviousChannelBit),
             HeldChannelImage: (m_hasTransferHeldChannels
             ? m_transferHeldChannels
             : m_channelReadHeld),
-            PendingDefaultChannelPress: Own(alias: alias, live: m_pendingDefaultChannelPress),
-            PendingDefaultChannelValue: Own(alias: alias, live: m_pendingDefaultChannelValue),
-            MotionRecency: Own(alias: alias, live: m_motionRecency),
+            PendingDefaultChannelPress: Own(alias: alias, live: m_pendingDefaultChannelPress, reuse: reuse.PendingDefaultChannelPress),
+            PendingDefaultChannelValue: Own(alias: alias, live: m_pendingDefaultChannelValue, reuse: reuse.PendingDefaultChannelValue),
+            MotionRecency: Own(alias: alias, live: m_motionRecency, reuse: reuse.MotionRecency),
             PlanarRampRemainder: m_planarRampAccumulator.Remainder,
             DriveLongRemainder: m_driveLongAccumulator.Remainder,
             DriveLatRemainder: m_driveLatAccumulator.Remainder,
@@ -97,34 +103,51 @@ public sealed partial class WorldBody {
             LaneFactHeld: laneFactHeld,
             LaneRecency: laneRecency,
             ActionState: actionState,
-            ActionStateDirty: Own(alias: alias, live: m_actionStateDirty),
-            ActionStateDirtyKind: Own(alias: alias, live: m_actionStateDirtyKind),
-            ActionStateDirtyOperand: Own(alias: alias, live: m_actionStateDirtyOperand),
-            DurableInputPresent: Own(alias: alias, live: m_durableInputPresent),
-            DurableInputValues: Own(alias: alias, live: m_durableInputValues),
-            DurableInputTimers: Own(alias: alias, live: m_durableInputTimers),
-            DurableInputWriters: Own(alias: alias, live: m_durableInputWriters),
+            ActionStateDirty: Own(alias: alias, live: m_actionStateDirty, reuse: reuse.ActionStateDirty),
+            ActionStateDirtyKind: Own(alias: alias, live: m_actionStateDirtyKind, reuse: reuse.ActionStateDirtyKind),
+            ActionStateDirtyOperand: Own(alias: alias, live: m_actionStateDirtyOperand, reuse: reuse.ActionStateDirtyOperand),
+            DurableInputPresent: Own(alias: alias, live: m_durableInputPresent, reuse: reuse.DurableInputPresent),
+            DurableInputValues: Own(alias: alias, live: m_durableInputValues, reuse: reuse.DurableInputValues),
+            DurableInputTimers: Own(alias: alias, live: m_durableInputTimers, reuse: reuse.DurableInputTimers),
+            DurableInputWriters: Own(alias: alias, live: m_durableInputWriters, reuse: reuse.DurableInputWriters),
             DurableInputTick: m_durableInputTick,
             TapeIntents: tapeIntents,
             TapeRemainingTicks: tapeRemainingTicks,
             PendingContinuum: m_pendingContinuum
         );
     }
-    // A view's array is the live one; a capture's is its own copy.
-    private static T[] Own<T>(bool alias, T[] live) => (alias
+    // A view's array is the live one; a capture's is its own copy, written into reuse when it has the length.
+    private static T[] Own<T>(bool alias, T[] live, T[]? reuse) => (alias
         ? live
-        : [.. live]);
-    // An assembled array of exactly length elements: the body's reused scratch for a view (grown only when this
-    // body's shape changes), a fresh array for a capture.
-    private static T[] Scratch<T>(bool alias, int length, ref T[]? scratch) {
+        : CopyInto(
+            reuse: reuse,
+            source: live
+        ));
+    // An assembled array of exactly length elements: the body's view scratch for a view (grown only when this body's
+    // shape changes), reuse when it has the length, or a fresh array.
+    private static T[] Assembled<T>(bool alias, int length, T[]? reuse, ref T[]? scratch) {
         if (!alias) {
-            return new T[length];
+            return Reuse(
+                length: length,
+                reuse: reuse
+            );
         }
         if ((scratch is null) || (scratch.Length != length)) {
             scratch = new T[length];
         }
 
         return scratch;
+    }
+    // An emptied list to assemble into: the body's view scratch for a view, the reused capture's own list when it is
+    // one, or a fresh list.
+    private static List<T> Assembled<T>(bool alias, IReadOnlyList<T>? reuse, ref List<T>? scratch) {
+        var list = (alias
+            ? (scratch ??= [])
+            : ((reuse as List<T>) ?? []));
+
+        list.Clear();
+
+        return list;
     }
 
     /// <summary>Installs an adjacency arrival's already-evaluated motion segment and resolves it through this
@@ -133,6 +156,8 @@ public sealed partial class WorldBody {
         var next = m_position;
         var velocity = (m_planarVelocity + (FixedVector3.UnitY * m_verticalVelocity));
         var resolution = default(ContactResolution);
+
+        m_sweepRefusal = ContactRefusal.None;
 
         if (
             (m_contactField is { } field) &&
@@ -161,19 +186,25 @@ public sealed partial class WorldBody {
             );
         }
 
-        m_previousPosition = trajectory.PreviousPosition;
-        m_position = next;
-        m_planarVelocity = new FixedVector3(
-            X: velocity.X,
-            Y: FixedQ4816.Zero,
-            Z: velocity.Z
-        );
-        m_verticalVelocity = velocity.Y;
-        m_grounded = resolution.Grounded;
-        m_lastContactCount = (resolution.Grounded
-            ? 1
-            : 0
-        );
+        // A refused sweep is a full block (WorldBody.SweepRefusal.cs): the arrival keeps the pose, velocity and contact
+        // facts it was installed with, and only the segment's consumption below advances.
+        if (resolution.Refusal != ContactRefusal.None) {
+            NoteSweepRefusal(refusal: resolution.Refusal);
+        } else {
+            m_previousPosition = trajectory.PreviousPosition;
+            m_position = next;
+            m_planarVelocity = new FixedVector3(
+                X: velocity.X,
+                Y: FixedQ4816.Zero,
+                Z: velocity.Z
+            );
+            m_verticalVelocity = velocity.Y;
+            m_grounded = resolution.Grounded;
+            m_lastContactCount = (resolution.Grounded
+                ? 1
+                : 0
+            );
+        }
         var consumedThrough = Math.Max(
             val1: trajectory.ConsumedThroughEngineTick,
             val2: destinationCompletedEngineTick
@@ -274,14 +305,31 @@ public sealed partial class WorldBody {
     }
     /// <summary>Reads this body's whole register file out of the arena slot lanes, one raw value per slot.</summary>
     /// <returns>The lane image, parallel to the kit's compiled definitions.</returns>
-    public long[] CaptureActionState() {
-        var image = new long[m_actionStateDefinitions.Length];
+    public long[] CaptureActionState() => CaptureActionStateInto(reuse: null);
+
+    // An array of the given length: the reused one when it has that length, a fresh one otherwise.
+    private static T[] Reuse<T>(int length, T[]? reuse) => ((reuse?.Length == length)
+        ? reuse
+        : ((length == 0)
+            ? []
+            : new T[length]
+        )
+    );
+    // A copy of the source, written into the reused array when it has the source's length.
+    private static T[] CopyInto<T>(T[]? reuse, T[] source) {
+        var copy = Reuse(length: source.Length, reuse: reuse);
+
+        source.AsSpan().CopyTo(destination: copy);
+
+        return copy;
+    }
+    private long[] CaptureActionStateInto(long[]? reuse) {
+        var image = Reuse(length: m_actionStateDefinitions.Length, reuse: reuse);
 
         ReadActionState(image: image);
 
         return image;
     }
-
     // Reads the register file into image, one raw value per slot of the kit's compiled definitions.
     private void ReadActionState(long[] image) {
         for (var slot = 0; (slot < image.Length); slot++) {

@@ -112,11 +112,15 @@ public sealed partial class WorldBody {
     /// <summary>Solves the attached tether against this tick's resolved anchor position, applying the same late,
     /// already-integrated-state correction <see cref="ApplyDynamicContact"/> applies for a dynamic body contact — the
     /// combined planar/vertical velocity is decomposed, corrected, and written back exactly the same way. A no-op when
-    /// no tether is attached.</summary>
+    /// no tether is attached, and for a body whose sweep was refused this tick (<see cref="SweepRefusedThisTick"/>),
+    /// which is immovable until the tick ends.</summary>
     /// <param name="anchor">The resolved anchor position this tick (a fixed world point, or the anchor body's current
     /// pose transformed by <see cref="FixedTetherConstraint.ResolveAnchor"/>).</param>
     internal void SolveTether(FixedVector3 anchor) {
-        if (m_tether is not { } tether) {
+        if (
+            (m_tether is not { } tether) ||
+            m_sweepRefusedThisTick
+        ) {
             return;
         }
 

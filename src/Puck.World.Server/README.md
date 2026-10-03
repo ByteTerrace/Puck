@@ -802,7 +802,10 @@ packed words, the cell size, and the contact reach, a `SetCollision` edit that
 keeps the cell size keeps the grid, and kit and bodies-row edits rebuild the
 field because the band derives from them (a whole-row upsert of the scale row
 itself takes effect at the next solid rebuild). `world.collision.status` echoes the
-cell size, corner extent, baked corner count, band, and hash. The analytic provider emits exact isotropically
+cell size, corner extent, baked corner count, band, and hash. The field provider proves each
+moving body's step clear before its contact solve, by a certified sweep over the exact program's
+bounds together with those of any field lattice's solid columns (`FixedFieldContactSolver.ResolveSweep`,
+counted as the `physics.sweep` work source). The analytic provider emits exact isotropically
 scaled spheres and world-axis bounds for other finite placement primitives;
 rotated, rounded, non-box, smoothed, and boolean-carved geometry is therefore
 conservative there. A solid row participates in simulation, which is why
@@ -825,6 +828,23 @@ none of them moved since a sleeping body last observed it. `body.where` trails
 the population-wide `sleeping` count. A rigid kit's own rest latch
 (`WorldBody.Resting`) is a distinct, older mechanism—a rigid body never
 reaches this one at all (`Advance` returns before it).
+
+A refused contact sweep (`ContactRefusal`, from `FixedFieldContactSolver`) is a
+full block: the body does not move this tick. `WorldBody.SweepRefusal.cs`
+captures everything the step writes before it begins (the whole
+`WorldBodyTransferState` and `WorldBodyIntegrationResidue`, with the pose and
+the contact facts both leave to re-derivation) and restores it for a walking,
+rigid or carried body, so the body reads exactly as it did before the tick. A
+walking body's refused step withdraws the outputs it emitted, and an arriving
+body keeps the pose it was installed with. A body refused this tick
+(`WorldBody.SweepRefusedThisTick`) is immovable until `CompleteStep` ends the
+tick: the pair passes resolve its partner against it as static, a tether does
+not pull it, and no carrier is corrected through it. A carrier is never handed
+a correction from a sweep that held its body for want of proof
+(`ContactResolution.Unproved`) either: only a proven contact corrects a carrier.
+`WorldPopulation.CompleteStep` narrates each transition once on `body.sweep`
+(refused, then recovered), and `body.where` trails `sweep=refused(<reason>)`
+while the refusal holds (absent otherwise).
 
 Checkpoint restoration preserves the sleep tick, any partially accumulated
 idle floor, and a pending contact-field wake. It records whether the body's
