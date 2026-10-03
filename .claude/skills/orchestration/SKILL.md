@@ -71,6 +71,12 @@ The lead machine's local agents can build on the unpushed integration head, so a
 lane that depends on a batch starts there before the batch lands; merge the
 landed head into it afterwards.
 
+Before calling a counted-work change a regression, read the history: a commit may
+have deliberately changed what is counted and owed a re-record. An owed line in a
+commit body is a debt. Track each one when merging, and settle it on the merged
+head, under a GPU grant when it needs the GPU, before the batch lands, with the
+reason in the commit that records it.
+
 The lead runs any merge an agent is denied. Agents resolve conflicts in
 generated files, including shader interfaces, fingerprints and generated
 schemas, by running their generators; never hand-merge those files.
