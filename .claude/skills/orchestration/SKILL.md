@@ -140,6 +140,14 @@ again while it runs, and the burner stops when a GPU leg starts. Contention that
 overlaps another lane's GPU leg makes that lane's timeouts untrustworthy, so the
 brief names the check and the stop.
 
+An agent stops only the processes it started, by the PIDs it recorded at launch,
+and never kills by a command-line pattern. On a shared box a filter on a common
+string (a scratchpad path, a lane prefix) matches processes the agent cannot
+attribute, other lanes' build and test commands among them, and those fail with
+verdicts that are not evidence, so a lane that failed while the kill ran re-runs
+its failed legs alone before anyone acts on them. A brief that starts background
+work says to record each PID and to stop only those.
+
 Every build, a Codex brief's included, passes `-nodeReuse:false`
 ([`verification`](../verification/SKILL.md#build-before-you-test) says why).
 
