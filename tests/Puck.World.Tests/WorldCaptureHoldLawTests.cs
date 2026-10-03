@@ -278,14 +278,30 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 }
             }
         }
-        // Iterates until the scheduler has decided the given number of captures; the bound is liveness for a build
-        // over a fake device, and decides nothing.
+        // Iterates until the scheduler has decided the given number of captures. The hold budgets are spent in host time
+        // the iterations hand the pump, so an iteration never races the thread pool's build: once the gate is open each
+        // iteration waits out the residency's builds, which is the build's own completion and not a deadline. The bound
+        // is liveness, and decides nothing.
         public void IterateUntilDecided(int captures, ulong? hostTicks = null) => TestLiveness.Until(
             reason: () => $"Only {Scheduler.Entries.Count} of {captures} captures were decided.",
             step: () => {
                 Iterate(hostTicks: hostTicks);
 
                 return (Scheduler.Entries.Count >= captures);
+            },
+            wait: WaitBuilds
+        );
+        // Blocks until the residency's in-flight builds finish when the law has opened their gate; while the gate is held
+        // the build cannot finish, so nothing is waited on.
+        public bool WaitBuilds(CancellationToken cancellationToken) => (m_gate.IsSet && View.Residency.WaitPipelineBuilds(cancellationToken: cancellationToken));
+        // Iterates, handing the pump no host time, until the condition holds. A held capture spends its hold budget from
+        // the host time withheld, so a poll that withholds none spends none however long the thread pool takes to finish
+        // the build the condition waits on.
+        public void IterateWithoutHostTimeUntil(Func<bool> condition) => TestLiveness.Until(
+            step: () => {
+                Iterate(hostTicks: 0UL);
+
+                return condition();
             }
         );
         public void Release() => m_gate.Set();
@@ -296,17 +312,12 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
                 Iterate();
 
                 return View.IsReady;
-            }
+            },
+            wait: WaitBuilds
         );
         // Iterates until the display encode's build is held in the driver, which the first frame serving a capture of the
         // view's float output starts; the bound is liveness, and decides nothing.
-        public void IterateUntilEncoding() => TestLiveness.Until(
-            step: () => {
-                Iterate();
-
-                return m_encodeEntered.IsSet;
-            }
-        );
+        public void IterateUntilEncoding() => IterateWithoutHostTimeUntil(condition: () => m_encodeEntered.IsSet);
         // Arms a capture outside the schedule on the view, as world.screenshot does, returning its request.
         public FrameCaptureRequest Screenshot(string path) {
             var request = new FrameCaptureRequest(path: path);
@@ -503,13 +514,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         );
 
         run.Release();
-        TestLiveness.Until(
-            step: () => {
-                run.Iterate();
-
-                return run.View.IsReady;
-            }
-        );
+        run.IterateUntilReady();
         run.Iterate();
         run.EndRun();
 
@@ -637,13 +642,7 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         Assert.True(condition: run.Scheduler.AwaitsFrame);
 
         run.ReleaseEncode();
-        TestLiveness.Until(
-            step: () => {
-                run.Iterate();
-
-                return request.Completion.IsCompleted;
-            }
-        );
+        run.IterateWithoutHostTimeUntil(condition: () => request.Completion.IsCompleted);
 
         Assert.True(condition: (await request.Completion).Succeeded);
         Assert.Equal(
