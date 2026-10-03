@@ -28,7 +28,6 @@ public sealed class HostAdmissionLawTests {
         Assert.True(condition: HostAdmission.Wait("build", false, () => Sample(), new GateClock(), _ => Assert.Fail(message: "idle must not wait"), error, CancellationToken.None));
         Assert.Equal("", error.ToString());
     }
-    [InlineData("cpu")]
     [InlineData("ram")]
     [InlineData("disk")]
     [InlineData("gpu")]
@@ -38,7 +37,6 @@ public sealed class HostAdmissionLawTests {
         var calls = 0;
         using var error = new StringWriter();
         var busy = pressure switch {
-            "cpu" => Sample(cpu: 99),
             "ram" => Sample(ram: 1),
             "disk" => Sample(disk: 1),
             _ => Sample(gpu: "Puck.World 42"),
@@ -56,7 +54,7 @@ public sealed class HostAdmissionLawTests {
         var clock = new GateClock();
         var calls = 0;
         using var error = new StringWriter();
-        HostSample[] readings = [Sample(gpu: "testhost 77"), Sample(gpu: "testhost 77"), Sample(gpu: "Puck.World 9"), Sample(cpu: 99), Sample()];
+        HostSample[] readings = [Sample(gpu: "testhost 77"), Sample(gpu: "testhost 77"), Sample(gpu: "Puck.World 9"), Sample(ram: 1), Sample()];
 
         Assert.True(condition: HostAdmission.Wait("Puck.World.Tests", true, () => readings[calls++], clock, clock.Advance, error, CancellationToken.None));
         var lines = error.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n');
@@ -65,7 +63,7 @@ public sealed class HostAdmissionLawTests {
         Assert.EndsWith(actualString: lines[0].TrimEnd(), expectedEndString: "the GPU is held by testhost 77.");
         Assert.EndsWith(actualString: lines[1].TrimEnd(), expectedEndString: "the GPU is held by Puck.World 9.");
         Assert.Contains(actualString: lines[2], expectedSubstring: "capacity returned for Puck.World.Tests");
-        Assert.Contains(actualString: HostAdmissionReason(cpu: 99), expectedSubstring: "no capacity: cpu=99%");
+        Assert.Contains(actualString: HostAdmissionReason(ram: 1), expectedSubstring: "no memory headroom: freeRAM=1.0GB");
     }
     [Fact]
     public void OnlyADeviceStepWaitsForTheGpuHolder() {
@@ -80,22 +78,37 @@ public sealed class HostAdmissionLawTests {
         Assert.True(condition: HostAdmission.Wait("Puck.World.Tests", true, () => ((calls++ == 0) ? Sample(gpu: "Puck.World 9") : Sample()), clock, clock.Advance, error, CancellationToken.None));
         Assert.Contains(actualString: error.ToString(), expectedSubstring: "the GPU is held by Puck.World 9");
 
-        // A CPU step still waits for CPU and memory capacity, and names it rather than a GPU holder.
+        // A CPU step still waits for memory headroom, and names it rather than a GPU holder.
         using var busy = new StringWriter();
 
         calls = 0;
-        Assert.True(condition: HostAdmission.Wait("affected", false, () => ((calls++ == 0) ? Sample(cpu: 99, gpu: "Puck.World 9") : Sample(gpu: "Puck.World 9")), clock, clock.Advance, busy, CancellationToken.None));
-        Assert.Contains(actualString: busy.ToString(), expectedSubstring: "no capacity: cpu=99%");
+        Assert.True(condition: HostAdmission.Wait("affected", false, () => ((calls++ == 0) ? Sample(ram: 1, gpu: "Puck.World 9") : Sample(gpu: "Puck.World 9")), clock, clock.Advance, busy, CancellationToken.None));
+        Assert.Contains(actualString: busy.ToString(), expectedSubstring: "no memory headroom: freeRAM=1.0GB");
         Assert.DoesNotContain(expectedSubstring: "GPU", actualString: busy.ToString());
     }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void CpuLoadIsAdvisoryAndNeverHoldsOrRefusesAStep(bool device) {
+        var clock = new GateClock();
+        using var error = new StringWriter();
 
-    private static string HostAdmissionReason(double cpu) {
+        // A CPU that never falls under the threshold, with memory, disk and the GPU free.
+        Assert.True(condition: HostAdmission.Wait("build", device, () => Sample(cpu: 99), clock, _ => Assert.Fail(message: "CPU load must not hold a step back"), error, CancellationToken.None));
+        var lines = error.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n');
+
+        Assert.Single(collection: lines);
+        Assert.Contains(actualString: lines[0], expectedSubstring: "build runs under cpu=99%");
+        Assert.DoesNotContain(expectedSubstring: "waiting", actualString: lines[0]);
+    }
+
+    private static string HostAdmissionReason(double ram) {
         var clock = new GateClock();
         var calls = 0;
         using var error = new StringWriter();
 
-        // A busy CPU first, then capacity.
-        _ = HostAdmission.Wait("x", true, () => ((calls++ == 0) ? Sample(cpu: cpu) : Sample()), clock, clock.Advance, error, CancellationToken.None);
+        // Too little memory first, then headroom.
+        _ = HostAdmission.Wait("x", true, () => ((calls++ == 0) ? Sample(ram: ram) : Sample()), clock, clock.Advance, error, CancellationToken.None);
         return error.ToString();
     }
 
