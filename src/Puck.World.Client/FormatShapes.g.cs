@@ -8,6 +8,6 @@ namespace Puck.World.Client.Sdf {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>SdfDocumentDecoder.Schema</c>, declared in <c>src/Puck.World.Client/Sdf/SdfDocumentDecoder.cs</c>.</summary>
-        public const string SdfDocumentDecoderSchema = "762fae7b2ea0564b";
+        public const string SdfDocumentDecoderSchema = "9203481f56887dd2";
     }
 }

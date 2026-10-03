@@ -8,11 +8,11 @@ namespace Puck.Assets {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AutomaticIntegerSequenceCodec.Magic</c>, declared in <c>src/Puck.Assets/AutomaticSequenceCodec.cs</c>.</summary>
-        public const string AutomaticIntegerSequenceCodecMagic = "d22890e94ba81023";
+        public const string AutomaticIntegerSequenceCodecMagic = "95f53d3a5445b007";
         /// <summary>The shape fingerprint of <c>AutomaticIntegerSequenceCodec.Version</c>, declared in <c>src/Puck.Assets/AutomaticSequenceCodec.cs</c>.</summary>
-        public const string AutomaticIntegerSequenceCodecVersion = "d22890e94ba81023";
+        public const string AutomaticIntegerSequenceCodecVersion = "95f53d3a5445b007";
         /// <summary>The shape fingerprint of <c>WasmBinaryFormat.Magic</c>, declared in <c>src/Puck.Assets/WasmBinaryFormat.cs</c>.</summary>
-        public const string WasmBinaryFormatMagic = "293a4f56b6458d75";
+        public const string WasmBinaryFormatMagic = "efcac5ab09c64267";
     }
 }
 
@@ -21,8 +21,8 @@ namespace Puck.Assets.Documents {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AudioDocument.CurrentSchema</c>, declared in <c>src/Puck.Assets/Documents/AudioDocument.cs</c>.</summary>
-        public const string AudioDocumentCurrentSchema = "ee1681a93b47384d";
+        public const string AudioDocumentCurrentSchema = "dc1219fc0e63322f";
         /// <summary>The shape fingerprint of <c>SynthPatchDocument.CurrentSchema</c>, declared in <c>src/Puck.Assets/Documents/SynthPatchDocument.cs</c>.</summary>
-        public const string SynthPatchDocumentCurrentSchema = "785cc2a006e0c9ad";
+        public const string SynthPatchDocumentCurrentSchema = "e6ddcc987e88eebf";
     }
 }

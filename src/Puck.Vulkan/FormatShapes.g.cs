@@ -8,6 +8,6 @@ namespace Puck.Vulkan {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>VulkanShaderCapabilities.Magic</c>, declared in <c>src/Puck.Vulkan/VulkanShaderCapabilities.cs</c>.</summary>
-        public const string VulkanShaderCapabilitiesMagic = "d4da3c43916bd9c4";
+        public const string VulkanShaderCapabilitiesMagic = "52c9ccc4460dffc2";
     }
 }

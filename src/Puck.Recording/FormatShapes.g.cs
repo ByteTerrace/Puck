@@ -8,6 +8,6 @@ namespace Puck.Recording.Document {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>RecordingDocument.SchemaVersion</c>, declared in <c>src/Puck.Recording/Document/RecordingDocument.cs</c>.</summary>
-        public const string RecordingDocumentSchemaVersion = "b7b0520c5eeff815";
+        public const string RecordingDocumentSchemaVersion = "c0817db1c7201f76";
     }
 }

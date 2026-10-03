@@ -8,6 +8,6 @@ namespace Puck.AdvancedGamingBrick {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AgbMachineIdentity.CurrentVersion</c>, declared in <c>src/Puck.AdvancedGamingBrick/AgbMachineSnapshot.cs</c>.</summary>
-        public const string AgbMachineIdentityCurrentVersion = "54677736aa9cf8bc";
+        public const string AgbMachineIdentityCurrentVersion = "8872da9a529dca4e";
     }
 }

@@ -8,6 +8,6 @@ namespace Puck.Scripting {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>AddonAbi.AbiVersion</c>, declared in <c>src/Puck.Scripting/AddonAbi.cs</c>.</summary>
-        public const string AddonAbiAbiVersion = "053bec953c3adb4f";
+        public const string AddonAbiAbiVersion = "24aa543e663d7755";
     }
 }

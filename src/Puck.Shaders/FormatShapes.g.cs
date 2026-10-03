@@ -8,12 +8,12 @@ namespace Puck.Shaders {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>ProbeKindManifest.SchemaTag</c>, declared in <c>src/Puck.Shaders/ProbeKindManifest.cs</c>.</summary>
-        public const string ProbeKindManifestSchemaTag = "433b35afa2f43678";
+        public const string ProbeKindManifestSchemaTag = "62fc865037294b7a";
         /// <summary>The shape fingerprint of <c>RenderGraphSchemas.Graph</c>, declared in <c>src/Puck.Shaders/Graph/RenderGraphModel.cs</c>.</summary>
-        public const string RenderGraphSchemasGraph = "c495fab562a4229e";
+        public const string RenderGraphSchemasGraph = "0fb2947d9195ff4c";
         /// <summary>The shape fingerprint of <c>ShaderCompiler.CompilerVersion</c>, declared in <c>src/Puck.Shaders/ShaderCompiler.cs</c>.</summary>
-        public const string ShaderCompilerCompilerVersion = "a355a189a892f432";
+        public const string ShaderCompilerCompilerVersion = "1ac0c88e8c61a023";
         /// <summary>The shape fingerprint of <c>ShaderPackageManifest.SchemaName</c>, declared in <c>src/Puck.Shaders/Packaging/ShaderPackageManifest.cs</c>.</summary>
-        public const string ShaderPackageManifestSchemaName = "dc113bce0d0b7889";
+        public const string ShaderPackageManifestSchemaName = "565be4b257d8fcc2";
     }
 }

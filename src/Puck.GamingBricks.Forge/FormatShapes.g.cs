@@ -8,6 +8,6 @@ namespace Puck.GamingBricks.Forge {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>CartridgeDocument.SchemaId</c>, declared in <c>src/Puck.GamingBricks.Forge/CartridgeDocument.cs</c>.</summary>
-        public const string CartridgeDocumentSchemaId = "78728ab61b5ad0e8";
+        public const string CartridgeDocumentSchemaId = "fb6850cef4ddd5c2";
     }
 }

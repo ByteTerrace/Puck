@@ -8,6 +8,6 @@ namespace Puck.Commands {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>BindingProfileDocument.CurrentVersion</c>, declared in <c>src/Puck.Commands/BindingProfileDocument.cs</c>.</summary>
-        public const string BindingProfileDocumentCurrentVersion = "c6b4db0f515dc809";
+        public const string BindingProfileDocumentCurrentVersion = "903942a74dd26e78";
     }
 }

@@ -8,7 +8,7 @@ namespace Puck.Networking {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>LocalEndpointCapability.Revision</c>, declared in <c>src/Puck.Networking/LocalEndpointCapability.cs</c>.</summary>
-        public const string LocalEndpointCapabilityRevision = "ae10e3939041b98e";
+        public const string LocalEndpointCapabilityRevision = "07ced790d73d1e65";
     }
 }
 
@@ -17,6 +17,6 @@ namespace Puck.Networking.Peers {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>PeerWireProtocol.ProtocolKey</c>, declared in <c>src/Puck.Networking/Peers/PeerWireProtocol.cs</c>.</summary>
-        public const string PeerWireProtocolProtocolKey = "8fbddc97be500ec2";
+        public const string PeerWireProtocolProtocolKey = "79c9c10493b48e46";
     }
 }
