@@ -44,8 +44,9 @@ public readonly record struct WorldHistoryCounters(
 /// <param name="ForkTick">The tick the branch leaves the timeline after: its first tick is <c>ForkTick + 1</c>.</param>
 /// <param name="Ticks">The recorded tick groups, in order, in the replay tape's own entry format.</param>
 /// <param name="AuthoritativeHashes">The authoritative hash recorded after each of <paramref name="Ticks"/>.</param>
+/// <param name="StepTicks">The engine ticks each of <paramref name="Ticks"/> stepped.</param>
 /// <param name="Bytes">The bytes the branch holds against the history's budget.</param>
-public sealed record WorldHistoryBranch(string Name, ulong ForkTick, IReadOnlyList<WorldReplayTickInput> Ticks, ulong[] AuthoritativeHashes, long Bytes) {
+public sealed record WorldHistoryBranch(string Name, ulong ForkTick, IReadOnlyList<WorldReplayTickInput> Ticks, ulong[] AuthoritativeHashes, ulong[] StepTicks, long Bytes) {
     /// <summary>Gets the tick the branch's recorded future ends at.</summary>
     public ulong HeadTick => (ForkTick + ((ulong)Ticks.Count));
 }
@@ -334,6 +335,7 @@ public sealed partial class WorldHistory {
         if (name is not null) {
             var ticks = new List<WorldReplayTickInput>();
             var hashes = new List<ulong>();
+            var steps = new List<ulong>();
             var bytes = 0L;
 
             for (var tick = (m_cursor + 1UL); (tick <= Head); tick++) {
@@ -341,6 +343,7 @@ public sealed partial class WorldHistory {
 
                 ticks.Add(item: InputAt(offset: offset, segment: segment));
                 hashes.Add(item: segment.Hashes[offset]);
+                steps.Add(item: segment.StepTicks[offset]);
                 bytes += (TickBookkeepingBytes + ((long)(IntentRange(offset: offset, segment: segment).Count * Unsafe.SizeOf<IntentSubmission>())));
             }
 
@@ -354,6 +357,7 @@ public sealed partial class WorldHistory {
                 Bytes: bytes,
                 ForkTick: m_cursor,
                 Name: name,
+                StepTicks: [.. steps],
                 Ticks: ticks
             ));
             m_counters = (m_counters with { BranchesKept = (m_counters.BranchesKept + 1L) });
@@ -387,6 +391,7 @@ public sealed partial class WorldHistory {
         m_branches.Clear();
         m_pendingBranchName = null;
         m_waiting = waiting;
+        PublishRow();
     }
     // Drops the oldest spans while the history holds more than its budget, always keeping the newest; a kept branch
     // whose fork the window no longer reaches goes with it.
@@ -684,6 +689,14 @@ public sealed partial class WorldHistory {
             return;
         }
 
+        NoteTickCore(
+            authoritativeHash: authoritativeHash,
+            input: in input
+        );
+        PublishRow();
+    }
+
+    private void NoteTickCore(in WorldReplayTickInput input, ulong authoritativeHash) {
         var tick = (m_server.NextInputTick - 1UL);
 
         if (m_segments.Count == 0) {

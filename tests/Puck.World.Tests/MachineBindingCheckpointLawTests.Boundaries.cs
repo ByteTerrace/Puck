@@ -42,8 +42,11 @@ public sealed partial class MachineBindingCheckpointLawTests {
         Assert.Equal(expected: ((ulong)FirstValue), actual: ByteAt(server: server));
         Assert.Equal(expected: image, actual: Image(server: server));
     }
+    // A paused machine still synchronizes its bindings, so its memo and the cells it wrote are state a step reached:
+    // a recording armed after them starts from a checkpoint that holds them, and re-drives to every recorded state,
+    // with the bindings live and after they are removed.
     [Fact]
-    public void RecordingAPausedMachineRequiresTheWorldsFirstTickEvenAfterItsBindingsAreRemoved() {
+    public void ARecordingArmedAfterAPausedMachineObservedItsBindingsReDrivesFromItsCheckpoint() {
         using var directory = new TemporaryDirectory(prefix: "puck-binding-memo-paused-");
         var rom = directory.WriteBytes(bytes: ProgramImage(), name: "program.gba");
         var binding = Binding(address: SendAddress, name: "send", row: "send", update: "onChange") with {
@@ -64,8 +67,12 @@ public sealed partial class MachineBindingCheckpointLawTests {
         harness.Submit(mutation: SetSend(value: FirstValue));
         harness.StepWithoutInput();
         Assert.Equal(expected: FirstValue, actual: server.Definition.State[0].Cells![0].Value.AsInt);
-        Assert.False(condition: harness.Tape.TryBeginRecording(name: "observed", refusal: out refusal));
-        Assert.StartsWith(actualString: refusal, comparisonType: StringComparison.Ordinal, expectedStartString: "ArmedAfterFirstStep:");
+        Assert.True(condition: harness.Tape.TryBeginRecording(name: "observed", refusal: out refusal), userMessage: refusal);
+        harness.StepWithoutInput();
+        harness.StepWithoutInput();
+        var observed = harness.Tape.StopRecording();
+
+        Assert.True(condition: observed.Verdict!.Passing, userMessage: observed.Verdict.Describe());
 
         harness.Submit(mutation: new WorldMutation.UpsertMachine(
             Principal: Principal.Console,
@@ -73,7 +80,11 @@ public sealed partial class MachineBindingCheckpointLawTests {
         ));
         harness.StepWithoutInput();
         Assert.Null(@object: server.MachineBindingState(binding: "send", machine: Machine));
-        Assert.False(condition: harness.Tape.TryBeginRecording(name: "removed", refusal: out refusal));
-        Assert.StartsWith(actualString: refusal, comparisonType: StringComparison.Ordinal, expectedStartString: "ArmedAfterFirstStep:");
+        Assert.True(condition: harness.Tape.TryBeginRecording(name: "removed", refusal: out refusal), userMessage: refusal);
+        harness.StepWithoutInput();
+        harness.StepWithoutInput();
+        var removed = harness.Tape.StopRecording();
+
+        Assert.True(condition: removed.Verdict!.Passing, userMessage: removed.Verdict.Describe());
     }
 }

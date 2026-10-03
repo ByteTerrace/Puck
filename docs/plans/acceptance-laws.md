@@ -222,11 +222,10 @@ crossing with a profiled traveller, through both tapes.
 **Lives in** `tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`.
 **GPU:** none.
 
-**As implemented.** The recording starts at the rows' first tick: a tape
-re-establishes the document and the seats, never a pose or other state a row
-reached before it was armed, so arming after the world's first step refuses by
-name (`ArmedAfterFirstStep`, `ReplayArmingLawTests`). Row A's document therefore
-authors seat 0's spawn a short walk in front of its door. The isolated reland is the companion tape's own
+**As implemented.** The recording starts at the rows' first tick, so each tape
+starts from its row's boot image. Row A's document authors seat 0's spawn a
+short walk in front of its door. A recording armed later would start from a
+checkpoint of its row instead (`ReplayArmingLawTests`). The isolated reland is the companion tape's own
 re-drive: at every recorded tick the replayed destination is read through
 `DriveTraces`' tick observer and compared with the live destination, field for
 field. A reservation that mints the credential is not red on this walk, because
@@ -550,7 +549,7 @@ twins are arranged, the operation, a witness over what the checkpoint does not
 capture, and the legal variant on its own twin. A classified refusal without an
 arrangement fails by name, and an arrangement naming no classified refusal fails
 `EveryArrangementNamesAClassifiedRefusal`. Six refusals are classified so far:
-`replay.record/ArmedAfterFirstStep`, `storage.pull/PullWhileRecording`,
+`replay.record/StartNotCheckpointable`, `storage.pull/PullWhileRecording`,
 `world.undo/PastHorizon`, `machine.operation/WhileRecording`,
 `machine.operation/ProviderWithoutOperations` and
 `state.rule.compile/VectorEffectNotAdmitted`. The machine-operation rows witness

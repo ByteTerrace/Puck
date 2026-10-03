@@ -183,10 +183,17 @@ public sealed class UnsupportedOperationLawTests {
         $"mode={twin.Tape.Mode} recording={twin.Server.Profiles.Recording} mutationTap={(twin.Server.MutationTap is not null)} rebuildTap={(twin.Server.RebuildTap is not null)} arrivalTap={(twin.Server.ArrivalTap is not null)} departureTap={(twin.Server.DepartureTap is not null)}";
 
     private static readonly IReadOnlyDictionary<string, Arrangement> Arrangements = new Dictionary<string, Arrangement>(comparer: StringComparer.Ordinal) {
-        ["replay.record/ArmedAfterFirstStep"] = new(
-            Arrange: static twin => twin.Step(),
-            // The legal arm is the one before the world's first step.
-            ArrangeLegal: static _ => { },
+        ["replay.record/StartNotCheckpointable"] = new(
+            // A stepped world with an edit buffered but not yet applied: a state no checkpoint captures.
+            Arrange: static twin => {
+                twin.Step();
+                twin.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
+                    Principal: Principal.Console,
+                    Row: new WorldStateRow(Name: CellName.Parse(candidate: "pending"), Kind: CellKind.Int)
+                ));
+            },
+            // The legal arm is the one on a stepped world a checkpoint captures.
+            ArrangeLegal: static twin => twin.Step(),
             Document: static () => Fixtures.BuildDocument(),
             Legal: static twin => twin.Tape.TryBeginRecording(name: "legal", refusal: out _),
             Operate: static twin => (twin.Tape.TryBeginRecording(name: "late", refusal: out var refusal) ? string.Empty : refusal),

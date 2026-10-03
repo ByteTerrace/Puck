@@ -73,6 +73,10 @@ public sealed partial class WorldReplaySnapshot {
         var authority = reader.ReadString(field: "tape authority");
         var documentDirectory = reader.ReadNullableString(field: "tape document directory");
         var documentPath = reader.ReadNullableString(field: "tape document path");
+        var startCheckpointBytes = reader.ReadOptionalClass(readValue: static (ref WireReader r) => r.ReadBlock(
+            field: "start checkpoint",
+            maxBytes: int.MaxValue
+        ));
 
         if (
             !reader.Failed &&
@@ -255,6 +259,11 @@ public sealed partial class WorldReplaySnapshot {
             throw new InvalidDataException(message: "Corrupt .puckreplay recording: the tape names no instance or no authority.");
         }
 
+        var startCheckpoint = ReadStartCheckpoint(
+            bytes: startCheckpointBytes,
+            definitionJson: definitionJson,
+            documentDirectory: documentDirectory
+        );
         var companionTapes = new WorldReplaySnapshot[companions.Length];
 
         for (var index = 0; (index < companions.Length); index++) {
@@ -296,6 +305,7 @@ public sealed partial class WorldReplaySnapshot {
             RecordedHashes = recordedHashes,
             Seats = seats,
             SimulationRate = simulationRate,
+            StartCheckpoint = startCheckpoint,
             Ticks = ticks,
         };
     }
@@ -372,6 +382,12 @@ public sealed partial class WorldReplaySnapshot {
         writer.WriteString(value: recording.Authority);
         writer.WriteNullableString(value: recording.DocumentDirectory);
         writer.WriteNullableString(value: recording.DocumentPath);
+        writer.WriteOptionalClass(
+            value: ((recording.StartCheckpoint is { } start)
+                ? EncodeStartCheckpoint(checkpoint: start, definitionJson: recording.DefinitionJson)
+                : null),
+            writeValue: static (w, bytes) => w.WriteBlock(value: bytes)
+        );
         writer.WriteArray(
             items: recording.RecordedHashes,
             writeItem: static (w, hash) => w.WriteUInt64(value: hash)

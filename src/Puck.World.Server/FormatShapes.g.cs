@@ -8,9 +8,9 @@ namespace Puck.World {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldReplaySnapshot.Magic</c>, declared in <c>src/Puck.World.Server/WorldReplaySnapshot.cs</c>.</summary>
-        public const string WorldReplaySnapshotMagic = "99896304444fb8f8";
+        public const string WorldReplaySnapshotMagic = "a5b31747bd3c0e79";
         /// <summary>The shape fingerprint of <c>WorldReplaySnapshot.ShapeToken</c>, declared in <c>src/Puck.World.Server/WorldReplaySnapshot.cs</c>.</summary>
-        public const string WorldReplaySnapshotShapeToken = "99896304444fb8f8";
+        public const string WorldReplaySnapshotShapeToken = "a5b31747bd3c0e79";
     }
 }
 
@@ -19,9 +19,9 @@ namespace Puck.World.Server {
     /// A codec writes its constant in its header or handshake and refuses any other value by name.</summary>
     internal static class FormatShapes {
         /// <summary>The shape fingerprint of <c>WorldAuthorityCheckpointCodec.Magic</c>, declared in <c>src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs</c>.</summary>
-        public const string WorldAuthorityCheckpointCodecMagic = "c498d90e5f17efed";
+        public const string WorldAuthorityCheckpointCodecMagic = "c1137683d36c87d9";
         /// <summary>The shape fingerprint of <c>WorldAuthorityCheckpointCodec.SupportedVersion</c>, declared in <c>src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs</c>.</summary>
-        public const string WorldAuthorityCheckpointCodecSupportedVersion = "c498d90e5f17efed";
+        public const string WorldAuthorityCheckpointCodecSupportedVersion = "c1137683d36c87d9";
         /// <summary>The shape fingerprint of <c>WorldAuthorityReceiptSnapshot.CurrentSchema</c>, declared in <c>src/Puck.World.Server/WorldAuthorityReceiptSnapshot.cs</c>.</summary>
         public const string WorldAuthorityReceiptSnapshotCurrentSchema = "65fc344287a0a17e";
         /// <summary>The shape fingerprint of <c>WorldAuthorityRecoveryRootCodec.Schema</c>, declared in <c>src/Puck.World.Server/WorldAuthorityRecoveryRoot.cs</c>.</summary>

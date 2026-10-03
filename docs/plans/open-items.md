@@ -245,5 +245,5 @@ Every package below carries its own check on the programme page; tick it there a
 - [ ] E11 source-preserving save for authored rows has landed, with named generated-row refusals; E3's live duplicate and rename workflow remains.
 - [ ] E12 the shape gallery as a world, retiring `Puck.SdfVm.Debug` once the gallery reaches parity with it.
 - [ ] E13 carving and the brick bake: a carve brush whose dabs are document rows.
-- [ ] E14 scrub the recorded past: `world.history` seek, branch, diff and replay-edit have landed as console verbs; the scrubber row, bindable stepping, and re-entering and saving a branch remain.
-  - [ ] E14's lane (the scrubber row, bindable stepping, a tape that starts from a checkpoint) is committed on a local subagent branch in fleet/cloud-a's session and is not yet merged: HistoryScrubLawTests and five arming and privacy laws still owe their `puck laws prove` red legs, and the branch owes a merge of fleet/cloud-a and its checks.
+- [x] E14 scrub the recorded past: a building seat's scrubber row and its pointer drag, bindable stepping under the seat's principal against `control` over `history`, `world.history switch` and `save`, and tapes that start from a checkpoint, so a mid-session `replay.record` matches from its first tick. No canary presses a physical mouse button onto the row.
+  - [ ] Prove E14's laws red with `puck laws prove`: HistoryScrubLawTests and the five arming and privacy laws (`ReplayArmingLawTests.AMidRunArmReDrivesCleanFromItsFirstTick` is proved).

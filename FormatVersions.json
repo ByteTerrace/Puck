@@ -174,7 +174,7 @@
                 "M:Puck.World.WorldBindingComposer.MergeWheels(System.Collections.Generic.List{Puck.Commands.BindingWheelDefinition},System.Collections.Generic.Dictionary{System.String,System.Int32},Puck.Commands.BindingProfileDocument)",
                 "M:Puck.World.WorldBindingComposer.MutableRow.ToDefinition"
             ],
-            "shape": "640a5b34aaeb44cd",
+            "shape": "43973c8c32c6b7c6",
             "source": "src/Puck.Commands/BindingProfileDocument.cs",
             "token": "puck.input.bindings.v1"
         },
@@ -796,7 +796,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Hosting.RenderGraphRefresh.EveryFrame"
             ],
-            "shape": "a488fa230a57852d",
+            "shape": "d99f838bfd6cdad4",
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },
@@ -942,7 +942,7 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "c498d90e5f17efed",
+            "shape": "c1137683d36c87d9",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "PCKP"
         },
@@ -980,7 +980,7 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "c498d90e5f17efed",
+            "shape": "c1137683d36c87d9",
             "source": "src/Puck.World.Server/WorldAuthorityCheckpointCodec.cs",
             "token": "21"
         },
@@ -1495,7 +1495,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "60d622eadcb133fc",
+            "shape": "430c26f7603cb944",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
@@ -1631,7 +1631,7 @@
                 "P:Puck.World.WorldDefinition.State",
                 "P:Puck.World.WorldJsonContext.WorldProjectionDocument"
             ],
-            "shape": "e512e4dc522c8871",
+            "shape": "089482bf8664d033",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },
@@ -1759,7 +1759,7 @@
                 "P:Puck.World.Server.WorldServer.Definition",
                 "P:Puck.World.Server.WorldServer.NextInputTick"
             ],
-            "shape": "f9022b1995424d79",
+            "shape": "a6140818d0ac0792",
             "source": "src/Puck.World.Protocol/Protocol/WorldProtocol.cs",
             "token": "PUCKWRL4"
         },
@@ -1945,7 +1945,9 @@
                 "M:Puck.World.Protocol.WorldMutation.Batch.TryValidateShape(System.String@)",
                 "M:Puck.World.Protocol.WorldMutationKindCatalog.All",
                 "M:Puck.World.ReplayRefusalExtensions.Raise(Puck.World.ReplayRefusal,System.String)",
+                "M:Puck.World.Server.WorldAuthorityCheckpointCodec.Encode(Puck.World.Server.WorldAuthorityCheckpoint)",
                 "M:Puck.World.Server.WorldAuthorityCheckpointCodec.ReadAdmissionGrant(Puck.Networking.WireReader@)",
+                "M:Puck.World.Server.WorldAuthorityCheckpointCodec.TryDecode(System.ReadOnlySpan{System.Byte},Puck.World.Server.WorldAuthorityCheckpoint@,System.String@,System.String)",
                 "M:Puck.World.Server.WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(System.ReadOnlySpan{System.Byte},Puck.World.Server.WorldCrossingArrival@,System.String@)",
                 "M:Puck.World.Server.WorldAuthorityCheckpointCodec.WriteAdmissionGrant(Puck.Networking.WireWriter,Puck.World.Protocol.WorldAdmissionGrant)",
                 "M:Puck.World.WorldBodiesLimits.IsBodyIndex(System.Int32)",
@@ -1960,7 +1962,7 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "99896304444fb8f8",
+            "shape": "a5b31747bd3c0e79",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
@@ -1983,7 +1985,9 @@
                 "M:Puck.World.Protocol.WorldMutation.Batch.TryValidateShape(System.String@)",
                 "M:Puck.World.Protocol.WorldMutationKindCatalog.All",
                 "M:Puck.World.ReplayRefusalExtensions.Raise(Puck.World.ReplayRefusal,System.String)",
+                "M:Puck.World.Server.WorldAuthorityCheckpointCodec.Encode(Puck.World.Server.WorldAuthorityCheckpoint)",
                 "M:Puck.World.Server.WorldAuthorityCheckpointCodec.ReadAdmissionGrant(Puck.Networking.WireReader@)",
+                "M:Puck.World.Server.WorldAuthorityCheckpointCodec.TryDecode(System.ReadOnlySpan{System.Byte},Puck.World.Server.WorldAuthorityCheckpoint@,System.String@,System.String)",
                 "M:Puck.World.Server.WorldAuthorityCheckpointCodec.TryDecodeCrossingArrival(System.ReadOnlySpan{System.Byte},Puck.World.Server.WorldCrossingArrival@,System.String@)",
                 "M:Puck.World.Server.WorldAuthorityCheckpointCodec.WriteAdmissionGrant(Puck.Networking.WireWriter,Puck.World.Protocol.WorldAdmissionGrant)",
                 "M:Puck.World.WorldBodiesLimits.IsBodyIndex(System.Int32)",
@@ -1998,9 +2002,9 @@
                 "P:Puck.World.Protocol.IntentSource.Idle",
                 "P:Puck.World.WorldJsonContext.WorldStateSection"
             ],
-            "shape": "99896304444fb8f8",
+            "shape": "a5b31747bd3c0e79",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
-            "token": "9"
+            "token": "10"
         },
         "WorldScheduleSection.ManifestSchemaId": {
             "open": [
