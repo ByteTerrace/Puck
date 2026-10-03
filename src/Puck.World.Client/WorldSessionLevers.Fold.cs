@@ -100,6 +100,7 @@ public static partial class WorldSessionLevers {
             RenderScale = settings.RenderScale,
             UpscaleSharpness = settings.UpscaleSharpness,
             Temporal = settings.Temporal,
+            ShadowAmortize = settings.ShadowAmortize,
             DynamicResolution = settings.DynamicResolution,
         });
 

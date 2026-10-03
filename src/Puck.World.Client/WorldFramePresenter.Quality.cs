@@ -32,5 +32,6 @@ public sealed partial class WorldFramePresenter {
             _ => (m_client.ActivePeerCount >= 16),
         }),
         Temporal = m_settings.Temporal,
+        ShadowAmortize = m_settings.ShadowAmortize,
     };
 }

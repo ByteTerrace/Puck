@@ -40,6 +40,11 @@
       "type": "boolean",
       "default": false
     },
+    "shadowAmortize": {
+      "description": "Whether secondary shadows boot reusing valid K history (world.shadow-amortize).",
+      "type": "boolean",
+      "default": false
+    },
     "dynamicResolution": {
       "description": "Whether views boot adapting their grids (world.render-scale auto). Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while adaptation is enabled, since a native view reconstructs nothing.",
       "type": "boolean",

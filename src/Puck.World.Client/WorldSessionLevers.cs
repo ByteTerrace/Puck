@@ -44,6 +44,8 @@ public static partial class WorldSessionLevers {
     public const string TargetHertz = "target";
     /// <summary>Temporal reconstruction of the world's own views (<c>world.temporal</c>).</summary>
     public const string Temporal = "temporal";
+    /// <summary>Secondary shadow history reuse (<c>world.shadow-amortize</c>).</summary>
+    public const string ShadowAmortize = "shadow-amortize";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
     public const string UpscaleSharpness = "upscale-sharpness";
 
@@ -122,6 +124,7 @@ public static partial class WorldSessionLevers {
             name: Temporal,
             setter: lever => settings.Temporal = Flag(lever: lever)
         );
+        sink.Register(name: ShadowAmortize, setter: lever => settings.ShadowAmortize = Flag(lever: lever));
         sink.Register(
             name: UpscaleSharpness,
             setter: lever => settings.UpscaleSharpness = ((float)lever.A)

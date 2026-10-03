@@ -44,6 +44,8 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             ? "on"
             : "off")} temporal={(settings.Temporal
             ? "on"
+            : "off")} shadow-amortize={(settings.ShadowAmortize
+            ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
             : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]";
@@ -709,6 +711,20 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.shadow-amortize",
+            description: "Reuses secondary shadow history with temporal reconstruction: world.shadow-amortize [on|off]. Slot zero and fading slots march fully. Other slots march one quarter-grid selected by the jitter index, rejecting history on light ownership, light motion, occluder motion, or receiver identity and depth changes.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.shadow-amortize: {(settings.ShadowAmortize ? "on" : "off")}]");
+                if (args.Count == 0) { return Echo(); }
+                if (ParseOnOff(token: args[0]) is not { } on) {
+                    return CommandResult.Error(output: $"[world.shadow-amortize: unknown state '{args[0]}' — on|off]");
+                }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadowAmortize,
+                    a: (on ? 1.0 : 0.0), formatEcho: Echo);
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.quality",
             description: "Applies one of the world's authored graphics PRESETs (render.low, render.medium, render.high), each bundling the shadow, ambient-occlusion, temporal-reconstruction, dynamic-resolution and render-scale levers, live: world.quality low|medium|high — no argument echoes the current settings. A preset the world does not author is refused by name. A preset just writes the individual settings (world.shadows/.ao/.temporal/.render-scale still override afterward).",
             handler: (context, args) => {
@@ -750,6 +766,8 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     ? 1.0
                     : 0.0)
                 );
+                SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadowAmortize,
+                    a: (preset.ShadowAmortize ? 1.0 : 0.0));
                 SubmitLever(
                     link: link,
                     principal: context.Principal,

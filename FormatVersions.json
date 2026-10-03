@@ -1083,7 +1083,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "c36fae949a4ac196",
+            "shape": "f263792eed0e793d",
             "source": "src/Puck.World.Schema/WorldCameraProgram.cs",
             "token": "puck.camera.program.v1"
         },
@@ -1161,7 +1161,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersCeilings"
             ],
-            "shape": "78fb5ee9580d9311",
+            "shape": "0c837ab9484f1526",
             "source": "src/Puck.World.Schema/WorldCountersCeilings.cs",
             "token": "puck.counters.ceilings.v1"
         },
@@ -1180,7 +1180,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersReport"
             ],
-            "shape": "6c4687474e18aef3",
+            "shape": "8e0944dc515d7ebc",
             "source": "src/Puck.World.Schema/WorldCountersReport.cs",
             "token": "puck.counters.report.v1"
         },
@@ -1494,7 +1494,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "fb0efb04b21bb245",
+            "shape": "8406916a52a12335",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
@@ -1630,7 +1630,7 @@
                 "P:Puck.World.WorldDefinition.State",
                 "P:Puck.World.WorldJsonContext.WorldProjectionDocument"
             ],
-            "shape": "e512e4dc522c8871",
+            "shape": "b06aa08bafa42f92",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },

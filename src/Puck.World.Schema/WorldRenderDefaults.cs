@@ -71,6 +71,7 @@ public static class WorldApplicationDefaults {
 /// <param name="AmbientOcclusion">Whether the preset enables ambient occlusion.</param>
 /// <param name="RenderScale">The scalar render-scale ceiling the preset selects.</param>
 /// <param name="Temporal">Whether the preset reconstructs the world's views over time (<c>world.temporal</c>).</param>
+/// <param name="ShadowAmortize">Whether secondary shadows reuse valid K history (<c>world.shadow-amortize</c>).</param>
 /// <param name="DynamicResolution">Whether the preset moves each view's render extent with the load
 /// (<c>world.render-scale auto</c>).</param>
 /// <param name="RenderScaleFloor">The per-view floor tier the preset selects (Quarter by default).</param>
@@ -83,6 +84,7 @@ public readonly record struct WorldQualityPreset(
     bool AmbientOcclusion,
     float RenderScale,
     bool Temporal = false,
+    bool ShadowAmortize = false,
     bool DynamicResolution = false,
     int ShadowLights = 0,
     int ShadowFadeSlots = 0,
@@ -101,6 +103,7 @@ public readonly record struct WorldQualityPreset(
 /// Catmull-Rom) and the strength of the sharpen a temporally resolved view gets at its rect's own extent.</param>
 /// <param name="Temporal">Whether the world's own views boot reconstructing over time (<c>world.temporal</c>): each
 /// jitters its samples and resolves them over its history, native or reduced. Camera and session views never do.</param>
+/// <param name="ShadowAmortize">Whether secondary shadows boot reusing valid K history (<c>world.shadow-amortize</c>).</param>
 /// <param name="DynamicResolution">Whether views boot adapting their grids (<c>world.render-scale auto</c>).
 /// Saved per-view quality and tier rows supply their floors. A native ceiling is lowered to three-quarter while
 /// adaptation is enabled, since a native view reconstructs nothing.</param>
@@ -137,6 +140,7 @@ public sealed record WorldRenderDefaults(
     float RenderScale = 1f,
     float UpscaleSharpness = 0f,
     bool Temporal = false,
+    bool ShadowAmortize = false,
     bool DynamicResolution = false,
     [property: JsonPropertyName("low"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? LowRaw = null,
     [property: JsonPropertyName("medium"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? MediumRaw = null,
