@@ -32,7 +32,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// the list in place whenever the set is composed again.</summary>
     public IReadOnlyList<string> Named => m_named;
     /// <summary>Gets the views the display shows directly beside the root, a HUD frame's or a probe export's camera, each
-    /// at the fraction of the display its declared extent covers. The host rewrites the list in place whenever the set is
+    /// at the fraction of the display its declared extent covers, and, while such a camera films the world, every view the
+    /// world's screens show, at the camera's fraction times the view's declared extent: the camera reads those views at
+    /// their previous frame, which demands nothing of them. The host rewrites the list in place whenever the set is
     /// composed again.</summary>
     public IReadOnlyList<RenderGraphRoot> Roots => m_roots;
     /// <summary>The source loader used by both boot and live authoring: a row naming a package directory loads through
@@ -448,6 +450,30 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 .. rendered.Views.Where(predicate: static view => WorldViewInstances.IsShownDirectly(view: in view)).Select(selector: static view => new RenderGraphRead(Producer: view.Name)),
             ],
         }));
+    // A camera the display shows directly that films the world reads every view the world's screens show at its previous
+    // frame, and a previous-frame read demands nothing of its producer. So while the camera is a root, each view it films
+    // is rooted too, at the fraction the camera's footprint of it would have demanded: the camera's root extent times the
+    // view's declared extent, and at the camera's refresh, so a filmed view renders no more often than the camera can
+    // consume it. The rooting ends with the camera's root.
+    private void AddFilmedRoots(in WorldView camera, WorldViewInstances rendered) {
+        if (!camera.FilmsWorld) {
+            return;
+        }
+        foreach (var filmed in rendered.Views) {
+            if (
+                WorldViewInstances.IsShownDirectly(view: in filmed) &&
+                !string.Equals(a: filmed.Name, b: camera.Name, comparisonType: StringComparison.Ordinal)
+            ) {
+                m_roots.Add(item: new RenderGraphRoot(
+                    Height: (camera.Height * filmed.Height),
+                    Instance: filmed.Name,
+                    Width: (camera.Width * filmed.Width)
+                ) {
+                    Refresh = camera.Refresh,
+                });
+            }
+        }
+    }
     // The footprints a screen-rendering instance, or a view whose screens show something, shows its reads through: a
     // source renders at its producer's negotiated extent, so any fraction demands it without sizing it, and a view a
     // screen shows at the fraction of the display its declared extent covers.
@@ -1281,6 +1307,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                     Instance: view.Name,
                     Width: view.Width
                 ));
+                AddFilmedRoots(camera: in view, rendered: rendered);
             }
         }
 

@@ -33,6 +33,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     private readonly SdfKernel m_kernel;
     private readonly bool m_resolved;
     private readonly bool m_temporal;
+
+    private int m_recordedView;
+
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
 
@@ -107,11 +110,13 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((recording.Width + 7) / 8), groupCountY: ((recording.Height + 7) / 8), groupCountZ: 1);
-        if (m_kernel == SdfKernel.Composite) {
-            residency.MarkRendered(view: index);
-            m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
-        }
+        m_recordedView = index;
         return RenderGraphPackageOutcome.Drew;
+    }
+    public void Submitted() {
+        if (m_kernel != SdfKernel.Composite) { return; }
+        m_view.Residency.MarkRendered(view: m_recordedView);
+        m_owner.MarkRendered(instance: m_context.Instance, view: in m_view);
     }
 
     // Writes, once per slot and tables, a filler at every member, then each port at the member its version reads or

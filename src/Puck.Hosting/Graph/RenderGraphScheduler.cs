@@ -15,10 +15,13 @@ namespace Puck.Hosting;
 /// <item><description>Instances the display does not show directly spend at most the frame's pass-pixel budget. The
 /// stalest due instance is admitted first, ties in render order, so an instance the budget defers is first in line on
 /// the next frame; the display's own instances always render.</description></item>
+/// <item><description>A root asks for its instance at most once per its own refresh
+/// (<see cref="RenderGraphRoot.Refresh"/>): an instance only roots show renders when its own refresh and its most
+/// frequent root's have both passed since it last rendered, and on its first frame whatever either says.</description></item>
 /// <item><description>A read of an instance's own output, and a read declared previous-frame, samples the producer's
-/// latest output completed before this frame, so a mirror facing itself shows the previous frame.</description></item>
-/// <item><description>A buffer read has no footprint: every consumer that renders reads it, so its producer is demanded
-/// whenever one of its consumers is, orders and refreshes as a shown producer does, and renders at no extent for no
+/// latest output completed before this frame and creates no demand for its producer.</description></item>
+/// <item><description>A same-frame buffer read has no footprint: every consumer that renders reads it, so its producer is
+/// demanded whenever one of its consumers is, orders and refreshes as a shown producer does, and renders at no extent for no
 /// pass-pixels.</description></item>
 /// <item><description>A source (<see cref="RenderGraphInstance.IsSource"/>) is demanded as any shown producer is and renders
 /// at most once a frame however many instances show it, but at its producer's cadence and negotiated extent
@@ -52,6 +55,8 @@ public static class RenderGraphScheduler {
             Due = new bool[count];
             Forced = new bool[count];
             Unchanged = new bool[count];
+            ConsumerDemanded = new bool[count];
+            RootDivisor = new int[count];
             Height = new int[count];
             IsRoot = new bool[count];
             PositionOf = new int[count];
@@ -84,6 +89,10 @@ public static class RenderGraphScheduler {
         public bool[] Forced { get; }
         // Whether the frame declares the instance unchanged since its latest render.
         public bool[] Unchanged { get; }
+        // Whether a consumer that renders this frame passed demand to the instance.
+        public bool[] ConsumerDemanded { get; }
+        // The most frequent resolved refresh divisor of the roots showing the instance, or 0 when none does.
+        public int[] RootDivisor { get; }
         public int[] Height { get; }
         public bool[] IsRoot { get; }
         public int[] Passes { get; }
@@ -112,6 +121,8 @@ public static class RenderGraphScheduler {
             Array.Clear(array: DemandWidth);
             Array.Clear(array: Forced);
             Array.Clear(array: Unchanged);
+            Array.Clear(array: ConsumerDemanded);
+            Array.Clear(array: RootDivisor);
             Array.Clear(array: Height);
             Array.Clear(array: IsRoot);
             Array.Clear(array: Price);
@@ -508,6 +519,7 @@ public static class RenderGraphScheduler {
         work.Clear();
 
         var isRoot = work.IsRoot;
+        var rootDivisor = work.RootDivisor;
         var demandWidth = work.DemandWidth;
         var demandHeight = work.DemandHeight;
         var roots = frame.Roots;
@@ -538,11 +550,20 @@ public static class RenderGraphScheduler {
                 what: "A root's height"
             );
 
+            if (!root.Refresh.IsValid) {
+                throw new ArgumentException(
+                    message: $"Root '{root.Instance}' declares refresh divisor {root.Refresh.Divisor} and hertz {root.Refresh.Hertz}; exactly one must be positive.",
+                    paramName: nameof(frame)
+                );
+            }
             if (
                 (rootWidth > 0) &&
                 (rootHeight > 0)
             ) {
+                var asked = root.Refresh.ResolveDivisor(displayHertz: frame.DisplayHertz);
+
                 isRoot[index] = true;
+                rootDivisor[index] = ((rootDivisor[index] == 0) ? asked : Math.Min(val1: rootDivisor[index], val2: asked));
                 demandWidth[index] = Math.Max(
                     val1: demandWidth[index],
                     val2: rootWidth
@@ -621,11 +642,11 @@ public static class RenderGraphScheduler {
             );
         }
 
-        // Consumers are decided before their same-frame producers, so a producer's demand is complete when it is
-        // reached; a previous-frame read that arrives after its producer was decided adds no extent this frame. A buffer
-        // read demands its producer without adding extent.
+        // Consumers pass demand only to same-frame producers. History remains reachable and named for lifetime and
+        // binding, but its reader never requests a write. A same-frame buffer read demands without adding extent.
         var decided = work.Decided;
         var demanded = work.Demanded;
+        var consumerDemanded = work.ConsumerDemanded;
         var scaleWidth = work.ScaleWidth;
         var scaleHeight = work.ScaleHeight;
         var changed = true;
@@ -650,6 +671,18 @@ public static class RenderGraphScheduler {
                 // it reads nothing to pass demand on to.
                 if (set.Instances[index].IsSource) {
                     continue;
+                }
+                // Shown only through roots, the instance renders no more often than the most frequent root asks: its
+                // own refresh and that root's must both have passed since it last rendered.
+                if (
+                    due[index] &&
+                    !forced[index] &&
+                    !consumerDemanded[index] &&
+                    (rootDivisor[index] > 1) &&
+                    (history.LatestFrame(index: index) is var last and >= 0) &&
+                    ((frame.Index - last) < rootDivisor[index])
+                ) {
+                    due[index] = false;
                 }
 
                 var (allocatedWidth, allocatedHeight) = history.Allocated(index: index);
@@ -678,9 +711,10 @@ public static class RenderGraphScheduler {
                 }
 
                 foreach (var entry in shown[index]) {
-                    if (decided[entry.Producer]) {
+                    if (entry.PreviousFrame || decided[entry.Producer]) {
                         continue;
                     }
+                    consumerDemanded[entry.Producer] = true;
                     if (entry.Kind == ShaderPipelineResourceKind.Buffer) {
                         demanded[entry.Producer] = true;
 
@@ -827,7 +861,7 @@ public static class RenderGraphScheduler {
                 }
 
                 foreach (var entry in shown[consumer]) {
-                    if (entry.Producer == index) {
+                    if (!entry.PreviousFrame && (entry.Producer == index)) {
                         read = true;
 
                         break;

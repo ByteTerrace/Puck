@@ -135,7 +135,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         TestLiveness.Until(
             reason: () => "The root never stood for its previous-frame input.",
             step: () => {
-                _ = scene.Produce(footprints: filmed, roots: MainRoot);
+                _ = scene.Produce(footprints: filmed, roots: [.. MainRoot, Full(instance: "camera")]);
 
                 return (scene.Runtime.IsSettled && (scene.Node(instance: "main").PublishedBinding == "world"));
             }
@@ -145,7 +145,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
             var previous = scene.Recorders.Of(instance: "camera").OutputImage;
 
             scene.Node(instance: "camera").Frame = (scene.Node(instance: "camera").Frame with { StateTick = ((ulong)(frame + 1)), });
-            var shown = scene.Produce(footprints: filmed, roots: MainRoot);
+            var shown = scene.Produce(footprints: filmed, roots: [.. MainRoot, Full(instance: "camera")]);
 
             Assert.NotEqual(expected: previous, actual: scene.Recorders.Of(instance: "camera").OutputImage);
             Assert.Equal(expected: previous, actual: shown.ImageHandle);
@@ -157,7 +157,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         var request = CaptureRequest();
 
         scene.Runtime.RequestCapture(request: request);
-        _ = scene.Produce(footprints: filmed, roots: MainRoot);
+        _ = scene.Produce(footprints: filmed, roots: [.. MainRoot, Full(instance: "camera")]);
         Assert.True(condition: request.Completion.IsCompleted);
         Assert.Null(@object: Outcome(request: request).Error);
         Assert.Equal(expected: 8UL, actual: Outcome(request: request).Tick);
