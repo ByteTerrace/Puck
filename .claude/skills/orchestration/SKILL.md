@@ -27,9 +27,7 @@ lead keeps cross-track conflicts, merges, owner-level calls, and scope and
 order. Every brief ends with the partner's own next one or two items, and the
 partner works its queue without waiting for the lead between items. A queue the
 partners cannot read is no queue: keep the lead's queue where partners can reach
-it, or delegate it to them. Every queue item has exactly one recorded owner, and
-a handoff records the new one; an item with two owners is a defect to resolve
-before either partner continues.
+it, or delegate it to them.
 
 ## Write and track assignments
 
