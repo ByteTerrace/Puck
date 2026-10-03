@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [
     "four-pass.graph.json",
-    "four-pass.world.json"
+    "four-pass.puck"
   ],
   "positive": {
     "world": "tests/Puck.World.Canaries/pipeline-feedback/fixture.world.json",
@@ -271,7 +271,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/pipeline-counters/four-pass.world.json",
+    "world": "tests/Puck.World.Canaries/pipeline-counters/four-pass.puck",
     "script": "counters.script.txt",
     "commands": [
       {
