@@ -405,27 +405,28 @@ public sealed class ConvexProfileLawTests {
     }
     [Fact]
     public void TheStudyShoulderPentagonEvaluatesWithTheRightSignAtItsCentreAndOutside() {
-        // moth-study.glsl's shoulderProfile: fiveSides(p, (-.12,.10), (.08,.20), (.29,.10), (.48,-.45), (.12,-.24)).
+        // The world-unit XY profile in src/Puck.World/Assets/pipelines/moth.hlsl's shoulderProfile, traversed clockwise
+        // for the prism profile contract. The shader's edgePlane accepts its counterclockwise traversal.
         Vector2[] pentagon = [
             new(
-                x: -0.12f,
+                x: 0.06f,
+                y: 0.05f
+            ),
+            new(
+                x: -0.06f,
+                y: -0.12f
+            ),
+            new(
+                x: -0.24f,
+                y: -0.225f
+            ),
+            new(
+                x: -0.145f,
+                y: 0.05f
+            ),
+            new(
+                x: -0.04f,
                 y: 0.10f
-            ),
-            new(
-                x: 0.08f,
-                y: 0.20f
-            ),
-            new(
-                x: 0.29f,
-                y: 0.10f
-            ),
-            new(
-                x: 0.48f,
-                y: -0.45f
-            ),
-            new(
-                x: 0.12f,
-                y: -0.24f
             ),
         ];
 
@@ -433,7 +434,7 @@ public sealed class ConvexProfileLawTests {
 
         var evaluator = ConvexPolygon(
             pentagon,
-            0.2f
+            0.1f
         );
 
         // The unweighted centroid of a convex polygon always lies inside it.

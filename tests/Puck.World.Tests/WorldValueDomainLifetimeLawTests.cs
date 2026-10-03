@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
+using Puck.SignedDistance;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Xunit;
@@ -63,16 +64,16 @@ public sealed class WorldValueDomainLifetimeLawTests {
         var reports = new List<string>();
         var resolve = new WorldEnvironmentResolve(domains: domains);
         var world = new WorldValueDomainLawTests.LiveWorld(definition: Clouds(scaleBound: true, value: 0.5d));
-        var engineDefault = resolve.Resolve(definition: Clouds(scaleBound: false, value: 0.5d), mirror: world.Mirror, revision: 0).Sky.Block.CloudScale;
+        var engineDefault = resolve.Resolve(definition: Clouds(scaleBound: false, value: 0.5d), mirror: world.Mirror, revision: 0).Sky.First<SdfSkyClouds>().Scale;
 
         domains.Report = reports.Add;
 
-        Assert.Equal(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 1).Sky.Block.CloudScale);
+        Assert.Equal(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 1).Sky.First<SdfSkyClouds>().Scale);
 
         // The row goes to 0: coverage (closed, so 0 is inside) takes it, scale (open at 0) holds 0.5 and is reported.
         world.Set(definition: Clouds(scaleBound: true, value: 0d));
 
-        Assert.Equal(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 2).Sky.Block.CloudScale);
+        Assert.Equal(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 2).Sky.First<SdfSkyClouds>().Scale);
         Assert.Single(collection: reports);
 
         // The scale binding goes away while coverage keeps reading the row, and a frame is presented without it.
@@ -82,8 +83,8 @@ public sealed class WorldValueDomainLifetimeLawTests {
         // It comes back with the row still at 0: a new binding, which holds nothing from the old one.
         world.Set(definition: Clouds(scaleBound: true, value: 0d));
 
-        Assert.NotEqual(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 4).Sky.Block.CloudScale);
-        Assert.Equal(expected: engineDefault, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 5).Sky.Block.CloudScale);
+        Assert.NotEqual(expected: 0.5f, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 4).Sky.First<SdfSkyClouds>().Scale);
+        Assert.Equal(expected: engineDefault, actual: resolve.Resolve(definition: world.Current, mirror: world.Mirror, revision: 5).Sky.First<SdfSkyClouds>().Scale);
         Assert.Equal(expected: 2, actual: reports.Count);
     }
     [Fact]

@@ -24,15 +24,18 @@ public sealed class PackLightsAndSkyLawTests {
         Shadows: shadows,
         Weight: weight
     );
-    private static SdfSkyBlock Sky(SdfSky sky, SdfLights lights) {
+    private static SdfSkyLayer[] Sky(SdfSky sky, SdfLights lights, out SdfSkyBlock block) {
+        var layers = new SdfSkyLayer[SdfSky.MaxLayers];
+
         sky.Pack(
-            block: out var block,
+            block: out block,
+            details: new SdfSkyDetails(),
+            layers: layers,
             lights: lights,
-            softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes],
-            stops: new SdfSkyStop[SdfSky.MaxStops]
+            softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]
         );
 
-        return block;
+        return layers;
     }
 
     [Fact]
@@ -112,9 +115,9 @@ public sealed class PackLightsAndSkyLawTests {
             Weight: 1f
         );
     }
-    // The sky block carries what the sky draws by, baked from the lights so the sky pass reads no light: the disc's
-    // direction is its light's packed direction, and the clouds are lit by stable slot zero, or the pinned sun and
-    // white when that slot is vacant.
+    // A layer's record carries what its kind draws by, baked from the lights so the sky pass reads no light: a disc's
+    // direction is its light's packed direction and its exponent puts its edge at half brightness, and clouds are lit by
+    // stable slot zero, or the pinned sun and white when that slot is vacant. A disc about no light writes no entry.
     [Fact]
     public void TheSkyBakesItsDiscAndCloudLightFromTheLights() {
         var lights = new SdfLights { Count = 2 };
@@ -124,21 +127,32 @@ public sealed class PackLightsAndSkyLawTests {
         lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 1);
         lights.ShadowSlots.SetSlot(light: 1, slot: 0);
 
-        var sky = new SdfSky { SunDiscRadians = 0.05f };
+        var sky = new SdfSky();
 
-        sky.Block.DiscLight = 0;
+        _ = sky.Add(label: "disc", parameters: new SdfSkyDisc { Intensity = 1f, Light = 0, Radius = 0.05f });
+        _ = sky.Add(label: "clouds", parameters: new SdfSkyClouds { Coverage = 0.5f });
 
-        var block = Sky(lights: lights, sky: sky);
+        var layers = Sky(block: out var block, lights: lights, sky: sky);
+        var disc = SdfSky.PayloadOf<SdfSkyDisc>(layer: ref layers[1]);
+        var clouds = SdfSky.PayloadOf<SdfSkyClouds>(layer: ref layers[2]);
 
-        Assert.Equal(expected: Vector3.UnitY, actual: block.DiscDirection);
-        Assert.Equal(expected: ((float)(Math.Log(d: 0.5d) / Math.Log(d: Math.Cos(d: 0.05d)))), actual: block.DiscExponent);
-        Assert.Equal(expected: Vector3.UnitX, actual: block.CloudLightDirection);
-        Assert.Equal(expected: new Vector3(x: 1f, y: 0.5f, z: 0.25f), actual: block.CloudLightColor);
+        Assert.Equal(actual: block.LayerCount, expected: 3u);
+        Assert.Equal(expected: Vector3.UnitY, actual: disc.Direction);
+        Assert.Equal(expected: ((float)(Math.Log(d: 0.5d) / Math.Log(d: Math.Cos(d: 0.05d)))), actual: disc.Exponent);
+        Assert.Equal(expected: Vector3.UnitX, actual: clouds.LightDirection);
+        Assert.Equal(expected: new Vector3(x: 1f, y: 0.5f, z: 0.25f), actual: clouds.LightColor);
 
-        var unlit = Sky(sky: new SdfSky(), lights: new SdfLights());
+        var unlitSky = new SdfSky();
 
-        Assert.Equal(actual: unlit.DiscLight, expected: -1);
-        Assert.Equal(expected: SdfLights.DefaultSunDirection, actual: unlit.CloudLightDirection);
-        Assert.Equal(expected: Vector3.One, actual: unlit.CloudLightColor);
+        _ = unlitSky.Add(label: "disc", parameters: new SdfSkyDisc { Intensity = 1f });
+        _ = unlitSky.Add(label: "clouds", parameters: new SdfSkyClouds { Coverage = 0.5f });
+
+        var unlit = Sky(block: out var unlitBlock, lights: new SdfLights(), sky: unlitSky);
+        var unlitClouds = SdfSky.PayloadOf<SdfSkyClouds>(layer: ref unlit[1]);
+
+        Assert.Equal(actual: unlitBlock.LayerCount, expected: 2u);
+        Assert.Equal(expected: SdfSkyLayerKind.Clouds, actual: unlit[1].Kind);
+        Assert.Equal(expected: SdfLights.DefaultSunDirection, actual: unlitClouds.LightDirection);
+        Assert.Equal(expected: Vector3.One, actual: unlitClouds.LightColor);
     }
 }
