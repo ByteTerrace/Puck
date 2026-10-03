@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response lists merging the integration branch's current tip into the lane among the steps to take.
+merg\w*[^.\n]{0,80}(integration|tip)|(integration|tip)[^.\n]{0,80}merg

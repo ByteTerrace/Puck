@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response excludes the search's own process, by process id or by a pattern that cannot match its own command line.
+\bpid\b|process id|\[[a-z]\]|bracket|exclud\w+

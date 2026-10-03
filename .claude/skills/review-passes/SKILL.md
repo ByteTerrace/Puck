@@ -1,6 +1,6 @@
 ---
 name: review-passes
-description: Briefs, runs and closes cross-family review-and-fix passes in at most two rounds. Codex reviews Claude-written work; a Claude agent reviews Codex-written work, including Codex review fixes. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verification and red legs, fast-forward landing on the author's branch, round 2 over round 1's fix diff alone, and the lead's ruling on remaining findings. Use when briefing or launching a pass, receiving its result, or verifying and landing its fixes. Does not choose models, effort or concurrency. verification owns gates, red-leg proofs and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
+description: Briefs, runs and closes cross-family review-and-fix passes in at most two rounds. Codex reviews Claude-written work; a Claude agent reviews Codex-written work, including Codex review fixes. Covers self-contained commit-range briefs, contracts and hunts, local WIPs, verification and red legs, fast-forward landing on the author's branch, round 2 over round 1's fix diff alone, and the lead's ruling on remaining findings. Use when briefing or launching a pass with the companion (`task`, `--cwd`, `--prompt-file`, job status and result), choosing a review range, receiving a pass's result (including a pass that changed nothing or raised a compatibility finding) or a claim it makes, verifying and landing its fixes, closing a round, or removing a review worktree. Does not choose models, effort or concurrency. verification owns gates, red-leg proofs and GPU legs; the changed area's skill supplies contracts and hunt classes; documentation owns doc-only checks.
 ---
 
 # Review passes
@@ -43,7 +43,8 @@ stale and is corrected in the same change.
   for the run to finish or give the pass a separate worktree.
 - For a code pass, restore and build that worktree first so `obj/` and `bin/`
   exist. The Codex sandbox has no network: fetch corpora and packages before
-  the run. A documentation-only pass needs no build unless XML comments change.
+  the run, and have the brief tell the pass to build with `--no-restore`, since
+  a restore inside the sandbox fails. A documentation-only pass needs no build unless XML comments change.
 - Launch a Codex pass as the companion's `task --write`. The subcommand takes
   `--write`, `--model`, `--effort`, `--cwd`, `--prompt-file`, `--background`
   and `--resume-last` (with `--resume` and `--fresh`).

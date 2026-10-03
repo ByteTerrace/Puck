@@ -15,8 +15,8 @@ none of them, but the mirror reads the state substrate and
 [the presentation view](runtime-and-delivery.md#the-presentation-view), so P9
 and P10 are scheduled against those.
 
-The programme ends with the frame graph at the centre of rendering. Today the
-SDF renderer still hosts nested cameras and screens inside its own passes. It
+The programme ends with the frame graph at the centre of rendering. The
+SDF renderer's nested cameras and screens are graph instances. It
 is a prototype, and the pipeline that replaces it has to be better at everything it does. P11 to P17 make the frame graph a document
 that every view is an instance of, and nest those instances efficiently. They
 feed the graph from image sources such as emulators, desktop capture, cameras,
@@ -36,9 +36,11 @@ reasoning behind every decision is in
 ## Implementation status
 
 P2, P3, P4, P5, P7, P8, P9, P10, P11 and P12 are complete; P1a, P1b, P6 and P13
-to P18 are not. Of P18, step 2 has landed: the sky and the bounded media
-animate on the presented engine tick, and the `timeline` section names
-presentation clocks. The programmable compute and graphics foundation has functional GPU
+to P18 are not. Of P18, steps 1 to 5 have landed: the sky and the bounded media
+animate on the presented engine tick, the `timeline` section names
+presentation clocks, and the sky and lights tables and the composite are
+current; step 6 has its retained-resource foundation, and steps 7 to 14 are
+open. The programmable compute and graphics foundation has functional GPU
 fixtures on both backends. The
 work-counting model, the GPU work ledger, and the counting wrappers live in
 `Puck.Abstractions`. The state arena, rules and search, the shader pipeline
@@ -1322,8 +1324,9 @@ display hands its CPU pixels over in. Both swapchains choose a display output th
 `colorSpace` requests it and the display reports it, and both write the root's
 frame through the display encode in the output they took. The tonemap is each
 view's place pass in the root graph, over the view it reconstructs.
-There is no jitter, motion vector, or history in the SDF kernels; render scale
-is a bilinear-to-Catmull-Rom upsample in the graph's `place` pass.
+A temporal view jitters its rays, derives motion from the visibility record and
+resolves over its own history; a spatial view resolves to its output extent
+without history, and the graph's `place` pass places the result.
 
 P12's source contract, producer registration and conversion passes have
 landed, and so have P12b's steps 1 to 7: sources are graph instances,
@@ -2937,7 +2940,7 @@ re-record explained in the same change.
    - Status: landed, with the review corrections and the round-three
      contract. Every law passes on the CPU, and the whole
      `Puck.SignedDistance.Tests` suite with it.
-2. **G2, the cache traced and partitioned.** After P18-4 and P18-5 reach the
+2. **G2, the cache traced and partitioned.** After P18-4 and P18-5, which are on the
    features head, since it extends the package declarations and the World
    group they move.
    - Delivers: the `indirect` package and its one instance per residency;
@@ -3177,8 +3180,8 @@ re-record explained in the same change.
 **Sequencing with other lanes.**
 
 - **P18.** G1's reference takes light callbacks and new files, so it touches
-  none of P18's records, declarations or laws. G2 waits for P18-4's World-group
-  tables and P18-5's package layout to reach the features head, because it adds
+  none of P18's records, declarations or laws. G2 extends P18-4's World-group
+  tables and P18-5's package layout, which are on the features head, because it adds
   to the same declarations. G4 reads the light record P18-4 generates and walks
   today's one shadow light; P18-7's slots and fades reach the light view in G5,
   which also needs P18-6's change classes and signatures. G6 needs P18-9's
@@ -5084,7 +5087,7 @@ world's own `low` preset (shadows off, ambient occlusion off, render scale
 `half`), which `tests/Puck.Counters/counters.script.txt` selects with
 `world.quality low` before anything is read. Half is 181/255 of each axis, which
 the extent quantization rounds up to 0.75, so the view renders 1440x810 and
-`place` reconstructs it to 1920x1080.
+`resolve` reconstructs it to 1920x1080 and `place` copies it.
 
 **Target shape.** `sdf.world` is a package fragment that `RenderGraphCompiler`
 splices into the graph, so `ShaderPipelineCompiler` orders, versions and
@@ -5199,8 +5202,7 @@ item 2 landed.
    differs from the engine's by the keys it is counted under (`sdf.world$<part>`
    under the instance, the upload under `sdf:<name>`). Done when parity and
    `puck counters compare` hold and both debug layers stay silent on the
-   RTX 2060, with Vulkan validation repeated on the RTX 4070; the RTX 2060
-   debug-layer run remains.
+   RTX 2060, with Vulkan validation repeated on the RTX 4070.
 7. Landed, the frame block: `SdfFrame`'s values and `SdfEnvironment` are
    members of the pass block every SDF pass already reads, declared once as
    `SdfWorldPackage.Values` and generated into `sdf-world.interface.hlsli`. The
@@ -5459,7 +5461,7 @@ item 2 landed.
       primary's shape evaluations fall by at least 60% (the study predicts 71%
       to 85%), the tape pass's own evaluations stay under 25% of those it
       saves, `gpu.march.steps` is unchanged, and parity passes.
-    - Follows P15-5.
+    - Open; P15-5 has landed, so it can start.
 15. Winner-only gradients. `mapGradCore` takes a hit's gradient from the
     shape that decides its value, rather than walking every shape's gradient,
     wherever one shape decides it: a hard blend, or a smooth blend outside its
@@ -5844,8 +5846,8 @@ counted rows recorded in the same change.
      presentation snapshot it composes from: the presenter holds presentation
      time, animation, the camera followers and the frame values at the first
      composition of the armed tick and composes every converging frame at a zero
-     interval, advancing only the jitter index. Nothing turns jitter on outside
-     a `converge` capture until P15-5 adds the lever.
+     interval, advancing only the jitter index. Jitter is on only for a temporal view (`world.temporal`)
+     and inside a `converge` capture.
    - Touches: `SdfWorldPackage.Values`, `SdfFrameBlock`,
      `frame/sdf-viewport.hlsli`, `sdf-mesh.vert.hlsl`, `ViewProjection`,
      `SdfCameraProgram`, `WorldScreenBinder.FilmViews`, `SdfWorldPasses`,
@@ -5905,7 +5907,7 @@ counted rows recorded in the same change.
    view's instance, and the spatial resolve replaces `place`'s upsample of a
    view.
    - Landed: the render-scale ceiling alone selects a view's fragment and is the
-     whole render-extent revision. Views at a native ceiling keep the ten-pass
+     whole render-extent revision. Views at a native ceiling keep the eleven-pass
      fragment and ignore the active grid. Views below it allocate traversal
      storage at their render ceiling, shade into one transient render-grid
      color, and run one output-sized spatial resolve that writes the color
@@ -6286,8 +6288,8 @@ its chunk in compiled worlds, and background baking on the CPU thread pool.
 
 **Delivers:** one baker that turns an SDF prototype into presentation assets:
 
-- A mesh with UVs, extracted with surface nets or dual contouring, whichever
-  measures better on silhouette error and cost.
+- A mesh with UVs, extracted with dual contouring, which beat surface nets on silhouette error
+  and cost.
 - Baked textures for albedo, normals, ambient occlusion, and material identity.
 - Impostors for distant content.
 
@@ -7729,8 +7731,8 @@ list per instance per frame slot, the conditional mesh pass, and the world table
 bound through the group-1 set P17's texture draw added for the bake atlases, one
 per upload ring slot, the float working targets (P14-10), staged shading (P14-11)
 and the final sweep (P14-13): steps 1 to 13 have landed, and the counted-cost
-ceilings land as P15-1. Per-tile segment pruning (P14-14) follows P15-5;
-winner-only gradients (P14-15) follow P14-14's shapes-evaluated count.
+ceilings landed as P15-1. Per-tile segment pruning (P14-14) is open, and P15-5
+has landed; winner-only gradients (P14-15) follow P14-14's shapes-evaluated count.
 P15 and P16 both follow P14: P15 also needs P4, and P16's display output landed
 with P14-10's float working targets and its HDR desktop capture after it; only
 the HDR-display checks remain, deferred to the end.
@@ -7749,14 +7751,15 @@ and a bound member and an overridden member compose by the rule
 [the decisions register](../decisions/rendering.md) states.
 
 The SDF engine's groups (P7b-20), P12b-2, P4-2c, P11b-13, P14-2 and P14-5 have
-landed, and so have P14's other first thirteen steps, so the longest remaining
-chain is P15's, P15-1 to P15-8, with P14-14's pruning after P15-5. A bake's
+landed, and so have P14's other first thirteen steps, so the remaining P15 step
+is P15-8 (P15-1 to P15-7 have landed or been decided), with P14-14's pruning
+open. A bake's
 textures and impostor (P17) come before P6's choice between a bake and the field.
 
 **The sky.** P18 follows P14. Its baseline (P18-1) needs P15-1's counted march
 steps and ceilings; its clocks, keys, sky block, passes and cadence (P18-2 to
-P18-6) land before or after P15-2 to P15-7, and move behind `resolve` once P15-4
-has landed. Its views of other worlds (P18-11) can build on the shared
+P18-6) run behind `resolve`; P18-2 to P18-5 have landed and P18-6 has its
+foundation. Its views of other worlds (P18-11) can build on the shared
 residency for routed seats and eligible windows and on camera views of the
 world's own residency; other session screens still use separate residencies,
 and infinity-view routing and quality levers remain to be implemented. Its shadow
@@ -7765,8 +7768,7 @@ editor's E5, E10 and E11, and its floor defaults (P18-14) are best decided
 beside P15-8.
 
 **Global illumination.** P6-GI's first slice (G1), the CPU reference and the
-CPU model of the cache's transport whose laws settle its layout, has landed. The cache itself (G2) follows P18-4 and P18-5
-onto the features head; its light views (G3) and lighting (G4) follow it; its
+CPU model of the cache's transport whose laws settle its layout, has landed. The cache itself (G2) extends P18-4 and P18-5, which are on the features head; its light views (G3) and lighting (G4) follow it; its
 change classes (G5) follow P18-6 and take P18-7's shadow slots; its sky (G6)
 follows P18-9; its portals (G7) follow G4 and, for infinity views, P18-11; its
 explanation (G8) follows the editor's E2, E4, E5 and E6; its near field (G9)
