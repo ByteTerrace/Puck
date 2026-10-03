@@ -781,6 +781,22 @@ base, so passing both is refused.
   run, and neither path is listed as `unmapped` or unplaced `deleted`.
   Libraries and compositions keep ordinary selection, as do missing documents
   and failed compilations: none establishes that the compiled value is unchanged.
+- A C# edit whose syntax is equivalent after stripping trivia chooses no suite,
+  canary, catalog or baseline. Roslyn parses the base text from git and the
+  working text with the same options, without a base build. Comments, XML
+  documentation, whitespace and regions do not count; other directive tokens
+  must match. Files with conditional directives are not judged because the
+  comparison does not infer project preprocessor symbols. Added or deleted
+  files and parse errors keep ordinary selection.
+- A canary manifest edit confined to root `title` and `binding` chooses only
+  that canary's strict load/list check. Every other JSON field remains in the
+  comparison, including nested assertion names and text. The plan prints
+  `canary-check <id>` and the shared `puck canary --list <id...>` command;
+  `--run` executes it without building or booting a World. Invalid prose still
+  fails strict loading. An execution or verdict field change chooses the run.
+  These rules leave the gate's repository checks intact: lengths,
+  comment-smells and docs links, format for changed C# sources, and docs
+  citations in the GPU gate. JSON manifests are not formatter inputs.
 - A file no canary can execute is placed through the indexed C# sources it
   stands for. A project file or `NativeMethods.txt` stands for its project's
   sources. A restore lock (`packages.lock.json`) reaches its own project's
@@ -846,7 +862,8 @@ Each `baseline <artifact>` line is followed by its exact
 `puck baselines <artifact> --check` command. The gate owns these checks;
 `affected --run` does not run them a second time.
 
-`--run` builds and runs the chosen suites, then `puck test` on the chosen
+`--run` first strictly loads and lists the prose-edited manifests, then builds
+and runs the chosen suites, then `puck test` on the chosen
 worlds, then the catalog check, and exits 1 when any of them fails. A suite
 prints one verdict line; a failed one follows it with its whole report, each
 failed test with its message and stack or the build errors that stopped it, so
@@ -1296,7 +1313,7 @@ manifest's own assertions.
 puck canary                         run the automatic set (headless, no environmental requirements)
 puck canary <id> ...                explicitly run named proofs
 puck canary --all                   explicitly run every proof; does not change automatic eligibility
-puck canary --list                  strictly load and list manifests without building or running
+puck canary --list [id ...]         strictly load and list named manifests, or all when unnamed, without building or running
 puck canary --capability <class>    filter automatic/headless/windowed/offscreen or an environmental requirement
 puck canary --merge                 run the merge gate: the automatic set plus every proof requiring gpu
 puck canary --backend <name> ...    run every backend-declaring proof on vulkan or directx only

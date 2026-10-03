@@ -24,7 +24,7 @@ internal static partial class CanaryCommand {
         var backendOption = new Option<string?>(name: "--backend") { Description = "Run every backend-declaring proof on this backend only: vulkan or directx. Both run when omitted, and the verdict names the backends that ran." };
         var capabilityOption = new Option<string>(name: "--capability") { Description = "Filter by automatic, headless, windowed, offscreen, gpu, audio-output, or input:<hardware-name>." };
         var idsArgument = new Argument<string[]>(name: "id") { Arity = ArgumentArity.ZeroOrMore, DefaultValueFactory = static _ => [], Description = "Run the named proofs explicitly, regardless of their declared requirements." };
-        var listOption = new Option<bool>(name: "--list") { Description = "Strictly load and list every manifest without building or running." };
+        var listOption = new Option<bool>(name: "--list") { Description = "Strictly load and list the named manifests, or every manifest when no id is given, without building or running." };
         var mergeOption = new Option<bool>(name: "--merge") { Description = "Run what a merge needs: the automatic set plus every proof requiring gpu." };
         var jobsOption = new Option<int>(name: "--jobs") {
             DefaultValueFactory = static _ => DefaultJobs,
@@ -45,7 +45,7 @@ internal static partial class CanaryCommand {
               no selection           run the automatic set: headless shape and no environmental requirements
               <id> ...               run the named proofs explicitly, regardless of requirements
               --all                  explicitly run every proof; does not promote any proof into the automatic set
-              --list                 strictly load and list every manifest without building or running
+              --list [id ...]        strictly load and list named manifests, or all when unnamed, without building or running
               --capability <class>   filter by automatic, headless, windowed, offscreen, gpu, audio-output, or input:<name>
               --merge                run the merge gate: the automatic set plus every proof requiring gpu
               --backend <name>       run every backend-declaring proof on vulkan or directx only
@@ -84,7 +84,7 @@ internal static partial class CanaryCommand {
                 ? 1
                 : 0) + ((capability is null)
                 ? 0
-                : 1)) + ((ids.Length == 0)
+                : 1)) + (((ids.Length == 0) || result.GetValue(option: listOption))
                 ? 0
                 : 1)) + (result.GetValue(option: listOption)
                 ? 1
@@ -93,7 +93,7 @@ internal static partial class CanaryCommand {
                 : 0));
 
             if (forms > 1) {
-                result.AddError(errorMessage: "ids, --all, --list, --merge, and --capability <class> are mutually exclusive selection forms.");
+                result.AddError(errorMessage: "ids, --all, --list [id ...], --merge, and --capability <class> are mutually exclusive selection forms.");
 
                 return;
             }
@@ -236,6 +236,7 @@ internal static partial class CanaryCommand {
             manifests: out var manifests,
             refused: out var refusedManifests,
             repositoryRoot: repositoryRoot,
+            only: ((strict && (ids.Length > 0)) ? ids.ToHashSet(comparer: StringComparer.Ordinal) : null),
             strict: strict
         )) {
             Console.Error.WriteLine(value: $"ERROR: {manifestError}");

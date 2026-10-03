@@ -56,7 +56,7 @@ public sealed class AffectedSelectionLawTests {
                 changed: ["src/World/Door.cs"],
                 coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) }
             ),
-            expected: new AffectedPlan(Baselines: [], Canaries: ["doors"], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
+            expected: new AffectedPlan(Baselines: [], Canaries: ["doors"], CanaryChecks: [], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
             comparer: new PlanComparer()
         );
     }
@@ -330,6 +330,7 @@ public sealed class AffectedSelectionLawTests {
             ((x is not null) && (y is not null) &&
             x.Baselines.SequenceEqual(second: y.Baselines) &&
             x.Canaries.SequenceEqual(second: y.Canaries) &&
+            x.CanaryChecks.SequenceEqual(second: y.CanaryChecks) &&
             (x.Catalog == y.Catalog) &&
             (x.Everything == y.Everything) &&
             (x.Parity == y.Parity) &&
