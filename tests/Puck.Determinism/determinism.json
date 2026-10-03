@@ -59,7 +59,7 @@
         },
         {
             "name": "kart-lap",
-            "world": "../Puck.World.Canaries/kart-lap/host.world.json",
+            "world": "../Puck.World.Canaries/kart-lap/host.puck",
             "ticks": 90,
             "seats": [0],
             "intents": [

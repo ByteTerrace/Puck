@@ -52,7 +52,7 @@ internal static class StartupBenchmarks {
                 Path.Combine(path1: root, path2: "worlds/parlor/chinese-checkers.puck"),
                 Path.Combine(path1: root, path2: "worlds/parlor/hearts.puck"),
                 Path.Combine(path1: root, path2: "tests/Puck.World.Canaries/jump-trophy/host.puck"),
-                Path.Combine(path1: root, path2: "tests/Puck.World.Canaries/kart-lap/host.world.json"),
+                Path.Combine(path1: root, path2: "tests/Puck.World.Canaries/kart-lap/host.puck"),
                 Path.Combine(path1: root, path2: "tests/Puck.World.Canaries/dive-medium/fixture.puck"),
             ];
         }
