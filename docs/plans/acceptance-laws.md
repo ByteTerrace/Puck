@@ -21,6 +21,9 @@ only on those lanes, and each is marked.
 ## Implementation status
 
 Law 1 is implemented, in `tests/Puck.World.Tests/ProjectionAnchorLawTests.Seek.cs`;
+law 2's local walked crossing in
+`tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`, without its federated,
+rollback and shared-identity variants;
 law 3's write, read and collision legs in
 `tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; and law 5 in
 `tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. The rest are not
@@ -210,7 +213,18 @@ grants and census across an arrival and a rollback. No law asserts the mobility
 credential or the velocity after replay. This law adds them, on a walked, mapped
 crossing with a profiled traveller, through both tapes.
 
-**Lives in** `tests/Puck.World.Tests`. **GPU:** none.
+**Lives in** `tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`.
+**GPU:** none.
+
+**As implemented.** The recording starts at the rows' first tick, because a tape
+re-establishes the document and the seats, never a pose or other state a row
+reached before it was armed. So row A's document authors seat 0's spawn a short
+walk in front of its door. The isolated reland is the companion tape's own
+re-drive: at every recorded tick the replayed destination is read through
+`DriveTraces`' tick observer and compared with the live destination, field for
+field. A reservation that mints the credential is not red on this walk, because
+its reservation and detach run in one drain; G3's own laws witness it
+(`CrossingTapeOrderLawTests.Reservation.cs`).
 
 **The contract it proves:** the reservation reads the mobility credential
 without minting it, and only the departure's detach mints it, which the replay's
