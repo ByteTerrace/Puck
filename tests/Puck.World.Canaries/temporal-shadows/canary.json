@@ -1,0 +1,279 @@
+{
+  "binding": "The converged two-sun court matches its native unamortized camera within two mean eight-bit codes over the receiver strip. A separately placed pillar moves at tick 101; the second light turns along a keyed orbital arc ending at tick 141; its owner changes at tick 181. Each rejection-frame capture matches the settled unamortized camera three ticks later over that same receiver strip. The still leg also requires counted secondary reprojected pixels. The discriminating leg turns amortization off and delays each transition until after its subject capture but before its reference, so the old shadow differs from the new reference and reused pixels are zero. Receiver geometry and camera stay fixed.",
+  "bootShape": "offscreen",
+  "id": "temporal-shadows",
+  "discriminating": {
+    "commands": [
+      {
+        "occurrence": 1,
+        "verb": "world.cadence",
+        "outcome": "accepted"
+      },
+      {
+        "occurrence": 1,
+        "verb": "world.wait",
+        "outcome": "accepted"
+      },
+      {
+        "occurrence": 2,
+        "verb": "world.wait",
+        "outcome": "accepted"
+      },
+      {
+        "occurrence": 1,
+        "verb": "world.counters",
+        "outcome": "accepted"
+      },
+      {
+        "occurrence": 3,
+        "verb": "world.wait",
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "extract": [
+          {
+            "field": "shadow.pixels",
+            "name": "reprojected",
+            "line": "work sdf.world$shadow detail=reprojected executed:"
+          }
+        ],
+        "verb": "world.counters",
+        "type": "response",
+        "occurrence": 1,
+        "count": 1,
+        "stream": "stdout",
+        "name": "secondary-history-work"
+      },
+      {
+        "right": {
+          "literal": 0
+        },
+        "operator": "equal",
+        "type": "relation",
+        "name": "amortization-off-reprojects-zero",
+        "left": {
+          "value": "reprojected"
+        }
+      },
+      {
+        "maximumMeanCodes": 2,
+        "reference": "state/captures/still-reference~63.png",
+        "capture": "state/captures/still~60.png",
+        "name": "still-matches-unamortized",
+        "type": "imageDifference",
+        "holds": true,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ]
+      },
+      {
+        "maximumMeanCodes": 2,
+        "reference": "state/captures/occluder-reference~104.png",
+        "capture": "state/captures/occluder~101.png",
+        "name": "occluder-matches-unamortized",
+        "type": "imageDifference",
+        "holds": false,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ]
+      },
+      {
+        "maximumMeanCodes": 2,
+        "reference": "state/captures/light-reference~144.png",
+        "capture": "state/captures/light~141.png",
+        "name": "light-matches-unamortized",
+        "type": "imageDifference",
+        "holds": false,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ]
+      },
+      {
+        "maximumMeanCodes": 2,
+        "reference": "state/captures/owner-reference~184.png",
+        "capture": "state/captures/owner~181.png",
+        "name": "owner-matches-unamortized",
+        "type": "imageDifference",
+        "holds": false,
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ]
+      }
+    ],
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "world": "tests/Puck.World.Canaries/temporal-shadows/discriminating.world.json"
+  },
+  "title": "Secondary K history amortizes two suns and rejects moving occluders, turning lights and new owners",
+  "backends": [
+    "vulkan",
+    "directx"
+  ],
+  "fixtures": [],
+  "timeoutSeconds": 60,
+  "positive": {
+    "commands": [
+      {
+        "occurrence": 1,
+        "verb": "world.cadence",
+        "outcome": "accepted"
+      },
+      {
+        "occurrence": 1,
+        "verb": "world.wait",
+        "outcome": "accepted"
+      },
+      {
+        "occurrence": 2,
+        "verb": "world.wait",
+        "outcome": "accepted"
+      },
+      {
+        "occurrence": 1,
+        "verb": "world.counters",
+        "outcome": "accepted"
+      },
+      {
+        "occurrence": 3,
+        "verb": "world.wait",
+        "outcome": "accepted"
+      }
+    ],
+    "expect": [
+      {
+        "extract": [
+          {
+            "field": "shadow.pixels",
+            "name": "reprojected",
+            "line": "work sdf.world$shadow detail=reprojected executed:"
+          }
+        ],
+        "verb": "world.counters",
+        "type": "response",
+        "occurrence": 1,
+        "count": 1,
+        "stream": "stdout",
+        "name": "secondary-history-work"
+      },
+      {
+        "right": {
+          "literal": 0
+        },
+        "operator": "greater",
+        "type": "relation",
+        "name": "secondary-reprojects",
+        "left": {
+          "value": "reprojected"
+        }
+      },
+      {
+        "maximumMeanCodes": 2,
+        "capture": "state/captures/still~60.png",
+        "name": "still-matches-unamortized",
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ],
+        "type": "imageDifference",
+        "holds": true,
+        "extent": [
+          128,
+          128
+        ],
+        "reference": "state/captures/still-reference~63.png"
+      },
+      {
+        "maximumMeanCodes": 2,
+        "capture": "state/captures/occluder~101.png",
+        "name": "occluder-matches-unamortized",
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ],
+        "type": "imageDifference",
+        "holds": true,
+        "extent": [
+          128,
+          128
+        ],
+        "reference": "state/captures/occluder-reference~104.png"
+      },
+      {
+        "maximumMeanCodes": 2,
+        "capture": "state/captures/light~141.png",
+        "name": "light-matches-unamortized",
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ],
+        "type": "imageDifference",
+        "holds": true,
+        "extent": [
+          128,
+          128
+        ],
+        "reference": "state/captures/light-reference~144.png"
+      },
+      {
+        "maximumMeanCodes": 2,
+        "capture": "state/captures/owner~181.png",
+        "name": "owner-matches-unamortized",
+        "region": [
+          0.3,
+          0.52,
+          0.85,
+          0.62
+        ],
+        "type": "imageDifference",
+        "holds": true,
+        "extent": [
+          128,
+          128
+        ],
+        "reference": "state/captures/owner-reference~184.png"
+      }
+    ],
+    "script": "capture.script.txt",
+    "runSchedule": true,
+    "world": "tests/Puck.World.Canaries/temporal-shadows/fixture.world.json"
+  },
+  "requirements": [
+    "gpu"
+  ]
+}

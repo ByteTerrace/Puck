@@ -1,0 +1,502 @@
+{
+  "documentId": "temporal-shadows-discriminating",
+  "schema": "puck.world.definition.v1",
+  "host": {
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "height": 128,
+    "width": 128,
+    "presentMode": "Immediate",
+    "presentation": "offscreen",
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0
+  },
+  "render": {
+    "shadows": "High",
+    "shadowLights": 2,
+    "shadowFadeSlots": 0,
+    "shadowFadeTicks": 0,
+    "shadowOverflow": "instant",
+    "ambientOcclusion": false,
+    "temporal": true,
+    "renderScale": 1,
+    "lighting": {
+      "lights": [
+        {
+          "$type": "directional",
+          "name": "east-sun",
+          "shadow": "auto",
+          "direction": [
+            0.6,
+            0.8,
+            0
+          ],
+          "color": "#FFE4BB",
+          "weight": 1
+        },
+        {
+          "$type": "directional",
+          "name": "west-sun",
+          "shadow": "auto",
+          "direction": {
+            "keys": [
+              {
+                "at": 0,
+                "ease": "Step",
+                "value": [
+                  -0.6,
+                  0.8,
+                  0
+                ]
+              },
+              {
+                "at": 4.7,
+                "ease": "Linear",
+                "value": [
+                  -0.6,
+                  0.8,
+                  0
+                ]
+              },
+              {
+                "at": 4.766666666666667,
+                "ease": "Step",
+                "value": [
+                  -0.9,
+                  0.43589,
+                  0
+                ]
+              }
+            ],
+            "clock": "orbit"
+          },
+          "color": "#BBDDFF",
+          "weight": 0.7
+        }
+      ]
+    },
+    "shadowAmortize": false
+  },
+  "prototypes": [
+    {
+      "document": {
+        "schema": "puck.creation.v1",
+        "palette": [
+          {
+            "color": "#CCCCCC",
+            "roughness": 1,
+            "specular": 0
+          }
+        ],
+        "name": "floor",
+        "shapes": [
+          {
+            "id": 0,
+            "name": "floor",
+            "type": "Box",
+            "material": 0,
+            "position": [
+              0,
+              -0.25,
+              0
+            ],
+            "scale": [
+              5,
+              0.25,
+              5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      },
+      "id": "floor"
+    },
+    {
+      "document": {
+        "schema": "puck.creation.v1",
+        "palette": [
+          {
+            "color": "#CCCCCC",
+            "roughness": 1,
+            "specular": 0
+          }
+        ],
+        "name": "pillar",
+        "shapes": [
+          {
+            "id": 0,
+            "name": "tall-pillar",
+            "type": "Box",
+            "material": 0,
+            "position": [
+              0,
+              1,
+              0
+            ],
+            "scale": [
+              0.35,
+              1,
+              0.35
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      },
+      "id": "pillar"
+    },
+    {
+      "document": {
+        "behavior": {
+          "faces": [
+            {
+              "defaultSource": null,
+              "name": "display",
+              "shapeId": 0
+            }
+          ]
+        },
+        "frames": [
+          {
+            "name": "idle",
+            "transforms": []
+          }
+        ],
+        "name": "screen",
+        "palette": [
+          {
+            "color": "#DDE8EA"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "panel",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.9,
+              0.6,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "screen"
+    }
+  ],
+  "placements": {
+    "policy": { "authoringHeadroomScreens": 0, "authoringHeadroomPlacements": 0, "minPlacementScale": 1, "maxPlacementScale": 1, "candidateRadius": 1, "candidateCap": 1, "previewDeadlineFrames": 1, "derivedFaceScreens": 1 },
+    "rows": [
+      {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "id": "receiver",
+        "prototypeId": "floor"
+      },
+      {
+        "position": [
+          1.2,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "id": "occluder",
+        "prototypeId": "pillar"
+      },
+      {
+        "id": "reference-screen",
+        "scale": 1,
+        "prototypeId": "screen",
+        "position": [
+          0,
+          1.2,
+          14
+        ],
+        "yawDegrees": 0,
+        "faceSources": [
+          {
+            "face": "display",
+            "source": {
+              "$type": "view",
+              "cameraName": "reference-cam"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "cameras": [
+    {
+      "name": "court-camera",
+      "renderWidth": 128,
+      "renderHeight": 128,
+      "rig": {
+        "name": "court-camera",
+        "version": "puck.camera.program.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                5,
+                8
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0.5,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fieldOfView",
+            "fieldOfViewRadians": 0.9
+          }
+        ]
+      }
+    },
+    {
+      "name": "reference-cam",
+      "renderWidth": 128,
+      "renderHeight": 128,
+      "rig": {
+        "name": "reference-cam",
+        "version": "puck.camera.program.v1",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                5,
+                8
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                0.5,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fieldOfView",
+            "fieldOfViewRadians": 0.9
+          }
+        ]
+      }
+    }
+  ],
+  "views": {
+    "layouts": [
+      {
+        "name": "world",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "court-camera",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
+      }
+    ]
+  },
+  "simulation": {
+    "rateHz": 30
+  },
+  "timeline": {
+    "clocks": [
+      {
+        "periodSeconds": 20,
+        "name": "orbit",
+        "spanSeconds": 20
+      }
+    ]
+  },
+  "grants": [
+    {
+      "grantee": "seat1",
+      "subject": "section:placements",
+      "capability": "Mutate"
+    },
+    {
+      "grantee": "seat1",
+      "subject": "section:render",
+      "capability": "Mutate"
+    }
+  ],
+  "schedule": {
+    "rows": [
+      {
+        "principal": "seat1",
+        "tick": 102,
+        "command": "world.row.set placements occluder position [0,0,0]"
+      },
+      {
+        "principal": "seat1",
+        "tick": 182,
+        "command": "world.row.set render lighting.lights[1] {\"$type\":\"directional\",\"name\":\"replacement-sun\",\"shadow\":\"auto\",\"direction\":[0,0.8,0.6],\"color\":\"#BBDDFF\",\"weight\":0.7}"
+      }
+    ],
+    "settleTicks": 4
+  },
+  "captures": {
+    "rows": [
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "still",
+        "converge": 8,
+        "instance": "world",
+        "ticks": [
+          60
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "still-reference",
+        "instance": "reference-cam",
+        "ticks": [
+          63
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "occluder",
+        "instance": "world",
+        "ticks": [
+          101
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "occluder-reference",
+        "instance": "reference-cam",
+        "ticks": [
+          104
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "light",
+        "instance": "world",
+        "ticks": [
+          141
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "light-reference",
+        "instance": "reference-cam",
+        "ticks": [
+          144
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "owner",
+        "instance": "world",
+        "ticks": [
+          181
+        ]
+      },
+      {
+        "palette": [
+          {
+            "material": 0,
+            "color": "#CCCCCC"
+          }
+        ],
+        "station": "owner-reference",
+        "instance": "reference-cam",
+        "ticks": [
+          184
+        ]
+      }
+    ]
+  }
+}
