@@ -30,7 +30,10 @@ public sealed record IrradianceFrameInputs(IReadOnlyList<Double3> Cameras, IRead
 /// <param name="Refused">The bricks demanded but refused because their level's pool is full, in key order.</param>
 /// <param name="Classified">The bricks to classify and partition this frame, in priority order.</param>
 /// <param name="Traces">The probe strata to trace this frame, in priority order.</param>
-public sealed record IrradianceFramePlan(IReadOnlyList<IrradianceBrickKey> Allocated, IReadOnlyList<IrradianceBrickKey> Evicted, IReadOnlyList<IrradianceBrickKey> Refused, IReadOnlyList<IrradianceBrickKey> Classified, IReadOnlyList<IrradianceUpdate> Traces);
+public sealed record IrradianceFramePlan(IReadOnlyList<IrradianceBrickKey> Allocated, IReadOnlyList<IrradianceBrickKey> Evicted, IReadOnlyList<IrradianceBrickKey> Refused, IReadOnlyList<IrradianceBrickKey> Classified, IReadOnlyList<IrradianceUpdate> Traces) {
+    /// <summary>Gets the bricks whose probe placements precede this frame's partitions.</summary>
+    public IReadOnlyList<IrradianceBrickKey> Placed { get; init; } = [];
+}
 /// <summary>
 /// The host's schedule for a residency's cache: which bricks each level allocates from its pool, which it classifies and
 /// which probe strata it traces each frame, within fixed budgets. It is a pure function of its inputs and its own state:
@@ -40,6 +43,7 @@ public sealed record IrradianceFramePlan(IReadOnlyList<IrradianceBrickKey> Alloc
 public sealed class IrradianceSchedule {
     private sealed class Brick {
         public bool Classified { get; set; }
+        public bool Placed { get; set; }
         public IrradianceUpdateReason Reason { get; set; }
         public bool[] Traced { get; init; } = [];
     }
@@ -116,6 +120,7 @@ public sealed class IrradianceSchedule {
             }
 
             if (any) {
+                brick.Placed = false;
                 brick.Classified = false;
                 brick.Reason = IrradianceUpdateReason.Geometry;
             }
@@ -167,8 +172,31 @@ public sealed class IrradianceSchedule {
             allocated.Add(item: key);
         }
 
+        foreach (var changed in allocated.Concat(second: evicted)) {
+            for (var z = 0; (z <= 1); z++) {
+                for (var y = 0; (y <= 1); y++) {
+                    for (var x = 0; (x <= 1); x++) {
+                        var neighbour = changed with { X = (changed.X - x), Y = (changed.Y - y), Z = (changed.Z - z) };
+
+                        if (m_bricks.TryGetValue(key: neighbour, value: out var brick)) { brick.Classified = false; }
+                    }
+                }
+            }
+        }
+        var placed = m_bricks
+            .Where(predicate: static pair => !pair.Value.Placed)
+            .Select(selector: static pair => pair.Key)
+            .OrderByDescending(keySelector: static key => key.Level)
+            .ThenBy(keySelector: key => ranks.GetValueOrDefault(defaultValue: double.MaxValue, key: key))
+            .ThenBy(keySelector: static key => key)
+            .Take(count: m_classifyBudget)
+            .ToList();
+
+        foreach (var key in placed) { m_bricks[key].Placed = true; }
+
         var classified = m_bricks
             .Where(predicate: static pair => !pair.Value.Classified)
+            .Where(predicate: pair => CornersPlaced(key: pair.Key))
             .Select(selector: static pair => pair.Key)
             .OrderByDescending(keySelector: static key => key.Level)
             .ThenBy(keySelector: key => ranks.GetValueOrDefault(defaultValue: double.MaxValue, key: key))
@@ -227,9 +255,21 @@ public sealed class IrradianceSchedule {
             Evicted: evicted,
             Refused: refused,
             Traces: traces.Select(selector: static trace => new IrradianceUpdate(Probe: trace.Probe, Reason: trace.Reason, Stratum: trace.Stratum)).ToList()
-        );
+        ) { Placed = placed };
     }
 
+    private bool CornersPlaced(IrradianceBrickKey key) {
+        for (var z = 0; (z <= 1); z++) {
+            for (var y = 0; (y <= 1); y++) {
+                for (var x = 0; (x <= 1); x++) {
+                    var neighbour = key with { X = (key.X + x), Y = (key.Y + y), Z = (key.Z + z) };
+
+                    if (m_bricks.TryGetValue(key: neighbour, value: out var brick) && !brick.Placed) { return false; }
+                }
+            }
+        }
+        return true;
+    }
     // A level's demanded bricks, nearest a camera first, ties by key: every brick inside the world box (and within the
     // level's radius of a camera, when it has one) whose box, widened by a cell and the relocation allowance, meets a
     // bound.
