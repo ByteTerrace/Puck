@@ -128,6 +128,14 @@ open item, or a dismissal with its reason. Every finding gets a destination
 before it is set aside: a lane, or a named deferral where scope is tracked. A
 finding called out of scope without a destination is not set aside.
 
+## Rule on collisions
+
+When two lanes' contracts collide at a merge, bisect to the exact field, then
+rule from the principle, not the convenient option. For example, a replay is a
+function of its tape, and the authoritative hash covers everything that drives
+play. Take the question to the owner when no written contract settles it, and
+never weaken or delete a law to make the merge pass.
+
 ## Message partners
 
 Keep messages short, with a self-contained first line:
