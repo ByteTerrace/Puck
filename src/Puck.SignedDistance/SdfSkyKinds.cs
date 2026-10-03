@@ -372,3 +372,51 @@ public record struct SdfSkyDisc : ISdfSkyKind {
     /// <inheritdoc/>
     public static string Name => "disc";
 }
+/// <summary>The <see cref="SdfSkyLayerKind.View"/> kind's parameters: an infinity view's image, the second
+/// <c>sdf.world</c> instance (<c>sky$&lt;layer&gt;</c>) that renders another world, or only named prototypes of this one
+/// (far geometry), from a fixed anchor, turned with the viewer and never translated. The instance renders exactly the
+/// rectangle of the viewer's camera plane its layer's mask covers (<see cref="Rect"/>, in tangent space), so a pixel
+/// samples it at the tangent its world direction has on the viewer's basis (<see cref="Right"/>, <see cref="Up"/>,
+/// <see cref="Forward"/>), with no sky frame in between. The screen is the one the binder routes the instance's image
+/// to (<see cref="Screen"/>); before the instance has an image, or where it renders nothing, the layer draws
+/// <see cref="Fallback"/>. Either way the pixel counts a shown texel, which is what demands the instance's next frame.
+/// Fitted to the residency's first view.</summary>
+[StructLayout(LayoutKind.Explicit, Size = 80)]
+public record struct SdfSkyView : ISdfSkyKind {
+    /// <summary>The viewer's camera right axis the instance was fitted to, in world space.</summary>
+    [FieldOffset(0)] public Vector3 Right;
+    /// <summary>The image's brightness scale.</summary>
+    [FieldOffset(12)] public float Intensity;
+    /// <summary>The viewer's camera up axis.</summary>
+    [FieldOffset(16)] public Vector3 Up;
+    /// <summary>The binder-routed screen index whose image is the instance's, or −1 for none: the layer then draws
+    /// <see cref="Fallback"/>.</summary>
+    [FieldOffset(28)] public int Screen;
+    /// <summary>The viewer's camera forward axis.</summary>
+    [FieldOffset(32)] public Vector3 Forward;
+    /// <summary>One when the image's alpha is its coverage (far geometry, which leaves the rest of the sky showing), zero
+    /// when the image is opaque (another world's whole frame).</summary>
+    [FieldOffset(44)] public uint Coverage;
+    /// <summary>The rectangle the instance renders on the viewer's camera plane, <c>(minX, minY, maxX, maxY)</c> in
+    /// tangent space (<c>InfinityViewFrame.Rect</c>).</summary>
+    [FieldOffset(48)] public Vector4 Rect;
+    /// <summary>The linear colour drawn where the instance has no image.</summary>
+    [FieldOffset(64)] public Vector3 Fallback;
+
+    /// <summary>Initializes a new instance of the <see cref="SdfSkyView"/> struct showing nothing: no screen, the camera's
+    /// own axes, an empty rectangle.</summary>
+    public SdfSkyView() {
+        Right = Vector3.UnitX;
+        Up = Vector3.UnitY;
+        Forward = -Vector3.UnitZ;
+        Intensity = 1f;
+        Screen = -1;
+    }
+
+    /// <inheritdoc/>
+    public static SdfSkyLayerKind Kind => SdfSkyLayerKind.View;
+    /// <inheritdoc/>
+    public static SdfSkyLayerClass Class => SdfSkyLayerClass.Point;
+    /// <inheritdoc/>
+    public static string Name => "view";
+}

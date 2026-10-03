@@ -396,7 +396,7 @@
                 "P:Puck.Assets.Documents.DocumentVector3.Y",
                 "P:Puck.Assets.Documents.DocumentVector3.Z"
             ],
-            "shape": "13ed85ae54ea7e45",
+            "shape": "5bc7a7ecd632c520",
             "source": "src/Puck.World.Authoring/Authoring/CreationDocument.cs",
             "token": "puck.creation.v1"
         },
@@ -1084,7 +1084,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "374fb89d72506360",
+            "shape": "e8cd2f07d0dc69c1",
             "source": "src/Puck.World.Schema/WorldCameraProgram.cs",
             "token": "puck.camera.program.v1"
         },

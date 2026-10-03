@@ -7787,13 +7787,33 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       `MaxViews` instances), the instance names (`WorldViewNames.Sky`,
       `NestedSky`), the scene (`WorldInfinityViewScene`, and far geometry as a
       `WorldSessionSceneEmitter` holding only named prototypes), each with CPU laws.
-      Still open: the `view` and `far` layer kinds, the body shapes and the
-      validator's cap refusal bind to the record when P18-8's layer record lands;
-      the composite's sampling of the instance image by the pixel's direction,
-      its shown-texel count (the demand's report) and its fallback colour sit in
-      that layer loop; the binder owns a `WorldInfinityViews` and registers the
-      scenes; `world.budget` reports `WorldInfinityViewPlan.Describe`; the
-      `sky-portal` canary, the ceilings and the GPU legs follow.
+      Landed on P18-8's record: the `view` layer kind (`SdfSkyView`, one GPU kind for
+      both document arms, with `sky/kinds/view.hlsli` and its `Kinds` entry), which
+      samples the instance image at the tangent the pixel's direction has on the
+      viewer's basis inside the rectangle the fit chose (`InfinityViewSampling`, the
+      CPU reference, held by `InfinityViewSamplingLawTests`), counts a shown texel
+      in its layer's detail row whether it reads the image or draws its fallback
+      colour, and is camera-only; the `view` and `far` document arms of
+      `render.sky.layers` (`WorldRenderSkyLayer.View`, `Far`, written
+      `view(name:, destination:, …)` and `far(name:, prototypes:, …)`) with their
+      validator refusals by name (an unnamed, unaimed or unbounded view, a band mask,
+      a cone of a quarter turn or more, lighting visibility, a duplicate name, a
+      prototype the world lacks) and the cap of `SdfSky.MaxInfinityViews` views
+      a world, refused at validation; their resolution to the GPU kind
+      (`WorldEnvironmentResolve`) and to the `InfinityViewSpec`s the host renders
+      (`WorldInfinityViewSpecs`, which carries a layer's sky-frame cone into the
+      viewer's frame); and the console echo.
+      Still open: the frame's fit written into the layer each frame (the viewer's
+      basis, the rectangle and the screen the instance's image arrives on, through
+      `InfinityViewSampling.Describe`) and the binder's routing of that image,
+      which are the binder's screen sources for the instances (`ISdfScreenSources`
+      entries past the declared screens) and its reading back of the shown-texel
+      counts into `InfinityViewDemand`; the binder owning a `WorldInfinityViews`,
+      registering the scenes and applying `WorldInfinityViewPlan`; the document
+      edit refusal at a live edit; `world.budget` reporting
+      `WorldInfinityViewPlan.Describe`; the `view` and `far` body shapes (no body
+      vocabulary exists to bind them to); the `sky-portal` canary, the ceilings and
+      the GPU legs. The `panel` kind belongs to P18-9.
     - Counted-cost gate: the infinity instance's rows at its dressed quality,
       zero when no uncovered pixel shows it, and its dispatches' extent within
       its rect; its residency's aperture bytes and the live count against the

@@ -2052,6 +2052,17 @@ the fitted camera, a quality with shadows and ambient occlusion off unless the
 view's levers turn them on, and the view's far distance; far geometry is a
 `WorldSessionSceneEmitter` given `onlyPrototypes`.
 
+The sky layer that shows one is the `view` kind (`SdfSkyView`, one GPU kind for the
+`view` and `far` document arms, `sky/kinds/view.hlsli`): a point kind that indexes
+the instance's image by the tangent the pixel's world direction has on the viewer's
+basis, inside the rectangle the fit chose (`InfinityViewSampling` is its CPU
+reference, `Describe` packs a fitted frame into the record), counts a shown texel
+in its layer's detail row whether it reads the image or draws its fallback colour,
+and is camera-only. `WorldInfinityViewSpecs.Of` lowers a sky's `view` and `far`
+layers to `InfinityViewSpec`s, carrying a cone from the sky frame into the viewer's
+(`SdfSky.MaxInfinityViews` bounds them, validated and planned alike). The record's
+basis, rectangle and screen come from the frame's fit, not from resolution.
+
 A displayed source's hit mapping is `SourceMapping` (`src/Puck.Commands/Sources`,
 [pointing at a displayed source](../../../docs/reference/commands.md#pointing-at-a-displayed-source)):
 placement, warp, UV layout, fit and crop as data, inverted in fixed point by

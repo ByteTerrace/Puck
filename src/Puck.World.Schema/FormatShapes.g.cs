@@ -20,7 +20,7 @@ namespace Puck.World {
         /// <summary>The shape fingerprint of <c>WorldBakePack.Magic</c>, declared in <c>src/Puck.World.Schema/WorldBakePack.cs</c>.</summary>
         public const string WorldBakePackMagic = "d2e03cce30cc1a53";
         /// <summary>The shape fingerprint of <c>WorldCameraProgram.CurrentVersion</c>, declared in <c>src/Puck.World.Schema/WorldCameraProgram.cs</c>.</summary>
-        public const string WorldCameraProgramCurrentVersion = "374fb89d72506360";
+        public const string WorldCameraProgramCurrentVersion = "e8cd2f07d0dc69c1";
         /// <summary>The shape fingerprint of <c>WorldCounterpartAttestation.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCounterpartAttestation.cs</c>.</summary>
         public const string WorldCounterpartAttestationSchemaVersion = "0b8d3db0201510b6";
         /// <summary>The shape fingerprint of <c>WorldCountersCeilings.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCountersCeilings.cs</c>.</summary>
