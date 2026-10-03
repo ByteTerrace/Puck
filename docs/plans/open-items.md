@@ -59,6 +59,7 @@ Every package below carries its own check on the programme page; tick it there a
 - [x] S3 structural operand grammar.
 - [x] S3 shipped-source migration: a call argument has one spelling and no source spells a colon channel outside an interpolated string.
 - [ ] S8 grammar gaps: a verdict row authored by name, the never-evaluated status, and a scheduled refusal expectation (`expect: Refused`, `rateHz: 0`) have no source spelling, so the five hand-authored `tests/Puck.World.Verdicts` documents stay JSON ([S8](state-and-language.md#s8--tests-are-worlds)).
+- [ ] S6: a `.puck` section lowers with every list member present (`placements { policy … }` emits `rows: []`), which a composition reads as replacing the rows its basis and imports bring, so `tests/Puck.World.Canaries/front-door/host.world.json` stays JSON ([S6](state-and-language.md#s6--modules-and-the-forcing-world)).
 - [ ] S6: `puck decompile` refuses the aliased-`use` machine name `arcade$agb-screen`, so the five `tests/Puck.World.Canaries/four-corners-sharded` documents stay JSON ([S6](state-and-language.md#s6--modules-and-the-forcing-world)).
 - [x] S3 remainder: an interpolated string computes a name or text and never program text, so an expression is always written bare.
 - [x] The operand tree: sugar operands carry parsed trees, generic members project structurally into them, atoms remain opaque, and module aliases reach bare binding words. Structural binding replaces the emitter's text-rewriting passes; laws cover these paths and source round trips.
