@@ -72,12 +72,19 @@ complete milestones, only when the owner asks, under
 
 ## Schedule machines
 
-Plan by each machine's fixed capability: CPU class, GPU, total memory and what
-it can run. Free-memory and free-disk snapshots fluctuate with what else is
-open and do not define a machine's capability. Allocate one GPU leg per GPU at
-a time and keep heavy builds off its machine while the leg runs. Use
-[`verification`](../verification/SKILL.md#gpu-legs) for grants, GPU work
-classification and execution.
+Allocate by each machine's fixed capability (CPU class, GPU, RAM, OS, network),
+mapped once and checked every turn. Free-memory and free-disk snapshots
+fluctuate with what else is open and do not define a machine's capability.
+Allocate one GPU leg per GPU at a time and keep heavy builds off its machine
+while the leg runs. Use [`verification`](../verification/SKILL.md#gpu-legs) for
+grants, GPU work classification and execution.
+
+Run a load governor on any machine that hosts many agents: admit queued work on
+measured spare capacity (CPU and free RAM), hold on memory pressure, and start
+GPU legs on GPU-idle transitions. Measure the heavy jobs: a full
+`Puck.World.Tests` run takes about 7 GB, so never run two at once on a 32 GB
+machine. Every build, a Codex brief's included, passes `-nodeReuse:false`, so no
+build server lingers and holds memory.
 
 ## Select models and route findings
 
