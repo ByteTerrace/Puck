@@ -147,6 +147,8 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
 
         var padded = new byte[((((((ulong)blockBytes.Length) + IGpuBindings.ConstantBufferAlignment) - 1UL) / IGpuBindings.ConstantBufferAlignment) * IGpuBindings.ConstantBufferAlignment)];
         var framePadded = new byte[((((((ulong)parameters.FrameBlockSizeBytes) + IGpuBindings.ConstantBufferAlignment) - 1UL) / IGpuBindings.ConstantBufferAlignment) * IGpuBindings.ConstantBufferAlignment)];
+        // The map's row and the reduction's; both name the detail rows from DetailRow, where each lit layer counts its
+        // evaluations in its own row, and the reduction evaluates none.
         var rows = new[] { 0u, 1u };
 
         IGpuComputePipeline Pipeline(IGpuShaderModule module, string name) =>
@@ -257,7 +259,10 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
             // Each row holds the kernel kinds as 64-bit counts in GpuWork.KernelKinds order: steps, texels, then sky.
             long Count(int row, int kind) => BinaryPrimitives.ReadInt64LittleEndian(source: counted.AsSpan(start: ((row * GpuKernelCounters.RowBytes) + ((kind * GpuKernelCounters.CountWords) * sizeof(uint)))));
 
+            Assert.Equal(expected: 0L, actual: Count(kind: 2, row: 0));
             Assert.Equal(expected: 0L, actual: Count(kind: 2, row: 1));
+            // The unused row between the pass rows and the detail rows counts nothing.
+            Assert.Equal(expected: 0L, actual: Count(kind: 1, row: 2));
 
             var evaluations = 0L;
 

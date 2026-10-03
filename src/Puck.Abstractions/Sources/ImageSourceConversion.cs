@@ -37,6 +37,11 @@ public static class ImageSourceConversion {
     /// <summary>The pass that decodes an image's transfer function and primaries into working values in a half-float RGBA
     /// image.</summary>
     public const string TransferPass = "source-transfer";
+    /// <summary>The pass that converts an imported half-float scRGB image, read as an image on the device rather than
+    /// uploaded (a desktop capture of an HDR display copied into shared targets on the GPU), into working values in a
+    /// half-float RGBA image: what <see cref="TransferPass"/> writes for the same pixels uploaded in
+    /// <see cref="ImagePixelFormat.R16G16B16A16Float"/> under the scRGB encoding.</summary>
+    public const string ScRgbImagePass = "source-scrgb";
 
     // SMPTE ST 2084 constants.
     private const double PqC1 = (3424.0 / 4096.0);
@@ -125,6 +130,24 @@ public static class ImageSourceConversion {
             ),
         };
     }
+    /// <summary>Returns the conversion pass an imported image of a format and encoding needs: one the device reads as an
+    /// image, never through an upload's region.</summary>
+    /// <param name="format">The image's pixel format.</param>
+    /// <param name="color">The image's color encoding.</param>
+    /// <returns><see cref="ScRgbImagePass"/> for <see cref="ImagePixelFormat.R16G16B16A16Float"/> scRGB content: linear,
+    /// BT.709 primaries.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">No conversion reads such an image.</exception>
+    public static string ImagePassOf(ImagePixelFormat format, ImageColorEncoding color) => ((
+        (format == ImagePixelFormat.R16G16B16A16Float) &&
+        (color.Transfer == ImageTransferFunction.Linear) &&
+        (color.Primaries == ImageColorPrimaries.Bt709)
+    )
+        ? ScRgbImagePass
+        : throw new ArgumentOutOfRangeException(
+            actualValue: format,
+            message: $"No conversion pass reads an imported {format} image with the {color.Transfer} transfer function and {color.Primaries} primaries.",
+            paramName: nameof(format)
+        ));
     /// <summary>Returns the perceptual quantizer's decoded luminance for an encoded value (SMPTE ST 2084).</summary>
     /// <param name="value">The encoded value, 0 to 1.</param>
     /// <returns>The luminance in cd/m², 0 to 10,000.</returns>
