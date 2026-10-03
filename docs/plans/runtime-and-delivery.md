@@ -327,12 +327,32 @@ generated `DerivationFingerprint`, and the two products below.
 
 **Delivers, as two independent slices:**
 
-1. **Chunk versions.** `DEFN` and `ASST` carry integers edited by hand beside
-   their derivations, and each chunk the simulation-chunks and everything-else
-   packages add would carry another. Each chunk's version becomes the
-   fingerprint of its derivation, as `BAKE`'s is. Check: a law that a chunk's
-   version equals its fingerprint's leading four bytes, and `puck derivations
-   --check` red after an edit to a source the derivation reads, shown once.
+1. **Chunk versions.** A compiled world is kept only while its header's engine
+   build equals the running one (`CompiledWorldCache.TryResolve`), and the
+   engine build is the module version id of every `Puck.*` assembly reachable
+   from `Puck.World.Schema` (`CompiledWorld.EngineBuild`). `DEFN` and `ASST`
+   derive wholly inside that reach, and carry hand-set integers (2 and 1) that
+   `CompiledWorldChunks.Holds` compares only after the header has matched, so
+   they can never decide anything the engine build has not. `BAKE` is the one
+   chunk whose producer, `Puck.World.Authoring`, lies outside the reach, which
+   is why its version is a fingerprint. The rule is that a chunk's `Version` is
+   the fingerprint of its derivation exactly when the derivation's assemblies
+   are outside the engine build's reach, and carries nothing when they are
+   inside: `DEFN` and `ASST` drop their integers, `ICompiledWorldChunk.Version`
+   defaults to zero for a chunk inside the reach, and each chunk the
+   simulation-chunks and everything-else packages add declares which side it is
+   on. Per-chunk fingerprints for `DEFN` and `ASST` are not taken: they would
+   gain a kept compiled world across a rebuild only if the header gave up the
+   engine build, which is the stronger key (module ids cover reflection,
+   dispatch and package code the token fingerprint does not read). Nothing
+   re-records: no hash, baseline or shipped compiled world moves, because the
+   compile at build already re-derives every world. Check: a law that every
+   registered chunk either lists an assembly inside the engine build's reach
+   and carries zero, or carries its derivation's fingerprint and names its
+   `[Derivation]` entry point; `puck derivations --check` red after an edit to a
+   source a fingerprinted chunk reads, shown once. Sequenced after Cloud C's
+   format-token sweep and the derivation reach changes in flight, which touch
+   the same files.
 2. **Shader packages.** `ShaderPackager.KeyOf` hashes the document's logical
    path, the pipeline's name, every closure file's pin, and each pass's interface
    and declarations pins. It reads nothing of the code that compiles and writes

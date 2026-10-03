@@ -1117,8 +1117,9 @@ the tape and every companion a crossing involves, and pairs every crossing's dep
 arrival whose commit stood, by handoff token. A crossing whose other half is on a remote authority,
 or on a row nothing taped, is reported as not verified, and `replay.verify` fails.
 
-Each authority tape records the initial authored rate and every ordered rate write, pause and resume
-that changes which steps occur. Replay drives from the tape's recorded rate history and refuses a
+Each authority tape records the world's simulation rate in its header and notes each pause and
+resume of the boot instance's own rate lever. Replay steps at the header's rate for exactly the
+ticks the tape holds, which already reproduces a paused span's missing steps, and refuses a
 definition/rate disagreement by name before stepping. A missing or mismatched rate must never fall
 through into a plausible-looking ordinary determinism `MISMATCH`. Rate and rate changes are part of
 the simulation input contract, not an out-of-band launcher setting.

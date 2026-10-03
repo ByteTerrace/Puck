@@ -482,8 +482,8 @@ operator only, because it prints the values the rules computed.
 | `world.history diff <a> <b> [--json]` | Re-simulates both ticks in an isolated copy and prints which bodies, cells, fields and hash components changed, with values. `--json` prints every change with exact raw values. |
 | `world.history replay-edit <n>` | Takes the document edits made at the cursor, applies them `n` ticks earlier in an isolated copy, and reports the first tick the world would have diverged, with the diff there. |
 
-The history records a full checkpoint (a keyframe) every few seconds of
-simulation at most, and each tick's input and authoritative hash in between. A
+The history records a full checkpoint (a keyframe) between an eighth of a
+second and four seconds of simulation apart, and each tick's input and authoritative hash in between. A
 seek restores the nearest keyframe at or before its target and re-simulates the
 recorded input, so every tick it reaches is checked against the hash the live
 run recorded; a disagreement is reported by tick and the verb fails. Machine

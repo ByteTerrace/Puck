@@ -2277,9 +2277,11 @@ trace; the pose trace remains the human-readable trajectory diagnostic.
 Presentation (screen pixels,
 cameras, overlays, audio) is excluded by design: a match proves the covered
 state-system lanes, not the whole document, grant table, HUD, or machine cores. Known scope limit—the tape
-captures every one of the twelve envelope payload kinds except `Lever`
-(command, grant, revoke, session, designation, rebuild, mutation, undo,
-composition, query, and screen-op) plus intents and the two
+captures eleven of the thirteen envelope payload kinds (command, grant,
+revoke, session, designation, rebuild, mutation, undo, composition, query, and
+screen-op). `Lever` is live presentation state with no capture point, and a
+machine `Operation` is refused while a recording runs, since the format does not
+capture provider operations. The tape also captures intents and the two
 peer-lifecycle server events; a mid-session capture honestly reports
 MISMATCH at tick 0—carried in
 [`docs/game/design.md`](../../docs/game/design.md).
