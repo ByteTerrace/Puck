@@ -29,9 +29,9 @@ namespace Puck.World.Tests;
 /// met, and the marker beyond it is.
 /// </summary>
 public sealed partial class WorldWindowFrustumFitLawTests {
-    internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.world.json";
+    internal const string Destination = "tests/Puck.World.Canaries/portal-window/beyond.puck";
 
-    private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.world.json";
+    private const string Local = "tests/Puck.World.Canaries/portal-window/fixture.puck";
     private const float Tolerance = 2e-3f;
 
     // The destination's marker: a ball of radius 0.5 six units behind the arch.
