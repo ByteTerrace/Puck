@@ -10,9 +10,13 @@ namespace Puck.World;
 /// <para>A row is only the last anchor sent. Anchors replaced before a delivery reached the recipient are coalesced
 /// away, so a recipient presents the latest authoritative tick it was told about and predicts only forward from the
 /// anchor it holds (<see cref="WorldClockAnchor.Predict"/>).</para>
+/// <para>A held anchor ahead of the authority's tick is stale: the authority was moved back past it (a history seek, a
+/// restored checkpoint), so it predicts nothing the authority presents. The next composition or step drops it and
+/// carries what a fresh recipient would be sent at that tick: the clock's own anchor, its seed while its row holds no
+/// number, or no anchor.</para>
 /// <para>Each row is counted retained when it is first sent and released when the recipient leaves or loses
-/// disclosure (<see cref="Release"/>), under <see cref="WorldProjectionWork"/>. Not thread-safe: one recipient's
-/// deliveries run on the thread that steps its world.</para>
+/// disclosure (<see cref="Release"/>) or its anchor goes stale, under <see cref="WorldProjectionWork"/>. Not
+/// thread-safe: one recipient's deliveries run on the thread that steps its world.</para>
 /// </summary>
 /// <param name="seeds">The phases a late view seeds a clock from while its row holds no number, by clock name, or
 /// <see langword="null"/> for none.</param>
@@ -34,7 +38,7 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
     /// <summary>Returns the clock a projection composed at an authoritative tick carries for a state clock: an anchored
     /// clock holding the anchor the recipient already holds while its prediction still matches, else a fresh anchor,
     /// recorded as sent; a clock whose row holds no number keeps the held anchor, or takes its seed when none is held,
-    /// or carries none.</summary>
+    /// or carries none. A held anchor ahead of <paramref name="engineTick"/> is dropped first.</summary>
     /// <param name="definition">The authority's installed document.</param>
     /// <param name="clock">The state clock.</param>
     /// <param name="tick">The authoritative simulation tick.</param>
@@ -50,24 +54,17 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
             m_carried.Add(item: clock.Name);
         }
 
-        var current = WorldClockAnchors.Read(
+        _ = DropStale(
+            clock: clock.Name,
+            engineTick: engineTick
+        );
+
+        if (Current(
             clock: clock,
             definition: definition,
             engineTick: engineTick,
             tick: tick
-        );
-
-        if ((current is null) && !m_held.ContainsKey(key: clock.Name) && (seeds is not null) && seeds.TryGetValue(
-            key: clock.Name,
-            value: out var seed
-        )) {
-            current = new WorldClockAnchor(
-                Phase: seed,
-                Tick: engineTick
-            );
-        }
-
-        if (current is not null) {
+        ) is { } current) {
             _ = Note(
                 clock: clock.Name,
                 current: current,
@@ -87,11 +84,12 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
         );
     }
     /// <summary>Re-anchors, at an authoritative tick, every carried clock whose held prediction differs from the
-    /// authority's phase, and only those.</summary>
+    /// authority's phase, and only those, after dropping every held anchor ahead of <paramref name="engineTick"/>.</summary>
     /// <param name="definition">The authority's installed document.</param>
     /// <param name="tick">The authoritative simulation tick.</param>
     /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
-    /// <returns><see langword="true"/> when an anchor was sent.</returns>
+    /// <returns><see langword="true"/> when an anchor was sent or a stale one dropped: either way the recipient's
+    /// timeline changed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public bool Step(WorldDefinition definition, ulong tick, ulong engineTick) {
         ArgumentNullException.ThrowIfNull(argument: definition);
@@ -99,6 +97,11 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
         var sent = false;
 
         foreach (var name in m_carried) {
+            sent |= DropStale(
+                clock: name,
+                engineTick: engineTick
+            );
+
             if (
                 !WorldKeyResolver.TryClock(
                 clock: out var clock,
@@ -106,7 +109,7 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
                 timeline: definition.Timeline
             ) ||
                 !clock.IsStateClock ||
-                (WorldClockAnchors.Read(
+                (Current(
                 clock: clock,
                 definition: definition,
                 engineTick: engineTick,
@@ -156,15 +159,55 @@ public sealed class WorldClockAnchorLedger(IReadOnlyDictionary<string, ulong>? s
         m_carried.Clear();
     }
 
-    // Records the current anchor when the recipient's prediction misses it; answers whether one was sent. An authority
-    // that stands before the held anchor (a restored checkpoint) has nothing the held anchor predicts, and re-anchors.
+    // The anchor the authority presents a clock at: its row's number, else the seed a recipient holding no anchor of
+    // it is sent, else none.
+    private WorldClockAnchor? Current(WorldClock clock, WorldDefinition definition, ulong tick, ulong engineTick) {
+        if (WorldClockAnchors.Read(
+            clock: clock,
+            definition: definition,
+            engineTick: engineTick,
+            tick: tick
+        ) is { } read) {
+            return read;
+        }
+
+        return ((!m_held.ContainsKey(key: clock.Name) && (seeds is not null) && seeds.TryGetValue(
+            key: clock.Name,
+            value: out var seed
+        ))
+            ? new WorldClockAnchor(
+                Phase: seed,
+                Tick: engineTick
+            )
+            : null);
+    }
+    // Drops a held anchor ahead of the authority's engine tick; answers whether one was dropped. Nothing it predicts
+    // is a phase the authority presents, and it never predicts backward.
+    private bool DropStale(string clock, ulong engineTick) {
+        if (
+            !m_held.TryGetValue(
+            key: clock,
+            value: out var held
+        ) ||
+            (held.Tick <= engineTick)
+        ) {
+            return false;
+        }
+
+        _ = m_held.Remove(key: clock);
+        WorldProjectionWork.Count(kind: WorldProjectionWork.AnchorRowsReleased);
+
+        return true;
+    }
+    // Records the current anchor when the recipient's prediction misses it; answers whether one was sent. A held
+    // anchor never stands ahead of engineTick here: DropStale ran first.
     private bool Note(string clock, WorldClockAnchor current, ulong engineTick) {
         var retained = m_held.TryGetValue(
             key: clock,
             value: out var held
         );
 
-        if (retained && (engineTick >= held!.Tick) && (held.Predict(engineTick: engineTick) == current.Phase)) {
+        if (retained && (held!.Predict(engineTick: engineTick) == current.Phase)) {
             return false;
         }
 

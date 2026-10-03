@@ -778,10 +778,13 @@ recipient per clock is a counted row under the `world.projection` work source. I
 kept: one replaced before a delivery reached the recipient is gone. A recipient therefore presents the
 latest authoritative tick it was told about and predicts only forward from the anchor it holds. A frame
 that interpolates toward the delivery that brought an anchor presents the anchor's own phase, and
-`WorldClockAnchor.Predict` refuses a tick before its anchor by name. An authority restored to a tick
-before the anchor it sent re-anchors. The anchor row is released when the
-recipient leaves or loses disclosure, when its projection stops carrying the clock, or when its stream
-detaches, without waiting for the socket to drain.
+`WorldClockAnchor.Predict` refuses a tick before its anchor by name. A held anchor ahead of the
+authority's tick is stale: the authority was restored or sought behind it. The next composition or step
+drops it, released like any other anchor row, and carries what a fresh recipient would hold at that
+tick: the clock's own anchor, its seed while its row holds no number, or no anchor. A recipient therefore
+never holds a frozen phase from a future the authority never presented. The anchor row is also released
+when the recipient leaves or loses disclosure, when its projection stops carrying the clock, or when its
+stream detaches, without waiting for the socket to drain.
 
 A portal window renders its destination from its own disclosed mirror unless its session is delivered
 everything the destination holds: a live session admitted at `Replica`, holding `observe all`,

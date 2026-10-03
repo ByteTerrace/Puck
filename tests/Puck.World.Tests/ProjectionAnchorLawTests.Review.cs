@@ -453,4 +453,118 @@ public sealed partial class ProjectionAnchorLawTests {
             feed.Release();
         }
     }
+    // An authority moved back past the anchor a recipient holds, to a tick whose row reads no number: the next
+    // composition or step drops that anchor and carries what a fresh recipient composed there holds, the seed or no
+    // anchor. Held, the anchor would present a frozen phase from a future the authority never presented.
+    [InlineData("compose", false)]
+    [InlineData("compose", true)]
+    [InlineData("step", false)]
+    [InlineData("step", true)]
+    [Theory]
+    public void A_held_anchor_ahead_of_a_restored_authority_is_dropped_for_what_a_fresh_recipient_holds(string door, bool seeded) {
+        var step = Fixtures.StepTicksAt(rateHz: RateHz);
+        var seed = WorldClockAnchor.PhaseOf(kind: CellKind.Fixed, raw: FixedQ4816.FromDouble(value: 0.375d).Value);
+        IReadOnlyDictionary<string, ulong>? seeds = (seeded
+            ? new Dictionary<string, ulong>(comparer: StringComparer.Ordinal) { [Clock] = seed }
+            : null);
+        var history = Document(row: Row(raw: FixedQ4816.FromDouble(value: 0.25d).Value));
+        var restored = Document(row: Row(raw: 0L, slot: false));
+        var restoredTime = ArenaTime.At(engineTick: (3UL * step), tick: 3UL);
+        var feed = new WorldProjectionFeed(recipient: null, seeds: seeds);
+        var work = new WorldProjectionWork();
+
+        _ = feed.Compose(arena: Fixtures.Store(definition: history), authority: "boot", definition: history, revision: 1, time: ArenaTime.At(engineTick: (8UL * step), tick: 8UL));
+        Assert.True(condition: feed.Anchors.TryHeld(anchor: out var future, clock: Clock));
+        Assert.Equal(expected: (8UL * step), actual: future.Tick);
+
+        using (WorldProjectionWork.Attribute(work: work)) {
+            if (door == "compose") {
+                _ = feed.Compose(arena: Fixtures.Store(definition: restored), authority: "boot", definition: restored, revision: 1, time: in restoredTime);
+            } else {
+                Assert.NotEqual(
+                    expected: WorldProjectionDeliveryKind.None,
+                    actual: feed.Step(definition: restored, engineTick: restoredTime.EngineTick, tick: restoredTime.Tick).Kind
+                );
+            }
+        }
+
+        var fresh = new WorldProjectionFeed(recipient: null, seeds: seeds);
+
+        _ = fresh.Compose(arena: Fixtures.Store(definition: restored), authority: "boot", definition: restored, revision: 1, time: in restoredTime);
+
+        var freshAnchor = (fresh.Anchors.TryHeld(anchor: out var freshHeld, clock: Clock) ? freshHeld : null);
+        var heldAnchor = (feed.Anchors.TryHeld(anchor: out var held, clock: Clock) ? held : null);
+
+        Assert.Equal(actual: (freshAnchor is not null), expected: seeded);
+        Assert.Equal(actual: heldAnchor, expected: freshAnchor);
+        Assert.Equal(expected: freshAnchor, actual: AnchorOf(definition: WorldProjectionTimeline(feed: feed)));
+        Assert.Equal(expected: 1L, actual: work.Read(kind: WorldProjectionWork.AnchorRowsReleased));
+    }
+
+    // The timeline a feed's recipient holds, hydrated into a definition the anchor reader takes.
+    private static WorldDefinition WorldProjectionTimeline(WorldProjectionFeed feed) {
+        Assert.True(condition: WorldProjection.TryToDefinition(definition: out var definition, projection: feed.Held!, reason: out var reason), userMessage: reason);
+
+        return definition;
+    }
+
+    // The same contract through the history's own seek. The clock's row reads no number, so a recipient holds the
+    // seed anchored at the tick it joined; a seek to a keyframe before that tick leaves it no anchor ahead of the
+    // authority once the restored timeline is delivered, and a step after the seek puts none back.
+    [Fact]
+    public async Task A_seek_behind_an_anchor_leaves_a_presentation_recipient_no_future_anchor() {
+        var envelope = Row(max: FixedQ4816.FromDouble(value: 0.75d).Value, min: FixedQ4816.FromDouble(value: 0.375d).Value, raw: FixedQ4816.FromDouble(value: 0.5d).Value, slot: false);
+
+        using var harness = new WorldHistoryHarness(definition: Document(row: envelope));
+        var server = harness.Fixture.Server;
+
+        harness.Steps(count: 8);
+
+        var keyframe = harness.History.KeyframeTicks[0];
+        var joined = server.Time.EngineTick;
+        var sink = new WorldFederationProjectionSink(
+            authority: "boot",
+            disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 1f)),
+            revision: static () => 1,
+            server: server,
+            tier: WorldDisclosureTier.Presentation
+        );
+        using var lease = server.AttachSink(sink: sink);
+
+        Assert.True(condition: (keyframe < harness.Tick), userMessage: $"the keyframe at {keyframe} does not precede the join at {harness.Tick}");
+        _ = harness.SeekAndProve(target: keyframe);
+        harness.StepWithoutInput();
+        Assert.Null(@object: sink.DetachReason);
+
+        using var wire = new MemoryStream();
+
+        await sink.StreamAsync(ct: TestContext.Current.CancellationToken, output: wire);
+        sink.Release();
+
+        using var received = new MemoryStream(buffer: wire.ToArray());
+        var hold = new WorldProjectionHold();
+        var heldAtJoin = false;
+
+        while (received.Position < received.Length) {
+            var frame = await WorldFederationCodec.ReadResponseAsync(ct: TestContext.Current.CancellationToken, stream: received);
+
+            Assert.True(condition: frame.Ok);
+
+            if (frame.Kind == ((byte)WorldFederationResponse.Definition)) {
+                Assert.True(condition: WorldFederationCodec.TryDecodeDocument(body: frame.Body.Span, definition: out _, failure: out var failure, hold: hold, tier: out _, version: out _), userMessage: failure.ToString());
+            } else if (frame.Kind == ((byte)WorldFederationResponse.ProjectionDelta)) {
+                Assert.True(condition: WorldFederationCodec.TryDecodeProjectionDelta(body: frame.Body.Span, definition: out _, failure: out var failure, hold: hold, stamp: out _, valuesOnly: out _, version: out _), userMessage: failure.ToString());
+            }
+
+            heldAtJoin |= (AnchorOf(definition: hold.Definition!)?.Tick == joined);
+        }
+
+        var anchor = AnchorOf(definition: hold.Definition!);
+
+        // The control: the recipient was sent the seed anchored where it joined, ahead of where the seek moved.
+        Assert.True(condition: heldAtJoin);
+        Assert.NotNull(@object: anchor);
+        Assert.InRange(actual: anchor.Tick, high: server.Time.EngineTick, low: 0UL);
+        Assert.Equal(expected: server.ClockSeeds[Clock], actual: anchor.Phase);
+    }
 }
