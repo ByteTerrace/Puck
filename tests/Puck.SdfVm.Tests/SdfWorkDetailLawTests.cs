@@ -18,7 +18,7 @@ public sealed class SdfWorkDetailLawTests {
         // The runs' rows, then the composite's atmosphere row, which the composite counts each atmosphere kind it evaluates
         // in (SDF_SKY_DETAIL_ATMOSPHERE), then the layers' labels.
         Assert.Equal(expected: new[] { "run0", "run1", "run2", "atmosphere" }, actual: details.Labels);
-        Assert.Equal(expected: ((uint)SdfSkyDetails.AtmosphereRow), actual: 3u);
+        Assert.Equal(actual: 3u, expected: ((uint)SdfSkyDetails.AtmosphereRow));
         Assert.Contains(expectedSubstring: "puckCountDetail(SDF_SKY_DETAIL_ATMOSPHERE, ", actualString: Source(path: "passes/sdf-composite.comp.hlsl"));
         Assert.Contains(expectedSubstring: "#define SDF_SKY_DETAIL_ATMOSPHERE 3u", actualString: Source(path: "isa/sdf-sky-kinds.hlsli"));
         Assert.Equal(expected: 4u, actual: details.RowOf(label: "gradient"));
@@ -26,7 +26,7 @@ public sealed class SdfWorkDetailLawTests {
         Assert.Equal(expected: 4u, actual: details.RowOf(label: "gradient"));
         Assert.Throws<ArgumentException>(testCode: () => details.RowOf(label: "run1"));
         Assert.Throws<ArgumentException>(testCode: () => details.RowOf(label: SdfSkyDetails.Atmosphere));
-        Assert.True(condition: SdfSkyDetails.IsFixed(label: "run2") && SdfSkyDetails.IsFixed(label: "atmosphere") && !SdfSkyDetails.IsFixed(label: "gradient"));
+        Assert.True(condition: (SdfSkyDetails.IsFixed(label: "run2") && SdfSkyDetails.IsFixed(label: "atmosphere") && !SdfSkyDetails.IsFixed(label: "gradient")));
         for (var index = 0; (index < SdfSkyDetails.Capacity); index++) {
             _ = details.RowOf(label: $"layer{index}");
         }

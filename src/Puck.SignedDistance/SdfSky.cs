@@ -143,7 +143,9 @@ public sealed class SdfSky {
     private readonly SdfSoftbox[] m_softboxes = new SdfSoftbox[MaxSoftboxes];
 
     private SdfSkyBlock m_block;
+
     private SdfAtmosphere m_atmosphere = SdfAtmosphere.Default;
+
     private int m_layerCount;
 
     /// <summary>Gets the zenith color of the default look's two-stop gradient, which an unauthored world renders.</summary>

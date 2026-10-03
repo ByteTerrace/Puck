@@ -68,10 +68,14 @@ template overcast(cover = 0.85) {
 
 // A clear day's air: a light fog in-scattering the sky.
 template clearDayAir() {
-  fog { density: 0.004 }
+  fog {
+    density: 0.004
+  }
 }
 
 // An overcast day's air: a denser fog in-scattering the sky.
 template overcastAir() {
-  fog { density: 0.01 }
+  fog {
+    density: 0.01
+  }
 }
