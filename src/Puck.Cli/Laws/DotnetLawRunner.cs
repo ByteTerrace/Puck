@@ -14,21 +14,28 @@ internal sealed class DotnetLawRunner : ILawRunner {
         .Where(predicate: static line => (line.Length > 0))];
 
     /// <inheritdoc/>
-    public LawBuild Build(string tree, string project, CancellationToken cancellationToken) {
+    public LawBuild Build(string tree, string project, string logDirectory, CancellationToken cancellationToken) {
+        _ = Directory.CreateDirectory(path: logDirectory);
+        var countsPath = Path.Combine(path1: logDirectory, path2: "build.counts");
+
+        File.Delete(path: countsPath);
         var build = CliProcess.RunCaptured(
             cancellationToken: cancellationToken,
-            arguments: ["build", project, "-c", CliOptions.DefaultConfiguration, "-v", "q", "-nologo", "--disable-build-servers", "-p:NuGetAudit=false"],
+            arguments: ["build", project, "-c", CliOptions.DefaultConfiguration, "-v", "diag", "-consoleloggerparameters:ErrorsOnly;Summary", "-nologo", "--disable-build-servers", "-p:NuGetAudit=false", $"-logger:{typeof(LawBuildLogger).FullName},{typeof(LawBuildLogger).Assembly.Location};{countsPath}"],
             fileName: "dotnet",
             input: string.Empty,
             timeout: BuildTimeout,
             workingDirectory: tree
         );
+        var counts = LawBuildLogger.Read(path: countsPath);
 
         if (
             !build.TimedOut &&
             (build.ExitCode == 0)
         ) {
-            return new LawBuild(Errors: [], Succeeded: true);
+            return ((counts is { } counted)
+                ? new LawBuild(Counts: counted, Errors: [], Succeeded: true)
+                : new LawBuild(Errors: ["the build produced no valid work-count report, so its execution cannot be judged."], Succeeded: false));
         }
 
         var output = Lines(text: (build.Stdout + build.Stderr));
@@ -38,7 +45,8 @@ internal sealed class DotnetLawRunner : ILawRunner {
             Errors: ((errors.Length > 0)
                 ? errors
                 : [.. output.TakeLast(count: 20), (build.TimedOut ? $"the build did not finish within {BuildTimeout}." : $"dotnet build exited {build.ExitCode}.")]),
-            Succeeded: false
+            Succeeded: false,
+            Counts: (counts ?? default)
         );
     }
     /// <inheritdoc/>

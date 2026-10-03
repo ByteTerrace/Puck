@@ -24,8 +24,9 @@ same change. The user's current instruction outranks it.
   the GPU legs and runs only under a GPU grant.
 - **`puck laws prove`** proves red legs: use it for every new or changed law,
   with `--fix <commit>` or with `--file-list` for an uncommitted fix. It
-  withholds the fix in a detached worktree of its own, never in the shared
-  tree, and refuses a proof in which a selected test was skipped.
+  withholds the fix in a proof tree of its own (a persistent clone it builds
+  incrementally, never the shared tree), and refuses a proof in which a
+  selected test was skipped.
 
 Run covered steps by hand only where a brief rules a verb out, for example a
 machine that must not build the solution. Complete checks the gate omits:

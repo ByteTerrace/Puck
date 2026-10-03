@@ -6,11 +6,11 @@ namespace Puck.Cli.Tests;
 
 /// <summary>CONTRACT UNDER TEST: <see cref="LawProof"/> proves a law that fails without its fix and passes with it,
 /// reports a law that passes with the fix withheld as unable to fail, refuses a build that fails, and does all of it in
-/// a worktree of its own, leaving the caller's checkout, its worktree list and the scratch root as it found them. Each
+/// a clone of its own, leaving the caller's checkout, its worktree list and the scratch root as it found them. Each
 /// law runs over a small git checkout and a runner that stands in for <c>dotnet build</c> and <c>dotnet test</c>: the
 /// law passes only when the fix's file reads <c>fixed</c>, and the build fails on a file that reads
 /// <c>unbuildable</c>.</summary>
-public sealed class LawProofLawTests {
+public sealed partial class LawProofLawTests {
     private const string FixPath = "src/Lib/Fix.cs";
     private const string Law = "FixLawTests.Holds";
     private const string Project = "tests/Lib.Tests/Lib.Tests.csproj";
@@ -22,7 +22,8 @@ public sealed class LawProofLawTests {
         public Func<string, LawRun>? Report { get; init; }
         public List<string> Runs { get; } = [];
 
-        public LawBuild Build(string tree, string project, CancellationToken cancellationToken) {
+        public LawBuild Build(string tree, string project, string logDirectory, CancellationToken cancellationToken) {
+            Assert.Equal(actual: project, expected: Project);
             Builds.Add(item: tree);
             BeforeBuild?.Invoke(arg1: tree, arg2: cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
@@ -54,6 +55,7 @@ public sealed class LawProofLawTests {
     private static GitScratchCheckout Checkout(string initial) {
         var checkout = new GitScratchCheckout();
 
+        checkout.Write(name: ".gitignore", text: "bin/\nobj/\n");
         checkout.Write(name: Project, text: "<Project />\n");
         checkout.Write(name: "tests/Lib.Tests/FixLawTests.cs", text: "public sealed class FixLawTests { }\n");
         checkout.Write(name: FixPath, text: initial);
@@ -68,8 +70,11 @@ public sealed class LawProofLawTests {
         project: null,
         repositoryRoot: checkout.Root,
         runner: runner,
-        scratchRoot: scratch.RootPath
+        scratchRoot: scratch.RootPath,
+        lawTreesRoot: LawTreesRoot(checkout: checkout)
     ));
+    private static string LawTreesRoot(GitScratchCheckout checkout) => Path.Combine(path1: Path.GetDirectoryName(path: checkout.Root)!, path2: "law-trees");
+    private static LawProofTree HoldTree(GitScratchCheckout checkout) => (LawProofTree.TryAcquire(root: LawTreesRoot(checkout: checkout), repository: checkout.Root, reason: out _) ?? throw new InvalidOperationException(message: "test could not hold the proof-tree lock"));
     // The proof leaves the caller's checkout clean, its worktree list holding only itself, and the scratch root empty.
     private static void AssertNothingLeftBehind(GitScratchCheckout checkout, TemporaryDirectory scratch, string status) {
         Assert.Equal(actual: checkout.Git("status", "--porcelain"), expected: status);
@@ -198,7 +203,7 @@ public sealed class LawProofLawTests {
         File.WriteAllText(path: Path.Combine(path1: scratch.RootPath, path2: "Outside.csproj"), contents: "<Project />");
 
         var (exitCode, _, error) = ConsoleCapture.RunSplit(run: () => LawProof.Prove(
-            repositoryRoot: checkout.Root, law: Law, project: outside, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratchRoot: scratch.RootPath));
+            repositoryRoot: checkout.Root, law: Law, project: outside, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratchRoot: scratch.RootPath, lawTreesRoot: LawTreesRoot(checkout: checkout)));
 
         Assert.Empty(collection: runner.Builds);
         Assert.Equal(actual: exitCode, expected: CliExit.Refused);
@@ -229,6 +234,7 @@ public sealed class LawProofLawTests {
     public void CancellationReachesTheRunnerAndRemovesTheWorktree() {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var lease = HoldTree(checkout: checkout);
         using var cancellation = new CancellationTokenSource();
 
         checkout.Write(name: FixPath, text: "fixed");
@@ -241,7 +247,7 @@ public sealed class LawProofLawTests {
         };
 
         Assert.Throws<OperationCanceledException>(testCode: () => ConsoleCapture.RunSplit(run: () => LawProof.Prove(
-            repositoryRoot: checkout.Root, law: Law, project: null, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratchRoot: scratch.RootPath, cancellationToken: cancellation.Token)));
+            repositoryRoot: checkout.Root, law: Law, project: null, fix: new LawFix(Paths: [], Revision: "HEAD"), runner: runner, scratchRoot: scratch.RootPath, lawTreesRoot: LawTreesRoot(checkout: checkout), cancellationToken: cancellation.Token)));
 
         Assert.Empty(collection: runner.Runs);
         AssertNothingLeftBehind(checkout: checkout, scratch: scratch, status: string.Empty);
@@ -251,6 +257,7 @@ public sealed class LawProofLawTests {
     public void AnExceptionRemovesEvenALockedProofWorktree() {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var lease = HoldTree(checkout: checkout);
 
         checkout.Write(name: FixPath, text: "fixed");
         _ = checkout.Commit(message: "lib: fix");
@@ -391,6 +398,7 @@ public sealed class LawProofLawTests {
     public void CleanupNeverPrunesAnotherWorktreesRegistration() {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var lease = HoldTree(checkout: checkout);
         using var other = new TemporaryDirectory(prefix: "puck-laws-other-law-");
         var otherTree = other.PathOf(name: "tree");
 
@@ -417,6 +425,7 @@ public sealed class LawProofLawTests {
     public void CleanupRemovesABuiltTreeWhosePathsPassTheWindowsLimit() {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var lease = HoldTree(checkout: checkout);
         string? deepest = null;
 
         checkout.Write(name: FixPath, text: "fixed");
@@ -448,6 +457,7 @@ public sealed class LawProofLawTests {
     public void ACleanupThatFailsAfterAProvenLawKeepsTheVerdictAndNamesWhatItLeft() {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var lease = HoldTree(checkout: checkout);
         var builds = 0;
         FileStream? held = null;
 
@@ -506,6 +516,7 @@ public sealed class LawProofLawTests {
     public void CleanupFailuresPreserveVerdictsAndExceptions(int outcome, int failureStage) {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var lease = HoldTree(checkout: checkout);
         using var cancellation = new CancellationTokenSource();
         Exception? proofException = outcome switch {
             130 => new OperationCanceledException(token: cancellation.Token),
@@ -557,7 +568,8 @@ public sealed class LawProofLawTests {
                     },
                     repositoryRoot: checkout.Root,
                     runner: runner,
-                    scratchRoot: scratch.RootPath);
+                    scratchRoot: scratch.RootPath,
+                    lawTreesRoot: LawTreesRoot(checkout: checkout));
             } catch (Exception exception) {
                 observed = exception;
                 return -1;
@@ -584,6 +596,7 @@ public sealed class LawProofLawTests {
     public void CleanupOfAnAlreadyRemovedScratchDirectoryStillRemovesItsRegistration() {
         using var checkout = Checkout(initial: "broken");
         using var scratch = new TemporaryDirectory(prefix: "puck-laws-law-");
+        using var lease = HoldTree(checkout: checkout);
         string? proofScratch = null;
 
         checkout.Write(name: FixPath, text: "fixed");

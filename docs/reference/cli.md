@@ -837,24 +837,65 @@ The fix is one of:
 - `--file-list <json>` alone: the working tree's uncommitted change to the
   listed paths, each put back to `HEAD` (a path `HEAD` lacks is removed).
 
-The proof never touches the working tree. It adds a detached git worktree of
-`HEAD` under a temporary directory and copies the working tree's uncommitted
-and untracked files into it. There it withholds the fix, builds the law's
-project in Release and runs the law, which must fail. It then restores the fix,
-builds and runs again, and the law must pass. Outcomes come from the test run's
+The proof never touches the working tree. It keeps one persistent proof clone
+per repository under `law-trees` in the [per-user Puck
+directory](../development/contributing.md#per-user-directory), in a subdirectory
+named by the SHA-256 of the repository's common Git directory
+(`git rev-parse --git-common-dir`, case folded on Windows), so every worktree
+of one repository shares one clone. The clone is made from that common Git
+directory and shares its objects through alternates; it is never a worktree
+and never registers in the caller's worktree list.
+
+Each proof fetches the caller's `HEAD` by object id, checks it out detached,
+removes untracked files Git does not ignore, and mirrors the caller's
+uncommitted and untracked files. Ignored build outputs stay in the clone at
+the paths where MSBuild produced them. Nothing copies or links the caller's
+`obj` or `bin`. Git rewrites changed tracked files; unchanged files retain
+their timestamps, so MSBuild's ordinary incremental checks apply.
+
+There the proof withholds the fix, builds the law's project in Release and
+runs the law, which must fail. It then restores the fix, builds and runs
+again, and the law must pass. Rewritten inputs are touched newer than the
+tree's outputs before each build, including after restoring the fix. Each
+side builds only the selected project's dependency closure, never the
+solution, once for all tests the law name selects. Outcomes come from the test run's
 TRX report together with the process's completion verdict. A run that selects
 no test, skips a selected test, aborts or executes different tests between legs
 is refused. Both legs execute the same tests, and every selected test must
 finish with a passed or failed outcome. Caller Git hooks are disabled, and
-projects outside the proof tree and links in it are refused. Cancellation kills
-and waits for the active child process before cleanup. Cleanup attempts to remove
-the proof's worktree, its own registration and its temporary directory. Git
-commands that write or remove the proof tree enable long-path support for that
-command alone, since a built tree's paths pass the Windows 260-character limit.
-Cleanup never prunes another worktree's registration. A cleanup failure is
-reported on standard error with the failed operation and scratch directory;
+projects outside the proof tree and links in it are refused.
+
+An exclusive lock file beside the clone leases it for the whole proof. A
+concurrent proof immediately falls back to a fresh detached scratch worktree
+and reports the cold build on standard error. A missing or corrupt clone,
+or one whose origin names another caller, is recreated cold. If the cache
+cannot be opened or repaired, the proof also uses the scratch fallback.
+
+Cancellation kills and waits for the active child process before cleanup.
+The persistent clone survives success, refusal, exceptions and cancellation;
+per-proof scratch holds results, build counts, patches and the empty hooks
+directory and is removed on every outcome. A fallback worktree and only its
+own registration are removed too. Git operations enable long-path support
+for that command alone. Cleanup never prunes another worktree's registration.
+A cleanup failure is reported on standard error with the failed operation and
+scratch directory;
 files or the proof's registration may remain. Cleanup never changes the exit
 code, which reports the proof, even if standard error cannot receive the warning.
+
+Each side reports this stable work-count line on standard error (the second
+side says `with the fix restored`):
+
+```text
+laws prove: built with the fix withheld: <n> project(s) compiled, <m> up to date, <t> target(s)
+```
+
+Counts come from MSBuild events across the selected closure, including restore.
+A compiled project executes a C#, F# or Visual Basic compiler task; an
+up-to-date project skips `CoreCompile` because its outputs are current and
+executes no compiler task in any of its target frameworks. Projects are
+counted distinctly, and targets count executions, excluding skipped targets.
+A failed build's partial counts do not establish a proof. A successful build
+without a valid count report is refused.
 
 ```text
 Law: BackgroundBuildLawTests (tests/Puck.Hosting.Tests/Puck.Hosting.Tests.csproj)

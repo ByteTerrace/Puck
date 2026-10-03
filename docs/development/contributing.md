@@ -78,6 +78,7 @@ subdirectory there:
 | `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root |
 | `bakes` | The creation bakes presentations make, shared the same way |
 | `world-builds` | The shared Release builds of `Puck.World` the CLI gates run |
+| `law-trees` | The persistent shared-object proof clones and exclusive locks used by `puck laws prove` |
 | `compilations` | The `.puck` compile cache the game and the CLI share |
 | `corpora` | The conformance corpora the emulator batteries fetch |
 
