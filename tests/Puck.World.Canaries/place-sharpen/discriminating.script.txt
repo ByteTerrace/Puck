@@ -1,0 +1,19 @@
+# Paused resets render one initialization frame; capture the pipeline output before display scaling.
+pipeline.wait sharpen compiled 40
+pipeline.wait sharpen installed 10
+pipeline.time sharpen pause
+pipeline.set sharpen place {"sharpen":1,"sharpness":0}
+pipeline.reset sharpen
+pipeline.wait sharpen counted 1 10
+pipeline.capture sharpen {run}/zero.png
+pipeline.wait sharpen captured 10
+pipeline.set sharpen place {"sharpen":0,"sharpness":1}
+pipeline.reset sharpen
+pipeline.wait sharpen counted 1 10
+pipeline.capture sharpen {run}/sharp.png
+pipeline.wait sharpen captured 10
+pipeline.set sharpen place {"sharpen":1,"sharpness":0.4}
+pipeline.reset sharpen
+pipeline.wait sharpen counted 1 10
+pipeline.capture sharpen {run}/partial.png
+pipeline.wait sharpen captured 10
