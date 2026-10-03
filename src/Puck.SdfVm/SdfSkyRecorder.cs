@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Shaders;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -9,8 +10,9 @@ namespace Puck.SdfVm;
 // (SdfWorldInterfaces.SkyParameters). The sky runs on the render grid, reading the color views writes with the dispatch box
 // it is current inside, in every fragment; the composite runs at the output extent, reading a native view's lit image with
 // the visibility records and the box, or a reduced or temporal view's resolved lit image and surface transport. Both bind
-// the residency's World set, whose tables hold the sky block and stops, the volumes and the dynamic transforms, and a pass
-// group binding each port at its member and a filler at every member the pass does not read or write. Their block holds
+// the residency's World set, whose tables hold the sky block and layer table, the volumes and the dynamic transforms, and a
+// pass group binding each port at its member, the screens the sky's layers sample (a panorama's, a textured disc's), and
+// a filler at every member the pass does not read or write. Their block holds
 // the frame's common values, the temporal ones every part of a frame writes alike among them, and ResolvedSurface, which
 // only a resolved composite sets; the kernels take the sky's direction without the jitter, so the sky never moves with a
 // temporal view's samples. The composite writes the view's color, so it completes the render.
@@ -22,8 +24,9 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         Length: checked((int)(member.Type!.Value.SizeBytes() * (member.Length ?? 1)))))];
     private static readonly int ResolvedSurfaceOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.ResolvedSurface));
     // The interface's image members a port reads through, and those a port writes through.
-    private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, SdfWorldPackage.SkyScaleImage, SdfWorldPackage.SkyOffsetImage];
-    private static readonly string[] StorageMembers = [SdfWorldPackage.SkyBaseWritten, SdfWorldPackage.SkyScaleWritten, SdfWorldPackage.SkyOffsetWritten, SdfWorldPackage.Output];
+    private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, .. SdfWorldPackage.SkyUpperImages];
+    private static readonly string[] StorageMembers = [SdfWorldPackage.SkyBaseWritten, .. SdfWorldPackage.SkyUpperWritten, SdfWorldPackage.Output];
+    private static readonly string[] ReadParts = [SdfWorldPackage.Parts.SkyUpper0, SdfWorldPackage.Parts.SkyUpper1, SdfWorldPackage.Parts.SkyUpper2];
     private static readonly string[] BufferMembers = [SdfWorldPackage.VisibilityRecords, SdfWorldPackage.CullBounds, SdfWorldPackage.TransportRead];
 
     private readonly RenderGraphPackageRecorderContext m_context;
@@ -39,6 +42,12 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
 
     // Per frame slot, the tables the slot's pass set was written against.
     private readonly SdfWorldTables?[] m_portTables;
+    // Per frame slot, the image each screen element of the pass set binds (zero before its first write), and which
+    // screens the residency declares and the frame's sky samples.
+    private readonly nint[][] m_screens;
+
+    private readonly bool[] m_declaredScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
+    private readonly bool[] m_sampledScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
 
     private SdfWorldView m_view;
     private bool m_disposed;
@@ -55,6 +64,11 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
         m_fragmentPass = fragment.Passes.Single(predicate: pass => string.Equals(a: pass.Name, b: context.Part, comparisonType: StringComparison.Ordinal));
         m_portTables = new SdfWorldTables?[context.InFlightFrames];
+        m_screens = new nint[context.InFlightFrames][];
+        for (var slot = 0; (slot < m_screens.Length); slot++) {
+            m_screens[slot] = new nint[SdfWorldTables.MaxScreenSurfaces];
+        }
+        DeclareScreens(residency: view.Residency);
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: m_kernel).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
     }
@@ -67,7 +81,8 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         m_owner.Unhold(residency: m_view.Residency);
         m_view.Residency.Release();
     }
-    public IReadOnlyList<string> WorkDetails(in FrameContext context) => SdfWorldWorkDetails.Of(part: ((m_kernel == SdfKernel.Composite) ? SdfWorldPackage.Parts.Composite : SdfWorldPackage.Parts.Sky));
+    // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
+    public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_view.Residency.SkyDetails.Labels;
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         if ((m_owner.ViewOf(instance: m_context.Instance) is { } current) && (current != m_view)) {
             if (!ReferenceEquals(objA: current.Residency, objB: m_view.Residency)) {
@@ -75,6 +90,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
                 m_owner.Hold(residency: current.Residency);
                 m_owner.Unhold(residency: m_view.Residency);
                 m_view.Residency.Release();
+                DeclareScreens(residency: current.Residency);
             }
             m_view = current;
         }
@@ -100,6 +116,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
 
         m_work.Write(passSet: set, recording: recording);
         BindPorts(recording: in recording, set: set, tables: tables);
+        BindScreens(frame: frame, recording: in recording, set: set, tables: tables);
         var pipeline = tables.Pipeline(kernel: m_kernel);
 
         recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: pipeline.Handle);
@@ -155,7 +172,66 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         for (var port = 0; (port < m_fragmentPass.Outputs.Count); port++) {
             bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: WrittenMemberOf(version: m_fragmentPass.Outputs[port].Name)), descriptorSetHandle: set, imageViewHandle: recording.Outputs[port].Image.ImageViewHandle);
         }
+        Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
+    }
+    // Notes the screens a residency declares, which alone may bind a source.
+    private void DeclareScreens(SdfWorldResidency residency) {
+        Array.Clear(array: m_declaredScreens);
+
+        if (residency.ScreenSources is { } sources) {
+            foreach (var screen in sources.Screens) {
+                m_declaredScreens[screen] = true;
+            }
+        }
+    }
+    // Writes each screen the frame's sky samples into the slot's pass set every frame, since a host's image handle is
+    // unique only among live objects, and the filler once at every other screen. The image is the one the views pass
+    // binds (SdfWorldResidency.ScreenImage), under the lease it already holds.
+    private void BindScreens(SdfFrame frame, in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
+        var bound = m_screens[recording.Slot];
+        var filler = tables.SampledFiller.ImageViewHandle;
+        var residency = m_view.Residency;
+        var sky = frame.Sky;
+
+        Array.Clear(array: m_sampledScreens);
+        for (var layer = 0; (layer < sky.LayerCount); layer++) {
+            var screen = sky.LayerAt(index: layer).Kind switch {
+                SdfSkyLayerKind.Panorama => sky.Parameters<SdfSkyPanorama>(index: layer).Screen,
+                SdfSkyLayerKind.Disc => sky.Parameters<SdfSkyDisc>(index: layer).Screen,
+                _ => -1,
+            };
+
+            if ((screen >= 0) && (screen < SdfWorldTables.MaxScreenSurfaces)) {
+                m_sampledScreens[screen] = true;
+            }
+        }
+        for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
+            var image = ((m_sampledScreens[screen] && m_declaredScreens[screen])
+                ? residency.ScreenImage(
+                    leases: recording.Leases,
+                    reads: recording.Reads,
+                    screen: screen,
+                    view: m_view.View
+                )
+                : 0);
+
+            if (image == 0) {
+                if (bound[screen] == filler) {
+                    continue;
+                }
+
+                image = filler;
+            }
+
+            m_context.Services.Bindings.WriteSampledImage(
+                arrayElement: ((uint)screen),
+                binding: m_sets.BindingOf(member: SdfWorldPackage.ScreenSources),
+                descriptorSetHandle: set,
+                imageViewHandle: image
+            );
+            bound[screen] = image;
+        }
     }
     // The member a pass reads a fragment version through.
     private static string ReadMemberOf(string version) => version switch {
@@ -164,15 +240,13 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         SdfWorldPackage.Parts.ShadowVisibility => SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.Parts.Transport => SdfWorldPackage.TransportRead,
         SdfWorldPackage.Parts.SkyBase => SdfWorldPackage.SkyBaseImage,
-        SdfWorldPackage.Parts.SkyScale => SdfWorldPackage.SkyScaleImage,
-        SdfWorldPackage.Parts.SkyOffset => SdfWorldPackage.SkyOffsetImage,
+        SdfWorldPackage.Parts.SkyUpper0 or SdfWorldPackage.Parts.SkyUpper1 or SdfWorldPackage.Parts.SkyUpper2 => SdfWorldPackage.SkyUpperImages[Array.IndexOf(array: ReadParts, value: version)],
         _ => throw new InvalidOperationException(message: $"The sky interface reads no version '{version}'."),
     };
     // The member a pass writes a fragment version through.
     private static string WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.SkyBase => SdfWorldPackage.SkyBaseWritten,
-        SdfWorldPackage.Parts.SkyScale => SdfWorldPackage.SkyScaleWritten,
-        SdfWorldPackage.Parts.SkyOffset => SdfWorldPackage.SkyOffsetWritten,
+        SdfWorldPackage.Parts.SkyUpper0 or SdfWorldPackage.Parts.SkyUpper1 or SdfWorldPackage.Parts.SkyUpper2 => SdfWorldPackage.SkyUpperWritten[Array.IndexOf(array: ReadParts, value: version)],
         SdfWorldPackage.Color => SdfWorldPackage.Output,
         _ => throw new InvalidOperationException(message: $"The sky interface writes no version '{version}'."),
     };

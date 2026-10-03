@@ -1,0 +1,64 @@
+// The sky presets every shipped world can draw from: each template lowers to the ordinary `render.sky` rows it spells,
+// so a look needs no runtime concept and a world overrides any field after applying one. Import the module and expand a
+// preset inside a world's `sky` block, which then holds the preset's layers:
+//
+//   import "skies.puck"
+//   render { sky { clearDay(cloudiness: 0.4) } }
+//
+// A layer the presets name can be keyed by the section's keys like any authored layer. A world that authors no sky renders
+// the engine's default look (`SdfSky`), the two-stop gradient and fog every unauthored world shares.
+
+// A clear day: a pale horizon under a deep zenith, a light haze, a sun disc about the first shadowed light, and a cloud
+// layer whose coverage is the cloudiness, drawn from `cloudTier` up.
+template clearDay(cloudiness = 0.25, sunLight = 0, cloudTier = low) {
+  layers [
+    gradient(name: "air", stops: [
+      { elevation: -1, color: "#5E6A72" }
+      { elevation: 0, color: "#CFDCE6" }
+      { elevation: 0.4, color: "#7FAED4" }
+      { elevation: 1, color: "#2F5C8C" }
+    ]
+    )
+    fog(name: "haze", density: 0.004)
+    sunDisc(name: "sun", light: sunLight, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
+    clouds(name: "cumulus", coverage: cloudiness, scale: 2, softness: 0.3, drift: [0.02, 0.005], tier: cloudTier)
+  ]
+}
+
+// A starry night: a near-black gradient, a share of twinkling stars, and no fog.
+template starryNight(density = 48, brightness = 1.2) {
+  layers [
+    gradient(name: "air", stops: [
+      { elevation: -1, color: "#020306" }
+      { elevation: 1, color: "#070B16" }
+    ]
+    )
+    stars(name: "stars", density: density, brightness: brightness, seed: 7, twinkle: { share: 0.3, depth: 0.5, rate: 1 })
+  ]
+}
+
+// A polar night: the starry night under aurora curtains, lit and turned by the given clock.
+template polarNight(clock, intensity = 1.5, density = 48) {
+  layers [
+    gradient(name: "air", stops: [
+      { elevation: -1, color: "#020306" }
+      { elevation: 1, color: "#060C18" }
+    ]
+    )
+    stars(name: "stars", density: density, brightness: 1, seed: 11)
+    aurora(name: "curtains", intensity: intensity, color: "#3DFFB0", top: "#7A4CFF", base: 15deg, height: 25deg, clock: clock, tier: medium)
+  ]
+}
+
+// An overcast day: a grey gradient under a thick, slow cloud deck and a dense haze.
+template overcast(cover = 0.85) {
+  layers [
+    gradient(name: "air", stops: [
+      { elevation: -1, color: "#4A4F55" }
+      { elevation: 1, color: "#9AA3AB" }
+    ]
+    )
+    fog(name: "haze", density: 0.01)
+    clouds(name: "deck", coverage: cover, scale: 3, softness: 0.6, color: "#C9CED3", drift: [0.006, 0.002])
+  ]
+}

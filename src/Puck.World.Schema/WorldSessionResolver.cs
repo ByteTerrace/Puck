@@ -678,7 +678,7 @@ public sealed class WorldSessionResolver {
     /// <param name="referencedDocument">The destination's own resolved referenced document identity — a canonical
     /// local identity the caller resolved (this resolver stays I/O-free by construction: it never touches a
     /// filesystem, so it cannot canonicalize anything itself). Two different spellings of one underlying document
-    /// ("modules/dive.world.json" vs "Assets/worlds/modules/dive.world.json") must resolve to the identical string here, or they
+    /// ("modules/dive.puck" vs "Assets/worlds/modules/dive.puck") must resolve to the identical string here, or they
     /// mint two cache entries for what the host's own instance-reuse fence (<c>Puck.World.WorldInstanceHost.ResolveByStableName</c>'s
     /// name-collision check, <c>TryFindRunningInstanceByOrigin</c>'s origin scan) already treats as one document —
     /// see this type's own <c>m_active</c> remarks.</param>

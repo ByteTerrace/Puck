@@ -12,8 +12,6 @@ public sealed partial class SdfWorldTables {
     private const int UploadPass = 2;
     private const int EnvironmentPass = 3;
 
-    // The environment's named rows, in kernel index order after its plain row (SdfWorldWorkDetails.Sky's gradient).
-    private static readonly GpuWorkDetail[] EnvironmentDetails = [new(Detail: "plain", Pass: EnvironmentPass), new(Detail: "gradient", Pass: EnvironmentPass)];
     private static readonly string[] PassLabelTable = ["fillers", "bricks", "upload", "environment"];
     private static readonly WorkClass[] PassClassTable = [WorkClass.Deterministic, WorkClass.PerBackendDeterministic, WorkClass.PerBackendDeterministic, WorkClass.Deterministic];
 
@@ -24,6 +22,8 @@ public sealed partial class SdfWorldTables {
     // The pass configuration's revision: one more for every UploadProgram and every InstallReload that installs a
     // pipeline, so a sample says which program and kernel set its counts ran under.
     private long m_workRevision;
+    // The sky's detail rows the ledger's environment rows were last configured from (SdfSkyDetails.Labels).
+    private IReadOnlyList<string>? m_environmentLabels;
 
     /// <summary>Gets the labels of an upload's passes, in submission order: <c>fillers</c>, the fillers' first transitions
     /// and clears, on the first upload alone; <c>bricks</c>, the brick pool's writes (a queued host-baked brick's staging
@@ -52,6 +52,26 @@ public sealed partial class SdfWorldTables {
             passLabels: PassLabelTable,
             revision: m_workRevision
         );
-        m_work.ConfigureDetails(details: EnvironmentDetails);
+        m_environmentLabels = null;
+        ConfigureSkyDetails();
+    }
+    // States the environment's named rows to the ledger when the sky's detail rows have grown since it last did: before
+    // the upload's first pass, since a configuration never changes under pass activity. The rows only grow, so the
+    // identities a sample already carries never move.
+    private void ConfigureSkyDetails() {
+        var labels = m_skyDetails.Labels;
+
+        if (ReferenceEquals(objA: labels, objB: m_environmentLabels)) {
+            return;
+        }
+
+        var details = new GpuWorkDetail[(labels.Count + 1)];
+
+        details[0] = new GpuWorkDetail(Detail: "plain", Pass: EnvironmentPass);
+        for (var index = 0; (index < labels.Count); index++) {
+            details[(index + 1)] = new GpuWorkDetail(Detail: labels[index], Pass: EnvironmentPass);
+        }
+        m_work.ConfigureDetails(details: details);
+        m_environmentLabels = labels;
     }
 }
