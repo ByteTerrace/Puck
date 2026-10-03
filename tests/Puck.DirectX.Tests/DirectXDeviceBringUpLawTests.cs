@@ -131,7 +131,6 @@ public sealed class DirectXDeviceBringUpLawTests {
         }
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
-        public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) => throw new NotSupportedException();
     }
     // Creates a real software device, then refuses to read it the way a capability probe refused by an older runtime
     // surfaces through CsWin32's throwing wrappers.
@@ -158,6 +157,5 @@ public sealed class DirectXDeviceBringUpLawTests {
         public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) => throw new ArgumentException(message: "Value does not fall within the expected range.");
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
-        public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) => throw new NotSupportedException();
     }
 }

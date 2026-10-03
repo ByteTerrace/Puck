@@ -945,7 +945,7 @@ These are one-line cautions; the owning pages hold the derivations.
   `IGpuDeviceContext.MemoryProfile` (`GpuMemoryProfile`) beside the identity —
   Vulkan through `GpuMemoryProfile.FromVulkan` over the device type and
   `vkGetPhysicalDeviceMemoryProperties`, Direct3D 12 through
-  `DirectXNativeDeviceApi.MemoryProfile` over the architecture, adapter and
+  `DirectXFeatureReads.MemoryProfile` over the architecture, adapter and
   options 16 structures. `GpuResidency.Select(profile, bytes, readersInFlight)`
   is the one choice of `InPlace`, `Ring` or `Staged`: in place only on coherent
   unified memory with no reader in flight while the host writes, so a per-frame

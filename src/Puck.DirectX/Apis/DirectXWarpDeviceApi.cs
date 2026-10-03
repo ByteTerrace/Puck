@@ -33,11 +33,4 @@ public sealed class DirectXWarpDeviceApi : IDirectXDeviceApi {
     /// <inheritdoc/>
     public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) =>
         m_native.GetMemoryProfile(deviceHandle: deviceHandle);
-    /// <summary>Refuses: the software renderer is not an adapter a LUID names, and probing one would open the hardware
-    /// device this API keeps a context off.</summary>
-    /// <param name="adapterLuid">The packed adapter LUID, not read.</param>
-    /// <returns>Never returns.</returns>
-    /// <exception cref="NotSupportedException">Always.</exception>
-    public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) =>
-        throw new NotSupportedException(message: "The software (WARP) device API probes no hardware adapter.");
 }
