@@ -285,7 +285,12 @@ public sealed class WorldCaptureHoldLawTests : IDisposable {
         public void IterateUntilDecided(int captures, ulong? hostTicks = null) => TestLiveness.Until(
             reason: () => $"Only {Scheduler.Entries.Count} of {captures} captures were decided.",
             step: () => {
-                Iterate(hostTicks: hostTicks);
+                // Once the view is ready, a capture still held waits on the display encode's build, which also runs on the
+                // pool and has no wait of its own here: hand the pump no host time then, so the hold budget is not spent
+                // racing it. The clock steps on as soon as the capture is served.
+                Iterate(hostTicks: ((View.IsReady && Scheduler.AwaitsFrame)
+                    ? 0UL
+                    : hostTicks));
 
                 return (Scheduler.Entries.Count >= captures);
             },
