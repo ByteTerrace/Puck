@@ -1,0 +1,145 @@
+schema: "puck.world.definition.v1"
+documentId: "arena-attack-canary"
+
+import "../../../src/Puck.World/Assets/worlds/modules/arena" as arena
+
+bodies {
+  capacity: 3
+  localSeats: 1
+  seatSpawns [
+    "arena-arrival"
+  ]
+}
+
+bodyMotionPrograms [
+  {
+    kind: Motion
+    name: "visitorMotion"
+    operations [ResolveYawAttitudeAndPlanarFrame, ResolveHold, ComputePlanarTargetVelocity, ShapeVelocity, SnapYawToPlanarIntent, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]
+    version: "puck.body.program.v1"
+  }
+]
+
+channels [
+  {
+    name: "forward"
+    role: MoveAdvance
+    shape: Bipolar
+  }
+  {
+    name: "strafe"
+    role: MoveStrafe
+    shape: Bipolar
+  }
+  {
+    name: "turn"
+    role: Turn
+    shape: Bipolar
+  }
+]
+
+collision {
+  contactSkin: 0.02
+  gradientProbe: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
+}
+
+defaultSeatKit: "visitor"
+
+dynamics [
+  {
+    f: 0.9549
+    name: "chase"
+    r: 1
+    zeta: 1
+  }
+]
+
+kits {
+  rows [
+    {
+      bodyContact: Solid
+      bodyMotionProgram: "visitorMotion"
+      collider: capsule(endpoint: [0, 1, 0], radius: 0.35)
+      motion {
+        facingSnap: true
+        holds [
+          {
+            bond: Surface
+            cone [0, 60]
+            envelope {
+              sinkSpeed: 20
+            }
+            gravity {
+              fall: 23
+              rise: 14
+            }
+            hold: Gravity
+            name: "ground"
+            reach: 1.2
+          }
+          {
+            bond: Free
+            envelope {
+              sinkSpeed: 20
+            }
+            gravity {
+              fall: 23
+              rise: 14
+            }
+            hold: Gravity
+            name: "air"
+          }
+        ]
+        shaping [
+          {
+            along {
+              engage: 30
+              release: 17
+            }
+          }
+        ]
+        speed {
+          value: 4
+        }
+        turn {
+          rate: 2.5
+        }
+      }
+      name: "visitor"
+    }
+  ]
+}
+
+properties {
+  names [
+    "arena$hot"
+    "arena$flammable"
+    "arena$cold"
+    "arena$freezable"
+  ]
+}
+
+simulation {
+  rateHz: 30
+}
+
+views {
+  seatControl {
+    maxPitch: 1.2
+    minPitch: -0.35
+    yawReference: World
+  }
+
+  seatRig "seatChase" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5.4626001, pitch: 0.4145069, pivotOffset: [0, 0, 0], yaw: 0)
+      lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false)
+      fieldOfView(fieldOfViewRadians: 0.9599311)
+      dynamics(row: chase)
+    ]
+  }
+}

@@ -7,7 +7,7 @@
   "timeoutSeconds": 25,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/arena-attack/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/arena-attack/fixture.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
@@ -31,7 +31,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/arena-attack/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/arena-attack/fixture.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
