@@ -13,7 +13,7 @@ public sealed partial class SdfPassPlanLawTests {
 
     // The temporal resolve reads the history the previous frame wrote and writes this frame's, both at the output extent
     // and one storage a frame slot, beside the lit image and the surface transport; the reactivity views writes is one
-    // transient render-extent buffer the resolve consumes within the frame. The sky never enters the history: the sky
+    // retained render-extent buffer the resolve consumes within the frame. The sky never enters the history: the sky
     // and composite passes follow the resolve.
     [Fact]
     public void TheTemporalResolveReadsLastFramesHistoryAndWritesThisFrames() {
@@ -34,7 +34,7 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.Equal(expected: ShaderPipelineDimensions.Relative(), actual: color.Declaration.Dimensions);
         Assert.Equal(expected: [ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports], actual: surface.Declaration.Count!.Single().Per);
         Assert.Equal(expected: SdfWorldPackage.HistorySurfaceWords, actual: surface.Declaration.Count!.Single().Elements);
-        Assert.True(condition: reactivity.Declaration.Transient);
+        Assert.True(condition: reactivity.Declaration.Retained);
         Assert.Equal(expected: [ShaderPipelineCountBasis.RenderExtent, ShaderPipelineCountBasis.Viewports], actual: reactivity.Declaration.Count!.Single().Per);
 
         var resolve = plan.Passes.Single(predicate: static pass => (pass.Package!.Part == SdfWorldPackage.Resolve));

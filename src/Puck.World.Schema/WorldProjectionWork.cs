@@ -3,7 +3,7 @@ using Puck.Abstractions.Counting;
 namespace Puck.World;
 
 /// <summary>
-/// The deterministic work an authority does to keep presentation-tier recipients current, counted in a
+/// The work an authority does to keep presentation-tier recipients current, counted in a
 /// <see cref="WorkCounterSet"/> under the source name <see cref="SourceName"/>: the projections it composes, the whole
 /// projections and the member
 /// deltas it delivers and their bytes, the clock anchors it sends, and the anchor rows it holds for its recipients,
@@ -37,8 +37,9 @@ public sealed class WorldProjectionWork : IWorkCounterSource {
     /// carry.</summary>
     public static WorkKind Documents { get; } = new(name: "world.projection.documents", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting projections composed: every disclosure of the document to a presentation-tier
-    /// reader, a recipient's delivery and a one-off read alike, whether or not it then owes anything.</summary>
-    public static WorkKind Compositions { get; } = new(name: "world.projection.compositions", unit: "count", workClass: WorkClass.Deterministic);
+    /// reader, a recipient's delivery and a one-off read alike, whether or not it then owes anything. Fetch authorization
+    /// also composes, so this count depends on the recipient cache retained across runs.</summary>
+    public static WorkKind Compositions { get; } = new(name: "world.projection.compositions", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting member deltas delivered: the members of a recipient's projection that changed,
     /// and nothing else.</summary>
     public static WorkKind Deltas { get; } = new(name: "world.projection.deltas", unit: "count", workClass: WorkClass.Deterministic);
@@ -54,6 +55,10 @@ public sealed class WorldProjectionWork : IWorkCounterSource {
     /// <summary>Gets the kind counting anchor rows released: every row a recipient held, when it leaves or loses
     /// disclosure.</summary>
     public static WorkKind AnchorRowsReleased { get; } = new(name: "world.projection.anchor-rows.released", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the count of prototype objects fetched on recipient cache misses.</summary>
+    public static WorkKind PrototypeFetches { get; } = new(name: "world.projection.prototype-fetches", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the canonical prototype body bytes delivered by fetches.</summary>
+    public static WorkKind PrototypeBytes { get; } = new(name: "world.projection.prototype-bytes", unit: "bytes", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the ledger's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds => Order.Kinds;
@@ -125,6 +130,8 @@ public sealed class WorldProjectionWork : IWorkCounterSource {
             Documents,
             Deltas,
             Bytes,
+            PrototypeFetches,
+            PrototypeBytes,
             Anchors,
             AnchorRowsRetained,
             AnchorRowsReleased,

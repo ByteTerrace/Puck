@@ -9,17 +9,18 @@
 // C (3 words): the terminal field radius, the acceptance threshold, then the seam's blend weight as a 15-bit fraction
 //    in bits 0..14 and its other material plus one in bits 15..31, so every material from -1 up is exact.
 // L (4 words): the winning SDF shape's transform slot (SDF_TRANSFORM_SLOT_NONE for static geometry), or a mesh hit's
-//    triangle, in the first word. The remaining words are reserved. Anonymous lanes are read exactly from the winning transform row.
+//    triangle, in the first word; one reserved word, then the ambient and shadow passes' replaceable query tallies.
+//    Anonymous lanes are read exactly from the winning transform row.
 // N (2 words): the geometric normal as a 16-bit signed octahedral pair (a zero normal is its own sentinel), and the
 //    gradient magnitude.
 // S (2 words): curvature and ambient occlusion as halves, then the surface flags in bits 0..7 and the surface and
-//    ambient query count, saturated, in bits 8..31. Surface flag bit 0 marks an ordinary lit, non-screen surface, the
+//    query count, saturated, in bits 8..31. Surface flag bit 0 marks an ordinary lit, non-screen surface, the
 //    only kind the ambient pass occludes.
 // K (1 word): four eight-bit stable-slot visibilities, 1 where no shadow was marched. The shadow stage writes it
 //    only when soft shadows are on and K is nonzero; views reads it only then.
 // V and the identity in it are exact; the packed fields round only presentation values.
 // Primary writes V, C and L for every active pixel, misses included; surface writes N and S; ambient updates S; shadow
-// writes K and adds its queries to S. Views reads the whole record once, as one surface sample (SdfSurfaceSample).
+// writes K and its query word. Views reads the whole record once, as one surface sample (SdfSurfaceSample).
 //
 // The identity names what the pixel sees: its kind (SDF_VISIBILITY_KIND_*) above SDF_VISIBILITY_KIND_SHIFT and its
 // source in SDF_VISIBILITY_SOURCE_MASK, both generated from SdfVisibility, which a pick decodes with. A background pixel
@@ -266,6 +267,9 @@ SdfSurfaceSample sdfLoadSurfaceSample(uint record) {
 void sdfVisibilityStoreWord(uint word, uint value) {
     sdfVisibilityRecordBuffer[word] = value;
     sdfWorkTexels = 1u;
+}
+void sdfStoreVisibilityQueries(uint record, uint word, float queries) {
+    sdfVisibilityStoreWord(record + word, min((uint)queries, SdfVisibilitySurfaceQueryMask));
 }
 void sdfVisibilityStoreRow(uint word, uint4 bits) {
     sdfVisibilityStoreWord(word, bits.x);

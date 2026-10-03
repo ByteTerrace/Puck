@@ -97,6 +97,23 @@ public sealed partial class ShaderPipelineRenderNode {
             written.Valid = (output.Resource.Alias.Target is null);
         }
     }
+    private void SkippedCadence(RuntimePass pass) {
+        if (pass.Cadence is not { } cadence) { return; }
+        cadence.Signature = null;
+        foreach (var output in cadence.Writes) {
+            var version = output.Resource.Cadence[output.Version];
+
+            if (output.PreservesPredecessor && (output.Version > 0)) {
+                var predecessor = output.Resource.Cadence[(output.Version - 1)];
+
+                version.Generation = predecessor.Generation;
+                version.Valid = predecessor.Valid;
+            } else if (!version.Valid) {
+                version.Generation = ++m_contentGeneration;
+                version.Valid = true;
+            }
+        }
+    }
     private void InvalidateCadence() {
         foreach (var resource in m_resources) {
             foreach (var version in resource.Cadence) { version.Valid = false; }

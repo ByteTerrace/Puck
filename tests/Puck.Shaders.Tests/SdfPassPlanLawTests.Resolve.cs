@@ -93,7 +93,7 @@ public sealed partial class SdfPassPlanLawTests {
         );
         var currentColor = ResolvedPlan.Pipeline.Storages.Single(predicate: static storage => storage.Versions.Contains(value: $"{Sdf}${SdfWorldPackage.CurrentColor}"));
 
-        Assert.True(condition: currentColor.Declaration.Transient);
+        Assert.True(condition: currentColor.Declaration.Retained);
         Assert.Equal(expected: ShaderPipelineDimensions.Render(), actual: currentColor.Declaration.Dimensions);
 
         // Every storage a node allocates for the plan, each image at its declared extent and format and each buffer at

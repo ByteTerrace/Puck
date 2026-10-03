@@ -101,7 +101,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                         pass: pass,
                         slot: slot
                     );
-                    if (pass.Cadence is { } inactive) { inactive.Signature = null; }
+                    SkippedCadence(pass: pass);
                     m_work.SkipPass(pass: index);
 
                     continue;

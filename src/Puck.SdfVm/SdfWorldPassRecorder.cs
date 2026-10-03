@@ -41,6 +41,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private readonly string m_part;
     // Whether the pass belongs to the temporal fragment (SdfWorldPackage.TemporalFragment).
     private readonly bool m_temporal;
+    private readonly bool m_resolved;
     private readonly int m_fadeCapacity;
 
     // The view the pass records, followed in place when the instance resolves another its passes can record
@@ -94,6 +95,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         var fragment = owner.FragmentOf(instance: context.Instance)!;
 
         m_temporal = fragment.Resources.Any(predicate: static resource => resource.History);
+        m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
         var incoming = context.Inputs.Concat(second: context.Outputs).SingleOrDefault(predicate: resource => (LocalName(resource: resource) == SdfWorldPackage.IncomingVisibility));
 
         m_fadeCapacity = ((incoming is null) ? 0 : ShaderPipelineRenderNode.ParseFormat(format: incoming.Format) switch {
@@ -256,6 +258,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         }
 
         return (quality.DisableSoftShadows || (frame.Lights.ShadowSlots.SlotCount == 0));
+    }
+    public ulong? Signature(in FrameContext context) => m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context);
+    public void Submitted() {
+        if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }
     }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         Follow();

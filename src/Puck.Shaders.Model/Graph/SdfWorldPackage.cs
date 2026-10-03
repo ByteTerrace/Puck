@@ -12,7 +12,7 @@ namespace Puck.Shaders;
 /// read-only member for its readers.</para>
 /// <para>The fragment (<see cref="Fragment"/>) is one view: the instance masks, the beam, the cull arguments, the mesh
 /// pass, primary traversal, surface, ambient and shadow resolution, shading the hits into the lit image, then the sky's
-/// field runs and the composite that writes the output. Its scratch is transient,
+/// field runs and the composite that writes the output. Its scratch is retained,
 /// one allocation shared by every frame slot, and scales with the counts its host resolves: the view's extent, one
 /// viewport, its tiles at <see cref="TileSize"/>, and the program's instances and instance-mask words.</para>
 /// </summary>
@@ -419,7 +419,7 @@ public static partial class SdfWorldPackage {
         ShaderWorkCounters.BufferMember,
         .. Tables,
     ];
-    /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch transient and counted, its
+    /// <summary>Gets the fragment the package runs as: one view's dispatch set, its scratch retained and counted, its
     /// one output the view's color. Views shades the hits into the lit image (<see cref="Parts.Lit"/>), the sky evaluates
     /// its field runs where the lit image's coverage is below one (<see cref="Parts.Sky"/>), and the composite writes the
     /// color (<see cref="Parts.Composite"/>). Every pass counts its kernels' march steps and texels written into the work counters
@@ -449,9 +449,9 @@ public static partial class SdfWorldPackage {
             Pass(inputs: [Parts.Lit, Parts.CullBounds, Parts.ShadowVisibility, .. SkyRuns], name: Parts.Composite, outputs: [Color]) with { Members = SkyMembers },
         ],
         Resources: [
-            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, transient: true),
+            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, retained: true),
             .. SkyResources,
-            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, transient: false),
+            Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, retained: false),
             Buffer(
                 count: [Term(1, ShaderPipelineCountBasis.Viewports, ShaderPipelineCountBasis.Tiles, ShaderPipelineCountBasis.InstanceMaskWords)],
                 name: Parts.InstanceMasks,
@@ -469,14 +469,14 @@ public static partial class SdfWorldPackage {
             ),
             Buffer(count: null, name: Parts.Arguments, sizeBytes: ShaderPipelineDispatch.ArgumentBytes, strideBytes: sizeof(uint)),
             Buffer(count: null, name: Parts.CullBounds, sizeBytes: CullBoundsByteLength, strideBytes: sizeof(uint)),
-            Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, transient: true),
+            Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, retained: true),
             new ShaderPipelineResource(
                 Dimensions: ShaderPipelineDimensions.Relative(),
                 Format: MeshDepthFormat.ToString(),
                 ClearDepth: MeshClearDepth,
                 Kind: ShaderPipelineResourceKind.Depth,
                 Name: Parts.MeshDepth,
-                Transient: true
+                Retained: true
             ),
             Visibility(from: null, name: Parts.Visibility),
             Visibility(from: Parts.Visibility, name: Parts.SurfaceVisibility),
@@ -514,23 +514,23 @@ public static partial class SdfWorldPackage {
         Elements: elements,
         Per: per
     );
-    private static ShaderPipelineResource Image(string name, GpuPixelFormat format, string? from, bool transient) => new(
+    private static ShaderPipelineResource Image(string name, GpuPixelFormat format, string? from, bool retained) => new(
         Dimensions: ShaderPipelineDimensions.Relative(),
         Format: format.ToString(),
         From: from,
         Name: name,
-        Transient: transient
+        Retained: retained
     );
-    // A transient buffer counted by its bases, or of a fixed size.
+    // A retained buffer counted by its bases, or of a fixed size.
     private static ShaderPipelineResource Buffer(string name, uint strideBytes, ulong? sizeBytes, IReadOnlyList<ShaderPipelineCountTerm>? count) => new(
         Count: count,
         Kind: ShaderPipelineResourceKind.Buffer,
         Name: name,
         SizeBytes: sizeBytes,
         StrideBytes: strideBytes,
-        Transient: true
+        Retained: true
     );
-    // A version of the visibility records forwarding another: the storage's declaration, less the transient class only its
+    // A version of the visibility records forwarding another: the storage's declaration, less the retained class only its
     // first version declares.
     private static ShaderPipelineResource Visibility(string name, string? from) => new(
         Count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)],
@@ -538,7 +538,8 @@ public static partial class SdfWorldPackage {
         Kind: ShaderPipelineResourceKind.Buffer,
         Name: name,
         StrideBytes: VisibilityRecordByteLength,
-        Transient: (from is null)
+        Retained: (from is null),
+        PreservesPredecessor: (from is not null)
     );
     // A compute pass, whose kernel counts its own work as every pass of the fragment does.
     private static RenderGraphFragmentPass Pass(string name, string[] outputs, string[]? inputs = null) => new(

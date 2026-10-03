@@ -26,6 +26,8 @@ public interface IWorldTransferForwarder {
     bool TryForwardSubmission(WorldServer source, in WorldMobilityIdentity mobility, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason);
     /// <summary>Resolves the final observable authority epoch behind a departed traveler incarnation.</summary>
     bool TryDescribeForwarding(WorldServer source, in WorldMobilityIdentity mobility, out WorldAuthorityRouteDescription route, out string reason);
+    /// <summary>Fetches a prototype through the departed traveler's current projection.</summary>
+    byte[]? FetchForwardedPrototype(WorldServer source, WorldTravelerObservation request, Puck.Assets.ContentPin pin);
     /// <summary>Streams the current owner's projection for an already authenticated departed traveler.</summary>
     /// <param name="source">The authority whose committed onward route is followed.</param>
     /// <param name="request">The credential and remaining disclosure/work bounds.</param>
