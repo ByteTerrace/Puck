@@ -64,6 +64,9 @@ public sealed class ReplayArmingLawTests {
         var stop = harness.Tape.StopRecording();
 
         Assert.True(condition: stop.Verdict!.Passing, userMessage: stop.Verdict.Describe());
+        // The verdict alone cannot tell: a second copy of the open tick's intent re-drives the same state. The tape's
+        // own first tick shows it: nothing was submitted for that tick after the arm, so it carries no intent.
+        Assert.Empty(collection: ReadTape(path: stop.Path).Ticks[0].Intents);
     }
     [Fact]
     public void ATapeWhoseCheckpointWasTakenAtTheWrongTickReportsMismatchAtItsFirstTick() {
