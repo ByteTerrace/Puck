@@ -87,7 +87,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format token, or checks it with `--check`. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds the affected canaries and parity. |
-| [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) | reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE` and `CAPACITY` lines an agent admits or holds work by; `--watch` streams one line per change. |
+| [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) | reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE` and `CAPACITY` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in a worktree of its own, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
 | [`puck lengths`](#puck-lengths-and-puck-comment-smellsratchet-ledgers) | regenerates `FileLengths.json`, the ratchet ledger the file-length build error (LEN001–LEN004) reads, or checks it with `--check`; a recorded length only falls. |
@@ -841,12 +841,15 @@ CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
   `Puck.DirectX.Tests`, `Puck.Vulkan.Tests` or `Puck.World.Tests`, whose
   device laws open the GPU. Builds, restores, MSBuild nodes, compilers and
   shells never count, whatever project they name, and the verb never counts
-  itself.
+  itself. The classifier uses the running executable or managed entry assembly;
+  a `dotnet run` wrapper does not count; its World child counts once it starts.
+  Canary `--list` and `--plan`, parity/counters `compare`, and help count no GPU work.
 - `PRESSURE` appears while free memory is under `--pressure-ram` or free disk
   is under `--pressure-disk`, at most once every five minutes.
 - Otherwise `CAPACITY` appears while the CPU mean is under `--capacity-cpu` and
   free memory is over `--capacity-ram`, at most once every ten minutes.
-  `PRESSURE` wins over `CAPACITY` within one reading.
+  It waits for a full CPU window. `PRESSURE` wins over `CAPACITY` within one
+  reading.
 
 A threshold left out is never judged, so with none the verb reports only the GPU
 state. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
@@ -863,7 +866,14 @@ operating-system queries: kernel CPU time, the memory status, the process list
 and each process's command line on Windows, and `/proc` on Linux. The verb
 starts no process and is never itself heavy or GPU work.
 
-Exit codes: 0 done, 2 refused (an interval or window below 1), 130 cancelled.
+Thresholds must be finite and nonnegative; `--capacity-cpu` must be at most 100.
+A `NaN` CPU or memory reading cannot produce `CAPACITY`; a failed CPU reading
+stays in the mean until it leaves the window.
+An unreadable process command line cannot identify a managed entry assembly or
+CLI verb; a recognizable World or device-test apphost still counts by name.
+
+Exit codes: 0 done, 2 refused (invalid thresholds or an interval or window below
+1), 130 cancelled.
 
 ## `puck laws prove`—a law against its fix
 

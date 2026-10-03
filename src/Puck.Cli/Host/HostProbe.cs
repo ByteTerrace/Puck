@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.InteropServices;
 
@@ -39,6 +40,9 @@ internal sealed partial class HostProbe(string checkoutRoot) {
     [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool GlobalMemoryStatusEx(ref MemoryStatusEx status);
+    [LibraryImport(libraryName: "kernel32.dll", EntryPoint = "GetDiskFreeSpaceExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
+    private static partial bool GetDiskFreeSpaceEx(string directory, out ulong available, out ulong total, out ulong free);
     [LibraryImport(libraryName: "ntdll.dll")]
     private static unsafe partial int NtQueryInformationProcess(nint process, uint informationClass, void* information, uint length, out uint returned);
     [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
@@ -47,7 +51,7 @@ internal sealed partial class HostProbe(string checkoutRoot) {
     private static unsafe string CommandLine(int processId) {
         if (OperatingSystem.IsLinux()) {
             try {
-                return File.ReadAllText(path: $"/proc/{processId.ToString(provider: CultureInfo.InvariantCulture)}/cmdline").Replace(newChar: ' ', oldChar: '\0').Trim();
+                return File.ReadAllText(path: $"/proc/{processId.ToString(provider: CultureInfo.InvariantCulture)}/cmdline");
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 return string.Empty;
             }
@@ -122,6 +126,37 @@ internal sealed partial class HostProbe(string checkoutRoot) {
         return double.NaN;
     }
 
+    /// <summary>Computes CPU busy percentage from two counter readings, or NaN when the interval is unusable.</summary>
+    /// <param name="before">The previous idle and total counters.</param>
+    /// <param name="after">The current idle and total counters.</param>
+    /// <returns>The interval's busy percentage.</returns>
+    public static double CpuPercent((ulong Idle, ulong Total)? before, (ulong Idle, ulong Total)? after) =>
+        (((before is { } previous) && (after is { } current) && (current.Total > previous.Total) &&
+            (current.Idle >= previous.Idle) && ((current.Idle - previous.Idle) <= (current.Total - previous.Total)))
+            ? (100.0 * (1.0 - ((current.Idle - previous.Idle) / ((double)(current.Total - previous.Total)))))
+            : double.NaN);
+    /// <summary>Queries the filesystem's available bytes and converts them to gigabytes.</summary>
+    /// <param name="directory">The working directory.</param>
+    /// <param name="availableBytes">The operating-system query.</param>
+    /// <returns>The available gigabytes.</returns>
+    public static double FreeDiskGb(string directory, Func<string, ulong> availableBytes) =>
+        (availableBytes(arg: directory) / 1073741824.0);
+
+    private static ulong AvailableDiskBytes(string directory) {
+        if (OperatingSystem.IsWindows()) {
+            // DriveInfo rejects UNC shares. The native query accepts a directory, including a share or mount point.
+            var path = (Path.EndsInDirectorySeparator(path: directory) ? directory : (directory + Path.DirectorySeparatorChar));
+
+            if (!GetDiskFreeSpaceEx(available: out var available, directory: path, free: out _, total: out _)) {
+                throw new Win32Exception(error: Marshal.GetLastPInvokeError());
+            }
+
+            return available;
+        }
+
+        return ((ulong)new DriveInfo(driveName: directory).AvailableFreeSpace);
+    }
+
     /// <summary>Takes one reading. The CPU figure covers the time since the previous reading; the first reading waits
     /// <paramref name="firstInterval"/> to have an interval at all.</summary>
     /// <param name="firstInterval">How long the first reading measures CPU over.</param>
@@ -133,9 +168,7 @@ internal sealed partial class HostProbe(string checkoutRoot) {
         }
 
         var times = CpuTimes();
-        var cpu = (((m_previous is { } before) && (times is { } after) && (after.Total > before.Total))
-            ? (100.0 * (1.0 - ((after.Idle - before.Idle) / ((double)(after.Total - before.Total)))))
-            : double.NaN);
+        var cpu = CpuPercent(after: times, before: m_previous);
 
         m_previous = times;
 
@@ -164,7 +197,7 @@ internal sealed partial class HostProbe(string checkoutRoot) {
         return new HostSample(
             At: DateTimeOffset.UtcNow,
             CpuPercent: cpu,
-            FreeDiskGb: (new DriveInfo(driveName: (Path.GetPathRoot(path: checkoutRoot) ?? checkoutRoot)).AvailableFreeSpace / 1073741824.0),
+            FreeDiskGb: FreeDiskGb(availableBytes: AvailableDiskBytes, directory: checkoutRoot),
             FreeRamGb: FreeRamGb(),
             GpuHolder: holder,
             ReuseNodes: reuse

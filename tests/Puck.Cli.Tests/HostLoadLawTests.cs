@@ -108,4 +108,65 @@ public sealed class HostLoadLawTests {
         Assert.False(condition: HostProcesses.IsReuseNode(commandLine: @"dotnet ""C:\Program Files\dotnet\sdk\10.0.401\MSBuild.dll"" /nodemode:1 /nodeReuse:false", name: "dotnet"));
         Assert.False(condition: HostProcesses.IsReuseNode(commandLine: "pwsh -c dotnet build -nodeReuse:true", name: "pwsh"));
     }
+    [InlineData("dotnet", "dotnet run --project src/Puck.World")]
+    [InlineData("dotnet", "dotnet test tests/Puck.Cli.Tests --logger Puck.World.dll")]
+    [InlineData("dotnet", "dotnet tool run puck canary x")]
+    [InlineData("tool", "tool /tmp/puck canary")]
+    [InlineData("dotnet", "dotnet /tmp/tool.dll --input /tmp/Puck.World.dll")]
+    [InlineData("dotnet", "dotnet /tmp/tool.dll --input /tmp/Puck.Cli.dll canary")]
+    [InlineData("puck", "puck canary --list")]
+    [InlineData("puck", "puck canary --plan --merge")]
+    [InlineData("puck", "puck parity compare left right --contract contract.json")]
+    [InlineData("puck", "puck counters compare left right")]
+    [InlineData("puck", "puck counters --help")]
+    [Theory]
+    public void OnlyTheRunningEntryPointCanClaimGpuWork(string name, string commandLine) =>
+        Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
+    [InlineData("Puck.Cli", "\"C:/a path/Puck.Cli.exe\" parity")]
+    [InlineData("dotnet", "dotnet exec --runtimeconfig runtime.json \"C:/a path/Puck.World.dll\" --world build")]
+    [InlineData("dotnet", "dotnet exec /tmp/Puck.Vulkan.Tests.dll")]
+    [InlineData("Puck.World.Test", "/tmp/Puck.World.Tests --port 1")]
+    [InlineData("Puck.World", "Puck.World --world build")]
+    [InlineData("puck", "puck canary --list false --plan false --merge")]
+    [InlineData("puck", "puck counters --world compare --script script")]
+    [InlineData("dotnet", "dotnet\0/tmp/a path/Puck.World.dll\0--world\0build\0")]
+    [Theory]
+    public void ApphostsAndManagedEntryPointsAreGpuWorkRegardlessOfArgumentWords(string name, string commandLine) =>
+        Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
+    [InlineData("dotnet", "dotnet tool.dll --text nodeReuse:true")]
+    [InlineData("dotnet", "dotnet MSBuild.dll /nodeReuse:true")]
+    [Theory]
+    public void ReuseRequiresAnActualMsbuildWorker(string name, string commandLine) =>
+        Assert.False(condition: HostProcesses.IsReuseNode(commandLine: commandLine, name: name));
+    [InlineData("--capacity-cpu", "NaN")]
+    [InlineData("--capacity-cpu", "Infinity")]
+    [InlineData("--capacity-cpu", "-1")]
+    [InlineData("--capacity-cpu", "101")]
+    [InlineData("--capacity-ram", "-1")]
+    [InlineData("--pressure-ram", "NaN")]
+    [InlineData("--pressure-disk", "-1")]
+    [Theory]
+    public void ThresholdsRefuseNonphysicalValuesBeforeReadingTheMachine(string option, string value) =>
+        Assert.NotEmpty(collection: HostCommand.Create().Parse(args: ["load", option, value]).Errors);
+    [InlineData(100UL, 1000UL, 99UL, 1010UL)]
+    [InlineData(100UL, 1000UL, 120UL, 1010UL)]
+    [Theory]
+    public void InconsistentCpuCountersCannotAdmitWork(ulong idleBefore, ulong totalBefore, ulong idleAfter, ulong totalAfter) {
+        var cpu = HostProbe.CpuPercent(after: (idleAfter, totalAfter), before: (idleBefore, totalBefore));
+        var monitor = new HostLoadMonitor(cpuSamples: 1, thresholds: Laptop);
+
+        Assert.True(condition: double.IsNaN(d: cpu));
+        Assert.Equal(expected: ["GPU idle"], actual: Kinds(lines: monitor.Observe(sample: Reading(seconds: 0, cpu: cpu))));
+    }
+    [InlineData("/mnt/checkout/worlds")]
+    [InlineData("//server/share/checkout")]
+    [Theory]
+    public void DiskSpaceIsQueriedAtTheWorkingDirectoryIncludingMountsAndShares(string directory) {
+        var free = HostProbe.FreeDiskGb(directory: directory, availableBytes: path => {
+            Assert.Equal(actual: path, expected: directory);
+            return (3UL * 1073741824);
+        });
+
+        Assert.Equal(actual: free, expected: 3);
+    }
 }

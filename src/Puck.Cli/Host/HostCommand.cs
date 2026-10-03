@@ -7,6 +7,13 @@ namespace Puck.Cli.Host;
 internal static class HostCommand {
     private const string LoadVerb = "host load";
 
+    private static void ValidateThreshold(Option<double?> option, double? maximum = null) {
+        option.Validators.Add(item: result => {
+            if ((result.GetValueOrDefault<double?>() is { } value) && (!double.IsFinite(d: value) || (value < 0) || ((maximum is { } limit) && (value > limit)))) {
+                result.AddError(errorMessage: $"{option.Name} must be finite and {((maximum is { } upper) ? $"between 0 and {upper}" : "nonnegative")}.");
+            }
+        });
+    }
     private static int Load(bool watch, int interval, int window, HostLoadThresholds thresholds, CancellationToken cancellationToken) {
         if ((interval < 1) || (window < 1)) {
             return CliExit.Refuse(verb: LoadVerb, what: "--interval and --window", why: "must each be at least 1.");
@@ -44,6 +51,11 @@ internal static class HostCommand {
         var capacityRamOption = new Option<double?>(name: "--capacity-ram") { Description = "CAPACITY needs free memory above this many gigabytes (with --capacity-cpu)." };
         var pressureRamOption = new Option<double?>(name: "--pressure-ram") { Description = "PRESSURE when free memory is below this many gigabytes." };
         var pressureDiskOption = new Option<double?>(name: "--pressure-disk") { Description = "PRESSURE when free disk on the working directory's drive is below this many gigabytes." };
+
+        ValidateThreshold(maximum: 100, option: capacityCpuOption);
+        ValidateThreshold(option: capacityRamOption);
+        ValidateThreshold(option: pressureRamOption);
+        ValidateThreshold(option: pressureDiskOption);
         var command = new Command(
             description: "Report CPU, memory, disk and GPU busyness as admission lines: GPU busy|idle, PRESSURE, CAPACITY.",
             name: "load"
@@ -63,13 +75,15 @@ internal static class HostCommand {
               GPU work is the World (Puck.World or Puck.World.dll), a canary, parity or counters verb,
               or a test host for Puck.DirectX.Tests, Puck.Vulkan.Tests or Puck.World.Tests. Builds,
               restores, MSBuild nodes, compilers and shells never are, and the verb never counts itself.
+              Canary --list/--plan, parity/counters compare, and help run no GPU work.
               reuseNodes counts MSBuild nodes left for reuse by a build or restore run without
               -nodeReuse:false.
 
               The readings are cheap operating-system queries: the verb starts no process and is never
               itself heavy or GPU work. Without --watch it takes one reading over one second and exits.
 
-              Exit codes: 0 done; 2 refused (an interval or window below 1); 130 cancelled.
+              Thresholds must be finite and nonnegative; --capacity-cpu must be at most 100.
+              Exit codes: 0 done; 2 refused (invalid thresholds or an interval or window below 1); 130 cancelled.
             """);
         command.SetAction(action: (parseResult, cancellationToken) => Task.Run(function: () => Load(
             cancellationToken: cancellationToken,
