@@ -3,7 +3,7 @@
   "world": "games/hiddenranks.puck",
   "host": {
     "kind": "fixture",
-    "path": "tests/Puck.World.Tests/Fixtures/minimal-hiddenranks-host.world.json"
+    "path": "tests/Puck.World.Tests/Fixtures/minimal-hiddenranks-host.puck"
   },
   "expectsStateChange": true,
   "steps": [

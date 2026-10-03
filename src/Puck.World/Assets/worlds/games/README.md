@@ -466,7 +466,7 @@ of the well.
 [hiddenranks.puck](hiddenranks.puck) is a module fragment, not a bootable world: the
 board, the two armies and the rules, over a 10×10 `grid` topology
 (`hiddenRanksField`, cell ordinal = row × 10 + column counting from red's back
-rank). `minimal-hiddenranks-host.world.json` under
+rank). `minimal-hiddenranks-host.puck` under
 [`tests/Puck.World.Tests/Fixtures`](../../../../../tests/Puck.World.Tests/Fixtures)
 supplies the two local seats and the `attack` channel the module's rules read.
 
