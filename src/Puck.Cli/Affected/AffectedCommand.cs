@@ -258,6 +258,7 @@ internal static class AffectedCommand {
             ),
             worldClosure: closure,
             worldInput: WorldInput,
+            compiledUnchanged: AffectedCompiledWorlds.Unchanged(changed: changed, repositoryRoot: repositoryRoot, since: since).Contains,
             deleted: deleted,
             // A file deleted since the base is placed through the index the base recorded, which is the only one that
             // can still name it, or through the stand-ins the base's own tree gave it there.
@@ -589,6 +590,12 @@ internal static class AffectedCommand {
               only when its project is one the World is built from. Build infrastructure (build/,
               Directory.Build.*, Directory.Packages.props, global.json, Puck.slnx, NuGet.config)
               reaches every suite, and every canary only when the file is an input of the World build.
+              A changed .puck or .world.json under {ShippedTree} reaches no canary when its stem's
+              document compiles to the same value at the base and in the working tree: object member
+              order and number spelling do not matter; array order does. Both paths of a JSON-to-source
+              replacement are judged. Its owner's suites, catalog check and changed test blocks still
+              run, and the path is neither unmapped nor unplaced deleted. Libraries, compositions,
+              missing documents and failed compilations keep ordinary selection.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test, and
               prints as a test line. A catalog line names the game's Release catalog, followed by the

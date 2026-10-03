@@ -81,6 +81,9 @@ internal static class AffectedSelection {
     /// <param name="standInsFor">The indexed sources a changed file the index does not know stands for
     /// (<see cref="AffectedStandIns"/>): their canaries are its canaries, and a file with an indexed stand-in is not
     /// unmapped.</param>
+    /// <param name="compiledUnchanged">Whether a changed shipped world file compiles to the same document value at the
+    /// base and the head (<see cref="AffectedCompiledWorlds"/>): a canary boots the compiled world, so such a file reaches
+    /// its suites and the catalog check but no canary, and it is never unmapped.</param>
     /// <param name="deleted">The changed files deleted since the base, or <see langword="null"/> for none: nothing reads
     /// them, and one no index places is listed in <see cref="AffectedPlan.Deleted"/>, never as unmapped.</param>
     /// <param name="recorded">The index as the base recorded it, which places a deleted file the current index no longer
@@ -105,6 +108,7 @@ internal static class AffectedSelection {
         Func<string, IReadOnlyList<string>> standInsFor,
         Func<string, IReadOnlySet<string>> canariesReaching,
         Func<string, bool> worldInput,
+        Func<string, bool>? compiledUnchanged = null,
         IReadOnlySet<string>? deleted = null,
         IReadOnlyDictionary<string, IReadOnlySet<string>>? recorded = null,
         Func<string, IReadOnlyList<string>>? recordedStandInsFor = null,
@@ -154,6 +158,17 @@ internal static class AffectedSelection {
                 declaresTests(arg: path)
             ) {
                 _ = worlds.Add(item: path);
+            }
+
+            if (compiledUnchanged?.Invoke(arg: path) == true) {
+                var unchangedOwner = owners.FirstOrDefault(predicate: project => IsUnder(path: path, directory: project.Directory));
+
+                catalog |= catalogInputs(arg1: path, arg2: unchangedOwner?.Name);
+                if (unchangedOwner is not null) {
+                    _ = seeds.Add(item: unchangedOwner.Name);
+                }
+
+                continue;
             }
 
             var named = false;

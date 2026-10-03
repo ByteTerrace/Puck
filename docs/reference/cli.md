@@ -771,6 +771,16 @@ base, so passing both is refused.
   adjacencies or post-process packages need the host's resolvers still reaches
   them.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
+- A changed `.puck` or `.world.json` under `src/Puck.World/Assets/worlds`
+  chooses no canary when the document named by its stem compiles to the same
+  value at the base and in the working tree. Both sides use the world's document
+  reader, with the base's shipped assets extracted from git. Object member order
+  and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
+  array order and every member's value do. A JSON-to-source replacement judges
+  both paths. The owner's suites, catalog check and changed test blocks still
+  run, and neither path is listed as `unmapped` or unplaced `deleted`.
+  Libraries and compositions keep ordinary selection, as do missing documents
+  and failed compilations: none establishes that the compiled value is unchanged.
 - A file no canary can execute is placed through the indexed C# sources it
   stands for. A project file or `NativeMethods.txt` stands for its project's
   sources. A restore lock (`packages.lock.json`) reaches its own project's
