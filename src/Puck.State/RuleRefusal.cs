@@ -184,7 +184,7 @@ public enum RuleRefusal : byte {
     VectorRememberShape,
 
     /// <summary>A vector cell was targeted by an effect kind that does not admit vectors.</summary>
-    [Refusal(door: "state.rule.compile", condition: "a vector cell was targeted by an unsupported effect kind", kind: RefusalKind.Verdict)]
+    [Refusal(door: "state.rule.compile", condition: "a vector cell was targeted by an unsupported effect kind", kind: RefusalKind.Verdict, Unsupported = true)]
     VectorEffectNotAdmitted,
 
     /// <summary>A transform writes a row a reader may see who may not see a row the transform reads, so the written

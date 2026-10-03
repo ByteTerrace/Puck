@@ -549,12 +549,17 @@ The theory's rows are the classified set, and an arrangement names how both
 twins are arranged, the operation, a witness over what the checkpoint does not
 capture, and the legal variant on its own twin. A classified refusal without an
 arrangement fails by name, and an arrangement naming no classified refusal fails
-`EveryArrangementNamesAClassifiedRefusal`. Five refusals are classified so far:
+`EveryArrangementNamesAClassifiedRefusal`. Six refusals are classified so far:
 `replay.record/ArmedAfterFirstStep`, `storage.pull/PullWhileRecording`,
-`world.undo/PastHorizon`, `machine.operation/WhileRecording` and
-`machine.operation/ProviderWithoutOperations`. The machine-operation rows witness
+`world.undo/PastHorizon`, `machine.operation/WhileRecording`,
+`machine.operation/ProviderWithoutOperations` and
+`state.rule.compile/VectorEffectNotAdmitted`. The machine-operation rows witness
 the operated machine's generation and configuration; the provider row's twins
-run an engine without operations and its legal variant one with them. The rest
+run an engine without operations and its legal variant one with them. The
+vector row submits a rule adding to a vector cell, and its legal variant adds to
+an integer cell. `HudRefusal.SeatPanelReplaceRefused` refuses only through
+`identity.hud`, which needs a joined seat's roster profile, so its arrangement
+needs a twin that can join one. The rest
 of the table above joins as each refusal gains a code and an arrangement;
 `IdentityUnbound` refuses inside a rule firing whose scope rewinds it, so its
 arrangement needs a gate the twins can hold apart.

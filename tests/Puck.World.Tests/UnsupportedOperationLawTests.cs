@@ -124,7 +124,8 @@ public sealed class UnsupportedOperationLawTests {
         public IMachineRuntime CreateMachine(MachineCreationRequest request) => inner.CreateMachine(request: request);
     }
 
-    private static string Undo(Twin twin, int count) {
+    // Submits one edit, steps once to apply it, and answers the refusal it echoed, or empty when it applied.
+    private static string Echoed(Twin twin, Action submit) {
         var rejected = string.Empty;
 
         twin.Server.EchoTap = echo => {
@@ -132,11 +133,46 @@ public sealed class UnsupportedOperationLawTests {
                 rejected = echo.Message;
             }
         };
-        twin.Server.EnqueueUndo(count: count, principal: Principal.Console);
+        submit();
         twin.Step();
         twin.Server.EchoTap = null;
         return rejected;
     }
+    private static string Undo(Twin twin, int count) => Echoed(submit: () => twin.Server.EnqueueUndo(count: count, principal: Principal.Console), twin: twin);
+    // A document holding a vector row and a scalar one, and a rule adding to whichever row it names: a vector cell
+    // admits no add.
+    private static WorldDefinition Vectors() {
+        var components = new sbyte[8];
+
+        components[0] = 127;
+        Assert.True(condition: StateVector.TryCreate(components: components, error: out var error, vector: out var vector), userMessage: error);
+        return Fixtures.BuildDocument() with {
+            StateRaw = new WorldStateSection(
+                Spaces: [new StateSpace(dimensions: 8, model: "test-model", name: CellName.Parse(candidate: "lore"), revision: "1")],
+                World: [
+                    new WorldStateRow(
+                        Name: CellName.Parse(candidate: "memory"),
+                        Kind: CellKind.Vector,
+                        Space: "lore",
+                        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Vector(components: vector.Memory))]
+                    ),
+                    new WorldStateRow(
+                        Name: CellName.Parse(candidate: "count"),
+                        Kind: CellKind.Int,
+                        Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 0L))]
+                    ),
+                ]
+            ),
+        };
+    }
+    private static string AddRule(Twin twin, string row) => Echoed(
+        submit: () => twin.Server.EnqueueMutation(mutation: new WorldMutation.UpsertWorldRule(
+            Principal: Principal.Console,
+            Rule: new WorldRule(Name: CellName.Parse(candidate: "adder"), Effects: [new ActionEffect.AddState(State: row, Value: 1m)])
+        )),
+        twin: twin
+    );
+    private static string Rules(Twin twin) => string.Join(separator: ",", values: (twin.Server.Definition.Rules ?? []).Select(selector: static rule => rule.Name.ToString()));
     private static WorldDefinition Pulled(WorldIdentity owned) => (owned.Document! with { Identity = owned.Document.Identity! with { Name = "Pulled" } });
     private static string Catalog(Twin twin) {
         var owned = twin.Server.Profiles.BootProfile;
@@ -176,6 +212,15 @@ public sealed class UnsupportedOperationLawTests {
             Operate: static twin => Undo(count: (UndoDepth + 1), twin: twin),
             OperationSteps: 1,
             Witness: static twin => $"journal={twin.Server.JournalLength}"
+        ),
+        ["state.rule.compile/VectorEffectNotAdmitted"] = new(
+            Arrange: static _ => { },
+            ArrangeLegal: static _ => { },
+            Document: Vectors,
+            Legal: static twin => (AddRule(row: "count", twin: twin).Length == 0),
+            Operate: static twin => AddRule(row: "memory", twin: twin),
+            OperationSteps: 1,
+            Witness: Rules
         ),
         ["machine.operation/WhileRecording"] = new(
             Arrange: static twin => {
