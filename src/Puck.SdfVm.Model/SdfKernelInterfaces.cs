@@ -103,6 +103,7 @@ public sealed class SdfKernelInterfaces {
             config: null,
             members: [
                 ShaderWorkCounters.RowMember,
+                ShaderWorkCounters.DetailRowMember,
                 ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
                 ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: SkyStops, structure: ShaderInterfaceStructure.From<SdfSkyStop>()),
                 Written(element: ShaderValueType.Uint2, name: SkyEnvironmentWritten),

@@ -1884,11 +1884,16 @@ the work counters: every pass of `sdf.world`, `place`, `overlay`, the source
 conversions and every post-process package, which must) declares the work
 counters in its interface (`ShaderWorkCounters`), whose generated include
 carries the functions its shaders count through, and keeps a counter buffer and
-a readback buffer per frame slot, one row a pass (`GpuKernelCounters`). A
+a readback buffer per frame slot, rows for passes and named work details (`GpuKernelCounters`).
+Detail labels grow in recorder order (`IRenderGraphPackageRecorder.WorkDetails`);
+the node grows only a completed slot's buffers, under its peak memory budget,
+before it records again. A detailed pass has a `plain` remainder row, and its
+detail rows sum to the pass totals after readback. A
 compute kernel counts through `puckCountWork`, one wave sum added by the wave's
 first active lane, and a fragment stage through `puckCountFragmentWork`, the
 same over the wave's lanes that are not helper lanes. Every generated include
-declares both functions, and one whose interface declares no work counters
+declares those functions and `puckCountDetail`, which adds an active invocation's
+work to its named row. An interface declaring no work counters
 declares them empty. A kernel therefore counts unguarded: a package's kernel
 that a document pass compiles by naming its source, such as `place` or a source
 conversion, reads the declarations the loader generates for the document's
@@ -1898,7 +1903,8 @@ ahead of the first pass and copies them to its readback behind the last, which
 counts one clear, one copy and three buffer barriers outside every pass: the
 clear before the compute and fragment stages that add, those stages before the
 copy, and the copy before the host's read. The ledger adds each row's
-`gpu.march.steps` and `gpu.texels.written` to its pass once the submission
+kernel kinds, including `gpu.sky.evaluations`, `gpu.sky.hashes` and
+`gpu.sky.texture-loads`, to its pass once the submission
 completes. What the
 node does between submissions to install or rebuild a graph, the sets it
 writes and the pass blocks it sends to every frame slot, counts in no

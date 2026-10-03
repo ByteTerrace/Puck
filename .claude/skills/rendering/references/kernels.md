@@ -90,7 +90,8 @@ wave-summed atomic a wave into the row `workCounterRow` names,
 `GpuKernelCounters`), which the node clears ahead of the first pass and copies
 to the slot's readback behind the last; `world.counters gpu` reads them as
 `march.steps` and `texels.written`, per-backend deterministic, and the sky and
-composite passes also count `sky.evaluations` through `puckCountSky`. The shadow stage
+composite passes also count `sky.evaluations`, `sky.hashes` and `sky.texture-loads` into their named layer rows through
+`puckCountDetail`. The shadow stage
 also calls generated `puckCountShadow` for each marched slot; the existing kind
 dimension adds `shadow.slot0.steps` through `shadow.slot5.steps` to each pass
 row. The shadow columns partition that pass's march total. Slots past K + F,

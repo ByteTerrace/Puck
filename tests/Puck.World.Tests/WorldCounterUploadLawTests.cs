@@ -49,6 +49,11 @@ public sealed class WorldCounterUploadLawTests {
 
         foreach (var line in lines) {
             var fields = line.GetString()!.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ' ');
+
+            // A named detail row is part of its pass's total, which the pass's own line states; its uploads are the pass's.
+            if (fields[2].StartsWith(comparisonType: StringComparison.Ordinal, value: "detail=")) {
+                continue;
+            }
             var pass = sample.PassLabels.IndexOf(value: fields[1]);
 
             Assert.True(condition: (pass >= 0), userMessage: $"No recorded pass {fields[1]}.");

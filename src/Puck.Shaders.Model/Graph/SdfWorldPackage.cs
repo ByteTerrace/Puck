@@ -347,6 +347,7 @@ public static partial class SdfWorldPackage {
         Value(name: FastAmbientOcclusion, type: ShaderValueType.Uint),
         Value(name: DisableFarBound, type: ShaderValueType.Uint),
         ShaderWorkCounters.RowMember,
+        ShaderWorkCounters.DetailRowMember,
     ];
     /// <summary>Gets the World group's members: what every pass of every view reads alike, the residency's tables, the
     /// brick pool, the glyph atlas, the samplers and the mesh and impostor atlases (<see cref="MeshAtlases"/>,

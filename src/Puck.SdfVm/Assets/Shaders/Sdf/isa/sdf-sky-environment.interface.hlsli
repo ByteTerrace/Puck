@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky-environment' (sha256/cc80bd26753c79bf15db994c5dcaf7af61d6f87c4a5e0adbf30e3e1ac5c441e1). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky-environment' (sha256/5516fd81f67eca340d4fdbf0108ae9a0bf031f13b71d55485beafaff1d320285). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 #define PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 
@@ -66,6 +66,7 @@ struct SdfSkyEnvironmentFrame {
 struct SdfSkyEnvironmentPass {
     [[vk::offset(0)]] uint2 extent;
     [[vk::offset(8)]] uint workCounterRow;
+    [[vk::offset(12)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsa506E1C21 : register(b0, space3);
 #define passGroup passGroupIsa506E1C21
@@ -78,15 +79,17 @@ struct SdfSkyEnvironmentPass {
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint> workCounters : register(u5, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, then
-// six shadow-slot step counts, as a
+// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
+// sky texture loads, then six shadow-slot step counts, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 18u;
+static const uint PuckWorkRowWords = 22u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
-static const uint PuckWorkShadowWord = 6u;
+static const uint PuckWorkSkyHashesWord = 6u;
+static const uint PuckWorkSkyTextureLoadsWord = 8u;
+static const uint PuckWorkShadowWord = 10u;
 static const uint PuckWorkShadowSlots = 6u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
@@ -115,13 +118,18 @@ void puckCountWork(uint steps, uint texels) {
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
     }
 }
-// Adds an invocation's sky evaluations to its pass's row: the wave sums them, and its first active lane adds the sum.
-void puckCountSky(uint evaluations) {
-    uint waveEvaluations = WaveActiveSum(evaluations);
-
-    if (WaveIsFirstLane()) {
-        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
+// Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
+// Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
+void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
+    if (passGroup.workCounterRowDetail == 0u) {
+        return;
     }
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+    puckAddWork((row + PuckWorkStepsWord), steps);
+    puckAddWork((row + PuckWorkTexelsWord), texels);
+    puckAddWork((row + PuckWorkSkyWord), evaluations);
+    puckAddWork((row + PuckWorkSkyHashesWord), hashes);
+    puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
 }
 // The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
 void puckCountShadow(uint slot, uint steps) {

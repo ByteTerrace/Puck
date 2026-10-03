@@ -12,7 +12,8 @@ namespace Puck.World.Tests;
 /// CONTRACT UNDER TEST: the shipped sky pass (<c>sdf-sky-runs.comp</c>) evaluates the sky once for a pixel the lit image
 /// leaves uncovered and never for one it covers, with the one-pixel dilation that keeps every texel beside an edge
 /// evaluated: a pixel is evaluated when it or one of its eight neighbours has coverage below one. It counts each pixel it
-/// evaluates as one <c>gpu.sky.evaluations</c>, and writes every pixel's texel, an unevaluated one's as a zero base the
+/// evaluates in its gradient detail row as one <c>gpu.sky.evaluations</c>; this fixture disables the other layers.
+/// It writes every pixel's texel, an unevaluated one's as a zero base the
 /// composite filters out, counting each as one texel written. On a 16x8 lit image, every pixel covered evaluates nothing,
 /// every pixel uncovered evaluates 128, and the left half covered evaluates the right half and the covered column beside
 /// it, 72; each writes 128 texels. The lit image is read as written for every pixel, and every binding the pass does not
@@ -54,6 +55,7 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         Word(member: SdfWorldPackage.ImageExtent, value: Width);
         Word(lane: 1, member: SdfWorldPackage.ImageExtent, value: Height);
         Word(member: SdfWorldPackage.ResolvedSurface, value: 1u);
+        Word(member: ShaderWorkCounters.DetailRow, value: 2u);
         var lit = new byte[((Width * Height) * 4)];
 
         for (var y = 0u; (y < Height); y++) {
@@ -73,8 +75,9 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         using var fillerBlock = services.BufferFactory.CreateHostVisible(data: new byte[padded.Length], name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
-        using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)GpuKernelCounters.RowBytes), usage: GpuBufferUsage.Storage);
-        using var counted = services.BufferFactory.CreateReadback(name: default, sizeBytes: ((ulong)GpuKernelCounters.RowBytes));
+        const int Rows = 6; // The pass, its plain detail, then gradient, disc, stars and clouds.
+        using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)(Rows * GpuKernelCounters.RowBytes)), usage: GpuBufferUsage.Storage);
+        using var counted = services.BufferFactory.CreateReadback(name: default, sizeBytes: ((ulong)(Rows * GpuKernelCounters.RowBytes)));
         // The runs the pass writes, at the output extent, so every write lands in an image.
         IGpuImage RunImage() => services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: Height, name: default, usage: GpuImageUsage.Storage, width: Width);
         using var skyBase = RunImage();
@@ -159,13 +162,15 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
                 sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer, destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
             recorder.EndCommandBuffer(commandBufferHandle: command);
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
-            var words = new byte[GpuKernelCounters.RowBytes];
+            var words = new byte[(Rows * GpuKernelCounters.RowBytes)];
 
             counted.Read(destination: words);
-            // The row holds each kernel kind as a 64-bit count, in GpuWork.KernelKinds order: steps, texels, then sky.
-            long Count(int kind) => BinaryPrimitives.ReadInt64LittleEndian(source: words.AsSpan(start: ((kind * GpuKernelCounters.CountWords) * sizeof(uint))));
+            long Count(int row, int kind) => BinaryPrimitives.ReadInt64LittleEndian(source: words.AsSpan(start: ((row * GpuKernelCounters.RowBytes) + ((kind * GpuKernelCounters.CountWords) * sizeof(uint)))));
+            var evaluations = Count(kind: 2, row: 0);
 
-            return (Evaluations: Count(kind: 2), Texels: Count(kind: 1));
+            for (var row = 2; (row < Rows); row++) { evaluations += Count(kind: 2, row: row); }
+
+            return (Evaluations: evaluations, Texels: Count(kind: 1, row: 0));
         } finally {
             services.Bindings.DestroyPool(poolHandle: pool);
             services.Bindings.DestroySampler(samplerHandle: sampler);

@@ -113,16 +113,28 @@ internal static class CountersComparison {
             if (!string.Equals(a: leftState, b: rightState, comparisonType: StringComparison.Ordinal)) {
                 differences.Add(item: $"{prefix}pass state node={node} pass={label} {leftName}={leftState} {rightName}={rightState}");
             }
+            var leftDetails = (left.Passes.FirstOrDefault(predicate: pass => ((pass.Node == node) && (pass.Label == label)))?.Details ?? []);
+            var rightDetails = (right.Passes.FirstOrDefault(predicate: pass => ((pass.Node == node) && (pass.Label == label)))?.Details ?? []);
+
+            foreach (var detail in leftDetails.Union(second: rightDetails).Order(comparer: StringComparer.Ordinal)) {
+                var inLeft = leftDetails.Contains(value: detail);
+                var inRight = rightDetails.Contains(value: detail);
+
+                if (inLeft != inRight) {
+                    differences.Add(item: $"{prefix}pass detail node={node} pass={label} detail={detail} {leftName}={(inLeft ? "present" : Absent)} {rightName}={(inRight ? "present" : Absent)}");
+                }
+            }
         }
     }
     private static string Describe(CountKey key, WorkClass workClass) =>
-        $"{EnumWireName<WorkClass>.Of(value: workClass)} kind={key.Kind} pass={(key.Pass ?? "-")} node={(key.Node ?? "-")} source={key.Source}";
+        $"{EnumWireName<WorkClass>.Of(value: workClass)} kind={key.Kind} pass={(key.Pass ?? "-")} detail={(key.Detail ?? "-")} node={(key.Node ?? "-")} source={key.Source}";
     private static Dictionary<CountKey, WorldCount> Index(WorldCountersRun run) {
         var index = new Dictionary<CountKey, WorldCount>();
 
         foreach (var count in run.Counts) {
             index[new CountKey(
                 Kind: count.Kind,
+                Detail: count.Detail,
                 Node: count.Node,
                 Pass: count.Pass,
                 Source: count.Source
@@ -138,12 +150,13 @@ internal static class CountersComparison {
         );
 
     // Where a count was read; the order a difference list is printed in.
-    private readonly record struct CountKey(string Source, string? Node, string? Pass, string Kind) : IComparable<CountKey> {
+    private readonly record struct CountKey(string Source, string? Node, string? Pass, string? Detail, string Kind) : IComparable<CountKey> {
         public int CompareTo(CountKey other) {
             var order = string.CompareOrdinal(strA: Source, strB: other.Source);
 
             order = ((order != 0) ? order : string.CompareOrdinal(strA: Node, strB: other.Node));
             order = ((order != 0) ? order : string.CompareOrdinal(strA: Pass, strB: other.Pass));
+            order = ((order != 0) ? order : string.CompareOrdinal(strA: Detail, strB: other.Detail));
 
             return ((order != 0) ? order : string.CompareOrdinal(strA: Kind, strB: other.Kind));
         }

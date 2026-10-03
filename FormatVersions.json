@@ -789,7 +789,7 @@
                 "M:System.IO.TextWriter.WriteLine(System.String)",
                 "P:Puck.Hosting.RenderGraphRefresh.EveryFrame"
             ],
-            "shape": "20279c231a3a95fb",
+            "shape": "02d7917306b2ee46",
             "source": "src/Puck.Shaders/Graph/RenderGraphModel.cs",
             "token": "puck.render.graph.v1"
         },
@@ -1155,7 +1155,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersCeilings"
             ],
-            "shape": "c7cb3f284c9bc241",
+            "shape": "78fb5ee9580d9311",
             "source": "src/Puck.World.Schema/WorldCountersCeilings.cs",
             "token": "puck.counters.ceilings.v1"
         },
@@ -1174,7 +1174,7 @@
                 "M:Puck.World.WorldSchema.ReadSourceRevision",
                 "P:Puck.World.WorldJsonContext.WorldCountersReport"
             ],
-            "shape": "b298751306113552",
+            "shape": "6c4687474e18aef3",
             "source": "src/Puck.World.Schema/WorldCountersReport.cs",
             "token": "puck.counters.report.v1"
         },

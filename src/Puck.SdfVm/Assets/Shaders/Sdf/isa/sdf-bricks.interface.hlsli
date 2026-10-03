@@ -43,7 +43,7 @@ struct SdfBricksPushedIndex {
 // are declared empty, and a kernel written for a counting package compiles here unchanged.
 void puckCountWork(uint steps, uint texels) {
 }
-void puckCountSky(uint evaluations) {
+void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
 }
 void puckCountShadow(uint slot, uint steps) {
 }

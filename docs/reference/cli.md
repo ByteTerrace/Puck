@@ -1844,7 +1844,7 @@ The report is a `puck.counters.report.v1` document. Its schema,
 source revision (the `HEAD` commit and the World build's source-state key) and,
 for each backend, the device identity, the offscreen resolution, the shader
 toolchain identity, the World's GC mode, each render node's pass states, and
-every count. Each count names its section, node, pass and kind, and carries a
+every count. Each count names its section, node, pass, detail and kind, and carries a
 class:
 
 | Class | Meaning | Compared |
@@ -1861,6 +1861,16 @@ Each pass there also carries a class, `deterministic` or
 a deterministic kind counted in a per-backend-deterministic pass is recorded as
 per-backend-deterministic. A node's submission and revision identities are not
 kinds; the collector records them as `pacing`.
+
+An explicit null detail identifies a pass total or work outside named rows.
+Sky layers and shadow slots have labels within their pass, alongside its
+`plain` remainder; all detail rows sum to that pass's totals. Skipped and
+standing passes retain their labels with no counts. Comparisons include those
+labels, and ceilings record their zero rows using the same class and
+`requiredZero` rules as the totals. Detail identities and frame-slot buffer
+capacity grow during the installed graph's run. The sky counts each layer
+evaluation, each procedural hash and each field-run texture load under
+`gpu.sky.evaluations`, `gpu.sky.hashes` and `gpu.sky.texture-loads`.
 
 The run prints the report's path, then one line for each deterministic count or
 pass state that differs between the two backends, naming its kind, pass and

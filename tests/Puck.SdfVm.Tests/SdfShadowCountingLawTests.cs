@@ -79,7 +79,7 @@ public sealed class SdfShadowCountingLawTests {
                     counters.RecordCopy(commandBuffer: command, recorder: gpu.Services.Recorder, slot: 0);
                     var counts = new long[(2 * columns.Length)];
 
-                    counters.AddTo(counts: counts, passCount: 1, slot: 0);
+                    counters.AddTo(counts: counts, rowCount: 1, slot: 0);
                     for (var index = 0; (index < GpuWork.ShadowSlotCount); index++) {
                         var column = Array.IndexOf(array: columns, value: GpuWork.ShadowSteps[index]);
 

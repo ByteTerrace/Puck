@@ -25,6 +25,8 @@ public sealed partial class SdfWorldPassesLawTests {
         TestLiveness.Until(step: () => view.Produce(context: in context), reason: () => view.NotReadyReason,
             wait: view.Residency.WaitPipelineBuilds);
         var node = view.Runtime.Node(instance: 0);
+
+        Settle(capacity: 0);
         var zeroBytes = node.AllocationBytes;
 
         Assert.DoesNotContain(collection: node.Plan!.Storages, filter: IsIncoming);
@@ -39,6 +41,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 _ = view.Produce(context: in context);
                 return ((node.WorkRevision > previousRevision) && !node.IsBuildingCandidate && view.Passes.HasRenderedResolvedView(instance: SdfTestView.Instance));
             }, reason: () => $"F={capacity}: revision {node.WorkRevision}, prior {previousRevision}, building={node.IsBuildingCandidate}, status={view.Runtime.Latest!.Instances[0].Status}, error={node.LastSwapError}, residency={view.NotReadyReason}");
+            Settle(capacity: capacity);
             var policyBytes = (zeroBytes + ((((ulong)capacity) * Extent) * Extent));
 
             Assert.Equal(expected: policyBytes, actual: node.AllocationBytes);
@@ -82,6 +85,17 @@ public sealed partial class SdfWorldPassesLawTests {
         }
         Assert.Empty(collection: gpu.StateConflicts);
 
+        // The kernel counters grow their named detail rows as each frame slot of a graph records a frame, so every
+        // measurement follows frames forced through the cadence gate into every slot: what remains between policies is
+        // the incoming channels alone, and a handoff then allocates nothing.
+        void Settle(int capacity) {
+            current = (ShadowFrame(active: false, capacity: capacity, weight: 0f) with { EnableCadenceGate = false });
+            for (var frame = 0; (frame <= SdfWorldTables.FrameRingSize); frame++) {
+                _ = view.Produce(context: in context);
+            }
+            current = ShadowFrame(active: false, capacity: capacity, weight: 0f);
+            _ = view.Produce(context: in context);
+        }
         static bool IsIncoming(ShaderPipelinePlannedStorage storage) => storage.Versions.Any(predicate: static name => name.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.IncomingVisibility}"));
         static SdfFrame ShadowFrame(int capacity, bool active, float weight) {
             var lights = SdfLights.Default();

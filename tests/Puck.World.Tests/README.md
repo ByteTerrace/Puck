@@ -26,6 +26,13 @@ lever, save and boot path for its slot policy, including atomic preset changes.
 checks that session observers see every complete delivery, field cells
 included, while keeping counted observer samples separate from frame samples.
 
+`GpuWorkDetailDeviceLawTests` runs the generated counting functions on Vulkan
+and Direct3D 12, crossing the low-word boundary in both a plain row and a named
+row. It submits two frames before waiting, grows the detail labels between
+them, and holds every detail sum to its pass total and each frame to its own
+labels. `SdfSkyEvaluationDeviceLawTests` binds the sky's named rows and checks
+that covered pixels evaluate no layer.
+
 `WorldCompilationAnalysisLawTests` checks that ticks retain installed cost and
 hazard analysis, while a rule-order edit replaces it even with the same state catalog.
 It also checks loader-to-server admission handoff, mismatched definition/catalog refusals, and

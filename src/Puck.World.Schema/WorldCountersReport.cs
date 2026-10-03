@@ -58,7 +58,9 @@ public sealed record WorldCountersRun(
 /// <param name="Kind">The kind's dotted name, or for an allocation reading the window's name.</param>
 /// <param name="Class">What two readings of the count may be expected to agree on.</param>
 /// <param name="Value">The count; for an allocation reading, the fewest bytes a run of the window allocated.</param>
-public sealed record WorldCount(string Source, string? Node, string? Pass, string Kind, WorkClass Class, long Value);
+/// <param name="Detail">The label within a pass, or null for its total or work outside a pass.</param>
+public sealed record WorldCount(string Source, string? Node, string? Pass, string Kind, WorkClass Class, long Value,
+    [property: System.Text.Json.Serialization.JsonRequired] string? Detail = null);
 /// <summary>What one pass of a render node did in its newest completed submission. A pass's state is deterministic:
 /// the same inputs execute, skip, or leave unreached the same passes on every backend.</summary>
 /// <param name="Node">The render node.</param>
@@ -67,4 +69,8 @@ public sealed record WorldCount(string Source, string? Node, string? Pass, strin
 /// <param name="Class">What two runs of the pass may be held to agree on, as its node declared it:
 /// <see cref="WorkClass.Deterministic"/> or <see cref="WorkClass.PerBackendDeterministic"/>, which a deterministic kind counted
 /// in it is loosened to.</param>
-public sealed record WorldCountersPass(string Node, string Label, GpuPassState State, WorkClass Class);
+public sealed record WorldCountersPass(string Node, string Label, GpuPassState State, WorkClass Class) {
+    /// <summary>Gets the grow-only detail labels, including plain, even when this pass did not execute.</summary>
+    [System.Text.Json.Serialization.JsonRequired]
+    public IReadOnlyList<string> Details { get; init; } = [];
+}

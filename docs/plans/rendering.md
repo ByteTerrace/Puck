@@ -7305,8 +7305,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      is the two-stop gradient and fog `SdfSky` starts from, as data. The CPU
      reference for the run composition is `SdfSkyRuns`. `gpu.sky.evaluations` is a
      kernel-counted kind beside the march steps and texels written; the field
-     runs' texels are the `sky` pass's row, and per-run and per-layer rows wait for
-     the detail labels P18-7 adds. A pixel covered with all its neighbours reads
+     runs' texels are the `sky` pass's plain row, and each evaluated layer has
+     its detail row through P18-7's counter foundation. A pixel covered with all its neighbours reads
      zero field evaluations in the sky pass (`SdfSkyEvaluationDeviceLawTests`).
      Composite counts each in-place field fallback; its fog evaluates no sky
      (`SdfSkySamplingLawTests`).
@@ -7348,13 +7348,14 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      as three frame slots of a graph instance's outputs, 98,736 bytes; no graph
      instance, node or edge carries it, so it adds no graph overhead. A refresh
      counts 2 dispatches, 2 pipeline binds, 4 descriptor-set binds, 8 buffer
-     barriers, the kernel counters' clear and their 96-byte copy, 4,096 sky
-     evaluations and 4,105 texels written, under the residency's
+     barriers, the kernel counters' clear and their 240-byte copy (four pass rows
+     and the `plain` and `gradient` rows the environment names), 4,096 sky
+     evaluations, counted in its `gradient` row, and 4,105 texels written, under the residency's
      `environment` pass, whose first refresh also writes its frame set and a
      pass set per ring slot (13 descriptor writes) and its two blocks (128
      host-visible bytes), so nothing lands outside every pass; construction
-     creates them and a counter and a readback buffer of 96 bytes per ring
-     slot. The device law and the `sky-environment` canary hold on both
+     creates them and a counter and a readback buffer of 528 bytes per ring
+     slot (four pass rows and the environment's plain and gradient rows). The device law and the `sky-environment` canary hold on both
      backends, parity's captures hold, and the environment pass's rows are
      recorded in `sky-still.ceilings.json` and `sky-cycle.ceilings.json`.
    - Delivers: `views` shading hits only into `lit`, premultiplied, with
@@ -7604,6 +7605,15 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      F = 0 has zero incoming-visibility bytes, control uploads and image read
      bindings. At the current `low`
      preset every shadow row is zero. Final tier counts remain P18-14's call.
+     The counter ledger also publishes `GpuWorkDetail` rows within a pass:
+     the sky and composite name their layers (`gradient`, `disc`, `stars`,
+     `clouds`), and each detailed pass has a `plain` row for work outside its
+     named details. These rows sum to every pass total. The shadow pass names
+     no detail rows; its slots are the six kinds above. Submission snapshots
+     retain their own labels across frame boundaries; identities and frame-slot
+     buffer capacity grow until the graph is replaced. The ceilings key each
+     count by node, pass, detail and kind, and apply the same device rules and
+     required zeros to detail rows as to pass totals.
 8. **P18-8, the open layer stack.**
    - Delivers: the layer record (kind, blend, mask, transform, clock, opacity,
      visibility, tier), the generated kind table and one module per kind for
@@ -7629,6 +7639,16 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
      zero for an absent or zero-opacity layer, a zero for a layer below its
      tier, and clouds at `low` at a quarter or less of their `high` hashes per
      covered pixel.
+     The current sky and composite passes expose `gradient`, `disc`, `stars`
+     and `clouds` detail rows. `gpu.sky.evaluations` counts each layer evaluation,
+     including the gradient a field fallback and the environment map's texels evaluate; the composite's fog reads the map and evaluates none.
+     `gpu.sky.hashes` counts each star hash and each noise lattice corner hash;
+     `gpu.sky.texture-loads` counts the field-run loads, including an invalid
+     base tap. These two kinds are per-backend-deterministic, with required
+     zeros judged on every device. Skipped or standing passes retain detail
+     identities and publish no counts, so recording gives their rows zero
+     ceilings. Reports, comparisons and generated schemas carry detail labels;
+     an absent measured detail or a detail without a ceiling fails the gate.
 9. **P18-9, lighting derived from the sky.**
    - Delivers: the display-code rule on the `environment` pass P18-5 lands (the
      map and its coefficients re-rendered only on a lighting-visible change
