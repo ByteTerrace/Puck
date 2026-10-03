@@ -452,6 +452,10 @@ callers still re-probe before relying on a path, and fall back otherwise:
   (compiled register counts, etc.); pixel-neutral read-back via `IVulkanPipelineStatisticsApi`.
 - **Storage-image-without-format**—`shaderStorageImage{Read,Write}WithoutFormat`, needed to
   write image views whose format (commonly BGRA8) has no storage-image format qualifier.
+- **Block-compressed textures**—`textureCompressionBC`, which a baked mesh's BC4, BC5,
+  BC6H and BC7 textures need; a device without it refuses their upload by name.
+- **Shader capability floor**—half-precision arithmetic, 16-bit storage and
+  subgroup-size control, enabled on a device that reports them for kernels that adopt them.
 - **External semaphores and timeline semaphores**—`VK_KHR_external_semaphore_win32` and the
   `timelineSemaphore` feature, which let the device wait on a Direct3D 12 shared fence.
   `IGpuSurfaceTransferFactory.TryImportFence` imports the fence's NT handle into a timeline

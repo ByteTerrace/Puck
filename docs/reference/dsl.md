@@ -19,7 +19,8 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 | `Diagnostics/` | `Diagnostic`/`DiagnosticBag`/`SourceSpan`/`SourceMap` and the `PUCK…` code constants. |
 | `Formatting/` | `PuckPrinter`: the one formatter, printing a parsed tree back as source. |
 | `Lowering/` | `DocumentLowering` (values, arithmetic, indexing, `for`/template expansion), `DocumentScope`, `DocumentValueComparer`, and `DocumentScalars`/`DocumentBuiltins`—the scalar and collection function vocabulary. |
-| `Modules/` | `ModuleResolver`: `import` resolution and alias composition. |
+| `Modules/` | `ModuleResolver`: `import` resolution and alias composition; `CompileInputs`: the files and probes a compile read. |
+| `Editing/` | `LspJson`: the Language Server Protocol items, positions and ranges the editor services answer with. |
 | `Rewriting/` | `PuckSyntaxRewriter` and `PuckMigration`: a named rewrite over the tree, and what it declares it reshapes. |
 | `Units/` | `UnitDimension`/`UnitConversion`: what `deg`, `rad`, `s`, `ms`, `min`, `h`, `m`, `cm`, `mm`, `hz`, `%` represent. |
 | (root) | `CompilationResult<T>`, and `PuckDslVocabulary`—the DSL's spelling of `Puck.State`'s cell-kind enum. |

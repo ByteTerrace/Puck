@@ -112,6 +112,8 @@ public sealed unsafe class DirectXGroupedLayoutLawTests {
     [MemberData(memberName: nameof(Tables))]
     [Theory]
     public void The_serialized_root_signature_holds_the_plans_tables_and_no_static_sampler(string name) {
+        if (!OperatingSystem.IsWindows()) { Assert.Skip(reason: "Direct3D 12 exists only on Windows."); return; }
+
         var description = TableNamed(name: name);
         var plan = DirectXRootLayout.Plan(description: description);
         var flags = ((description.Stages == GpuShaderStage.Compute)

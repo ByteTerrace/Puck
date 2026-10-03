@@ -129,7 +129,7 @@ Part of [`puck.world.definition.v1`](documents.md). See
   spelling `/` refuses by name. Read back with `world.placements` (`dealt
   from <row> (<n> of <capacity>)` / `dealt by <template>`); `world.budget`
   counts every template's offsets. The granaries module
-  (`modules/granaries.world.json`) is the worked example.
+  (`modules/granaries.puck`) is the worked example.
 
 ## Owned-world identities
 
@@ -225,7 +225,7 @@ immediately.
 **`WorldIdentity`** (`Puck.World.Schema/WorldIdentity.cs`) is the runtime
 handle over one owned document's `identity` section
 (`WorldIdentityDefinition(Id, Name, Color, MoveSpeedState, TurnSpeedState,
-Controllers, Voice, Facts)`): `MoveSpeed`/`TurnSpeed` read
+Controllers, Voice, Facts, Records)`; `Records` names the capacity-one record pools the identity owns and carries across authority boundaries): `MoveSpeed`/`TurnSpeed` read
 and write the owned document's OWN `state` rows named by those state-row
 references; `Bindings` is the owned document's own first `bindingOverlays`
 row's document (the seat's profile binding layer — see

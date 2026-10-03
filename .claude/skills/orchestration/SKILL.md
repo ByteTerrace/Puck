@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: Coordinates Puck's delegated sessions and subagents as the lead who lands work on the integration branch. Use when writing assignment briefs or build, test and review instructions for a Claude or Codex partner, messaging partners, deciding what each partner works on next, sequencing integration merges or batches, scheduling GPU legs and builds across machines, selecting models per lane, routing reviews and findings, ruling on a finding or on two lanes that collide, closing a review, and answering an owner's remark about how the fleet is run. verification owns gates, red legs and GPU execution; review-passes owns launching and closing cross-family review-and-fix passes; documentation owns agent-document authoring and checks.
+description: Coordinates Puck's delegated sessions and subagents as the lead who lands work on the integration branch. Use when writing assignment briefs or build, test and review instructions for a Claude or Codex partner, messaging partners, deciding what each partner works on next, sequencing per-lane integration landings, scheduling GPU legs and builds across machines, selecting models per lane, routing reviews and findings, ruling on a finding or on two lanes that collide, closing a review, auditing the lead's own throughput, and answering an owner's remark about how the fleet is run. verification owns gates, red legs and GPU execution; review-passes owns launching and closing cross-family review-and-fix passes; documentation owns agent-document authoring and checks.
 ---
 
 # Orchestration
@@ -55,51 +55,53 @@ Brief: <id> done
 Brief: <id> blocked: <question>
 ```
 
+The lead's ledger and plan files that a delegate never writes are the lead's
+own scratch checklists in the session scratchpad. The repository's documents,
+`docs/plans/open-items.md` and the plans under `docs/plans` among them, belong
+to no one lane: a delegate edits them for what its change delivers, ticking an
+item it closed and correcting text its change made stale, and the brief says so.
+
 The message is the notification; git is the record. Inspect the reported
 changes and checks before merging, following
 [`verification`](../verification/SKILL.md). At each merge, turn every GPU leg
 or re-record owed in a commit body into a tracked item: the commit records a
-debt, but assigns it to no lane. Carry each item into the batch's GPU run and
+debt, but assigns it to no lane. Carry each item into the lane's own GPU run and
 close it only with that run's evidence.
 
-## Assemble and refresh batches
+## Land each lane on its own
 
-Assemble a batch on a local-only branch in a worktree under
-`.claude/worktrees/<name>`, cut from the current integration head. When one
-batch lands, merge the integration head into every open batch before its
-qualification run ([`verification`](../verification/SKILL.md#gpu-legs) owns
-the run).
+A lane lands as soon as its own head passes: the lead merges the integration
+head into it, runs `puck gate --merge-base <lane base> --gpu` scoped by
+`puck affected`, and fast-forwards the integration branch. Qualification is
+measured in minutes. Never hold a finished lane for others to make a batch, and
+never assemble a multi-lane qualification branch; a lane that cannot land alone
+is a dependency to name in the brief, not a reason to wait.
 
-A gate (a batch landing, a review slot) blocks a lane, never a partner: the
-partner takes its next work from its track or the ready queue. A lane's GPU legs
-run as soon as it is GPU-ready; the batch's GPU run re-confirms them and does not
-wait on them.
+A gate blocks a lane, never a partner: the partner takes its next work from its
+track or the ready queue.
 
-The lead machine's local agents can build on the unpushed integration head, so a
-lane that depends on a batch starts there before the batch lands; merge the
-landed head into it afterwards.
+The lead machine's local agents can build on an unpushed lane head, so a lane
+that depends on another starts there before it lands; merge the landed head into
+it afterwards.
 
 Before calling a counted-work change a regression, read the history: a commit may
 have deliberately changed what is counted and owed a re-record. An owed line in a
-commit body is a debt. Track each one when merging, and settle it on the merged
-head, under a GPU grant when it needs the GPU, before the batch lands, with the
-reason in the commit that records it.
+commit body is a debt. Track each one when merging, and settle it on the lane's
+merged head, under a GPU grant when it needs the GPU, before it lands, with the
+reason in the commit that records it. A counters ceiling recorded only on the
+2060 is re-recorded there right after the landing that moved it.
 
-Partners cannot see local batches. When a partner designs against code that
-exists only in an unpushed batch, send it those lanes' contracts and answer its
+Partners cannot see unpushed lanes. When a partner designs against code that
+exists only on the lead's machine, send it those lanes' contracts and answer its
 contract questions from the local code; a stale remote makes false "failing"
 claims.
 
-The audit of owed GPU legs covers the unlanded lane branches entering a batch as
-well as the commits already integrated. Run a canary's pending legs before the
-batch, since a bound recorded in an unlanded branch is stale by the time the
-batch runs it.
-
-Include every counters workload under `tests/Puck.Counters` in batch
-qualification, not just the default. Inspect the directory before naming the
-inputs: the worlds, scripts and ceilings sit directly in it. Read each
-ledger's workload and script paths to select the matching inputs. Run each set
-as `puck counters --check --world <world> --script <script> --ceilings <file>`.
+When a lane moves counted work, run every counters workload under
+`tests/Puck.Counters` it reaches, not just the default. Inspect the directory
+before naming the inputs: the worlds, scripts and ceilings sit directly in it.
+Read each ledger's workload and script paths to select the matching inputs. Run
+each set as
+`puck counters --check --world <world> --script <script> --ceilings <file>`.
 
 The lead runs any merge an agent is denied. Agents resolve conflicts in
 generated files, including shader interfaces, fingerprints and generated
@@ -119,7 +121,10 @@ while the leg runs. Use [`verification`](../verification/SKILL.md#gpu-legs) for
 grants, GPU work classification and execution.
 
 Run a load governor on any machine that hosts many agents, through
-`puck host load`, which samples the machine's load and names its state:
+`puck host load`, which samples the machine's load and names its state. Under a
+watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
+`LOADED` when capacity ends without pressure, `PRESSURE`, `GPU busy` and
+`GPU idle`), so each change arrives once:
 
 - Size admission by the job's measured peak. On capacity, admit light work only.
   A heavy job (a solution build plus a full suite, about 7 GB at its peak) needs
@@ -133,31 +138,66 @@ Run a load governor on any machine that hosts many agents, through
   4 GB free. A 16 GB, 6-thread machine has capacity while CPU is under 50% and
   free RAM over 5 GB, and is under pressure below 2 GB free or 10 GB of disk.
 
+A brief that asks an agent for deliberate CPU contention, such as a burner for a
+flake proof, gates it on GPU idle on the same box: no canary, parity, `Puck.World`
+run or device test host is running, checked just before the burner starts and
+again while it runs, and the burner stops when a GPU leg starts. Contention that
+overlaps another lane's GPU leg makes that lane's timeouts untrustworthy, so the
+brief names the check and the stop.
+
+An agent stops only the processes it started, by the PIDs it recorded at launch,
+and never kills by a command-line pattern. On a shared box a filter on a common
+string (a scratchpad path, a lane prefix) matches processes the agent cannot
+attribute, other lanes' build and test commands among them, and those fail with
+verdicts that are not evidence, so a lane that failed while the kill ran re-runs
+its failed legs alone before anyone acts on them. A brief that starts background
+work says to record each PID and to stop only those.
+
 Every build, a Codex brief's included, passes `-nodeReuse:false`
 ([`verification`](../verification/SKILL.md#build-before-you-test) says why).
 
 ## Select models and route findings
 
 Codex (Astra and Sol) and Claude (Sonnet, Opus, and Fable when genuinely needed)
-both implement and both review. Choose per lane by fit: subtle or
-correctness-heavy work goes to Astra or Opus; well-specified work goes to Sol or
-Sonnet. [`review-passes`](../review-passes/SKILL.md#who-reviews-and-when-it-ends)
-owns which family reviews and the two-round limit.
+both implement. Choose per lane by fit: subtle or correctness-heavy work goes to
+Astra or Opus; well-specified work goes to Sol or Sonnet. Keep every Codex slot
+implementing; a review takes a slot only under the narrow rule in
+[`review-passes`](../review-passes/SKILL.md#when-a-lane-gets-a-review).
 
 Judge the family balance lane by lane. It is not a quota and not a reason to
 reassign work already under way. Owner steering adjusts judgement; do not harden
 a small direction into a quota or an always rule.
 
-The lead rules on what the second round still raises: a scoped fix, a recorded
-open item, or a dismissal with its reason. Every finding gets a destination
-before it is set aside: a lane, or a named deferral where scope is tracked. A
-finding called out of scope without a destination is not set aside. After the
-final review round the lead decides each remaining blocker as a scoped fix, sends
-it to the author with the ruling, and reads the diff; there is no third round.
+The lead rules on what a review raises: a scoped fix, a recorded open item, or a
+dismissal with its reason. Every finding gets a destination before it is set
+aside: a lane, or a named deferral where scope is tracked. A finding called out
+of scope without a destination is not set aside. There is no second round.
 
 Route reviews by where the work lives. A pushed branch can be reviewed in any
 machine's Codex slot; a local-only lane needs the lead's own slots. When the
 lead's slots are full, send reviews of pushed branches to partners.
+
+## Audit the process before the owner does
+
+The lead's job is throughput of landed, correct code. Finding a process defect
+is the lead's work; one the owner has to point out is a lead failure. Measure the
+thing the owner cares about, not machine load alone:
+
+- time from a lane's last commit to its landing on the integration branch;
+- implementation slots (Codex and agent) not implementing right now;
+- review passes per landed lane, and qualification wall time per landing;
+- the board's age against the newest lane change.
+
+Arm a recurring audit as a background monitor, which reports while the lead is
+busy; a session cron fires only when the lead is idle and misses exactly the
+drift it exists for. On each audit, act on what degraded in the same turn: a
+lane waiting more than an hour to land, an idle slot with ready work, a second
+review on a lane outside determinism, formats or federation, or a stale board.
+
+When an owner correction reveals a process rule, change the repository skill
+that drives the behavior (this one, `review-passes`, `verification`) in the
+same turn. Agents and the lead's own briefs read the skills; a private note
+beside a skill that still says otherwise changes nothing.
 
 ## Rule on collisions
 
@@ -183,5 +223,5 @@ not agreement.
 | Skill | Route there for |
 |---|---|
 | [`verification`](../verification/SKILL.md) | Gate selection, private CLI copies, red legs, GPU execution and finished-lane evidence. |
-| [`review-passes`](../review-passes/SKILL.md) | Review briefs, companion launch commands, two-round review scope, fix verification and landing on the author's branch. |
+| [`review-passes`](../review-passes/SKILL.md) | When a lane gets a review, review briefs, companion launch commands, fix verification and landing on the author's branch. |
 | [`documentation`](../documentation/SKILL.md) | Writing and checking agent-facing documents and skills. |

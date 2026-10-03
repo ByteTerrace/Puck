@@ -18,7 +18,7 @@ namespace Puck.World.Browser.Tests;
 /// all refuse — each names a host register, a look, or a body motion program the island's own body supplies, never
 /// the bare basis alone); the two fixtures below are two independent scripted-write cases over that one document
 /// rather than two different fragments, and <c>puck.world.json</c> itself refuses standalone (its <c>modules/
-/// arcade.world.json</c> import authors real gaming-brick screens this engine cannot register — see
+/// arcade.puck</c> import authors real gaming-brick screens this engine cannot register — see
 /// <see cref="Puck.World.Browser.Engine.BrowserExtensionVocabulary"/>).</remarks>
 public sealed class BrowserParityRecordingTests {
     private static byte[] ComposedTicTacToeBytes() {

@@ -156,8 +156,12 @@ alone.
 A scope touches the field, never the point: `localPosition`, `distanceScale`, and
 the material chain are untouched across a push, so cull bounds computed for shapes
 after the push stay sound. A `Union` pop makes the whole scope far-neutral and
-therefore *maskable* again (the culling payoff); an intersection-family pop stays
-globally unmaskable, exactly like an unscoped intersection. There is one fine-print
+therefore *maskable* again (the culling payoff), unless the scope's own field has
+no bound; an intersection-family pop stays globally unmaskable, exactly like an
+unscoped intersection. Inside the scope the shapes' bounds compose through their
+blends ([the algebra](../reference/lipschitz-and-field-correctness.md#bounds-compose-through-set-operations)):
+a lattice with no edge that a bounded shape intersects, or that is subtracted from
+one, leaves the scope as bounded as that shape. There is one fine-print
 rule—a scoped field op grows the surface *outward* past the authored geometry
 bound, so the packer inflates the instance's cull bound by that reach (`Onion(t)`
 moves out by `t`, `Dilate(r)` by `r`, `Displace(a)` by `a`) or the beam would

@@ -1,3 +1,4 @@
+using System.CommandLine.Parsing;
 using Puck.Cli.Affected;
 using Xunit;
 
@@ -21,9 +22,10 @@ public sealed class AffectedSelectionLawTests {
     ];
     private static readonly HashSet<string> WorldClosure = new(collection: ["World", "Core"], comparer: StringComparer.OrdinalIgnoreCase);
 
-    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null, IReadOnlySet<string>? deleted = null, Dictionary<string, IReadOnlySet<string>>? recorded = null) => AffectedSelection.Select(
+    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null, IReadOnlySet<string>? deleted = null, Dictionary<string, IReadOnlySet<string>>? recorded = null, Func<string, bool>? worldInput = null, Func<string, bool>? compiledUnchanged = null) => AffectedSelection.Select(
         canaries: Canaries,
         changed: changed,
+        compiledUnchanged: compiledUnchanged,
         consumersOf: (consumersOf ?? (static _ => [])),
         coverage: (coverage ?? []),
         declaresTests: static path => path.Contains(comparisonType: StringComparison.Ordinal, value: "tested"),
@@ -32,6 +34,9 @@ public sealed class AffectedSelectionLawTests {
         canariesReaching: (canariesReaching ?? (static _ => new HashSet<string>())),
         standInsFor: (standInsFor ?? (static _ => [])),
         worldClosure: WorldClosure,
+        // As WorldArtifactClosure walks it: every repository-root file is an input of the World build, and build/ is
+        // one only where the World imports it.
+        worldInput: (worldInput ?? (static path => !path.Contains(value: '/'))),
         deleted: deleted,
         recorded: recorded
     );
@@ -51,7 +56,7 @@ public sealed class AffectedSelectionLawTests {
                 changed: ["src/World/Door.cs"],
                 coverage: new() { ["src/World/Door.cs"] = new HashSet<string>(collection: ["doors"]) }
             ),
-            expected: new AffectedPlan(Canaries: ["doors"], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
+            expected: new AffectedPlan(Baselines: [], Canaries: ["doors"], CanaryChecks: [], Catalog: false, Deleted: [], Everything: false, Parity: false, Suites: ["Cli.Tests", "World.Tests"], Unmapped: [], Worlds: []),
             comparer: new PlanComparer()
         );
     }
@@ -68,6 +73,35 @@ public sealed class AffectedSelectionLawTests {
         Assert.True(condition: Select(changed: ["src/Core/Thing.cs"]).Catalog);
         Assert.True(condition: Select(changed: ["build/Shaders.targets"]).Catalog);
         Assert.False(condition: Select(changed: ["src/Maths/Field.cs"]).Catalog);
+    }
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [Theory]
+    public void AnUnchangedCompiledValueKeepsSuitesAndCatalogButNoCanaryOrUnplacedPath(bool mapped, bool isDeleted) {
+        const string Path = "src/World/Assets/worlds/sample.world.json";
+        var plan = Select(
+            changed: [Path],
+            compiledUnchanged: static path => (path == Path),
+            coverage: (mapped ? new() { [Path] = new HashSet<string>(collection: ["ink"]) } : null),
+            canariesReaching: _ => new HashSet<string>(collection: (mapped ? ["doors"] : [])),
+            deleted: (isDeleted ? new HashSet<string>(collection: [Path]) : null)
+        );
+
+        Assert.Equal(expected: ["Cli.Tests", "World.Tests"], actual: plan.Suites);
+        Assert.True(condition: plan.Catalog);
+        Assert.Empty(collection: plan.Canaries);
+        Assert.False(condition: plan.Parity);
+        Assert.Empty(collection: plan.Unmapped);
+        Assert.Empty(collection: plan.Deleted);
+    }
+    [Fact]
+    public void AnUnchangedCompiledValueStillRunsChangedTestBlocks() {
+        const string Path = "src/World/Assets/worlds/tested.puck";
+        var plan = Select(changed: [Path], compiledUnchanged: static path => (path == Path));
+
+        Assert.Equal(expected: [Path], actual: plan.Worlds);
     }
     [Fact]
     public void ParityRunsWhenAChosenCanaryRendersOnAGpu() {
@@ -157,6 +191,45 @@ public sealed class AffectedSelectionLawTests {
         Assert.Empty(collection: prose.Unmapped);
     }
     [Fact]
+    public void ARestoreLockReachesItsOwnSuiteAloneAndNoCanaryUnlessItsProjectBuildsTheWorld() {
+        var suite = Select(changed: ["tests/World.Tests/packages.lock.json"]);
+
+        Assert.Equal(actual: suite.Suites, expected: ["World.Tests"]);
+        Assert.Empty(collection: suite.Canaries);
+        Assert.False(condition: suite.Everything);
+
+        // A library's lock reaches that library alone, not the suites that reference it; outside the World build it
+        // selects no canary.
+        var library = Select(changed: ["src/Maths/packages.lock.json"]);
+
+        Assert.Empty(collection: library.Suites);
+        Assert.Empty(collection: library.Canaries);
+
+        // A lock of a project the World is built from changes what every canary boots.
+        var world = Select(changed: ["src/Core/packages.lock.json"]);
+
+        Assert.Equal(actual: world.Canaries, expected: ["doors", "ink"]);
+        Assert.Empty(collection: world.Suites);
+        Assert.True(condition: world.Parity);
+    }
+    [Fact]
+    public void BuildInfrastructureReachesTheCanariesOnlyThroughTheWorldBuild() {
+        var outside = Select(changed: ["build/Shaders.targets", "tests/Maths.Tests/packages.lock.json"]);
+
+        Assert.True(condition: outside.Everything);
+        Assert.Equal(actual: outside.Suites, expected: ["Cli.Tests", "Maths.Tests", "World.Tests"]);
+        Assert.Empty(collection: outside.Canaries);
+        Assert.False(condition: outside.Parity);
+
+        foreach (var path in ((string[])["Directory.Build.props", "Directory.Build.targets", "global.json"])) {
+            var inside = Select(changed: [path]);
+
+            Assert.Equal(actual: inside.Suites, expected: ["Cli.Tests", "Maths.Tests", "World.Tests"]);
+            Assert.Equal(actual: inside.Canaries, expected: ["doors", "ink"]);
+        }
+        Assert.Equal(actual: Select(changed: ["build/World.targets"], worldInput: static path => (path == "build/World.targets")).Canaries, expected: ["doors", "ink"]);
+    }
+    [Fact]
     public void AFileNoProjectOwnsChoosesTheProjectsThatNameItsDirectory() {
         var plan = Select(
             changed: ["tests/Verdicts/phase.world.json"],
@@ -180,14 +253,84 @@ public sealed class AffectedSelectionLawTests {
         var lines = text.ToString().Split(options: StringSplitOptions.RemoveEmptyEntries, separator: Environment.NewLine);
 
         Assert.Contains(collection: lines, expected: "test src/World/Assets/worlds/tested.puck");
-        Assert.Contains(collection: lines, expected: $"catalog {AffectedCommand.ShippedCatalog} (puck compile --tree {AffectedCommand.ShippedTree} --check)");
+        Assert.Contains(collection: lines, expected: $"catalog {AffectedCommand.ShippedCatalog}");
+        Assert.Contains(collection: lines, expected: $"puck compile --tree {AffectedCommand.ShippedTree} --output {AffectedCommand.ShippedCatalog} --check");
         Assert.DoesNotContain(collection: lines, filter: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: $"test {AffectedCommand.ShippedCatalog}"));
+    }
+    [Fact]
+    public void EveryPuckCommandInThePrintedPlanParses() {
+        var plan = Select(changed: ["build/WorldAssets.targets", "src/World/Assets/worlds/tested.puck", "src/World/Assets/ink.hlsl"]);
+        using var text = new StringWriter();
+
+        AffectedCommand.Describe(into: text, plan: plan);
+
+        var lines = text.ToString().Split(separator: Environment.NewLine, options: StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.NotEmpty(collection: plan.Suites);
+        Assert.NotEmpty(collection: plan.Worlds);
+        Assert.NotEmpty(collection: plan.Canaries);
+        Assert.True(condition: plan.Catalog);
+        Assert.True(condition: plan.Parity);
+
+        var commands = lines.Select(selector: PuckArguments).OfType<string[]>().ToArray();
+
+        Assert.Equal(expected: ((plan.Worlds.Count + plan.Canaries.Count) + 2), actual: commands.Length);
+
+        foreach (var args in commands) {
+            var parsed = PuckRootCommand.Create(clock: TimeProvider.System).Parse(args: args);
+
+            Assert.True(condition: (parsed.Errors.Count == 0),
+                userMessage: $"puck {string.Join(separator: ' ', value: args)}: {string.Join(separator: "; ", values: parsed.Errors.Select(selector: static error => error.Message))}");
+        }
+    }
+    [Fact]
+    public void TheCatalogRunInvokesExactlyThePrintedArgumentsAfterThePrintedBuild() {
+        using var text = new StringWriter();
+
+        AffectedCommand.Describe(plan: Select(changed: ["src/World/Assets/worlds/tested.puck"]), into: text);
+        var lines = text.ToString().Split(separator: Environment.NewLine, options: StringSplitOptions.RemoveEmptyEntries);
+        var printed = Assert.Single(collection: lines.Select(selector: PuckArguments).OfType<string[]>(), predicate: static args => (args[0] == "compile"));
+        var root = PuckRootCommand.Create(clock: TimeProvider.System);
+        var calls = new List<string[]>();
+
+        root.Subcommands.Single(predicate: static command => (command.Name == "compile")).SetAction(action: parsed => {
+            calls.Add(item: [.. parsed.Tokens.Select(selector: static token => token.Value)]);
+            return 37;
+        });
+
+        var exit = AffectedCommand.CheckCatalog(
+            build: arguments => { calls.Add(item: arguments); return 0; },
+            root: root
+        );
+
+        Assert.Equal(actual: exit, expected: 37);
+        Assert.Equal(expected: 2, actual: calls.Count);
+        Assert.Equal(expected: printed, actual: calls[1]);
+        Assert.Contains(collection: lines, expected: $"dotnet {string.Join(separator: ' ', value: calls[0])}");
+        Assert.All(collection: calls[1], action: static argument => Assert.DoesNotContain(actualString: argument, expectedSubstring: "\\"));
+    }
+
+    private static string[]? PuckArguments(string line) {
+        var start = ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "catalog ") || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "puck "))
+            ? line.IndexOf(comparisonType: StringComparison.Ordinal, value: "puck ")
+            : -1);
+
+        if (start >= 0) {
+            return [.. CommandLineParser.SplitCommandLine(commandLine: line[(start + "puck ".Length)..].TrimEnd(trimChar: ')'))];
+        }
+
+        return ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "test ") ||
+            line.StartsWith(comparisonType: StringComparison.Ordinal, value: "canary ") || (line == "parity"))
+            ? [.. CommandLineParser.SplitCommandLine(commandLine: line)]
+            : null);
     }
 
     private sealed class PlanComparer : IEqualityComparer<AffectedPlan> {
         public bool Equals(AffectedPlan? x, AffectedPlan? y) =>
             ((x is not null) && (y is not null) &&
+            x.Baselines.SequenceEqual(second: y.Baselines) &&
             x.Canaries.SequenceEqual(second: y.Canaries) &&
+            x.CanaryChecks.SequenceEqual(second: y.CanaryChecks) &&
             (x.Catalog == y.Catalog) &&
             (x.Everything == y.Everything) &&
             (x.Parity == y.Parity) &&

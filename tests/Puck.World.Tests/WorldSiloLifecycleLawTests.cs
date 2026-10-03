@@ -732,6 +732,8 @@ public sealed class WorldSiloLifecycleLawTests {
     [InlineData(true)]
     [Theory]
     public async Task ReplacementActivationUsesPublishedNetworkBindingAfterCheckpointRecovery(bool listen) {
+        if (listen) { PeerTestClient.SkipWithoutQuic(); }
+
         using var directory = new TemporaryDirectory();
         using var output = new BufferedConsoleOutput();
         using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);

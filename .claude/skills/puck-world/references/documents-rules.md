@@ -30,7 +30,7 @@ journal, and deliberately outside the `gatesDrive` check, which is what lets a
 `valueSeconds`/`fromState`/`text`); because `lookAssignment.rows` and creation
 palettes bind to text cells, and a state write re-resolves every bound value
 (re-running the look resolve when `lookAssignment` is touched), this is how a
-rule restyles a body — the arena module's (`modules/arena.world.json`) `look-*` rules drive one
+rule restyles a body — the arena module's (`modules/arena.puck`) `look-*` rules drive one
 `lookOf.<body>` cell per body. A text row also takes a `fromState` copy from
 another text cell. Two indirections make "the body my `target` cell names"
 addressable: a key spelled `$cell:<row>:<key>` resolves to that cell's integer
@@ -207,7 +207,7 @@ inside that option. Inspect candidateBudget as well as maxCandidates: rejected
 points and incumbent rechecks consume attention. Incarnation-addressed choices,
 not merely option ordinals, own commitment and entry transitions. Positions freeze
 before ordinary rules; state gates still read in normal document order.
-See the Schema README's `decision-policies` section for the complete authoring
+See the Schema README's "Decision policies" section for the complete authoring
 contract. Keep choice state, local random draws, and timers in checkpoint/hash
 coverage; refresh compiled handles while retaining unchanged policy episodes.
 Rules evaluate in DOCUMENT ORDER and their effects apply IMMEDIATELY, so a later
@@ -273,7 +273,7 @@ rule (including the one being fired) still names it — retire the referencing
 rule first, in an earlier mutation of the same or a prior tick, then remove the
 placement. Sense a PERMANENT placement (boot-declared, never removed) rather
 than a token placement a rule itself spawns/removes, for exactly this reason.
-The arena module (`src/Puck.World/Assets/worlds/modules/arena.world.json`) is the worked example: two
+The arena module (`src/Puck.World/Assets/worlds/modules/arena.puck`) is the worked example: two
 boot-declared region placements (`firePit`/`icePool`), `Region` interactions
 that schedule a burn/freeze deadline, and `Level` rules that act while `$tick`
 has not yet reached it.
@@ -281,7 +281,7 @@ has not yet reached it.
 ## Discrete state, patterns, and impressions
 
 Discrete state shares `state.lattices`: only `Field` creates physical storage;
-`Grid`, `Ring`, and `Hex` compile bounded adjacency. Keep token identity domains,
+`Grid`, `Ring`, `Hex`, `Graph`, `Tiling`, and `Box` compile bounded adjacency. Keep token identity domains,
 ordered zone membership, position attributes, phase progression, and knowledge
 stamps inside the canonical state row converter and authoritative hash. A
 `cellsOf` row's `inverse` trait (`Puck.State.StateInverse`) declares it derived

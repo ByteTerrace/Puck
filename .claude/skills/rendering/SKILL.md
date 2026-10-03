@@ -27,7 +27,7 @@ with the fixed-point query evaluator described below and with `maths-usage`.
 | Program model and ISA | `src/Puck.SignedDistance` (`SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfDomainOp`, `SdfProgram*.cs`, `SdfProgramBuilder*.cs`) | [program model](../../../docs/rendering/sdf/handbook/program-model.md), [materials and primitives](../../../docs/rendering/sdf/reference/materials-and-primitives.md), [Lipschitz](../../../docs/rendering/sdf/reference/lipschitz-and-field-correctness.md) |
 | CPU interpreter and queries | `src/Puck.SignedDistance/Queries` (`SdfFieldEvaluator`, `SdfBandedFieldEvaluator`, `BakedWorldQuery`); seams `IWorldQuery`/`IFieldEvaluator` in `src/Puck.Maths/FixedPoint` | [queries and determinism](../../../docs/rendering/sdf/handbook/queries-and-determinism.md) |
 | Prototype bakes (mesh, textures, impostor) | `src/Puck.SignedDistance/Baking` (`SdfBaker`, `SdfBakeTier`, `SdfBakedTexture`); `src/Puck.Assets/Textures` (BC4/BC5/BC6H/BC7 codecs, `TextureMipChain`, `OctahedralNormal`); `CreationBaker`, `CreationBakeKey`, `CreationBakeCodec` in `src/Puck.World.Authoring/Authoring`; `WorldBakeStore`, `WorldBakeChunk` in `src/Puck.World.Schema`; `WorldBakeSchedule` in `src/Puck.World.Client` | [prototype bakes](../../../docs/rendering/sdf/handbook/bricks-and-baking.md#prototype-bakes), [creation bakes](../../../docs/architecture/worlds.md#creation-bakes) |
-| GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`); the `sdf.world` fragment `SdfWorldPackage` in `src/Puck.Shaders/Graph` | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
+| GPU engine and render assembly | `src/Puck.SdfVm` (`SdfWorldResidency`, `SdfWorldTables.*.cs`, `SdfWorldPasses`, `SdfWorldPassRecorder`, `SdfWorldRenderSpec`/`SdfWorldRenderBuilder`, `SdfCompositionFrameSource`, `ISdfSceneEmitter`); the `sdf.world` fragment `SdfWorldPackage` in `src/Puck.Shaders.Model/Graph` | [`Puck.SdfVm` README](../../../src/Puck.SdfVm/README.md), [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md) |
 | Kernels | `src/Puck.SdfVm/Assets/Shaders/Sdf` — `isa/sdf-isa.hlsli` the generated instruction-set declarations (`puck shaders generate`), the `field/` modules the interpreter (`mapCore` in `sdf-map.hlsli`, `mapGradCore` in `sdf-map-grad.hlsli`), the `frame/` modules the frame's data (the screen tables, the shadow slots, the levers), the `march/`/`surface/`/`shade/`/`debug/` modules the view logic, `field/sdf-vm.hlsli` and `passes/sdf-world.hlsli` the two aggregators, one `*.comp.hlsl` wrapper per dispatch under `passes/` | [frame rendering](../../../docs/rendering/sdf/handbook/frame-rendering.md), [lighting and shading](../../../docs/rendering/sdf/handbook/lighting-and-shading.md), [shading, AO and shadows](../../../docs/rendering/sdf/reference/shading-ao-shadows.md) |
 | Cameras and views | `src/Puck.SdfVm/Views` (`SdfCameraProgram`, rigs, `ViewTransition`); `WorldViewInstances` (`src/Puck.World.Client/Sources`); `WorldScreenBinder.CameraViews.cs`/`.Session.cs`/`.Views.cs` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
 | World data into frames | `src/Puck.World.Client` (`WorldFramePresenter`, `WorldSceneEmitter`, `WorldPlacementStamper`, `WorldStampPool`, `WorldRigCatalog`, `WorldCameraRigCompiler`, `WorldViewGraphHost`, `WorldRootGraph`); `src/Puck.World.Authoring/Authoring/CreationStampEmitter.cs` | `puck-world` skill for document meaning; [authoring README](../../../src/Puck.World.Authoring/README.md) |
@@ -220,15 +220,67 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Path (shape 21) is presentation-only.** The fixed-point evaluator refuses
   it.
 - **A fold wall is crossed, never bounded by a floor.** `mapCore` publishes the
-  sample's walls: the wallpaper LOD shell (`sdfMapLodGap`, `sdfMapLodInner`,
-  `sdfMapLodOuter`), the nearest log-sphere shell whose chain is a similarity
-  (`sdfMapFoldGap`, `sdfMapFoldCenter`, `sdfMapFoldInner`, `sdfMapFoldOuter`),
-  and every other log-sphere wall as a ball gap (`sdfMapStepBound`). Every march
-  takes its next sample from `sdfMarchAdvance` (`field/sdf-map.hlsli`), passing
-  its own proven clearance (the field, never limited by a wall), intended
-  advance, acceptance distance and end; a new march does the same. A ball proof
-  reads `sdfMapBallClearance`, a cone `sdfMapConeClearance`. A crossing is a
-  proven step: a relaxed march resets its relaxation after one.
+  sample's walls: the nearest log-sphere shell whose chain is a similarity
+  (`sdfMapFoldGap`, `sdfMapFoldCenter`, `sdfMapFoldInner`, `sdfMapFoldOuter`)
+  and every other log-sphere wall as a ball gap (`sdfMapStepBound`). Every fine
+  march takes its next sample from `sdfMarchAdvance` (`field/sdf-map.hlsli`),
+  passing its own proven clearance (the field, never limited by a wall),
+  intended advance, acceptance distance and end; a new march does the same. A
+  ball proof, the beam's cone included, reads `sdfMapBallClearance`. A crossing
+  is a proven step: a relaxed march resets its relaxation after one.
+- **A wallpaper fold has no wall to cross.** A program folds only through a
+  group whose fold is continuous (`SdfWallpaperFold.IsContinuous`: PMM, P4M,
+  P3M1, P6M), which never reads past the nearest copy; `SdfProgram` refuses the
+  others by name. A kernel change to `sdfWallpaperFoldCell` changes
+  `SdfWallpaperFold` with it. The lattice is held to the same rule in three
+  places through one statement (`SdfWallpaperFold.LimitRefusal` and
+  `CellRefusal`: the builder, `SdfProgram` admission, the creation
+  canonicalizer): a square limit is whole, a hex group takes the unbounded
+  limit and no clamp, and `Data0.zw` is exactly `InverseCell`. A fold with an
+  unbounded limit (`SdfWallpaperFold.IsUnbounded`, one axis at the sentinel) has
+  no bound: `SdfProgram.HasUnmaskableInfluence` and `ShapeDomainOps.Reach` both
+  answer it, never a number of cells. An infinite `Repeat`, or a `RepeatLimited`
+  with a limit at `SdfDomainOps.UnboundedRepeatLimit` on any axis
+  (`SdfDomainOps.IsUnboundedRepeat`, `ShapeDomainOp.Repeat.IsUnbounded`), is the
+  same answer, and no 1e6-cells radius exists anywhere.
+- **Unbounded is a state, not a number.** `SdfBoundAlgebra.Unbounded` (positive
+  infinity) is what `Reach`, `RenderReach` and an authored instance radius carry;
+  composition, a margin and a positive scale keep it, so no arithmetic runs on a
+  large stand-in that a scale could overflow or shrink. `BeginInstance` admits it,
+  `SdfProgram.IsUnmaskable` is the one classification every reader of an instance's
+  bound asks (a declared `Unbounded` radius, or a tree whose composed bound is
+  unbounded), and only the packing writes `UnmaskableBoundRadius`.
+- **A segment starts from the world point, and the program enforces it.** The
+  directory and the instance mask skip or compile segments apart from their
+  neighbours, and a skipped segment passes the point before it along, so a stream
+  that may carry a moved point into a segment that reads it without its own
+  `ResetPoint` refuses by name (`RequireSegmentsStartAtTheWorldPoint`); an emitter
+  begins every chain with `ResetPoint` rather than trusting what ran before. The
+  classifier, the skip spheres and the part compiler start from the world point
+  because of it. `SdfOpRoles.Of` is the one table of point ops, field ops and
+  lattices, and a new op is classified there first. `SegmentRanges` is the one
+  definition of a segment (before each `ResetPoint` and at every instance's first
+  and end instruction, an empty instance included) that the directory and the
+  refusal both read. A scope's compose radius reaches `L` times as far when the
+  scope's field joins its parent divided by its Lipschitz factor
+  (`PopField.Data1.Y = 1/L`), and the halo says so; an instance bound contains the
+  surface and the blends' influence, and the field outside it is at least its
+  distance to the bound over `SdfInstanceCost.FieldRescale`, not the distance. The
+  `sdf-lattice-cull` canary pins on the GPU what the CPU laws hold: a hex
+  wallpaper with no edge clipped by a box in one scoped placement is bounded by
+  the box and still draws across all of it.
+- **Bounds compose through the set operations.** `SdfBoundAlgebra` is the one
+  statement: an intersection takes the smaller operand bound (unbounded and
+  finite is finite), a subtraction its subject's, a union the larger (one
+  unbounded operand makes it unbounded), a smooth variant the same plus the
+  halo the program adds. `HasUnmaskableInfluence` folds a field scope's shapes
+  through it, so an unbounded lattice clipped inside a scope packs its clipper's
+  bound; at depth 0 a fold with no edge, an intersection, a field op and a
+  `Plane` stay unmaskable, because they read the one global accumulator. An
+  authored bound is composed the same way only for an instance that holds the
+  whole creation as one scope (`RenderReach`'s `composeBlends`, passed by
+  `WorldPlacementStamper` for a scoped placement); the dynamic pool's per-shape
+  and per-group instances hold subsets and keep the largest shape's reach.
 
 ## Prototype bakes
 
@@ -516,8 +568,18 @@ These are one-line cautions; the owning pages hold the derivations.
   working values; `source-transfer` writes them relative to the host's paper
   white, the pass-block value `SourceConversionPackage` writes each frame, so
   an HDR sample shows at its own luminance. A desktop capture of an HDR display
-  hands over half-float scRGB (`INativeImageCaptureFeed.Output`), which
-  converts on its CPU tier, never the B8G8R8A8 GPU route.
+  hands over half-float scRGB (`INativeImageCaptureFeed.Output`). On the
+  Direct3D 12 host the platform copies it GPU-side into half-float shared
+  targets (`NativeImageGpuCaptureTargets.Format`, the capture's own format), and
+  an image converter (`RenderGraphRuntime.CreateImageConverter`, the
+  `source-scrgb` package, `RenderGraphPackageCatalog.ImageConversions`) binds the
+  latest slot to its graph's external input under the slot's lease, waits on the
+  copy's shared fence in its submission, and converts it on the device, so
+  nothing is read back; a frame samples the converted image
+  (`WorldCapturePixels.Convert`, `CaptureFeed.SamplesRing` for the SDR copy
+  sampled directly). Elsewhere the CPU tier converts it through
+  `source-transfer`. `source-scrgb` is `source-transfer`'s arithmetic for the
+  same pixels (`ImportedImageConversionDeviceLawTests`).
   An HDR toggle, a move to a display that differs in it, or unavailable display
   discovery ends the native feed; its consumer reopens it with fresh metadata.
   Frame callbacks and background checks queued by consumer liveness polls check
@@ -964,7 +1026,7 @@ These are one-line cautions; the owning pages hold the derivations.
   `IGpuDeviceContext.MemoryProfile` (`GpuMemoryProfile`) beside the identity —
   Vulkan through `GpuMemoryProfile.FromVulkan` over the device type and
   `vkGetPhysicalDeviceMemoryProperties`, Direct3D 12 through
-  `DirectXNativeDeviceApi.MemoryProfile` over the architecture, adapter and
+  `DirectXFeatureReads.MemoryProfile` over the architecture, adapter and
   options 16 structures. `GpuResidency.Select(profile, bytes, readersInFlight)`
   is the one choice of `InPlace`, `Ring` or `Staged`: in place only on coherent
   unified memory with no reader in flight while the host writes, so a per-frame
@@ -1073,29 +1135,41 @@ These are one-line cautions; the owning pages hold the derivations.
   counting functions in its generated include: `puckCountWork` (a wave sum
   added by the first active lane) for a compute kernel and
   `puckCountFragmentWork` (the same over the lanes that are not helper lanes)
-  for a fragment stage, laid out from `GpuKernelCounters`' constants. Every
-  other generated include, a document pass's among them, declares the same two
-  functions empty, so a kernel counts unguarded and a package's kernel compiles
+  for a fragment stage, `puckCountDetail` (a per-invocation add to one of the
+  pass's named detail rows, which the sky, composite and sky-environment kernels
+  call for each layer's evaluations, hashes and texture loads) and
+  `puckCountShadow` (a wave sum of one shadow slot's march steps, which the
+  shadow stage calls for each slot it marches), laid out from
+  `GpuKernelCounters`' constants. Every other generated include, a document
+  pass's among them, declares the same functions empty, so a kernel counts unguarded and a package's kernel compiles
   as a document pass naming its source; never guard a count with a macro.
   `DocumentPassPackageKernelLawTests` compiles every package kernel that way.
   Its node keeps
   `GpuKernelCounters`: per frame slot a device-local counter
-  buffer and a readback buffer (`IGpuBufferFactory.CreateReadback`), one row a
-  planned pass. The node records the clear and its barrier ahead of the first
+  buffer and a readback buffer (`IGpuBufferFactory.CreateReadback`), rows for
+  planned passes and their grow-only named details (`IRenderGraphPackageRecorder.WorkDetails`).
+  A completed frame slot grows through `EnsureRows` before its next clear,
+  under the node's peak memory budget. Detail indices stay in their recorder's
+  order; a detailed pass's `plain` row holds CPU and kernel work outside its
+  named details. The ledger sums plain and named rows once at completion,
+  retaining that submission's label snapshot. The node records the clear and its barrier ahead of the first
   pass, and behind the last the barrier from the compute and fragment stages,
   the copy (`IGpuRecorder.CopyBuffer`) and the barrier to the host
   (`GpuStage.Host`, `GpuAccess.HostRead`), outside every pass, and names the
   slot to its ledger (`GpuWorkLedger.ReadOnCompletion`), which adds each row to
-  its pass as `gpu.march.steps`, `gpu.texels.written`, `gpu.sky.evaluations` and
-  six `gpu.shadow.slot0.steps` through `gpu.shadow.slot5.steps` columns once the submission
+  its pass as the kinds in `GpuWork.KernelKinds`: march steps, texels written,
+  sky evaluations, hashes and texture loads, and the six `gpu.shadow.slot0.steps`
+  through `gpu.shadow.slot5.steps` columns, once the submission
   completes. A package pass that skips the frame is counted skipped
   (`GpuWorkLedger.SkipPass`), never executed with zeros. A
   recording gets its row in `RenderGraphPackageRecording.WorkCounters`; a
   package recorder writes it through `RenderGraphPackageWorkCounters`, which
   binds the buffer at `workCounters` and writes the row into the pass
-  block (`workCounterRow`), and every SDF compute kernel ends with
+  block (`workCounterRow`, and `workCounterRowDetail` for named rows), and SDF compute kernels end with
   `puckCountWork(sdfWorkSteps, sdfWorkTexels)` (`frame/sdf-work.hlsli`), after
-  every lane that did work. A new march, query or volume sample adds to
+  every lane that did work. A shadow uses `puckCountDetail` for its slot, and sky
+  layers count evaluations, hashes and field-run loads at their own operations.
+  A new march, query or volume sample adds to
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
   counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
   and `SdfWorkCountingLawTests` hold both. The residency's upload counts its
@@ -1187,8 +1261,8 @@ These are one-line cautions; the owning pages hold the derivations.
   so names appear only when something is reported.
 - **Every kind declares its class.** A `WorkKind` is constructed with its
   `WorkClass`: GPU submission kinds are `Deterministic` (equal across
-  backends) except the kernel kinds (`GpuWork.KernelKinds`: march steps and
-  texels written), which are `PerBackendDeterministic` like created-object
+  backends) except the kernel kinds (`GpuWork.KernelKinds`: march steps, texels written
+  and sky evaluations), which are `PerBackendDeterministic` like created-object
   kinds, and anything
   paced by the clock or a cross-process cache `Pacing`.
   `world.counters --json` publishes the classes in its `kinds` legend, and
@@ -1473,7 +1547,7 @@ The engine's kernels are one table, `SdfKernel`: each kernel's stem
 (`SdfKernelSet.StemOf`), pipeline (`SdfWorldTables.PipelineLayouts.Specs`),
 build order and loaded bytecode (`SdfKernelSet`) derive from it, so a new
 kernel is one enum member, one stem and its `.comp.hlsl`.
-The grouped binding contract is the pass interface in `src/Puck.Shaders/Interface`
+The grouped binding contract is the pass interface in `src/Puck.Shaders.Model/Interface`
 ([pass interfaces](../../../docs/reference/shaders.md#pass-interfaces)). Every
 shipped pass binds its groups as sets: each pipeline pass and package pass
 (post-process, `place`, `overlay`, the source conversions) through its
@@ -1826,17 +1900,20 @@ bound parameters before publishing its mapping. A pane the active layout does
 not show draws nothing in its place pass and is not scheduled. A pane slot adds
 no SDF view. `WorldViewGraphHost.PlaceViews` and `Place` add footprints at the
 envelope the presenter hands them: the largest width and height each occupant
-reaches over the layout transition in flight (`WorldViewOutputRegions` over
-`WorldViewComposer.StartSlots` and `EndSlots`), including a whole-display
-spectator at an endpoint without a rendered slot. Reservations retain their largest
+reaches over the layout transition in flight when its endpoints nest
+(`WorldViewOutputRegions` over `WorldViewComposer.StartSlots` and `EndSlots`),
+including a whole-display spectator at an endpoint without a rendered slot, or
+its start's extent when they oppose, growing on one axis and shrinking on the
+other, which `place` resamples the eased rect from. Reservations retain their largest
 extent through interrupted transitions until the chain settles, then request the
 occupant's own rect, subject to scheduler quantization and shrink hysteresis.
 Placement uses the current eased rect with
 `world.upscale-sharpness`; the envelope holds through easing, so quantization
-and hysteresis rebuild nothing during an uninterrupted ease. Allocations grow as
-it starts and shrink as it settles; growth on one axis and shrinkage on the other
-rebuild at both boundaries
+and hysteresis rebuild nothing during an uninterrupted ease. A transition
+allocates at most once: a growing occupant as it starts, a shrinking one as it
+settles, and an opposite-axis one as it settles
 (`WorldCameraPlacementLawTests.AnEasedRectCrossesQuantizationStepsWithoutRebuildingItsNodeUntilTheTransitionSettles`,
+`AnOppositeAxisTransitionRebuildsItsNodeOnceWhenItSettles`,
 `ASteadySplitLayoutAllocatesItsFirstViewAtItsPlacedHalf`).
 The view package reconstructs a reduced render grid to that native output
 before `place` composes it, and `place` resamples it once more unless the
@@ -2179,11 +2256,11 @@ stations gate GPU kernel behavior by machine.
 ```bash
 dotnet build src/Puck.SdfVm -c Release                      # runs DXC; needs dxc on PATH
 dotnet test tests/Puck.SignedDistance.Tests -c Release      # ISA packing, Lipschitz, parts, rigid leaves, grid, SdfBakerLawTests
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~CreationBakeLawTests"   # bake keys, cache, BAKE chunk, background schedule
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*CreationBakeLawTests"   # bake keys, cache, BAKE chunk, background schedule
 dotnet test tests/Puck.SdfVm.Tests -c Release               # kernel variants, camera programs, environment packing
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~WorldRenderEnvelopeLawTests|FullyQualifiedName~ShapePanelLawTests|FullyQualifiedName~WorldStampPoolBoundLawTests"
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*WorldRenderEnvelopeLawTests" --filter-class "*ShapePanelLawTests" --filter-class "*WorldStampPoolBoundLawTests"
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
 puck parity                                                 # parity world, offscreen, Vulkan then Direct3D 12
 puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
 puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends

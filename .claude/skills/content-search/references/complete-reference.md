@@ -90,7 +90,8 @@ searched and 1 if none.
 
 Defaults: the recursive walk skips `.git`, `.tmp`, `artifacts`, `bin`, `obj`,
 `node_modules`, `publish`, `BenchmarkDotNet.Artifacts`, agent worktrees under
-`.claude/worktrees`, and binary files (NUL-byte sniff of the first 4 KiB). The
+`.claude/worktrees`, directory links (junctions and symbolic links are never
+followed), and binary files (NUL-byte sniff of the first 4 KiB). The
 build-artifact names are pruned because this repo publishes the tool into
 `src/Puck.Cli/publish/`, whose generated `.xml` doc files are duplicates of the
 sources that would otherwise drain the `-M` cap before the walk reaches

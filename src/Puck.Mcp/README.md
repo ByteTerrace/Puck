@@ -291,7 +291,7 @@ retain their own lifetimes. Local Operator `quit` and reload retain their normal
 ## SDK and verification
 
 The adapter uses official **ModelContextProtocol.Core/ASP.NET Core 2.2.0** and
-ASP.NET Core JWT bearer authentication 10.0.11, with explicit schemas and low-level
+ASP.NET Core JWT bearer authentication 10.0.12, with explicit schemas and low-level
 handlers. It installs no Harness or model provider.
 Result metadata uses a typed, source-generated serializer; standalone schemas use
 .NET 10's `JsonElement.Parse`. The SDK owns the asynchronous message channel.

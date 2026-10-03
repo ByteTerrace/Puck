@@ -66,7 +66,8 @@ yields an empty, default or stale result that the frame presents as success.
 - `RenderGraphRuntime.TryReconfigure` refuses with a
   `RenderGraphRuntimeRefusal` whose code is a `RenderGraphRuntimeRefusalCode`
   (`GraphCount`, `Root`, `OutputKind`, `PackageUnserved`, `InputVersion`,
-  `InputProducer`, `InputKind`, `InputSize`, `ExternalProducer`).
+  `InputProducer`, `InputKind`, `InputSize`, `ExternalProducer`,
+  `StandingChain`).
 - At frame time, an image input whose producer has no output binds a
   transparent-black stand-in (`RenderGraphRuntime.Bind`,
   `RenderGraphRuntime.StandIns.cs`), recorded per instance. A capture waits on
@@ -110,10 +111,11 @@ node's own last surface, which the node's retirement rule (§1) holds. The
 runtime forwards a capture to a node only when the node is ready and the
 instance read no stand-in or tainted input. A capture waits while a preview
 builds, while the root has not yet presented at the requested extent
-(`ShownAtItsExtent`), and while its readback encoder (`SurfaceEncoder`) builds. The offscreen host
-holds its clock at an armed, unserved capture, and refuses it as `unserved`
-after 60 seconds of holding in all. A root frame that drew nothing captures its
-input version in that version's layout.
+(`ShownAtItsExtent`), and while its readback encoder (`SurfaceEncoder`) builds. Both
+rendered hosts hold their clock at an armed, unserved capture, and the scheduler
+refuses it as `unserved` when the hold budget runs out (`WorldCaptureScheduler.BuildHoldBudgetSeconds`
+while the world is not ready, `HoldBudgetSeconds` once it is). A root frame that drew
+nothing captures its input version in that version's layout.
 
 **Laws.** `WorldCaptureHoldLawTests`
 (`NoTickIsSteppedWhileACaptureIsArmedAndUnservedOffscreen`),
@@ -142,20 +144,31 @@ such as a refused package or build, a source that has ended, or a view with no
 camera. A permanent condition is always refused, so a host that waits on "not
 yet" never waits forever, and a refused frame names its reason.
 
-**How the code holds it.** `IRenderRoot.ProduceFrame` returns a `Surface` and no
-outcome. Readiness is reported beside the frame instead: capture service and
-`UnservedCaptureReasonOf` (§2, §3), and `SdfWorldResidency.NotReadyReason`. The
-offscreen host paces by `HostPacing.OneTickPerFrame` and `FixedStepPump.TryStep`,
-and holds a tick only at an armed capture.
+**How the code holds it.** `IRenderRoot.ProduceFrame` returns a `RootFrame`: the
+surface and a `FrameRender` whose `FrameCompletion` is `Rendered`,
+`NotYetRenderable` or `Refused`, with a reason naming what waits or refused. The
+runtime reads it from `RenderGraphRuntime.Render`: the root is rendered only
+when it rendered and every instance it reads within the frame did too (a
+previous-frame read, a refresh divisor, an unchanged view or a paused node
+stands on purpose). `MarkUnproduced` (`RenderGraphRuntime.Completion.cs`) is the
+one place a graph instance's refusal becomes `Refused` (a package's
+`RefusalOf`, a refused build, a missing graph); every other unproduced instance
+is waiting. A producer or an upload answers the same three ways
+(`MarkProduction`). The offscreen host paces by `HostPacing.OneTickPerFrame` and
+`FixedStepPump.TryStep`, steps the next tick only once the root reports the
+frame rendered, and holds the tick (composing it again, stepping none) while it
+is not yet renderable; a refused frame releases the tick. Both rendered hosts
+also hold their clock at an armed, unserved capture.
 
-**Laws.** `WorldCaptureHoldLawTests` and `SdfPipelineBuildLivenessLawTests`
-(the pump never blocks on pipeline creation).
+**Laws.** `RenderGraphRuntimeLawTests.Completion`, `OffscreenTickPacingLawTests`,
+`WorldCaptureHoldLawTests` and `SdfPipelineBuildLivenessLawTests` (the pump never
+blocks on pipeline creation).
 
-**Where the code is weaker.** A host cannot tell a frame that has not rendered
-yet from one that never will. Outside an armed capture, the offscreen host
-steps regardless, and inside one only the 60-second backstop ends a permanent
-wait. A change that adds an outcome to the frame classifies every condition by
-whether a wait can end it.
+**Where the code is weaker.** The classification is only as good as each
+condition's classifier: a new condition that is permanent but reported as
+waiting holds an offscreen tick, and an armed capture's hold budget is then the
+only backstop. A change that adds a condition classifies it by whether a wait
+can end it.
 
 **Violations to hunt.** A permanent condition reported as waiting: a source
 with no frames, a disabled view, a portal past its nesting limit, a world with

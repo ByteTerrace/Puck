@@ -60,9 +60,16 @@ public static class SdfEncodingProbe {
         Call(name: "elongate", inputs: [0.21f, 0.23f, 0.29f], emit: static (b, m, v) => Shape(b: b.ResetPoint().Elongate(extents: new Vector3(x: v[0], y: v[1], z: v[2])), material: m));
         Call(name: "repeat", inputs: [4.25f, 4.5f, 4.75f], emit: static (b, m, v) => Shape(b: b.ResetPoint().Repeat(spacing: new Vector3(x: v[0], y: v[1], z: v[2])), material: m));
         Call(name: "repeat-limited", inputs: [4.25f, 4.5f, 4.75f, 2f, 3f, 5f], emit: static (b, m, v) => Shape(b: b.ResetPoint().RepeatLimited(limit: new Vector3(x: v[3], y: v[4], z: v[5]), spacing: new Vector3(x: v[0], y: v[1], z: v[2])), material: m));
-        foreach (var group in Enum.GetValues<SdfWallpaperGroup>()) {
+        // A group whose fold jumps is refused at program build, so only the continuous groups build here
+        // (SdfWallpaperFoldLawTests holds the refusals). A hex lattice takes only the unbounded limit, so its calls carry
+        // the limit as a constant and the square groups carry it as an input.
+        foreach (var group in Enum.GetValues<SdfWallpaperGroup>().Where(predicate: SdfWallpaperFold.IsContinuous)) {
             foreach (var plane in Enum.GetValues<SdfPlane>()) {
-                Call(name: $"wallpaper-fold {group} {plane}", inputs: [4.5f, 2f, 3f, 9.5f, 7f], emit: (b, m, v) => Shape(b: b.ResetPoint().WallpaperFold(cell: new Vector2(value: v[0]), group: group, limit: new Vector2(x: v[1], y: v[2]), lodDistance: v[3], materialStride: ((int)v[4]), plane: plane), material: m));
+                if (group >= SdfWallpaperGroup.P3) {
+                    Call(name: $"wallpaper-fold {group} {plane}", inputs: [4.5f, 7f], emit: (b, m, v) => Shape(b: b.ResetPoint().WallpaperFold(cell: new Vector2(value: v[0]), group: group, limit: new Vector2(value: SdfWallpaperFold.UnboundedLimit), materialStride: ((int)v[1]), plane: plane), material: m));
+                } else {
+                    Call(name: $"wallpaper-fold {group} {plane}", inputs: [4.5f, 2f, 3f, 7f], emit: (b, m, v) => Shape(b: b.ResetPoint().WallpaperFold(cell: new Vector2(value: v[0]), group: group, limit: new Vector2(x: v[1], y: v[2]), materialStride: ((int)v[3]), plane: plane), material: m));
+                }
             }
         }
         Call(name: "log-sphere", inputs: [3f, 0.39f], emit: static (b, m, v) => Shape(b: b.ResetPoint().LogSphere(shellRatio: v[0], twist: v[1]), material: m));

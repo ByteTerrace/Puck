@@ -5,8 +5,8 @@ namespace Puck.World.Addons;
 
 /// <summary>
 /// The World-side half of the addon ABI's wire vocabularies: the <see cref="GrantRule"/> → <see cref="AddonVerdict"/>
-/// mapping and the capability mask-bit mapping. These live here, not in the Simulation adapter, because one side of
-/// each mapping is a <c>Puck.World</c> type the adapter must not reference. The input channel vocabulary is not
+/// mapping and the capability mask-bit mapping. These live here, not in the scripting core (<c>Puck.Scripting</c>), because one
+/// side of each mapping is a World type the core must not reference. The input channel vocabulary is not
 /// pinned here at all: what a guest may declare is whatever the world document's channels section declares,
 /// resolved beside this in <see cref="WorldAddonChannelResolver"/>.
 /// </summary>

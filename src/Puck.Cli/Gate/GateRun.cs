@@ -9,30 +9,16 @@ internal sealed record GateStepResult(int ExitCode, string Output);
 /// <summary>Runs the gate's steps. <see cref="ProcessGateRunner"/> is the real one; the laws over <see cref="GateRun"/>
 /// substitute their own, so no law builds the solution or touches a GPU.</summary>
 internal interface IGateRunner {
-    /// <summary>Builds the solution in Release.</summary>
-    /// <param name="repositoryRoot">The checkout to build.</param>
-    /// <returns>The build's outcome.</returns>
-    GateStepResult Build(string repositoryRoot);
-    /// <summary>Copies the CLI the build just wrote into <paramref name="directory"/>.</summary>
-    /// <param name="repositoryRoot">The checkout whose build output holds the CLI.</param>
-    /// <param name="directory">The empty directory that receives the copy.</param>
-    /// <returns>The copied <c>Puck.Cli.dll</c>'s full path.</returns>
+    GateStepResult Dotnet(string repositoryRoot, IReadOnlyList<string> arguments);
     string CopyCli(string repositoryRoot, string directory);
-    /// <summary>Runs one verb of the copied CLI against the checkout.</summary>
-    /// <param name="cli">The copied <c>Puck.Cli.dll</c>.</param>
-    /// <param name="repositoryRoot">The checkout, the verb's working directory.</param>
-    /// <param name="arguments">The verb and its arguments.</param>
-    /// <returns>The verb's outcome.</returns>
-    GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments);
+    /// <summary>Runs one verb of the copied CLI against the checkout; <paramref name="progress"/>, when given, sees each
+    /// line the verb writes as it writes it, so a long step can report while it runs.</summary>
+    GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments, Action<string>? progress = null);
+    /// <summary>Waits for host capacity before a step; a step that opens a device (<see cref="GateStep.Gpu"/>) also waits
+    /// for an idle GPU.</summary>
+    bool WaitForCapacity(string repositoryRoot, string step, bool device);
 }
-/// <summary>
-/// <c>puck gate</c>'s run: the change-scoped CPU gate for a branch. It builds the solution and stops there, showing the
-/// build's errors, when the build fails; copies the CLI that build wrote into the run's own directory, so every later
-/// step runs the candidate's code and no other run can overwrite it; resolves the merge base of <c>HEAD</c> and the
-/// target; runs <c>puck affected --merge-base &lt;base&gt; --run</c> on that copy, adding <c>--gpu</c> when asked; and
-/// runs the repository checks in their check forms only. Every step's full output goes to the log the run names; the
-/// console carries one verdict line a step.
-/// </summary>
+/// <summary>Executes the batch plan serially, recording each step and withholding coverage on any failure.</summary>
 internal static class GateRun {
     /// <summary>The branch a change is gated against unless <c>--merge-base</c> names another.</summary>
     public const string DefaultTarget = "origin/features/gfx-pipeline";
@@ -63,142 +49,112 @@ internal static class GateRun {
         .Where(predicate: static path => !(path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".g.cs") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".generated.cs")))
         .Where(predicate: path => File.Exists(path: Path.Combine(path1: repositoryRoot, path2: path)))
         .Order(comparer: StringComparer.Ordinal)];
-    /// <summary>Runs the gate.</summary>
-    /// <param name="repositoryRoot">The checkout to gate.</param>
-    /// <param name="target">The branch the change lands on; the change is read against its merge base with
-    /// <c>HEAD</c>.</param>
-    /// <param name="gpu">Whether to run the chosen canaries and parity after the CPU checks.</param>
-    /// <param name="runner">Runs the steps.</param>
-    /// <param name="directory">The run's own empty directory: it receives the CLI copy, the format file list and the log,
-    /// and keeps the log.</param>
-    /// <returns><see cref="CliExit.Success"/> when every step passed, <see cref="CliExit.Failed"/> when the build or any
-    /// step failed, and <see cref="CliExit.Refused"/> when no merge base could be resolved.</returns>
-    public static int Run(string repositoryRoot, string target, bool gpu, IGateRunner runner, string directory) {
+    /// <summary>Runs the selected plan using the CLI host's clock and a substitutable process/admission boundary.</summary>
+    public static int Run(string repositoryRoot, string target, bool gpu, bool record, IGateRunner runner, string directory, TimeProvider clock) {
+        if (record && !gpu) {
+            return CliExit.Refuse(verb: Verb, what: "--record", why: "requires --gpu and an all-green qualification.");
+        }
         if (!AffectedCommand.TryResolveBase(error: out var baseError, mergeBase: target, repositoryRoot: repositoryRoot, resolved: out var mergeBase, since: null)) {
             return CliExit.Refuse(verb: Verb, what: target, why: baseError);
         }
-
         if (!AffectedCommand.TryReadChanged(changed: out var changed, deleted: out var deleted, error: out var changeError, repositoryRoot: repositoryRoot, since: mergeBase)) {
             return CliExit.Refuse(verb: Verb, what: mergeBase, why: changeError);
         }
-
-        var logPath = Path.Combine(
-            path1: directory,
-            path2: "gate.log"
-        );
-        var shownLog = CliPaths.ToDisplay(fullPath: logPath);
-        using var log = new StreamWriter(
-            append: false,
-            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            path: logPath
-        );
-
-        Console.Out.WriteLine(value: $"gate: {changed.Count} changed file(s) against {mergeBase[..12]}, the merge base of HEAD and {target}; full output in {shownLog}.");
-        Console.Error.WriteLine(value: "gate: building the solution.");
-
-        var build = runner.Build(repositoryRoot: repositoryRoot);
-
-        Log(log: log, result: build, step: "build");
-
-        if (build.ExitCode != 0) {
-            var output = Lines(text: build.Output);
-            var errors = output.Where(predicate: static line => line.Contains(comparisonType: StringComparison.Ordinal, value: ": error ")).Distinct(comparer: StringComparer.Ordinal).ToArray();
-
-            Console.Out.WriteLine(value: $"gate: build FAILED (exit {build.ExitCode}); nothing else ran.");
-
-            foreach (var line in ((errors.Length > 0) ? errors : output.TakeLast(count: FailureTail))) {
-                Console.Out.WriteLine(value: $"  {line.Trim()}");
-            }
-
-            return CliExit.Failed;
+        if (!AffectedCommand.TryPlan(changed: out _, error: out var planError, plan: out var affected, repositoryRoot: repositoryRoot, since: mergeBase)) {
+            return CliExit.Refuse(verb: Verb, what: mergeBase, why: planError);
         }
-
-        Console.Out.WriteLine(value: "gate: build passed");
-
-        var cliDirectory = Path.Combine(
-            path1: directory,
-            path2: "cli"
-        );
-
-        _ = Directory.CreateDirectory(path: cliDirectory);
-
-        var cli = runner.CopyCli(directory: cliDirectory, repositoryRoot: repositoryRoot);
+        var logPath = Path.Combine(path1: directory, path2: "gate.log");
+        var stepsPath = Path.Combine(path1: directory, path2: "gate.steps");
+        var shownLog = CliPaths.ToDisplay(fullPath: logPath);
+        var shownSteps = CliPaths.ToDisplay(fullPath: stepsPath);
+        using var log = new StreamWriter(logPath, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        using var summary = new StreamWriter(stepsPath, false, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)) { AutoFlush = true };
+        var cliDirectory = Path.Combine(path1: directory, path2: "cli");
+        var fileList = Path.Combine(path1: directory, path2: "format-sources.json");
         var sources = FormatSources(changed: changed, deleted: deleted, repositoryRoot: repositoryRoot);
-        var fileList = Path.Combine(
-            path1: directory,
-            path2: "format-sources.json"
-        );
 
         using (var stream = File.Create(path: fileList)) {
-            using var writer = new Utf8JsonWriter(utf8Json: stream);
+            using var writer = new Utf8JsonWriter(stream);
 
             writer.WriteStartArray();
-
-            foreach (var source in sources) {
-                writer.WriteStringValue(value: source);
-            }
-
+            foreach (var source in sources) { writer.WriteStringValue(value: source); }
             writer.WriteEndArray();
         }
-
-        List<(string Name, string[] Arguments)> steps = [
-            ("affected", ["affected", "--merge-base", mergeBase, "--run", .. (gpu ? (string[])["--gpu"] : [])]),
-        ];
-
-        if (sources.Count > 0) {
-            steps.Add(item: ("format", ["format", "--check", "--file-list", fileList]));
-        }
-
-        steps.Add(item: ("lengths", ["lengths", "--check"]));
-        steps.Add(item: ("comment-smells", ["comment-smells", "--check"]));
-        steps.Add(item: ("docs links", ["docs", "links"]));
-        steps.Add(item: ("schema", ["schema", "--check"]));
-        steps.Add(item: ("architecture", ["architecture", "--check"]));
-        steps.Add(item: ("registry", ["registry", "--check"]));
-        steps.Add(item: ("vocabulary", ["vocabulary", "--check"]));
-        steps.Add(item: ("shaders generate", ["shaders", "generate", "--check"]));
-        steps.Add(item: ("branding", ["branding", "--check"]));
-        steps.Add(item: ("formats", ["formats", "--check"]));
-        steps.Add(item: ("canary-ceilings", ["canary-ceilings", "--check"]));
-
         var failed = new List<string>();
+        var refused = false;
+        var cli = string.Empty;
 
+        Console.Out.WriteLine(value: $"gate: {changed.Count} changed file(s) against {mergeBase[..12]}, the merge base of HEAD and {target}; full output in {shownLog}; steps in {shownSteps}.");
         try {
-            if (sources.Count == 0) {
-                Console.Out.WriteLine(value: "gate: format skipped; no changed C# or .puck source");
-            }
-
-            foreach (var (name, arguments) in steps) {
-                Console.Error.WriteLine(value: $"gate: running puck {string.Join(separator: ' ', values: arguments)}.");
-
-                var result = runner.Puck(arguments: arguments, cli: cli, repositoryRoot: repositoryRoot);
-
-                Log(log: log, result: result, step: name);
-
-                if (result.ExitCode == 0) {
-                    Console.Out.WriteLine(value: $"gate: {name} passed");
-
+            foreach (var step in GatePlan.Expand(repositoryRoot, mergeBase, fileList, (sources.Count > 0), gpu, record, affected!)) {
+                if (step.Record && (failed.Count > 0)) {
+                    Console.Out.WriteLine(value: $"gate: {step.Name} skipped; qualification failed.");
                     continue;
                 }
+                if (step.Heavy && !runner.WaitForCapacity(device: step.Gpu, repositoryRoot: repositoryRoot, step: step.Name)) {
+                    refused = true;
+                    Console.Error.WriteLine(value: $"gate: {step.Name} refused; host capacity did not return.");
+                    break;
+                }
+                Console.Error.WriteLine(value: $"gate: running {step.Name}.");
+                var started = clock.GetTimestamp();
 
-                failed.Add(item: name);
-                Console.Out.WriteLine(value: $"gate: {name} FAILED (exit {result.ExitCode})");
+                summary.WriteLine(value: $"{clock.GetUtcNow():O} start {step.Name} exit=- elapsed=0s");
+                GateStepResult result;
 
-                foreach (var line in Lines(text: result.Output).TakeLast(count: FailureTail)) {
+                try {
+                    switch (step.Kind) {
+                        case GateStepKind.Build:
+                        case GateStepKind.DeviceSuite:
+                            result = runner.Dotnet(repositoryRoot, step.Arguments);
+                            break;
+                        case GateStepKind.CopyCli:
+                            Directory.CreateDirectory(path: cliDirectory);
+                            cli = runner.CopyCli(directory: cliDirectory, repositoryRoot: repositoryRoot);
+                            result = new GateStepResult(ExitCode: 0, Output: CliPaths.ToDisplay(fullPath: cli));
+                            break;
+                        case GateStepKind.Canaries:
+                            // Each canary's verdict is echoed as it lands, so a long GPU leg shows its progress.
+                            result = runner.Puck(cli, repositoryRoot, step.Arguments, progress: static line => {
+                                if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "PASS: canary ") || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "FAIL: canary ")) {
+                                    Console.Out.WriteLine(value: $"gate:   {line}");
+                                }
+                            });
+                            break;
+                        default:
+                            result = runner.Puck(cli, repositoryRoot, step.Arguments);
+                            break;
+                    }
+                } catch (Exception exception) {
+                    result = new GateStepResult(ExitCode: CliExit.Refused, Output: exception.ToString());
+                }
+                var elapsed = ((long)clock.GetElapsedTime(startingTimestamp: started).TotalSeconds);
+
+                summary.WriteLine(value: $"{clock.GetUtcNow():O} exit {step.Name} exit={result.ExitCode} elapsed={elapsed}s");
+                Log(log: log, result: result, step: step.Name);
+                if (result.ExitCode == 0) {
+                    Console.Out.WriteLine(value: $"gate: {step.Name} passed ({elapsed}s)");
+                    continue;
+                }
+                failed.Add(item: step.Name);
+                var prerequisite = (step.Kind is GateStepKind.Build or GateStepKind.CopyCli);
+
+                Console.Out.WriteLine(value: $"gate: {step.Name} FAILED (exit {result.ExitCode}, {elapsed}s){(prerequisite ? "; nothing else ran." : string.Empty)}");
+                var lines = Lines(text: result.Output);
+                var errors = lines.Where(predicate: line => line.Contains(comparisonType: StringComparison.Ordinal, value: ": error ")).Distinct(comparer: StringComparer.Ordinal).ToArray();
+
+                foreach (var line in ((prerequisite && (errors.Length > 0)) ? errors : lines.TakeLast(count: FailureTail))) {
                     Console.Out.WriteLine(value: $"  {line.Trim()}");
                 }
+                if (prerequisite) { break; }
             }
         } finally {
             _ = RunDirectory.TryDelete(path: cliDirectory);
             File.Delete(path: fileList);
         }
+        var verdict = (refused ? "refused" : ((failed.Count == 0) ? "passed" : $"FAILED: {string.Join(separator: ", ", values: failed)}"));
 
-        Console.Out.WriteLine(value: ((failed.Count == 0)
-            ? $"gate: passed; full output in {shownLog}"
-            : $"gate: FAILED: {string.Join(separator: ", ", values: failed)}; full output in {shownLog}"));
-
-        return ((failed.Count == 0)
-            ? CliExit.Success
-            : CliExit.Failed);
+        Console.Out.WriteLine(value: $"gate: {verdict}; full output in {shownLog}; steps in {shownSteps}");
+        return (refused ? CliExit.Refused : ((failed.Count == 0) ? CliExit.Success : CliExit.Failed));
     }
 }

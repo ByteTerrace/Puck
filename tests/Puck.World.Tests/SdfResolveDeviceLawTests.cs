@@ -14,6 +14,7 @@ namespace Puck.World.Tests;
 /// visibility record is a miss, and every binding the spatial path does not read holds a filler of its kind, while the
 /// reduced-world canary exercises its ordinary package recorder.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class SdfResolveDeviceLawTests {
     private const uint RenderWidth = 16;
     private const uint RenderHeight = 48;

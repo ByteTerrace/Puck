@@ -91,7 +91,7 @@ Button elements compare the RAW `FixedQ4816` value against
 `WorldChannelTable.DefaultBinaryThreshold`, never a float round-trip; stick axes
 canonicalize to -1..1 and triggers to 0..1 in the fixed-point domain first.
 
-The arcade district (`modules/arcade.world.json`) is the worked example: its
+The arcade district (`modules/arcade.puck`) is the worked example: its
 cabinet screens route engageable with kit `arcadePad`. No shipped world authors a
 portal face; the `portal-window` canary's fixture is the worked portal example, and
 a portal face shows its destination without being engageable.
@@ -197,7 +197,7 @@ declared ordinal's threshold).
 advances (so it reads PRE-MOVE positions), over every active local seat that has
 COMPOSED NOTHING beyond its own body (`HasComposedApplication`): the first
 (document order) screen that is `Engageable`, carrying a live machine
-(`Server.WorldMachineHost.HasMachine`, the actually booted signal rather than the
+(`IWorldMachineHost.HasMachine`, the actually booted signal rather than the
 document-declared `WorldScreenSource.Machine`), carrying no live occupant
 (`PlayersOn(screenIndex)` empty), naming an `EngageChannel` this world's channel
 table resolves, within radius, and that would pass `CheckEngage`. The resolved
@@ -352,9 +352,11 @@ counting as absent (`EngageBodyIndexLawTests`). `body.disengage` submits
 
 A booted `IMachineRuntime` is CORE state, not presentation-fed. Machine engines are
 engine-neutral (`Puck.Abstractions.Machines`): `IMachineEngine` is a factory
-keyed by a kebab-case id, DI-collected into `Server.WorldMachineHost` (a peer
-singleton `WorldServer` takes as a constructor parameter — `WorldBootComposition`
-registers `gaming-brick` (SM83 family) and `advanced-gaming-brick` (ARM7TDMI)).
+keyed by a kebab-case id, DI-collected into `WorldMachineHost` (in
+`Puck.World.Machines`, behind the Server seam `IWorldMachineHost`; `WorldBootComposition`
+registers the factory (`machineHostFactory`) that builds it over the composed
+engines and content providers — `gaming-brick` (SM83 family) and
+`advanced-gaming-brick` (ARM7TDMI) are the shipped engines).
 `WorldMachineHost` owns boot/step/cable-link/reconfigure/memory-peek for every
 declared screen's machine in EVERY boot shape, headless included; stepping happens
 inside `WorldServer.Step`, immediately after `FoldTick`, fed the tick's per-screen
@@ -376,22 +378,25 @@ rides the tape REGARDLESS of whether the op succeeded, so a FAILED insert/select
 reproduces the identical failure on replay rather than silently retrying
 unpinned, and refuses BY NAME (`ScreenOpContentMismatch`) the moment the file's
 on-disk state has since changed in EITHER direction. Tape-covered:
-`WorldReplayEntry.ScreenOp`, discriminant 7. Camera/capture/window-capture/
+`WorldReplayEntry.ScreenOp`, discriminant 6. Camera/capture/window-capture/
 jumbotron-view/test-pattern/QR screen sources remain presentation-only;
 `ScreenCommandModule`'s camera/capture/desktop/view/qr handlers eject a present
 machine through a `WorldScreenOp.Eject` submission first, then call
 `WorldScreenBinder` directly.
 
-Exact machine-op grammars: `screen.insert <index> <contentPath> [engine]
-[options…]` (a `<contentPath>` ending in `.cartridge.json` is compiled through
-the engine's forge at bind, and `screen.state` echoes `cartridge <path> hash
-<source> rom <image>`); `screen.eject <index>`; `screen.select <index>
-[next|prev|<entry>]` (index alone reads the current selection); `screen.options
-<index> [options…]` (index alone reads current options); `screen.link <name>
-<index> <index> [index…]`; `screen.unlink <name>`. `ScreenCommandModule` routes
-write forms as `Simulation`; when each handler runs, its `WorldScreenOp` applies
-synchronously in the ordered domain. The `screen.state`, `screen.peek`, and
-`screen.links` read-backs are Immediate.
+Console grammars: `screen.insert <index> <contentPath> [engine] [options…]`
+(a content path an engine's content provider recognizes, such as a
+`.cartridge.json`, is compiled at bind, and `screen.state` echoes `cartridge
+<path> hash <source> rom <image>`; a screen whose source names a declared machine
+instance takes the content path alone, inserted through `machine.operation`'s
+`content.insert` provider path, and refuses an engine or options because the
+instance keeps its authored configuration); `screen.eject <index>` (a named
+machine display clears only the screen source through a
+`WorldMutation.UpsertScreen`); `screen.source <index> <kind> …` (a presentation
+source); and the Immediate read-backs `screen.state`, `screen.peek`,
+`screen.links`, `world.machines`, `world.screens`. Only `body.engage`'s
+auto-insert submits `WorldScreenOp.Select` from a verb; `SetOptions`, `Link` and
+`Unlink` have codec arms but no console verb.
 
 ## Read-backs
 
@@ -412,8 +417,9 @@ Run the game; drive `body.engage <target> [body] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. Exercising
-the screen path needs a screen at index 0, and no shipped world declares one,
-so validate a screen application against a scratch
+the screen path needs a declared screen: the flagship's arcade district declares
+engageable cabinet screens (kit `arcadePad`, none at index 0), so
+validate any other screen layout against a scratch
 world copy. Remember actor ≠ target: every seat holds wide grants by default, so
 self-targeting discriminates nothing — revoke first, then prove the denial, then
 re-grant and prove success. Remember body index vs. player index:

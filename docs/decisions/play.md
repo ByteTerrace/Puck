@@ -50,7 +50,7 @@ cartridge-compatible rendition are distinct products; shaders and meshes do
 not translate to handheld hardware by themselves.
 
 **Districts are modules** imported under an alias and exporting only their
-control rows. `granaries.world.json` moves under the modules rather than
+control rows. `granaries.puck` moves under the modules rather than
 disappearing; the frozen documents, the scenarios, and their canaries retire
 with a ledger naming each successor.
 
@@ -211,8 +211,9 @@ compliance.
 completion** (`FrameCaptureRequest.Completion`), not a file's existence or a
 pending echo; one pending request, arbitrated on the owning thread.
 
-**Cost reports return `WorldCostReport.Generate`'s facts intact**; calibration
-stays out of the adapter.
+**The rule-cost report returns `WorldCostReport.Generate`'s facts intact**; the
+console reads it through `world.budget.rules`, and calibration stays out of the
+adapter. `world.cost` is the editor's per-placement verb and not this report.
 
 **Submission is distinct from execution.** Queueing a simulation command
 returns no verdict, so receipts carry correlation through deferred dispatch;

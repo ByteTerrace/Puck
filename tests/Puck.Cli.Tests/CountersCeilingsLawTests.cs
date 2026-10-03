@@ -126,7 +126,7 @@ public sealed class CountersCeilingsLawTests {
 
         Assert.Equal(
             actual: Assert.Single(collection: verdict.Failures),
-            expected: "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$primary node=world is over its ceiling: reads 4097, ceiling 4096"
+            expected: "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$primary detail=- node=world is over its ceiling: reads 4097, ceiling 4096"
         );
 
         // A count that falls stays within its ceiling.
@@ -142,8 +142,8 @@ public sealed class CountersCeilingsLawTests {
         Assert.Equal(
             actual: verdict.Failures,
             expected: [
-                "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$cull-args node=world breaks its required zero: reads 3",
-                "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient node=world breaks its required zero: reads 12",
+                "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$cull-args detail=- node=world breaks its required zero: reads 3",
+                "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient detail=- node=world breaks its required zero: reads 12",
             ]
         );
     }
@@ -159,7 +159,7 @@ public sealed class CountersCeilingsLawTests {
 
         Assert.Equal(
             actual: Assert.Single(collection: verdict.Failures),
-            expected: "vulkan: deterministic kind=gpu.dispatches pass=sdf.world$resolve node=world reads 1 with no ceiling recorded"
+            expected: "vulkan: deterministic kind=gpu.dispatches pass=sdf.world$resolve detail=- node=world reads 1 with no ceiling recorded"
         );
     }
     // On another device the per-backend-deterministic magnitudes, however far they move, are not judged, and a line says
@@ -174,7 +174,7 @@ public sealed class CountersCeilingsLawTests {
 
         Assert.Equal(
             actual: Assert.Single(collection: verdict.Failures),
-            expected: "vulkan: deterministic kind=gpu.dispatches.indirect pass=sdf.world$primary node=world is over its ceiling: reads 2, ceiling 1"
+            expected: "vulkan: deterministic kind=gpu.dispatches.indirect pass=sdf.world$primary detail=- node=world is over its ceiling: reads 2, ceiling 1"
         );
         Assert.Equal(
             actual: Assert.Single(collection: verdict.Notes),
@@ -199,8 +199,8 @@ public sealed class CountersCeilingsLawTests {
         Assert.Equal(
             actual: verdict.Failures,
             expected: [
-                "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$cull-args node=world breaks its required zero: reads 3",
-                "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient node=world breaks its required zero: reads 12",
+                "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$cull-args detail=- node=world breaks its required zero: reads 3",
+                "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient detail=- node=world breaks its required zero: reads 12",
             ]
         );
     }
@@ -222,7 +222,7 @@ public sealed class CountersCeilingsLawTests {
                 ceilings: recorded,
                 report: Report(vulkan: WithUpload(dispatches: 5L, run: Run(backend: "vulkan")))
             ).Failures),
-            expected: "vulkan: per-backend-deterministic kind=gpu.dispatches pass=upload node=world breaks its required zero: reads 5"
+            expected: "vulkan: per-backend-deterministic kind=gpu.dispatches pass=upload detail=- node=world breaks its required zero: reads 5"
         );
     }
     // A pass the recording skipped holds a required zero for each kernel kind everywhere: executing and counting work on
@@ -242,7 +242,7 @@ public sealed class CountersCeilingsLawTests {
         Assert.Empty(collection: verdict.Failures);
         Assert.Equal(
             actual: Assert.Single(collection: verdict.Notes),
-            expected: "vulkan: 1 per-backend-deterministic count(s) not judged, 5 required zero(s) still judged: the ceilings were recorded on Example GPU (driver 566.36), this run's device is Example GPU (driver 580.01)"
+            expected: "vulkan: 1 per-backend-deterministic count(s) not judged, 13 required zero(s) still judged: the ceilings were recorded on Example GPU (driver 566.36), this run's device is Example GPU (driver 580.01)"
         );
 
         var executing = recordingRun with {
@@ -253,7 +253,7 @@ public sealed class CountersCeilingsLawTests {
 
         Assert.Contains(
             collection: CountersCeilings.Check(ceilings: recorded, report: Report(vulkan: executing)).Failures,
-            expected: "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$shadow node=world breaks its required zero: reads 7"
+            expected: "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$shadow detail=- node=world breaks its required zero: reads 7"
         );
     }
     // The recorded files state a required zero exactly where the recorder would: every zero of a kernel kind is marked, so a
@@ -386,7 +386,7 @@ public sealed class CountersCeilingsLawTests {
     // the kind reads in the pass, so the pass starting to count fails.
     [Fact]
     public void ASkippedPassIsRecordedAsARequiredZeroForEveryKind() {
-        const string Line = """[world.counters: {"sources":[],"gpu":{"device":{"backend":"vulkan","adapter":"Example GPU","vendor":4318,"device":7944,"driver":"566.36","driver.raw":2374860800,"api":"1.4.303","driver.name":"","driver.id":0,"conformance":""},"nodes":[{"name":"world","sample":{"submission":61,"revision":3,"passes":[{"label":"sdf.world$primary","class":"deterministic","state":"executed","counts":{"gpu.dispatches.indirect":1,"gpu.march.steps":4096}},{"label":"sdf.world$ambient","class":"deterministic","state":"skipped"}],"outside":{"gpu.clears":1}},"lifetime":null}]},"allocation":{"gcMode":"workstation, concurrent","windows":{}},"kinds":{"gpu.dispatches.indirect":{"unit":"count","class":"deterministic"},"gpu.march.steps":{"unit":"count","class":"per-backend-deterministic"},"gpu.clears":{"unit":"count","class":"deterministic"}}}]""";
+        const string Line = """[world.counters: {"sources":[],"gpu":{"device":{"backend":"vulkan","adapter":"Example GPU","vendor":4318,"device":7944,"driver":"566.36","driver.raw":2374860800,"api":"1.4.303","driver.name":"","driver.id":0,"conformance":""},"nodes":[{"name":"world","sample":{"submission":61,"revision":3,"passes":[{"label":"sdf.world$primary","class":"deterministic","state":"executed","details":[],"counts":{"gpu.dispatches.indirect":1,"gpu.march.steps":4096}},{"label":"sdf.world$ambient","class":"deterministic","state":"skipped","details":[]}],"outside":{"gpu.clears":1}},"lifetime":null}]},"allocation":{"gcMode":"workstation, concurrent","windows":{}},"kinds":{"gpu.dispatches.indirect":{"unit":"count","class":"deterministic"},"gpu.march.steps":{"unit":"count","class":"per-backend-deterministic"},"gpu.clears":{"unit":"count","class":"deterministic"}}}]""";
 
         Assert.True(condition: CountersReading.TryReadLine(
             backend: "vulkan",
@@ -431,7 +431,7 @@ public sealed class CountersCeilingsLawTests {
 
         Assert.Contains(
             collection: CountersCeilings.Check(ceilings: ceilings, report: report with { Runs = [executing, report.Runs[1]] }).Failures,
-            expected: "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient node=world breaks its required zero: reads 5"
+            expected: "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient detail=- node=world breaks its required zero: reads 5"
         );
     }
     // Every recorded expectation must be measured: a node the run no longer reports fails each of its ceilings.
@@ -448,11 +448,11 @@ public sealed class CountersCeilingsLawTests {
         Assert.Equal(
             actual: verdict.Failures,
             expected: [
-                "vulkan: deterministic kind=gpu.dispatches.indirect pass=sdf.world$primary node=world was recorded but not measured",
-                "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$primary node=world was recorded but not measured",
-                "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$cull-args node=world was recorded but not measured",
-                "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient node=world was recorded but not measured",
-                "vulkan: deterministic kind=gpu.clears pass=outside node=world was recorded but not measured",
+                "vulkan: deterministic kind=gpu.dispatches.indirect pass=sdf.world$primary detail=- node=world was recorded but not measured",
+                "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$primary detail=- node=world was recorded but not measured",
+                "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$cull-args detail=- node=world was recorded but not measured",
+                "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$ambient detail=- node=world was recorded but not measured",
+                "vulkan: deterministic kind=gpu.clears pass=outside detail=- node=world was recorded but not measured",
             ]
         );
     }
@@ -472,7 +472,7 @@ public sealed class CountersCeilingsLawTests {
 
         Assert.Equal(
             actual: Assert.Single(collection: verdict.Failures),
-            expected: "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$primary node=world was measured as pacing"
+            expected: "vulkan: per-backend-deterministic kind=gpu.march.steps pass=sdf.world$primary detail=- node=world was measured as pacing"
         );
     }
     [Fact]

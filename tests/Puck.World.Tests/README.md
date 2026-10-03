@@ -26,6 +26,13 @@ lever, save and boot path for its slot policy, including atomic preset changes.
 checks that session observers see every complete delivery, field cells
 included, while keeping counted observer samples separate from frame samples.
 
+`GpuWorkDetailDeviceLawTests` runs the generated counting functions on Vulkan
+and Direct3D 12, crossing the low-word boundary in both a plain row and a named
+row. It submits two frames before waiting, grows the detail labels between
+them, and holds every detail sum to its pass total and each frame to its own
+labels. `SdfSkyEvaluationDeviceLawTests` binds the sky's named rows and checks
+that covered pixels evaluate no layer.
+
 `WorldCompilationAnalysisLawTests` checks that ticks retain installed cost and
 hazard analysis, while a rule-order edit replaces it even with the same state catalog.
 It also checks loader-to-server admission handoff, mismatched definition/catalog refusals, and
@@ -55,7 +62,10 @@ same three devices, uploaded and drawn through the display encode in SDR, and
 holds each RGBA8 channel within one code of the value's own code, headroom
 saturating to 255; it shares that collection for the same debug-layer leg.
 The device laws share `tests/Shared`'s
-`HeadlessVulkanDevice` and `DirectXTestDevices`. A Vulkan device law's
+`HeadlessVulkanDevice` and `DirectXTestDevices`. Every class that opens a
+hardware device carries `[Trait("Category", "Gpu")]`, which the build holds
+(GPU001), so `--filter-not-trait Category=Gpu` runs the rest of the suite beside a
+GPU leg. A Vulkan device law's
 instance runs under `VK_LAYER_KHRONOS_validation` as the one switch
 `HeadlessVulkanDevice.Validation` says (on), unless the law passes
 `validation` itself; a host without the layer skips the law by name. An instance
@@ -219,7 +229,7 @@ Changing a fixture must preserve the condition that can make its law fail.
 Measure execution separately from restore and build:
 
 ```powershell
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-build --logger trx
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-build --report-xunit-trx
 ```
 
 Review slow TRX cases before reducing workloads. Do not make the default run

@@ -26,6 +26,7 @@ namespace Puck.World.Tests;
 /// software (WARP) renderer.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class MeshTextureDeviceLawTests {
     private const string KernelName = "mesh-textures.comp";
     private const uint Group = 3U;

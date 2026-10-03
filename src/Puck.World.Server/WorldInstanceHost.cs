@@ -87,7 +87,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // a fresh one per instance would both misreport the host and put a Guid.NewGuid() on an admission path.
     private readonly Guid m_machineId;
     // The screen-machine host builder, supplied by the composition root: Puck.World.Server carries no reference to
-    // the emulator cores or the Tune instrument engine, so it cannot construct Puck.World.Addons.Machines'
+    // Puck.World.Machines or the engines it hosts, so it cannot construct that project's
     // WorldMachineHost itself — the same "the server calls out, the composition root supplies the capability" shape
     // as m_addonHostFactory (WorldReplaySnapshot).
     private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
@@ -163,7 +163,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // so the host canonicalizes once, here, and threads the same canonical string into every resolver call
     // (TryResolve, TryGetActive, TryAdopt, DescribeActive) — never the raw WorldReference.Document string a
     // destination row spells, since two documents naming the identical underlying file through different
-    // spellings ("dive.world.json" beside it vs "../modules/dive.world.json") would otherwise mint two separate
+    // spellings ("dive.puck" beside it vs "../modules/dive.puck") would otherwise mint two separate
     // resolver cache entries even though they resolve to one file.
     // A path this probe cannot resolve to an existing file falls back to the raw string unchanged — the
     // resolver still needs some stable identity for its cache key, and an unresolvable document is about to

@@ -51,8 +51,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     ViewportData view = worldView();
 
-    // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
-    sdfLodOrigin = view.position.xyz;
     // The per-invocation program-layout cache (field/sdf-layout.hlsli), decoded once before the stage's field queries.
     sdfProgramLayout = sdfLoadProgramLayout();
     sdfPartBoundsViewport = viewIndex;

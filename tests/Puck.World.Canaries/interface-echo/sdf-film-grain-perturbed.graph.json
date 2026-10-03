@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 19,
+        "width": 20,
         "height": 1
       }
     }
@@ -29,7 +29,8 @@
         "intensity": { "type": "float", "default": 0.05, "min": 0, "max": 1, "description": "The peak per-channel offset." },
         "seed": { "type": "uint", "default": 0, "description": "Folded into the per-pixel hash." },
         "size": { "type": "float", "default": 1, "min": 1, "description": "The grain cell size, in pixels." },
-        "workCounterRow": { "type": "uint", "default": 0, "description": "The pass's row of the work counters." }
+        "workCounterRow": { "type": "uint", "default": 0, "description": "The pass's row of the work counters." },
+        "workCounterRowDetail": { "type": "uint", "default": 0, "description": "The pass's first named detail row of the work counters." }
       }
     }
   ],

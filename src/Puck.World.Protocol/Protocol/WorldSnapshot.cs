@@ -96,7 +96,7 @@ public readonly record struct EntitySnapshot(
 /// reader (a HUD binding, a gait driver) must pass to evaluate a <c>StateAdvance</c> row's live value; never derived
 /// from <see cref="Tick"/> at a simulation rate.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
-/// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> inside <c>WorldServer.Step</c>, in-process,
+/// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> (in <c>Puck.World.Machines</c>) inside <c>WorldServer.Step</c>, in-process,
 /// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
 public readonly record struct WorldSnapshot(
     ulong Tick,

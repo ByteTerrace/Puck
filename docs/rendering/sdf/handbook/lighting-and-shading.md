@@ -142,9 +142,11 @@ shadow march, the 64 lanes in an 8×8 workgroup walk the world-space instance
 grid along the current slot's light ray and cooperatively build one groupshared mask covering
 the complete instance capacity. Each pixel then marches that mask. The mask
 contains every occluder the flat all-instances march could hit, while its grid
-walk is shared across the workgroup. No automated check compares it with the
-flat march. The next slot reuses the same gather and march sites after every
-lane finishes consuming the shared mask.
+walk is shared across the workgroup. An admitted instance a pixel's ray never
+reaches composes as the accumulator to the bit, so by construction the masked
+march equals the flat march exactly. No automated check compares them. The next
+slot reuses the same gather and march sites after every lane finishes consuming
+the shared mask.
 
 The gather cone matters. It is **not** a bare ray: it is the *penumbra cone*,
 wider than the ray itself, because the closest-approach estimate must include
@@ -184,9 +186,11 @@ the sun stays governed by the soft shadow above. And the `(h − d)` deficit mix
 a world-space rung height with a scaled field sample, so `d` is de-scaled first
 (the chapter's recurring rule again).
 
-There is *no* screen-space AO, no hemisphere sampling, no temporal history—all
-of that fights the no-RNG / no-screen-history posture that keeps the renderer
-deterministic across backends. The three-tap ladder and its one-sample fast
+There is *no* screen-space AO, no hemisphere sampling, and no AO history—all
+of that fights the no-RNG posture that keeps the renderer deterministic across
+backends, and every frame's occlusion comes from the field alone. (A temporal
+view's [reconstruction](frame-rendering.md#temporal-reconstruction) filters the
+shaded color afterwards and never feeds back into AO.) The three-tap ladder and its one-sample fast
 path are the whole AO story: the cheapest technique with the largest perceptual
 gain, and zero architectural disturbance.
 
@@ -252,7 +256,7 @@ frame uploads zero and every default is preserved.
 
 | Verb | Effect | Why you'd use it |
 |---|---|---|
-| `world.shadows off\|low\|medium\|high\|0..1` | `off` leaves the sun unshadowed; other values scale the shadow ray's reach *and* its gather cone together | Isolates the most expensive shading term, or measures shorter-reach shadows (both lengths must scale together or the gathered set is unsound) |
+| `world.shadows off\|low\|medium\|high\|0..1 [crowd-radius]` | `off` leaves the sun unshadowed; other values scale the shadow ray's reach *and* its gather cone together, and the optional radius bounds which avatars cast | Isolates the most expensive shading term, or measures shorter-reach shadows (both lengths must scale together or the gathered set is unsound) |
 | `world.ao on\|off` | `off` forces occlusion to 1; creases brighten | Isolates the three AO field evaluations per lit pixel |
 | `world.ao-quality auto\|exact\|fast` | Picks the three-rung ladder or the one-sample contact estimate | A/B of AO cost against look |
 | `world.shadow-mask auto\|exact\|camera-tile` | Picks the per-workgroup shadow gather or the camera tile's mask | Measures the gather's cost; the camera-tile mask drops off-frustum occluders |

@@ -1,13 +1,17 @@
 using System.CommandLine;
 using Puck.Cli.Affected;
+using Puck.Cli.Host;
 
 namespace Puck.Cli.Gate;
 
-/// <summary><c>puck gate</c> — the change-scoped CPU gate for a branch; <see cref="GateRun"/> holds its steps.</summary>
+/// <summary><c>puck gate</c> — the batch qualification for a branch; <see cref="GatePlan"/> holds its steps.</summary>
 internal static class GateCommand {
     private const string Verb = "gate";
 
-    private static int Run(string target, bool gpu) {
+    private static int Run(string target, bool gpu, bool record, TimeProvider clock, CancellationToken cancellationToken) {
+        if (record && !gpu) {
+            return CliExit.Refuse(verb: Verb, what: "--record", why: "requires --gpu and an all-green qualification.");
+        }
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -25,46 +29,48 @@ internal static class GateCommand {
             directory: directory,
             gpu: gpu,
             repositoryRoot: repositoryRoot,
-            runner: new ProcessGateRunner(),
+            record: record,
+            clock: clock,
+            runner: new ProcessGateRunner(cancellationToken: cancellationToken, clock: clock),
             target: target
         );
     }
 
-    public static Command Create() {
+    public static Command Create(TimeProvider clock) {
         var mergeBaseOption = AffectedCommand.MergeBase(description: "The branch the change lands on; the change is read against its merge base with HEAD.");
         var gpuOption = AffectedCommand.Gpu();
+
+        gpuOption.Description = "Add affected canaries and parity, device suites, every recorded counters workload and docs citations, serially.";
+        var recordOption = new Option<bool>("--record") { Description = "Requires --gpu; refresh canary coverage only after every qualification step passes." };
         var command = new Command(
             description: "Build the solution and run the checks a branch's change needs, against its merge base.",
             name: Verb
-        ) { mergeBaseOption, gpuOption };
+        ) { mergeBaseOption, gpuOption, recordOption };
 
         mergeBaseOption.DefaultValueFactory = static _ => GateRun.DefaultTarget;
-        command.Detail(detail: """
-              Steps, in order:
-                1. dotnet build Puck.slnx -c Release; a failed build prints its errors and stops the gate.
-                2. Copy the CLI that build wrote into the run's own temporary directory; every later
-                   step runs that copy, so it runs the candidate's code and nothing else overwrites it.
-                3. puck affected --merge-base <merge base> --run: the suites, the .puck test worlds and
-                   the catalog check the change reaches, read against the merge base of HEAD and
-                   --merge-base, so commits the target gained after the branch left it are not counted.
-                   --gpu adds --gpu: the chosen canaries, then parity, one after the other.
-                4. puck format --check over the changed C# and .puck sources, puck lengths --check,
-                   puck comment-smells --check, puck docs links, puck schema --check,
-                   puck architecture --check, puck registry --check, puck vocabulary --check,
-                   puck shaders generate --check, puck branding --check, puck formats --check and
-                   puck canary-ceilings --check. Nothing is rewritten.
-              Each step's full output goes to gate.log in the run's directory, which the summary names
-              and the run keeps; the CLI copy is removed. Run it from a CLI outside the checkout: the
-              build rewrites src/Puck.Cli/bin.
+        command.Detail(detail: (GatePlan.Detail() + $"""
 
-              Exit codes: 0 every step passed; 1 the build or a step failed; 2 refused (no merge base,
-              or the CLI runs from the checkout it would rebuild).
-            """);
-        command.SetAction(action: parseResult => Run(
+            Baseline steps run only when affected reaches their owning project or declared data inputs.
+            The chosen canaries and parity follow the baseline checks, only with --gpu. Counters expands every
+            tests/Puck.Counters/*.world.json with matching ceilings, using its sibling script when
+            present or the script recorded in its ceilings. Checks write nothing; --record writes coverage.
+            Before each heavy step, admission uses host load's default classification in-process. A step that
+            opens a device (the --gpu steps) also waits for an idle GPU; every other step waits for capacity alone.
+            It waits at most {HostAdmission.Timeout.TotalMinutes:0} minutes, reporting when waiting starts and capacity returns.
+            A failed build or CLI copy stops the run. Other failures allow later checks, but skip recording.
+            gate.log holds full output; gate.steps records each start and exit with UTC time and whole seconds.
+            Both files are kept and named in the summary. Run from a CLI copy outside the checkout.
+
+            Exit codes: 0 every step passed; 1 a step failed; 2 refused (invalid record, no merge base,
+            admission timeout, or a CLI running from the checkout it would rebuild).
+            """));
+        command.SetAction(action: (parseResult, cancellationToken) => Task.FromResult(result: Run(
             gpu: parseResult.GetValue(option: gpuOption),
+            record: parseResult.GetValue(option: recordOption),
+            clock: clock,
+            cancellationToken: cancellationToken,
             target: parseResult.GetValue(option: mergeBaseOption)!
-        ));
-
+        )));
         return command;
     }
 }

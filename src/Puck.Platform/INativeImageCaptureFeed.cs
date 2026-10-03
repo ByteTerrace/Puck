@@ -14,8 +14,9 @@ public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     bool IsEnded { get; }
     /// <summary>Gets the format and color space of the frames <see cref="IFrameCaptureSource.TryCapture"/> hands out,
     /// fixed at open by the display the target shows on: B8G8R8A8 sRGB for an SDR display, and half-float scRGB for an HDR
-    /// one, which a consumer converts into its working space rather than clipping. Only an SDR feed takes GPU targets
-    /// (<see cref="AttachGpuTargets"/>). An HDR toggle, a move to a display that differs in it, or unavailable display
+    /// one, which a consumer converts into its working space rather than clipping. GPU targets
+    /// (<see cref="AttachGpuTargets"/>) are made in this format, so an HDR feed's targets hold its scRGB frames for the
+    /// consumer to convert on the device. An HDR toggle, a move to a display that differs in it, or unavailable display
     /// discovery ends the feed; the consumer reopens it to refresh this contract.</summary>
     DisplayOutput Output { get; }
     /// <summary>Gets whether the live source extent differs from the attached GPU targets' extent, in which case GPU
@@ -46,8 +47,8 @@ public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     /// previously opened targets, whose images the consumer keeps until its last acquisition of them is released.
     /// Thread-safe against the capture callback.</summary>
     /// <param name="targets">The shared targets, sized to the live source extent (<see cref="SourceWidth"/> ×
-    /// <see cref="SourceHeight"/>).</param>
-    /// <exception cref="NotSupportedException"><see cref="Output"/> is HDR, whose frames the B8G8R8A8 targets cannot
-    /// hold.</exception>
+    /// <see cref="SourceHeight"/>), in <see cref="Output"/>'s format.</param>
+    /// <exception cref="ArgumentException">The targets' format is not <see cref="Output"/>'s, which a copy would silently
+    /// drop.</exception>
     void AttachGpuTargets(NativeImageGpuCaptureTargets targets);
 }

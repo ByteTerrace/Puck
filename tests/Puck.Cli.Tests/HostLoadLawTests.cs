@@ -1,3 +1,5 @@
+using Puck.Cli.Affected;
+using Puck.Cli.Gate;
 using Puck.Cli.Host;
 using Xunit;
 
@@ -33,23 +35,39 @@ public sealed class HostLoadLawTests {
         Assert.Empty(collection: monitor.Observe(sample: Reading(cpu: 0, disk: 0.1, ram: 0.1, seconds: 3600)));
     }
     [Fact]
-    public void PressureWinsOverCapacityAndRepeatsAtMostEveryFiveMinutes() {
+    public void PressureWinsOverCapacityAndPrintsOncePerChangeOfItsReasons() {
         var monitor = new HostLoadMonitor(cpuSamples: 1, thresholds: Laptop);
 
         // Low CPU and plenty of memory would be CAPACITY, but the disk is under its pressure threshold.
         Assert.Equal(actual: monitor.Observe(sample: Reading(disk: 9.5, seconds: 0)), expected: ["GPU idle cpu=10% freeRAM=8.0GB freeDisk=9.5GB reuseNodes=0", "PRESSURE freeDisk<10.0GB cpu=10% freeRAM=8.0GB freeDisk=9.5GB reuseNodes=0"]);
-        Assert.Empty(collection: monitor.Observe(sample: Reading(disk: 9.5, ram: 1.5, seconds: 299)));
-        Assert.Equal(actual: monitor.Observe(sample: Reading(disk: 9.5, ram: 1.5, seconds: 300)), expected: ["PRESSURE freeRAM<2.0GB,freeDisk<10.0GB cpu=10% freeRAM=1.5GB freeDisk=9.5GB reuseNodes=0"]);
+        Assert.Empty(collection: monitor.Observe(sample: Reading(disk: 9.4, seconds: 3600)));
+        Assert.Equal(actual: monitor.Observe(sample: Reading(disk: 9.5, ram: 1.5, seconds: 3610)), expected: ["PRESSURE freeRAM<2.0GB,freeDisk<10.0GB cpu=10% freeRAM=1.5GB freeDisk=9.5GB reuseNodes=0"]);
+        Assert.Empty(collection: monitor.Observe(sample: Reading(disk: 9.5, ram: 1.5, seconds: 7200)));
     }
     [Fact]
-    public void CapacityWaitsForAFullWindowAndRepeatsAtMostEveryTenMinutes() {
+    public void CapacityWaitsForAFullWindowAndPrintsOnceWhileItHolds() {
         var monitor = new HostLoadMonitor(cpuSamples: 3, thresholds: Laptop);
 
         Assert.Equal(actual: Kinds(lines: monitor.Observe(sample: Reading(seconds: 0))), expected: ["GPU idle"]);
         Assert.Empty(collection: monitor.Observe(sample: Reading(seconds: 10)));
         Assert.Equal(actual: Kinds(lines: monitor.Observe(sample: Reading(seconds: 20))), expected: ["CAPACITY"]);
-        Assert.Empty(collection: monitor.Observe(sample: Reading(seconds: 619)));
-        Assert.Equal(actual: Kinds(lines: monitor.Observe(sample: Reading(seconds: 620))), expected: ["CAPACITY"]);
+        Assert.Empty(collection: monitor.Observe(sample: Reading(seconds: 620)));
+        Assert.Empty(collection: monitor.Observe(sample: Reading(seconds: 7200)));
+    }
+    [Fact]
+    public void EachAdmissionTransitionPrintsExactlyOneLine() {
+        var monitor = new HostLoadMonitor(cpuSamples: 1, thresholds: Laptop);
+        (double Cpu, double Ram, string? Gpu)[] readings = [
+            (10, 8, null), (10, 8, null),
+            (90, 8, null), (90, 8, null),
+            (90, 1.5, null), (10, 1.5, null),
+            (10, 1.5, "Puck.Vulkan.Tests 77"), (10, 8, "Puck.Vulkan.Tests 77"),
+            (10, 8, null), (10, 8, null),
+        ];
+        var lines = readings.SelectMany(selector: (reading, index) => monitor.Observe(sample: Reading(cpu: reading.Cpu, gpu: reading.Gpu, ram: reading.Ram, seconds: (index * 10)))).ToArray();
+
+        // Capacity, its end, pressure, the GPU taken and released, and capacity again: one line each, no repeat.
+        Assert.Equal(expected: ["GPU idle", "CAPACITY", "LOADED", "PRESSURE", "GPU busy", "CAPACITY", "GPU idle"], actual: Kinds(lines: lines));
     }
     [Fact]
     public void CapacityJudgesTheCpuMeanOverTheWindowNotTheLastReading() {
@@ -59,7 +77,7 @@ public sealed class HostLoadLawTests {
         _ = monitor.Observe(sample: Reading(cpu: 90, seconds: 10));
 
         // The last reading is idle, but the mean of 90, 90 and 0 is 60, over the 50% capacity threshold.
-        Assert.Empty(collection: monitor.Observe(sample: Reading(cpu: 0, seconds: 20)));
+        Assert.Equal(actual: Kinds(lines: monitor.Observe(sample: Reading(cpu: 0, seconds: 20))), expected: ["LOADED"]);
 
         // Now the window holds 90, 0 and 0: a mean of 30.
         Assert.Equal(actual: Kinds(lines: monitor.Observe(sample: Reading(cpu: 0, seconds: 30))), expected: ["CAPACITY"]);
@@ -73,7 +91,7 @@ public sealed class HostLoadLawTests {
         var full = new HostLoadMonitor(cpuSamples: 1, thresholds: Laptop);
 
         // Free memory not over the capacity threshold holds CAPACITY back without being PRESSURE.
-        Assert.Equal(actual: Kinds(lines: full.Observe(sample: Reading(ram: 4, seconds: 0))), expected: ["GPU idle"]);
+        Assert.Equal(actual: Kinds(lines: full.Observe(sample: Reading(ram: 4, seconds: 0))), expected: ["GPU idle", "LOADED"]);
     }
     [InlineData("Puck.World", @"C:\Puck\src\Puck.World\bin\Release\net10.0\Puck.World.exe --world worlds/a.puck")]
     [InlineData("dotnet", @"dotnet C:\Users\a\AppData\Local\Puck\world-builds\k\Puck.World.dll --headless true")]
@@ -82,7 +100,10 @@ public sealed class HostLoadLawTests {
     [InlineData("puck", "puck counters --check")]
     [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.exe --port 1")]
     [InlineData("Puck.DirectX.Tests", "Puck.DirectX.Tests.exe")]
+    [InlineData("Puck.Platform.Windows.Tests", "Puck.Platform.Windows.Tests.exe")]
     [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.Vulkan.Tests\bin\Release\net10.0\Puck.Vulkan.Tests.dll")]
+    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.DirectX.Tests\bin\Release\net10.0\Puck.DirectX.Tests.dll")]
+    [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.dll")]
     [Theory]
     public void TheWorldAGpuVerbAndADeviceTestHostAreGpuWork(string name, string commandLine) =>
         Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
@@ -96,12 +117,41 @@ public sealed class HostLoadLawTests {
     [InlineData("VBCSCompiler", "VBCSCompiler.exe -pipename:x")]
     [InlineData("pwsh", "pwsh -c Get-Process Puck.World; puck canary x")]
     [InlineData("bash", "bash -c 'grep -E \"Puck.Cli.dll canary\"'")]
+    // A filter or follower whose arguments name a test assembly runs no test: a run is the process executing it.
+    [InlineData("grep", "grep.exe --line-buffered -E \"passed|Puck.World.Tests exit\"")]
+    [InlineData("tail", @"tail -f C:\scratch\Puck.World.Tests\gate.steps")]
+    [InlineData("node", "node watch.js tests/Puck.World.Tests/bin/Release/net10.0/Puck.World.Tests.dll")]
+    [InlineData("dotnet", "dotnet tool run report --assembly Puck.World.Tests.dll")]
     [InlineData("dotnet", "dotnet /tmp/cli/Puck.Cli.dll host load --watch")]
     [InlineData("Puck.Cli.Tests", @"C:\Puck\tests\Puck.Cli.Tests\bin\Release\net10.0\Puck.Cli.Tests.exe -class Puck.Cli.Tests.CanaryPlanLawTests")]
     [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.Cli.Tests\bin\Release\net10.0\Puck.Cli.Tests.dll")]
     [Theory]
     public void BuildsShellsAndOtherTestsAreNeverGpuWork(string name, string commandLine) =>
         Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
+    [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.exe --filter-not-trait Category=Gpu")]
+    [InlineData("dotnet", "dotnet exec tests/Puck.World.Tests/bin/Release/net10.0/Puck.World.Tests.dll --filter-class *CaptureLawTests --filter-not-trait Category=Gpu")]
+    [InlineData("Puck.Vulkan.Tests", "Puck.Vulkan.Tests.exe --filter-not-trait=Category=Gpu")]
+    [InlineData("dotnet", "dotnet\0/tmp/a path/Puck.DirectX.Tests.dll\0--filter-not-trait\0Category=Gpu\0")]
+    [Theory]
+    public void ADeviceTestRunCarryingTheCpuSelectionIsNotGpuWork(string name, string commandLine) =>
+        Assert.False(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
+    [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-trait Category=Gpu")]
+    [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-class *WorldCaptureHoldLawTests")]
+    [InlineData("dotnet", "dotnet exec Puck.World.Tests.dll --filter-not-trait Category=Slow")]
+    [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-not-trait")]
+    [InlineData("Puck.World.Tests", "Puck.World.Tests.exe @run.rsp --filter-not-trait Category=Gpu")]
+    [Theory]
+    public void ADeviceTestRunThatCanSelectADeviceLawIsGpuWork(string name, string commandLine) =>
+        Assert.True(condition: HostProcesses.IsGpuWork(commandLine: commandLine, name: name));
+    [Fact]
+    public void EveryDeviceSuiteIsGpuWorkUnderItsGateSelectionAndNotUnderTheCpuSelection() {
+        foreach (var (suite, selection) in GatePlan.DeviceSuites) {
+            foreach (var (name, prefix) in new[] { (suite, $"{suite}.exe"), ("dotnet", $"dotnet exec {suite}.dll") }) {
+                Assert.True(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: selection)}", name: name));
+                Assert.False(condition: HostProcesses.IsGpuWork(commandLine: $"{prefix} {string.Join(separator: ' ', value: AffectedCommand.CpuSelection)}", name: name));
+            }
+        }
+    }
     [Fact]
     public void AReuseNodeIsAnMsbuildNodeStartedForReuse() {
         Assert.True(condition: HostProcesses.IsReuseNode(commandLine: @"dotnet ""C:\Program Files\dotnet\sdk\10.0.401\MSBuild.dll"" /nodemode:1 /nodeReuse:true", name: "dotnet"));
@@ -156,7 +206,7 @@ public sealed class HostLoadLawTests {
         var monitor = new HostLoadMonitor(cpuSamples: 1, thresholds: Laptop);
 
         Assert.True(condition: double.IsNaN(d: cpu));
-        Assert.Equal(expected: ["GPU idle"], actual: Kinds(lines: monitor.Observe(sample: Reading(seconds: 0, cpu: cpu))));
+        Assert.Equal(expected: ["GPU idle", "LOADED"], actual: Kinds(lines: monitor.Observe(sample: Reading(seconds: 0, cpu: cpu))));
     }
     [InlineData("/mnt/checkout/worlds")]
     [InlineData("//server/share/checkout")]

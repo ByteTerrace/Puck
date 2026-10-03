@@ -272,8 +272,8 @@ the lock file and writes the vectors into the compiled document, where rules rea
 them like any other cells.
 
 ```text
-puck embed worlds/caravan/lore.world.puck
-puck compile worlds/caravan/lore.world.puck --validate -o lore.world.json
+puck embed lore.world.puck
+puck compile lore.world.puck --validate -o lore.world.json
 ```
 
 The lock file groups entries by space. Each entry is keyed by the SHA-256 hash of

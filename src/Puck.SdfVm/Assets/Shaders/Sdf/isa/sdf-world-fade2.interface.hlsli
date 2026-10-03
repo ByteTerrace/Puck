@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world-fade2' (sha256/4837fe8d4a05ab9ffb6feb9b71a6d8a0e16e40bb54d792a16ee13de7d072fbd5). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world-fade2' (sha256/5c6ff0410ef44940fad4bc5ee0cf8ef78fcb191af3aebaed759f4a2bcc12ad40). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD_FADE2
 #define PUCK_SHADER_INTERFACE_SDF_WORLD_FADE2
 
@@ -199,9 +199,10 @@ struct SdfWorldFade2Pass {
     [[vk::offset(480)]] float3 viewUp;
     [[vk::offset(492)]] uint viewportCount;
     [[vk::offset(496)]] uint workCounterRow;
+    [[vk::offset(500)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldFade2Pass> passGroupIsa2B9CD8C3 : register(b0, space3);
-#define passGroup passGroupIsa2B9CD8C3
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldFade2Pass> passGroupIsa506E1C21 : register(b0, space3);
+#define passGroup passGroupIsa506E1C21
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<float> tiles : register(t3, space3);
@@ -220,15 +221,17 @@ struct SdfWorldFade2Pass {
 [[vk::binding(47, 3)]] [[vk::image_format("rg8")]] RWTexture2D<float2> incomingVisibilityRW : register(u47, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
-// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, then
-// six shadow-slot step counts, as a
+// back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
+// sky texture loads, then six shadow-slot step counts, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 18u;
+static const uint PuckWorkRowWords = 22u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
-static const uint PuckWorkShadowWord = 6u;
+static const uint PuckWorkSkyHashesWord = 6u;
+static const uint PuckWorkSkyTextureLoadsWord = 8u;
+static const uint PuckWorkShadowWord = 10u;
 static const uint PuckWorkShadowSlots = 6u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
@@ -257,13 +260,18 @@ void puckCountWork(uint steps, uint texels) {
         puckAddWork((row + PuckWorkTexelsWord), waveTexels);
     }
 }
-// Adds an invocation's sky evaluations to its pass's row: the wave sums them, and its first active lane adds the sum.
-void puckCountSky(uint evaluations) {
-    uint waveEvaluations = WaveActiveSum(evaluations);
-
-    if (WaveIsFirstLane()) {
-        puckAddWork(((passGroup.workCounterRow * PuckWorkRowWords) + PuckWorkSkyWord), waveEvaluations);
+// Named rows are disjoint from the plain pass row; the ledger sums both once the submission completes.
+// Per-lane atomics permit divergent layer evaluation without merging lanes targeting different rows.
+void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
+    if (passGroup.workCounterRowDetail == 0u) {
+        return;
     }
+    uint row = ((passGroup.workCounterRowDetail + detail) * PuckWorkRowWords);
+    puckAddWork((row + PuckWorkStepsWord), steps);
+    puckAddWork((row + PuckWorkTexelsWord), texels);
+    puckAddWork((row + PuckWorkSkyWord), evaluations);
+    puckAddWork((row + PuckWorkSkyHashesWord), hashes);
+    puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
 }
 // The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
 void puckCountShadow(uint slot, uint steps) {

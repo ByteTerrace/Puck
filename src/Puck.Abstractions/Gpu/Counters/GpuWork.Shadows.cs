@@ -6,9 +6,9 @@ public static partial class GpuWork {
     /// <summary>The maximum shadow march slots: four stable slots and two active incoming handoffs.</summary>
     public const int ShadowSlotCount = 6;
     /// <summary>The first shadow slot's position in a kernel counter row, in counts rather than words.</summary>
-    public const int ShadowStepsFirstKind = 3;
+    public const int ShadowStepsFirstKind = 5;
 
-    internal const int ShadowStepsFirstColumn = 19;
+    internal const int ShadowStepsFirstColumn = 21;
 
     private static readonly WorkKind[] ShadowStepKinds = [
         new(name: "gpu.shadow.slot0.steps", unit: "count", workClass: WorkClass.PerBackendDeterministic),

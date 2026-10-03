@@ -14,6 +14,7 @@ public sealed class RenderGraphPackageWorkCounters {
     private readonly uint m_binding;
     private readonly string m_pass;
     private readonly int m_rowOffset;
+    private readonly int m_detailRowOffset;
 
     /// <summary>Initializes a new instance of the <see cref="RenderGraphPackageWorkCounters"/> class for one package
     /// pass.</summary>
@@ -31,6 +32,7 @@ public sealed class RenderGraphPackageWorkCounters {
         m_binding = sets.BindingOf(member: ShaderWorkCounters.Buffer);
         m_pass = context.Pass;
         m_rowOffset = ((int)context.Parameters.BlockOffsetOf(member: ShaderWorkCounters.Row));
+        m_detailRowOffset = ((int)context.Parameters.BlockOffsetOf(member: ShaderWorkCounters.DetailRow));
     }
 
     /// <summary>Writes a frame's row into the recording's pass block and binds the frame slot's counter buffer in the
@@ -46,6 +48,7 @@ public sealed class RenderGraphPackageWorkCounters {
             destination: recording.PassBlock[m_rowOffset..],
             value: counters.Row
         );
+        BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[m_detailRowOffset..], value: recording.WorkDetailRow);
         m_bindings.WriteBuffer(
             binding: m_binding,
             bufferHandle: counters.Buffer.BufferHandle,

@@ -10,6 +10,7 @@ namespace Puck.Vulkan;
 /// The native implementation of <see cref="IVulkanLogicalDeviceApi"/>, marshaling to the device-creation,
 /// queue-retrieval, and wait-idle entry points resolved from the Vulkan loader.
 /// </summary>
+[OpensGpuDevice]
 public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceApi {
     // A single over-sized, zeroed block per chained struct. We only enable the FIRST VkBool32 (the primary
     // feature) and require every trailing flag to read VK_FALSE; the driver reads exactly sizeof(struct) bytes

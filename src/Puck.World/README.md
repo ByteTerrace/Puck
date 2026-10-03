@@ -47,10 +47,14 @@ document directory.
 `world.gpu-timing on|off` enables optional observational per-pass timestamps;
 bare reads completed means over at most 32 pairs. The inspector's FPS and timing
 rows follow that toggle. Timing starts off and creates no timestamp objects or
-commands until requested. A device without timestamps, or a timestamp pool or
+commands until requested; dynamic resolution (see [Graphics options](#graphics-options))
+also requests them while it reads the views' GPU frame time, in which case the
+toggle controls only the readout and bare `world.gpu-timing` reports
+`off (recording for dynamic resolution)`. A device without timestamps, or a timestamp pool or
 readback the device will not create, refuses timing for that render-graph
 instance by name (`<instance>: refused <reason>`); the graph keeps rendering and
-nothing is tried again until timing is turned on anew. An offscreen host
+nothing is tried again until timing is turned on anew or the operator's
+`gpu.faults` change. An offscreen host
 supports explicit placement costs and timing; the panel and pointer feed belong
 to the windowed presentation.
 
@@ -408,12 +412,12 @@ stick yaw turns the upright character through `FaceX`/`FaceZ`, while both axes
 orbit/look and never write `Turn`. Authors can pair `player.move` with
 `player.look` for movement-facing/free-orbit alternatives, or use
 `player.move.strafe` with `player.look.steer` for the standard action scheme.
-Pressing the left stick toggles the `run` channel; West and Left Shift retain
-hold-to-run behavior. Holding LT and pressing the left stick toggles autorun
-through the `forward` channel; the chord consumes that press, so it does not
-also flip the bare-stick run toggle.
-Holding LT + RB temporarily makes the standard right stick camera-only free
-look; left-stick movement remains relative to character heading while held.
+The island binds the left stick to `player.move.strafe`, the right stick to
+`player.look.steer`, mouse buttons 1 and 2 to `player.orbit` and `player.steer`,
+and South and Space to `jump`; East and West switch the view layout. It binds
+no run channel, no autorun and no free-look chord. An author gets autorun from
+a channel binding in `toggle` mode (`BindingEntryMode.Toggle`), and the held
+`player.look.free` command suppresses body steering while camera look continues.
 `views.seatRig` authors framing, `views.seatControl` authors the
 world's `World|Body` yaw reference and pitch envelope, and
 `seatDefaults.seatCameraFeel` authors portable sensitivity/inversion/arming/rate.
@@ -668,7 +672,7 @@ keeps running.
 from now, or the next one, before the call reaches the device, so a reload can
 be refused partway through its allocation on real hardware. The kinds are
 `pipeline`, `buffer`, `image`, `render-pass`, `framebuffer`, `shader-module`,
-`command-pool` and `bindings-pool`. The refusal is `GPU_CREATION_FAULT`, naming
+`command-pool`, `bindings-pool` and `timestamp-pool`. The refusal is `GPU_CREATION_FAULT`, naming
 the kind and the creation's number; the node releases what the candidate
 created and the installed graph keeps running. A fault fires once.
 `gpu.faults lose [<n>]` loses the device on the nth frame from now, or the next
@@ -905,8 +909,8 @@ Facts a script needs:
   `IWorldSimulationClock` the frame producer reads. `Puck.Launcher.FixedStepPump`
   (not in this project) owns the accumulator both boot shapes' hosted services
   drive it through.
-- `WorldInstanceHost.cs` / `WorldInstance.cs`—the process's running world
-  instances. The boot world is one entry (name `boot`) beside every instance
+- `WorldInstanceHost.cs` / `WorldInstance.cs` (in `Puck.World.Server`)—the
+  process's running world instances. The boot world is one entry (name `boot`) beside every instance
   `world.instance.start` adds; each non-boot instance holds its own
   `WorldServer`/`WorldPopulation`/`WorldOwnedWorlds` and an empty
   `WorldMachineHost`, shares no singleton with the boot world, and advances on
@@ -951,8 +955,8 @@ Facts a script needs:
   occlusion, far field, cadence, render scale, quality and the rest) is
   composed by both the windowed and the offscreen shapes; `WorldOffscreenCommandModule.cs`
   (`world.resize`) by the offscreen shape alone; `WorldCommandModule.cs`
-  (frame rate, FPS target, cameras, shader reload),
-  `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
+  (frame rate, FPS target, cameras), `WorldShaderReloadCommandModule.cs`
+  (`world.shaders.reload`/`.status`), `WorldHostCommandModule.cs`, `WorldAudioCommandModule.cs`,
   `WorldRecordingCommandModule.cs`, and `WorldSdfCommandModule.cs` are
   genuinely presentation-only (unregistered headless); `WorldUiCommandModule.cs`,
   `WorldWheelCommandModule.cs`, `WorldViewCommandModule.cs`, and
@@ -1438,13 +1442,14 @@ registers a third, fake producer whose documents validate and round-trip, and
 `AThirdProducersSourceIsAnInstanceTheRuntimeInstallsThroughItsRegistration`
 installs its screen's source instance through its own registration.
 
-The engine ships four producers, each with its settings record in
+The engine ships five producers, each with its settings record in
 `WorldImageProducerSettings`:
 
 | Id | Settings | Transport | Content class |
 |---|---|---|---|
 | `testPattern` | `width`, `height` | uploaded | deterministic |
 | `qr` | `payload`, `ecLevel` (`M`), `quietZoneModules` (4) | uploaded | deterministic |
+| `color` | `color` (`#RRGGBB`) | uploaded | deterministic |
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
 | `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
 
@@ -1454,10 +1459,11 @@ ends the feed, which the consumer reopens with fresh metadata; unknown discovery
 refuses the open. An SDR
 display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
 shared targets the screen samples and a Vulkan host converts through
-`source-rgba`. An HDR display is captured in half-float scRGB on either host
-and converts on its CPU tier through `source-transfer` into working values at
-the host section's `paperWhiteNits`, so its highlights keep their luminance
-above SDR white. On an SDR output those highlights clip at the display encode,
+`source-rgba`. An HDR display is captured in half-float scRGB, which a
+Direct3D 12 host copies into half-float shared targets and converts on the GPU
+through `source-scrgb`, and a Vulkan host converts on its CPU tier through
+`source-transfer`, both into working values at the host section's
+`paperWhiteNits`, so its highlights keep their luminance above SDR white. On an SDR output those highlights clip at the display encode,
 as any working value above 1 does.
 
 Every feed carries an `ImageSourceDescriptor` (`Puck.Abstractions.Sources`),
@@ -1601,8 +1607,9 @@ boot, exact-tick advancement, links, and hardware access for named machines in
 every boot shape, including headless. Screens and speakers consume their named
 outputs. `machine.operation` carries expected generation and named-machine Control
 authority; `screen.insert` and `forge.play` use that executor for named producers,
-while `screen.eject` detaches the display. Legacy screen operations remain in the
-protocol. Generic provider operations are refused during recording until the tape
+while `screen.eject` detaches the display. The screen operations (insert, eject,
+select, options, link, unlink) remain their own ordered payload kind beside the
+generic provider operation. Generic provider operations are refused during recording until the tape
 can capture their execution. A screen showing a machine output reads it as a
 render-graph source instance (package `source.machine`), an uploaded source:
 once per completed tick its upload (`MachineVideoSourceUpload`, made by the
@@ -1866,10 +1873,14 @@ seat-relative probe resolves to the enclosing instance's own seat's target
 instance, or the single instance when the target is not seat-relative.
 Shipped kinds are
 the lit-frame blob centroid `ir-blob` (bright-mass centroid/coverage/mean
-luminance of the above-threshold pixels over the FaceAuth infrared stream)
-and `faerie` (relights the color frame from a light orbiting an authored
-anchor, with the infrared strobe pair's lit-minus-unlit response as the
-height field; see `src/Puck.Shaders/README.md`)—GPU-tier only today.
+luminance of the above-threshold pixels over the FaceAuth infrared stream),
+`ir-marker` (an oriented rectangle over the strobe pair's bright mass, whose
+four corners another probe's sockets can bind), `faerie` (relights the color
+frame from a light orbiting an authored anchor, with the infrared strobe
+pair's lit-minus-unlit response as the height field) and `average` (the
+smallest texture-writing kind); the
+[shader reference](../../docs/reference/shaders.md#probe-kinds-puckprobemanifestv1) describes each kernel—GPU-tier
+only today.
 
 `probe.status` echoes every live instance's run state (or fault), tier, rate,
 cycles/drops, latest capture age, channel values and confidence, every
@@ -1912,8 +1923,9 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
 shadow tier, a shadow-slot policy, an ambient-occlusion switch, a
-temporal-reconstruction switch and render-scale ceiling and floor tiers.
-Its four shadow-policy fields apply together as one settings change. The names are
+temporal-reconstruction switch, a dynamic-resolution switch and render-scale
+ceiling and floor tiers. Its four shadow-policy fields apply together as one
+settings change. The names are
 the engine's one quality vocabulary (`QualityTiers`), and a preset the world
 does not author is refused by name. The shipped worlds share one table,
 `Assets/worlds/quality.puck`: the standard world imports it, and a world on
@@ -1994,7 +2006,7 @@ hits and each native tool's runs) and the process's SDF kernel loads,
 allocated and released at their allocation sizes, and the peak held; swapchain
 images are never counted), and Vulkan adds `procedures.vulkan`. A rendering
 shape also registers `sdf.bakes`: the creation bakes its cache held, scheduled,
-baked and refused, the held bakes that could not be decoded (`undecodable`, each named
+baked, refused and switched to drawing, the held bakes that could not be decoded (`undecodable`, each named
 once on the error stream, the prototype drawing through its field), and the field evaluations the bakes spent; and `sdf.mesh.lod`: the
 mesh draws (`near`) and impostor cards (`far`) of baked placements the views
 recorded. The
@@ -2024,7 +2036,7 @@ completed submission's per-pass counts and its created objects, or
 `work unavailable` until a submission completes. A filter selects whole dotted
 segments (`world.counters gpu`, `world.counters state`); a filter that selects
 nothing is refused and lists the sources. `--json` prints one line:
-`{"sources":[{"name":…,"counts":{"<kind>":<value>}}],"gpu":{"device":{…},"nodes":[…]},"allocation":{"gcMode":…,"windows":{…}},"kinds":{"<kind>":{"unit":…,"class":…}}}`.
+`{"sources":[{"name":…,"counts":{"<kind>":<value>}}],"gpu":{"device":{…},"capabilities":{…},"nodes":[…]},"allocation":{"gcMode":…,"windows":{…}},"kinds":{"<kind>":{"unit":…,"class":…}}}`.
 The `kinds` legend gives every reported kind's unit and class
 (`deterministic`, `per-backend-deterministic` or `pacing`), which
 `puck counters` reads to tag each count.

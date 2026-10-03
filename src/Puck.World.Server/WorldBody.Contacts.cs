@@ -191,21 +191,40 @@ public sealed partial class WorldBody {
 
         m_position += correction;
         var normal = correction.Normalize();
-        var velocity = (m_planarVelocity + (FixedVector3.UnitY * m_verticalVelocity));
+        var velocity = ComposedVelocity();
         var inward = FixedVector3.Dot(
             left: velocity,
             right: normal
         );
 
         if (inward < FixedQ4816.Zero) {
-            velocity -= (normal * inward);
-            m_planarVelocity = new FixedVector3(
-                X: velocity.X,
-                Y: FixedQ4816.Zero,
-                Z: velocity.Z
+            SplitVelocity(
+                resetVerticalRemainder: true,
+                velocity: (velocity - (normal * inward))
             );
-            if (m_verticalVelocity != velocity.Y) {
-                m_verticalVelocity = velocity.Y;
+        }
+    }
+
+    // A walking body's velocity in world space: its planar velocity, tangent to the body's own up, plus its vertical
+    // velocity along that up, the frame it integrates in (IntegratePlanarAndVerticalVelocity). Every write that moves
+    // the velocity in world space composes it here and splits it back with SplitVelocity, so none splits it against
+    // world Y, which differs from the body's up wherever the field or the surface tilts it.
+    private FixedVector3 ComposedVelocity() => (m_planarVelocity + (m_up * m_verticalVelocity));
+    // Splits a world-space velocity into the planar and vertical channels against the body's own up. A vertical velocity
+    // that changes starts its rate remainder afresh only when the caller says so; the paths that never reset it keep
+    // their remainder as before.
+    private void SplitVelocity(FixedVector3 velocity, bool resetVerticalRemainder) {
+        var vertical = FixedVector3.Dot(
+            left: velocity,
+            right: m_up
+        );
+
+        m_planarVelocity = (velocity - (m_up * vertical));
+
+        if (m_verticalVelocity != vertical) {
+            m_verticalVelocity = vertical;
+
+            if (resetVerticalRemainder) {
                 m_verticalVelocityAccumulator.Reset();
             }
         }

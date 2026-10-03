@@ -38,6 +38,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
         }
         public WorldDeliveredDocument Document => (m_document ??= new WorldDeliveredDocument(
             Definition: (Basis with { PlacementRowsRaw = [.. m_rows] }),
+            Lifetime: 0,
             Version: Version
         ));
         public WorldDocumentVersion Version => new(Activation: Activation, Sequence: m_sequence);
@@ -96,7 +97,7 @@ public sealed class WorldEditorEditQueueStateLawTests {
     ));
     private static IServerLink LinkOf(WorldDefinition definition) => new RecordingLink(definition: definition);
     // A document that carries nothing but its version.
-    private static WorldDeliveredDocument At(WorldDocumentVersion version) => new(Definition: Basis, Version: version);
+    private static WorldDeliveredDocument At(WorldDocumentVersion version) => new(Definition: Basis, Lifetime: 0, Version: version);
 
     [Fact]
     public void ADocumentOlderThanAConfirmedValueNeverReplacesItAndANewerOneAlwaysDoes() {

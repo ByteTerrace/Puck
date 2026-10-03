@@ -12,9 +12,10 @@ It registers two provider types into the host extension registry:
 
 ## Layering and Dependencies
 
-`Puck.World.Embeddings` lives in the `Engine services` layer alongside `Puck.World.Azure`.
-It references `Puck.World.Server` and `Puck.Embeddings`. It is dynamically loaded or
-referenced by host composition roots (`Puck.World.Silo`, `Puck.World.Console`, `Puck.Cli`).
+`Puck.World.Embeddings` lives in the `Engine services` layer.
+It references `Puck.World.Server` and `Puck.Embeddings`. It is an installed
+extension, dynamically loaded from a host's extensions directory; `Puck.Cli` is
+the one project that references it directly.
 
 ## Configuration
 
