@@ -82,7 +82,7 @@ public sealed partial class WorldPersistence {
             return RefuseUndo(
                 connectionId: connectionId,
                 correlationId: correlationId,
-                refusal: $"undo refused: {count} requested, but host.journalDepth {journalDepth} bounds the horizon to the {Host.Document.Journal.Count} entries still in the journal — earlier mutations have already compacted into the base"
+                refusal: $"undo refused ({nameof(WorldUndoRefusal.PastHorizon)}): {count} requested, but host.journalDepth {journalDepth} bounds the horizon to the {Host.Document.Journal.Count} entries still in the journal — earlier mutations have already compacted into the base"
             );
         }
 
