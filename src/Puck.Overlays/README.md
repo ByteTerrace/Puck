@@ -32,7 +32,7 @@ See the [project file](Puck.Overlays.csproj) for shader inputs and the shared
 
 `InspectorWriter` draws the optional per-seat editor panel through the same
 builder and shader. Composition sums every writer's text reservation and rounds
-up to a power of two; the current four-seat world uses 32,768 words. Other record
+up to a power of two; at the schema's four local seats (`WorldBodiesLimits.LocalSeatCount`) that is 32,768 words. Other record
 backstops remain fixed. Writers still have individual limits, with named
 reservation and own-cap refusals. An off panel writes nothing, but the shared
 GPU region, CPU shadow and builder scratch stay allocated and counted by the
