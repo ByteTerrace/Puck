@@ -26,9 +26,10 @@ law 2's local walked crossing in
 sequences, without its federated, rollback and shared-identity variants;
 law 3's write, read and collision legs in
 `tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; law 4's headless
-legs in `tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; and law 5 in
-`tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. The rest are not
-yet. The design was read against the
+legs in `tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; law 5 in
+`tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`; and law 6 in
+`tests/Puck.World.Tests/UnsupportedOperationLawTests.cs`, over the refusals
+classified so far. The design was read against the
 integration branch and the lanes the coming integration batch lands, and a
 review checked that no law can pass while its claim is false. Designing the
 laws found seven gaps. The coming integration batch fixes five of them (G1 to
@@ -527,7 +528,20 @@ field or the verdict. None compares a whole-state hash with a twin, and nothing
 enumerates the unsupported operations. This law adds both: the twin comparison,
 with witnesses for what a checkpoint misses, over a set read from the code.
 
-**Lives in** `tests/Puck.World.Tests`. **GPU:** none.
+**Lives in** `tests/Puck.World.Tests/UnsupportedOperationLawTests.cs`.
+**GPU:** none.
+
+**As implemented.** G6's classification is `RefusalAttribute.Unsupported`,
+carried on `RefusalCatalogEntry` and tagged `, unsupported` in `world.refusals`.
+The theory's rows are the classified set, and an arrangement names how both
+twins are arranged, the operation, a witness over what the checkpoint does not
+capture, and the legal variant on its own twin. A classified refusal without an
+arrangement fails by name, and an arrangement naming no classified refusal fails
+`EveryArrangementNamesAClassifiedRefusal`. Two refusals are classified so far,
+`replay.record/ArmedAfterFirstStep` and `storage.pull/PullWhileRecording`. The
+rest of the table above joins as each refusal gains a code and an arrangement;
+`IdentityUnbound` refuses inside a rule firing whose scope rewinds it, so its
+arrangement needs a gate the twins can hold apart.
 
 **Scope.** Delivered effect arms (a cue, a pose, a body motion, a rigid impulse,
 a field paint, a save) are outside the atomic promise by contract: they fire

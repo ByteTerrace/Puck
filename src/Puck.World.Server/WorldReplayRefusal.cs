@@ -11,7 +11,7 @@ namespace Puck.World;
 internal enum ReplayRefusal {
     /// <summary>A recording was armed after the world's first step. A tape re-establishes the definition and the seats,
     /// never the state a step reached, so its re-drive could not start where the recording did.</summary>
-    [Refusal(door: "replay.record", condition: "the world has already stepped when a recording is armed", kind: RefusalKind.Verdict)]
+    [Refusal(door: "replay.record", condition: "the world has already stepped when a recording is armed", kind: RefusalKind.Verdict, Unsupported = true)]
     ArmedAfterFirstStep,
 
     /// <summary>The leading magic or shape token does not match this build's pinned <c>.puckreplay</c> shape.</summary>
