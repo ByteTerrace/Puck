@@ -773,8 +773,8 @@ base, so passing both is refused.
 - A changed `.puck` or `.world.json` under `src/Puck.World/Assets/worlds`
   chooses no canary when the document named by its stem compiles to the same
   value at the base and in the working tree. Both sides use the world's document
-  reader, with the base's shipped assets extracted from git. Object member order
-  and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
+  reader, with the base's `src/Puck.World/Assets` exported from git. Object
+  member order and number spelling do not matter (`1.0` equals `1`, `0.50` equals `0.5`);
   array order and every member's value do. A JSON-to-source replacement judges
   both paths. The owner's suites, catalog check and changed test blocks still
   run, and neither path is listed as `unmapped` or unplaced `deleted`.
@@ -832,9 +832,12 @@ base, so passing both is refused.
   them, through the same readers, so a deleted pass source that a base graph
   document declared, or an asset a base world named, chooses the canaries whose
   documents reached it there. A base `.puck` source composes through an export
-  of the base revision (`git archive` into a temporary directory, made when the
-  first document is read and deleted when the selection ends), because the
-  composer reads files. The canaries are today's, since only a canary
+  of the base revision's document trees (`src/Puck.World/Assets`,
+  `tests/Puck.World.Canaries`, `tests/Puck.World.Verdicts` and `worlds`, written
+  by `git archive` to a temporary directory when the first document is read and
+  deleted when the selection ends), because the composer reads files. A git run
+  the export needs that fails, or does not finish within two minutes, refuses
+  the selection by name. The canaries are today's, since only a canary
   that exists now can run. One none of these places is listed as `deleted`, and
   its project's suites still run. Nothing reads a deleted file from disk.
 

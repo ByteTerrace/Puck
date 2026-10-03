@@ -99,7 +99,7 @@ public sealed class AffectedDocumentsLawTests {
 
         // The same reach read from a revision's tree through git rather than the disk: the committed documents of two
         // real canaries reach the same pass sources, a world authored as .puck included (the revision exports once and composes it).
-        using var head = new AffectedRevisionTree(revision: "HEAD", root: repositoryRoot);
+        using var head = new AffectedRevisionTree(documentTrees: AffectedRevisionExport.DocumentTrees, revision: "HEAD", root: repositoryRoot);
         var recorded = AffectedDocuments.ReachedBy(
             canaries: [.. canaries.Where(predicate: static canary => (canary.Id is "resample-reconstruction" or "pipeline-ink"))],
             tree: head
@@ -153,22 +153,15 @@ public sealed class AffectedDocumentsLawTests {
     }
     [Fact]
     public void AModuleAuthoredOnlyAsASourceIsReachedFromTheRevisionThatRecordedIt() {
-        using var scratch = new TemporaryDirectory(prefix: "puck-affected-module-revision-");
+        using var checkout = new GitScratchCheckout();
 
-        WriteModuleTree(root: scratch.RootPath);
-
-        foreach (var arguments in new[] {
-            new[] { "init", "-q" },
-            new[] { "add", "." },
-            new[] { "-c", "user.name=law", "-c", "user.email=law@example.invalid", "commit", "-q", "-m", "the tree" },
-        }) {
-            Assert.Equal(actual: CliGit.Run(scratch.RootPath, arguments).ExitCode, expected: 0);
-        }
+        WriteModuleTree(root: checkout.Root);
+        _ = checkout.Commit(message: "the tree");
 
         // The working tree no longer holds the files: only the revision does, and it composes them from an export.
-        File.Delete(path: Path.Combine(path1: scratch.RootPath, path2: "mods", path3: "ttt.puck"));
+        File.Delete(path: Path.Combine(path1: checkout.Root, path2: "mods", path3: "ttt.puck"));
 
-        using var revision = new AffectedRevisionTree(revision: "HEAD", root: scratch.RootPath);
+        using var revision = new AffectedRevisionTree(documentTrees: ["host.puck", "mods"], revision: "HEAD", root: checkout.Root);
         var reached = AffectedDocuments.Reach(path: "host.puck", tree: revision);
 
         Assert.Contains(collection: reached, expected: "mods/ttt.puck");

@@ -211,7 +211,7 @@ internal static class AffectedCommand {
         // Reading every canary world is the cost of this map, so it is built only for a change a document can reach; the
         // base's map, over the tree the base recorded, only for a deleted file one can reach.
         var workingTree = new AffectedWorkingTree(root: repositoryRoot);
-        using var baseTree = new AffectedRevisionTree(revision: since, root: repositoryRoot);
+        using var baseTree = new AffectedRevisionTree(documentTrees: AffectedRevisionExport.DocumentTrees, revision: since, root: repositoryRoot);
         // Each tree's kernels and post-process packages are read once, for both its documents' reach and its stand-ins.
         var workingShaders = new AffectedShaders(projects: projects, tree: workingTree);
         var baseShaders = new AffectedShaders(projects: projects, tree: baseTree);
@@ -235,50 +235,58 @@ internal static class AffectedCommand {
 
         bool WorldInput(string path) => worldRoots.Value.Any(predicate: root => (string.Equals(a: path, b: root, comparisonType: StringComparison.Ordinal) || path.StartsWith(comparisonType: StringComparison.Ordinal, value: (root + "/"))));
 
-        plan = AffectedSelection.Select(
-            canaries: canaries,
-            changed: changed,
-            consumersOf: ConsumerSearch(projects: projects, repositoryRoot: repositoryRoot),
-            coverage: coverage,
-            catalogInputs: (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: (ShippedTree + "/")) ||
-                (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World/Assets/") && (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".graph.json"))) ||
-                path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.Cli/Transpiler/") ||
-                ((owner is not null) && catalogProjects.Contains(item: owner))),
-            declaresTests: path => File.ReadLines(path: Path.Combine(path1: repositoryRoot, path2: path)).Any(predicate: static line => line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "test \"")),
-            projects: projects,
-            canariesReaching: path => ((Reachable(path: path) && reachedBy.Value.TryGetValue(key: path, value: out var reaching))
-                ? reaching
-                : none),
-            standInsFor: AffectedStandIns.Create(
-                documented: source => reachedBy.Value.ContainsKey(key: source),
-                indexed: [.. coverage.Keys],
+        // Reading the base revision's documents exports its files (AffectedRevisionExport), which a stalled or failing
+        // git refuses by name.
+        try {
+            plan = AffectedSelection.Select(
+                canaries: canaries,
+                changed: changed,
+                consumersOf: ConsumerSearch(projects: projects, repositoryRoot: repositoryRoot),
+                coverage: coverage,
+                catalogInputs: (path, owner) => (path.StartsWith(comparisonType: StringComparison.Ordinal, value: (ShippedTree + "/")) ||
+                    (path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.World/Assets/") && (path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsl") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".hlsli") || path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".graph.json"))) ||
+                    path.StartsWith(comparisonType: StringComparison.Ordinal, value: "src/Puck.Cli/Transpiler/") ||
+                    ((owner is not null) && catalogProjects.Contains(item: owner))),
+                declaresTests: path => File.ReadLines(path: Path.Combine(path1: repositoryRoot, path2: path)).Any(predicate: static line => line.TrimStart().StartsWith(comparisonType: StringComparison.Ordinal, value: "test \"")),
                 projects: projects,
-                shaders: workingShaders,
-                tree: workingTree
-            ),
-            worldClosure: closure,
-            worldInput: WorldInput,
-            compiledUnchanged: AffectedCompiledWorlds.Unchanged(changed: changed, repositoryRoot: repositoryRoot, since: since).Contains,
-            triviaOnly: path => AffectedCSharpTrivia.IsUnchanged(after: workingTree, before: baseTree, path: path),
-            proseOnly: path => AffectedManifestProse.IsUnchanged(after: workingTree, before: baseTree, path: path),
-            deleted: deleted,
-            // A file deleted since the base is placed through the index the base recorded, which is the only one that
-            // can still name it, or through the stand-ins the base's own tree gave it there.
-            recorded: recorded,
-            recordedStandInsFor: ((recorded is null)
-                ? null
-                : AffectedStandIns.Create(
-                    documented: source => recordedReachedBy.Value.ContainsKey(key: source),
-                    indexed: [.. recorded.Keys],
+                canariesReaching: path => ((Reachable(path: path) && reachedBy.Value.TryGetValue(key: path, value: out var reaching))
+                    ? reaching
+                    : none),
+                standInsFor: AffectedStandIns.Create(
+                    documented: source => reachedBy.Value.ContainsKey(key: source),
+                    indexed: [.. coverage.Keys],
                     projects: projects,
-                    shaders: baseShaders,
-                    tree: baseTree
-                )),
-            // A deleted file is reached through the documents the base's tree held.
-            recordedCanariesReaching: path => ((Reachable(path: path) && recordedReachedBy.Value.TryGetValue(key: path, value: out var reaching))
-                ? reaching
-                : none)
-        );
+                    shaders: workingShaders,
+                    tree: workingTree
+                ),
+                worldClosure: closure,
+                worldInput: WorldInput,
+                compiledUnchanged: AffectedCompiledWorlds.Unchanged(changed: changed, repositoryRoot: repositoryRoot, since: since).Contains,
+                triviaOnly: path => AffectedCSharpTrivia.IsUnchanged(after: workingTree, before: baseTree, path: path),
+                proseOnly: path => AffectedManifestProse.IsUnchanged(after: workingTree, before: baseTree, path: path),
+                deleted: deleted,
+                // A file deleted since the base is placed through the index the base recorded, which is the only one that
+                // can still name it, or through the stand-ins the base's own tree gave it there.
+                recorded: recorded,
+                recordedStandInsFor: ((recorded is null)
+                    ? null
+                    : AffectedStandIns.Create(
+                        documented: source => recordedReachedBy.Value.ContainsKey(key: source),
+                        indexed: [.. recorded.Keys],
+                        projects: projects,
+                        shaders: baseShaders,
+                        tree: baseTree
+                    )),
+                // A deleted file is reached through the documents the base's tree held.
+                recordedCanariesReaching: path => ((Reachable(path: path) && recordedReachedBy.Value.TryGetValue(key: path, value: out var reaching))
+                    ? reaching
+                    : none)
+            );
+        } catch (AffectedRevisionExportRefusedException exception) {
+            error = exception.Message;
+
+            return false;
+        }
 
         return true;
     }

@@ -11,7 +11,7 @@ public sealed class AffectedNonExecutingEditsLawTests {
     private const string Source = "src/World/Value.cs";
 
     private static AffectedPlan Select(GitScratchCheckout checkout, string since, params string[] changed) {
-        var before = new AffectedRevisionTree(root: checkout.Root, revision: since);
+        using var before = new AffectedRevisionTree(documentTrees: AffectedRevisionExport.DocumentTrees, root: checkout.Root, revision: since);
         var after = new AffectedWorkingTree(root: checkout.Root);
 
         return AffectedSelection.Select(

@@ -1,4 +1,3 @@
-using System.Formats.Tar;
 using System.Text.Json;
 using Puck.World.Transpiler.Composition;
 
@@ -11,7 +10,7 @@ namespace Puck.Cli.Affected;
 /// <para>
 /// A changed <c>.puck</c> or <c>.world.json</c> under the shipped tree names the document its stem carries. That
 /// document is read at the head from the working tree and at the base from the shipped assets the base recorded
-/// (extracted once into a scratch directory), each through <see cref="PuckDocumentComposer"/>, which compiles a source
+/// (exported once, <see cref="AffectedRevisionExport"/>), each through <see cref="PuckDocumentComposer"/>, which compiles a source
 /// or reads a document exactly as a load does. The two are compared as values (<see cref="ValueEqual"/>). A file whose
 /// source is a module library or a composition is not judged here and keeps the ordinary selection.
 /// </para>
@@ -67,6 +66,7 @@ internal static class AffectedCompiledWorlds {
     /// <param name="since">The base revision.</param>
     /// <param name="changed">The changed paths, repository-relative with forward slashes, deleted ones included.</param>
     /// <returns>The paths judged unchanged in value; empty when no shipped world file changed.</returns>
+    /// <exception cref="AffectedRevisionExportRefusedException">The base's shipped assets could not be exported.</exception>
     public static IReadOnlySet<string> Unchanged(string repositoryRoot, string since, IReadOnlyList<string> changed) {
         var candidates = changed.Select(selector: static path => (Path: path, Name: DocumentName(path: path)))
             .Where(predicate: static candidate => (candidate.Name is not null))
@@ -77,21 +77,11 @@ internal static class AffectedCompiledWorlds {
             return unchanged;
         }
 
-        using var scratch = RunDirectory.Create(prefix: "puck-affected-base-", keepOnFailure: false);
-        var archive = Path.Combine(path1: scratch.Path, path2: "base.tar");
-        var baseRoot = Path.Combine(path1: scratch.Path, path2: "base");
-        var exported = CliGit.Run(repositoryRoot, "archive", "--format=tar", "-o", archive, since, "--", AssetsTree);
-
-        if (exported.ExitCode != 0) {
-            return unchanged;
-        }
-
-        _ = Directory.CreateDirectory(path: baseRoot);
-        TarFile.ExtractToDirectory(destinationDirectoryName: baseRoot, overwriteFiles: true, sourceFileName: archive);
+        using var export = AffectedRevisionExport.Create(paths: [AssetsTree], repository: repositoryRoot, revision: since);
 
         foreach (var name in candidates.Select(selector: static candidate => candidate.Name!).Distinct(comparer: StringComparer.Ordinal)) {
             using var head = Read(name: name, root: repositoryRoot);
-            using var before = Read(name: name, root: baseRoot);
+            using var before = Read(name: name, root: export.Root);
 
             if ((head is not null) && (before is not null) && ValueEqual(left: before.RootElement, right: head.RootElement)) {
                 unchanged.UnionWith(other: candidates.Where(predicate: candidate => (candidate.Name == name)).Select(selector: static candidate => candidate.Path));
