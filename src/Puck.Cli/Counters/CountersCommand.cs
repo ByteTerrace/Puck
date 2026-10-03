@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
+using Puck.Abstractions;
 using Puck.World;
 
 namespace Puck.Cli.Counters;
@@ -150,10 +151,16 @@ internal static class CountersCommand {
             return false;
         }
 
-        CountersCeilings.Write(
-            ceilings: ceilings,
-            path: path
-        );
+        try {
+            CountersCeilings.Write(
+                ceilings: ceilings,
+                path: path
+            );
+        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+            reason = $"could not write the ceilings: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
         reason = string.Empty;
 
         return true;
@@ -185,6 +192,22 @@ internal static class CountersCommand {
             : Path.GetFullPath(path: ceilingsPath)
         );
         WorldCountersCeilings? ceilings = null;
+
+        if (
+            (check || record) &&
+            (output is not null) &&
+            PuckPaths.Comparer.Equals(x: PuckPaths.Normalize(path: output), y: PuckPaths.Normalize(path: ceilingsFile))
+        ) {
+            const string Reason = "the report output names the ceilings file; --output must name a different file";
+
+            if (record) {
+                Console.Out.WriteLine(value: $"{Verb}: ceilings {CliPaths.ToDisplay(fullPath: ceilingsFile)} not written: {Reason}");
+
+                return CliExit.Failed;
+            }
+
+            return CliExit.Refuse(verb: Verb, what: "--output", why: Reason);
+        }
 
         // The ceilings are read before the workload runs, so a missing or damaged file refuses before any GPU work.
         if (
@@ -398,7 +421,9 @@ internal static class CountersCommand {
             ceiling was recorded for. --record writes the report's counts as the ceilings instead, each reading its
             own ceiling, every kind of a pass that did not execute as a zero, and each zero of a kernel kind as a
             required zero. A record writes nothing, and leaves an existing ceilings file as it was, when the
-            backends disagree on a deterministic count or pass state, which then fails the run as it does without --record.
+            backends disagree on a deterministic count or pass state, the recorded ceilings fail their own run, or the
+            atomic replacement fails. It prints 'not written: ...' and exits 1. --output must name a different file
+            from the ceilings when --check or --record is selected.
 
             Performance is judged by these counts, never by time; 'puck bench' is the only wall-clock tool.
 

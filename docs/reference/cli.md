@@ -1688,8 +1688,12 @@ ceiling, and every submission kind of a pass that did not execute as a zero. A
 zero of a per-backend-deterministic kind is written with `requiredZero` set. A
 record is all or nothing: when the backends disagree on a deterministic count or
 a pass state, or the recorded ceilings would fail their own run, the verb writes
-no file, leaves an existing one byte for byte as it was, prints that the ceilings
-were not written and exits 1 with the disagreements. A ceiling is re-recorded only in the change that explains why its count
+no file, leaves an existing one byte for byte as it was, prints `not written: …`
+and exits 1. The write uses a flushed temporary file and atomic replacement;
+a write failure also leaves the existing ceilings unchanged, prints the reason
+and exits 1. `--output` names a different file from the ceilings when `--check`
+or `--record` is selected; a collision refuses before the workload runs.
+A ceiling is re-recorded only in the change that explains why its count
 moved, never from wall-clock or GPU timing. `--ceilings <file>` names another
 ceilings file for either option.
 

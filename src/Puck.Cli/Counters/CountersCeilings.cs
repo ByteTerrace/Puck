@@ -1,10 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Gpu;
+using Puck.Assets;
 using Puck.World;
 
 namespace Puck.Cli.Counters;
@@ -25,7 +25,6 @@ internal static class CountersCeilings {
 
     private const string Outside = "outside";
 
-    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly Dictionary<string, WorkKind> SubmissionKindsByName = GpuWork.SubmissionKinds.ToArray().ToDictionary(keySelector: static kind => kind.Name);
 
     /// <summary>What a check found: the counts that failed their ceilings, and the notes about counts it did not judge.</summary>
@@ -270,19 +269,12 @@ internal static class CountersCeilings {
 
         return true;
     }
-    /// <summary>Writes a ceilings document as indented UTF-8 JSON ending in one line feed.</summary>
+    /// <summary>Atomically replaces a ceilings document with indented UTF-8 JSON ending in one line feed.</summary>
     /// <param name="path">The file to write.</param>
     /// <param name="ceilings">The ceilings.</param>
     public static void Write(string path, WorldCountersCeilings ceilings) {
-        var directory = Path.GetDirectoryName(path: path);
-
-        if (directory is { Length: > 0 }) {
-            _ = Directory.CreateDirectory(path: directory);
-        }
-
-        File.WriteAllText(
+        AtomicFile.WriteAllText(
             contents: $"{JsonSerializer.Serialize(value: ceilings, jsonTypeInfo: WorldJsonContext.Default.WorldCountersCeilings)}\n",
-            encoding: Utf8,
             path: path
         );
     }

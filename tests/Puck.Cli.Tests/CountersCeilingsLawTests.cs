@@ -308,6 +308,74 @@ public sealed class CountersCeilingsLawTests {
         }
     }
     [Fact]
+    public void AFailedAtomicReplacementLeavesTheExistingCeilingsByteIdentical() {
+        Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "Windows file sharing can forbid replacement while allowing direct writes.");
+
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-ceilings-law-");
+
+        try {
+            var path = Path.Combine(path1: directory.FullName, path2: "counters.ceilings.json");
+            var report = Report(vulkan: Run(backend: "vulkan", steps: 4000L));
+
+            CountersCeilings.Write(ceilings: Recorded, path: path);
+
+            var before = File.ReadAllBytes(path: path);
+
+            // Direct writing is allowed, but replacing the directory entry is not.
+            using (var held = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: path, share: FileShare.ReadWrite)) {
+                Assert.False(condition: CountersCommand.TryRecord(path: path, reason: out var reason, report: report));
+                Assert.Contains(actualString: reason, expectedSubstring: "could not write the ceilings:");
+                Assert.Equal(actual: File.ReadAllBytes(path: path), expected: before);
+                Assert.Equal(actual: Directory.GetFiles(path: directory.FullName).Select(selector: Path.GetFileName), expected: ["counters.ceilings.json"]);
+            }
+
+            Assert.True(condition: CountersCommand.TryRecord(path: path, reason: out var written, report: report), userMessage: written);
+            Assert.True(condition: CountersCeilings.TryRead(ceilings: out var ceilings, path: path, reason: out var read), userMessage: read);
+            Assert.Equal(actual: ceilings.Runs[0].Ceilings.Single(predicate: static ceiling => ((ceiling.Pass == "sdf.world$primary") && (ceiling.Kind == GpuWork.MarchSteps.Name))).Ceiling, expected: 4000L);
+            Assert.Empty(collection: CountersCeilings.Check(ceilings: ceilings, report: report).Failures);
+        } finally {
+            directory.Delete(recursive: true);
+        }
+    }
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [Theory]
+    public void AReportOutputNamingTheCeilingsRefusesBeforeReadingTheWorkload(bool check, bool defaultCeilings) {
+        var directory = Directory.CreateTempSubdirectory(prefix: "puck-counters-ceilings-law-");
+
+        try {
+            var path = Path.Combine(path1: directory.FullName, path2: "counters.ceilings.json");
+            var missing = Path.Combine(path1: directory.FullName, path2: "missing.world.json");
+
+            if (defaultCeilings) {
+                Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot));
+                path = Path.GetFullPath(path: Path.Combine(path1: repositoryRoot, path2: CountersCeilings.CeilingsPath));
+            } else {
+                CountersCeilings.Write(ceilings: Recorded, path: path);
+            }
+
+            var alias = Path.Combine(path1: Path.GetDirectoryName(path: path)!, path2: ".", path3: Path.GetFileName(path: path));
+            string[] ceilingsArguments = (defaultCeilings ? [] : ["--ceilings", path]);
+            var before = File.ReadAllBytes(path: path);
+
+            var (exitCode, output, error) = ConsoleCapture.RunSplit(run: () => PuckRootCommand.Invoke(args: [
+                "counters", (check ? "--check" : "--record"), .. ceilingsArguments, "--output", alias,
+                "--world", missing, "--script", missing,
+            ]));
+
+            Assert.Contains(actualString: (check ? error : output), expectedSubstring: "the report output names the ceilings file; --output must name a different file");
+            Assert.Equal(actual: exitCode, expected: (check ? CliExit.Refused : CliExit.Failed));
+            if (!check) {
+                Assert.Contains(actualString: output, expectedSubstring: "not written:");
+            }
+            Assert.Equal(actual: File.ReadAllBytes(path: path), expected: before);
+        } finally {
+            directory.Delete(recursive: true);
+        }
+    }
+    [Fact]
     public void AnotherWorkloadOrExtentIsRefusedByName() {
         var report = Report(vulkan: Run(backend: "vulkan"));
 
