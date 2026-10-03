@@ -8,7 +8,7 @@
   "timeoutSeconds": 60,
   "fixtures": ["conversion.graph.json", "discriminating.graph.json", "seed.hlsl", "seed.hlsli", "seed-discriminating.hlsl"],
   "positive": {
-    "world": "tests/Puck.World.Canaries/source-conversion/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/source-conversion/fixture.puck",
     "script": "conversion.script.txt",
     "commands": [
       {
@@ -360,7 +360,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/source-conversion/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/source-conversion/discriminating.puck",
     "script": "conversion.script.txt",
     "commands": [
       {
