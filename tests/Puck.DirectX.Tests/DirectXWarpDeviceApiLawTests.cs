@@ -33,7 +33,7 @@ public sealed class DirectXWarpDeviceApiLawTests {
 
             foreach (var member in typeof(IDirectXDeviceApi).GetMethods()) {
                 var arguments = member.GetParameters().Select(selector: parameter => parameter.ParameterType switch {
-                    var type when (type == typeof(DirectXFeatureLevel)) => (object)DirectXFeatureLevel.Level110,
+                    var type when (type == typeof(DirectXFeatureLevel)) => ((object)DirectXFeatureLevel.Level110),
                     var type when ((type == typeof(long)) && (parameter.Name == "adapterLuid")) => adapterLuid,
                     var type when ((type == typeof(nint)) && (parameter.Name == "deviceHandle")) => device.Handle,
                     _ => throw new InvalidOperationException(message: $"The law supplies no argument for {member.Name}'s parameter {parameter.Name}; teach it one."),
@@ -43,7 +43,7 @@ public sealed class DirectXWarpDeviceApiLawTests {
                     if (member.Invoke(obj: api, parameters: arguments) is IDisposable created) {
                         created.Dispose();
                     }
-                } catch (TargetInvocationException exception) when (exception.InnerException is not null) {
+                } catch (TargetInvocationException exception) when ((exception.InnerException is not null)) {
                     refused.Add(item: $"{member.Name}: {exception.InnerException.GetType().Name}: {exception.InnerException.Message}");
                 }
             }

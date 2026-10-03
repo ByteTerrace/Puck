@@ -216,7 +216,7 @@ public sealed class TemporaryDirectoryLawTests {
             access: FileAccess.Read,
             mode: FileMode.Open,
             path: path,
-            share: (FileShare.ReadWrite | FileShare.Delete)
+            share: FileShare.ReadWrite | FileShare.Delete
         );
 
         try {
