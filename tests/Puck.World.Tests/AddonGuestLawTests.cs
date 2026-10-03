@@ -72,7 +72,6 @@ public sealed class AddonGuestLawTests {
             return false;
         }
     }
-
     // Serves one module's bytes at one path, so a guest reaches the host through the real loader.
     private sealed class OneModule(string path, byte[] bytes) : IAssetSource {
         public bool Exists(string path1) => string.Equals(a: path1, b: path, comparisonType: StringComparison.Ordinal);
@@ -107,6 +106,7 @@ public sealed class AddonGuestLawTests {
 
         return instance;
     }
+
     // Loads from the last bytes of the 32-bit address space, far past its one page.
     private const string OutOfBounds = (("""
         (module
@@ -255,8 +255,8 @@ public sealed class AddonGuestLawTests {
             condition: (child.ExitCode == 0),
             userMessage: $"the child test host exited {child.ExitCode}:{Environment.NewLine}{printed[Math.Max(val1: 0, val2: (printed.Length - 2000))..]}"
         );
-        Assert.Contains(expectedSubstring: "total: 1", actualString: printed);
-        Assert.Contains(expectedSubstring: "succeeded: 1", actualString: printed);
+        Assert.Contains(actualString: printed, expectedSubstring: "total: 1");
+        Assert.Contains(actualString: printed, expectedSubstring: "succeeded: 1");
     }
     // Runs only as the child of AHostHardwareFaultAfterAGuestRanIsAManagedException, which selects it explicitly. A guest
     // runs on this thread, then the processor raises an integer division fault in managed code on a thread that never
@@ -275,7 +275,7 @@ public sealed class AddonGuestLawTests {
         fresh.Start();
         fresh.Join();
 
-        var onPoolThreads = await Task.WhenAll(tasks: Enumerable.Range(start: 0, count: 8).Select(selector: _ => Task.Run(function: DivisionFault)));
+        var onPoolThreads = await Task.WhenAll(tasks: Enumerable.Range(count: 8, start: 0).Select(selector: _ => Task.Run(function: DivisionFault)));
 
         _ = Assert.IsType<OverflowException>(@object: onAFreshThread);
         Assert.All(collection: onPoolThreads, action: fault => Assert.IsType<OverflowException>(@object: fault));
