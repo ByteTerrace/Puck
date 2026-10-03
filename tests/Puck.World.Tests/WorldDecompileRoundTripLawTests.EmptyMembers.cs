@@ -186,10 +186,9 @@ public sealed partial class WorldDecompileRoundTripLawTests {
         (pointer.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: "rules/"
-        ) || string.Equals(
-            a: pointer,
-            b: "state/world/verdict",
-            comparisonType: StringComparison.Ordinal
+        ) || pointer.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "state/world/verdict"
         ));
     // Every member the schema declares, with the document that holds it empty (a list or an object) or null (a scalar).
     private static SortedDictionary<string, (List<Step> Path, JsonNode? Empty)> Members() {
@@ -266,14 +265,14 @@ public sealed partial class WorldDecompileRoundTripLawTests {
         );
     }
     [Fact]
-    public void EverySectionHeldNullSurvivesDecompileAndCompile() {
+    public void EveryMemberHeldNullSurvivesDecompileAndCompile() {
         var cases = Members();
         var losses = new List<string>();
 
         foreach (var (pointer, member) in cases) {
-            // A section is held null to clear what a basis brings. The header members are not sections: `schema` names the
-            // document and `basis` names where it stands, so a null there says what its absence says.
-            if ((member.Path.Count != 1) || (pointer is "basis" or "schema")) {
+            // A member is held null to clear what a basis brings. The header members are not members of that kind: `schema`
+            // names the document and `basis` names where it stands, so a null there says what its absence says.
+            if ((pointer is "basis" or "schema") || IsHeldElsewhere(pointer: pointer)) {
                 continue;
             }
 
@@ -313,7 +312,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
 
         Assert.True(
             condition: (losses.Count == 0),
-            userMessage: $"{losses.Count} sections held null are lost:{Environment.NewLine}{string.Join(separator: Environment.NewLine, values: losses)}"
+            userMessage: $"{losses.Count} members held null are lost:{Environment.NewLine}{string.Join(separator: Environment.NewLine, values: losses)}"
         );
     }
 }
