@@ -346,13 +346,13 @@ qualified row (`jump$reached`/`jump$falls`).
 
 ## Verifying headless
 
-`tests/Puck.World.Canaries/jump-trophy/host.world.json` is a minimal `standard.world.json`-based world that
+`tests/Puck.World.Canaries/jump-trophy/host.puck` is a minimal `standard.world.json`-based world that
 imports `modules/jump.world.json` under alias `jump` and spawns its one local seat on `jump-arrival` with
 the `vaulter` kit—the same shape a future island import uses. Drive it directly:
 
 ```text
 dotnet run --project src/Puck.World -c Release -- --headless --state-dir <tmp> \
-  --world tests/Puck.World.Canaries/jump-trophy/host.world.json < tests/Puck.World.Canaries/jump-trophy/positive.script.txt
+  --world tests/Puck.World.Canaries/jump-trophy/host.puck < tests/Puck.World.Canaries/jump-trophy/positive.script.txt
 ```
 
 `body.fly 0.65 0.30 0.22 0 0 0 4.5` (forward/strafe/up channels, no yaw/pitch/roll, 4.5 simulated seconds)
