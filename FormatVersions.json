@@ -394,9 +394,10 @@
                 "M:Puck.World.WorldSchema.TryGetInlineRoot(System.Text.Json.Nodes.JsonNode,System.Int32@)",
                 "P:Puck.Assets.Documents.DocumentVector3.X",
                 "P:Puck.Assets.Documents.DocumentVector3.Y",
-                "P:Puck.Assets.Documents.DocumentVector3.Z"
+                "P:Puck.Assets.Documents.DocumentVector3.Z",
+                "P:Puck.SignedDistance.SdfAtmosphere.Default"
             ],
-            "shape": "d943ebf6d5819c29",
+            "shape": "3be5081edf8bb3b0",
             "source": "src/Puck.World.Authoring/Authoring/CreationDocument.cs",
             "token": "puck.creation.v1"
         },
@@ -1036,7 +1037,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "d2e03cce30cc1a53",
+            "shape": "732eeb2420c1ed65",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "1"
         },
@@ -1055,7 +1056,7 @@
                 "M:Puck.Assets.ContainerChunk.#ctor(Puck.Assets.ChunkCode,System.UInt32,System.ReadOnlyMemory{System.Byte},System.Collections.Generic.IReadOnlyList{Puck.Assets.ChunkInput})",
                 "M:Puck.Assets.ContentPin.TryParseHex(System.ReadOnlySpan{System.Char},Puck.Assets.ContentPin@)"
             ],
-            "shape": "d2e03cce30cc1a53",
+            "shape": "732eeb2420c1ed65",
             "source": "src/Puck.World.Schema/WorldBakePack.cs",
             "token": "PWBK"
         },
@@ -1079,12 +1080,13 @@
                 "M:Puck.World.WorldFaceCatalog.DerivedCameraName(System.String,System.String)",
                 "M:Puck.World.WorldFaceCatalog.For(Puck.World.WorldDefinition)",
                 "M:System.IO.TextWriter.WriteLine(System.String)",
+                "P:Puck.SignedDistance.SdfAtmosphere.Default",
                 "P:Puck.World.WorldPlacement.ShownPrototypeId",
                 "P:Puck.World.WorldPrototype.EngineDocument",
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "374fb89d72506360",
+            "shape": "232b3ccd55bbcf54",
             "source": "src/Puck.World.Schema/WorldCameraProgram.cs",
             "token": "puck.camera.program.v1"
         },
@@ -1417,6 +1419,7 @@
                 "M:Puck.World.WorldDefinitionValidator.ValidateProperties(Puck.World.WorldPropertyRegistrySection,System.Collections.Generic.Dictionary{System.String,Puck.World.WorldStateRow},System.Collections.Generic.List{System.String})",
                 "M:Puck.World.WorldDefinitionValidator.ValidatePrototypes(Puck.World.WorldDefinition,System.Collections.Generic.IReadOnlyList{Puck.World.WorldPrototype},System.Collections.Generic.HashSet{System.String},System.Boolean,System.Collections.Generic.List{System.String})",
                 "M:Puck.World.WorldDefinitionValidator.ValidateReferences(System.Collections.Generic.IReadOnlyList{Puck.World.WorldReference},System.Collections.Generic.List{System.String})",
+                "M:Puck.World.WorldDefinitionValidator.ValidateRenderAtmosphere(Puck.World.WorldDefinition,Puck.World.WorldRenderAtmosphere,System.Collections.Generic.List{System.String},System.String)",
                 "M:Puck.World.WorldDefinitionValidator.ValidateRenderEnvironment(Puck.World.WorldDefinition,Puck.World.WorldRenderEnvironment,System.Collections.Generic.List{System.String},System.String)",
                 "M:Puck.World.WorldDefinitionValidator.ValidateRenderFarDistance(System.Nullable{System.Single},System.Collections.Generic.List{System.String})",
                 "M:Puck.World.WorldDefinitionValidator.ValidateRenderLighting(Puck.World.WorldDefinition,Puck.World.WorldRenderLighting,System.Collections.Generic.List{System.String},System.String)",
@@ -1495,7 +1498,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "c090dbdf56beabe6",
+            "shape": "7586622de5340642",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
@@ -1631,7 +1634,7 @@
                 "P:Puck.World.WorldDefinition.State",
                 "P:Puck.World.WorldJsonContext.WorldProjectionDocument"
             ],
-            "shape": "a50d8daa1d027e5d",
+            "shape": "9ab621935670a876",
             "source": "src/Puck.World.Schema/WorldProjection.cs",
             "token": "puck.world.projection.v1"
         },
