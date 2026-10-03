@@ -35,7 +35,7 @@ The running World as the editor and debugger a builder needs, as one page of pac
 
 ## [Milestone 1 acceptance laws](acceptance-laws.md)
 
-The six cross-system laws that prove the pipeline foundation holds together on the integration head: a rewind reaching an existing viewer, a crossing that replays to the same traveller, a restored machine under its bindings, a displayed source surviving the screen's changes, a federated commit that keeps private profile data at home, and an unsupported operation that refuses before changing anything. The page also names the gaps found while designing them, two of which make a law fail today.
+The six cross-system laws that prove the pipeline foundation holds together on the integration head: a rewind reaching an existing viewer, a crossing that replays to the same traveller, a restored machine under its bindings, a displayed source surviving the screen's changes, a federated commit that keeps private profile data at home, and an unsupported operation that refuses before changing anything. The page also names the gaps found while designing them: G1 to G5 are fixed in code with laws, and G6 and a narrowed G7 remain open.
 
 The current world architecture is owned by [Worlds and federation](../architecture/worlds.md). The [Reference game design](../game/design.md) defines the reference game requirements; its implementation work is in [Play](play.md).
 

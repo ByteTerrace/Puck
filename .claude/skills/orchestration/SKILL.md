@@ -55,6 +55,12 @@ Brief: <id> done
 Brief: <id> blocked: <question>
 ```
 
+The lead's ledger and plan files that a delegate never writes are the lead's
+own scratch checklists in the session scratchpad. The repository's documents,
+`docs/plans/open-items.md` and the plans under `docs/plans` among them, belong
+to no one lane: a delegate edits them for what its change delivers, ticking an
+item it closed and correcting text its change made stale, and the brief says so.
+
 The message is the notification; git is the record. Inspect the reported
 changes and checks before merging, following
 [`verification`](../verification/SKILL.md). At each merge, turn every GPU leg

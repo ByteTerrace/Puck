@@ -43,7 +43,7 @@ These items belong to no single programme.
 
   `FederationOnwardRouteLawTests` drives the host's own claim publication across the onward hop, with the onward route observed before, during and after the claim. The portal follow-up work (presented-world probe hosts, remote destinations' screens, silo failover) reuses the same harness.
 
-- [ ] Implement the six [Milestone 1 acceptance laws](acceptance-laws.md) on the integration head once the projection, time-travel and portal-unification lanes have landed, each proved red by withholding the behavior it guards.
+- [ ] Write the six composed [Milestone 1 acceptance laws](acceptance-laws.md) on the integration head, each proved red by withholding the behavior it guards. The projection, time-travel and portal-unification lanes have landed and gaps G1 to G5 are fixed in code with their own laws; G6 (no refusal classification) and a narrowed G7 remain open.
 
 ## [State and language](state-and-language.md)
 
@@ -206,7 +206,7 @@ Every package below carries its own check on the programme page; tick it there a
   - [x] P18-3: keys on clocks for every bindable presentation value, blended by the field's type, with one resolver replacing `render.cycle` (the keys substrate, section keys, the resolver, the migrated worlds and remote presentation by anchored clocks and projection deltas).
   - [x] P18-4: the sky block and the lights table as regions with generated decoders, and the environment out of every pass block.
   - [x] P18-5: the sky evaluated once, only where a pixel or a neighbour is uncovered, and a composite pass for the sky, fog and bounded media; the pinned sky branch deleted and parity re-recorded (`SdfSkyEvaluationDeviceLawTests`, `SkyRunCompositionLawTests`, the `sky-coverage` canary).
-  - [ ] P18-5 environment (decision I): one environment map and its coefficients a residency renders in its upload only when its gradient changes, which the composite's fog reads with no sky evaluation; landed with its CPU and fake-device laws, while its device law, the `sky-environment` canary, parity's re-record and the counters ceilings wait for a GPU run.
+  - [x] P18-5 environment (decision I): one environment map and its coefficients a residency renders in its upload only when its gradient changes, which the composite's fog reads with no sky evaluation; its CPU, fake-device and device laws, the `sky-environment` canary and parity held in the batch E runs, and its counters ceilings are recorded in `sky-still.ceilings.json` and `sky-cycle.ceilings.json`.
   - [ ] P18-6: a cadence per pass, so a sky-only change runs only the sky and the composite (the generic retained-resource, signature, standing-counter and failure-recovery foundation has landed; SDF change classes, pass scheduling and temporal-history integration remain).
   - [ ] P18-7: celestial bodies with light binding and illumination, and up to four shadowed lights chosen by slot and tier, a slot changing hands by a counted crossfade.
   - [ ] P18-8: the open, ordered layer stack with one module per kind, the sky frame, per-layer tiers, one noise module and the `skies.puck` presets.
