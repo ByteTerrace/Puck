@@ -36,6 +36,8 @@
     "o28-hard-two-partners-one-gpu",
     "o30-hard-codex-brief-on-a-shared-box",
     "o31-hard-gate-blocks-lane-owner-says-ship",
-    "o32-owed-work-from-commit-bodies"
+    "o32-owed-work-from-commit-bodies",
+    "o33-hard-flake-proof-burner-brief",
+    "o34-hard-cleanup-kills-by-command-line"
   ]
 }

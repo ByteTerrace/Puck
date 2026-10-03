@@ -24,26 +24,19 @@ every package is complete.
 - **Games.** Ten of sixteen are landed: Reversi, Hidden ranks, Hearts, Snake,
   Word spy, Paddleball, Arena, Rulepush, Tetromino, and Go. Lineup landed
   outside the sixteen, in the [Parlor package](../../worlds/parlor/README.md#lineup).
-- **Embeddings** is done. The reference schedule's evidence is landed:
-  `src/Puck.State/ReferenceSchedule.json` pins eight targets across two ISA
-  families and prices the unary, binary, bit-field and bit-insert expression
-  operations. Every other reachable operation is registered with its named size
-  parameters and an explicit unmodeled reason — the function, program and fold
-  kernels,
-  the fourteen effect arms, the fifteen arena transforms, the five draw
-  sources, the two search methods and six candidate shapes, and the whole
-  memory profile — each enumerated against the code that owns it, so a new
-  operation cannot escape registration, and `puck bench state-evidence`
-  reports the priced and unmodeled counts per vocabulary. Pricing them remains
-  C1's, as reviewed loop formulas per implementation family and a
-  published-configuration memory profile.
+- **Embeddings** is done: the open defects in `Puck.Embeddings` and `puck embed`
+  are closed, each with a law ([Embeddings](#embeddings-done)).
+- **C1** is open. The reference schedule is implemented in part
+  ([C1](#c1--ceilings-as-prices) holds its status and what remains).
 - **S1** is landed: `WorldCompiler.Compile` is the one door, and
   `ProjectionLawTests` holds over every shipped source and a generated corpus
-  of every registered construct. `puck lint` and the language server both
-  publish `WorldSourceDiagnostics.Diagnose`, which compiles through that door
-  and then runs the lint, the engine's validation of the composed world and the
-  reference lint, so an editor refuses what `puck lint` refuses, by the same
-  code, text and line.
+  of every registered construct. `puck lint` calls
+  `WorldSourceDiagnostics.Diagnose`; the language server runs the two tiers
+  `Diagnose` composes, `DiagnoseSource` and then `DiagnoseSemantic`. The source
+  tier compiles through that door and runs the lint; the semantic tier runs the
+  engine's validation of the composed world and the reference lint, and only
+  when the source tier reported no error. An editor therefore refuses what
+  `puck lint` refuses, by the same code, text and line.
 - **S2** is landed: the syntax tree carries trivia, `puck format`,
   the language server and `puck decompile` are parse-then-print through
   `PuckPrinter`, the text formatter is gone, and formatting every shipped
@@ -164,11 +157,13 @@ at each hop; a body that steps off the rim over each quadrant arrives in that
 quadrant's biome still falling, with the velocity, stamina, and record it left
 with, and a body hovering on the border plane does not change authority every
 tick; a body returns to the island by each biome's ascent; winning a game in a
-parlor writes a badge onto the visitor's record, and the badge is there on the
-island afterward; the cabinet module used twice yields two independent sets of
-rows and two devices; the projection law holds over every source in it; every
-module in it ships tests, the movement kit's among them, and `puck test` is
-green over them on both hosts.
+parlor writes a badge onto the visitor's record, and the badge is on the owned
+identity at home afterward (a colocated seat coming home adopts the carried
+record today; across separate authorities the badge waits on the open
+[remote home adoption](records-and-pools.md#remote-home-adoption) step); the
+cabinet module used twice yields two independent sets of rows and two devices;
+the projection law holds over every source in it; every module in it ships
+tests, the movement kit's among them, and `puck test` is green over them.
 
 Three games finish the proof the world cannot reach on its own. **Rulepush**
 forces a match that answers *where*, a push along a ray, a write across a
@@ -314,8 +309,9 @@ condition the chance ply's exact average rests on; the outcome count never
 was.
 
 The reference schedule and shared report are implemented in part. The manifest
-pins the evidence targets, prices the unary, binary, bit-field and bit-insert
-expression operations, and registers every other reachable
+(`src/Puck.State/ReferenceSchedule.json`) pins eight evidence targets across two
+ISA families (x86-64 and AArch64), prices the unary, binary, bit-field and
+bit-insert expression operations, and registers every other reachable
 operation with its size parameters and an explicit unmodeled reason;
 `puck bench state-evidence` reproduces the pinned instruction-service rows and
 reports the priced and unmodeled counts per vocabulary. A compilation retains
@@ -545,7 +541,7 @@ typed arguments, required exports and re-exports, aliased recursive naming,
 lexically closed imported modules and constants, hygienic external row/pool/gate
 arguments, bounded expansion, formatter projection, and diagnostic/source-map
 origins for imported definitions and instance chains. Multi-world emission,
-reciprocal `border` and `door` expansion, and explicit asset-lock refresh are now
+reciprocal `border` and `door` expansion, and explicit asset-lock refresh are
 implemented. Each output has an independent source map, while compilation limits
 are shared across the source. Borders support derived ground sides and explicit
 pitched frames, including an authored minimum ownership deadband. Doors generate
@@ -608,8 +604,7 @@ host and real-executable verification gates.
 
 **Owns:** a `test` construct; the `schedule` section and the `verdict` row
 trait in `Puck.World.Schema`; `puck test` in `src/Puck.Cli`; the deletion
-of the C# game laws, the baseline runner's raw cell writes, and the browser
-parity fixtures.
+of the C# game laws and the baseline runner's raw cell writes.
 
 **Delivers:** a `test` block in a module or world lowers to a generated test
 world: the subject `use`d with the test's arguments in an empty host, `given`
@@ -617,8 +612,8 @@ as initial cells through the host's ingress, `when` as tick-scheduled command
 rows, `expect` as rules whose gate is the expectation and whose effect writes
 a verdict row folding the values the gate saw. `puck test` boots each test
 world headless to its last scheduled tick and reads the verdicts from exported
-state; the same world's hash through the server and the browser host is the
-parity and cross-host determinism check. A module's tests run once per distinct
+state, and `puck test --reproduce` runs each world on the server host twice and
+compares the two exports byte for byte. A module's tests run once per distinct
 instantiation, wherever it is used, and `puck test` is the door that runs them:
 the transpiler cannot boot a world, so `puck compile` stays a pure lowering and
 a `use` of a module whose tests fail is not a compile refusal. A module's
@@ -644,9 +639,10 @@ code. A checkpoint or a save inside an armed run is refused. A test over several
 `world` statements boots the set in one process and reads its verdict in the
 destination world. The export-hash baseline stays as the determinism check only.
 
-**Check:** every module in the forcing world ships tests, green on both hosts;
-the C# laws that pinned a shipped game's behavior are deleted with the tests
-that replace them; a failing verdict names the gate and the values it saw.
+**Check:** every module in the forcing world ships tests, green on the server
+host and reproducing under `--reproduce`; the C# laws that pinned a shipped
+game's behavior are deleted with the tests that replace them; a failing verdict
+names the gate and the values it saw.
 
 The runner half is landed and is what the construct lowers to: the `schedule`
 document section (rows of tick/principal/command/expect plus the derived export
@@ -816,6 +812,10 @@ admission's refusal of one is held on admission's own function,
 `WorldRuleWorkBudget.Refuse`, and at the sheet, not through a world. The
 reference schedule, reference-cycle admission, and the shared report are C1's.
 
+The comparison of reference costs with independent full-workload measurements
+([costing §8 step 5](abstract-machine-costing.md#8-implementation-order-and-acceptance)) waits for C1's
+reference schedule.
+
 ### Embeddings (done)
 
 **Owns:** `src/Puck.Embeddings`, `EmbeddingLock`, `EmbedCommand`,
@@ -825,16 +825,15 @@ reference schedule, reference-cycle admission, and the shared report are C1's.
 (a copy into an absent key, transform refusals by name, an Edit-only principal
 applying each transform); weak tests made to fail when their subject breaks;
 `puck embed` exits 2 without writing when lowering has errors and collects
-texts from both dialects; `Puck.World.Transpiler` stops referencing
+texts from both dialects; `Puck.World.Transpiler` references no
 `Puck.Embeddings` (lock spaces carry `Puck.State`'s `EmbeddingIdentity`); `PruneEntries`
 and `PruneSpaces` are called; `EmbedCommandTests` compares a fixture lock byte
-for byte. The measurement reported with the change: flagship tick timing
-unregressed, `nearest` over 256 × 256 under 100 µs in Release
-(`puck bench kernels --filter '*VectorNearest*'`, on a quiet machine).
+for byte.
 
 **Check:** `puck embed --check` offline with fixture locks regenerating
-byte-identically; both authored samples boot and trace their rules; neither
-`packages.lock.json` lists a provider package.
+byte-identically; both authored samples boot and trace their rules; the
+`packages.lock.json` of `src/Puck.Transpiler` and of `src/Puck.World.Transpiler`
+lists no embedding provider package (no `OpenAI` or `Azure.AI.OpenAI` entry).
 
 ### G4 — Tetromino
 
@@ -939,29 +938,35 @@ are two rules, and no job has been authored or planned against them.
 
 ## Sequencing
 
-The landing carries the rebuilt state system and the means to build and test a
-world against it: the rebuild, S8's runner, and S8's `test` construct for a
-world. A test inside a module, and the rule that a `use` of a module whose tests
-fail is a compile refusal, follow with S6's expander, which is what gives a
-module its `use`.
+Landed: the rebuild and the means to build and test a world against it
+([the landing](state-rebuild.md)), S1 to S5, S6's expander (modules, `use`,
+`import`, several documents from one source, `border`, `door` and the asset
+lock), S7's substrate and World integration, S8's runner, `test` construct and
+composed run, the costing correction, C2 to C6, and the games G4, G1 and G16.
+A `test` inside a module runs once per distinct instantiation under `puck test`;
+a `use` of a module whose tests fail is not a compile refusal, because the
+transpiler cannot boot a world. `puck test` runs on the server host; running the
+same test world through the browser host is not scheduled.
+
+What is open, in order:
 
 | Step | In parallel | Why here |
 |---|---|---|
-| 1 (landed) | [The landing](state-rebuild.md): the sweep, WP8, WP13, WP14; S4's remainder; S8's runner and its `test` construct for a world | The critical path. Everything below edits the new substrate and is verified with `puck test`. |
-| 2 | S3, S7a, S7b, S6's expander; C1 and the costing correction | Each language package adds spellings and follows S4's table; S7a is state work; C1 is what every later package allocates under, and the correction needs the rebuilt operator table. |
-| 3 | S6's remainder, S8's distributed tests, and the shipped island, districts, and shards onto the modules | Needs the language proven by step 2. |
+| 1 | C1, including the line-of-sight pricing the costing correction leaves to it | C1 is what every later package allocates under, and the correction's remaining item needs its reference schedule. |
+| 2 | S6's remainder: the forcing world under the product tree, and the shipped island, districts, and shards moved onto the modules, with their canaries re-recorded and the JSON sources deleted | Needs the language proven, which the landed packages above supply. |
+| 3 | S7's two open steps: [remote home adoption](records-and-pools.md#remote-home-adoption) and records carrying timed row traits | Remote adoption closes the forcing world's badge check across separate authorities. |
+| 4 | The deferred games, each when the capability it forces is otherwise unproven | See the table above. |
 
 After the landing a package branches from `main` and lands as its own squash.
-`puck test` runs on the server host; running the same test world through the
-browser host is not scheduled.
 
-### Deferred with the games that force them
+### The packages C2 to C6 serve
 
-C2 to C6 exist for three acceptance games: C2's variable-width cell sets for Go
-at 19×19, and C3 to C6 for Rulepush; tetromino needs none of them and proves the
-same substrate the landed games already exercise. The five capabilities and the
-three games (G4, G1, G16) are scheduled together, after step 3, with each game
-verified by its own `test` blocks. Their packages above stay as written.
+C2 serves Go at 19×19 (G1), and C3 to C6 serve Rulepush (G16); Tetromino (G4)
+needs none of them and proves the same substrate the landed games already
+exercise. All five capabilities and all three games are implemented, each game
+verified by its own `test` blocks and its canary: `go-capture` for Go,
+`rulepush-undo` and `rulepush-overworld` for Rulepush (with `push-ray` for C4),
+and `tetromino-clear` for Tetromino.
 
 ## Verification summary
 
@@ -1019,8 +1024,8 @@ puck landing --against origin/main --base <the commit the branch was authored fr
 
 ## The forcing world, drafted
 
-These pages began as sketches for judging the proposed spellings. Several
-constructs are now implemented, but the complete examples still contain planned
+These pages are sketches for judging the proposed spellings. Several
+constructs are implemented, but the complete examples still contain planned
 features and are not executable fixtures.
 Statements are keyword-led blocks, as today: the keyword at the start of a
 line is what the construct table, a diagnostic, and a reader key on, and
@@ -1237,8 +1242,9 @@ module parlor(game: Module exporting seats, outcome) {
   use traveller()
   use game as table(at: [0, 0.9m, 0])
 
-  // The parlor is its own authority; the badge is a write onto an identity
-  // it does not own, so it goes through the identity write-back door.
+  // The parlor is its own authority; the badge is a write onto the visitor's
+  // travelling record, which the next crossing carries home. A colocated seat
+  // adopts it today; remote home adoption is the open records-and-pools step.
   rule award for each seat in table.seats {
     when table.outcome == seat.side
     mode: edge

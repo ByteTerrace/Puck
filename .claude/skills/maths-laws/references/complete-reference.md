@@ -172,7 +172,7 @@ Smoke + Default.
 | Tier | Selected by | Declared budget | When it runs |
 |---|---|---|---|
 | Smoke | `--settings tests/Puck.Maths.Tests/smoke.runsettings` | < 2 s | a tight inner loop; carries **no new evidence** by construction |
-| Default (Smoke + Default) | the bound default | ~13 s | **every change**, unconditionally |
+| Default (Smoke + Default) | the bound default | < 30 s | **every change**, unconditionally |
 | Deep | `--settings …/deep.runsettings` | minutes | before you commit, and before any rounding change lands |
 | Exhaustive | `--settings …/exhaustive.runsettings` | long | on demand or nightly; full-width sweeps over an ENTIRE carrier |
 

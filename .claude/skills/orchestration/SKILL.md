@@ -55,6 +55,12 @@ Brief: <id> done
 Brief: <id> blocked: <question>
 ```
 
+The lead's ledger and plan files that a delegate never writes are the lead's
+own scratch checklists in the session scratchpad. The repository's documents,
+`docs/plans/open-items.md` and the plans under `docs/plans` among them, belong
+to no one lane: a delegate edits them for what its change delivers, ticking an
+item it closed and correcting text its change made stale, and the brief says so.
+
 The message is the notification; git is the record. Inspect the reported
 changes and checks before merging, following
 [`verification`](../verification/SKILL.md). At each merge, turn every GPU leg
@@ -135,6 +141,21 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   while CPU is under 60% and free RAM over 10 GB, and is under pressure below
   4 GB free. A 16 GB, 6-thread machine has capacity while CPU is under 50% and
   free RAM over 5 GB, and is under pressure below 2 GB free or 10 GB of disk.
+
+A brief that asks an agent for deliberate CPU contention, such as a burner for a
+flake proof, gates it on GPU idle on the same box: no canary, parity, `Puck.World`
+run or device test host is running, checked just before the burner starts and
+again while it runs, and the burner stops when a GPU leg starts. Contention that
+overlaps another lane's GPU leg makes that lane's timeouts untrustworthy, so the
+brief names the check and the stop.
+
+An agent stops only the processes it started, by the PIDs it recorded at launch,
+and never kills by a command-line pattern. On a shared box a filter on a common
+string (a scratchpad path, a lane prefix) matches processes the agent cannot
+attribute, other lanes' build and test commands among them, and those fail with
+verdicts that are not evidence, so a lane that failed while the kill ran re-runs
+its failed legs alone before anyone acts on them. A brief that starts background
+work says to record each PID and to stop only those.
 
 Every build, a Codex brief's included, passes `-nodeReuse:false`
 ([`verification`](../verification/SKILL.md#build-before-you-test) says why).

@@ -250,7 +250,10 @@ and an iteration already a period late starts the next one at once with no
 steps owed. The interval an iteration measured decides no step. Whatever it
 exceeds its one step by rebases the input pin, so input captured during a slow
 frame is due in the next step, and while the host holds its clock for a capture
-the interval is the host time the hold spends. An offscreen client of a remote
+the interval is the host time the hold spends. A frame hold spends an owed
+capture's hold budget as a withheld step does, and the capture is refused once
+that budget is spent, while the frame hold itself continues until the frame
+renders. An offscreen client of a remote
 authority steps its own ticks the same way while the authority keeps its own
 wall clock, so a client script reads what the authority did, never a tick count
 of it.
@@ -387,7 +390,8 @@ carries a kind too, the same `ShaderPipelineResourceKind` a graph version
 declares. `RenderGraphInstanceSet.TryCreate` validates a set and orders it so
 every producer renders before the consumers that read it in the same frame,
 whatever the read carries. A read of the instance's own output, or a read
-declared previous-frame, takes the producer's last completed frame instead. A
+declared previous-frame, takes the producer's last completed frame instead and
+demands nothing of the producer. A
 loop of same-frame reads is refused with `SameFrameCycle`, naming every
 instance in the loop, and a read whose kind is not what its producer's output
 carries is refused with `KindMismatch`, naming the consumer and the producer.
@@ -406,6 +410,11 @@ and the frame's pass-pixel budget:
   a shrink of less than an eighth.
 - It renders only when its refresh is due. A consumer of an instance that is
   not due reads that instance's latest completed output and never waits for it.
+- A root asks for its instance at most as often as its own refresh
+  (`RenderGraphRoot.Refresh`, every frame unless set). An instance shown only by
+  roots renders no more often than the most frequent root's refresh, nor its own,
+  and on its first frame whatever either says. A consumer's same-frame read
+  exempts the producer from that, since the consumer needs the frame.
 - The instances the display does not show directly spend at most the budget,
   priced as passes times pixels. The stalest due instance goes first, so an
   instance the budget defers is first in line on the next frame.
@@ -473,8 +482,10 @@ limit, on an image the showing instance does not read, or at an instance with
 no camera. Every step maps in fixed point, so the same inputs walk the same
 path on every run. A World host walks its runtime's live instance set from the
 pane mappings it publishes each frame, with each view's seat camera and each
-pane's paired camera; no instance reports the surfaces in its world yet, so a
-walk that continues into an instance ends on that instance's world.
+pane's paired camera; each view's world producer and each camera view reports
+the screens standing in the boot world, so the walk continues from a pane through
+a screen into its source, or into the view the screen films; any other instance
+reports none, so a ray cast into it ends on its world.
 
 `PublishBuffer<T>` is the smaller handoff for immutable latest-state values. A
 single writer swaps a holder reference and readers snapshot the newest value.

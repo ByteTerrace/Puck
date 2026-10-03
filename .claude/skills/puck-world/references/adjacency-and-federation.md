@@ -425,8 +425,10 @@ determinism for cross-authority dynamic contact.
 ## What the tape does and does not carry about federation
 
 Every authority tapes its own half of a crossing. The source's
-`WorldReplayEntry.Transfer` names the target authority (and whether it is
-remote) and the slots that departed; a re-drive detaches them. The
+`WorldReplayEntry.Departure` entries name each detached or restored slot, and a
+re-drive detaches them; its `WorldReplayEntry.Transfer` names the target
+authority (and whether it is remote), the outcome and the slots the settlement
+made final, and is the pairing key. The
 destination's `WorldReplayEntry.Arrival` carries the arrival record and is
 landed again through the shadow's own escrow at the tick it landed
 (`ReplayRefusal.ArrivalRefused` when it cannot land in the same body indices);

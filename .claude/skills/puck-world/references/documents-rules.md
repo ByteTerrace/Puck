@@ -207,7 +207,7 @@ inside that option. Inspect candidateBudget as well as maxCandidates: rejected
 points and incumbent rechecks consume attention. Incarnation-addressed choices,
 not merely option ordinals, own commitment and entry transitions. Positions freeze
 before ordinary rules; state gates still read in normal document order.
-See the Schema README's `decision-policies` section for the complete authoring
+See the Schema README's "Decision policies" section for the complete authoring
 contract. Keep choice state, local random draws, and timers in checkpoint/hash
 coverage; refresh compiled handles while retaining unchanged policy episodes.
 Rules evaluate in DOCUMENT ORDER and their effects apply IMMEDIATELY, so a later
@@ -281,7 +281,7 @@ has not yet reached it.
 ## Discrete state, patterns, and impressions
 
 Discrete state shares `state.lattices`: only `Field` creates physical storage;
-`Grid`, `Ring`, and `Hex` compile bounded adjacency. Keep token identity domains,
+`Grid`, `Ring`, `Hex`, `Graph`, `Tiling`, and `Box` compile bounded adjacency. Keep token identity domains,
 ordered zone membership, position attributes, phase progression, and knowledge
 stamps inside the canonical state row converter and authoritative hash. A
 `cellsOf` row's `inverse` trait (`Puck.State.StateInverse`) declares it derived

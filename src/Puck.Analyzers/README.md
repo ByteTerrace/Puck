@@ -22,7 +22,7 @@ per-file count may only fall. Both ledgers use one ledger type and one analyzer
 base, and `puck lengths` and `puck comment-smells` regenerate them. Update each
 file through its owning workflow rather than suppressing a diagnostic to hide a
 changed declaration.
-The [CLI reference](../Puck.Cli/README.md) documents the related inspection tools.
+The [CLI reference](../../docs/reference/cli.md) documents the related inspection tools.
 
 ENV001 refuses any read of the process environment whose variable is not named,
 with its reason and the assemblies that may read it, in `EnvironmentReadAllowlist`,

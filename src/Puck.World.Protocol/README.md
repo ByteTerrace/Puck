@@ -85,7 +85,8 @@ reply, never silently admitted), `WorldSnapshot.cs` (the per-tick pose
 delivery—poses flow OUT only—and `WorldObserverDisclosureEvaluation`, the
 per-observer disclosure-policy evaluation over a live `EntitySnapshot`),
 `WorldComposition.cs` and `WorldSessionLever.cs` (the composition and
-session-lever deliveries), `WorldScreenOp.cs` (the screen-machine lifecycle
+session-lever deliveries; a lever names a section, a knob, an optional seat,
+and an optional render view, where no view means every view), `WorldScreenOp.cs` (the screen-machine lifecycle
 vocabulary insert/eject/select/options/link/unlink, each CAS-pinned where it
 names on-disk content), and `WorldSubmissionResult.cs`.
 

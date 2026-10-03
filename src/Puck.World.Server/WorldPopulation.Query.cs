@@ -822,29 +822,6 @@ public sealed partial class WorldPopulation {
         ? m_entries[bodyIndex].PressRefusal
         : string.Empty
     );
-    /// <summary>Refreshes the cached body color of every active seat currently seated on <paramref name="profile"/> —
-    /// the server half of a live <c>SetPlayerSection(identity)</c> color edit. The seat renders its color live off the
-    /// shared handle client-side, but the per-entry <see cref="BodyColor"/> cache is the snapshot's source of truth, so
-    /// it must not lie after an identity change. Bumps the revision when a seat's color actually moves.</summary>
-    /// <param name="profile">The edited profile handle.</param>
-    public void RefreshSeatColor(WorldIdentity profile) {
-        for (var slot = 0; (slot < LocalSeatCount); slot++) {
-            var entry = m_entries[slot];
-
-            if (
-                (entry is { Active: true, Body: { } body }) &&
-                ReferenceEquals(
-                objA: body.Profile,
-                objB: profile
-            ) &&
-                (entry.BodyColor != profile.Color)
-            ) {
-                entry.BodyColor = profile.Color;
-                m_revision++;
-            }
-        }
-    }
-
     // The shared body-construction pattern ActivateInhabitant/ActivateSimulated/RestoreDetachedSeat each already
     // run for their own kit index — factored out here so a restore reconstructs an arbitrary slot's body under
     // ITS OWN captured kit, not just the local-seat kit RestoreDetachedSeat assumes.

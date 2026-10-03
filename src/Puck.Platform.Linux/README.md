@@ -19,7 +19,7 @@ The Linux concrete backends behind `Puck.Platform`'s contracts.
 
 No camera-capture, desktop-capture, or audio-render backend.
 `AddLinuxCameraCapture` registers `Puck.Platform.NullCameraCaptureService`/
-`NullNativeImageCaptureService`; no `IAudioRenderDeviceFactory` is registered
+`NullNativeImageCaptureService` and the probes' `NullProbeKernelHostService`; no `IAudioRenderDeviceFactory` is registered
 at all (`WorldAudioRenderService` already treats an unresolved factory as
 "no render backend" and parks as `unsupported`).
 

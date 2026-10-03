@@ -261,9 +261,10 @@ a template with no document row behind it at all.
 
 ## The overlay reservation — what refuses at construction
 
-`OverlayChannel` has SEVEN members, value = draw priority for the first four:
+`OverlayChannel` has EIGHT members, value = draw priority for the first four:
 `Console = 0`, `BindingBar = 1`, `Markers = 2`, `Toast = 3`, `Hud = 4`,
-`Cursor = 5`, `Wheel = 6`. The FOUR first-party writers are
+`Cursor = 5`, `Wheel = 6`, `Editor = 7` (the inspector, drawn after the seat
+panels and just before the wheel and cursor). The FOUR first-party writers are
 `ConsolePanelWriter`, `BindingBarWriter`, `MarkerWriter`, `ToastWriter`
 (`FirstPartyChannelCount = 4`); `HudWriter`
 is the fifth channel, banded, not one of the four; `WheelWriter` and
@@ -315,8 +316,8 @@ beside the others.
 (snapshot the structure once) → UNDER band (its own
 `BeginChannel(Hud)` scope) → BASE slot → OVER band. The base slot is: if any
 live panel declares `Replace`, the replace panels draw IN DOCUMENT ORDER
-INSTEAD OF the five first-party writers — exactly those five, nothing else;
-otherwise the five run in enum order. `HasReplace` recomputes from the
+INSTEAD OF the four first-party writers — exactly those four, nothing else;
+otherwise the four run in enum order. `HasReplace` recomputes from the
 fresh snapshot every frame, so removing the last replace panel restores the
 writers the next produced frame. The stdin/stdout control plane is
 untouched by `Replace` — the console MIRROR merely stops being drawn.

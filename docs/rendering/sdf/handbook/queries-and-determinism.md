@@ -142,9 +142,12 @@ warps, displacement and domain warp), plus the dynamic-transform op (its
 per-frame pose buffer has no seam in this interface), the wallpaper fold
 (isometric and therefore tractable, just not yet mirrored), and a small
 number of shapes whose exact cores need runtime trig or texture sampling
-(star and regular-polygon's `atan2`, the ellipse's cubic solve, and the
-glyph shape's texture sample). Everything else—resets, translates,
-rotations (a baked quaternion needs no runtime sin/cos), scales, repeats,
+(star and regular-polygon's `atan2`, the ellipse's cubic solve, the
+glyph shape's texture sample, and a sampled brick, whose pool is an engine
+resource the evaluator cannot reach), and a non-uniform `Scale`, because the
+renderer's minimum-axis correction is a march bound, not physical distance.
+Everything else—resets, translates,
+rotations (a baked quaternion needs no runtime sin/cos), uniform scales, repeats,
 symmetry planes, elongation, onion/dilate, scoped field push/pop, and the
 shape/blend core—is interpreted exactly, because every one of those
 operations is either an isometry or has an exact, closed-form fixed-point
@@ -351,6 +354,7 @@ public interface IFieldEvaluator {
     FieldEvaluatorCapabilities Capabilities { get; }
     bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material);
     bool TryFieldGradient(FixedPosition position, out FixedVector3 gradient);
+    bool TryFieldGradient(FixedPosition position, FixedQ4816 epsilon, out FixedVector3 gradient);
 }
 ```
 

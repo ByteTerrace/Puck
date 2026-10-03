@@ -118,13 +118,16 @@ two never act, so they are not principals: a grant's holder is a separate type,
 `Grantee` in the world schema, which is a principal, a group, or a document.
 Because no acting surface accepts a grantee, a group or a document acting is a
 type error rather than a run-time refusal.
+
 ## Configuration and operations remain discoverable
 
 Durable configuration belongs in documents. Live operations belong in the
 running application's command interface, available through the console and
 process stdin/stdout. Launch flags select boot concerns such as the backend,
 world and presentation mode; they do not replace a content authoring model.
-Diagnostic environment variables are documented with development tooling.
+No environment variable switches Puck; a run's diagnostics are flags, as the
+[development guide](../development/contributing.md#configuration-and-diagnostics)
+explains.
 
 The intended authoring experience supports work within one session. A missing
 in-session operation is a planned integration task, not evidence that an

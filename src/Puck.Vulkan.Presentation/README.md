@@ -6,8 +6,10 @@ service registration. It presents a surface through the display encode that
 `Puck.Shaders` ships (`SurfaceEncoder`) and carries no shader of its own. The
 project owns this presentation seam; Vulkan loading and resource APIs stay in
 `Puck.Vulkan`.
-`VulkanRenderer` reports its device to backend-neutral code as the device
-command table's token, as described in [the Vulkan backend](../../docs/rendering/vulkan.md#command-tables).
+`VulkanRenderer` is the backend's `IGpuDeviceContext`: it reports its device to
+backend-neutral code through `GpuDeviceServices`, the device identity, its
+capabilities and its memory profile. The Vulkan entry points it resolves are
+described in [the Vulkan backend](../../docs/rendering/vulkan.md#command-tables).
 
 ## Usage
 

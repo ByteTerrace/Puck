@@ -30,8 +30,8 @@ lowered document. None of this is author-facing DSL syntax — it has no DSL spe
   bytes. Above them: `0x020000C4` queue count, `0x020000C8` the queue's 24
   entries of (row, column, tile, palette), `0x02000130` the four voices' state,
   `0x02000200` the save mirror. Mode-0 background map uses screenblock 31; tiles and object graphics
-  use their native VRAM regions. Code starts at `0x080000C8`, data at
-  `0x0800C000`, image size 64 KiB.
+  use their native VRAM regions. Code starts at `0x080000D8`, data at
+  `0x0800C000`; the image is at least 64 KiB and grows with its data blob.
 - Thumb literal pools are DATA. `EmitLiteralPool` does not branch around them;
   emit a branch yourself wherever the instruction stream can fall through.
 - The AGB per-pixel surface is mode 4 drawn by BG2, so DISPCNT needs BG2's
@@ -107,7 +107,7 @@ lowered document. None of this is author-facing DSL syntax — it has no DSL spe
 - Per-scanline scroll takes a different road on each machine: the Color machine
   arms a scanline-match interrupt whose handler waits for mode 0 before writing
   SCX/SCY, so the match is aimed one line ABOVE the band; the advanced machine
-  arms DMA0 from an EWRAM table (0x02000400, 160 pairs of halfwords) into
+  arms DMA0 from an EWRAM table (0x02000500, 160 pairs of halfwords) into
   0x04000010 with control 0xA260. A burst runs in line n's horizontal blank and
   governs line n+1, so a band starting at line L is written from entry L-1.
   Rows republish in the vertical blank, never mid-picture — a burst must not

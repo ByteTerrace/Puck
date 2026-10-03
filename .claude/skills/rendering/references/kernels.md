@@ -74,11 +74,14 @@ which a view below a native ceiling runs, puts `sdf.world$resolve` between views
 and the sky.
 `world.counters gpu` lists them under the instance's name. The frame's first pass to record submits its residency's one
 upload ahead of the instance's submission (`SdfWorldResidency.Submit`), counted
-under the residency as `sdf:<name>` with three passes (`SdfWorldTables.PassLabels`):
+under the residency as `sdf:<name>` with four passes (`SdfWorldTables.PassLabels`):
 `fillers`, the fillers' first transitions and clears on the first upload;
 `bricks`, the brick staging copy, the bake dispatches and the pool's barriers
-when that work is pending; and `upload`, the region copies. An upload skips a
-pass it has no work for. Every pass of the view counts its own march steps
+when that work is pending; `upload`, the region copies; and `environment`, the
+sky's environment map and its coefficients, rendered only on an upload whose sky
+gradient moved while the fog reads it (`SdfWorldTables.SkyEnvironment.cs`;
+`sdf-sky-environment.comp` then `sdf-sky-environment-reduce.comp`). An upload
+skips a pass it has no work for. Every pass of the view counts its own march steps
 (`sdfWorkSteps`: each field evaluation of a march or a query, and each bounded
 volume sample) and the pixels it writes an output for (`sdfWorkTexels`: set by
 `sdfVisibilityStoreWord` and the output writes; the mesh pass one per fragment)
@@ -86,7 +89,8 @@ into its node's kernel counters through the generated `puckCountWork` (one
 wave-summed atomic a wave into the row `workCounterRow` names,
 `GpuKernelCounters`), which the node clears ahead of the first pass and copies
 to the slot's readback behind the last; `world.counters gpu` reads them as
-`march.steps` and `texels.written`, per-backend deterministic. The shadow stage
+`march.steps` and `texels.written`, per-backend deterministic, and the sky and
+composite passes also count `sky.evaluations` through `puckCountSky`. The shadow stage
 also calls generated `puckCountShadow` for each marched slot; the existing kind
 dimension adds `shadow.slot0.steps` through `shadow.slot5.steps` to each pass
 row. The shadow columns partition that pass's march total. Slots past K + F,
@@ -107,17 +111,22 @@ of its passes. The upload and the view's passes, in order:
 | `surface` | `sdf-world-surface.comp` | Normals, curvature, gradient magnitude. |
 | `ambient` | `sdf-world-ambient.comp` | Ambient occlusion with its own candidate mask; skips a frame whose ambient occlusion is off (`Skips`). |
 | `shadow` | `sdf-world-shadow.comp` | One gather and march for each occupied stable slot and active incoming slot, bounded by K + F. Four 8-bit stable visibilities pack into the K row; incoming visibilities use the policy-sized transient image. Skips when soft shadows are off or the slot table contains no marched light (`Skips`). |
-| `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss left uncovered. |
+| `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss left uncovered. In a reduced or temporal view it writes `currentColor` at the render grid instead. |
+| `resolve` | `sdf-resolve.comp` | Only in `Fragment` and `TemporalFragment`: reconstructs the render grid's samples into the lit image and each output pixel's surface transport at the output grid, over history when the view is temporal. |
 | `sky` | `sdf-sky-runs.comp` | The sky's field runs on the render grid, from views' color, only where a pixel or one of its neighbours is not wholly covered: the gradient's offset, then the cloud run's scale and offset, the base's alpha marking an evaluated texel. Counts `gpu.sky.evaluations`. Binds the sky interface (`SdfWorldInterfaces.SkyParameters`) and the World set. |
-| `composite` | `sdf-composite.comp` | The view's color: the lit image (already through each hit's fog transmittance) plus the gradient by the surface transport's in-scatter weight, the sky's runs in their authored order, filtered from the texels the sky evaluated, beneath it by its coverage (the disc and stars evaluated at the pixel), then the bounded media over the surface share to the transport's distance and over the sky share to the far distance. |
+| `composite` | `sdf-composite.comp` | The view's color: the lit image (already through each hit's fog transmittance) plus the sky environment map the residency's upload renders (`sdfSkyEnvironment`, filtered bilinearly along the pixel's ray; it evaluates no sky) by the surface transport's in-scatter weight, the sky's runs in their authored order, filtered from the texels the sky evaluated, beneath it by its coverage (the disc and stars evaluated at the pixel), then the bounded media over the surface share to the transport's distance and over the sky share to the far distance. |
 
-The ceiling (`SdfViewSnapshot.RenderCeiling`) alone selects the fragment
-(`SdfWorldPasses.FragmentOf`) and is the whole render-extent revision, so a
-fragment change is always a rebuild the node holds its last image through, never
-a frame of one graph at another's grid. A view at a native ceiling uses
+The ceiling (`SdfViewSnapshot.RenderCeiling`) and the temporal ask
+(`SdfViewQuality.Temporal`) select the fragment (`SdfWorldPasses.FragmentOf`)
+and are the whole render-extent revision, so a fragment change is always a
+rebuild the node holds its last image through, never a frame of one graph at
+another's grid. A view at a native ceiling that asks for nothing temporal uses
 `SdfWorldPackage.NativeFragment`, eleven passes whose composite writes `color`,
 and ignores the current grid (`SdfViewSnapshot.RenderGrid`). A view below it uses
-`Fragment`: views writes `currentColor` (one transient allocation) at the active
+`Fragment`, and a view asking for temporal reconstruction uses
+`SdfWorldPackage.TemporalFragment` at any ceiling (the reduced passes plus the
+reactivity buffer and the history, [SKILL](../SKILL.md#temporal-reconstruction)).
+In `Fragment`: views writes `currentColor` (one transient allocation) at the active
 render grid, then `sdf-resolve.comp` writes the lit image and the surface transport
 at the output grid, the sky evaluates its runs on the render grid from views' color, and the composite follows the resolve at the output grid, reading its render grid from the recording
 (`RenderGraphPackageRecording.RenderWidth`), the node's one resolution of it.
@@ -276,7 +285,7 @@ including grazing rays and separated bands.
 
 ## Diagnostics
 
-`world.debug-view off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot|evals`
+`world.debug-view off|depth|normals|raydir|material-id|iteration-count|termination|slice|mask|overshoot|evals|visibility|motion`
 selects a diagnostic image (`DebugViewModes.Names` is the list); `depth` isolates the march. To see what a shadow
 ray sees, place a camera at the shaded point looking along the sun direction
 under `material-id`.

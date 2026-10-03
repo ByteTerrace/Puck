@@ -223,7 +223,7 @@ When you are the delegate:
 - Give every scratch file and directory you create a name carrying your lane
   (`<lane>-cli/`, `<lane>-files.json`, `<lane>-red/`). A shared scratchpad is
   written by parallel agents, and generic names are overwritten mid-run.
-- Never write the lead's ledger or plan files.
+- Never write the lead's scratch checklists or ledger; `docs/plans/open-items.md` and the plans are repository documents, and you update them for what you deliver.
 - Before reporting, merge the integration branch's current tip into your branch
   and re-run your checks.
 

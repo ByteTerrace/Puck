@@ -74,8 +74,8 @@ a second cache; the contract is in
 boot's work is counted by the `world.boot` work source (`WorldBootWork`,
 `world.boot.compiled-hits` and `world.boot.chunk-derivations` among its kinds);
 a law attributes its own ledger to read it. The flagship `puck.world.json` itself has no `.puck` source today
-— it remains hand-authored JSON, while the avatar/courtyard/tool worlds and
-both shipped CGB cartridges are DSL-authored (`git ls-files '*.puck'` is the
+— it remains hand-authored JSON, while the avatar/courtyard/tool/game worlds and
+the shipped CGB cartridges are DSL-authored (`git ls-files '*.puck'` is the
 current inventory; treat it, not this sentence, as the source of truth).
 Grammar, `let`/`template`/modules, units, and diagnostics belong to
 `puck-dsl`; this skill owns only the world vocabulary's own sugar and

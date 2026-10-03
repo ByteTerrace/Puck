@@ -53,13 +53,13 @@ current declarations and read each entry's `basis`, `argument`, and
 ## Verify
 
 The floor is one command — `dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release`,
-about thirteen seconds. It is the Default tier, and the only one carrying the
+under thirty seconds. It is the Default tier, and the only one carrying the
 coverage ratchet and both leg gates, so every change owes it and most changes
 owe nothing more. Run `deep.runsettings` before committing; `exhaustive.runsettings`
 on demand only. No tier measures time; cost is `puck bench`'s.
 
-**Do not reflexively run the `exhaustive` tier.** It takes minutes and cannot
-run a subset. Run it only when the member you touched names it as its gate of
+**Do not reflexively run the `exhaustive` tier.** It takes minutes; narrow it with a
+`--filter` on the law id. Run it only when the member you touched names it as its gate of
 record. A public API change also requires a law or precise waiver
 under `maths-laws`. Report the exact commands, and distinguish failures caused
 by the change from pre-existing ones.
