@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 
 /// <summary>The indirect package's sole producer for each residency, shared by all of its view buffer edges.</summary>
 public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackageFactory, IDisposable {
-    private readonly Dictionary<string, SdfWorldResidency> m_instances = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SdfWorldResidency> m_instances = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<SdfIndirectTier, RenderGraphPackageFragment> m_fragments = [];
     private readonly Lock m_gate = new();
 
@@ -18,8 +18,8 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
     public void Register(string name, SdfWorldResidency residency) {
         ArgumentNullException.ThrowIfNull(residency);
         lock (m_gate) {
-            if (m_instances.TryGetValue(name, out var previous)) {
-                if (ReferenceEquals(previous, residency)) { return; }
+            if (m_instances.TryGetValue(key: name, value: out var previous)) {
+                if (ReferenceEquals(objA: previous, objB: residency)) { return; }
                 previous.Release();
             }
             residency.Retain();
@@ -28,47 +28,47 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
     }
     /// <summary>Releases an instance no enabled view reads.</summary>
     public void Unregister(string name) {
-        lock (m_gate) { if (m_instances.Remove(name, out var residency)) { residency.Release(); } }
+        lock (m_gate) { if (m_instances.Remove(key: name, value: out var residency)) { residency.Release(); } }
     }
     /// <inheritdoc/>
     public void Dispose() {
         lock (m_gate) { foreach (var residency in m_instances.Values) { residency.Release(); } m_instances.Clear(); }
     }
     /// <inheritdoc/>
-    public string? RefusalOf(string instance) => Resolve(instance)?.Refusal;
+    public string? RefusalOf(string instance) => Resolve(instance: instance)?.Refusal;
     /// <inheritdoc/>
     public RenderGraphPackageFragment? FragmentOf(string instance) {
-        var tier = (Resolve(instance)?.IndirectTier ?? SdfIndirectTier.Medium);
+        var tier = (Resolve(instance: instance)?.IndirectTier ?? SdfIndirectTier.Medium);
 
         if (tier == SdfIndirectTier.Off) { tier = SdfIndirectTier.Medium; }
         lock (m_gate) {
-            if (!m_fragments.TryGetValue(tier, out var fragment)) {
-                fragment = SdfWorldPackage.IndirectFragment(new SdfIndirectLayout(tier).ByteLength);
-                m_fragments.Add(tier, fragment);
+            if (!m_fragments.TryGetValue(key: tier, value: out var fragment)) {
+                fragment = SdfWorldPackage.IndirectFragment(bytes: new SdfIndirectLayout(tier: tier).ByteLength);
+                m_fragments.Add(key: tier, value: fragment);
             }
             return fragment;
         }
     }
     /// <inheritdoc/>
     public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
-        var residency = Resolve(instance);
+        var residency = Resolve(instance: instance);
 
-        if ((residency is null) || !residency.Prepare(context)) { return false; }
-        residency.Tables!.PlanIndirect(residency.Frame!);
+        if ((residency is null) || !residency.Prepare(context: context)) { return false; }
+        residency.Tables!.PlanIndirect(frame: residency.Frame!);
         return (residency.Tables.Indirect is not { NeedsPublish: true });
     }
     /// <inheritdoc/>
     public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
-        var residency = (Resolve(context.Instance) ?? throw new InvalidOperationException($"Indirect instance '{context.Instance}' names no residency."));
+        var residency = (Resolve(instance: context.Instance) ?? throw new InvalidOperationException(message: $"Indirect instance '{context.Instance}' names no residency."));
 
         residency.Retain();
         SdfIndirectCache? cache = null;
 
         try {
-            await residency.WaitReadyAsync(cancellationToken).ConfigureAwait(false);
-            cache = (residency.Tables!.RetainIndirect() ?? throw new InvalidOperationException($"Indirect instance '{context.Instance}' has no enabled cache."));
-            await residency.Tables.Pipelines.BuildIndirectAsync(context.Pipelines, context.Device, cancellationToken).ConfigureAwait(false);
-            return new Built(residency, cache);
+            await residency.WaitReadyAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            cache = (residency.Tables!.RetainIndirect() ?? throw new InvalidOperationException(message: $"Indirect instance '{context.Instance}' has no enabled cache."));
+            await residency.Tables.Pipelines.BuildIndirectAsync(context.Pipelines, context.Device, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            return new Built(cache: cache, residency: residency);
         } catch { cache?.Dispose(); residency.Release(); throw; }
     }
     /// <inheritdoc/>
@@ -76,10 +76,10 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
         ((Built)built!).Cache.Buffer;
     /// <inheritdoc/>
     public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
-        try { return new SdfIndirectRecorder(context, groups, ((Built)built!), views); } catch { built?.Dispose(); throw; }
+        try { return new SdfIndirectRecorder(built: ((Built)built!), context: context, groups: groups, views: views); } catch { built?.Dispose(); throw; }
     }
 
-    private SdfWorldResidency? Resolve(string instance) { lock (m_gate) { return m_instances.GetValueOrDefault(instance); } }
+    private SdfWorldResidency? Resolve(string instance) { lock (m_gate) { return m_instances.GetValueOrDefault(key: instance); } }
 
     internal sealed class Built(SdfWorldResidency residency, SdfIndirectCache cache) : IDisposable {
         public SdfWorldResidency Residency { get; } = residency;

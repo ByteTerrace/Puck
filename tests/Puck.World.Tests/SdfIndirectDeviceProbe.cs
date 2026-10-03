@@ -30,7 +30,7 @@ internal static class SdfIndirectDeviceProbe {
         using var inputs = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: rows.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         var cacheWords = new uint[128];
         using var cache = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: cacheWords.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
-        Vector4[] identity = [Vector4.Zero, new Vector4(0, 0, 0, 1), Vector4.Zero];
+        Vector4[] identity = [Vector4.Zero, new Vector4(w: 1, x: 0, y: 0, z: 0), Vector4.Zero];
         using var transforms = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: identity.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
         var buffers = new List<IGpuStorageBuffer>();
         var pool = services.Bindings.CreatePool(
@@ -69,8 +69,8 @@ internal static class SdfIndirectDeviceProbe {
                 recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: command, data: MemoryMarshal.AsBytes(span: pushed), offset: 0,
                     pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
                 recorder.Dispatch(commandBufferHandle: command, groupCountX: 1, groupCountY: 1, groupCountZ: 1);
-                recorder.MemoryBarrier(commandBufferHandle: command, sourceAccessMask: GpuAccess.ShaderWrite, destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
-                    sourceStageMask: GpuStage.ComputeShader, destinationStageMask: GpuStage.ComputeShader);
+                recorder.MemoryBarrier(commandBufferHandle: command, destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader,
+                    sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader);
             }
             recorder.EndCommandBuffer(commandBufferHandle: command);
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);

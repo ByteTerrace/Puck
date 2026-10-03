@@ -53,7 +53,7 @@ public sealed partial class RenderGraphRuntime {
             m_packageFragments[instance.Name] = fragment;
         }
         if (changed) {
-            if (!TryBindAll(set: m_set, graphs: m_graphs, producers: m_producers, packages: m_packages, inputs: out var inputs, refusal: out var refusal)) {
+            if (!TryBindAll(graphs: m_graphs, inputs: out var inputs, packages: m_packages, producers: m_producers, refusal: out var refusal, set: m_set)) {
                 throw new InvalidDataException(message: refusal.Message);
             }
             m_inputs = inputs;

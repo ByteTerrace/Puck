@@ -47,7 +47,7 @@ public sealed partial class SdfIndirectGatherLawTests {
             rows[(index * 2)] = new Vector4(value: item.Origin, w: item.Reach);
             rows[((index * 2) + 1)] = new Vector4(value: item.Direction, w: item.Far);
         }
-        var results = SdfIndirectDeviceProbe.Run(programs: cases.Select(static item => item.Program).ToArray(), rows: rows,
+        var results = SdfIndirectDeviceProbe.Run(programs: cases.Select(selector: static item => item.Program).ToArray(), rows: rows,
             extension: extension, kernel: Kernel, resultRows: ResultRows, services: services);
 
         for (var index = 0; (index < cases.Length); index++) {
@@ -59,17 +59,17 @@ public sealed partial class SdfIndirectGatherLawTests {
             var controls = results[((4 * cases.Length) + index)];
 
             Assert.True(condition: (masked.X == full.X), userMessage: $"{item.Name}: masked kind {masked.X}, full kind {full.X}");
-            Assert.True(condition: (MathF.Abs((masked.Y - full.Y)) <= 0.002f),
+            Assert.True(condition: (MathF.Abs(x: (masked.Y - full.Y)) <= 0.002f),
                 userMessage: $"{item.Name}: masked distance {masked.Y}, full distance {full.Y}");
             if (item.ExpectedHit is { } expected) {
-                Assert.Equal(expected: ((float)IrradianceHitKind.Hit), actual: full.X);
-                Assert.InRange(actual: full.Y, low: (expected - 0.002f), high: (expected + 0.002f));
+                Assert.Equal(actual: full.X, expected: ((float)IrradianceHitKind.Hit));
+                Assert.InRange(actual: full.Y, high: (expected + 0.002f), low: (expected - 0.002f));
             }
             Assert.True(condition: (intervals.X == 0f), userMessage: $"{item.Name}: {intervals.X} full-field occupied samples in a cleared interval");
             Assert.True(condition: (intervals.Y == 0f), userMessage: $"{item.Name}: {intervals.Y} masked steps passed the reach");
             Assert.True(condition: (intervals.Z > 0f), userMessage: $"{item.Name}: no cleared interval was checked");
             Assert.True(condition: (queries == Vector4.Zero), userMessage: $"{item.Name}: cone/ball/box/strided mask differences {queries}");
-            Assert.Equal(expected: 1f, actual: controls.X);
+            Assert.Equal(actual: controls.X, expected: 1f);
             if (index < 4) {
                 Assert.True(condition: (controls.W == 1f), userMessage: $"{item.Name}: the fixture did not exercise the masked march");
             }
@@ -82,14 +82,14 @@ public sealed partial class SdfIndirectGatherLawTests {
         }
     }
     private static GatherCase[] Cases() => [
-        new("the outer spacing remains gathered", Sphere(center: new Vector3(3.6f, 0, 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 3.4f),
-        new("an instance just outside the reach remains visible", Sphere(center: new Vector3(4.25f, 0, 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 4.05f),
-        new("an occluder after the reach remains visible", Sphere(center: new Vector3(7, 0, 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 6.8f),
-        new("a clear ray exhausts the full interval", Sphere(center: new Vector3(3, 2, 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10),
+        new("the outer spacing remains gathered", Sphere(center: new Vector3(x: 3.6f, y: 0, z: 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 3.4f),
+        new("an instance just outside the reach remains visible", Sphere(center: new Vector3(x: 4.25f, y: 0, z: 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 4.05f),
+        new("an occluder after the reach remains visible", Sphere(center: new Vector3(x: 7, y: 0, z: 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10, 6.8f),
+        new("a clear ray exhausts the full interval", Sphere(center: new Vector3(x: 3, y: 2, z: 0), radius: 0.2f), Vector3.Zero, Vector3.UnitX, 4, 10),
         new("a subtractive composition keeps its operand", Carved(), Vector3.Zero, Vector3.UnitX, 4, 10, 3.25f),
         new("a smooth composition keeps its halo", Smooth(), Vector3.Zero, Vector3.UnitX, 4, 10),
-        new("a wallpaper fold preserves cleared intervals", Wallpaper(), new Vector3(6.9f, 0, 0), -Vector3.UnitX, 1, 5),
-        new("a log-sphere fold preserves cleared intervals", LogSphere(), new Vector3(22.7f, 0, 0), -Vector3.UnitX, 0.04f, 1),
+        new("a wallpaper fold preserves cleared intervals", Wallpaper(), new Vector3(x: 6.9f, y: 0, z: 0), -Vector3.UnitX, 1, 5),
+        new("a log-sphere fold preserves cleared intervals", LogSphere(), new Vector3(x: 22.7f, y: 0, z: 0), -Vector3.UnitX, 0.04f, 1),
     ];
     private static SdfProgramBuilder Builder() {
         var builder = new SdfProgramBuilder();
@@ -113,20 +113,20 @@ public sealed partial class SdfIndirectGatherLawTests {
     private static SdfProgram Carved() {
         var builder = Builder();
 
-        _ = builder.BeginInstance(boundCenter: new Vector3(3, 0, 0), boundRadius: 1)
-            .ResetPoint().Translate(offset: new Vector3(3, 0, 0)).Sphere(material: 0, radius: 1)
-            .EndInstance().BeginInstance(boundCenter: new Vector3(2.5f, 0, 0), boundRadius: 0.75f)
-            .ResetPoint().Translate(offset: new Vector3(2.5f, 0, 0)).Sphere(blend: SdfBlendOp.Subtraction, material: 0, radius: 0.75f)
+        _ = builder.BeginInstance(boundCenter: new Vector3(x: 3, y: 0, z: 0), boundRadius: 1)
+            .ResetPoint().Translate(offset: new Vector3(x: 3, y: 0, z: 0)).Sphere(material: 0, radius: 1)
+            .EndInstance().BeginInstance(boundCenter: new Vector3(x: 2.5f, y: 0, z: 0), boundRadius: 0.75f)
+            .ResetPoint().Translate(offset: new Vector3(x: 2.5f, y: 0, z: 0)).Sphere(blend: SdfBlendOp.Subtraction, material: 0, radius: 0.75f)
             .EndInstance();
         return builder.Build();
     }
     private static SdfProgram Smooth() {
         var builder = Builder();
 
-        _ = builder.BeginInstance(boundCenter: new Vector3(3, 0.3f, 0), boundRadius: 0.5f)
-            .ResetPoint().Translate(offset: new Vector3(3, 0.3f, 0)).Sphere(material: 0, radius: 0.5f)
-            .EndInstance().BeginInstance(boundCenter: new Vector3(3, -0.3f, 0), boundRadius: 0.5f)
-            .ResetPoint().Translate(offset: new Vector3(3, -0.3f, 0)).Sphere(blend: SdfBlendOp.SmoothUnion, material: 0, radius: 0.5f, smooth: 0.4f)
+        _ = builder.BeginInstance(boundCenter: new Vector3(x: 3, y: 0.3f, z: 0), boundRadius: 0.5f)
+            .ResetPoint().Translate(offset: new Vector3(x: 3, y: 0.3f, z: 0)).Sphere(material: 0, radius: 0.5f)
+            .EndInstance().BeginInstance(boundCenter: new Vector3(x: 3, y: -0.3f, z: 0), boundRadius: 0.5f)
+            .ResetPoint().Translate(offset: new Vector3(x: 3, y: -0.3f, z: 0)).Sphere(blend: SdfBlendOp.SmoothUnion, material: 0, radius: 0.5f, smooth: 0.4f)
             .EndInstance();
         return builder.Build();
     }
@@ -134,8 +134,8 @@ public sealed partial class SdfIndirectGatherLawTests {
         var builder = Builder();
 
         _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 20)
-            .ResetPoint().WallpaperFold(cell: new Vector2(2), group: SdfWallpaperGroup.Pmm, limit: new Vector2(8))
-            .Translate(offset: new Vector3(0.4f, 0, 0)).Sphere(material: 0, radius: 0.2f).EndInstance();
+            .ResetPoint().WallpaperFold(cell: new Vector2(value: 2), group: SdfWallpaperGroup.Pmm, limit: new Vector2(value: 8))
+            .Translate(offset: new Vector3(x: 0.4f, y: 0, z: 0)).Sphere(material: 0, radius: 0.2f).EndInstance();
         return builder.Build();
     }
     private static SdfProgram LogSphere() {
@@ -143,7 +143,7 @@ public sealed partial class SdfIndirectGatherLawTests {
 
         _ = builder.BeginInstance(boundCenter: Vector3.Zero, boundRadius: 32)
             .ResetPoint().LogSphere(shellRatio: 2)
-            .Translate(offset: new Vector3(1.41406f, 0, 0)).Sphere(material: 0, radius: 0.0003125f).EndInstance();
+            .Translate(offset: new Vector3(x: 1.41406f, y: 0, z: 0)).Sphere(material: 0, radius: 0.0003125f).EndInstance();
         return builder.Build();
     }
 }

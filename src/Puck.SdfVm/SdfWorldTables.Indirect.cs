@@ -27,7 +27,7 @@ public sealed partial class SdfWorldTables {
     public GpuMemoryBytes IndirectBytes {
         get {
             lock (m_indirectGate) {
-                m_retiredIndirect.RemoveAll(static cache => cache.IsDisposed);
+                m_retiredIndirect.RemoveAll(match: static cache => cache.IsDisposed);
                 return m_retiredIndirect.Aggregate((m_indirect?.Bytes ?? default), (bytes, cache) => (bytes + cache.Bytes));
             }
         }
@@ -41,12 +41,12 @@ public sealed partial class SdfWorldTables {
             if (((m_indirect?.Layout.Tier ?? SdfIndirectTier.Off) == tier) && ((m_indirect is null) || (m_indirect.FarDistance == farDistance))) { return; }
             var previous = m_indirect;
 
-            m_indirect = ((tier == SdfIndirectTier.Off) ? null : new SdfIndirectCache(layout: new SdfIndirectLayout(tier), gpu: m_gpu,
+            m_indirect = ((tier == SdfIndirectTier.Off) ? null : new SdfIndirectCache(layout: new SdfIndirectLayout(tier: tier), gpu: m_gpu,
                 profile: m_deviceContext.MemoryProfile, copyPipeline: m_regionCopyPipeline, farDistance: farDistance, work: work, epoch: m_indirectEpoch));
             m_indirectClear = (m_indirect is not null);
             m_deviceContext.TryWaitIdle();
             if (previous is not null) {
-                m_retiredIndirect.Add(previous);
+                m_retiredIndirect.Add(item: previous);
                 previous.Dispose();
             }
         }
@@ -70,38 +70,38 @@ public sealed partial class SdfWorldTables {
     /// <summary>Collects demand from the existing program's conservative segment bounds and every camera.</summary>
     public static IrradianceFrameInputs IndirectInputs(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
-        var cameras = frame.Views.Select(view => Point(view.Camera.Position)).ToArray();
+        var cameras = frame.Views.Select(selector: view => Point(value: view.Camera.Position)).ToArray();
         var bounds = new List<IrradianceSphere>();
-        var low = new Double3(double.PositiveInfinity, double.PositiveInfinity, double.PositiveInfinity);
-        var high = new Double3(double.NegativeInfinity, double.NegativeInfinity, double.NegativeInfinity);
+        var low = new Double3(X: double.PositiveInfinity, Y: double.PositiveInfinity, Z: double.PositiveInfinity);
+        var high = new Double3(X: double.NegativeInfinity, Y: double.NegativeInfinity, Z: double.NegativeInfinity);
         var unbounded = false;
 
         for (var index = 0; (index < frame.Program.SkipSegmentCount); index++) {
-            var sphere = frame.Program.SegmentSkipSphere(index);
+            var sphere = frame.Program.SegmentSkipSphere(segment: index);
             var center = sphere.Center;
 
             if ((sphere.Mode == SdfProgram.BoundModeDynamic) && (sphere.Slot < frame.DynamicTransforms.Count)) { center += frame.DynamicTransforms[sphere.Slot].Position; }
-            if ((sphere.Mode == SdfProgram.BoundModeNone) || !float.IsFinite(sphere.Radius)) { unbounded = true; continue; }
-            var position = Point(center);
-            var extent = new Double3(sphere.Radius, sphere.Radius, sphere.Radius);
+            if ((sphere.Mode == SdfProgram.BoundModeNone) || !float.IsFinite(f: sphere.Radius)) { unbounded = true; continue; }
+            var position = Point(value: center);
+            var extent = new Double3(X: sphere.Radius, Y: sphere.Radius, Z: sphere.Radius);
 
-            bounds.Add(new IrradianceSphere(position, sphere.Radius));
-            low = Min(low, (position - extent));
-            high = Max(high, (position + extent));
+            bounds.Add(item: new IrradianceSphere(Center: position, Radius: sphere.Radius));
+            low = Min(a: low, b: (position - extent));
+            high = Max(a: high, b: (position + extent));
         }
         if (unbounded || (bounds.Count == 0)) {
-            var reach = new Double3(frame.FarDistance, frame.FarDistance, frame.FarDistance);
+            var reach = new Double3(X: frame.FarDistance, Y: frame.FarDistance, Z: frame.FarDistance);
 
-            foreach (var camera in cameras) { low = Min(low, (camera - reach)); high = Max(high, (camera + reach)); }
-            bounds.Add(new IrradianceSphere(default, double.PositiveInfinity));
+            foreach (var camera in cameras) { low = Min(a: low, b: (camera - reach)); high = Max(a: high, b: (camera + reach)); }
+            bounds.Add(item: new IrradianceSphere(Center: default, Radius: double.PositiveInfinity));
         }
         if (cameras.Length == 0) { low = default; high = default; }
-        return new IrradianceFrameInputs(cameras, bounds, low, high);
+        return new IrradianceFrameInputs(Bounds: bounds, Cameras: cameras, WorldMax: high, WorldMin: low);
     }
 
-    private static Double3 Point(Vector3 value) => new(value.X, value.Y, value.Z);
-    private static Double3 Min(Double3 a, Double3 b) => new(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Min(a.Z, b.Z));
-    private static Double3 Max(Double3 a, Double3 b) => new(Math.Max(a.X, b.X), Math.Max(a.Y, b.Y), Math.Max(a.Z, b.Z));
+    private static Double3 Point(Vector3 value) => new(X: value.X, Y: value.Y, Z: value.Z);
+    private static Double3 Min(Double3 a, Double3 b) => new(X: Math.Min(val1: a.X, val2: b.X), Y: Math.Min(val1: a.Y, val2: b.Y), Z: Math.Min(val1: a.Z, val2: b.Z));
+    private static Double3 Max(Double3 a, Double3 b) => new(X: Math.Max(val1: a.X, val2: b.X), Y: Math.Max(val1: a.Y, val2: b.Y), Z: Math.Max(val1: a.Z, val2: b.Z));
     private void RecordIndirectClear(nint commandBuffer) {
         if (!m_indirectClear || (m_indirect is not { } cache)) { return; }
         m_gpu.Recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: cache.Buffer.BufferHandle,

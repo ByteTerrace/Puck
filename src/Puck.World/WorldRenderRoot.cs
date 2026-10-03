@@ -154,17 +154,17 @@ internal static class WorldRenderRoot {
                         )))
             );
         packages.Register(factory: host.Pickers, package: RenderGraphPackageCatalog.SdfWorld);
-        host.Indirect = new SdfIndirectPasses(host.Pickers);
+        host.Indirect = new SdfIndirectPasses(views: host.Pickers);
         host.ReadIndirectTier = () => sp.GetRequiredService<WorldRenderSettings>().IndirectTier;
         host.IndirectResidencyChanged = (cacheResidency, added) => {
             var indirectProbe = sp.GetRequiredService<WorldRenderProbe>();
 
             if (added) {
-                indirectProbe.Indirect.Attach(cacheResidency.IndirectWork);
-                indirectProbe.IndirectResidencies.Add(cacheResidency);
+                indirectProbe.Indirect.Attach(instance: cacheResidency.IndirectWork);
+                indirectProbe.IndirectResidencies.Add(item: cacheResidency);
             } else {
-                indirectProbe.Indirect.Detach(cacheResidency.IndirectWork);
-                indirectProbe.IndirectResidencies.Remove(cacheResidency);
+                indirectProbe.Indirect.Detach(instance: cacheResidency.IndirectWork);
+                indirectProbe.IndirectResidencies.Remove(item: cacheResidency);
             }
         };
         packages.Register(factory: host.Indirect, package: RenderGraphPackageCatalog.Indirect);

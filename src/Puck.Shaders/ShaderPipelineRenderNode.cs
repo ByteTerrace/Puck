@@ -519,8 +519,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     IGpuBuffer? borrowed = null;
 
                     foreach (var pass in built.Passes) {
-                        if ((pass?.PackageContext is { } context) && context.Outputs.Any(output => planned.Versions.Contains(output.Name))) {
-                            borrowed = pass.PackageFactory!.BorrowedBuffer(context: context, built: pass.PackageBuilt, resource: declaration);
+                        if ((pass?.PackageContext is { } context) && context.Outputs.Any(predicate: output => planned.Versions.Contains(value: output.Name))) {
+                            borrowed = pass.PackageFactory!.BorrowedBuffer(built: pass.PackageBuilt, context: context, resource: declaration);
                             if (borrowed is not null) { break; }
                         }
                     }

@@ -11,7 +11,7 @@ public sealed partial class SdfWorldPassesLawTests {
     public void RetiringIndirectCachesRemainInTheResidencyBudgetUntilTheLastReaderReleasesThem() {
         var gpu = new FakeGpuDevice();
         using var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0,
-            frameSource: new FixedFrameSource(Frame()), height: Extent, kernels: SdfTestPipelines.Kernels(),
+            frameSource: new FixedFrameSource(frame: Frame()), height: Extent, kernels: SdfTestPipelines.Kernels(),
             name: "indirect-budget", pipelines: SdfTestPipelines.Cache(), width: Extent) {
             IndirectTierOverride = SdfIndirectTier.Medium,
         };
@@ -19,7 +19,7 @@ public sealed partial class SdfWorldPassesLawTests {
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
             StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
 
-        TestLiveness.Until(step: () => { residency.BeginFrame(); return residency.Prepare(context); }, reason: () => residency.NotReadyReason,
+        TestLiveness.Until(step: () => { residency.BeginFrame(); return residency.Prepare(context: context); }, reason: () => residency.NotReadyReason,
             wait: residency.WaitPipelineBuilds);
         var tables = residency.Tables!;
         var held = tables.Indirect!.Retain();
@@ -28,8 +28,8 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(bytes, tables.IndirectBytes);
         residency.IndirectTierOverride = SdfIndirectTier.Off;
         residency.BeginFrame();
-        Assert.True(residency.Prepare(context));
-        Assert.Null(tables.Indirect);
+        Assert.True(condition: residency.Prepare(context: context));
+        Assert.Null(@object: tables.Indirect);
         Assert.Equal(bytes, tables.IndirectBytes);
         held.Dispose();
         Assert.Equal(default(GpuMemoryBytes), tables.IndirectBytes);

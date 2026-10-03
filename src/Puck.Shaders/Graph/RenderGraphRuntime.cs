@@ -602,7 +602,7 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 : (((instance.Output != ShaderPipelineResourceKind.Image) && !RunsPackage(instance: instance, packages: packages))
                     ? $"declares a {instance.Output} output, but an external producer hands out images"
                     : ((packages.ServesProducer(package: instance.ExternalPackage!) || packages.ServesSource(package: instance.ExternalPackage!))
-                        ? ((instance.Reads ?? []).Any(read => (read.Kind != ShaderPipelineResourceKind.Image))
+                        ? ((instance.Reads ?? []).Any(predicate: read => (read.Kind != ShaderPipelineResourceKind.Image))
                             ? "is an image producer, but declares a buffer read" : null)
                         : PackageRefusal(
                             package: instance.ExternalPackage!,

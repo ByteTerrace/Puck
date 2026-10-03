@@ -16,7 +16,7 @@ namespace Puck.Shaders;
 // declared unchanged, since only a render serves it.
 public sealed partial class RenderGraphRuntime {
     private static RenderGraphRuntimeGraph? PackageGraphFor(string package, string instance, RenderGraphPackageRecorders packages) {
-        packages.TryGetFactory(package: package, factory: out var factory);
+        packages.TryGetFactory(factory: out var factory, package: package);
         return PackageGraphOf(package: package, fault: out _, selected: factory?.FragmentOf(instance: instance), inputs: factory?.InputsOf(instance: instance));
     }
 
@@ -77,7 +77,7 @@ public sealed partial class RenderGraphRuntime {
             fault = $"selected a fragment whose output '{version}' has no resource declaration";
             return null;
         }
-        var inputResources = fragment.InputVersions.Select(name => fragment.Resources.Single(resource => (resource.Name == name))).ToArray();
+        var inputResources = fragment.InputVersions.Select(selector: name => fragment.Resources.Single(predicate: resource => (resource.Name == name))).ToArray();
 
         var definition = new RenderGraphDefinition(
             Name: package,
@@ -85,7 +85,7 @@ public sealed partial class RenderGraphRuntime {
             Packages: [
                 new RenderGraphPackagePass(
                     Name: package,
-                    Inputs: [.. fragment.InputVersions.Select(name => new ResourceReference(Name: name))],
+                    Inputs: [.. fragment.InputVersions.Select(selector: name => new ResourceReference(Name: name))],
                     Outputs: [new ResourceReference(Name: version)],
                     Package: package
                 ),
@@ -98,9 +98,9 @@ public sealed partial class RenderGraphRuntime {
             // The instance graph owns its external input declarations. Expansion contributes private and output
             // versions only; its input-port names refer to the declarations already in the graph.
             Fragment = ((inputResources.Length == 0) ? fragment : fragment with {
-                Resources = [.. fragment.Resources.Where(resource => !fragment.InputVersions.Contains(resource.Name))],
+                Resources = [.. fragment.Resources.Where(predicate: resource => !fragment.InputVersions.Contains(value: resource.Name))],
             }),
-            Inputs = [.. inputResources.Select(resource => new RenderGraphPackagePort(Kind: resource.Kind,
+            Inputs = [.. inputResources.Select(selector: resource => new RenderGraphPackagePort(Kind: resource.Kind,
                 Access: RenderGraphPortAccess.ComputeRead, StrideBytes: resource.StrideBytes, Count: resource.Count))],
         }])).TryCompile(
             definition: definition,
@@ -136,7 +136,7 @@ public sealed partial class RenderGraphRuntime {
                 (index != captured) &&
                 !IsConverging(index: index) &&
                 (m_sources[index] is null) &&
-                InputsUnchanged(index) &&
+                InputsUnchanged(index: index) &&
                 (m_graphs[index] is { } graph) &&
                 PackagesUnchanged(
                     context: in context,
@@ -171,7 +171,7 @@ public sealed partial class RenderGraphRuntime {
         for (var position = 0; (position < inputs.Length); position++) {
             var input = inputs[position];
 
-            if (input.PreviousFrame || !m_unchanged.Contains(input.ProducerName)) { return false; }
+            if (input.PreviousFrame || !m_unchanged.Contains(item: input.ProducerName)) { return false; }
         }
         return true;
     }

@@ -10,7 +10,7 @@ public sealed class SdfWorkDetailLawTests {
     [Fact]
     public void IndirectDetailIndicesNameEachLevelLaunchAndProof() {
         Assert.Equal(new[] { "near", "room", "world", "launch", "proof" }, SdfWorldWorkDetails.Indirect);
-        Assert.Equal(new[] { "indirect" }, SdfWorldWorkDetails.Of(SdfWorldPackage.Parts.Views));
+        Assert.Equal(new[] { "indirect" }, SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Views));
     }
     [Fact]
     public void SkyAndShadowRowLabelsAndPassBlockReachTheirKernelIndices() {

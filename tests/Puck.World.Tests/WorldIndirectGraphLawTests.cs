@@ -19,7 +19,7 @@ public sealed class WorldIndirectGraphLawTests {
             new RenderGraphInstance("remote", RenderGraphRefresh.EveryFrame, 1, [], ExternalPackage: RenderGraphPackageCatalog.SdfWorld),
         };
 
-        Assert.True(RenderGraphInstanceSet.TryCreate(views, out var set, out _));
+        Assert.True(condition: RenderGraphInstanceSet.TryCreate(views, out var set, out _));
         Assert.Same(set, WorldIndirectGraph.Append(set, new Dictionary<string, string>()));
         var enabled = WorldIndirectGraph.Append(set, new Dictionary<string, string> {
             ["world"] = "indirect:world",
@@ -28,40 +28,40 @@ public sealed class WorldIndirectGraphLawTests {
         });
 
         Assert.Equal(5, enabled.Instances.Count);
-        Assert.All(enabled.Instances.Take(3), instance => {
-            var edge = Assert.Single(instance.Reads);
+        Assert.All(enabled.Instances.Take(count: 3), instance => {
+            var edge = Assert.Single(collection: instance.Reads);
 
             Assert.Equal(ShaderPipelineResourceKind.Buffer, edge.Kind);
-            Assert.False(edge.PreviousFrame);
-            var producer = enabled.Instances.Single(item => (item.Name == edge.Producer));
+            Assert.False(condition: edge.PreviousFrame);
+            var producer = enabled.Instances.Single(predicate: item => (item.Name == edge.Producer));
 
             Assert.Equal(ShaderPipelineResourceKind.Buffer, producer.Output);
             Assert.Equal("indirect", producer.ExternalPackage);
-            Assert.True((enabled.Order.ToList().IndexOf(enabled.Instances.ToList().IndexOf(producer)) <
-                enabled.Order.ToList().IndexOf(enabled.Instances.ToList().IndexOf(instance))));
+            Assert.True(condition: (enabled.Order.ToList().IndexOf(item: enabled.Instances.ToList().IndexOf(item: producer)) <
+                enabled.Order.ToList().IndexOf(item: enabled.Instances.ToList().IndexOf(item: instance))));
         });
     }
     [Fact]
     public void SessionTierAppliesAllThreeValuesAndRefusesUnknownOrdinals() {
-        var settings = new WorldRenderSettings(new WorldRenderDefaults());
-        var sink = WorldSessionLevers.Compose(settings, new PresentPacingControl(null), new Audio(), new WorldBindingBarVisibility());
+        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults());
+        var sink = WorldSessionLevers.Compose(settings, new PresentPacingControl(initialTargetHertz: null), new Audio(), new WorldBindingBarVisibility());
 
         Assert.Equal(SdfIndirectTier.Off, settings.IndirectTier);
         foreach (var tier in Enum.GetValues<SdfIndirectTier>()) {
             var before = settings.Revision;
 
-            Assert.True(sink.TryApply(new(WorldSection.Render, WorldSessionLevers.Indirect, ((int)tier))));
+            Assert.True(condition: sink.TryApply(lever: new(WorldSection.Render, WorldSessionLevers.Indirect, ((int)tier))));
             Assert.Equal(tier, settings.IndirectTier);
-            Assert.True((settings.Revision > before));
+            Assert.True(condition: (settings.Revision > before));
         }
-        Assert.Throws<ArgumentOutOfRangeException>(() => settings.IndirectTier = ((SdfIndirectTier)3));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => settings.IndirectTier = ((SdfIndirectTier)3));
     }
     [Fact]
     public void IndirectDebugNamesReachTheirShaderModeIndices() {
-        Assert.True(DebugViewModes.TryParse("indirect-probes", out var probes));
-        Assert.True(DebugViewModes.TryParse("indirect-cells", out var cells));
-        Assert.Equal(13, probes);
-        Assert.Equal(14, cells);
+        Assert.True(condition: DebugViewModes.TryParse(mode: out var probes, name: "indirect-probes"));
+        Assert.True(condition: DebugViewModes.TryParse(mode: out var cells, name: "indirect-cells"));
+        Assert.Equal(actual: probes, expected: 13);
+        Assert.Equal(actual: cells, expected: 14);
     }
 
     private sealed class Audio : IWorldAudioLever {

@@ -49,7 +49,7 @@ public sealed partial class SdfIndirectTraceDeviceLawTests {
             inputs[((index * 3) + 2)] = new Vector4(x: ((float)item.Mode), y: item.Spacing, z: 0, w: 0);
         }
         var results = SdfIndirectDeviceProbe.Run(extension: extension, kernel: "sdf-indirect-trace-proof.comp",
-            programs: cases.Select(static item => item.Program).ToArray(), resultRows: ResultRows, rows: inputs, services: services);
+            programs: cases.Select(selector: static item => item.Program).ToArray(), resultRows: ResultRows, rows: inputs, services: services);
 
         for (var index = 0; (index < cases.Length); index++) {
             var item = cases[index];
@@ -68,20 +68,20 @@ public sealed partial class SdfIndirectTraceDeviceLawTests {
                     };
                     Assert.True(condition: (((float)kind) == result.X), userMessage: $"{item.Name}: CPU {kind}, GPU kind {result.X}");
                     var stored = results[((10 * cases.Length) + index)];
-                    Assert.Equal(expected: result.Y, actual: stored.X);
-                    Assert.Equal(expected: result.Z, actual: stored.Y);
-                    Assert.Equal(expected: ((uint)kind) | (165u << SdfIndirectLayout.ProofMaskShift) | (1u << SdfIndirectLayout.ProofLevelShift), actual: ((uint)stored.Z));
+                    Assert.Equal(actual: stored.X, expected: result.Y);
+                    Assert.Equal(actual: stored.Y, expected: result.Z);
+                    Assert.Equal(actual: ((uint)stored.Z), expected: ((uint)kind) | (165u << SdfIndirectLayout.ProofMaskShift) | (1u << SdfIndirectLayout.ProofLevelShift));
                     if (kind == IrradianceHitKind.Hit) {
                         Assert.InRange(actual: result.Y, low: (((float)expected.Distance) - 0.002f), high: (((float)expected.Distance) + 0.002f));
                         Assert.Equal(expected: expected.Material, actual: ((int)result.Z));
                         Assert.True(condition: field.TryGradient(gradient: out var normal, point: expected.Point));
                         var actualNormal = results[(cases.Length + index)];
 
-                        Assert.True(condition: (Double3.Dot(a: normal, b: AsDouble(value: new Vector3(actualNormal.X, actualNormal.Y, actualNormal.Z))) > 0.999),
+                        Assert.True(condition: (Double3.Dot(a: normal, b: AsDouble(value: new Vector3(x: actualNormal.X, y: actualNormal.Y, z: actualNormal.Z))) > 0.999),
                             userMessage: $"{item.Name}: normal {actualNormal}, CPU {normal}");
                         var storedNormal = results[((11 * cases.Length) + index)];
 
-                        Assert.True(condition: (Double3.Dot(a: normal, b: AsDouble(value: new Vector3(storedNormal.X, storedNormal.Y, storedNormal.Z))) > 0.999),
+                        Assert.True(condition: (Double3.Dot(a: normal, b: AsDouble(value: new Vector3(x: storedNormal.X, y: storedNormal.Y, z: storedNormal.Z))) > 0.999),
                             userMessage: $"{item.Name}: stored normal {storedNormal}, CPU {normal}");
                     } else if (kind == IrradianceHitKind.Unresolved) {
                         Assert.InRange(actual: result.Y, low: 0f, high: (item.Far - 0.001f));
@@ -102,27 +102,27 @@ public sealed partial class SdfIndirectTraceDeviceLawTests {
                     break;
                 case ProbeMode.EndpointSupport:
                     var fromHandoff = (vector - point);
-                    var supported = ((fromHandoff.X > 0.0) && (fromHandoff.Normalize().X >= Math.Cos(0.5)));
+                    var supported = ((fromHandoff.X > 0.0) && (fromHandoff.Normalize().X >= Math.Cos(d: 0.5)));
                     Assert.True(condition: (supported == (result.W > 0.5f)), userMessage: $"{item.Name}: continuation support {result.W}, expected {supported}");
                     break;
                 case ProbeMode.NormalCodec:
                     if (vector == Double3.Zero) {
                         Assert.Equal(expected: Vector4.Zero, actual: result);
                     } else {
-                        Assert.Equal(expected: 1f, actual: result.W);
-                        Assert.True(condition: (Double3.Dot(a: vector.Normalize(), b: AsDouble(value: new Vector3(result.X, result.Y, result.Z))) > 0.9999),
+                        Assert.Equal(actual: result.W, expected: 1f);
+                        Assert.True(condition: (Double3.Dot(a: vector.Normalize(), b: AsDouble(value: new Vector3(x: result.X, y: result.Y, z: result.Z))) > 0.9999),
                             userMessage: $"{item.Name}: decoded normal {result}");
                     }
                     break;
                 case ProbeMode.LaunchRecord:
-                    HoldsLaunchRecord(item: item, field: field, rows: Enumerable.Range(start: 0, count: 5)
-                        .Select(row => results[((row * cases.Length) + index)]).ToArray());
+                    HoldsLaunchRecord(item: item, field: field, rows: Enumerable.Range(count: 5, start: 0)
+                        .Select(selector: row => results[((row * cases.Length) + index)]).ToArray());
                     break;
                 case ProbeMode.ProofEntries:
-                    Assert.Equal(expected: (7 * SdfIndirectLayout.ProofsPerCell), actual: ((int)result.X));
-                    Assert.Equal(expected: ((8 * SdfIndirectLayout.ProofsPerCell) - 1), actual: ((int)result.Y));
-                    Assert.Equal(expected: ((1 << SdfIndirectLayout.ProofsPerCell) - 1), actual: ((int)result.Z));
-                    Assert.Equal(expected: 0f, actual: result.W);
+                    Assert.Equal(actual: ((int)result.X), expected: (7 * SdfIndirectLayout.ProofsPerCell));
+                    Assert.Equal(actual: ((int)result.Y), expected: ((8 * SdfIndirectLayout.ProofsPerCell) - 1));
+                    Assert.Equal(actual: ((int)result.Z), expected: ((1 << SdfIndirectLayout.ProofsPerCell) - 1));
+                    Assert.Equal(actual: result.W, expected: 0f);
                     break;
                 case ProbeMode.ProofReuse:
                     Assert.Equal(expected: item.ExpectedReuse!.Value, actual: (result.W > 0.5f));
@@ -134,14 +134,14 @@ public sealed partial class SdfIndirectTraceDeviceLawTests {
                     Assert.True(condition: (result.X == 0f), userMessage: $"{item.Name}: {result.X} proof words survived the cell store");
                     Assert.True(condition: (result.Y == 0f), userMessage: $"{item.Name}: {result.Y} words outside the cell and proof range changed");
                     Assert.True(condition: (result.Z == 0f), userMessage: $"{item.Name}: the cell record was not stored intact");
-                    Assert.Equal(expected: ((1 << SdfIndirectLayout.ProofsPerCell) - 1), actual: ((int)result.W));
+                    Assert.Equal(actual: ((int)result.W), expected: ((1 << SdfIndirectLayout.ProofsPerCell) - 1));
                     break;
                 case ProbeMode.ProofPublication:
-                    Assert.Equal(expected: new Vector4(1, 0, 0, 0), actual: result);
+                    Assert.Equal(expected: new Vector4(w: 0, x: 1, y: 0, z: 0), actual: result);
                     var publication = results[(cases.Length + index)];
-                    Assert.Equal(expected: 165f, actual: publication.X);
-                    Assert.Equal(expected: 0f, actual: publication.Y);
-                    Assert.Equal(expected: 0f, actual: publication.Z);
+                    Assert.Equal(actual: publication.X, expected: 165f);
+                    Assert.Equal(actual: publication.Y, expected: 0f);
+                    Assert.Equal(actual: publication.Z, expected: 0f);
                     break;
             }
         }
@@ -151,33 +151,33 @@ public sealed partial class SdfIndirectTraceDeviceLawTests {
         var quantized = rows[1];
         var reconstructed = rows[2];
         var certificate = rows[3];
-        var originalPosition = new Vector3(original.X, original.Y, original.Z);
-        var quantizedPosition = new Vector3(quantized.X, quantized.Y, quantized.Z);
-        var height = Vector3.Dot((originalPosition - item.Point), item.Vector);
+        var originalPosition = new Vector3(x: original.X, y: original.Y, z: original.Z);
+        var quantizedPosition = new Vector3(x: quantized.X, y: quantized.Y, z: quantized.Z);
+        var height = Vector3.Dot(vector1: (originalPosition - item.Point), vector2: item.Vector);
 
-        Assert.Equal(expected: 1f, actual: original.W);
-        Assert.InRange(actual: height, low: 0.0001f, high: 0.0012f);
+        Assert.Equal(actual: original.W, expected: 1f);
+        Assert.InRange(actual: height, high: 0.0012f, low: 0.0001f);
         Assert.True(condition: (height < (IrradianceCells.ReceiverBias * item.Spacing)));
         var encoded = ((uint)certificate.Y);
         var terminal = ((uint)certificate.Z) | (((uint)certificate.W) << 16);
 
-        Assert.Equal(expected: encoded, actual: (terminal >> SdfIndirectLayout.LaunchHeightShift));
-        Assert.Equal(expected: new Vector3(quantized.X, quantized.Y, quantized.Z), actual: new Vector3(reconstructed.X, reconstructed.Y, reconstructed.Z));
-        Assert.InRange(actual: reconstructed.W, low: 0f, high: height);
-        var displacement = Vector3.Distance(originalPosition, quantizedPosition);
+        Assert.Equal(actual: (terminal >> SdfIndirectLayout.LaunchHeightShift), expected: encoded);
+        Assert.Equal(expected: new Vector3(x: quantized.X, y: quantized.Y, z: quantized.Z), actual: new Vector3(x: reconstructed.X, y: reconstructed.Y, z: reconstructed.Z));
+        Assert.InRange(actual: reconstructed.W, high: height, low: 0f);
+        var displacement = Vector3.Distance(value1: originalPosition, value2: quantizedPosition);
 
-        Assert.InRange(actual: quantized.W, low: 0.0000001f, high: ((certificate.X - displacement) + 0.000000001f));
+        Assert.InRange(actual: quantized.W, high: ((certificate.X - displacement) + 0.000000001f), low: 0.0000001f);
         if (item.Vector != Vector3.UnitY) {
-            Assert.True(condition: (Vector3.Distance(quantizedPosition, (item.Point + (item.Vector * reconstructed.W))) > 0.000000001f),
+            Assert.True(condition: (Vector3.Distance(value1: quantizedPosition, value2: (item.Point + (item.Vector * reconstructed.W))) > 0.000000001f),
                 userMessage: $"{item.Name}: the fixture did not exercise normal quantization");
         }
-        Assert.True(condition: field.TryClampedDistance(point: AsDouble(new Vector3(reconstructed.X, reconstructed.Y, reconstructed.Z)), distance: out var distance, material: out _));
+        Assert.True(condition: field.TryClampedDistance(point: AsDouble(value: new Vector3(x: reconstructed.X, y: reconstructed.Y, z: reconstructed.Z)), distance: out var distance, material: out _));
         Assert.True(condition: (quantized.W <= (distance + (2 * IrradianceField.Resolution))));
         Assert.Equal(expected: 1f, actual: rows[4].W);
     }
     private static void HoldsPlacement(IrradianceProbePlacement expected, Vector4 actual, string name) {
         Assert.True(condition: (actual.W == ((float)expected.Class)), userMessage: $"{name}: class {actual.W}, CPU {expected.Class}");
-        HoldsPoint(actual: new Vector3(actual.X, actual.Y, actual.Z), expected: expected.Position, tolerance: 0.002, name: name);
+        HoldsPoint(actual: new Vector3(x: actual.X, y: actual.Y, z: actual.Z), expected: expected.Position, tolerance: 0.002, name: name);
     }
     private static void HoldsPartition(int cases, IrradianceField field, int index, ProbeCase item, Vector4[] results) {
         var corners = new IrradianceProbePlacement[IrradianceLattice.CellCorners];
@@ -201,7 +201,7 @@ public sealed partial class SdfIndirectTraceDeviceLawTests {
         var plane = results[((9 * cases) + index)];
 
         if (expected.Plane is { } fitted) {
-            Assert.True(condition: (Double3.Dot(a: fitted.Normal, b: AsDouble(value: new Vector3(plane.X, plane.Y, plane.Z))) > 0.99),
+            Assert.True(condition: (Double3.Dot(a: fitted.Normal, b: AsDouble(value: new Vector3(x: plane.X, y: plane.Y, z: plane.Z))) > 0.99),
                 userMessage: $"{item.Name}: plane normal {plane}, CPU {fitted.Normal}");
             Assert.InRange(actual: packed.Z, low: (((float)fitted.Offset) - 0.01f), high: (((float)fitted.Offset) + 0.01f));
         } else {
@@ -220,10 +220,10 @@ public sealed partial class SdfIndirectTraceDeviceLawTests {
             Assert.True(condition: ((actual.W == 0f) || (actual.Y < 0.0012f)), userMessage: $"{item.Name}: launch crossed the slab: {actual}");
             return;
         }
-        Assert.Equal(expected: 1f, actual: actual.W);
-        HoldsPoint(actual: new Vector3(actual.X, actual.Y, actual.Z), expected: expected.Value.Point, tolerance: 0.002, name: item.Name);
+        Assert.Equal(actual: actual.W, expected: 1f);
+        HoldsPoint(actual: new Vector3(x: actual.X, y: actual.Y, z: actual.Z), expected: expected.Value.Point, tolerance: 0.002, name: item.Name);
         Assert.True(condition: (certificate.X > 0f), userMessage: $"{item.Name}: no positive launch certificate");
-        Assert.True(condition: field.TryClampedDistance(distance: out var distance, material: out _, point: AsDouble(value: new Vector3(actual.X, actual.Y, actual.Z))));
+        Assert.True(condition: field.TryClampedDistance(distance: out var distance, material: out _, point: AsDouble(value: new Vector3(x: actual.X, y: actual.Y, z: actual.Z))));
         Assert.True(condition: (certificate.X <= (distance + 0.0001)), userMessage: $"{item.Name}: clearance {certificate.X} exceeds full field {distance}");
     }
     private static Double3 AsDouble(Vector3 value) => new(X: value.X, Y: value.Y, Z: value.Z);

@@ -6,8 +6,8 @@ using Puck.SignedDistance;
 namespace Puck.World.Client;
 
 public sealed partial class WorldViewGraphHost {
-    private readonly Dictionary<string, SdfWorldResidency> m_indirectResidencies = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, SdfWorldResidency?> m_indirectViews = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SdfWorldResidency> m_indirectResidencies = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, SdfWorldResidency?> m_indirectViews = new(comparer: StringComparer.Ordinal);
 
     private SdfIndirectTier m_lastIndirectTier;
 
@@ -20,7 +20,7 @@ public sealed partial class WorldViewGraphHost {
 
     private void ResetIndirect() {
         foreach (var pair in m_indirectResidencies) {
-            Indirect?.Unregister(pair.Key);
+            Indirect?.Unregister(name: pair.Key);
             IndirectResidencyChanged?.Invoke(pair.Value, false);
         }
         m_indirectResidencies.Clear();
@@ -33,46 +33,46 @@ public sealed partial class WorldViewGraphHost {
         if (tier != m_lastIndirectTier) { return true; }
         if ((tier == SdfIndirectTier.Off) || (Pickers is null)) { return false; }
         foreach (var pair in m_indirectViews) {
-            if (!ReferenceEquals(pair.Value, Pickers.ViewOf(pair.Key)?.Residency)) { return true; }
+            if (!ReferenceEquals(objA: pair.Value, objB: Pickers.ViewOf(instance: pair.Key)?.Residency)) { return true; }
         }
         return false;
     }
     private void AppendIndirect(ref RenderGraphInstanceSet set, ref IReadOnlyList<RenderGraphRuntimeGraph?> graphs) {
         if ((Pickers is null) || (Indirect is null)) { return; }
         var tier = (ReadIndirectTier?.Invoke() ?? SdfIndirectTier.Off);
-        var desired = new Dictionary<string, SdfWorldResidency>(StringComparer.Ordinal);
-        var cacheByView = new Dictionary<string, string>(StringComparer.Ordinal);
+        var desired = new Dictionary<string, SdfWorldResidency>(comparer: StringComparer.Ordinal);
+        var cacheByView = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
         m_indirectViews.Clear();
         foreach (var instance in set.Instances) {
             if (instance.ExternalPackage != RenderGraphPackageCatalog.SdfWorld) { continue; }
-            var resolved = Pickers.ViewOf(instance.Name)?.Residency;
+            var resolved = Pickers.ViewOf(instance: instance.Name)?.Residency;
 
-            m_indirectViews.Add(instance.Name, resolved);
+            m_indirectViews.Add(key: instance.Name, value: resolved);
             if (resolved is not { } residency) { continue; }
             residency.IndirectTierOverride = tier;
             if (tier == SdfIndirectTier.Off) { continue; }
             var cache = residency.IndirectInstanceName;
 
-            cacheByView.Add(instance.Name, cache);
-            desired.TryAdd(cache, residency);
+            cacheByView.Add(key: instance.Name, value: cache);
+            desired.TryAdd(key: cache, value: residency);
         }
         foreach (var pair in m_indirectResidencies) {
-            if (desired.TryGetValue(pair.Key, out var next) && ReferenceEquals(next, pair.Value)) { continue; }
-            Indirect.Unregister(pair.Key);
+            if (desired.TryGetValue(key: pair.Key, value: out var next) && ReferenceEquals(objA: next, objB: pair.Value)) { continue; }
+            Indirect.Unregister(name: pair.Key);
             IndirectResidencyChanged?.Invoke(pair.Value, false);
         }
         foreach (var pair in desired) {
-            Indirect.Register(pair.Key, pair.Value);
-            if (!m_indirectResidencies.TryGetValue(pair.Key, out var previous) || !ReferenceEquals(previous, pair.Value)) {
+            Indirect.Register(name: pair.Key, residency: pair.Value);
+            if (!m_indirectResidencies.TryGetValue(key: pair.Key, value: out var previous) || !ReferenceEquals(objA: previous, objB: pair.Value)) {
                 IndirectResidencyChanged?.Invoke(pair.Value, true);
             }
         }
         m_indirectResidencies.Clear();
-        foreach (var pair in desired) { m_indirectResidencies.Add(pair.Key, pair.Value); }
+        foreach (var pair in desired) { m_indirectResidencies.Add(key: pair.Key, value: pair.Value); }
         var before = set.Instances.Count;
 
-        set = WorldIndirectGraph.Append(set, cacheByView);
+        set = WorldIndirectGraph.Append(cacheByView: cacheByView, set: set);
         graphs = [.. graphs, .. Enumerable.Repeat<RenderGraphRuntimeGraph?>(null, (set.Instances.Count - before))];
         m_lastIndirectTier = tier;
     }
@@ -86,16 +86,16 @@ public static class WorldIndirectGraph {
     /// <exception cref="InvalidOperationException">The requested edges do not form a valid instance set.</exception>
     public static RenderGraphInstanceSet Append(RenderGraphInstanceSet set, IReadOnlyDictionary<string, string> cacheByView) {
         if (cacheByView.Count == 0) { return set; }
-        var instances = set.Instances.Select(instance => (cacheByView.TryGetValue(instance.Name, out var cache)
+        var instances = set.Instances.Select(selector: instance => (cacheByView.TryGetValue(key: instance.Name, value: out var cache)
             ? instance with { Reads = [.. instance.Reads, new(Producer: cache, Kind: ShaderPipelineResourceKind.Buffer)] }
             : instance)).ToList();
 
-        foreach (var cache in cacheByView.Values.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)) {
-            instances.Add(new(Name: cache, Refresh: RenderGraphRefresh.EveryFrame, Passes: 3, Reads: [],
+        foreach (var cache in cacheByView.Values.Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal)) {
+            instances.Add(item: new(Name: cache, Refresh: RenderGraphRefresh.EveryFrame, Passes: 3, Reads: [],
                 Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.Indirect));
         }
         if (!RenderGraphInstanceSet.TryCreate(instances, out var result, out var refusal, set.NestingDepth)) {
-            throw new InvalidOperationException(refusal.Message);
+            throw new InvalidOperationException(message: refusal.Message);
         }
         return result;
     }

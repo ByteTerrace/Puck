@@ -618,7 +618,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
 
-        tables.WriteWorldBuffer(buffer: (tables.Indirect?.Regions[0].Buffer(tables.CurrentSlot) ?? tables.DummyBuffer),
+        tables.WriteWorldBuffer(buffer: (tables.Indirect?.Regions[0].Buffer(slot: tables.CurrentSlot) ?? tables.DummyBuffer),
             member: SdfWorldPackage.IndirectBricks, set: set);
 
         if (ReferenceEquals(

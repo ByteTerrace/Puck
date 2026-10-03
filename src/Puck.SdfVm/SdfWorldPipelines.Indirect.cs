@@ -11,16 +11,16 @@ public sealed partial class SdfWorldPipelines {
             GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> wait;
 
             lock (m_gate) {
-                ObjectDisposedException.ThrowIf(m_disposed, this);
+                ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
                 if (m_slots[((int)kernel)] is not { } slot) {
                     var description = SdfWorldTables.PipelineLayouts.Specs[((int)kernel)].Description;
 
-                    slot = new Slot(description, cache.Acquire(device: device, key: GpuPassPipelineKey.OfCompute(bytecode: m_kernels[kernel], description: description)));
+                    slot = new Slot(description: description, lease: cache.Acquire(device: device, key: GpuPassPipelineKey.OfCompute(bytecode: m_kernels[kernel], description: description)));
                     m_slots[((int)kernel)] = slot;
                 }
                 wait = cache.Acquire(device: device, key: slot.Lease.Key);
             }
-            try { await wait.WaitAsync(cancellationToken).ConfigureAwait(false); } finally { wait.Release(); }
+            try { await wait.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false); } finally { wait.Release(); }
         }
     }
 }

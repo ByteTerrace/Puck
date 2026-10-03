@@ -1228,7 +1228,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return;
         }
 
-        AppendIndirect(ref set, ref graphs);
+        AppendIndirect(graphs: ref graphs, set: ref set);
 
         // A synthesized root this host already runs keeps the graph it has installed.
         if (ReferenceEquals(

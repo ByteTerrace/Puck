@@ -89,7 +89,7 @@ public sealed partial class WorldRenderSettings {
     public SdfIndirectTier IndirectTier {
         get => m_indirectTier;
         set {
-            if (!Enum.IsDefined(value)) { throw new ArgumentOutOfRangeException(nameof(value)); }
+            if (!Enum.IsDefined(value: value)) { throw new ArgumentOutOfRangeException(paramName: nameof(value)); }
             m_indirectTier = value;
             m_revision++;
         }

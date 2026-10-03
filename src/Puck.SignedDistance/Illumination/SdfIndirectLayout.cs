@@ -68,8 +68,8 @@ public sealed class SdfIndirectLayout {
 
         Levels = tier switch {
             SdfIndirectTier.Off => [],
-            SdfIndirectTier.Medium => [new("room", 1.5, 9, 36, strata), new("world", 4.5, 0, 0, strata)],
-            _ => [new("near", 0.5, 3, 12, strata), new("room", 1.5, 9, 36, strata), new("world", 4.5, 0, 0, strata)],
+            SdfIndirectTier.Medium => [new(Name: "room", Radius: 36, Reach: 9, Spacing: 1.5, Strata: strata), new(Name: "world", Radius: 0, Reach: 0, Spacing: 4.5, Strata: strata)],
+            _ => [new(Name: "near", Radius: 12, Reach: 3, Spacing: 0.5, Strata: strata), new(Name: "room", Radius: 36, Reach: 9, Spacing: 1.5, Strata: strata), new(Name: "world", Radius: 0, Reach: 0, Spacing: 4.5, Strata: strata)],
         };
         Pools = tier switch { SdfIndirectTier.Off => [], SdfIndirectTier.Medium => [192, 64], _ => [256, 192, 64] };
         BrickCapacity = Pools.Sum();

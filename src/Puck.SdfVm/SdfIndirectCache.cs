@@ -34,7 +34,7 @@ public sealed class SdfIndirectCache : IDisposable {
         var offset = 0;
 
         for (var level = 0; (level < m_free.Length); level++) {
-            m_free[level] = new SortedSet<int>(Enumerable.Range(offset, layout.Pools[level]));
+            m_free[level] = new SortedSet<int>(collection: Enumerable.Range(offset, layout.Pools[level]));
             offset += layout.Pools[level];
         }
         m_bricks = new byte[(layout.BrickCapacity * 16)];
@@ -42,17 +42,17 @@ public sealed class SdfIndirectCache : IDisposable {
         m_traceStates = new uint[layout.ProbeCapacity];
         using var scope = new GpuCreationScope();
 
-        Buffer = scope.Own(gpu.BufferFactory.CreateDeviceLocal(name: new GpuObjectName(owner: "sdf-indirect", part: "cache"), sizeBytes: layout.ByteLength, usage: GpuBufferUsage.Storage));
-        var names = new[] { "bricks", "updates", "directions", "trace-states" }.Select(part => new GpuObjectName(owner: "sdf-indirect", part: part)).ToArray();
+        Buffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: new GpuObjectName(owner: "sdf-indirect", part: "cache"), sizeBytes: layout.ByteLength, usage: GpuBufferUsage.Storage));
+        var names = new[] { "bricks", "updates", "directions", "trace-states" }.Select(selector: part => new GpuObjectName(owner: "sdf-indirect", part: part)).ToArray();
 
-        m_copies = scope.Own(new GpuRegionCopyPool(bindings: gpu.Bindings, copyPipeline: copyPipeline, name: new GpuObjectName(owner: "sdf-indirect", part: "region-copies"), regions: names, slotCount: SdfWorldTables.FrameRingSize));
+        m_copies = scope.Own(created: new GpuRegionCopyPool(bindings: gpu.Bindings, copyPipeline: copyPipeline, name: new GpuObjectName(owner: "sdf-indirect", part: "region-copies"), regions: names, slotCount: SdfWorldTables.FrameRingSize));
         var lengths = new[] { m_bricks.Length, m_updates.Length, (layout.RaysPerProbe * 16), (m_traceStates.Length * sizeof(uint)) };
         var regions = new GpuRegion[lengths.Length];
 
         Regions = regions;
         for (var region = 0; (region < lengths.Length); region++) {
-            regions[region] = scope.Own(new GpuRegion(bindings: gpu.Bindings, buffers: gpu.BufferFactory, byteCount: lengths[region], copyPipeline: copyPipeline,
-                copySets: m_copies.Region(region), memory: GpuResidency.RingMemory(profile), name: names[region],
+            regions[region] = scope.Own(created: new GpuRegion(bindings: gpu.Bindings, buffers: gpu.BufferFactory, byteCount: lengths[region], copyPipeline: copyPipeline,
+                copySets: m_copies.Region(index: region), memory: GpuResidency.RingMemory(profile: profile), name: names[region],
                 policy: GpuResidency.Select(byteCount: ((ulong)lengths[region]), profile: profile, readersInFlight: true), recorder: gpu.Recorder, slotCount: SdfWorldTables.FrameRingSize));
         }
         var directions = new float[(layout.RaysPerProbe * 4)];
@@ -64,7 +64,7 @@ public sealed class SdfIndirectCache : IDisposable {
             directions[((ray * 4) + 1)] = ((float)direction.Y);
             directions[((ray * 4) + 2)] = ((float)direction.Z);
         }
-        Regions[2].Write(offset: 0, bytes: MemoryMarshal.AsBytes(directions.AsSpan()));
+        Regions[2].Write(offset: 0, bytes: MemoryMarshal.AsBytes(span: directions.AsSpan()));
         ClearBricks();
         scope.Complete();
     }
@@ -96,15 +96,15 @@ public sealed class SdfIndirectCache : IDisposable {
     /// <summary>Gets every GPU byte, including region rings and shadows.</summary>
     public GpuMemoryBytes Bytes => Regions.Aggregate(new GpuMemoryBytes(DeviceLocal: Buffer.SizeBytes, HostVisible: 0), (bytes, region) => (bytes + region.OwnedBytes));
 
-    internal bool IsDisposed => (Volatile.Read(ref m_holds) <= 0);
+    internal bool IsDisposed => (Volatile.Read(location: ref m_holds) <= 0);
 
     /// <summary>Retains the allocation for a graph's lifetime.</summary>
     public SdfIndirectCache Retain() {
-        var holds = Volatile.Read(ref m_holds);
+        var holds = Volatile.Read(location: ref m_holds);
 
         while (true) {
-            ObjectDisposedException.ThrowIf((holds <= 0), this);
-            var observed = Interlocked.CompareExchange(ref m_holds, (holds + 1), holds);
+            ObjectDisposedException.ThrowIf(condition: (holds <= 0), instance: this);
+            var observed = Interlocked.CompareExchange(comparand: holds, location1: ref m_holds, value: (holds + 1));
 
             if (observed == holds) { return this; }
             holds = observed;
@@ -112,7 +112,7 @@ public sealed class SdfIndirectCache : IDisposable {
     }
     /// <inheritdoc/>
     public void Dispose() {
-        if (Interlocked.Decrement(ref m_holds) != 0) { return; }
+        if (Interlocked.Decrement(location: ref m_holds) != 0) { return; }
         foreach (var region in Regions) { region.Dispose(); }
         m_copies.Dispose();
         Buffer.Dispose();
@@ -125,13 +125,13 @@ public sealed class SdfIndirectCache : IDisposable {
         m_pending = null;
         m_slots.Clear();
         m_placed.Clear();
-        Array.Clear(m_traceStates);
-        Regions[3].Write(offset: 0, bytes: MemoryMarshal.AsBytes(m_traceStates.AsSpan()));
+        Array.Clear(array: m_traceStates);
+        Regions[3].Write(offset: 0, bytes: MemoryMarshal.AsBytes(span: m_traceStates.AsSpan()));
         var offset = 0;
 
         for (var level = 0; (level < m_free.Length); level++) {
             m_free[level].Clear();
-            m_free[level].UnionWith(Enumerable.Range(offset, Layout.Pools[level]));
+            m_free[level].UnionWith(other: Enumerable.Range(offset, Layout.Pools[level]));
             offset += Layout.Pools[level];
         }
         m_completed = false;
@@ -140,71 +140,71 @@ public sealed class SdfIndirectCache : IDisposable {
     /// <summary>Plans once until a successful submission commits the same list.</summary>
     public void Plan(IrradianceFrameInputs inputs) {
         if (m_pending is not null) { return; }
-        m_pending = m_schedule.Frame(inputs);
+        m_pending = m_schedule.Frame(inputs: inputs);
         foreach (var key in m_pending.Evicted) {
-            Array.Clear(m_traceStates, (m_slots[key] * SdfIndirectLayout.ProbesPerBrick), SdfIndirectLayout.ProbesPerBrick);
-            m_free[key.Level].Add(m_slots[key]); m_slots.Remove(key); m_placed.Remove(key);
+            Array.Clear(array: m_traceStates, index: (m_slots[key] * SdfIndirectLayout.ProbesPerBrick), length: SdfIndirectLayout.ProbesPerBrick);
+            m_free[key.Level].Add(item: m_slots[key]); m_slots.Remove(key: key); m_placed.Remove(item: key);
         }
         foreach (var key in m_pending.Allocated) {
             var slot = m_free[key.Level].Min;
 
-            m_free[key.Level].Remove(slot);
-            m_slots.Add(key, slot);
+            m_free[key.Level].Remove(item: slot);
+            m_slots.Add(key: key, value: slot);
         }
         ClearBricks();
-        m_placed.UnionWith(m_pending.Placed);
+        m_placed.UnionWith(other: m_pending.Placed);
         foreach (var (key, slot) in m_slots) {
-            if (m_placed.Contains(key)) { Write(m_bricks, slot, key.X, key.Y, key.Z, key.Level); }
+            if (m_placed.Contains(item: key)) { Write(m_bricks, slot, key.X, key.Y, key.Z, key.Level); }
         }
-        Regions[0].Write(offset: 0, bytes: m_bricks);
+        Regions[0].Write(bytes: m_bricks, offset: 0);
         var row = 0;
 
         foreach (var key in m_pending.Placed) { Write(m_updates, row++, m_slots[key], 0, key.Level, 0); }
         foreach (var key in m_pending.Classified) { Write(m_updates, row++, m_slots[key], 0, key.Level, 0); }
         foreach (var update in m_pending.Traces) {
-            Write(m_updates, row++, ProbeSlot(update.Probe), update.Stratum, update.Probe.Level, ((int)update.Reason));
+            Write(m_updates, row++, ProbeSlot(probe: update.Probe), update.Stratum, update.Probe.Level, ((int)update.Reason));
         }
-        Regions[1].Write(offset: 0, bytes: m_updates.AsSpan(0, (row * 16)));
-        Regions[3].Write(offset: 0, bytes: MemoryMarshal.AsBytes(m_traceStates.AsSpan()));
+        Regions[1].Write(offset: 0, bytes: m_updates.AsSpan(length: (row * 16), start: 0));
+        Regions[3].Write(offset: 0, bytes: MemoryMarshal.AsBytes(span: m_traceStates.AsSpan()));
         if (!HasWork && (m_pending.Allocated.Count == 0) && (m_pending.Evicted.Count == 0)) { m_pending = null; }
     }
     /// <summary>Counts and commits only the schedule actually submitted.</summary>
     public void Submitted() {
         if (m_pending is not { } plan) { return; }
         foreach (var update in plan.Traces) {
-            m_traceStates[ProbeSlot(update.Probe)] |= (1u << update.Stratum);
+            m_traceStates[ProbeSlot(probe: update.Probe)] |= (1u << update.Stratum);
         }
         m_work.Add(SdfIndirectWork.Rays, (plan.Traces.Count * IrradianceLattice.RaysPerStratum));
         m_work.Add(SdfIndirectWork.Probes, plan.Traces.Count);
-        foreach (var reason in Enum.GetValues<IrradianceUpdateReason>()) { Count($"indirect.probes.scheduled.{reason.ToString().ToLowerInvariant()}", plan.Traces.Count(update => (update.Reason == reason))); }
+        foreach (var reason in Enum.GetValues<IrradianceUpdateReason>()) { Count($"indirect.probes.scheduled.{reason.ToString().ToLowerInvariant()}", plan.Traces.Count(predicate: update => (update.Reason == reason))); }
         foreach (var (keys, action) in new[] { (plan.Allocated, "allocated"), (plan.Evicted, "evicted"), (plan.Refused, "refused") }) {
-            for (var level = 0; (level < Layout.Levels.Count); level++) { Count($"indirect.bricks.{action}.{Layout.Levels[level].Name}", keys.Count(key => (key.Level == level))); }
+            for (var level = 0; (level < Layout.Levels.Count); level++) { Count($"indirect.bricks.{action}.{Layout.Levels[level].Name}", keys.Count(predicate: key => (key.Level == level))); }
         }
-        if (!m_completed && m_schedule.IsComplete) { Count("indirect.sweeps.completed", 1); }
+        if (!m_completed && m_schedule.IsComplete) { Count(amount: 1, name: "indirect.sweeps.completed"); }
         m_completed = m_schedule.IsComplete;
         m_pending = null;
         Frame++;
     }
 
     private int ProbeSlot(IrradianceProbeKey probe) {
-        var brick = IrradianceLattice.BrickOf(probe);
+        var brick = IrradianceLattice.BrickOf(key: probe);
 
         return ((((m_slots[brick] * SdfIndirectLayout.ProbesPerBrick) + (probe.X - (brick.X * 4)))
             + ((probe.Y - (brick.Y * 4)) * 4)) + ((probe.Z - (brick.Z * 4)) * 16));
     }
     private IrradianceSchedule NewSchedule() => new(Layout.Levels, Layout.Pools, Layout.TraceBudget, Layout.ClassifyBudget, FarDistance);
-    private void Count(string name, int amount) => m_work.Add(SdfIndirectWork.Kinds.Single(kind => (kind.Name == name)), amount);
+    private void Count(string name, int amount) => m_work.Add(SdfIndirectWork.Kinds.Single(predicate: kind => (kind.Name == name)), amount);
     private void ClearBricks() {
-        Array.Clear(m_bricks);
-        for (var slot = 0; (slot < Layout.BrickCapacity); slot++) { BinaryPrimitives.WriteInt32LittleEndian(m_bricks.AsSpan(((slot * 16) + 12)), -1); }
-        Regions[0].Write(offset: 0, bytes: m_bricks);
+        Array.Clear(array: m_bricks);
+        for (var slot = 0; (slot < Layout.BrickCapacity); slot++) { BinaryPrimitives.WriteInt32LittleEndian(destination: m_bricks.AsSpan(start: ((slot * 16) + 12)), value: -1); }
+        Regions[0].Write(bytes: m_bricks, offset: 0);
     }
     private static void Write(byte[] bytes, int row, int x, int y, int z, int w) {
-        var span = bytes.AsSpan((row * 16), 16);
+        var span = bytes.AsSpan(length: 16, start: (row * 16));
 
-        BinaryPrimitives.WriteInt32LittleEndian(span, x);
-        BinaryPrimitives.WriteInt32LittleEndian(span[4..], y);
-        BinaryPrimitives.WriteInt32LittleEndian(span[8..], z);
-        BinaryPrimitives.WriteInt32LittleEndian(span[12..], w);
+        BinaryPrimitives.WriteInt32LittleEndian(destination: span, value: x);
+        BinaryPrimitives.WriteInt32LittleEndian(destination: span[4..], value: y);
+        BinaryPrimitives.WriteInt32LittleEndian(destination: span[8..], value: z);
+        BinaryPrimitives.WriteInt32LittleEndian(destination: span[12..], value: w);
     }
 }

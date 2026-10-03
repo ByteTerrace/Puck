@@ -13,16 +13,16 @@ namespace Puck.Shaders.Tests;
 public sealed class ShaderWorkCountersLawTests {
     [Fact]
     public void IndirectCountersUseGeneratedColumnsAndCountEachDetailOnce() {
-        var generated = ShaderInterfaceHlsl.Generate(Interface([.. ShaderWorkCounters.Members]));
+        var generated = ShaderInterfaceHlsl.Generate(shaderInterface: Interface([.. ShaderWorkCounters.Members]));
 
-        Assert.Contains($"PuckWorkIndirectWord = {(GpuWork.IndirectFirstKind * GpuKernelCounters.CountWords)}u;", generated);
-        Assert.Contains("void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved)", generated);
-        Assert.Contains("puckAddWork((row + PuckWorkIndirectWord), hits);", generated);
-        Assert.Contains("puckAddWork((row + PuckWorkIndirectWord + 2u), samples);", generated);
-        Assert.Contains("puckAddWork((row + PuckWorkIndirectWord + 4u), unresolved);", generated);
-        var empty = ShaderInterfaceHlsl.Generate(Interface());
+        Assert.Contains(actualString: generated, expectedSubstring: $"PuckWorkIndirectWord = {(GpuWork.IndirectFirstKind * GpuKernelCounters.CountWords)}u;");
+        Assert.Contains(actualString: generated, expectedSubstring: "void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved)");
+        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkIndirectWord), hits);");
+        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkIndirectWord + 2u), samples);");
+        Assert.Contains(actualString: generated, expectedSubstring: "puckAddWork((row + PuckWorkIndirectWord + 4u), unresolved);");
+        var empty = ShaderInterfaceHlsl.Generate(shaderInterface: Interface());
 
-        Assert.Contains("void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {\n}", empty);
+        Assert.Contains(actualString: empty, expectedSubstring: "void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {\n}");
     }
 
     private static ShaderInterface Interface(params ShaderInterfaceMember[] members) => new(

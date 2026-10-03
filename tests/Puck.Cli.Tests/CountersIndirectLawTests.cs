@@ -7,16 +7,16 @@ namespace Puck.Cli.Tests;
 public sealed class CountersIndirectLawTests {
     [Fact]
     public void RecordedOffWorkloadsRequireEveryIndirectKindToStayZero() {
-        Assert.True(CliPaths.TryGetRepositoryRoot(out var root));
-        foreach (var path in Directory.GetFiles(Path.Combine(root, "tests/Puck.Counters"), "*.ceilings.json")) {
-            Assert.True(CountersCeilings.TryRead(path, out var ledger, out var reason), reason);
+        Assert.True(condition: CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root));
+        foreach (var path in Directory.GetFiles(path: Path.Combine(path1: root, path2: "tests/Puck.Counters"), searchPattern: "*.ceilings.json")) {
+            Assert.True(condition: CountersCeilings.TryRead(ceilings: out var ledger, path: path, reason: out var reason), userMessage: reason);
             foreach (var run in ledger.Runs) {
-                foreach (var row in run.Ceilings.GroupBy(item => (item.Node, item.Pass, item.Detail))) {
+                foreach (var row in run.Ceilings.GroupBy(keySelector: item => (item.Node, item.Pass, item.Detail))) {
                     foreach (var kind in new[] { "gpu.indirect.hits", "gpu.indirect.samples", "gpu.indirect.unresolved" }) {
-                        var zero = Assert.Single(row, item => (item.Kind == kind));
+                        var zero = Assert.Single(collection: row, predicate: item => (item.Kind == kind));
 
                         Assert.Equal(0, zero.Ceiling);
-                        Assert.True(zero.RequiredZero);
+                        Assert.True(condition: zero.RequiredZero);
                     }
                 }
             }

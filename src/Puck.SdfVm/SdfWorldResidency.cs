@@ -399,7 +399,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         var tables = m_tables!;
 
         if (frame.IndirectTier != IndirectTier) { frame = frame with { IndirectTier = IndirectTier }; }
-        PrepareIndirect(tables: tables, frame: frame);
+        PrepareIndirect(frame: frame, tables: tables);
 
         ApplyPendingShaderReload();
         tables.Pipelines.RequestShadowFadeVariants(cache: m_pipelines.Catalog.Pipelines, device: device,

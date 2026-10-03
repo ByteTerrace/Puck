@@ -89,7 +89,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
     }
     private string DescribeIndirectBudget() {
         if ((renderProbe is null) || (renderProbe.IndirectResidencies.Count == 0)) { return "indirect off, 0 byte(s)"; }
-        return string.Join(" | ", renderProbe.IndirectResidencies.OrderBy(residency => residency.Name, StringComparer.Ordinal).Select(residency => {
+        return string.Join(separator: " | ", values: renderProbe.IndirectResidencies.OrderBy(residency => residency.Name, StringComparer.Ordinal).Select(selector: residency => {
             if (residency.Tables?.IndirectLayout is not { } layout) { return $"indirect {residency.Name} pending"; }
             var bytes = residency.Tables.IndirectBytes;
             var probes = ((ulong)layout.ProbeCapacity);

@@ -19,20 +19,20 @@ public sealed class GpuKernelCountersLawTests {
         var gpu = new UploadModelGpu();
         using var counters = new GpuKernelCounters(gpu.Services.BufferFactory, 1, 1, "indirect-law", "counters");
         var kinds = new[] { GpuWork.IndirectHits, GpuWork.IndirectSamples, GpuWork.IndirectUnresolved };
-        var memory = gpu.Memory(counters.RowOf(0, 0).Buffer.BufferHandle);
+        var memory = gpu.Memory(bufferHandle: counters.RowOf(row: 0, slot: 0).Buffer.BufferHandle);
 
         for (var index = 0; (index < kinds.Length); index++) {
             Assert.Equal(WorkClass.PerBackendDeterministic, kinds[index].Class);
             var offset = (GpuWork.KernelKinds.IndexOf(kinds[index]) * sizeof(ulong));
 
-            BinaryPrimitives.WriteUInt64LittleEndian(memory.AsSpan(offset), (0x1_0000_0001UL + ((ulong)index)));
+            BinaryPrimitives.WriteUInt64LittleEndian(destination: memory.AsSpan(start: offset), value: (0x1_0000_0001UL + ((ulong)index)));
         }
         var command = gpu.Services.CommandPoolFactory.Create(name: default).CommandBufferHandle;
 
         counters.RecordCopy(gpu.Services.Recorder, command, 0);
         var counts = new long[(GpuWork.SubmissionKinds.Length * 2)];
 
-        counters.AddTo(0, counts, 1);
+        counters.AddTo(counts: counts, rowCount: 1, slot: 0);
         for (var index = 0; (index < kinds.Length); index++) {
             Assert.Equal((0x1_0000_0001L + index), counts[(GpuWork.SubmissionKinds.Length + GpuWork.SubmissionKinds.IndexOf(kinds[index]))]);
         }

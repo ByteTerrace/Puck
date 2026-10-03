@@ -30,11 +30,11 @@ public sealed class SdfIndirectDebugDeviceLawTests {
     }
 
     private static void Verify(GpuDeviceServices services, string extension) {
-        Assert.True(DebugViewModes.TryParse(name: "indirect-probes", mode: out var probes));
-        Assert.True(DebugViewModes.TryParse(name: "indirect-cells", mode: out var cells));
-        Vector4 sky = new(-1, -1, 0, 0);
-        Vector4 scene = new(2, 3, 5, 7);
-        Vector4 viewport = new(0, 0, 15, 11);
+        Assert.True(condition: DebugViewModes.TryParse(mode: out var probes, name: "indirect-probes"));
+        Assert.True(condition: DebugViewModes.TryParse(mode: out var cells, name: "indirect-cells"));
+        Vector4 sky = new(w: 0, x: -1, y: -1, z: 0);
+        Vector4 scene = new(w: 7, x: 2, y: 3, z: 5);
+        Vector4 viewport = new(w: 11, x: 0, y: 0, z: 15);
         (Vector4 Surviving, int Mode, int Meshes, bool Hit, float Depth, Vector4 ExpectedBox, float ExpectedMaximum)[] cases = [
             (sky, probes, 0, false, 0, viewport, 80),
             (scene, probes, 0, false, 2, viewport, 80),
@@ -51,8 +51,8 @@ public sealed class SdfIndirectDebugDeviceLawTests {
             var item = cases[index];
 
             rows[(index * 3)] = item.Surviving;
-            rows[((index * 3) + 1)] = new Vector4(16, 12, item.Meshes, item.Mode);
-            rows[((index * 3) + 2)] = new Vector4((item.Hit ? 1 : 0), item.Depth, 80, 0);
+            rows[((index * 3) + 1)] = new Vector4(w: item.Mode, x: 16, y: 12, z: item.Meshes);
+            rows[((index * 3) + 2)] = new Vector4(w: 0, x: (item.Hit ? 1 : 0), y: item.Depth, z: 80);
         }
         var builder = new SdfProgramBuilder();
 
