@@ -63,6 +63,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // The lease on the pipeline set the views record with, shared through the composition's pipeline cache, built off
     // the frame thread and kept across rebuilds until a device loss or disposal releases it.
     private readonly SdfWorldPipelineSource m_pipelines;
+    private readonly SdfSkyDetails m_skyDetails;
 
     private SdfKernelSet m_kernels;
     private IGpuDeviceContext? m_deviceContext;
@@ -141,6 +142,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_instanceCapacity = instanceCapacity;
         m_kernels = kernels;
         m_pipelines = new SdfWorldPipelineSource(catalog: pipelines);
+        m_skyDetails = pipelines.SkyDetails;
         m_programWordCapacity = programWordCapacity;
         m_screenSources = screenSources;
         m_screenSurfaceTransforms = ((frameSource.ScreenSurfaceTransforms is { } transforms)
@@ -597,6 +599,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return handle;
     }
+
+    /// <summary>Gets the detail rows the residency's sky counts its runs and layers in, the composition's one set
+    /// (<see cref="SdfWorldPipelineCatalog.SkyDetails"/>).</summary>
+    public SdfSkyDetails SkyDetails => m_skyDetails;
+
     /// <summary>Returns the counts a view of the residency allocates its counted scratch by at an extent: one viewport,
     /// its tiles, and the instances the tables are provisioned for (<see cref="CapacityRevision"/>) and their per-tile
     /// mask words.</summary>
@@ -788,6 +795,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             InstanceCapacity: m_instanceCapacity,
             Program: frame.Program,
             ProgramWordCapacity: m_programWordCapacity,
+            SkyDetails: m_skyDetails,
             WorkLedger: m_work
         );
     // Binds every screen's mapping, light and bound flag: a screen shows a source while it names an instance some view of
