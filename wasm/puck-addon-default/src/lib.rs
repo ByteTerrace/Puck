@@ -51,6 +51,13 @@ pub extern "C" fn puck_abi_version() -> i32 {
     abi::ABI_VERSION
 }
 
+/// Exact-match ABI shape handshake: the host's addon ABI shape fingerprint as one word, so a `.wasm` built against any other
+/// shape faults at load even when the version number has not moved.
+#[no_mangle]
+pub extern "C" fn puck_abi_shape() -> i64 {
+    abi::ABI_SHAPE as i64
+}
+
 /// Byte offset of the guest→host output ring.
 #[no_mangle]
 pub extern "C" fn puck_out_ptr() -> i32 {

@@ -24,7 +24,8 @@ namespace Puck.Cli;
 /// </para>
 /// </summary>
 internal static class WorldArtifactKey {
-    // Bumped whenever what the key covers changes, so no entry keyed under an older rule is ever reused.
+    // A content-identified note, not a header: the schema name is hashed into every key, so an entry keyed under another rule
+    // is a different key and is never read. The ledger records the rule's shape; a key carries no fingerprint of its own.
     private const string Schema = "puck.world-artifact-key.v1";
 
     private static bool TryGit(string repositoryRoot, IReadOnlyList<string> arguments, out string stdout, out string reason) {

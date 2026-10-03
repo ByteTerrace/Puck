@@ -294,6 +294,16 @@ public sealed class AddonInstance : IDisposable {
             return false;
         }
 
+        var shape = ((ulong)instance.GetFunction<long>(name: AddonAbi.Exports.AbiShape)!());
+
+        if (shape != AddonAbi.AbiShape) {
+            SetFault(
+                kind: AddonFaultKind.AbiMismatch,
+                reason: $"AbiMismatch — guest ABI shape {shape:x16}, host speaks ABI shape {AddonAbi.AbiShapeFingerprint}"
+            );
+            return false;
+        }
+
         var channelsPtr = instance.GetFunction<int>(name: AddonAbi.Exports.ChannelsPtr)!();
         var channelsCount = instance.GetFunction<int>(name: AddonAbi.Exports.ChannelsCount)!();
         var outPtr = instance.GetFunction<int>(name: AddonAbi.Exports.OutPtr)!();
