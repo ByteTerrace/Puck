@@ -7066,7 +7066,7 @@
       "title": "WorldEffectPose"
     },
     "WorldEffectSetIdentityFact": {
-      "description": "Writes one fact on the identity a world-addressed body drives under: the body\u0027s cell in the world\u0027s reserved WorldIdentityFactLane row and the identity\u0027s own persisted facts row, together. Exactly one of Value and Expression is authored; a body driving under no owned identity refuses the write rather than minting one.",
+      "description": "Writes one fact on the identity a world-addressed body drives under: the body\u0027s cell in the world\u0027s reserved WorldIdentityFactLane row and the identity\u0027s facts row, together. An owned identity\u0027s row is persisted; a visitor\u0027s is its travelling row, which its own authority adopts when it comes home. Exactly one of Value and Expression is authored; a body driving under no identity refuses the write rather than minting one.",
       "properties": {
         "$type": {
           "const": "setIdentityFact"
@@ -8415,6 +8415,7 @@
     },
     "StateCellClock": {
       "description": "A cell\u0027s own value-over-time timing state \u2014 the epoch(s), the second-order follower\u0027s sampled position and velocity, and a rotation\u0027s carried substep remainder \u2014 moved off the trait records (StateAdvance/StateDynamics/StateCycle, which keep only their authored parameters) onto the cell they time, so a key a write mints later starts its own clock from the tick it was created rather than sharing one baked into a trait every cell of the row would otherwise repeat.",
+      "title": "StateCellClock",
       "type": [
         "object",
         "null"
@@ -8422,32 +8423,26 @@
       "properties": {
         "epochTick": {
           "description": "The simulation tick this clock\u0027s rotation is measured from \u2014 the tick the cell\u0027s base value was last explicitly set, or its own behavior last changed. Read by StateCycle. A negative value is refused; in practice this can only be violated by an authored boot document, since every live settle rebases to the applying tick before validation sees it.",
-          "type": "integer",
-          "default": 0
+          "type": "integer"
         },
         "epochEngineTick": {
           "description": "The engine tick (TicksPerSecond per second) this clock\u0027s accumulation is measured from \u2014 the engine tick the cell\u0027s base value was last explicitly set, or its own behavior last changed. Read by StateAdvance alone; never derived from EpochTick at a simulation rate, since a live rate change must move neither. A negative value is refused, for the same reason EpochTick is.",
-          "type": "integer",
-          "default": 0
+          "type": "integer"
         },
         "y0": {
           "description": "A StateDynamics follower\u0027s position at EpochTick, as raw FixedQ4816 bits, independent of the carrying row\u0027s stored-value kind.",
-          "type": "integer",
-          "default": 0
+          "type": "string"
         },
         "v0": {
           "description": "A StateDynamics follower\u0027s velocity at EpochTick, per second, as raw FixedQ4816 bits.",
-          "type": "integer",
-          "default": 0
+          "type": "string"
         },
         "substepTicks": {
           "description": "Elapsed ticks a StateCycle has already accumulated toward its next step at EpochTick; must be non-negative and less than the cycle\u0027s own ticksPerStep.",
-          "type": "integer",
-          "default": 0
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
-      "title": "StateCellClock"
+      "additionalProperties": false
     },
     "StatePoolValue": {
       "description": "One field override in a statically seeded pool instance.",

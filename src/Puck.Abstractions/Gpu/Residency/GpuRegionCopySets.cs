@@ -37,6 +37,12 @@ public sealed class GpuRegionCopySets {
             slot: slot,
             writer: region
         );
+    // Releases the share's references to a region that disposed or moved to another share.
+    internal void ForgetWriter(GpuRegion region) =>
+        m_pool.ForgetWriter(
+            region: m_region,
+            writer: region
+        );
     // Records that the region's buffers are now what the slot's set holds.
     internal void WrittenBy(int slot, GpuRegion region) =>
         m_pool.WrittenBy(

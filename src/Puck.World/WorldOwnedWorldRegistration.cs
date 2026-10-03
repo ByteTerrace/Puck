@@ -34,7 +34,8 @@ internal static class WorldOwnedWorldRegistration {
                 neighbours: neighbours,
                 template: definition,
                 machineCatalog: catalog,
-                catalogFingerprint: catalogFingerprint
+                catalogFingerprint: catalogFingerprint,
+                narrationHub: serviceProvider.GetRequiredService<WorldOutputHub>()
             );
 
             Console.Error.WriteLine(value: $"[identity] loaded {worlds.All.Count} owned worlds from {directory}");

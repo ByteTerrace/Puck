@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Testing;
 
@@ -179,10 +178,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         Assert.Equal(expected: recorded, actual: view.Parts.Count);
 
         // A capture of it is served only by a render.
-        var request = new FrameCaptureRequest(path: Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"{Guid.NewGuid():N}.png"
-        ));
+        var request = CaptureRequest();
 
         runtime.CaptureTarget(instance: PackageView).RequestCapture(request: request);
         ProducePackageFrame(

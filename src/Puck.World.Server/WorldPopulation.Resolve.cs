@@ -811,7 +811,6 @@ public sealed partial class WorldPopulation {
     /// population.
     /// </summary>
     public void ResolveDynamicContacts() {
-        var two = FixedQ4816.FromInteger(value: 2L);
         var contacts = m_dynamicContactBodies;
         var count = 0;
 
@@ -933,10 +932,14 @@ public sealed partial class WorldPopulation {
                             );
                             rigidResolvedThisPass++;
                         } else {
-                            var shared = (correction / two);
+                            var (leftShare, rightShare) = SplitPairCorrection(
+                                correction: correction,
+                                left: left,
+                                right: right
+                            );
 
-                            left.ApplyDynamicContact(correction: shared);
-                            right.ApplyDynamicContact(correction: -shared);
+                            left.ApplyDynamicContact(correction: leftShare);
+                            right.ApplyDynamicContact(correction: rightShare);
                         }
                         m_dynamicContactDegrees[leftIndex]++;
                         m_dynamicContactDegrees[rightIndex]++;
@@ -981,6 +984,26 @@ public sealed partial class WorldPopulation {
             }
         }
     }
+
+    /// <summary>Splits a body pair's overlap correction (added to <paramref name="left"/>, subtracted from
+    /// <paramref name="right"/>) between the two: half each, unless a side's sweep was refused this tick. A refused
+    /// body is immovable for the rest of its tick, so the other side is resolved against it as static and takes the
+    /// whole correction; a pair of refused bodies moves neither.</summary>
+    /// <returns>The correction to add to each side's position.</returns>
+    private static (FixedVector3 Left, FixedVector3 Right) SplitPairCorrection(WorldBody left, WorldBody right, FixedVector3 correction) {
+        if (left.SweepRefusedThisTick) {
+            return (FixedVector3.Zero, (right.SweepRefusedThisTick ? FixedVector3.Zero : -correction));
+        }
+
+        if (right.SweepRefusedThisTick) {
+            return (correction, FixedVector3.Zero);
+        }
+
+        var shared = (correction / FixedQ4816.FromInteger(value: 2L));
+
+        return (shared, -shared);
+    }
+
     /// <summary>Resolves every attached tether after every body has integrated and dynamic contacts have resolved —
     /// the same "late correction over the whole population's current-tick pose" slot <see cref="ResolveDynamicContacts"/>
     /// occupies, so a body-anchored tether reads its anchor's just-advanced pose rather than one tick stale. One-way by

@@ -34,6 +34,8 @@ internal sealed class MemoryCrossingStore {
 
     /// <summary>Gets how many records are durable.</summary>
     public int Count => m_entries.Count;
+    /// <summary>Gets every durable record's encoded bytes, as they rest in the store.</summary>
+    public IReadOnlyList<byte[]> Encoded => m_entries;
 
     /// <summary>Opens a new activation: its writer is the only one the store accepts from now on.</summary>
     public IWorldCrossingLog Activate() => new Writer(
@@ -41,11 +43,10 @@ internal sealed class MemoryCrossingStore {
         store: this
     );
     /// <summary>Reads every durable entry back through the codec, as a restarted authority would.</summary>
-    public IReadOnlyList<WorldCrossingEntry> Read(WorldPlayerDefaults defaults) => [.. m_entries.Select(selector: bytes => {
+    public IReadOnlyList<WorldCrossingEntry> Read() => [.. m_entries.Select(selector: bytes => {
         Assert.True(
             condition: WorldAuthorityCheckpointCodec.TryDecodeCrossingEntry(
                 bytes: bytes,
-                defaults: defaults,
                 entry: out var entry,
                 reason: out var reason
             ),
@@ -160,6 +161,7 @@ internal sealed class CrossingWorld : IDisposable {
     public IWorldCrossingLog SourceWriter { get; }
 
     public void CheckpointDestination() => DestinationImage = Image(host: Host, row: Destination);
+    public void CheckpointSource() => SourceImage = Image(host: Host, row: Source);
 
     /// <summary>The traveler's stable identity: seat 0 of the source as it was first minted.</summary>
     public WorldEntityAddress Traveler { get; private set; }
@@ -201,14 +203,19 @@ internal sealed class CrossingWorld : IDisposable {
             engines: [],
             screens: definition.Screens
         );
-        var profilesDirectory = Directory.CreateTempSubdirectory(prefix: $"puck-crossing-durability-{name}-").FullName;
+        // The restored row composes a host whose background work may still hold a file as the row is disposed, so the
+        // scratch delete is best-effort.
+        var scratch = new TemporaryDirectory(
+            bestEffortDelete: true,
+            prefix: $"puck-crossing-durability-{name}-"
+        );
 
         var (server, _) = WorldServer.FromCheckpoint(
             checkpoint: checkpoint,
             instanceIdentity: name,
             machines: machines,
             profiles: new WorldOwnedWorlds(
-                directory: profilesDirectory,
+                directory: scratch.RootPath,
                 machineId: Guid.NewGuid(),
                 template: definition
             )
@@ -217,8 +224,8 @@ internal sealed class CrossingWorld : IDisposable {
         return HostRow.Wrap(
             machines: machines,
             name: name,
-            server: server,
-            stateDirectory: profilesDirectory
+            scratch: scratch,
+            server: server
         );
     }
 
@@ -372,7 +379,7 @@ internal sealed class CrossingWorld : IDisposable {
             slice: checkpoint!.HostRow
         );
         Host.RecoverCrossings(
-            entries: DestinationLog.Read(defaults: destination.Server.Definition.PlayerDefaults),
+            entries: DestinationLog.Read(),
             row: destination.Instance
         );
         Destination = destination;
@@ -448,13 +455,13 @@ internal sealed class CrossingWorld : IDisposable {
         host.RecoverCrossings(
             entries: (destinationLogLost
                 ? []
-                : DestinationLog.Read(defaults: destination.Server.Definition.PlayerDefaults)),
+                : DestinationLog.Read()),
             row: destination.Instance
         );
         host.RecoverCrossings(
             entries: (sourceLogLost
                 ? []
-                : SourceLog.Read(defaults: source.Server.Definition.PlayerDefaults)),
+                : SourceLog.Read()),
             row: source.Instance
         );
 

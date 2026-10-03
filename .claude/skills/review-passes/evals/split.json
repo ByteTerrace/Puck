@@ -1,7 +1,7 @@
 {
   "seed": 4092083762,
   "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
-  "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 6 or 7 of the 12 cases, on case counts only, before any case had been run. A split with an empty train side cannot drive a hill-climb, so the first suite is split by the rule; new cases go to test by hand until it holds about 10. Cases moved to train by hand after exposing a gap: r15-hard-pass-adds-a-compat-alias, r16-hard-pass-changed-nothing; replaced in test by a fresh harder case.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (2 draws in all) until train held 6 or 7 of the 12 cases, on case counts only, before any case had been run. A split with an empty train side cannot drive a hill-climb, so the first suite is split by the rule; new cases go to test by hand until it holds about 10. Cases moved to train by hand after exposing a gap: r15-hard-pass-adds-a-compat-alias, r16-hard-pass-changed-nothing; replaced in test by a fresh harder case. Entries added to evals.json by other sessions are converted to cases and assigned to test by hand.",
   "train": [
     "r01-brief-for-a-codex-pass",
     "r02-landing-a-codex-pass",
@@ -21,6 +21,10 @@
     "r12-nonblocking-finding-after-round-two",
     "r13-hard-doc-only-round-one",
     "r14-hard-author-branch-diverged",
-    "r17-hard-verifier-rejects-a-fix"
+    "r17-hard-verifier-rejects-a-fix",
+    "r18-scope-two-dot-log-versus-diff",
+    "r19-pass-claims-from-a-broken-sandbox",
+    "r20-pass-ends-on-a-question",
+    "r21-write-pass-while-a-run-builds"
   ]
 }

@@ -9,10 +9,11 @@ public sealed partial class WorldServer {
     public WorldPersistence Persistence => m_persistence;
 
     /// <inheritdoc cref="WorldPersistence.FromCheckpoint"/>
-    public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null) =>
+    public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null) =>
         WorldPersistence.FromCheckpoint(
             adjacencies: adjacencies,
             checkpoint: checkpoint,
+            documentDirectory: documentDirectory,
             instanceIdentity: instanceIdentity,
             machines: machines,
             profiles: profiles

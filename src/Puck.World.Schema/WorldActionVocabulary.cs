@@ -135,8 +135,9 @@ public static class WorldEffect {
     /// <summary>Saves the world through the host's save tap.</summary>
     public sealed record Save : ActionEffect;
     /// <summary>Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's
-    /// reserved <see cref="WorldIdentityFactLane"/> row and the identity's own persisted facts row, together. Exactly
-    /// one of <paramref name="Value"/> and <paramref name="Expression"/> is authored; a body driving under no owned
+    /// reserved <see cref="WorldIdentityFactLane"/> row and the identity's facts row, together. An owned identity's row
+    /// is persisted; a visitor's is its travelling row, which its own authority adopts when it comes home. Exactly
+    /// one of <paramref name="Value"/> and <paramref name="Expression"/> is authored; a body driving under no
     /// identity refuses the write rather than minting one.</summary>
     /// <param name="Key">The body — an index, a <c>$cell:</c> indirection, or a bound key.</param>
     /// <param name="Fact">The fact key on the identity's row.</param>

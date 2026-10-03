@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -287,7 +288,11 @@ public sealed class ShaderBuildTargetsLawTests {
     }
 
     private sealed class Fixture : IDisposable {
-        public string Root { get; } = CliScratchDirectories.CreateProject(prefix: "puck-shader-targets-");
+        private readonly TemporaryDirectory m_directory = new(prefix: "puck-shader-targets-");
+
+        public Fixture() => CliScratchDirectories.PinSdk(directory: Root);
+
+        public string Root => m_directory.RootPath;
 
         public string PathOf(string path) => Path.Combine(path1: Root, path2: path);
         public void Write(string path, string text) {
@@ -314,6 +319,6 @@ public sealed class ShaderBuildTargetsLawTests {
             workingDirectory: Root
         );
         public void RequireSuccess(CliProcessResult run) => Assert.True(condition: (run.ExitCode == 0), userMessage: $"{run.Stdout}\n{run.Stderr}");
-        public void Dispose() => CliScratchDirectories.TryDelete(path: Root);
+        public void Dispose() => m_directory.Dispose();
     }
 }

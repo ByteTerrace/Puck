@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Validation;
 using Xunit;
@@ -41,60 +42,46 @@ public class EditorDiagnosticsLawTests {
 
     [Fact]
     public async Task AWorldTheEngineRefusesIsRefusedInTheEditorByTheSameCodeTextAndLine() {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-editor-law-{Guid.NewGuid():N}"
+        using var directory = new TemporaryDirectory(prefix: "puck-editor-law-");
+
+        var path = directory.PathOf(name: "refused.puck").Replace(
+            newChar: '/',
+            oldChar: '\\'
         );
 
-        _ = Directory.CreateDirectory(path: directory);
-        try {
-            var path = Path.Combine(
-                path1: directory,
-                path2: "refused.puck"
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
+        await File.WriteAllTextAsync(
+            cancellationToken: TestContext.Current.CancellationToken,
+            contents: Refused,
+            path: path
+        );
 
-            await File.WriteAllTextAsync(
-                cancellationToken: TestContext.Current.CancellationToken,
-                contents: Refused,
-                path: path
-            );
+        var saved = Reported(
+            source: Refused,
+            sourcePath: path
+        );
+        var refusal = Assert.Single(collection: saved);
 
-            var saved = Reported(
-                source: Refused,
-                sourcePath: path
-            );
-            var refusal = Assert.Single(collection: saved);
-
-            Assert.Equal(
-                actual: refusal.Code,
-                expected: PuckDiagnosticCodes.SemanticValidation
-            );
-            Assert.Equal(
-                actual: refusal.Line,
-                expected: 10
-            );
-            Assert.Equal(
-                saved,
-                await LanguageServerClient.PublishedAsync(
-                    text: Refused,
-                    uri: new Uri(uriString: path).AbsoluteUri
-                )
-            );
-            Assert.Equal(
-                saved,
-                await LanguageServerClient.PublishedAsync(
-                    text: Refused,
-                    uri: "untitled:refused"
-                )
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: refusal.Code,
+            expected: PuckDiagnosticCodes.SemanticValidation
+        );
+        Assert.Equal(
+            actual: refusal.Line,
+            expected: 10
+        );
+        Assert.Equal(
+            saved,
+            await LanguageServerClient.PublishedAsync(
+                text: Refused,
+                uri: new Uri(uriString: path).AbsoluteUri
+            )
+        );
+        Assert.Equal(
+            saved,
+            await LanguageServerClient.PublishedAsync(
+                text: Refused,
+                uri: "untitled:refused"
+            )
+        );
     }
 }

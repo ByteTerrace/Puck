@@ -8,6 +8,10 @@ using Xunit;
 namespace Puck.World.Tests;
 
 public sealed partial class NavigationLawTests {
+    // The navigation component alone: what a large shared domain costs to hash, apart from the component whose fold
+    // writes a checkpoint image (BodyContinuation).
+    private static readonly WorldStateHashComponent[] NavigationOnly = [WorldStateHashComponent.Navigation];
+
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
@@ -39,7 +43,9 @@ public sealed partial class NavigationLawTests {
                 ))
         );
         fixture.Step(); fixture.Step();
-        var expected = WorldStateHashComposition.HashAuthoritative(
+        var expected = WorldStateHashComposition.Compose(
+            order: NavigationOnly,
+            seed: 0UL,
             server: fixture.Server,
             tick: 2
         );
@@ -47,7 +53,9 @@ public sealed partial class NavigationLawTests {
         for (var iteration = 0; (iteration < 100); iteration++) {
             Assert.Equal(
                 expected,
-                WorldStateHashComposition.HashAuthoritative(
+                WorldStateHashComposition.Compose(
+                    order: NavigationOnly,
+                    seed: 0UL,
                     server: fixture.Server,
                     tick: 2
                 )
@@ -61,7 +69,9 @@ public sealed partial class NavigationLawTests {
             var start = Stopwatch.GetTimestamp();
 
             for (var iteration = 0; (iteration < 1000); iteration++) {
-                actual = WorldStateHashComposition.HashAuthoritative(
+                actual = WorldStateHashComposition.Compose(
+                    order: NavigationOnly,
+                    seed: 0UL,
                     server: fixture.Server,
                     tick: 2
                 );

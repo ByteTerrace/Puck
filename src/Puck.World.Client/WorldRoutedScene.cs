@@ -19,8 +19,10 @@ namespace Puck.World.Client;
 /// <see cref="WorldFramePresenter"/> resolved for it this frame at the presentation's quality, latched afresh every frame
 /// (<see cref="AddView"/>);</item>
 /// <item>each window onto the world attached through <see cref="WorldFramePresenter.AttachWindow"/>, whose view its
-/// holder sets (<see cref="WorldRoutedWindow.View"/>), after the seats.</item>
+/// holder sets (<see cref="WorldRoutedWindow.View"/>), after the seats;</item>
+/// <item>each camera of the world a screen shows, which <see cref="Film"/> adds after the windows.</item>
 /// </list>
+/// The world's text screens draw through its own font catalog (<see cref="GlyphAtlas"/>, <see cref="ScreenDecals"/>).
 /// </summary>
 public sealed class WorldRoutedScene : ISdfFrameDresser {
     private readonly WorldSessionSceneEmitter m_emitter;
@@ -31,6 +33,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     // last dressed frame rendered, kept for a frame with neither: a frame always carries a view.
     private readonly List<WorldRoutedWindow> m_latchedWindows = [];
     private readonly List<SdfViewSnapshot> m_dressedViews = [];
+    // The views the last dressed frame carries: the seats' and windows', then the cameras Film added.
+    private readonly List<SdfViewSnapshot> m_frameViews = [];
 
     private int m_latchedSeatCount;
 
@@ -70,6 +74,19 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     public int ViewCount => m_views.Count;
     /// <summary>Gets how many windows are attached to the scene.</summary>
     public int WindowCount => m_windows.Count;
+    /// <summary>Gets or sets what films the world's cameras into each dressed frame: handed the frame's views, the seats'
+    /// and windows' first, it adds a view of each camera of the world a screen shows, at an index the caller records.
+    /// <see langword="null"/>, the default, films none.</summary>
+    public Action<List<SdfViewSnapshot>>? Film { get; set; }
+    /// <inheritdoc/>
+    /// <remarks>The world's own font atlas (<see cref="WorldSessionSceneEmitter.GlyphAtlas"/>).</remarks>
+    public SdfGlyphAtlas? GlyphAtlas => m_emitter.GlyphAtlas;
+    /// <inheritdoc/>
+    /// <remarks>The world's text screens' (<see cref="WorldSessionSceneEmitter.ScreenDecals"/>).</remarks>
+    public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>>? ScreenDecals => m_emitter.ScreenDecals;
+    /// <summary>Gets why the world's font catalog does not resolve, which leaves its text screens blank, or
+    /// <see langword="null"/> (<see cref="WorldSessionSceneEmitter.TextFault"/>).</summary>
+    public string? TextFault => m_emitter.TextFault;
 
     /// <summary>Clears the views the presenter latched, before it latches this frame's.</summary>
     public void BeginViews() => m_views.Clear();
@@ -120,16 +137,20 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
             m_dressedViews.AddRange(collection: frame.Views);
         }
 
+        m_frameViews.Clear();
+        m_frameViews.AddRange(collection: m_dressedViews);
+        Film?.Invoke(obj: m_frameViews);
+
         if (m_hostFrame() is not { } host) {
             return frame with {
-                Views = m_dressedViews,
+                Views = m_frameViews,
             };
         }
 
         return frame with {
             EnableCadenceGate = host.EnableCadenceGate,
             Time = host.Time,
-            Views = m_dressedViews,
+            Views = m_frameViews,
         };
     }
     /// <summary>Finds the camera the first seat presented in the world renders with this frame, as the presenter latched
@@ -158,8 +179,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
     /// <param name="camera">The camera, when this returns <see langword="true"/>.</param>
     /// <returns><see langword="true"/> when the last dressed frame carries the view.</returns>
     public bool TryCamera(int view, out CameraSnapshot camera) {
-        if (((uint)view) < ((uint)m_dressedViews.Count)) {
-            camera = m_dressedViews[view].Camera;
+        if (((uint)view) < ((uint)m_frameViews.Count)) {
+            camera = m_frameViews[view].Camera;
 
             return true;
         }

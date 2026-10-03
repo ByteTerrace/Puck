@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.SdfVm;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -234,35 +235,31 @@ public sealed class InterfaceEchoCanaryFixtureTests {
             reason: "DXC is required to compile the echo passes."
         );
 
-        var cache = Directory.CreateTempSubdirectory(prefix: "puck-interface-echo-");
+        using var cache = new TemporaryDirectory(prefix: "puck-interface-echo-");
 
-        try {
-            var loader = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache.FullName));
+        var loader = new ShaderPipelineLoader(compiler: new ShaderCompiler(cacheDirectory: cache.RootPath));
 
-            foreach (var name in ((string[])[echo, $"{echo}-perturbed"])) {
-                var result = loader.Load(
-                    cancellationToken: TestContext.Current.CancellationToken,
-                    name: name,
-                    path: FixturePath(fileName: $"{name}.graph.json")
-                );
+        foreach (var name in ((string[])[echo, $"{echo}-perturbed"])) {
+            var result = loader.Load(
+                cancellationToken: TestContext.Current.CancellationToken,
+                name: name,
+                path: FixturePath(fileName: $"{name}.graph.json")
+            );
 
-                Assert.True(
-                    condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
-                    userMessage: result.Message
-                );
+            Assert.True(
+                condition: (result.Status == ShaderPipelineLoadStatus.Compiled),
+                userMessage: result.Message
+            );
 
-                var pass = Assert.Single(collection: result.Pipeline!.Plan.Passes);
-                var shader = result.Pipeline.Shaders[pass.Name];
+            var pass = Assert.Single(collection: result.Pipeline!.Plan.Passes);
+            var shader = result.Pipeline.Shaders[pass.Name];
 
-                Assert.Null(@object: pass.Parameters.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: shader.SpirvByStage[ShaderStage.Compute].Span)));
-                if (OperatingSystem.IsWindows()) {
-                    using var dxil = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
+            Assert.Null(@object: pass.Parameters.Layout.Mismatch(reflected: SpirvInterfaceReader.Read(module: shader.SpirvByStage[ShaderStage.Compute].Span)));
+            if (OperatingSystem.IsWindows()) {
+                using var dxil = DxilInterfaceReader.Load(toolchain: new ShaderToolchain());
 
-                    Assert.Null(@object: pass.Parameters.Layout.Mismatch(reflected: dxil.Read(container: shader.DxilByStage[ShaderStage.Compute].Span)));
-                }
+                Assert.Null(@object: pass.Parameters.Layout.Mismatch(reflected: dxil.Read(container: shader.DxilByStage[ShaderStage.Compute].Span)));
             }
-        } finally {
-            cache.Delete(recursive: true);
         }
     }
 }

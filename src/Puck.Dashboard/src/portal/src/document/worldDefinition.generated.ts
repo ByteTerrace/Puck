@@ -2278,11 +2278,11 @@ export type StateCellClock = {
   /**
    * A StateDynamics follower's position at EpochTick, as raw FixedQ4816 bits, independent of the carrying row's stored-value kind.
    */
-  y0?: number;
+  y0?: string;
   /**
    * A StateDynamics follower's velocity at EpochTick, per second, as raw FixedQ4816 bits.
    */
-  v0?: number;
+  v0?: string;
   /**
    * Elapsed ticks a StateCycle has already accumulated toward its next step at EpochTick; must be non-negative and less than the cycle's own ticksPerStep.
    */
@@ -4405,6 +4405,29 @@ export type WorldClock = {
    * A state clock's Fixed or Int row. Refused beside PeriodSeconds.
    */
   state?: string | null;
+  /**
+   * An anchored clock's anchor: what a projection carries for a state clock it discloses, in place of the row. Refused in an authored document. An anchored clock carrying none reads no phase, as the state clock it stands for reads none while its row holds no number.
+   */
+  anchor?: WorldClockAnchor | null;
+};
+
+export type WorldClockAnchor = {
+  /**
+   * The engine tick the anchor stands at.
+   */
+  tick: number;
+  /**
+   * The phase at Tick, a whole turn being 2^64.
+   */
+  phase: number;
+  /**
+   * The phase one authoritative tick adds, wrapping; zero for a clock held still.
+   */
+  rate?: number;
+  /**
+   * The engine ticks one authoritative tick spans; zero exactly when Rate is.
+   */
+  step?: number;
 };
 
 export type WorldCollider = WorldColliderSphere | WorldColliderCapsule | WorldColliderBox | WorldColliderFromCreation | null;
@@ -5093,7 +5116,7 @@ export type WorldEffectScaleVerticalVelocity = {
 };
 
 /**
- * Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's reserved WorldIdentityFactLane row and the identity's own persisted facts row, together. Exactly one of Value and Expression is authored; a body driving under no owned identity refuses the write rather than minting one.
+ * Writes one fact on the identity a world-addressed body drives under: the body's cell in the world's reserved WorldIdentityFactLane row and the identity's facts row, together. An owned identity's row is persisted; a visitor's is its travelling row, which its own authority adopts when it comes home. Exactly one of Value and Expression is authored; a body driving under no identity refuses the write rather than minting one.
  */
 export type WorldEffectSetIdentityFact = {
   $type?: "setIdentityFact";

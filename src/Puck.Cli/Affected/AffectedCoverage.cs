@@ -17,6 +17,8 @@ namespace Puck.Cli.Affected;
 internal static partial class AffectedCoverage {
     /// <summary>The coverage index's schema id.</summary>
     public const string Schema = "puck.canary.coverage.v1";
+    /// <summary>The file in a recording's run directory that holds the inner canary run's exit code and streams.</summary>
+    public const string CanaryTranscriptName = "canary.transcript.txt";
 
     [GeneratedRegex(pattern: @"^canary (?<id>\S+) .*transcripts (?<directory>.+)$")]
     private static partial Regex TranscriptLine();
@@ -169,10 +171,14 @@ internal static partial class AffectedCoverage {
     /// writes <see cref="AffectedCommand.CoveragePath"/>.</summary>
     /// <param name="repositoryRoot">The repository root.</param>
     /// <param name="cli">This CLI's entry assembly, which runs the canaries as a child process.</param>
-    /// <param name="scratch">A directory the recording World is built into.</param>
+    /// <param name="scratch">The recording's run directory: the recording World is built into it, and the inner canary
+    /// run's transcript is written to <see cref="CanaryTranscriptName"/> in it.</param>
+    /// <param name="canaryExit">The inner canary run's exit code, or <see cref="CliExit.Refused"/> when it never ran.</param>
     /// <param name="error">The refusal, or empty.</param>
     /// <returns><see langword="true"/> when the index was written.</returns>
-    public static bool TryRecord(string repositoryRoot, string cli, string scratch, out string error) {
+    public static bool TryRecord(string repositoryRoot, string cli, string scratch, out int canaryExit, out string error) {
+        canaryExit = CliExit.Refused;
+
         var build = Path.Combine(path1: scratch, path2: "world");
         var compile = CliProcess.RunCaptured(
             arguments: ["build", "--disable-build-servers", "src/Puck.World/Puck.World.csproj", "-c", "Release", "--nologo", "-v", "q", "-p:NuGetAudit=false", "-p:PuckRecordMethods=true", "--output", build],
@@ -191,11 +197,17 @@ internal static partial class AffectedCoverage {
         Console.Error.WriteLine(value: "affected: running the full canary set on the recording World.");
 
         var run = CliProcess.RunCaptured(
-            arguments: [cli, "canary", "--merge", "--world-artifact", Path.Combine(path1: build, path2: WorldArtifactBuild.ArtifactName)],
+            arguments: [cli, "canary", "--merge", "--keep-transcripts", "--world-artifact", Path.Combine(path1: build, path2: WorldArtifactBuild.ArtifactName)],
             fileName: "dotnet",
             input: string.Empty,
             timeout: TimeSpan.FromHours(hours: 3),
             workingDirectory: repositoryRoot
+        );
+
+        canaryExit = run.ExitCode;
+        KeepCanaryTranscript(
+            directory: scratch,
+            run: run
         );
 
         if (run.ExitCode != 0) {
@@ -203,6 +215,7 @@ internal static partial class AffectedCoverage {
         }
 
         var runs = new SortedDictionary<string, SortedSet<string>>(comparer: StringComparer.Ordinal);
+        var legs = new List<string>();
         using var map = new SourceMap(buildDirectory: build, repositoryRoot: repositoryRoot);
 
         foreach (var line in run.Stdout.Split(separator: '\n')) {
@@ -211,6 +224,8 @@ internal static partial class AffectedCoverage {
             if (!match.Success || !Directory.Exists(path: match.Groups["directory"].Value)) {
                 continue;
             }
+
+            legs.Add(item: match.Groups["directory"].Value);
 
             var id = match.Groups["id"].Value;
 
@@ -232,6 +247,15 @@ internal static partial class AffectedCoverage {
                     }
                 }
             }
+        }
+
+        // The canary kept every leg for this reader; once read, they are evidence only when the canary run failed.
+        foreach (var leg in legs) {
+            RunDirectory.Conclude(
+                passed: (canaryExit == CliExit.Success),
+                path: leg,
+                report: Console.Error
+            );
         }
 
         if (runs.Count == 0) {
@@ -281,5 +305,25 @@ internal static partial class AffectedCoverage {
         error = string.Empty;
 
         return true;
+    }
+
+    /// <summary>Writes the inner canary run's exit code, standard output and standard error to
+    /// <see cref="CanaryTranscriptName"/> in <paramref name="directory"/>.</summary>
+    /// <param name="directory">The recording's run directory.</param>
+    /// <param name="run">The finished canary run.</param>
+    /// <returns>The transcript's path.</returns>
+    internal static string KeepCanaryTranscript(string directory, CliProcessResult run) {
+        var path = Path.Combine(
+            path1: directory,
+            path2: CanaryTranscriptName
+        );
+
+        File.WriteAllText(
+            contents: $"exit {run.ExitCode}{(run.TimedOut ? " (timed out)" : string.Empty)}\n--- stdout\n{run.Stdout}\n--- stderr\n{run.Stderr}\n",
+            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            path: path
+        );
+
+        return path;
     }
 }

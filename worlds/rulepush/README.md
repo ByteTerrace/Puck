@@ -19,8 +19,9 @@ pushing them into a new line rewrites what the objects do.
 - [room.puck](room.puck) is the physical room every world stands in: a floor,
   the arrival spot, the walking controls and a camera.
 - [level.puck](level.puck) turns a map into a level and shows its board. A
-  win writes an identity fact named for the level onto the visitor's own
-  record.
+  win writes an identity fact named for the level onto the record the visitor
+  carries, and the overworld adopts it onto the visitor's own identity when the
+  visitor walks home.
 - [board.graph.json](board.graph.json) and [board.hlsl](board.hlsl) are the
   board pass. The rules keep a `tiles` lattice: each cell holds the look of the
   last token standing on it, `0` for an empty cell, the noun plus one for an

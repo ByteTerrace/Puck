@@ -3,6 +3,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Puck.Machines.Post;
+using Puck.Testing;
 
 namespace Puck.Machines.Tests;
 
@@ -139,10 +140,10 @@ public sealed class CorpusManifestTests {
 
     /// <summary>Owns a temporary manifest and cache tree for one corpus test.</summary>
     private sealed class Fixture : IDisposable {
-        private readonly string m_directory = Path.Combine(path1: Path.GetTempPath(), path2: "puck-corpus-tests", path3: Guid.NewGuid().ToString(format: "N"));
+        private readonly TemporaryDirectory m_directory = new(prefix: "puck-corpus-tests-");
 
         /// <summary>Gets the isolated cache root.</summary>
-        public string Cache => Path.Combine(path1: m_directory, path2: "corpora");
+        public string Cache => m_directory.PathOf(name: "corpora");
 
         /// <summary>Writes and loads a manifest with individually hashed files.</summary>
         /// <param name="files">The relative paths and expected payload bytes.</param>
@@ -171,8 +172,7 @@ public sealed class CorpusManifestTests {
         }
 
         private CorpusManifest Write<T>(T value) {
-            _ = Directory.CreateDirectory(path: m_directory);
-            var path = Path.Combine(path1: m_directory, path2: "manifest.json");
+            var path = m_directory.PathOf(name: "manifest.json");
 
             File.WriteAllText(path: path, contents: JsonSerializer.Serialize(value: value));
 
@@ -180,11 +180,7 @@ public sealed class CorpusManifestTests {
         }
 
         /// <inheritdoc/>
-        public void Dispose() {
-            if (Directory.Exists(path: m_directory)) {
-                Directory.Delete(path: m_directory, recursive: true);
-            }
-        }
+        public void Dispose() => m_directory.Dispose();
     }
     /// <summary>Serves declared corpus payloads without network access and counts fetch requests.</summary>
     private sealed class MemoryHandler : HttpMessageHandler {

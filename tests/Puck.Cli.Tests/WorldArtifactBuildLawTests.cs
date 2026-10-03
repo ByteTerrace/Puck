@@ -52,7 +52,7 @@ public sealed class WorldArtifactBuildLawTests {
                 name: "docs/guide.md",
                 text: "# Guide\n"
             );
-            Git("init", "--quiet", "--initial-branch=main");
+            GitScratchCheckout.Initialize(repository: m_directory.RootPath);
             Git("add", "--all");
             Commit(message: "initial");
         }
@@ -240,9 +240,9 @@ public sealed class WorldArtifactBuildLawTests {
             Assert.False(condition: Directory.Exists(path: namedLogDirectory));
             Assert.Equal(expected: 1, actual: builder.Builds);
         } finally {
-            CliScratchDirectories.TryDelete(path: builtLogDirectory);
-            CliScratchDirectories.TryDelete(path: reusedLogDirectory);
-            CliScratchDirectories.TryDelete(path: namedLogDirectory);
+            _ = RunDirectory.TryDelete(path: builtLogDirectory);
+            _ = RunDirectory.TryDelete(path: reusedLogDirectory);
+            _ = RunDirectory.TryDelete(path: namedLogDirectory);
         }
     }
     [Fact]

@@ -4,9 +4,11 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// The shared state directory tears a law down in one fixed order: it disposes what the law gave it, waits for any
-/// handle that disposal left open, deletes, and fails the law naming a file something wrote after the owners were
-/// disposed. Each claim has a control that shows the fixture does not fail a clean teardown.
+/// The shared state directory tears a law down in one fixed order: its disposal shuts down what the law gave it, within
+/// a bound, and a passing verdict then waits for any handle that shutdown left open, deletes, and fails the law naming a
+/// file something wrote after the owners returned. Each law drives the verdict itself through
+/// <see cref="TemporaryDirectory.Conclude"/>, after <see cref="TemporaryDirectory.Dispose"/>, so it observes the delete
+/// inside its own body. Each claim has a control that shows the fixture does not fail a clean teardown.
 /// </summary>
 public sealed class TemporaryDirectoryLawTests {
     private const string Late = "late.bin";
@@ -14,23 +16,26 @@ public sealed class TemporaryDirectoryLawTests {
     // Long enough that a loaded machine starts the teardown worker and reaches its first step well inside it.
     private static readonly TimeSpan TeardownBound = TimeSpan.FromSeconds(value: 3);
 
-    // An owner whose disposal returns at once and leaves a worker running: the worker holds a file open and releases it
-    // after a while, writing to it meanwhile when asked to, the way a background build that was cancelled but not joined
-    // does.
-    private sealed class Straggler(FileStream held, bool writes) : IDisposable {
-        public void Dispose() => _ = Task.Run(function: async () => {
-            var release = DateTime.UtcNow.AddMilliseconds(value: (writes ? 1200 : 300));
-
-            while (DateTime.UtcNow < release) {
-                await Task.Delay(delay: TimeSpan.FromMilliseconds(value: 25));
-                if (writes) {
+    // An owner whose disposal returns at once and leaves a worker running, the way a background build that was cancelled
+    // but not joined does: the worker holds a file open and releases it after a while or, given a signal, writes to it
+    // once the signal is set and then releases it. The signalled write lands after the owners returned and before the
+    // handle closes, so the delete, which cannot succeed while the handle is open, always sees it.
+    private sealed class Straggler(FileStream held, ManualResetEventSlim? write = null) : IDisposable {
+        public void Dispose() => _ = Task.Factory.StartNew(
+            action: () => {
+                if (write is null) {
+                    Thread.Sleep(millisecondsTimeout: 300);
+                } else if (write.Wait(timeout: TestLiveness.Bound)) {
                     held.Write(buffer: new byte[64]);
                     held.Flush();
                 }
-            }
 
-            held.Dispose();
-        });
+                held.Dispose();
+            },
+            cancellationToken: CancellationToken.None,
+            creationOptions: TaskCreationOptions.LongRunning,
+            scheduler: TaskScheduler.Default
+        );
     }
     // An owner whose disposal is asynchronous: it finishes after a delay, and only then has it released its marker.
     private sealed class AsynchronousOwner(string marker) : IAsyncDisposable, IDisposable {
@@ -93,6 +98,10 @@ public sealed class TemporaryDirectoryLawTests {
             Assert.Contains(expectedSubstring: (nested ? nameof(TemporaryDirectory) : nameof(BlockingOwner)), actualString: failure.Message);
             Assert.True(condition: File.Exists(path: marker));
             Assert.Empty(collection: order);
+
+            // A passing verdict after a teardown that timed out deletes nothing either.
+            state.Conclude(passed: true);
+            Assert.True(condition: File.Exists(path: marker));
         } finally {
             owner.Release.Set();
             Assert.True(condition: owner.Returned.Wait(cancellationToken: TestContext.Current.CancellationToken, timeout: TestLiveness.Bound));
@@ -120,7 +129,10 @@ public sealed class TemporaryDirectoryLawTests {
         using var held = Hold(state: state);
         var expected = Assert.Throws<IOException>(testCode: () => Directory.Delete(path: state.RootPath, recursive: true));
         var teardown = Task.Factory.StartNew(
-            function: () => Record.Exception(testCode: state.Dispose),
+            function: () => Record.Exception(testCode: () => {
+                state.Dispose();
+                state.Conclude(passed: true);
+            }),
             cancellationToken: CancellationToken.None,
             creationOptions: TaskCreationOptions.LongRunning,
             scheduler: TaskScheduler.Default
@@ -150,6 +162,7 @@ public sealed class TemporaryDirectoryLawTests {
 
         _ = state.Own(owner: owner);
         state.Dispose();
+        state.Conclude(passed: true);
 
         Assert.Equal(actual: owner.Observed, expected: "finished:True");
         Assert.False(condition: owner.SynchronousDisposalCalled);
@@ -160,8 +173,9 @@ public sealed class TemporaryDirectoryLawTests {
         Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "an open handle blocks a delete only where the file system refuses it.");
         var state = new TemporaryDirectory(prefix: "puck-fixture-exclusive-");
 
-        _ = state.Own(owner: new Straggler(held: Hold(share: FileShare.None, state: state), writes: false));
+        _ = state.Own(owner: new Straggler(held: Hold(share: FileShare.None, state: state)));
         state.Dispose();
+        state.Conclude(passed: true);
 
         Assert.False(condition: Directory.Exists(path: state.RootPath));
     }
@@ -174,6 +188,7 @@ public sealed class TemporaryDirectoryLawTests {
         _ = state.Own(owner: new Recorder(marker: marker, name: "first", order: order));
         _ = state.Own(owner: new Recorder(marker: marker, name: "second", order: order));
         state.Dispose();
+        state.Conclude(passed: true);
 
         Assert.Equal(actual: order, expected: ["second:True", "first:True"]);
         Assert.False(condition: Directory.Exists(path: state.RootPath));
@@ -183,8 +198,9 @@ public sealed class TemporaryDirectoryLawTests {
         Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "an open handle blocks a delete only where the file system refuses it.");
         var state = new TemporaryDirectory(prefix: "puck-fixture-handle-");
 
-        _ = state.Own(owner: new Straggler(held: Hold(state: state), writes: false));
+        _ = state.Own(owner: new Straggler(held: Hold(state: state)));
         state.Dispose();
+        state.Conclude(passed: true);
 
         Assert.False(condition: Directory.Exists(path: state.RootPath));
     }
@@ -192,10 +208,13 @@ public sealed class TemporaryDirectoryLawTests {
     public void ADirectoryNamesTheFileAnOwnersWorkerWroteAfterItsDisposeReturned() {
         Assert.SkipUnless(condition: OperatingSystem.IsWindows(), reason: "an open handle blocks a delete only where the file system refuses it.");
         var state = new TemporaryDirectory(prefix: "puck-fixture-stray-");
+        using var write = new ManualResetEventSlim(initialState: false);
 
-        _ = state.Own(owner: new Straggler(held: Hold(state: state), writes: true));
+        _ = state.Own(owner: new Straggler(held: Hold(state: state), write: write));
+        state.Dispose();
+        write.Set();
 
-        var failure = Assert.Throws<InvalidOperationException>(testCode: state.Dispose);
+        var failure = Assert.Throws<InvalidOperationException>(testCode: () => state.Conclude(passed: true));
 
         Assert.Contains(expectedSubstring: Late, actualString: failure.Message);
         Assert.False(condition: Directory.Exists(path: state.RootPath));

@@ -31,8 +31,10 @@ public interface IVulkanInstanceApi {
     /// the Vulkan backend reports them like the Direct3D 12 info queue does. Best-effort: returns zero when the
     /// extension (or its entry point) is unavailable.</summary>
     /// <param name="instance">The command table of the instance the messenger reports for.</param>
+    /// <param name="userData">The <c>pUserData</c> the messenger hands its callback: a handle to the writer its messages
+    /// go to (<see cref="VulkanDebugOutput"/>), or zero for the process's standard error.</param>
     /// <returns>The native <c>VkDebugUtilsMessengerEXT</c> handle, or zero when one could not be created.</returns>
-    nint CreateDebugMessenger(VulkanInstanceCommands instance);
+    nint CreateDebugMessenger(VulkanInstanceCommands instance, nint userData);
     /// <summary>Destroys a debug-utils messenger created by <see cref="CreateDebugMessenger"/>. A no-op when either
     /// handle is zero.</summary>
     /// <param name="instance">The command table of the instance the messenger belongs to.</param>

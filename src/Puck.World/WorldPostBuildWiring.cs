@@ -305,11 +305,12 @@ public static class WorldPostBuildWiring {
             // SERVER's own echo confirms the rebuild actually applied (this tap fires from the tick boundary, after
             // every gate — authority, dirty-guard, validation, capacity, solids — has already passed), never eagerly
             // at submit time, when the rebuild might still be refused. world.reset never reaches here with a
-            // RebuildOrigin (it targets the base without moving it), so SourcePath is correctly left untouched.
+            // RebuildOrigin (it targets the base without moving it), so SourcePath is correctly left untouched, and
+            // only a file origin is a path the console can save to or re-read.
             if (
                 !echo.Rejected &&
                 (echo.Kind == WorldEditEchoKind.Rebuild) &&
-                (echo.RebuildOrigin is { } origin)
+                (echo.RebuildOrigin is WorldRebuildOrigin.File { Path: var origin })
             ) {
                 definitionSource.SourcePath = origin;
                 editorSeats.Reconcile(world: WorldInstanceHost.BootInstanceName, placements: server.Definition.Placements);

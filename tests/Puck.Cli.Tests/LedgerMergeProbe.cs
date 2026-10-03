@@ -1,3 +1,4 @@
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -12,44 +13,40 @@ internal static class LedgerMergeProbe {
     /// <param name="theirs">The other branch's text.</param>
     /// <returns>The number of conflicts git reports, and the merged text with its conflict markers.</returns>
     public static (int Conflicts, string Merged) Merge(string baseText, string ours, string theirs) {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-ledger-merge-");
+        using var directory = new TemporaryDirectory(prefix: "puck-ledger-merge-");
 
-        try {
-            File.WriteAllText(
-                contents: baseText,
-                path: Path.Combine(
-                    path1: directory.FullName,
-                    path2: "base.json"
-                )
-            );
-            File.WriteAllText(
-                contents: ours,
-                path: Path.Combine(
-                    path1: directory.FullName,
-                    path2: "ours.json"
-                )
-            );
-            File.WriteAllText(
-                contents: theirs,
-                path: Path.Combine(
-                    path1: directory.FullName,
-                    path2: "theirs.json"
-                )
-            );
+        File.WriteAllText(
+            contents: baseText,
+            path: Path.Combine(
+                path1: directory.RootPath,
+                path2: "base.json"
+            )
+        );
+        File.WriteAllText(
+            contents: ours,
+            path: Path.Combine(
+                path1: directory.RootPath,
+                path2: "ours.json"
+            )
+        );
+        File.WriteAllText(
+            contents: theirs,
+            path: Path.Combine(
+                path1: directory.RootPath,
+                path2: "theirs.json"
+            )
+        );
 
-            var result = CliGit.Run(
-                directory.FullName,
-                "merge-file", "-p", "ours.json", "base.json", "theirs.json"
-            );
+        var result = CliGit.Run(
+            directory.RootPath,
+            "merge-file", "-p", "ours.json", "base.json", "theirs.json"
+        );
 
-            Assert.True(
-                condition: (result.ExitCode >= 0),
-                userMessage: $"git merge-file failed: {result.Stderr}"
-            );
+        Assert.True(
+            condition: (result.ExitCode >= 0),
+            userMessage: $"git merge-file failed: {result.Stderr}"
+        );
 
-            return (result.ExitCode, result.Stdout);
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        return (result.ExitCode, result.Stdout);
     }
 }

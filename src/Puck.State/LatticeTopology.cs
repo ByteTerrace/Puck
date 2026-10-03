@@ -93,13 +93,20 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     public sealed record Grid(
         string Name, DocumentVector3 Origin, float CellSize,
         int Width, int Depth, TopologyWrap Wrap = TopologyWrap.None, float Band = 0f,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyDirection>? Directions = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyElementAlias>? ElementAliases = null
+        IReadOnlyList<TopologyDirection>? Directions = null,
+        IReadOnlyList<TopologyElementAlias>? ElementAliases = null
     ) : LatticeTopology(
         Name,
         Origin,
         CellSize
     ), IDiscreteLatticeTopology {
+        /// <summary>See <see cref="IDiscreteLatticeTopology.Directions"/>.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Directions);
+        /// <summary>See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: ElementAliases);
+
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Grid;
@@ -113,13 +120,20 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     /// <param name="ElementAliases">See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</param>
     public sealed record Ring(
         string Name, DocumentVector3 Origin, float CellSize, int Width,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyDirection>? Directions = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyElementAlias>? ElementAliases = null
+        IReadOnlyList<TopologyDirection>? Directions = null,
+        IReadOnlyList<TopologyElementAlias>? ElementAliases = null
     ) : LatticeTopology(
         Name,
         Origin,
         CellSize
     ), IDiscreteLatticeTopology {
+        /// <summary>See <see cref="IDiscreteLatticeTopology.Directions"/>.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Directions);
+        /// <summary>See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: ElementAliases);
+
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Ring;
@@ -133,13 +147,20 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     /// <param name="ElementAliases">See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</param>
     public sealed record Hex(
         string Name, DocumentVector3 Origin, float CellSize, int Radius,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyDirection>? Directions = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyElementAlias>? ElementAliases = null
+        IReadOnlyList<TopologyDirection>? Directions = null,
+        IReadOnlyList<TopologyElementAlias>? ElementAliases = null
     ) : LatticeTopology(
         Name,
         Origin,
         CellSize
     ), IDiscreteLatticeTopology {
+        /// <summary>See <see cref="IDiscreteLatticeTopology.Directions"/>.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Directions);
+        /// <summary>See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: ElementAliases);
+
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Hex;
@@ -159,13 +180,20 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
     public sealed record Box(
         string Name, DocumentVector3 Origin, float CellSize,
         int Width, int Depth, int Layers, float LayerHeight,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyDirection>? Directions = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TopologyElementAlias>? ElementAliases = null
+        IReadOnlyList<TopologyDirection>? Directions = null,
+        IReadOnlyList<TopologyElementAlias>? ElementAliases = null
     ) : LatticeTopology(
         Name,
         Origin,
         CellSize
     ), IDiscreteLatticeTopology {
+        /// <summary>See <see cref="IDiscreteLatticeTopology.Directions"/>.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<TopologyDirection>? Directions { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Directions);
+        /// <summary>See <see cref="IDiscreteLatticeTopology.ElementAliases"/>.</summary>
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<TopologyElementAlias>? ElementAliases { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: ElementAliases);
+
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Box;
@@ -208,6 +236,13 @@ public abstract record LatticeTopology(string Name, DocumentVector3 Origin, floa
         Origin,
         CellSize
     ) {
+        /// <summary>The cells, in ordinal order.</summary>
+        public IReadOnlyList<GraphCell> Cells { get => field; init => field = StateLists.Freeze(items: value)!; } = StateLists.Freeze(items: Cells)!;
+        /// <summary>The direction slots, each naming its opposite (possibly itself).</summary>
+        public IReadOnlyList<GraphDirection> Directions { get => field; init => field = StateLists.Freeze(items: value)!; } = StateLists.Freeze(items: Directions)!;
+        /// <summary>The edges.</summary>
+        public IReadOnlyList<GraphEdge> Edges { get => field; init => field = StateLists.Freeze(items: value)!; } = StateLists.Freeze(items: Edges)!;
+
         /// <inheritdoc/>
         [JsonIgnore]
         public override TopologyKind Kind => TopologyKind.Graph;

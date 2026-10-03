@@ -16,19 +16,27 @@ same change. The user's current instruction outranks it.
 
 ## The route
 
-`puck gate` and `puck laws prove` are the routes. Run both from your CLI copy
-(below).
+`puck gate` and `puck laws prove` are the routes. Run both from a CLI copy
+(below) outside the checkout.
 
-- **`puck gate --merge-base <integration branch>`** is the route for verifying a
-  lane. Run it on the lane's final head against the integration branch the brief
-  names, report its verdict, and read its `--help` for what it already covers;
-  do not repeat by hand a step it ran. Without `--gpu` it runs no canary or
-  parity, so with no grant run it without `--gpu` and list the plan's canary and
-  parity lines as GPU legs owed.
+- **`puck gate --merge-base origin/<integration-branch>`** is the route for
+  verifying a lane. Run it on the lane's final head against the integration
+  branch the brief names, report its verdict, and read its `--help` for what it
+  already covers; do not repeat by hand a step it ran. Without `--gpu` it runs
+  no canary or parity, so with no grant run it without `--gpu` and list the
+  plan's canary and parity lines as GPU legs owed.
 - **`puck laws prove`** is the route for proving red legs. Use it for every new
-  or changed law instead of the manual withholding below: it works in a scratch
-  worktree, never in your tree, and refuses a proof when a build fails, a
-  selected test is skipped or the two legs ran different tests.
+  or changed law, with `--fix <commit>` or with `--file-list` for an
+  uncommitted fix, instead of the manual withholding below: it withholds the
+  fix in a detached worktree of its own, never in your tree or a shared one,
+  and refuses a proof when a build fails, a selected test is skipped or the two
+  legs ran different tests.
+
+Run covered steps by hand only where a brief rules a verb out, for example a
+machine that must not build the solution. Complete checks the gate omits:
+`puck baselines <artifact> --check` for affected committed baselines, explicit
+`puck docs links <document>...` for changed documents outside its default set,
+and `puck docs citations` when required below, under the GPU rules.
 
 ## Run gates from your own CLI copy
 
@@ -59,7 +67,9 @@ same change. The user's current instruction outranks it.
   errors that point at it. Delete that `obj` `ref` directory and rebuild.
 - Do not edit the source tree while a canary, parity or test run is going:
   canaries rebuild from source, and tests read baselines, schemas and generated
-  tables from it.
+  tables from it. Apply the
+  [review launch restriction](../review-passes/SKILL.md#before-launching) when
+  scheduling a pass alongside a run.
 - Verify the operation itself: read its output and its exit status, since an
   exit code of 0 is not a verdict. After moving a tool or document, run its
   real consumer at the new location.
@@ -87,25 +97,28 @@ check form:
 Run the recording form only to apply a deliberate change: `puck lengths` after
 shrinking a recorded file, `puck format --file-list` over your own files,
 `puck formats` after bumping a format token, `puck canary-ceilings` after
-changing canary cost, a baseline whose movement the change explains. Review the rewritten file's diff
-and commit it in the same change. A ledger rewritten during verification hides
-the drift the check exists to report.
+changing canary cost, a baseline whose movement the change explains. Review
+the rewritten file's diff and commit it in the same change. A ledger rewritten
+during verification hides the drift the check exists to report.
 
-A recording verb that exits nonzero has not recorded, whatever file it wrote
-(`puck counters --record` exits 1 when a deterministic count differs between
-backends). Do not commit what it wrote. Read its exit status and its
-differences, fix the cause, and record again only when the verb exits 0.
+A recording verb that exits nonzero has not recorded, whatever file it wrote.
+`puck counters --record` writes no file and exits 1 when the backends disagree
+on a deterministic count or pass state, when the recorded ceilings fail their
+own check, or when it cannot write them; the existing ledger stays as it was.
+Read the refusal, find and fix its cause, and record again only once the exit
+status is 0.
 
 ## Choose what to run
 
-- Use the lane's real base: `puck affected --since $(git merge-base HEAD
-  origin/<integration-branch>)`. A branch name whose tip moved after the lane
-  started folds other landings into the selection. The integration branch is
-  the one the lead's brief names.
-- `puck affected` without `--run` prints the plan. `--run` also runs every GPU
-  canary and parity line it selected, so run it only when you hold the GPU
-  grant; otherwise run the plan's suites, `test` worlds and catalog check, and
-  list its `canary` and `parity` lines as GPU legs owed.
+- Use the lane's real base: `puck affected --merge-base
+  origin/<integration-branch>` reads the change against the merge base of HEAD
+  and that branch, so landings on it after the lane started are not counted.
+  `--since <branch>` compares against the branch's moving tip and folds those
+  landings in. The integration branch is the one the lead's brief names.
+- `puck affected` without `--run` prints the plan. `--run` builds and runs the
+  chosen suites, `test` worlds and catalog check; `--gpu` adds the chosen
+  canaries and parity, so add it only under a GPU grant and otherwise list the
+  plan's `canary` and `parity` lines as GPU legs owed.
 - While iterating, run only the test classes your edits add or touch and the
   canaries that exercise the change. Run the affected selection once at the
   lane's end. Run full sets (`puck canary --merge`, every suite) only when the
@@ -115,31 +128,53 @@ differences, fix the cause, and record again only when the verb exits 0.
 
 ## Prove each law's red leg
 
+Prefer type enforcement over a source-scan law when the compiler can enforce
+the contract. Make a required dependency a required, non-null parameter; let
+the compiler check every call site. Do not substitute a regex over constructor
+calls: it misses target-typed `new(...)` and gives false assurance.
+
 A law or canary that passes proves nothing until it has been seen to fail when
 the behavior it pins is wrong. A law that passes with the fix withheld pins
 nothing, however plausible it reads.
 
-1. Withhold the fix and keep the law: `git stash push -- <fix files>`, or a
-   scratch worktree at the base with only the law applied. A mutation made by
-   text substitution can differ from the fix you meant to withhold, so it is not
-   the withheld fix until a diff against the fixed file shows exactly that change
-   and nothing else. Prefer an exact edit, or let `puck laws prove --file-list`
-   or `--fix` withhold it, and record how in the commit message.
+Before `puck laws prove`, inspect the change its selected paths will withhold.
+Afterwards, check its reported failures against the intended assertion and
+message. It rejects failed builds, skipped tests and inconsistent runs, but
+does not judge whether a failure is the one the law was written for. When a
+brief requires a manual proof, use these steps:
+
+1. Withhold the fix and keep the law, in a scratch worktree of your own, never
+   by reverting or stashing files in a shared tree.
+   In a probe or script, point Git at the scratch tree with `git -C <tree>`
+   rather than a directory change. Where a script must change directory, make
+   a failed change stop it (`cd <tree> || exit 1`, or `set -e`): after
+   `cd <tree>; git ...`, a `cd` line followed by Git lines, or
+   `cd <tree> && git a; git b`, a failed `cd` leaves the later Git commands
+   running against the real repository.
+   A mutation made by text substitution can differ from the fix you meant to
+   withhold, so it is not the withheld fix until a diff against the fixed file
+   shows exactly that change and nothing else. Prefer an exact edit, or let
+   `puck laws prove --file-list` or `--fix` withhold it, and record how in the
+   commit message.
 2. Build the withheld tree until the build exits 0, repairing even an unrelated
-   compile error in it, and only then run the law: a run after a failed build
-   measures the fixed binaries, so a pass there says nothing about the law. The
-   law must fail at the assertion it was written for, with the intended message.
-   A failure anywhere else (a compile error, a setup throw, a different
-   assertion) is not a red leg. Read the Total, Failed and Skipped counts of
-   every leg, not the exit code: the outcome must be **Failed**, and a
-   **Skipped** or unselected test executed nothing, so it is not a red leg
-   whatever the exit code says. Run the law where it executes, or report the
-   leg as unproved.
-3. Restore the fix, then touch the restored files before rebuilding and running
+   compile error in it: a failed build leaves the previous binaries, and a run
+   against them tests the fix.
+3. Run the law where it executes, or report the leg as unproved. It must fail
+   at the assertion it was written for, with the intended message. A failure
+   anywhere else (a compile error, a setup throw, a different assertion) is
+   not a red leg. Read the Total, Failed and Skipped counts of every leg, not
+   the exit code: the outcome must be **Failed**, and a **Skipped** or
+   unselected test executed nothing, so it is not a red leg.
+4. Confirm the withheld tree differs from the fixed one exactly where you
+   meant it to (diff it). A mutation made by text substitution, or by a
+   mutation tool, can produce a different mutant, and a red leg against it
+   proves nothing about the fix. Make the change as an exact edit, and record
+   how it was withheld in the commit message.
+5. Restore the fix, then touch the restored files before rebuilding and running
    the law again. It must pass. Restoring an older timestamp can let MSBuild
    keep the mutated assembly, so a run without this rebuild can test the
    mutation instead of the restored fix.
-4. Record in the commit message which laws were proved red and how.
+6. Record in the commit message which laws were proved red and how.
 
 In xUnit v3, `Assert.Throws`, `Assert.ThrowsAny`, `Assert.ThrowsAsync`,
 `Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception
@@ -156,13 +191,15 @@ owed when your change relies on it.
 ## GPU legs
 
 GPU work is `puck parity`, `puck counters`, any canary requiring `gpu`
-(including `--merge`), a `Puck.World` run, and any test that opens a device.
-This includes a full `Puck.World.Tests` run: its device-law classes open the
-GPU. `puck docs citations` builds `Puck.World` and boots it headless and
-windowed to read its help vocabulary; it is a World run and waits for the GPU
-like any other GPU leg. Given `--enumeration <file>`, a saved `help` listing, it
-boots nothing and may run beside a GPU leg; `puck docs links` only reads files
-and runs at any time.
+(including `--merge`), a windowed or offscreen `Puck.World` run, any verb that
+boots one in those modes, and any test that opens a device. This includes a
+full `Puck.World.Tests` run: its device-law classes open the GPU. `puck docs
+citations` builds `Puck.World` and boots it headless and windowed to read its
+help vocabulary, so it waits for the GPU like any other GPU leg; given
+`--enumeration <file>`, a saved `help` listing, it boots nothing and may run
+beside a GPU leg. `puck docs links` only reads files and runs at any time. A
+World run with effective `host.presentation: none` uses no GPU; the
+`puck-world` skill owns the presentation modes and deployment overrides.
 
 - A GPU runs one GPU leg at a time. Legs compete for the device, the ports and
   the frame budget, and a contended leg times out.
@@ -185,6 +222,16 @@ and runs at any time.
   the change means to move pixels or simulation state, and otherwise once at
   the lane's end. The `rendering` skill owns which canaries a render change
   owes.
+- Treat `puck counters --check` on a non-recording device as partial ledger
+  evidence under the
+  [rules](../../../docs/reference/cli.md#puck-counterswork-counter-collector).
+  On every device it judges `deterministic` ceilings and the required zeros of
+  kernel kinds (`requiredZero`: march steps, texels written, sky evaluations).
+  It skips `per-backend-deterministic` magnitudes and device-following zeros
+  (the SDF `upload` and `bricks` passes), and its note says how many counts
+  were not judged and how many required zeros still were. Require each
+  backend's recorded device identity to match before claiming the whole ledger
+  was judged; use the recording device (the floor GPU) for a re-record.
 
 ### GPU process checks and script runs
 

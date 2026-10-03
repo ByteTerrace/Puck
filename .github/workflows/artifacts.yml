@@ -43,10 +43,16 @@ jobs:
         run: dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
       - name: Compile the solution once
         run: dotnet build Puck.slnx -c Release --no-restore -p:PuckCaptureTestArtifacts=true -bl:artifacts/build.binlog
+      - name: Verify bake derivation fingerprints
+        run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll derivations --check
       # The shaders the build just compiled with the pinned DXC, at their repository paths, for the Linux job that holds
       # its own DXC build of this commit to them byte for byte (verify.yml, shader-bytecode).
       - name: Collect the compiled shader bytecode
         run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll shaders collect artifacts/shader-bytecode
+      # What every determinism scenario hashes to on Windows, for the Linux job that records the same manifest and
+      # holds the two streams to each other tick by tick (verify.yml, determinism).
+      - name: Record the determinism scenarios
+        run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll determinism record tests/Puck.Determinism/determinism.json --output artifacts/determinism/windows.stream
       - name: Package the compiled assemblies without rebuilding
         run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll nuget pack --output artifacts/packages --no-build
       - name: Publish the compiled application payloads
@@ -84,6 +90,12 @@ jobs:
           if-no-files-found: error
           name: shader-bytecode-windows
           path: artifacts/shader-bytecode
+      - name: Upload the determinism stream
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          name: determinism-windows
+          path: artifacts/determinism
       - name: Upload Functions and browser payloads
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

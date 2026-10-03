@@ -9,7 +9,7 @@ namespace Puck.Abstractions.Gpu;
 /// between. An owner reserves every region's sets in one pool, so it holds one copy pool however many regions it has.
 /// <para>
 /// Reserved sets outlive the regions that write them, one region at a time per share: a region writes its buffers into
-/// a slot's set when it is created, and again before it records that slot's copy if another region wrote the set since,
+/// a slot's set before it records that slot's first copy, and again if another region wrote the set since,
 /// which happens only with the slot's last submission retired. The owner disposes the pool after its last region.
 /// </para>
 /// </summary>
@@ -148,6 +148,16 @@ public sealed class GpuRegionCopyPool : IDisposable {
             objA: m_writers[IndexOf(region: region, slot: slot)],
             objB: writer
         );
+    // Drops the retired writer without touching the descriptors or forgetting a writer that took its sets since.
+    internal void ForgetWriter(int region, GpuRegion writer) {
+        for (var slot = 0; (slot < SlotCount); slot++) {
+            var index = IndexOf(region: region, slot: slot);
+
+            if (ReferenceEquals(objA: m_writers[index], objB: writer)) {
+                m_writers[index] = null;
+            }
+        }
+    }
     // Records that the writer's buffers are now what region's set of slot holds.
     internal void WrittenBy(int region, int slot, GpuRegion writer) =>
         m_writers[IndexOf(region: region, slot: slot)] = writer;

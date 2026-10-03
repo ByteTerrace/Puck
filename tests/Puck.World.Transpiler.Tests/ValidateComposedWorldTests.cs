@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Validation;
 using Xunit;
@@ -34,26 +35,20 @@ public sealed class ValidateComposedWorldTests : IDisposable {
         }
         """;
 
-    private readonly string m_directory = Directory.CreateDirectory(path: Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: ("puck-validate-composed-tests-" + Guid.NewGuid().ToString(format: "N"))
-    )).FullName;
+    private readonly TemporaryDirectory m_directory = new(prefix: "puck-validate-composed-tests-");
 
-    public void Dispose() => Directory.Delete(
-        path: m_directory,
-        recursive: true
-    );
+    public void Dispose() => m_directory.Dispose();
     [Fact]
     public void ValidateComposedWorld_ComposesBasisBeforeValidating() {
         File.WriteAllText(
             Path.Combine(
-                path1: m_directory,
+                path1: m_directory.RootPath,
                 path2: "basis.world.json"
             ),
             BasisJson
         );
         var rootPath = Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: "root.world.json"
         );
 
@@ -80,7 +75,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
         var root = JsonNode.Parse(FlatJson)!.AsObject();
         var diagnostics = new DiagnosticBag();
         var rootPath = Path.Combine(
-            path1: m_directory,
+            path1: m_directory.RootPath,
             path2: "flat.world.json"
         );
 
@@ -96,7 +91,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
     }
     [Fact]
     public void MultiWorldDiagnosticsComposeEachBasisBeforeValidation() {
-        File.WriteAllText(Path.Combine(path1: m_directory, path2: "basis.world.json"), BasisJson);
+        File.WriteAllText(Path.Combine(path1: m_directory.RootPath, path2: "basis.world.json"), BasisJson);
         const string Source = """
                 module room() {
                     basis: "basis"
@@ -105,7 +100,7 @@ public sealed class ValidateComposedWorldTests : IDisposable {
                 world first = room()
                 world second = room()
                 """;
-        var sourcePath = Path.Combine(path1: m_directory, path2: "composition.puck");
+        var sourcePath = Path.Combine(path1: m_directory.RootPath, path2: "composition.puck");
         var compiled = WorldCompiler.Compile(Source, sourcePath: sourcePath, allowMultiple: true, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(condition: compiled.Success, userMessage: string.Join(separator: "\n", values: compiled.Diagnostics));

@@ -1,4 +1,5 @@
 using Puck.Cli.Transpiler;
+using Puck.Testing;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Formatting;
@@ -90,22 +91,15 @@ public sealed class PuckMigrateCommandTests {
 
     private static readonly IReadOnlyList<PuckMigration> Migrations = [new Retitle(), new RetitleCartridge(), new SneakCartridge()];
 
-    private static string Fixture() {
-        var directory = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-migrate-verb-{Guid.NewGuid():N}"
+    private static TemporaryDirectory Fixture() {
+        var scratch = new TemporaryDirectory(prefix: "puck-migrate-verb-");
+
+        scratch.WriteText(
+            name: "world.puck",
+            text: World
         );
 
-        Directory.CreateDirectory(path: directory);
-        File.WriteAllText(
-            contents: World,
-            path: Path.Combine(
-                path1: directory,
-                path2: "world.puck"
-            )
-        );
-
-        return directory;
+        return scratch;
     }
     private static int Migrate(string directory, bool check = false, string name = "retitle") => PuckMigrateCommand.Execute(
         check: check,
@@ -134,142 +128,120 @@ public sealed class PuckMigrateCommandTests {
 
     [Fact]
     public void AnUnknownNameIsRefused() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
 
-        try {
-            Assert.Equal(
-                actual: Migrate(
-                    directory: directory,
-                    name: "no-such-migration"
-                ),
-                expected: 2
-            );
-            Assert.Equal(
-                actual: Read(directory: directory),
-                expected: World
-            );
-            // This suite's own name is not in the shipped registry, whatever that registry carries.
-            Assert.Equal(
-                actual: PuckMigrateCommand.Execute(
-                    check: false,
-                    name: "retitle",
-                    path: directory
-                ),
-                expected: 2
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: Migrate(
+                directory: directory,
+                name: "no-such-migration"
+            ),
+            expected: 2
+        );
+        Assert.Equal(
+            actual: Read(directory: directory),
+            expected: World
+        );
+        // This suite's own name is not in the shipped registry, whatever that registry carries.
+        Assert.Equal(
+            actual: PuckMigrateCommand.Execute(
+                check: false,
+                name: "retitle",
+                path: directory
+            ),
+            expected: 2
+        );
     }
     [Fact]
-    public void AMissingPathIsAUsageError() => Assert.Equal(
-        actual: PuckMigrateCommand.Execute(
-            check: false,
-            migrations: Migrations,
-            name: "retitle",
-            path: Path.Combine(
-                path1: Path.GetTempPath(),
-                path2: $"puck-migrate-absent-{Guid.NewGuid():N}"
-            )
-        ),
-        expected: 2
-    );
+    public void AMissingPathIsAUsageError() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-migrate-absent-");
+
+        Assert.Equal(
+            actual: PuckMigrateCommand.Execute(
+                check: false,
+                migrations: Migrations,
+                name: "retitle",
+                path: scratch.PathOf(name: "absent")
+            ),
+            expected: 2
+        );
+    }
     // A run that rewrote one source and could not read another has migrated nothing, so it writes nothing.
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
     public void ASourceThatDoesNotParseRefusesTheWholeRun(bool check) {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
 
-        try {
-            File.WriteAllText(
-                contents: Broken,
-                path: Path.Combine(
-                    path1: directory,
-                    path2: "broken.puck"
-                )
-            );
+        File.WriteAllText(
+            contents: Broken,
+            path: Path.Combine(
+                path1: directory,
+                path2: "broken.puck"
+            )
+        );
 
-            Assert.Equal(
-                actual: Migrate(
-                    check: check,
-                    directory: directory
-                ),
-                expected: 2
-            );
-            Assert.Equal(
-                actual: Read(directory: directory),
-                expected: World
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: Migrate(
+                check: check,
+                directory: directory
+            ),
+            expected: 2
+        );
+        Assert.Equal(
+            actual: Read(directory: directory),
+            expected: World
+        );
     }
     [Fact]
     public void CheckReportsTheWorkAndWritesNothing() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
 
-        try {
-            Assert.Equal(
-                actual: Migrate(
-                    check: true,
-                    directory: directory
-                ),
-                expected: 1
-            );
-            Assert.Equal(
-                actual: Read(directory: directory),
-                expected: World
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: Migrate(
+                check: true,
+                directory: directory
+            ),
+            expected: 1
+        );
+        Assert.Equal(
+            actual: Read(directory: directory),
+            expected: World
+        );
     }
     [Fact]
     public void ARunWithNothingLeftToDoSucceeds() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
 
-        try {
-            Assert.Equal(
-                actual: Migrate(directory: directory),
-                expected: 0
-            );
-            Assert.Contains(
-                actualString: Read(directory: directory),
-                expectedSubstring: $"documentId: \"{Retitled}\""
-            );
-            Assert.Equal(
-                actual: Migrate(directory: directory),
-                expected: 0
-            );
-            Assert.Equal(
-                actual: Migrate(
-                    check: true,
-                    directory: directory
-                ),
-                expected: 0
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: Migrate(directory: directory),
+            expected: 0
+        );
+        Assert.Contains(
+            actualString: Read(directory: directory),
+            expectedSubstring: $"documentId: \"{Retitled}\""
+        );
+        Assert.Equal(
+            actual: Migrate(directory: directory),
+            expected: 0
+        );
+        Assert.Equal(
+            actual: Migrate(
+                check: true,
+                directory: directory
+            ),
+            expected: 0
+        );
     }
     // Only a source the run would change owes the before-and-after verdict, so a source the migration leaves
     // alone is never compiled and cannot refuse a sweep it has no part in.
     [Fact]
     public void ASourceTheMigrationLeavesAloneIsNeverCompiled() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
         var incompatible = Path.Combine(
             path1: directory,
             path2: "incompatible.puck"
@@ -277,112 +249,93 @@ public sealed class PuckMigrateCommandTests {
 
         var printed = PuckSourceText.Formatted(source: Incompatible);
 
-        try {
-            File.WriteAllText(
-                contents: printed,
-                path: incompatible
-            );
+        File.WriteAllText(
+            contents: printed,
+            path: incompatible
+        );
 
-            Assert.True(condition: Refuses(
-                sourcePath: incompatible,
-                sourceText: printed
-            ));
-            Assert.Equal(
-                actual: Migrate(directory: directory),
-                expected: 0
-            );
-            Assert.Contains(
-                actualString: Read(directory: directory),
-                expectedSubstring: $"documentId: \"{Retitled}\""
-            );
-            Assert.Equal(
-                actual: File.ReadAllText(path: incompatible),
-                expected: printed
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.True(condition: Refuses(
+            sourcePath: incompatible,
+            sourceText: printed
+        ));
+        Assert.Equal(
+            actual: Migrate(directory: directory),
+            expected: 0
+        );
+        Assert.Contains(
+            actualString: Read(directory: directory),
+            expectedSubstring: $"documentId: \"{Retitled}\""
+        );
+        Assert.Equal(
+            actual: File.ReadAllText(path: incompatible),
+            expected: printed
+        );
     }
     // The two arms of one rewrite over a cartridge source. Declaring nothing must refuse, which it can only do if
     // the cartridge document was actually built and compared; declaring `title` must then write. A cartridge door
     // that produced no document would refuse both arms, so the second assertion is the discriminating one.
     [Fact]
     public void ACartridgeSourceIsCompiledThroughItsOwnDoor() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
         var cartridge = Path.Combine(
             path1: directory,
             path2: "cart.puck"
         );
 
-        try {
-            File.WriteAllText(
-                contents: Cartridge,
-                path: cartridge
-            );
+        File.WriteAllText(
+            contents: Cartridge,
+            path: cartridge
+        );
 
-            Assert.Equal(
-                actual: PuckMigrateCommand.Execute(
-                    check: false,
-                    migrations: Migrations,
-                    name: "sneak-cartridge",
-                    path: cartridge
-                ),
-                expected: 2
-            );
-            Assert.Equal(
-                actual: File.ReadAllText(path: cartridge),
-                expected: Cartridge
-            );
-            Assert.Equal(
-                actual: PuckMigrateCommand.Execute(
-                    check: false,
-                    migrations: Migrations,
-                    name: "retitle-cartridge",
-                    path: cartridge
-                ),
-                expected: 0
-            );
-            Assert.Contains(
-                actualString: File.ReadAllText(path: cartridge),
-                expectedSubstring: $"title: \"{RetitledCartridge}\""
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: PuckMigrateCommand.Execute(
+                check: false,
+                migrations: Migrations,
+                name: "sneak-cartridge",
+                path: cartridge
+            ),
+            expected: 2
+        );
+        Assert.Equal(
+            actual: File.ReadAllText(path: cartridge),
+            expected: Cartridge
+        );
+        Assert.Equal(
+            actual: PuckMigrateCommand.Execute(
+                check: false,
+                migrations: Migrations,
+                name: "retitle-cartridge",
+                path: cartridge
+            ),
+            expected: 0
+        );
+        Assert.Contains(
+            actualString: File.ReadAllText(path: cartridge),
+            expectedSubstring: $"title: \"{RetitledCartridge}\""
+        );
     }
     [Fact]
     public void OneFileMayBeMigratedOnItsOwn() {
-        var directory = Fixture();
+        using var scratch = Fixture();
+        var directory = scratch.RootPath;
         var file = Path.Combine(
             path1: directory,
             path2: "world.puck"
         );
 
-        try {
-            Assert.Equal(
-                actual: PuckMigrateCommand.Execute(
-                    check: false,
-                    migrations: Migrations,
-                    name: "retitle",
-                    path: file
-                ),
-                expected: 0
-            );
-            Assert.Contains(
-                actualString: Read(directory: directory),
-                expectedSubstring: $"documentId: \"{Retitled}\""
-            );
-        } finally {
-            Directory.Delete(
-                path: directory,
-                recursive: true
-            );
-        }
+        Assert.Equal(
+            actual: PuckMigrateCommand.Execute(
+                check: false,
+                migrations: Migrations,
+                name: "retitle",
+                path: file
+            ),
+            expected: 0
+        );
+        Assert.Contains(
+            actualString: Read(directory: directory),
+            expectedSubstring: $"documentId: \"{Retitled}\""
+        );
     }
 }

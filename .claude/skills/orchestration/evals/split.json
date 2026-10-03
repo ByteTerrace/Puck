@@ -1,7 +1,7 @@
 {
   "seed": 4045387051,
   "rule": "A case is `train` when the first byte of sha256(\"<seed>:<case directory name>\") is below 154 (about 60%), else `test`. The rule depends on the case's name alone, so adding a case never moves another.",
-  "seed_note": "Drawn at random from 32 bits and redrawn (3 draws in all) until train held 8 or 9 of the 14 cases; the redraw looked at case counts only, before any case had been run. Cases o15 to o24 were added afterwards and assigned by the rule without a redraw. Cases moved to train by hand after exposing a gap: o29-hard-stale-remote-and-started-fix; replaced in test by a fresh harder case.",
+  "seed_note": "Drawn at random from 32 bits and redrawn (3 draws in all) until train held 8 or 9 of the 14 cases; the redraw looked at case counts only, before any case had been run. Cases o15 to o24 were added afterwards and assigned by the rule without a redraw. Cases moved to train by hand after exposing a gap: o29-hard-stale-remote-and-started-fix; replaced in test by a fresh harder case. Entries added to evals.json by other sessions are converted to cases and assigned to test by hand.",
   "train": [
     "o02-landed-batch-and-denied-merge",
     "o03-machines-by-capability",
@@ -35,6 +35,7 @@
     "o27-hard-queue-owner-conflict-and-owed-leg",
     "o28-hard-two-partners-one-gpu",
     "o30-hard-codex-brief-on-a-shared-box",
-    "o31-hard-gate-blocks-lane-owner-says-ship"
+    "o31-hard-gate-blocks-lane-owner-says-ship",
+    "o32-owed-work-from-commit-bodies"
   ]
 }

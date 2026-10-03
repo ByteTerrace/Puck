@@ -60,8 +60,13 @@ layer by `name`. `WorldRenderKeys.Expand` turns section keys into value keys
 and `WorldKeyResolver` resolves them, for the validator with no live source and
 for the client through its state mirror. Ordered values (gradient stop
 elevations, the ink band) are judged by `JudgeAscending` over every phase of
-their one clock, between keys as well as at them. A projection carries only the
-tick clocks; one whose values key on a state clock refuses to hydrate.
+their one clock, between keys as well as at them. A projection carries the tick
+clocks, and each state clock a value keys on as an anchored clock
+(`WorldClock.Anchor`, refused in an authored document) whose phase the
+recipient predicts with `WorldClockAnchor.Predict`, the authority's own
+prediction; `WorldClockAnchorLedger` sends a new anchor at exactly the ticks
+that prediction misses, and a clock whose row the recipient may not read
+refuses the composition. See [the worlds manual](../../../../docs/architecture/worlds.md#observation-and-display).
 Every bindable presentation scalar's domain is one row of `WorldValueFields`
 (`WorldValueDomain.cs`), keyed by its model member: `JudgeScalar` judges a
 literal and each key against it, `ValidateBoundStarts` judges a bound row's

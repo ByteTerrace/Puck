@@ -3,7 +3,7 @@
   "tick": 224,
   "engineTick": 376320,
   "hashes": {
-    "authoritative": "2f0015aa6cc50c14",
+    "authoritative": "6ab02c2b633d27a3",
     "capture": "b5882d5c786a1b56",
     "pose": "4fc7a1cae087a921",
     "world": "d02f73520ba9d726"
@@ -387,10 +387,7 @@
                   "field": "health",
                   "clock": {
                     "epochTick": 153,
-                    "epochEngineTick": 257040,
-                    "y0": 0,
-                    "v0": 0,
-                    "substepTicks": 0
+                    "epochEngineTick": 257040
                   },
                   "value": {
                     "kind": "Int",
@@ -454,10 +451,7 @@
                   "field": "health",
                   "clock": {
                     "epochTick": 153,
-                    "epochEngineTick": 257040,
-                    "y0": 0,
-                    "v0": 0,
-                    "substepTicks": 0
+                    "epochEngineTick": 257040
                   },
                   "value": {
                     "kind": "Int",

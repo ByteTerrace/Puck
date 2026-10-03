@@ -220,9 +220,8 @@ internal static class QualifyCommand {
         Deferred(profile: profile);
     }
     private static int Qualify(ReleaseProfile profile, string profileFile, string package, IReadOnlyList<PlannedCell> planned, string repositoryRoot, string? output) {
-        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
-
-        var runDirectory = Directory.CreateTempSubdirectory(prefix: ScratchPrefix).FullName;
+        using var run = RunDirectory.Create(prefix: ScratchPrefix);
+        var runDirectory = run.Path;
         var install = Path.Combine(
             path1: runDirectory,
             path2: "install"
@@ -331,6 +330,9 @@ internal static class QualifyCommand {
         );
         Console.Out.WriteLine(value: $"{Verb}: {results.Count(predicate: static result => (result.Outcome == QualificationOutcome.Pass))} of {results.Count} cell(s) passed, {results.Count(predicate: static result => (result.Outcome == QualificationOutcome.Fail))} failed, {results.Count(predicate: static result => (result.Outcome == QualificationOutcome.Blocked))} blocked; {Label(outcome: outcome)}.");
         Console.Out.WriteLine(value: $"{Verb}: report {CliPaths.ToDisplay(fullPath: reportPath)}");
+
+        // With no --output the report is written into the run directory, which is then the run's product and kept.
+        run.Conclude(passed: ((outcome == QualificationOutcome.Pass) && (output is not null)));
 
         return outcome switch {
             QualificationOutcome.Pass => CliExit.Success,

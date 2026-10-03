@@ -1,5 +1,6 @@
 using Puck.Abstractions.Presentation;
 using Puck.Maths;
+using Puck.Physics.Fields;
 
 namespace Puck.World;
 
@@ -609,6 +610,8 @@ public static partial class WorldDefinitionValidator {
             (FixedQ4816.FromDouble(value: lattice.CellSize) <= FixedQ4816.Zero)
         ) {
             errors.Add(item: $"fields.lattice.cellSize must quantize to a positive Q48.16 value (was {lattice.CellSize}).");
+        } else if (!FieldLatticeSolid.CellFits(cell: FixedQ4816.FromDouble(value: lattice.CellSize))) {
+            errors.Add(item: $"fields.lattice.cellSize {lattice.CellSize} puts the lattice solid's contact reach, {FieldLatticeSolid.ReachCells} cells, past Q48.16.");
         }
 
         if (

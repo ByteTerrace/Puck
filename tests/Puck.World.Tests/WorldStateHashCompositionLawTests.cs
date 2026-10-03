@@ -31,6 +31,7 @@ public sealed class WorldStateHashCompositionLawTests {
         ("each decision's runtime", WorldStateHashComponent.Decisions),
         ("the board enforcement verdict latch", WorldStateHashComponent.BoardEnforcement),
         ("every body's action state", WorldStateHashComponent.BodyActionState),
+        ("every body's whole continuation as its checkpoint entry encodes it", WorldStateHashComponent.BodyContinuation),
         ("cached navigation", WorldStateHashComponent.Navigation),
         ("flock perception, slot generations and prior travel", WorldStateHashComponent.Flock),
         ("every search job's progress", WorldStateHashComponent.Search),

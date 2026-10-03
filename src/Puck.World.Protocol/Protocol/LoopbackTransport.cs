@@ -91,7 +91,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
             (operationId == Guid.Empty)
         ) {
             completion?.Invoke(new WorldSubmissionResult.Refusal(
-                Code: "world.mutation.operation_id_missing",
+                Code: "world.mutation.operation-id-missing",
                 Detail: "mutation operation id is required"
             ));
             return 0;
@@ -135,7 +135,7 @@ public sealed class LoopbackTransport : IPrincipalServerLink {
         }
 
         completion(new WorldSubmissionResult.Refusal(
-            Code: "world.transport.codec_refused",
+            Code: "world.transport.codec-refused",
             Detail: $"the submission could not be encoded or decoded: {failure}"
         ));
     }

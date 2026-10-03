@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Testing;
 using Puck.World.Transpiler.Lsp;
 using Xunit;
 
@@ -192,49 +193,42 @@ public class LspTests {
     }
     [Fact]
     public async Task LspDiagnosticsReportsPuck079ForUnlockedEmbed() {
-        var tempDir = Path.Combine(path1: Path.GetTempPath(), path2: ("puck_lsp_test_" + Guid.NewGuid().ToString(format: "N")));
+        using var directory = new TemporaryDirectory(prefix: "puck_lsp_test_");
 
-        Directory.CreateDirectory(path: tempDir);
-        try {
-            var tempFile = Path.Combine(path1: tempDir, path2: "unlocked.world.puck");
-            var sourceText = """
-                schema: "puck.world.definition.v1"
+        var tempFile = Path.Combine(path1: directory.RootPath, path2: "unlocked.world.puck");
+        var sourceText = """
+            schema: "puck.world.definition.v1"
 
-                state {
-                  spaces [
-                    {
-                      name: "lore"
-                      dimensions: 8
-                      model: "puck-fixture-v1"
-                      revision: "1"
-                    }
-                  ]
+            state {
+              spaces [
+                {
+                  name: "lore"
+                  dimensions: 8
+                  model: "puck-fixture-v1"
+                  revision: "1"
                 }
-
-                sql {
-                    CREATE TABLE lore_table (
-                        id TEXT PRIMARY KEY,
-                        v  VECTOR(lore)
-                    );
-                    INSERT INTO lore_table (id, v) VALUES ('k1', embed('unlocked text'));
-                }
-                """;
-
-            await File.WriteAllTextAsync(tempFile, sourceText, TestContext.Current.CancellationToken);
-
-            var published = await LanguageServerClient.PublishedAsync(
-                text: sourceText,
-                uri: new Uri(uriString: tempFile).AbsoluteUri
-            );
-
-            Assert.Contains(
-                collection: published,
-                filter: static diagnostic => (diagnostic.Code == "PUCK079")
-            );
-        } finally {
-            if (Directory.Exists(path: tempDir)) {
-                Directory.Delete(tempDir, recursive: true);
+              ]
             }
-        }
+
+            sql {
+                CREATE TABLE lore_table (
+                    id TEXT PRIMARY KEY,
+                    v  VECTOR(lore)
+                );
+                INSERT INTO lore_table (id, v) VALUES ('k1', embed('unlocked text'));
+            }
+            """;
+
+        await File.WriteAllTextAsync(tempFile, sourceText, TestContext.Current.CancellationToken);
+
+        var published = await LanguageServerClient.PublishedAsync(
+            text: sourceText,
+            uri: new Uri(uriString: tempFile).AbsoluteUri
+        );
+
+        Assert.Contains(
+            collection: published,
+            filter: static diagnostic => (diagnostic.Code == "PUCK079")
+        );
     }
 }

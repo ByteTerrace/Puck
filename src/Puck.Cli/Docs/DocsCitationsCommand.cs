@@ -487,9 +487,8 @@ public static class DocsCitationsCommand {
         enumerated = new HashSet<string>(comparer: StringComparer.Ordinal);
         error = string.Empty;
 
-        CliScratchDirectories.SweepScratch(scratchPrefix: ScratchPrefix);
-
-        var runDirectory = Directory.CreateTempSubdirectory(prefix: ScratchPrefix).FullName;
+        using var run = RunDirectory.Create(prefix: ScratchPrefix);
+        var runDirectory = run.Path;
 
         if (!WorldArtifactBuild.TryResolve(
             artifact: out var world,
@@ -521,6 +520,8 @@ public static class DocsCitationsCommand {
 
             return false;
         }
+
+        run.Conclude(passed: true);
 
         return true;
     }

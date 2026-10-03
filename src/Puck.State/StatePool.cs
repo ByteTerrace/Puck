@@ -7,13 +7,8 @@ namespace Puck.State;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StateRecord(CellName Name, IReadOnlyList<StatePoolField>? Fields = null) {
     /// <summary>Gets the immutable field declarations in authored order.</summary>
-    public IReadOnlyList<StatePoolField>? Fields { get => field; init => field = Freeze(values: value); } = Freeze(values: Fields);
+    public IReadOnlyList<StatePoolField>? Fields { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Fields);
 
-    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? values) => (values switch {
-        null => null,
-        ImmutableArray<T> => values,
-        _ => values.ToImmutableArray(),
-    });
 }
 /// <summary>One typed field of a <see cref="StateRecord"/>.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -50,25 +45,15 @@ public sealed record StatePoolValue(CellName Field, CellValue Value, StateCellCl
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StatePoolSeed(int Slot, IReadOnlyList<StatePoolValue>? Values = null) {
     /// <summary>Gets the immutable field overrides.</summary>
-    public IReadOnlyList<StatePoolValue>? Values { get => field; init => field = Freeze(values: value); } = Freeze(values: Values);
+    public IReadOnlyList<StatePoolValue>? Values { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Values);
 
-    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? values) => (values switch {
-        null => null,
-        ImmutableArray<T> => values,
-        _ => values.ToImmutableArray(),
-    });
 }
 /// <summary>A bounded deterministic allocator over instances of one declared record.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StatePool(CellName Name, CellName Record, int Capacity, IReadOnlyList<StatePoolSeed>? Initial = null, StatePoolSnapshot? Snapshot = null) {
     /// <summary>Gets the immutable statically live instances.</summary>
-    public IReadOnlyList<StatePoolSeed>? Initial { get => field; init => field = Freeze(values: value); } = Freeze(values: Initial);
+    public IReadOnlyList<StatePoolSeed>? Initial { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Initial);
 
-    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? values) => (values switch {
-        null => null,
-        ImmutableArray<T> => values,
-        _ => values.ToImmutableArray(),
-    });
 }
 /// <summary>A bounded pool whose stable slots identify pairs of live instances from two endpoint pools.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -84,13 +69,8 @@ public sealed record StatePairPool(
     StatePoolSnapshot? Snapshot = null
 ) {
     /// <summary>Gets the immutable statically live pair slots.</summary>
-    public IReadOnlyList<StatePoolSeed>? Initial { get => field; init => field = Freeze(values: value); } = Freeze(values: Initial);
+    public IReadOnlyList<StatePoolSeed>? Initial { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Initial);
 
-    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? values) => (values switch {
-        null => null,
-        ImmutableArray<T> => values,
-        _ => values.ToImmutableArray(),
-    });
 }
 /// <summary>The complete persistent allocator continuation of one pool: every slot generation, including dead
 /// slots, plus the currently live instances and their field values.</summary>
@@ -99,14 +79,9 @@ public sealed record StatePoolSnapshot(IReadOnlyList<long> Generations, IReadOnl
     /// <summary>Gets one generation per pool slot.</summary>
     public IReadOnlyList<long> Generations { get => field; init => field = FreezeRequired(values: value); } = FreezeRequired(values: Generations);
     /// <summary>Gets the immutable live instances in ascending slot order.</summary>
-    public IReadOnlyList<StatePoolSeed>? Live { get => field; init => field = Freeze(values: value); } = Freeze(values: Live);
+    public IReadOnlyList<StatePoolSeed>? Live { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Live);
 
     private static IReadOnlyList<T> FreezeRequired<T>(IReadOnlyList<T> values) => (values switch {
-        ImmutableArray<T> => values,
-        _ => values.ToImmutableArray(),
-    });
-    private static IReadOnlyList<T>? Freeze<T>(IReadOnlyList<T>? values) => (values switch {
-        null => null,
         ImmutableArray<T> => values,
         _ => values.ToImmutableArray(),
     });

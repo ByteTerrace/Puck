@@ -15,8 +15,6 @@
         <Compile Include="../Shared/IdentifierCorpus.cs" Link="IdentifierCorpus.cs" />
         <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
         <Compile Include="../Shared/SpellingLaws.cs" Link="SpellingLaws.cs" />
-        <Compile Include="../Shared/TemporaryDirectory.cs" Link="TemporaryDirectory.cs" />
-        <Compile Include="../Shared/TestLiveness.cs" Link="TestLiveness.cs" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="../../src/Puck.Transpiler/Puck.Transpiler.csproj" />

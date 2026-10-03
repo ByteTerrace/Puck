@@ -68,12 +68,13 @@ internal static class WorldTravelerProjection {
             );
 
             sink = new(
-                request.Ceiling,
-                server.AuthorityIdentity,
-                () => server.Population.Revision,
-                () => disclosure,
-                Current,
-                principal
+                authority: server.AuthorityIdentity,
+                disclosure: () => disclosure,
+                isCurrent: Current,
+                recipient: principal,
+                revision: () => server.Population.Revision,
+                server: server,
+                tier: request.Ceiling
             );
             sink.PrimeRoute(route: WorldLocalForwardedAuthority.DescribeRoute(
                 endpoint: endpoint,
@@ -104,7 +105,12 @@ internal static class WorldTravelerProjection {
             ct: ct,
             output: output
         ).ConfigureAwait(continueOnCapturedContext: false);
-        } finally { server.ExecuteAuthorityOperation(operation: lease.Dispose); }
+        } finally {
+            server.ExecuteAuthorityOperation(operation: () => {
+                lease.Dispose();
+                sink.Release();
+            });
+        }
         return null;
     }
 }

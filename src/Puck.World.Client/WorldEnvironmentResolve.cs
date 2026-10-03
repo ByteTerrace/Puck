@@ -16,8 +16,8 @@ namespace Puck.World.Client;
 /// (<see cref="WorldStateMirror.Integrate(in BindableScalar, double)"/>), keyed or literal, so the environment carries
 /// offsets and a phase that never jump where a key changes a rate.
 /// <para>
-/// The environment re-resolves only when its definition revision moves, a slot one of its bindings or state clocks
-/// reads moves, or the presented tick moves while it reads a tick clock or integrates a rate; every other frame copies
+/// The environment re-resolves only when its definition moves, a slot one of its bindings or state clocks reads
+/// moves, or the presented tick moves while it reads a tick clock or a moving anchor, or integrates a rate; every other frame copies
 /// the last resolution, and <see cref="Resolutions"/> counts the ones it made. A point light's anchor is resolved fresh
 /// every frame.
 /// </para>
@@ -227,8 +227,8 @@ public sealed class WorldEnvironmentResolve {
 
         return false;
     }
-    // Notes what a keyed value reads besides its keys: a state clock's slot, or the presented tick a tick clock moves
-    // with.
+    // Notes what a keyed value reads besides its keys: a state clock's slot, the presented tick a tick clock or a moving
+    // anchor moves with, or nothing for an anchor held still, which moves only with the definition.
     private void NoteKeys(WorldStateMirror mirror, IWorldKeyTrack? keys) {
         if (keys is null) {
             return;
@@ -238,7 +238,7 @@ public sealed class WorldEnvironmentResolve {
 
         if (slot >= 0) {
             NoteSlot(mirror: mirror, slot: slot);
-        } else {
+        } else if (!mirror.ClockHoldsStill(name: keys.Clock)) {
             m_readsTick = true;
         }
     }

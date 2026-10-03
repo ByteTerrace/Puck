@@ -14,6 +14,20 @@ public sealed record WorldCrossingArrival(WorldTransferReservationRequest Reques
         TransferId: Request.TransferId
     );
 }
+/// <summary>What one commit decided about an arrival it landed at least one traveler of: the occupant generation each
+/// landed traveler's index took, in member order, whether the commit rolled those landings back, and the projection each
+/// traveler that came home was bound to. A commit that stood landed every traveler. A rolled-back one landed the leading
+/// travelers and then undid them, because the next member was refused or, with every member landed, because its arrival
+/// record could not be made durable. A landing advances its index's generation, which outlives the rollback, so a
+/// replay reproduces both. A traveler coming home binds its owned identity once that identity adopts what it carried,
+/// which can refuse part of it, so the bound projection is the commit's decision too, and a replay binds it rather than
+/// deciding the adoption again.</summary>
+/// <param name="Generations">The generation each landed traveler's index took, in member order.</param>
+/// <param name="RolledBack">Whether the commit rolled its landings back.</param>
+/// <param name="Adopted">For a commit that stood, one entry per traveler in member order: the projection a traveler
+/// coming home was bound to after its adoption, or <see langword="null"/> for one that did not come home. Empty for a
+/// commit that rolled back, which adopts nothing.</param>
+public sealed record WorldArrivalOutcome(IReadOnlyList<int> Generations, bool RolledBack, IReadOnlyList<WorldIdentityProjection?> Adopted);
 /// <summary>One crossing step an authority makes durable before the step becomes visible to its peer. A source records
 /// its <see cref="Departure"/> before it sends the commit and its <see cref="Settlement"/> before it acknowledges; a
 /// destination records its <see cref="Arrival"/> before it answers the commit. Recovery restores the authority's

@@ -517,8 +517,12 @@ public static partial class WorldDefinitionValidator {
     // the presentation maps into the domain, so revalidating an applied mutation, a journal replay or an embedded
     // snapshot never reads them.
     private static void ValidateBoundStarts(WorldDefinition definition, List<string> errors) {
-        foreach (var (path, value, field) in WorldKeyedValues.BoundOf(definition: definition)) {
-            var binding = value.State.GetValueOrDefault();
+        foreach (var bound in WorldKeyedValues.BoundOf(definition: definition)) {
+            if (bound is not { Value: { } value, Field: { } field }) {
+                continue;
+            }
+
+            var (path, binding) = (bound.Path, bound.Binding);
 
             if (
                 (binding.Target

@@ -79,7 +79,7 @@ public sealed class WorldPresentationManifest {
     private WorldPresentationManifest(WorldPresentationBinding[] bindings, WorldPresentationBinding[] bodyBindings, WorldClock[] clocks, Dictionary<object, WorldPresentationBinding[]> templates, WorldDefinition? definition = null) {
         m_authored = new Lazy<HashSet<(string Path, StateBinding Binding)>>(valueFactory: () => ((definition is null)
             ? []
-            : [.. WorldKeyedValues.BoundOf(definition: definition).Where(predicate: static bound => bound.Value.State.HasValue).Select(selector: static bound => (bound.Path, bound.Value.State!.Value))]));
+            : [.. WorldKeyedValues.BoundOf(definition: definition).Where(predicate: static bound => (bound.Field is not null)).Select(selector: static bound => (bound.Path, bound.Binding))]));
         m_bindings = bindings;
         m_bodyBindings = bodyBindings;
         m_clocks = clocks;

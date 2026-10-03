@@ -24,43 +24,35 @@ public sealed class CreationCommandTests {
     /// the file is ever parsed — with an empty registry, no name reaches the JSON-parse step.</summary>
     [Fact]
     public void SculptRefusesAMalformedWorldFileWithoutWriting() {
-        var path = Path.Combine(
-            path1: Path.GetTempPath(),
-            path2: $"puck-creation-cli-{Guid.NewGuid():N}.world.json"
-        );
-
-        File.WriteAllText(
-            contents: "[1, 2, 3]",
-            path: path
+        using var directory = new TemporaryDirectory(prefix: "puck-creation-cli-");
+        var path = directory.WriteText(
+            name: "malformed.world.json",
+            text: "[1, 2, 3]"
         );
 
         var before = File.ReadAllBytes(path: path);
 
-        try {
-            var (exitCode, output) = Invoke(
-                "creation",
-                "sculpt",
-                "not-a-real-sculpt",
-                "--world",
-                path
-            );
+        var (exitCode, output) = Invoke(
+            "creation",
+            "sculpt",
+            "not-a-real-sculpt",
+            "--world",
+            path
+        );
 
-            Assert.Equal(
-                actual: exitCode,
-                expected: 2
-            );
-            Assert.Contains(
-                actualString: output,
-                comparisonType: StringComparison.Ordinal,
-                expectedSubstring: "unknown sculpt"
-            );
-            Assert.Equal(
-                expected: before,
-                actual: File.ReadAllBytes(path: path)
-            );
-        } finally {
-            File.Delete(path: path);
-        }
+        Assert.Equal(
+            actual: exitCode,
+            expected: 2
+        );
+        Assert.Contains(
+            actualString: output,
+            comparisonType: StringComparison.Ordinal,
+            expectedSubstring: "unknown sculpt"
+        );
+        Assert.Equal(
+            expected: before,
+            actual: File.ReadAllBytes(path: path)
+        );
     }
     /// <summary>An unknown sculpt name is refused BY NAME (naming the empty registry) and the file is left
     /// untouched.</summary>

@@ -49,13 +49,14 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
 
     // The messenger configuration shared by the standalone messenger (vkCreateDebugUtilsMessengerEXT) and the
     // create-info chained into vkCreateInstance's pNext: subscribe to WARNING|ERROR across all message types and
-    // route each to OnDebugMessage.
-    private static VkDebugUtilsMessengerCreateInfoExt BuildMessengerCreateInfo() {
+    // route each to OnDebugMessage, which writes it to the writer userData names.
+    private static VkDebugUtilsMessengerCreateInfoExt BuildMessengerCreateInfo(nint userData) {
         return new VkDebugUtilsMessengerCreateInfoExt {
             MessageSeverity = DebugMessageSeverityWarning | DebugMessageSeverityError,
             MessageType = DebugMessageTypeAll,
             StructureType = VkStructureTypeDebugUtilsMessengerCreateInfoExt,
             UserCallback = ((nint)((delegate* unmanaged[Cdecl]<uint, uint, VkDebugUtilsMessengerCallbackDataExt*, void*, uint>)(&OnDebugMessage))),
+            UserData = userData,
         };
     }
     private unsafe delegate* unmanaged[Cdecl]<in VkInstanceCreateInfo, nint, out nint, VkResult> GetCreateInstance() {
@@ -78,8 +79,9 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             return m_enumerateInstanceExtensionProperties;
         }
     }
-    // The VK_EXT_debug_utils callback: it surfaces each validation message to the console (mirroring the Direct3D 12
-    // info-queue drain) and returns VK_FALSE so the triggering Vulkan call still proceeds.
+    // The VK_EXT_debug_utils callback: it writes each validation message to the instance's writer (userData, through
+    // VulkanDebugOutput), or to the process's standard error when it has none, mirroring the Direct3D 12 info-queue
+    // drain, and returns VK_FALSE so the triggering Vulkan call still proceeds.
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static uint OnDebugMessage(uint messageSeverity, uint messageTypes, VkDebugUtilsMessengerCallbackDataExt* callbackData, void* userData) {
         if (
@@ -104,7 +106,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
                     : "general"
             ));
 
-            Console.Error.WriteLine(value: $"[vulkan-debug] {type} {label}: {Marshal.PtrToStringUTF8(ptr: callbackData->Message)}");
+            VulkanDebugOutput.Writer(userData: ((nint)userData)).WriteLine(value: $"[vulkan-debug] {type} {label}: {Marshal.PtrToStringUTF8(ptr: callbackData->Message)}");
         }
 
         return 0;
@@ -138,10 +140,12 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
     /// also reach the console. With validation off it links nothing.</summary>
     /// <param name="chain">The chain to fill, at an address that stays valid until the create call returns.</param>
     /// <param name="enableValidation">Whether the validation layer is enabled.</param>
+    /// <param name="debugUserData">The <c>pUserData</c> the chained messenger hands its callback: a handle to the writer
+    /// its messages go to (<see cref="VulkanDebugOutput"/>), or zero for the process's standard error.</param>
     /// <returns>The chain's head, the validation features; zero when <paramref name="enableValidation"/> is
     /// <see langword="false"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="chain"/> is <see langword="null"/>.</exception>
-    public static nint LinkCreateChain(VulkanInstanceCreateChain* chain, bool enableValidation) {
+    public static nint LinkCreateChain(VulkanInstanceCreateChain* chain, bool enableValidation, nint debugUserData) {
         if (null == chain) {
             throw new ArgumentNullException(paramName: nameof(chain));
         }
@@ -151,7 +155,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         }
 
         chain->EnabledFeature = VulkanInstanceCreateChain.SynchronizationValidation;
-        chain->Messenger = BuildMessengerCreateInfo();
+        chain->Messenger = BuildMessengerCreateInfo(userData: debugUserData);
         chain->ValidationFeatures = new VkValidationFeaturesExt {
             EnabledValidationFeatureCount = 1,
             EnabledValidationFeatures = ((nint)(&chain->EnabledFeature)),
@@ -162,7 +166,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
         return ((nint)(&chain->ValidationFeatures));
     }
     /// <inheritdoc/>
-    public nint CreateDebugMessenger(VulkanInstanceCommands instance) {
+    public nint CreateDebugMessenger(VulkanInstanceCommands instance, nint userData) {
         if (instance is null) {
             return 0;
         }
@@ -174,7 +178,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             return 0;
         }
 
-        var createInfo = BuildMessengerCreateInfo();
+        var createInfo = BuildMessengerCreateInfo(userData: userData);
 
         return ((VkResult.Success == createMessenger(
             instance.Handle,
@@ -220,6 +224,7 @@ public unsafe sealed class VulkanNativeInstanceApi : IVulkanInstanceApi {
             EnabledLayerNames = layerNames.Pointer,
             Next = LinkCreateChain(
                 chain: &chain,
+                debugUserData: request.DebugUserData,
                 enableValidation: request.EnableValidation
             ),
             StructureType = VkStructureTypeInstanceCreateInfo,

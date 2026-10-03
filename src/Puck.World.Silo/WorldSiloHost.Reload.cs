@@ -130,11 +130,11 @@ public sealed partial class WorldSiloHost {
                             m_pendingReleases[identity] = (hash, completion.Task);
                             correlation = row.Link.SubmitEnvelope(
                                 payload: new WorldSubmissionPayload.Rebuild(Value: new(
-                                    WorldRebuildKind.Reload,
-                                    definition,
-                                    origin.Identity,
-                                    false,
-                                    hash
+                                    ContentHash: hash,
+                                    Definition: definition,
+                                    Force: false,
+                                    Kind: WorldRebuildKind.Reload,
+                                    Origin: origin.Store
                                 )),
                                 principal: Principal.Console
                             );

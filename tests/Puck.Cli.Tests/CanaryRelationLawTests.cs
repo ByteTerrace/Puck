@@ -1,4 +1,5 @@
 using Puck.Cli.Canary;
+using Puck.Testing;
 
 using Xunit;
 
@@ -11,14 +12,11 @@ namespace Puck.Cli.Tests;
 /// </summary>
 public sealed class CanaryRelationLawTests : IDisposable {
     private readonly CanaryLeg m_leg;
-    private readonly string m_root = Path.Combine(
-        path1: Path.GetTempPath(),
-        path2: $"puck-cli-tests-canary-relation-{Guid.NewGuid():N}"
-    );
+    private readonly TemporaryDirectory m_directory = new(bestEffortDelete: true, prefix: "puck-cli-tests-canary-relation-");
 
     public CanaryRelationLawTests() {
         var directory = Path.Combine(
-            path1: m_root,
+            path1: m_directory.RootPath,
             path2: "tests",
             path3: "Puck.World.Canaries",
             path4: "ordered"
@@ -77,7 +75,7 @@ public sealed class CanaryRelationLawTests : IDisposable {
                 error: out var error,
                 manifests: out var manifests,
                 refused: out _,
-                repositoryRoot: m_root,
+                repositoryRoot: m_directory.RootPath,
                 strict: true
             ),
             userMessage: error
@@ -89,21 +87,13 @@ public sealed class CanaryRelationLawTests : IDisposable {
         CanaryAssertions.Evaluate(
             leg: m_leg,
             primaryTranscript: new CanaryTranscript(
-                RunDirectory: m_root,
+                RunDirectory: m_directory.RootPath,
                 Stderr: [],
                 Stdout: [$"[probe: work submission={before} revision=1]", $"[probe: work submission={after} revision=1]"]
             )
         ).Passed;
 
-    public void Dispose() {
-        try {
-            Directory.Delete(
-                path: m_root,
-                recursive: true
-            );
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-        }
-    }
+    public void Dispose() => m_directory.Dispose();
     [Fact]
     public void GreaterHoldsOnlyWhenTheLeftValueIsStrictlyAboveTheRight() {
         Assert.Equal(

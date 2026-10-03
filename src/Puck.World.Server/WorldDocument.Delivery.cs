@@ -31,6 +31,15 @@ public sealed partial class WorldDocument {
         m_pendingDefinitionDelivery = false;
         m_pendingStateDelivery = false;
     }
+    /// <summary>Records that the live definition was replaced since the last delivery, so
+    /// <see cref="DeliverPending"/> carries it whole to every attached sink. Every way the authoritative state jumps
+    /// rather than steps reaches here: a shape mutation's install and every whole-document rebuild
+    /// (<c>world.reset</c>, <c>world.load</c>, <c>world.reload</c>, a replay drive's boot image) through
+    /// <see cref="Install"/>, an undo through the same install, a machine operation's adoption, and a checkpoint
+    /// restore (a direct restore or a replay drive), which delivers at once because it completes
+    /// outside the tick. A projection recipient reads its observations from that delivery: its per-tick step sends
+    /// anchors alone, so a jump nothing delivered would leave it presenting the state the jump replaced.</summary>
+    internal void MarkDefinitionDeliveryPending() => m_pendingDefinitionDelivery = true;
     /// <summary>Records that the live definition's state values have moved since the last delivery, so the step's
     /// <see cref="DeliverPending"/> carries them to every attached sink.</summary>
     /// <remarks>A shape change already pending outranks this: a definition delivery carries the values too.</remarks>

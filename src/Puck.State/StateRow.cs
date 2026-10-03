@@ -37,7 +37,8 @@ public enum StateCellBehavior : byte {
 /// </summary>
 /// <remarks>
 /// For a slot-shaped row written with the <c>value</c> sugar, the slot cell's clock is authored as a row-level
-/// <c>clock</c> member beside <c>value</c> — see <see cref="StateRowJsonConverter{TRow}"/>. Every field defaults
+/// <c>clock</c> member beside <c>value</c> — see <see cref="StateRowJsonConverter{TRow}"/>. A clock has one wire
+/// form wherever it travels (<see cref="StateCellClockJsonConverter"/>). Every field defaults
 /// to zero, the settled-at-epoch-zero shape <c>world.save</c> and undo/checkpoint restore leave behind; the
 /// fields a particular effective behavior does not read are simply ignored (an <see cref="StateAdvance"/> cell
 /// never reads <see cref="Y0"/>/<see cref="V0"/>/<see cref="SubstepTicks"/>/<see cref="EpochTick"/>, a
@@ -63,6 +64,7 @@ public enum StateCellBehavior : byte {
 /// raw <c>FixedQ4816</c> bits.</param>
 /// <param name="SubstepTicks">Elapsed ticks a <see cref="StateCycle"/> has already accumulated toward its next
 /// step at <see cref="EpochTick"/>; must be non-negative and less than the cycle's own <c>ticksPerStep</c>.</param>
+[JsonConverter(typeof(StateCellClockJsonConverter))]
 public sealed record StateCellClock(long EpochTick = 0, long EpochEngineTick = 0, long Y0 = 0, long V0 = 0, long SubstepTicks = 0);
 /// <summary>
 /// One cell of the <c>state</c> section's substrate — a typed value addressed by a stable string <see cref="Key"/>
@@ -236,6 +238,22 @@ public record StateRow(
     CellName? Enum = null,
     bool HostOwned = false
 ) {
+    // Both lists are owned (StateLists.Freeze): a caller that keeps the collection it passed in cannot change the row,
+    // so every cache keyed by a row stays true while the row lives.
+    /// <summary>The row's current cells (default empty). Refused past its effective capacity, and on a
+    /// duplicate key, by name — unless <see cref="Evicts"/> is set, in which case a write that would grow past capacity
+    /// evicts the oldest cell instead of refusing (see <see cref="Evicts"/>). A slot-shaped row (see
+    /// <see cref="IsSlot"/>) holds exactly one cell keyed <see cref="SlotKey"/>; a keyed row may hold any author-chosen
+    /// keys except <see cref="SlotKey"/> itself, which is reserved for the <c>value</c> sugar and refused as an
+    /// authored cell key.</summary>
+    public IReadOnlyList<StateCell>? Cells { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Cells);
+    /// <summary>This site's drawn masks — engine-minted bookkeeping a source under an exhausting
+    /// <see cref="GeneratorMode"/> carries: one mask per context, by declaration ordinal, for a Markov source; exactly
+    /// one for a weighted numeric source. Bit <c>i</c> is set when entry <c>i</c> has been drawn. Lives at the site rather
+    /// than on the source row, which lets two sites reference one declared source and draw independently. Null or empty
+    /// for a site whose source never exhausts.</summary>
+    public IReadOnlyList<ClosedBitset256>? DrawnMasks { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: DrawnMasks);
+
     /// <summary>Checks that every value a code row can admit is also a value a derived board can store.</summary>
     /// <param name="board">The derived board.</param>
     /// <param name="boardSymbols">The board's enum, or <see langword="null"/>.</param>

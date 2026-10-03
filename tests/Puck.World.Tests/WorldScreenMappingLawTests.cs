@@ -101,7 +101,7 @@ public sealed class WorldScreenMappingLawTests {
             jsonTypeInfo: WorldJsonContext.Default.WorldScreen
         ));
 
-        var source = WorldSourceInstances.Of(shown: [Pattern]).HandleOf(screen: 0)!.Value;
+        var source = WorldSourceInstances.Of(shown: [Pattern], world: WorldDefinitionLoader.BootInstanceName).HandleOf(screen: 0)!.Value;
         var sharp = WorldScreenMappings.Of(screen: nearest, source: source, sourceHeight: Height, sourceWidth: Width);
         var smooth = WorldScreenMappings.Of(screen: linear, source: source, sourceHeight: Height, sourceWidth: Width);
 
@@ -119,7 +119,7 @@ public sealed class WorldScreenMappingLawTests {
     [Fact]
     public void AScreenAtAnArbitraryPoseMapsKnownPointsToKnownPixels() {
         var images = new Images();
-        var set = new WorldScreenMappingSet();
+        var set = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
         var screens = new[] { Screen(index: 3, source: Pattern) };
 
         images.Extents[3] = (Width, Height);
@@ -129,7 +129,7 @@ public sealed class WorldScreenMappingLawTests {
         Assert.True(condition: set.TryGet(mapping: out var mapping, screen: 3));
         Assert.Equal(
             actual: mapping.Source,
-            expected: WorldSourceInstances.Of(shown: [Pattern]).HandleOf(screen: 0)
+            expected: WorldSourceInstances.Of(shown: [Pattern], world: WorldDefinitionLoader.BootInstanceName).HandleOf(screen: 0)
         );
         Assert.StartsWith(
             actualString: mapping.Source.Name,
@@ -152,7 +152,7 @@ public sealed class WorldScreenMappingLawTests {
         );
 
         // Reconciled and published again from the same rows, the mapping maps every point to the identical hit.
-        var again = new WorldScreenMappingSet();
+        var again = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
 
         again.Reconcile(cameras: [], screens: screens);
         again.Publish(images: images);
@@ -170,7 +170,7 @@ public sealed class WorldScreenMappingLawTests {
     [Fact]
     public void EachSourceKindNamesItsInstance() {
         var images = new Images();
-        var set = new WorldScreenMappingSet();
+        var set = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
 
         images.Extents[0] = (Width, Height);
         images.Extents[1] = (Width, Height);
@@ -204,7 +204,7 @@ public sealed class WorldScreenMappingLawTests {
     [Fact]
     public void AScreenWithoutAMappingSaysWhy() {
         var images = new Images();
-        var set = new WorldScreenMappingSet();
+        var set = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
 
         images.Extents[0] = (Width, Height);
         images.Extents[1] = (Width, Height);
@@ -247,7 +247,7 @@ public sealed class WorldScreenMappingLawTests {
     [Fact]
     public void ALiveBindOverARowPublishesTheBoundSourcesMapping() {
         var images = new Images();
-        var set = new WorldScreenMappingSet();
+        var set = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
         var code = WorldImageProducerSettings.SourceOf(
             id: WorldImageProducerSettings.QrId,
             settings: new WorldQrSettings(Payload: "puck")
@@ -270,7 +270,7 @@ public sealed class WorldScreenMappingLawTests {
         live.Clear();
         set.Publish(images: images);
 
-        var instance = WorldSourceInstances.Of(shown: [code]);
+        var instance = WorldSourceInstances.Of(shown: [code], world: WorldDefinitionLoader.BootInstanceName);
 
         Assert.Equal(
             actual: (set.Describe(screen: 0), set.InstanceOf(screen: 0), set.InstanceOf(screen: 1)),
@@ -290,7 +290,7 @@ public sealed class WorldScreenMappingLawTests {
     [Fact]
     public void ASteadyFramePublishesWithoutAllocating() {
         var images = new Images();
-        var set = new WorldScreenMappingSet();
+        var set = new WorldScreenMappingSet(world: WorldDefinitionLoader.BootInstanceName);
 
         images.Extents[0] = (Width, Height);
         set.Reconcile(

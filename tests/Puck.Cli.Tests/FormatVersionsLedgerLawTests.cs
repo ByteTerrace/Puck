@@ -269,7 +269,7 @@ public sealed class FormatVersionsLedgerLawTests {
             recordedText: text
         ));
 
-        foreach (var id in new[] { "SdfBaker.Version", "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldFederationCodec.WireKey", "WorldProtocol.WireProtocolKey", "PeerWireProtocol.ProtocolKey", "WorldReplaySnapshot.ShapeToken", "LocalEndpointCapability.Revision", "RatchetLedger.Format" }) {
+        foreach (var id in new[] { "WorldAuthorityCheckpointCodec.SupportedVersion", "WorldFederationCodec.WireKey", "WorldProtocol.WireProtocolKey", "PeerWireProtocol.ProtocolKey", "WorldReplaySnapshot.ShapeToken", "LocalEndpointCapability.Revision", "RatchetLedger.Format" }) {
             Assert.Contains(
                 collection: current,
                 filter: entry => (entry.Id == id)

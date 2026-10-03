@@ -6,7 +6,15 @@ namespace Puck.Vulkan.Interop;
 /// Owns a native Vulkan instance (<c>VkInstance</c>) through its command table and destroys it when disposed.
 /// </summary>
 public sealed class VulkanInstance : IDisposable {
+    /// <summary>The line an instance created with validation writes when its debug messenger reports the layer's
+    /// messages.</summary>
+    public const string ValidationLiveLine = "[vulkan] validation layer live: the instance reports through its debug messenger";
+    /// <summary>The line an instance created with validation writes when it has no debug messenger, so the layer's
+    /// messages reach no one.</summary>
+    public const string ValidationNotLiveLine = "[vulkan] validation layer requested but not live: the instance has no debug messenger, so nothing is reported";
+
     private readonly nint m_debugMessengerHandle;
+    private readonly VulkanDebugOutput? m_debugOutput;
     private readonly IVulkanInstanceApi m_instanceApi;
 
     private bool m_disposed;
@@ -20,6 +28,9 @@ public sealed class VulkanInstance : IDisposable {
     public IReadOnlyList<string> EnabledExtensions { get; }
     /// <summary>Gets the names of the instance layers that were enabled.</summary>
     public IReadOnlyList<string> EnabledLayers { get; }
+    /// <summary>Gets whether the instance runs under the validation layer and its debug messenger reports the layer's
+    /// messages.</summary>
+    public bool ReportsValidation => ((0 != m_debugMessengerHandle) && EnabledLayers.Contains(value: VulkanInstanceCreateChain.ValidationLayer));
 
     /// <summary>Initializes a new instance of the <see cref="VulkanInstance"/> class, taking ownership of an existing native instance.</summary>
     /// <param name="instance">The command table of the native instance to own.</param>
@@ -28,6 +39,8 @@ public sealed class VulkanInstance : IDisposable {
     /// <param name="enabledLayers">The names of the enabled instance layers.</param>
     /// <param name="instanceApi">The API used to destroy the instance on disposal.</param>
     /// <param name="debugMessengerHandle">The native <c>VkDebugUtilsMessengerEXT</c> owned alongside the instance (destroyed first on disposal), or zero when none was created.</param>
+    /// <param name="debugOutput">The writer the instance's messengers report to, released after the instance is destroyed,
+    /// or <see langword="null"/> when they report to the process's standard error.</param>
     /// <exception cref="ArgumentNullException"><paramref name="instance"/>, <paramref name="enabledExtensions"/>, <paramref name="enabledLayers"/>, or <paramref name="instanceApi"/> is <see langword="null"/>.</exception>
     public VulkanInstance(
         VulkanInstanceCommands instance,
@@ -35,7 +48,8 @@ public sealed class VulkanInstance : IDisposable {
         IReadOnlyList<string> enabledExtensions,
         IReadOnlyList<string> enabledLayers,
         IVulkanInstanceApi instanceApi,
-        nint debugMessengerHandle = 0
+        nint debugMessengerHandle = 0,
+        VulkanDebugOutput? debugOutput = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: instance);
         ArgumentNullException.ThrowIfNull(argument: enabledExtensions);
@@ -47,6 +61,7 @@ public sealed class VulkanInstance : IDisposable {
         EnabledExtensions = enabledExtensions.ToArray();
         EnabledLayers = enabledLayers.ToArray();
         m_debugMessengerHandle = debugMessengerHandle;
+        m_debugOutput = debugOutput;
         m_instanceApi = instanceApi;
     }
 
@@ -62,6 +77,8 @@ public sealed class VulkanInstance : IDisposable {
             messengerHandle: m_debugMessengerHandle
         );
         m_instanceApi.DestroyInstance(instance: Commands);
+        // The messenger chained into creation reports vkDestroyInstance's messages, so the writer outlives the instance.
+        m_debugOutput?.Dispose();
 
         m_disposed = true;
     }

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.State;
+using Puck.Testing;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Parsing;
 using Puck.Transpiler.Rewriting;
@@ -108,31 +109,27 @@ public class OperandTreeLawTests {
     }
     [Fact]
     public void AnImportAliasReachesBareSugarOperandsWithoutRenamingLiteralKeys() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-tree-import-");
+        using var directory = new TemporaryDirectory(prefix: "puck-tree-import-");
 
-        try {
-            File.WriteAllText(Path.Combine(path1: directory.FullName, path2: "library.puck"), """
-                let amount = 5
-                module emit() {
-                    state { world { slot result = 0
-                        table values { amount = 8 }
-                    } }
-                    rule r { result = values[amount] + amount }
-                }
-                """);
-            var path = Path.Combine(path1: directory.FullName, path2: "root.puck");
+        File.WriteAllText(Path.Combine(path1: directory.RootPath, path2: "library.puck"), """
+            let amount = 5
+            module emit() {
+                state { world { slot result = 0
+                    table values { amount = 8 }
+                } }
+                rule r { result = values[amount] + amount }
+            }
+            """);
+        var path = Path.Combine(path1: directory.RootPath, path2: "root.puck");
 
-            File.WriteAllText(contents: "schema: \"puck.world.definition.v1\"\nimport \"library.puck\" as lib\nuse lib.emit as first()\n", path: path);
-            var compilation = WorldCompiler.CompileFile(path, cancellationToken: TestContext.Current.CancellationToken);
+        File.WriteAllText(contents: "schema: \"puck.world.definition.v1\"\nimport \"library.puck\" as lib\nuse lib.emit as first()\n", path: path);
+        var compilation = WorldCompiler.CompileFile(path, cancellationToken: TestContext.Current.CancellationToken);
 
-            Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
-            var expression = compilation.RequireJson()["rules"]![0]!["effects"]![0]!["expression"]!;
+        Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
+        var expression = compilation.RequireJson()["rules"]![0]!["effects"]![0]!["expression"]!;
 
-            Assert.Equal("amount", expression["instructions"]![0]!["key"]!.GetValue<string>());
-            Assert.Equal(5m, expression["instructions"]![1]!["value"]!.GetValue<decimal>());
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal("amount", expression["instructions"]![0]!["key"]!.GetValue<string>());
+        Assert.Equal(5m, expression["instructions"]![1]!["value"]!.GetValue<decimal>());
     }
     [Fact]
     public void ATextOnlyRewriteCannotLeaveStaleOperandSyntax() {

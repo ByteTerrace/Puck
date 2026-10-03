@@ -823,7 +823,7 @@ public sealed partial class NavigationLawTests {
         var route = fixture.Server.Population.Capture().Entries.Single(predicate: entry => (entry.Index == 0)).Navigation!.Value;
 
         Assert.True(
-            condition: (route.Path.Length > 4),
+            condition: (route.Path.Count > 4),
             userMessage: string.Join(
                 separator: ',',
                 values: route.Path

@@ -96,6 +96,8 @@ internal sealed class UploadModelGpu :
     /// <summary>Gets the model's buffers, bindings, pipelines, shader modules and recorder, and the
     /// <see cref="FakeGpuDevice"/>'s other services.</summary>
     public GpuDeviceServices Services { get; }
+    /// <summary>Gets the buffer descriptors written into sets since the last <see cref="ResetTallies"/>.</summary>
+    public int BufferDescriptorWrites { get; private set; }
     /// <summary>Gets the table-upload copies recorded since the last <see cref="ResetTallies"/>.</summary>
     public int UploadCopies { get; private set; }
     /// <summary>Gets the raw buffer-copy bytes recorded since the last tally reset.</summary>
@@ -175,6 +177,7 @@ internal sealed class UploadModelGpu :
 
         UploadCopies = 0;
         BufferCopyBytes = 0;
+        BufferDescriptorWrites = 0;
     }
     public void WaitIdle() { }
 
@@ -239,7 +242,10 @@ internal sealed class UploadModelGpu :
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => m_inner.Services.Bindings.CreateSampler(filter: filter);
     void IGpuBindings.DestroyPool(nint poolHandle) { }
     void IGpuBindings.DestroySampler(nint samplerHandle) { }
-    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
+        m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
+        BufferDescriptorWrites++;
+    }
     void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) => m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
     void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) { }

@@ -449,10 +449,10 @@ public sealed class MachineCartridgeLawTests {
             catalog: TestHookInstaller.CreateMachineCatalog(),
             documentPath: hostPath
         );
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-world-tests-").FullName;
+        using var stateDirectory = new TemporaryDirectory(prefix: "puck-world-tests-");
         var profiles = new WorldOwnedWorlds(
             template: definition,
-            directory: stateDirectory,
+            directory: stateDirectory.RootPath,
             machineId: Guid.NewGuid()
         );
         using var fixture = new WorldFixture(
@@ -464,8 +464,7 @@ public sealed class MachineCartridgeLawTests {
                 machines: machines,
                 narrationSink: new WorldConsoleNarrationSink()
             ),
-            machines: machines,
-            stateDirectory: stateDirectory
+            machines: machines
         );
 
         foreach (var (screen, engine, file) in ((ReadOnlySpan<(int, string, string)>)[(8, CgbEngine, "hgb-mirror.cgb.cartridge.json"), (9, AgbEngine, "pip.agb.cartridge.json"), (10, CgbEngine, "hgb-mirror.cgb.cartridge.json")])) {

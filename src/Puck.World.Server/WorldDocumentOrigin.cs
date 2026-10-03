@@ -2,6 +2,7 @@ using Puck.Abstractions;
 using Puck.Abstractions.Machines;
 using Puck.Networking;
 using Puck.Storage;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -178,13 +179,19 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
         m_store = store;
         m_target = target;
         m_world = world;
-        Identity = $"owner/{owner:D}/{world.Value}";
+        Store = new WorldRebuildOrigin.Store(
+            Owner: owner,
+            World: world
+        );
+        Identity = Store.ToString();
     }
 
     /// <summary>Gets the bound on reading the hosted definition, on the host clock.</summary>
     public static TimeSpan OperationTimeout { get; } = TimeSpan.FromSeconds(seconds: 15);
     /// <inheritdoc/>
     public override string Identity { get; }
+    /// <summary>Gets the store this origin reads, as a rebuild names it.</summary>
+    public WorldRebuildOrigin.Store Store { get; }
     /// <inheritdoc/>
     public override IWorldNeighbourResolver Neighbours => new WorldStorageNeighbourResolver(
         containerId: m_owner,

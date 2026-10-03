@@ -1,5 +1,6 @@
 using Puck.Cli.Affected;
 using Puck.Cli.Architecture;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -14,43 +15,39 @@ namespace Puck.Cli.Tests;
 public sealed class AffectedDocumentsLawTests {
     [Fact]
     public void AGraphDocumentReachesThePassSourcesItNamesAndTheirIncludes() {
-        var directory = Directory.CreateTempSubdirectory(prefix: "puck-affected-graph-");
+        using var scratch = new TemporaryDirectory(prefix: "puck-affected-graph-");
 
-        try {
-            var passes = Directory.CreateDirectory(path: Path.Combine(path1: directory.FullName, path2: "passes"));
-            var named = Path.Combine(path1: passes.FullName, path2: "fill.hlsl");
-            var unnamed = Path.Combine(path1: passes.FullName, path2: "other.hlsl");
-            var include = Path.Combine(path1: passes.FullName, path2: "common.hlsli");
-            var unincluded = Path.Combine(path1: passes.FullName, path2: "unused.hlsli");
-            var graph = Path.Combine(path1: directory.FullName, path2: "fill.graph.json");
+        var passes = Directory.CreateDirectory(path: Path.Combine(path1: scratch.RootPath, path2: "passes"));
+        var named = Path.Combine(path1: passes.FullName, path2: "fill.hlsl");
+        var unnamed = Path.Combine(path1: passes.FullName, path2: "other.hlsl");
+        var include = Path.Combine(path1: passes.FullName, path2: "common.hlsli");
+        var unincluded = Path.Combine(path1: passes.FullName, path2: "unused.hlsli");
+        var graph = Path.Combine(path1: scratch.RootPath, path2: "fill.graph.json");
 
-            File.WriteAllText(contents: "#include \"common.hlsli\"\n[numthreads(8, 8, 1)] void main() {}", path: named);
-            File.WriteAllText(contents: "static const uint Fill = 1;", path: include);
-            File.WriteAllText(contents: "static const uint Unused = 1;", path: unincluded);
-            File.WriteAllText(contents: "[numthreads(8, 8, 1)] void main() {}", path: unnamed);
-            File.WriteAllText(
-                contents: """
-                    {
-                      "$schema": "puck.render.graph.v1",
-                      "name": "fill",
-                      "resources": [ { "name": "out", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "relative", "width": 1, "height": 1 } } ],
-                      "passes": [ { "name": "fill", "kind": "compute", "source": "passes/fill.hlsl", "entryPoint": "main", "outputs": [ { "name": "out" } ] } ],
-                      "outputs": [ "out" ]
-                    }
-                    """,
-                path: graph
-            );
+        File.WriteAllText(contents: "#include \"common.hlsli\"\n[numthreads(8, 8, 1)] void main() {}", path: named);
+        File.WriteAllText(contents: "static const uint Fill = 1;", path: include);
+        File.WriteAllText(contents: "static const uint Unused = 1;", path: unincluded);
+        File.WriteAllText(contents: "[numthreads(8, 8, 1)] void main() {}", path: unnamed);
+        File.WriteAllText(
+            contents: """
+                {
+                  "$schema": "puck.render.graph.v1",
+                  "name": "fill",
+                  "resources": [ { "name": "out", "format": "R8G8B8A8Unorm", "dimensions": { "mode": "relative", "width": 1, "height": 1 } } ],
+                  "passes": [ { "name": "fill", "kind": "compute", "source": "passes/fill.hlsl", "entryPoint": "main", "outputs": [ { "name": "out" } ] } ],
+                  "outputs": [ "out" ]
+                }
+                """,
+            path: graph
+        );
 
-            var tree = new AffectedWorkingTree(root: directory.FullName);
+        var tree = new AffectedWorkingTree(root: scratch.RootPath);
 
-            Assert.Equal(actual: AffectedDocuments.PassSources(graph: "fill.graph.json", tree: tree), expected: ["passes/fill.hlsl"]);
-            Assert.Equal(
-                actual: AffectedDocuments.Reach(path: "fill.graph.json", tree: tree).Order(comparer: StringComparer.Ordinal),
-                expected: ["fill.graph.json", "passes/common.hlsli", "passes/fill.hlsl"]
-            );
-        } finally {
-            directory.Delete(recursive: true);
-        }
+        Assert.Equal(actual: AffectedDocuments.PassSources(graph: "fill.graph.json", tree: tree), expected: ["passes/fill.hlsl"]);
+        Assert.Equal(
+            actual: AffectedDocuments.Reach(path: "fill.graph.json", tree: tree).Order(comparer: StringComparer.Ordinal),
+            expected: ["fill.graph.json", "passes/common.hlsli", "passes/fill.hlsl"]
+        );
     }
     [Fact]
     public void AFileACanarysDocumentsReachChoosesItAndIsMapped() {

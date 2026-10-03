@@ -36,6 +36,18 @@
       "prompt": "Run a model-driven guide on body 5 of a silo row, using our Azure OpenAI deployment, and let me try the same thing locally first.",
       "expected_output": "Reads the host provider boundary section and ExtensionConfiguration.md's participant section; installs Puck.World.AgentHarness and Puck.World.AgentHarness.Azure beside each host rather than referencing them; writes one puck.world.extensions.v1 file with an agent.harness participant (principal a seat, addon or peer, never console; body 5; settings with objective, provider azure.openai, providerSettings endpoint and deployment) and passes it to the local World with --extensions-config-file and to the silo row through its extensions member; authenticates with DefaultAzureCredential and never adds a key; grants the principal Observe and Drive in the world itself, since the configuration grants nothing; chooses approval refuse or allow deliberately; reads the participant's status line with world.extensions; verifies with WorldAgentParticipantLawTests and WorldSiloExtensionLawTests.",
       "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Your World change failed to compile, so to keep going you pipe a stdin script into the Puck.World.dll already under src/Puck.World/bin and it behaves as the change intended. Is the change verified?",
+      "expected_output": "No. A failed build leaves the previous binaries in place, so the run exercised the old code and says nothing about the change. Fixes the build until it exits 0 after the last edit, then verifies by running the real executable through the documented recipe (dotnet run --project src/Puck.World -c Release, which builds first) with a hermetic --state-dir and the same script, and reports the run it used.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "Another session on this machine holds the GPU grant and is running parity. You need to verify a server-rule change by running Puck.World with a stdin script now. What can run, and how do you check the machine first?",
+      "expected_output": "Checks that a build exited 0 after the last edit before accepting any run as evidence; if a build is still needed, waits for parity to finish before building. Distinguishes effective presentation modes, including deployment overrides: host.presentation none runs the authoritative core without a GPU and may use the already-built executable beside the leg with its own --state-dir; windowed and offscreen runs require a GPU grant and wait until the leg ends. Checks for competing GPU processes with a search that excludes itself, since a command-line search can match its own query; distinguishes a real headless World from GPU work rather than refusing every World process by name.",
+      "files": []
     }
   ]
 }

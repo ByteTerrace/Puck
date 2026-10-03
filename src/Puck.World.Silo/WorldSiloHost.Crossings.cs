@@ -81,7 +81,6 @@ public sealed partial class WorldSiloHost {
                 case WorldAuthorityJournalEntryKind.Crossing:
                     if (!WorldAuthorityCheckpointCodec.TryDecodeCrossingEntry(
                         bytes: entry.Encoded.Span,
-                        defaults: row.Server.Definition.PlayerDefaults,
                         entry: out var crossing,
                         reason: out var decodeReason
                     )) {

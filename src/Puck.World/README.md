@@ -556,7 +556,7 @@ pending, from any submitter, with `world.authority.stopped`, so an edit in
 flight there rolls back by name. The queue keeps nothing once its last endpoint
 is gone. Every edit carries the activation of the world whose document its base
 came from, and a world refuses one composed on another's
-(`world.mutation.activation_mismatch`), so an edit sent while a traveler's link
+(`world.mutation.activation-mismatch`), so an edit sent while a traveler's link
 has already moved on to the next world rolls back instead of landing there. The
 row doors that read a row before writing it (`world.row.add`, `.remove`, the
 literal `.set`, `.step`) and `creation.sculpt` carry it too.
@@ -1418,16 +1418,16 @@ the drawn image, none exists:
 | Arm | Reproduced by | Held by |
 |---|---|---|
 | `none` | no instance: `WorldSourceInstances` names none, and the engine shades the screen as unbound glass | `WorldSourceInstanceLawTests`; `world.screens` echoes `unbound`; the `uploaded-sources` canary captures the dark glass |
-| `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), the `uploaded-sources` and `instrument-clock-source` canaries |
+| `machine` | `source.machine`, an uploaded instance whose `MachineVideoSourceUpload` writes the output's latest frame once per completed tick, read from the host of the world instance its `world` setting names | `RenderGraphRuntimeLawTests.AMachineSource*`, `WorldCaptureSchedulerLawTests` (the exact verdict), `WorldNestedScreensLawTests` (a presented world's machine is its own instance), the `uploaded-sources`, `instrument-clock-source` and `portal-sources` canaries |
 | `producer`, `testPattern` | `WorldTestPatternProducer`, uploaded | `ImageProducerLawTests.ATestPatternFeedStatesTheExactPatternItShowsAndTheVerdictHoldsIt`, `WorldSourceInstanceLawTests`, the `uploaded-sources` canary |
 | `producer`, `qr` | `WorldQrProducer`, uploaded | `ImageProducerLawTests.AQrFeedStatesTheCodeItRasterized`, the `uploaded-sources` canary |
 | `producer`, `color` | `WorldColorProducer`, uploaded | `WorldNestedScreensLawTests` (a face past the nesting depth shows its fallback colour's instance), the `portal-nested` and `portal-return` canaries' discriminating legs |
 | `producer`, `camera` | the binder's `CameraProducer`, imported through `WorldCameraSourceFeed` | `ImageProducerLawTests.ACameraSourceDeclaresTheExtentItsSeatsSensorDelivers`, `WorldCaptureFillLawTests.ACapturedFrameAnswersFromItsConversionNeverFromItsPixels` (camera conversion refusal), the `hud-frame-slots` canary (offscreen, it opens no device); a recorded camera run is deferred |
 | `producer`, `capture` | the binder's `CaptureProducer`, imported through `CaptureSlotFeed`, whose answer delegates to `WorldCaptureFrame.Answer` | `ImageProducerLawTests.ACaptureOfADesktopCaptureSourceShowsTheFillAndNeverTheDesktopPixels` and `AFilledExternalSourceHandsOutItsFillAndNeverAcquiresItsFeed`, `WorldCaptureFillLawTests` (CPU conversion, quiet sources, GPU publication, source loss); the `uploaded-sources` canary opens monitor 0 offscreen and captures its fill |
-| `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it | `WorldViewPaneMappingLawTests.Views`, the `view-screens` canary |
+| `view` | an `sdf.world` instance of its own, rendering the residency `WorldScreenBinder.TryResolveView` creates for it; in a presented world, a view of the residency that world renders through, named under its level (`WorldViewNames.NestedCamera`) | `WorldViewPaneMappingLawTests.Views`, `WorldNestedScreensLawTests`, `WorldPresentedSourcesLawTests` (a presented world's cameras read each other at their previous frame), the `view-screens` and `portal-sources` canaries |
 | `session` | an `sdf.world` instance (`WorldViewNames.Session`) rendered through the destination's own frame source, or its endpoint's shared one; the destination's own screens show to `views.nestingDepth` (`WorldNestedScreens`, `WorldViewNames.Nested`) | `WorldScreenMappingLawTests.EachSourceKindNamesItsInstance`, `WorldSessionFollowLawTests`, `WorldNestedScreensLawTests`; the `uploaded-sources` canary shows and captures one, `portal-nested` a third world two levels deep and `portal-return` a destination's return portal |
-| `text` | no image: the decal tier draws its lines (`WorldScreenTextDecal`, through `TextSourceAt`) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`); the `uploaded-sources` canary checks its glyphs' ink |
-| `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`) | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
+| `text` | no image: the decal tier draws its lines (`WorldScreenDecals` over `WorldScreenTextDecal`, through `TextSourceAt`, or a presented world's own rows and font catalog in its session emitter) | `WorldTextAuthoringLawTests` (`TextScreenSourceValidates`, `TextScreenRefusesWithoutCatalogUnknownFontGridAndColor`, `TextCreationFaceSourceValidates`), `WorldPresentedSourcesLawTests` (a destination's text through its own fonts); the `uploaded-sources` and `portal-sources` canaries check its glyphs' ink |
+| `probe` | `source.probe`, an imported instance over the probe's output ring (`ProbeSourceFeed`); only the boot world runs a probe host, so a presented world's probe opens with a fault naming its world | `WorldSourceInstanceLawTests`, `RenderedProbeKernelHostLawTests`, the `probe-sources` canary |
 
 A producer a host adds needs no schema, planner or runtime change:
 `ImageProducerLawTests.AThirdProducerRegistersWithNoChangeToTheDocumentModel`
@@ -1966,7 +1966,10 @@ per source, sorted by name: the source's dotted name, then a `<kind> <value>`
 line per kind it counts. The boot server registers its own sources:
 `state.arena` and `state.search`, whose totals carry across a definition
 rebuild (`world.reload`, `world.load`, `world.reset`) that replaces the arena
-and search behind them, so a reading never goes down, and `state.rules`. A
+and search behind them, so a reading never goes down, and `state.rules`. Every
+authoritative shape registers `physics.sweep`: the certified sweeps that prove
+each moving body's travel, the bounds queries they spend, and how many ended in
+contact or exhausted their budget. A
 rendering shape adds the shader compiler's `shaders.compiler` (requests, cache
 hits and each native tool's runs) and the process's SDF kernel loads,
 `shaders.sdf-kernels` (loads and the bytecode bytes they read); each backend adds its
@@ -2083,8 +2086,9 @@ rates the tick integrates in closed form, so a key changing one never jumps
 the layer; a rate keys only on a tick clock and binds no state row. Keys are
 presentation: a clock reads the tick or a state row and nothing keyed feeds
 the simulation. A presentation-tier projection carries the tick clocks, which
-the recipient evaluates at the tick it presents, and no state clock, so a
-projection whose values key on a state clock refuses to hydrate by name. `world.timeline` echoes each clock's source, its period and
+the recipient evaluates at the tick it presents, and each state clock a value
+keys on as an anchor of its phase, re-sent only at the ticks the recipient's
+prediction misses the authority's phase. `world.timeline` echoes each clock's source, its period and
 start in engine ticks, its phase and reading at the authority's tick, and how
 many keyed values the presentation has resolved, which rises only while a
 clock a key reads moves.
