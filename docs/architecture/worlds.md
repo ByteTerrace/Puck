@@ -206,8 +206,9 @@ earlier run kept in the per-user `bakes` cache is read back, and any
 other is baked and kept there, so editing one prototype bakes that prototype
 alone. A prototype draws through its field until its bake is ready. The
 `sdf.bakes` work source counts the keys the cache held, the keys scheduled, the
-bakes made, the refusals, and the field evaluations spent; every kind is
-pacing-class, because what the cache already holds decides it.
+bakes made, the refusals, the held bakes that cannot be decoded, the field
+evaluations spent, and the bakes a presentation switched to from their field;
+every kind is pacing-class, because what the cache already holds decides it.
 
 ## World relationships
 

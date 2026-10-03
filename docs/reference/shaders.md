@@ -51,7 +51,7 @@ post-process package:
 |-----|---------|
 | Id | `sdf.film-grain` (`RenderGraphPackageCatalog.SdfFilmGrain`). |
 | Stages | `Assets/Shaders/Sdf/passes`: `fullscreen.vert` and `sdf-film-grain.frag`, compiled at build to `.spv` and `.dxil`. |
-| Members | `source`, its sampled input image, and `sourceSampler`, the sampler it is read through, after the config in its pass group. |
+| Members | `source`, its sampled input image, and `sourceSampler`, the sampler it is read through, after the config in its pass group, then the work counters every counting package declares (`ShaderWorkCounters`; see [loading and installing](#loading-and-installing)). |
 | Config | `SdfFilmGrainConfig`: `intensity` (float, default 0.05, 0 to 1, the peak per-channel offset), `size` (float, default 1, at least 1, the grain cell size in pixels), `seed` (uint, default 0), and `flickerHz` (uint, default 24, at least 1). |
 | Interface | `sdf-film-grain`, whose declarations are checked in as `sdf-film-grain.interface.hlsli`. |
 
@@ -335,7 +335,7 @@ offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): mask, beam, cull arguments, mesh, then primary, surface, ambient, shadow and views dispatched indirectly from the cull arguments, then the sky and the composite at the output extent, over transient counted scratch. Those five are stages over the per-pixel visibility record: primary alone reads the mesh target and writes the record, surface, ambient and shadow add to it, and views shades its hits into the lit image, premultiplied by coverage and each hit's fog transmittance, every light answering through one interface and the stage adding each light's summed rim and specular totals once; the sky evaluates its field runs only where the lit image leaves a pixel or a neighbour uncovered, and the composite adds the fog's in-scatter to the lit image, puts it over the sky's runs by its coverage, then integrates the bounded media over the surface and sky shares, each clipped at its own end, into the output. The ambient and shadow passes skip a frame whose levers turn ambient occlusion or soft shadows off. A view below a native render ceiling puts `resolve` between views and the sky (`SdfWorldPackage.Fragment`): it reconstructs the lit image and each output pixel's surface transport (the fog's in-scatter weight and the coverage over the ray distance, read from each sample's own record with the color's weights) from the render grid inside the dispatch box. A view whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment` at any ceiling: views also writes a render-extent reactivity buffer, and `resolve` reads it and the previous frame's history color and surface (each a history version at the output extent) and writes this frame's history beside the lit image, so the history never holds the sky. The screens it shows are the instance's reads, not ports. |
+| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): mask, beam, cull arguments, mesh, then primary, surface, ambient, shadow and views dispatched indirectly from the cull arguments, then the sky and the composite at the output extent, over transient counted scratch. Those five are stages over the per-pixel visibility record: primary alone reads the mesh target and writes the record, surface, ambient and shadow add to it, and views shades its hits into the lit image, premultiplied by coverage and each hit's fog transmittance, every light answering through one interface and the stage adding each light's summed rim and specular totals once; the sky evaluates its field runs only where the lit image leaves a pixel or a neighbour uncovered, and the composite adds the fog's in-scatter to the lit image (toward the gradient it reads from the residency's environment map), puts it over the sky's runs by its coverage, then integrates the bounded media over the surface and sky shares, each clipped at its own end, into the output. The ambient and shadow passes skip a frame whose levers turn ambient occlusion or soft shadows off. A view below a native render ceiling puts `resolve` between views and the sky (`SdfWorldPackage.Fragment`): it reconstructs the lit image and each output pixel's surface transport (the fog's in-scatter weight and the coverage over the ray distance, read from each sample's own record with the color's weights) from the render grid inside the dispatch box. A view whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment` at any ceiling: views also writes a render-extent reactivity buffer, and `resolve` reads it and the previous frame's history color and surface (each a history version at the output extent) and writes this frame's history beside the lit image, so the history never holds the sky. The screens it shows are the instance's reads, not ports. |
 | `sdf.bricks` | no input, one buffer output written by compute | The world's SDF brick pool, written by brick uploads and carve bakes: one float per voxel, stride 4, counted `[{ "per": ["BrickPoolVoxels"] }]`. It is world-scoped, and the views read it across buffer edges. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
 | `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, or, with `sharpen` set, a contrast-adaptive sharpen of the source by `sharpness` there (exact at sharpness 0), otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes the letterbox color outside the rect instead of the base, 0 by default), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpen` (0 by default), `sharpness` and `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default); a host that places panes per frame (`IRenderGraphPlacements`) overrides the rect, the sharpness and the sharpen switch, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
@@ -436,8 +436,8 @@ a `graph "name" { … }` block inside `views`, and a slot says
 ```
 
 An input that names its own row reads that row's previous frame. An input
-marked `previousFrame` takes its producer's last completed frame, which lets
-two rows show each other. The validator refuses any other loop of inputs
+marked `previousFrame` takes its producer's last completed frame and demands
+nothing of the producer, which lets two rows show each other. The validator refuses any other loop of inputs
 through the scheduler's own rule, naming every instance in the loop. A row's
 instance reads every producer as an image and publishes an image: the rows do
 not yet take their edges' kinds from their graphs' plans, so no world row
@@ -714,7 +714,12 @@ Every SDF view is a package instance of `sdf.world`. Its factory,
 residency (`SdfWorldResidency`): the tables one frame source's views share, its
 program, transforms, screens, lights, volumes and mesh draws. The frame's first
 pass to record submits the residency's one upload ahead of the view's
-submission, and every pass of the view reads the tables that upload wrote. At
+submission, and every pass of the view reads the tables that upload wrote. The
+upload also renders the sky's environment map and its coefficients, one pair
+for the residency however many views read it (its `environment` pass,
+`SdfWorldTables.SkyEnvironment.cs`), only when the sky draws another gradient
+than the map holds and the fog reads the map; the composite's fog reads the map
+instead of evaluating the sky. At
 the start of each frame the factory starts and prepares every residency it
 holds (`IRenderGraphPackageFactory.BeginFrame`); it answers `IsUnchanged` from
 the residency's record of what each view last rendered, and sizes a view's
@@ -1137,7 +1142,7 @@ groups its include declares:
 struct SdfBricksPushedIndex {
     [[vk::offset(0)]] uint index;
 };
-[[vk::push_constant]] ConstantBuffer<SdfBrickBakePushedIndex> pushedIndex : register(b0, space4);
+[[vk::push_constant]] ConstantBuffer<SdfBricksPushedIndex> pushedIndex : register(b0, space4);
 ```
 
 The struct is named for the interface (`ShaderInterface.PushedIndexTypeName`),
@@ -1845,7 +1850,12 @@ between them: a transition when the image layout changes, a memory or buffer
 barrier when either side writes, and nothing when a read follows reads in the
 same layout. An instance's first access of a frame starts from where its uses
 in earlier frames left it, including a history instance read one frame later
-as the previous frame's. The only states the plan cannot place are the ones
+as the previous frame's. A history storage's previous frame is the instance its
+writer last wrote successfully: the node reserves the next instance only for a
+writer that records, commits it once that frame's submission succeeds and
+cancels it when recording or submission fails, so a failed or skipped write
+leaves the last successful history in place, and a previous-frame read never
+demands its writer. The only states the plan cannot place are the ones
 host events leave: new or reset storage, a zero clear, a presentation, and
 history carried from a replaced graph. The node remembers those per instance,
 and the next access starts from that state and always records a barrier.
@@ -2027,9 +2037,12 @@ Readback waits for the submission fence and rejects earlier graph/enable epochs.
 The readout keeps at most 32 completed pairs per pass. Disabling withdraws it at
 once, then releases pools as their fences complete; device loss releases them.
 These durations never establish parity. Dynamic resolution is their one
-quality reader: it holds the latest timed frame's summed pass time
-(`LatestTimingMilliseconds`, a new frame each time `TimingFrames` moves) to the
-display period, and keeps timing recording while it is on.
+quality reader: it reads each of the world's view nodes' latest timed
+submission (`LatestTimingMilliseconds`, with `LatestTimingSubmission` naming
+the submission it timed, and so the render grid that submission recorded),
+sums the views' pass times, holds the sum to the display period, and keeps
+timing recording while it is on. `TimingFrames` moves with each submission read
+back.
 
 `pipeline.inspect` includes timestamp readback and CPU sample payload bytes.
 Both inspection and the live budget include `cadence-cpu-bytes`: installed
