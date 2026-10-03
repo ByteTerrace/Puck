@@ -394,14 +394,14 @@ public sealed class ShadowFrameLawTests {
         var initial = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
 
         Assert.Equal(expected: 0, actual: initial.Lights.ShadowSlots[0]);
-        Assert.Equal(expected: 0, actual: initial.Sky.Block.DiscLight);
+        Assert.Equal(expected: 0, actual: initial.Sky.First<SdfSkyDisc>().Light);
         mirror.Advance(engineTick: (EngineTicks.PerSecond / 4UL), tick: 1UL);
         mirror.Apply(fraction: 1f);
         var crossed = resolver.Resolve(definition: definition, revision: 0, mirror: mirror);
 
         Assert.Equal(expected: 1, actual: crossed.Lights.ShadowSlots[0]);
-        Assert.Equal(expected: 1, actual: crossed.Sky.Block.DiscLight);
-        Assert.Equal(expected: 1, actual: resolver.Resolve(definition: definition, revision: 0, mirror: mirror).Sky.Block.DiscLight);
+        Assert.Equal(expected: 1, actual: crossed.Sky.First<SdfSkyDisc>().Light);
+        Assert.Equal(expected: 1, actual: resolver.Resolve(definition: definition, revision: 0, mirror: mirror).Sky.First<SdfSkyDisc>().Light);
 
         var explicitDisc = definition with {
             RenderRaw = definition.Render with {
@@ -411,12 +411,12 @@ public sealed class ShadowFrameLawTests {
         var explicitFrame = resolver.Resolve(definition: explicitDisc, revision: 1, mirror: mirror);
 
         Assert.Equal(expected: 1, actual: explicitFrame.Lights.ShadowSlots[0]);
-        Assert.Equal(expected: 0, actual: explicitFrame.Sky.Block.DiscLight);
+        Assert.Equal(expected: 0, actual: explicitFrame.Sky.First<SdfSkyDisc>().Light);
         var disabled = resolver.Resolve(definition: definition, revision: 2, mirror: mirror,
             shadows: new WorldShadowSettings(FadeSlots: 0, FadeTicks: 0UL, Overflow: WorldShadowOverflow.Instant, Slots: 0));
 
         Assert.Equal(expected: -1, actual: disabled.Lights.ShadowSlots[0]);
-        Assert.Equal(expected: 0, actual: disabled.Sky.Block.DiscLight);
+        Assert.Equal(expected: 0, actual: disabled.Sky.First<SdfSkyDisc>().Light);
     }
     [Fact]
     public void ReconstructedSectionKeysKeepNamedSlotsAcrossAReorder() {

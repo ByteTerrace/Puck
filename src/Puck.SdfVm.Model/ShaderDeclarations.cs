@@ -9,7 +9,9 @@ namespace Puck.SdfVm;
 public sealed record ShaderDeclaration(string Path, Func<string> Generate);
 /// <summary>
 /// The one list of every HLSL declaration the C# model owns, and the generator the kernel builds and
-/// <c>puck shaders generate</c> both run: <c>sdf-isa.hlsli</c> (<see cref="SdfIsaHlsl"/>), the instruction set's recorded
+/// <c>puck shaders generate</c> both run: <c>sdf-isa.hlsli</c> (<see cref="SdfIsaHlsl"/>), the sky's kind table
+/// (<c>sdf-sky-kinds.hlsli</c> and <c>sky/sdf-sky-kind-table.hlsli</c>, <see cref="SdfSkyKindsHlsl"/>), the instruction
+/// set's recorded
 /// fingerprint (<see cref="SdfIsaHlsl.FingerprintSourcePath"/>), and every generated shader interface
 /// (<see cref="ShaderInterfaceHlsl"/>) the model declares: each engine package's with pass-group members, found by its
 /// interface's file name, and the SDF engine kernels' (<see cref="SdfKernelInterfaces"/>) at the paths they name.
@@ -33,8 +35,8 @@ public static class ShaderDeclarations {
     /// <param name="packages">The engine packages whose declared interfaces are owned includes.</param>
     /// <param name="problems">Receives one line per include no generator owns and per package whose include is missing or
     /// named twice.</param>
-    /// <returns>The owned files, <c>sdf-isa.hlsli</c> and the fingerprint's record first, then the includes in path
-    /// order.</returns>
+    /// <returns>The owned files, <c>sdf-isa.hlsli</c>, the fingerprint's record and the sky's kind table first, then the
+    /// includes in path order.</returns>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public static IReadOnlyList<ShaderDeclaration> Of(IReadOnlyList<string> files, RenderGraphPackageCatalog packages, List<string> problems) {
         ArgumentNullException.ThrowIfNull(argument: files);
@@ -101,6 +103,8 @@ public static class ShaderDeclarations {
         return [
             new ShaderDeclaration(Generate: SdfIsaHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfIsaHlsl.FileName}"),
             new ShaderDeclaration(Generate: () => SdfIsaHlsl.GenerateFingerprintSource(fingerprint: fingerprint), Path: SdfIsaHlsl.FingerprintSourcePath),
+            new ShaderDeclaration(Generate: SdfSkyKindsHlsl.Generate, Path: $"{SdfKernelInterfaces.KernelDirectory}/isa/{SdfSkyKindsHlsl.FileName}"),
+            new ShaderDeclaration(Generate: SdfSkyKindsHlsl.GenerateTable, Path: $"{SdfKernelInterfaces.KernelDirectory}/sky/{SdfSkyKindsHlsl.TableFileName}"),
             .. owned.Values,
         ];
     }
