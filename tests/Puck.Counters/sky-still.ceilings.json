@@ -294,6 +294,140 @@
         },
         {
           "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.dispatches",
+          "class": "deterministic",
+          "ceiling": 2
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.dispatches.indirect",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.draws",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.render-passes",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.command-buffers",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.barriers.image",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.barriers.memory",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.barriers.buffer",
+          "class": "deterministic",
+          "ceiling": 8
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.binds.pipeline",
+          "class": "deterministic",
+          "ceiling": 2
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.binds.descriptor-set",
+          "class": "deterministic",
+          "ceiling": 4
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.push-constants",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.descriptor-writes",
+          "class": "deterministic",
+          "ceiling": 13
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.uploads.host-visible",
+          "class": "deterministic",
+          "ceiling": 128
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.clears",
+          "class": "deterministic",
+          "ceiling": 1
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.copies",
+          "class": "deterministic",
+          "ceiling": 1
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.march.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.texels.written",
+          "class": "per-backend-deterministic",
+          "ceiling": 4105
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.copies.buffer-bytes",
+          "class": "deterministic",
+          "ceiling": 96
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 4096
+        },
+        {
+          "node": "sdf:world",
           "pass": null,
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -1639,7 +1773,8 @@
           "pass": "sdf.world$composite",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 110135
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",
@@ -3295,6 +3430,140 @@
         },
         {
           "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.dispatches",
+          "class": "deterministic",
+          "ceiling": 2
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.dispatches.indirect",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.draws",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.render-passes",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.command-buffers",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.barriers.image",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.barriers.memory",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.barriers.buffer",
+          "class": "deterministic",
+          "ceiling": 8
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.binds.pipeline",
+          "class": "deterministic",
+          "ceiling": 2
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.binds.descriptor-set",
+          "class": "deterministic",
+          "ceiling": 4
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.push-constants",
+          "class": "deterministic",
+          "ceiling": 0
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.descriptor-writes",
+          "class": "deterministic",
+          "ceiling": 13
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.uploads.host-visible",
+          "class": "deterministic",
+          "ceiling": 128
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.clears",
+          "class": "deterministic",
+          "ceiling": 1
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.copies",
+          "class": "deterministic",
+          "ceiling": 1
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.march.steps",
+          "class": "per-backend-deterministic",
+          "ceiling": 0,
+          "requiredZero": true
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.texels.written",
+          "class": "per-backend-deterministic",
+          "ceiling": 4105
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.copies.buffer-bytes",
+          "class": "deterministic",
+          "ceiling": 96
+        },
+        {
+          "node": "sdf:world",
+          "pass": "environment",
+          "kind": "gpu.sky.evaluations",
+          "class": "per-backend-deterministic",
+          "ceiling": 4096
+        },
+        {
+          "node": "sdf:world",
           "pass": null,
           "kind": "gpu.dispatches",
           "class": "deterministic",
@@ -4640,7 +4909,8 @@
           "pass": "sdf.world$composite",
           "kind": "gpu.sky.evaluations",
           "class": "per-backend-deterministic",
-          "ceiling": 110135
+          "ceiling": 0,
+          "requiredZero": true
         },
         {
           "node": "world",

@@ -118,6 +118,21 @@ public sealed class SdfTemporalHistoryLawTests {
         Assert.Equal(expected: 0u, actual: gap.Frames);
     }
     [Fact]
+    public void ARenderWhoseSubmissionFailedLeavesHistoryOnThePosesTheLastCompletedRenderHeld() {
+        var history = new SdfTemporalHistory();
+
+        history.Prepare(camera: default, epoch: Epoch, previousPoses: 0, currentPoses: 1);
+        history.Rendered();
+        // The tables uploaded poses 2 for this render, but its submission failed: Rendered is never called.
+        history.Prepare(camera: default, epoch: Epoch, previousPoses: 1, currentPoses: 2);
+        Assert.True(condition: history.HasPreviousView);
+        // The retry's previous tables hold poses 2, which no completed render of this view held: its history image
+        // was rendered at poses 1, so reprojecting it through poses 2 would be wrong.
+        history.Prepare(camera: default, epoch: Epoch, previousPoses: 2, currentPoses: 2);
+        Assert.False(condition: history.HasPreviousView);
+        Assert.Equal(expected: 0u, actual: history.Frames);
+    }
+    [Fact]
     public void DisabledAndDebugViewsAccumulateNoJitter() {
         foreach (var epoch in ((SdfTemporalEpoch[])[Epoch with { Enabled = false }, Epoch with { Debug = 1 }])) {
             var history = new SdfTemporalHistory();

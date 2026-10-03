@@ -1,6 +1,7 @@
 // The deterministic hashes' noise and dither: the R2 dither, value, lattice and cellular noise.
 #ifndef FIELD_SDF_NOISE_HLSLI
 #define FIELD_SDF_NOISE_HLSLI
+#include "../isa/sdf-isa.hlsli"
 #include "sdf-hash.hlsli"
 // One R2 dither sample in [0, 1] from integer pixel coordinates: a "blue-ish" low-discrepancy pattern the volumes jitter
 // their samples with, the same sequence the display encode dithers its quantization with (display-encode.frag.hlsl in

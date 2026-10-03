@@ -364,6 +364,7 @@ public static partial class WorldSubmissionCodec {
         var a = reader.ReadDouble();
         var b = reader.ReadDouble();
         var seat = reader.ReadInt32();
+        var view = reader.ReadString(field: "SessionLever.View");
 
         if (
             !reader.Failed &&
@@ -380,6 +381,7 @@ public static partial class WorldSubmissionCodec {
             B: b,
             Name: name,
             Seat: seat,
+            View: ((view.Length == 0) ? null : view),
             Section: section
         );
     }
@@ -1845,6 +1847,7 @@ public static partial class WorldSubmissionCodec {
                 writer.WriteDouble(value: lever.A);
                 writer.WriteDouble(value: lever.B);
                 writer.WriteInt32(value: lever.Seat);
+                writer.WriteString(value: (lever.View ?? string.Empty));
             },
             out bytes,
             out failure

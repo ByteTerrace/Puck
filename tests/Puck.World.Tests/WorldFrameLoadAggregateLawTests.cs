@@ -51,7 +51,7 @@ public sealed class WorldFrameLoadAggregateLawTests {
             var standing = (frame > 0);
 
             load.Render(first: !standing, periods: (0.25d + (frame / 32d)));
-            controller.Advance(ceiling: 0.875f, displayHertz: Hertz, floor: 0.5f, forced: 0f, load: load, outputPixels: (256L * 144L));
+            controller.Advance(ceiling: 0.875f, displayHertz: Hertz, floor: 0.5f, load: load, outputPixels: (256L * 144L), pin: 0f);
         }
 
         Assert.Equal(expected: WorldDynamicResolutionSignal.Gpu, actual: controller.Signal);

@@ -38,6 +38,8 @@ public sealed class SdfPipelineBuildOrderLawTests {
                 SdfKernel.ViewsCore,
                 SdfKernel.ViewsFolds,
                 SdfKernel.Composite,
+                SdfKernel.SkyEnvironment,
+                SdfKernel.SkyEnvironmentReduce,
             ]
         );
     }

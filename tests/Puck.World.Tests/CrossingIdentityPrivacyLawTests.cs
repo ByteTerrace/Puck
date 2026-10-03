@@ -1025,7 +1025,13 @@ public sealed class CrossingIdentityPrivacyLawTests {
     // The red legs: a binding taped before the later adoption gives seat 0 score 1 on the re-drive, and two detached
     // identities leave seat 1 without the write.
     [Fact]
-    public void TwoTravelersHomeUnderOneIdentityReplayTheirSharedBinding() {
+    public void TwoTravelersHomeUnderOneIdentityReplayTheirSharedBinding() => ProveSharedHomeBinding(separateArrivals: false);
+    // The non-atomic party path lands one arrival per traveler. With an arrival-local detached map, the second
+    // arrival leaves replay seat 0 at score 1 while live seat 0 reads 2, failing Primary.Match at that tick.
+    [Fact]
+    public void SeparateHomeArrivalsUnderOneIdentityReplayTheirSharedBinding() => ProveSharedHomeBinding(separateArrivals: true);
+
+    private static void ProveSharedHomeBinding(bool separateArrivals) {
         const int LaneCapacity = 16;
         using var directory = new TemporaryDirectory(prefix: "puck-privacy-shared-");
         var definition = Fixtures.BuildDocument() with {
@@ -1080,11 +1086,28 @@ public sealed class CrossingIdentityPrivacyLawTests {
             })]
         );
 
-        Assert.True(condition: server.ReserveTransfer(request: request).Accepted);
-        Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: request.SourceAuthority,
-            transferId: request.TransferId, reason: out _, members: [.. carried.Select(selector: static projection => new WorldTransferCommitMember(
-                Profile: projection, HasMappedArrival: false, BodyMotionProgramName: "", Position: default, YawRadians: default,
-                PlanarVelocity: default, VerticalVelocity: default))]));
+        var arrivals = (separateArrivals
+            ? request.Members.Select(selector: (member, index) => request with {
+                TransferId = ((ulong)(index + 1)),
+                PartyAllOrNothing = false,
+                Members = [member],
+            }).ToArray()
+            : [request]);
+
+        foreach (var arrival in arrivals) {
+            Assert.True(condition: server.ReserveTransfer(request: arrival).Accepted);
+            Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: arrival.SourceAuthority,
+                transferId: arrival.TransferId, reason: out _, members: [.. arrival.Members.Select(selector: static member => new WorldTransferCommitMember(
+                    Profile: member.Identity, HasMappedArrival: false, BodyMotionProgramName: "", Position: default, YawRadians: default,
+                    PlanarVelocity: default, VerticalVelocity: default))]));
+            if (separateArrivals) {
+                fixture.Step();
+                tape.NoteTick();
+            }
+        }
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 1)!.Profile);
+        Assert.Equal(expected: 2L, actual: Fact(identity: owned, key: "score"));
         for (var tick = 0; (tick < 5); tick++) {
             fixture.Step();
             tape.NoteTick();
@@ -1100,6 +1123,305 @@ public sealed class CrossingIdentityPrivacyLawTests {
 
         Assert.True(condition: verdict.Primary.Match, userMessage: verdict.Primary.Describe());
         Assert.Equal(expected: -1, actual: verdict.Primary.DivergedAt);
-        Assert.Equal(expected: 6, actual: verdict.Primary.Ticks);
+        Assert.Equal(expected: (separateArrivals ? 8 : 6), actual: verdict.Primary.Ticks);
+    }
+
+    // Records one tick on a fresh server whose catalog owns the boot profile, seat 0 joined as that identity.
+    private static (WorldReplayTape Tape, WorldIdentity Owned) RecordOwnedSeat(WorldFixture fixture, string directory) {
+        var server = fixture.Server;
+        var owned = server.Profiles.BootProfile;
+
+        Assert.True(condition: server.ApplySession(request: new SessionRequest.Join(Principal: Principal.Seat(slot: 0), Slot: 0,
+            IdentityName: owned.Name, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        var tape = Tape(directory: directory, server: server);
+
+        Assert.True(condition: tape.TryBeginRecording(name: "arrivals", refusal: out var refusal), userMessage: refusal);
+        fixture.Step();
+        tape.NoteTick();
+        _ = tape.StopRecording();
+        return (tape, owned);
+    }
+    // Ends the drive `tape` holds the way the theory names: a cancel, or the one recorded tick stepped to its target.
+    private static void EndDrive(WorldFixture fixture, WorldReplayTape tape, bool cancel) {
+        if (cancel) {
+            _ = tape.CancelDrive();
+            return;
+        }
+        tape.InjectDriveTick();
+        fixture.Step();
+        tape.NoteTick();
+        Assert.Null(@object: tape.DriveProgress);
+    }
+    private static WorldIdentity SavedOnDisk(WorldOwnedWorlds catalog, WorldIdentity owned, WorldServer server) => new(
+        defaults: server.Definition.PlayerDefaults,
+        document: WorldDefinitionSerialization.Deserialize(utf8Json: File.ReadAllBytes(path: Path.Combine(
+            path1: catalog.FilePath,
+            path2: WorldDocumentName.For(id: SafeName.Parse(candidate: owned.Id))
+        )))
+    );
+
+    // THE LAW: when a live drive ends, a seat this authority's catalog owns is bound to the live catalog identity again,
+    // and the drive's detached copy is discarded. The drive's own write (a fact written while the seat drove the taped
+    // projection) is never saved, the owner's later edit is untouched, the two differences are narrated as drift on
+    // replay.profile, and a live write after the drive ends is saved to the catalog. A cancel and a drive that reaches its
+    // target end through the same door. The red leg leaves the seat on the detached copy: it is not the owned identity,
+    // and the live write after the drive stays on the copy and is never saved.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ADriveThatEndsRebindsAnOwnedSeatToTheLiveIdentity(bool cancel) {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-rebind-");
+        var hub = new WorldOutputHub();
+        var sink = new RecordingNarrationSink();
+
+        using var attached = hub.AttachNarrationSink(sink: sink);
+        using var fixture = Fixtures.FreshServer(catalogNarration: hub);
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+
+        var (tape, owned) = RecordOwnedSeat(directory: directory.RootPath, fixture: fixture);
+
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "laterFact"), reason: out var reason, value: 7), userMessage: reason);
+        var before = Saved(catalog: catalog, owned: owned);
+
+        Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: null, name: "arrivals", refusal: out reason, toTick: null), userMessage: reason);
+        var driven = server.Population.EntryBody(index: 0)!.Profile!;
+
+        Assert.NotSame(actual: driven, expected: owned);
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: driven, key: Name(value: "drivenFact"), reason: out reason, value: 5), userMessage: reason);
+        EndDrive(cancel: cancel, fixture: fixture, tape: tape);
+
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Null(@object: Fact(identity: owned, key: "drivenFact"));
+        AssertUnchanged(before: before, catalog: catalog, owned: owned);
+        Assert.Contains(collection: sink.Narrations, filter: static narration => ((narration.Channel == "replay.profile") && narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: "fact 'drivenFact' drifted since record-start — taped 5, live none")));
+        Assert.Contains(collection: sink.Narrations, filter: static narration => ((narration.Channel == "replay.profile") && narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: "fact 'laterFact' drifted since record-start — taped none, live 7")));
+
+        Assert.True(condition: catalog.TrySetFact(changed: out var changed, identity: server.Population.EntryBody(index: 0)!.Profile!, key: Name(value: "liveFact"), reason: out reason, value: 9), userMessage: reason);
+        Assert.True(condition: changed);
+        var saved = SavedOnDisk(catalog: catalog, owned: owned, server: server);
+
+        Assert.Equal(9L, Fact(identity: saved, key: "liveFact"));
+        Assert.Equal(7L, Fact(identity: saved, key: "laterFact"));
+        Assert.Null(@object: Fact(identity: saved, key: "drivenFact"));
+    }
+    // THE LAW: a drive's end touches only the seats this authority's catalog owns. Seat 1 drives a visitor the catalog
+    // holds no document for; after the drive it still carries the very identity the drive seated, and no drift is
+    // narrated for it. Seat 0, owned, is the control: it is rebound. The red leg rebinds every profiled seat, so the
+    // visitor seat loses its identity or the owned one is not rebound.
+    [Fact]
+    public void ADriveThatEndsLeavesASeatTheCatalogDoesNotOwnAlone() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-rebind-visitor-");
+        var hub = new WorldOutputHub();
+        var sink = new RecordingNarrationSink();
+
+        using var attached = hub.AttachNarrationSink(sink: sink);
+        using var fixture = Fixtures.FreshServer(catalogNarration: hub);
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+
+        Assert.True(condition: server.ApplySession(request: new SessionRequest.Join(Principal: Principal.Seat(slot: 1), Slot: 1,
+            IdentityName: null, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        var visitor = WorldIdentity.FromProjection(
+            defaults: server.Definition.PlayerDefaults,
+            projection: new WorldIdentityProjection(Id: "guest-visitor", Name: "Guest", ColorHex: "#112233", MoveSpeed: null, TurnSpeed: null)
+        );
+
+        server.Population.SetSeatProfile(profile: visitor, slot: 1);
+        Assert.False(condition: catalog.Owns(identity: visitor));
+        var (tape, owned) = RecordOwnedSeat(directory: directory.RootPath, fixture: fixture);
+
+        Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: null, name: "arrivals", refusal: out var reason, toTick: null), userMessage: reason);
+        var seated = server.Population.EntryBody(index: 1)!.Profile!;
+
+        Assert.Equal(expected: "guest-visitor", actual: seated.Id);
+        Assert.NotSame(actual: server.Population.EntryBody(index: 0)!.Profile, expected: owned);
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: seated, key: Name(value: "visitFact"), reason: out reason, value: 2), userMessage: reason);
+        _ = tape.CancelDrive();
+
+        Assert.Same(expected: seated, actual: server.Population.EntryBody(index: 1)!.Profile);
+        Assert.Equal(2L, Fact(identity: seated, key: "visitFact"));
+        Assert.False(condition: catalog.Owns(identity: seated));
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.DoesNotContain(collection: sink.Narrations, filter: static narration => narration.Text.Contains(comparisonType: StringComparison.Ordinal, value: "drifted since record-start"));
+    }
+    // THE LAW: a save failure's narration and refusal name the file under the catalog and the kind of failure, never a
+    // rooted path. A directory standing where the identity's file belongs fails the write; the narration the catalog's hub
+    // carries, the reason TrySave returns, and the reason an unowned identity is refused with, hold no part of the
+    // catalog's directory. The control is the same save succeeding with the directory gone. The red leg puts the exception
+    // message, which names the path, back into the narration.
+    [Fact]
+    public void ASaveFailureNarrationCarriesNoRootedPath() {
+        var hub = new WorldOutputHub();
+        var sink = new RecordingNarrationSink();
+
+        using var attached = hub.AttachNarrationSink(sink: sink);
+        using var fixture = Fixtures.FreshServer(catalogNarration: hub);
+        var catalog = fixture.Server.Profiles;
+        var owned = catalog.BootProfile;
+        var fileName = WorldDocumentName.For(id: SafeName.Parse(candidate: owned.Id));
+        var path = Path.Combine(path1: catalog.FilePath, path2: fileName);
+
+        Assert.True(condition: catalog.TrySave(identity: owned, reason: out var reason), userMessage: reason);
+        File.Delete(path: path);
+        _ = Directory.CreateDirectory(path: path);
+        try {
+            Assert.False(condition: catalog.TrySave(identity: owned, reason: out reason));
+            catalog.Save();
+        } finally {
+            Directory.Delete(path: path);
+        }
+
+        NarrationPaths.AssertNone(root: catalog.FilePath, text: reason);
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: $"'{fileName}'");
+        Assert.NotEmpty(collection: sink.Narrations);
+
+        foreach (var narration in sink.Narrations) {
+            NarrationPaths.AssertNone(root: catalog.FilePath, text: narration.Text);
+        }
+
+        var visitor = WorldIdentity.FromProjection(defaults: fixture.Server.Definition.PlayerDefaults, projection: owned.Project());
+
+        Assert.False(condition: catalog.TrySave(identity: visitor, reason: out reason));
+        Assert.Contains(actualString: reason, comparisonType: StringComparison.Ordinal, expectedSubstring: "not owned by this catalog");
+        NarrationPaths.AssertNone(root: catalog.FilePath, text: reason);
+        Assert.True(condition: catalog.TrySave(identity: owned, reason: out reason), userMessage: reason);
+    }
+
+    // A world whose one rule reads a fact of the identity seat 0 drives: `seen` becomes 1 while that fact is 1.
+    private static WorldDefinition FactReadingDocument() => Fixtures.BuildDocument() with {
+        StateRaw = new WorldStateSection(World: [
+            new WorldStateRow(Name: Name(value: WorldIdentityFactLane.RowName), Kind: CellKind.Int, Capacity: 16),
+            new WorldStateRow(Name: Name(value: "seen"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 0L))]),
+        ]),
+        Rules = [new WorldRule(
+            Name: Name(value: "read"),
+            Effects: [new ActionEffect.SetState(State: "seen", Value: 1m)],
+            Gate: new ActionPredicate.CompareState(State: $"{WorldRuleFacts.IdentityPrefix}body:0:dived", Comparison: ExpressionOp.Equal, Value: 1m)
+        )],
+    };
+
+    // THE LAW: a fork records the identity it continues with. A tape is recorded with the owned identity carrying no
+    // `dived` fact; the owner then writes it as 1 and the tape is driven to its end as a fork, which rebinds the seat to
+    // that live identity. The fork's rule reads the fact, so the fork's world is not the tape's: the fork's own recording,
+    // re-driven through a fresh world, must reproduce every tick bit-identically. The red leg records the old tape's pins
+    // as the fork's starting identity, so the re-drive reads no fact and diverges from the tick the live fork's rule fired.
+    [Fact]
+    public void AForkRecordsTheIdentityItContinuesWith() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-fork-");
+        using var fixture = Fixtures.FreshServer(definition: FactReadingDocument());
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+
+        var (tape, owned) = RecordOwnedSeat(directory: directory.RootPath, fixture: fixture);
+
+        Assert.Equal(0L, SeenSlot(fixture: fixture));
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "dived"), reason: out var reason, value: 1), userMessage: reason);
+        Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: "branch", name: "arrivals", refusal: out reason, toTick: null), userMessage: reason);
+
+        while (tape.Mode == WorldReplayMode.Replaying) {
+            tape.InjectDriveTick();
+            fixture.Step();
+            tape.NoteTick();
+        }
+
+        Assert.Equal(WorldReplayMode.Recording, tape.Mode);
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Equal(0L, SeenSlot(fixture: fixture));
+
+        for (var tick = 0; (tick < 3); tick++) {
+            fixture.Step();
+            tape.NoteTick();
+        }
+
+        Assert.Equal(1L, SeenSlot(fixture: fixture));
+        _ = tape.StopRecording();
+
+        var verdict = tape.Verify(name: "branch");
+
+        Assert.Equal(-1, verdict.Primary.DivergedAt);
+
+        WorldReplaySnapshot recorded;
+
+        using (var stream = File.OpenRead(path: tape.PathFor(name: "branch"))) {
+            recorded = WorldReplaySnapshot.Read(stream: stream);
+        }
+
+        var switches = recorded.Ticks.SelectMany(selector: static tick => tick.Authority).Where(predicate: static entry => (entry.GetType().Name == "SeatIdentity")).ToArray();
+
+        Assert.Single(collection: switches);
+    }
+
+    private static long SeenSlot(WorldFixture fixture) => StateRows.FindCell(
+        cells: WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "seen")!.Cells,
+        key: WorldStateRow.SlotKey
+    )!.Value.AsInt;
+    // Two seats driving the one owned identity, a rule writing seat 0's fact when its `armed` fact is 1, and a rule that
+    // reads seat 1's fact the write produced.
+    private static WorldDefinition SharedIdentityDocument() => Fixtures.BuildDocument() with {
+        StateRaw = new WorldStateSection(World: [
+            new WorldStateRow(Name: Name(value: WorldIdentityFactLane.RowName), Kind: CellKind.Int, Capacity: 16),
+            new WorldStateRow(Name: Name(value: "seen"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 0L))]),
+        ]),
+        Rules = [
+            new WorldRule(
+                Name: Name(value: "write"),
+                Effects: [new WorldEffect.SetIdentityFact(Key: "0", Fact: "score", Value: 7m)],
+                Gate: new ActionPredicate.CompareState(State: $"{WorldRuleFacts.IdentityPrefix}body:0:armed", Comparison: ExpressionOp.Equal, Value: 1m)
+            ),
+            new WorldRule(
+                Name: Name(value: "read"),
+                Effects: [new ActionEffect.SetState(State: "seen", Value: 1m)],
+                Gate: new ActionPredicate.CompareState(State: $"{WorldRuleFacts.IdentityPrefix}body:1:score", Comparison: ExpressionOp.Equal, Value: 7m)
+            ),
+        ],
+    };
+
+    // THE LAW: seats the live rebind gave the same owned identity share one identity on the fork's tape. Seats 0 and 1
+    // both drive the owned identity; the owner arms it, the tape is driven to its end as a fork, and the fork's rule
+    // writes seat 0's score, which the second rule reads through seat 1. The fork's own recording, re-driven through a
+    // fresh world, must reproduce it. The red leg gives each switch entry its own detached identity: seat 1 never sees
+    // the score and the re-drive diverges.
+    [Fact]
+    public void AForkKeepsSeatsOfOneIdentitySharingIt() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-fork-shared-");
+        using var fixture = Fixtures.FreshServer(definition: SharedIdentityDocument());
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+        var owned = catalog.BootProfile;
+
+        foreach (var slot in new[] { 0, 1 }) {
+            Assert.True(condition: server.ApplySession(request: new SessionRequest.Join(Principal: Principal.Seat(slot: slot), Slot: slot,
+                IdentityName: owned.Name, WireProtocolKey: WorldProtocol.WireProtocolKey)).Accepted);
+        }
+
+        var tape = Tape(server: server, directory: directory.RootPath);
+
+        Assert.True(condition: tape.TryBeginRecording(name: "arrivals", refusal: out var reason), userMessage: reason);
+        fixture.Step();
+        tape.NoteTick();
+        _ = tape.StopRecording();
+
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "armed"), reason: out reason, value: 1), userMessage: reason);
+        Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: "branch", name: "arrivals", refusal: out reason, toTick: null), userMessage: reason);
+
+        while (tape.Mode == WorldReplayMode.Replaying) {
+            tape.InjectDriveTick();
+            fixture.Step();
+            tape.NoteTick();
+        }
+
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 1)!.Profile);
+
+        for (var tick = 0; (tick < 3); tick++) {
+            fixture.Step();
+            tape.NoteTick();
+        }
+
+        Assert.Equal(1L, SeenSlot(fixture: fixture));
+        Assert.Equal(7L, Fact(identity: owned, key: "score"));
+        _ = tape.StopRecording();
+        Assert.Equal(-1, tape.Verify(name: "branch").Primary.DivergedAt);
     }
 }

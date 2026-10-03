@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response re-runs the verification with `puck lengths --check` and reports its verdict.
+lengths\s+--check

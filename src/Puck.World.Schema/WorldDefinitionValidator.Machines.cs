@@ -161,4 +161,45 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
+    // The (row, key) pair rule every reader of a named cell enforces, specialized to a memory binding's own error
+    // text (kept separate from WorldDefinitionValidator.Response.cs's ValidateStateCell, which speaks of a response's
+    // comparand rather than a binding's mirrored cell).
+    private static void ValidateMemoryRow(string? row, string? key, string entryPath, WorldDefinition definition, List<string> errors) {
+        if (
+            (row is null) ||
+            (WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: row
+        ) is not { } declared)
+        ) {
+            errors.Add(item: $"{entryPath}.row '{row}' does not name a declared state.world row.");
+
+            return;
+        }
+
+        if (declared.Kind != CellKind.Int) {
+            errors.Add(item: $"{entryPath}.row '{row}' is kind={declared.Kind} — a machine-memory binding mirrors an Int cell only.");
+        }
+
+        if (
+            declared.IsKeyed &&
+            (key is null)
+        ) {
+            errors.Add(item: $"{entryPath} names keyed row '{row}' without a 'key' — a keyed row has no single cell, so name the one you mean.");
+        } else if (
+            !declared.IsKeyed &&
+            (key is not null)
+        ) {
+            errors.Add(item: $"{entryPath} names row '{row}' with a 'key', but the row is not keyed — omit 'key' to read its slot cell.");
+        } else if (
+            (key is not null) &&
+            !CellName.TryParse(
+            candidate: key,
+            name: out _,
+            reason: out var reason
+        )
+        ) {
+            errors.Add(item: $"{entryPath} key '{key}' {reason}");
+        }
+    }
 }

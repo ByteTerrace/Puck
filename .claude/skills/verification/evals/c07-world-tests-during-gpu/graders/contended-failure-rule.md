@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response says a leg that fails while contended is re-run once alone, and a timeout that passes alone is reported as a flake.
+(re-?run|rerun)[^.\n]{0,60}(once|alone)|alone[^.\n]{0,60}(re-?run|rerun)

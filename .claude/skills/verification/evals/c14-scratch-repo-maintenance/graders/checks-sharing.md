@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response checks whether the scratch repository shares an object store, alternates or a common directory with the other worktree.
+object store|alternates

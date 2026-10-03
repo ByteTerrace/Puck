@@ -17,7 +17,11 @@ namespace Puck.World.Client;
 /// <param name="resolution">The session's authored pixel extent, including the caller's resolved default, or null to
 /// use the requested capture extent. It fixes the camera aspect from the first capture, independently of a residency's
 /// largest previously requested extent.</param>
-public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Action captureHostFirst, WorldScreenResolution? resolution = null) : ISdfFrameSource {
+/// <param name="resolveResolution">Dresses the session view's saved quality and live pin, or null for unchanged views.</param>
+public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Action captureHostFirst, WorldScreenResolution? resolution = null,
+    Func<SdfViewSnapshot, uint, uint, SdfViewSnapshot>? resolveResolution = null) : ISdfFrameSource {
+    private readonly List<SdfViewSnapshot> m_views = [];
+
     private bool m_hasProduced;
     private long m_lastProduceTimestamp;
 
@@ -43,12 +47,23 @@ public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Act
         m_lastProduceTimestamp = timestamp;
         m_hasProduced = true;
 
-        return inner.CaptureFrame(
+        var frame = inner.CaptureFrame(
             deltaSeconds: ownDelta,
             height: ((uint)(resolution?.Height ?? ((int)height))),
             interpolationAlpha: 0f,
             width: ((uint)(resolution?.Width ?? ((int)width)))
         );
+
+        if (resolveResolution is null) {
+            return frame;
+        }
+        m_views.Clear();
+        for (var index = 0; (index < frame.Views.Count); index++) {
+            // Only the session's own snapshot is dressed here: the views after it are cameras the binder filmed, each
+            // already dressed under its own name.
+            m_views.Add(item: ((index == 0) ? resolveResolution(frame.Views[index], ((uint)(resolution?.Width ?? ((int)width))), ((uint)(resolution?.Height ?? ((int)height)))) : frame.Views[index]));
+        }
+        return frame with { Views = m_views };
     }
     /// <inheritdoc/>
     /// <remarks>The time a device loss takes to recover must not land as one giant smoothing delta on the next

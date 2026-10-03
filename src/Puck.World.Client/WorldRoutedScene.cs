@@ -131,7 +131,7 @@ public sealed class WorldRoutedScene : ISdfFrameDresser {
 
             // The emitter's own view frames the world's default projection at a session screen's quality.
             foreach (var window in m_latchedWindows) {
-                m_dressedViews.Add(item: (window.View ?? frame.Views[0]));
+                m_dressedViews.Add(item: (window.View ?? ((window.FallbackResolution is { } resolve) ? resolve(frame.Views[0]) : frame.Views[0])));
             }
         } else if (m_dressedViews.Count == 0) {
             m_dressedViews.AddRange(collection: frame.Views);
@@ -270,6 +270,9 @@ public sealed class WorldRoutedWindow : IDisposable {
     /// quality. <see langword="null"/>, the default, renders the world's default projection at a session screen's
     /// reduced quality (<see cref="WorldSessionSceneEmitter.ReducedQuality"/>).</summary>
     public SdfViewSnapshot? View { get; set; }
+    /// <summary>Gets or sets how the window dresses the world's default projection it renders while <see cref="View"/> is
+    /// <see langword="null"/>, or <see langword="null"/> to render it as the emitter framed it.</summary>
+    public Func<SdfViewSnapshot, SdfViewSnapshot>? FallbackResolution { get; set; }
 
     /// <summary>Detaches the window from its scene; the scene's later windows move down at the next presenter latch.</summary>
     public void Dispose() {

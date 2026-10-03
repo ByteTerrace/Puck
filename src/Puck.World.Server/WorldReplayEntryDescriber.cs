@@ -171,6 +171,7 @@ public static class WorldReplayEntryDescriber {
             values: federated.Held.Select(selector: static held => $"body:{held.Index}")
         )}]",
             WorldReplayEntry.LinkDelivery link => $"link '{link.Adjacency}' delivered",
+            WorldReplayEntry.SeatIdentity seatIdentity => $"seat body:{seatIdentity.Slot} continues as '{seatIdentity.Profile.Id}'",
             _ => entry.GetType().Name,
         };
     }

@@ -1,6 +1,8 @@
 ---
-type: llm
+type: regex
 weight: 1
+match: contains
+flags: i
 ---
 
-The response redoes the mutation with an exact edit, or with `puck laws prove --file-list` or `--fix`, if the diff shows anything else.
+exact edit|laws prove

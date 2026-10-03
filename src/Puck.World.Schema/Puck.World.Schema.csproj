@@ -25,4 +25,17 @@
     <ItemGroup>
         <Using Include="Puck.State" />
     </ItemGroup>
+    <!-- The commit this assembly is built at, embedded as a manifest resource (WorldSchema.SourceRevision). A
+         resource is not part of the reference assembly, so a new commit recompiles this project alone and its
+         dependents only copy it; the file is rewritten only when the commit changes. Empty outside a git tree. -->
+    <Target Name="PuckEmbedSourceRevision" BeforeTargets="AssignTargetPaths" DependsOnTargets="InitializeSourceControlInformation">
+        <PropertyGroup>
+            <_PuckSourceRevisionFile>$(IntermediateOutputPath)puck.source-revision.txt</_PuckSourceRevisionFile>
+        </PropertyGroup>
+        <WriteLinesToFile File="$(_PuckSourceRevisionFile)" Lines="$(SourceRevisionId)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+        <ItemGroup>
+            <EmbeddedResource Include="$(_PuckSourceRevisionFile)" LogicalName="Puck.World.Schema.SourceRevision" />
+            <FileWrites Include="$(_PuckSourceRevisionFile)" />
+        </ItemGroup>
+    </Target>
 </Project>

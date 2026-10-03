@@ -533,10 +533,10 @@ public sealed partial class WorldTick {
         Host.Engagement.FoldTick(replaysInput: Host.ReplaysInput);
         Host.ReplaysInput = false;
 
-        // screens[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its
-        // cell — see WorldServer.MachineMemory.cs. Runs right before the machine steps so a Write binding's poke
+        // machines[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its
+        // cell — see WorldServer.NamedMachineMemory.cs. Runs right before the machine steps so a Write binding's poke
         // reaches it before this tick's advance.
-        Host.SyncMachineMemory(tick: tick);
+        Host.SyncNamedMachineMemory(tick: tick);
 
         // Step every booted machine off THIS tick's freshly-folded pads: reads WorldEngagement.BuildPadSnapshot()
         // directly, in-process, no client/wire round-trip. Runs in EVERY boot shape via WorldServerStepShell.Step

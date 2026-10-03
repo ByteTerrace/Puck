@@ -1,0 +1,19 @@
+world.temporal on
+world.render-scale quarter
+world.ao off
+world.shadows off
+world.upscale-sharpness 0
+world.cadence on
+world.wait ready 45
+world.wait 30
+# Restart the epoch by panning; two reads inside its eight-sample convergence must advance.
+world.row.set placements camera-anchor position [0.5,0,0]
+world.wait 1
+world.counters gpu
+world.wait 2
+world.counters gpu
+# A still camera finishes convergence, then its last output stands for later frames.
+world.wait 30
+world.counters gpu
+world.wait 30
+world.counters gpu

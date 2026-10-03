@@ -226,7 +226,7 @@ public sealed class DirectXDescriptorSet {
 }
 /// <summary>
 /// Pairs an <c>ID3D12Resource*</c> with its DXGI format so <see cref="DirectXGpuBindings"/> can create a typed SRV
-/// without calling the problematic <c>GetDesc</c> vtable slot. Stored in a <see cref="GCHandle"/>.
+/// without calling the problematic <c>GetDesc</c> vtable slot. Named through <see cref="DirectXImageViews"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed class DirectXImageView {

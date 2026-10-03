@@ -1,6 +1,7 @@
 // The sky's layers, read from the sky block (sdfSky) and its stops (sdfSkyStops): the gradient, the sun disc, the star
 // field and the cloud layer, grouped into the runs the sky and composite passes evaluate in the authored order: the
-// gradient (a field run), the disc and the stars (a point run), then the clouds (a field run).
+// gradient (a field run), the disc and the stars (a point run), then the clouds (a field run). The environment map holds
+// the gradient alone (sdf-sky-environment.comp.hlsl).
 #ifndef SHADE_SDF_SKY_HLSLI
 #define SHADE_SDF_SKY_HLSLI
 // The star field's cell-grid domain is the octahedral sky projection (sdf-octahedral.hlsli).
@@ -164,7 +165,8 @@ float4 sdfCloudLayer(float3 direction, float3 color, float coverage, float softn
 }
 // The sky's GRADIENT: the stops, which the default look an unauthored world renders supplies as data like any authored
 // sky's, piecewise-linear in direction.y and clamped to the end stops beyond the first and last (the validator orders
-// them and requires two). It is the sky's lowest field run, and the colour distance fog blends a surface toward.
+// them and requires two). It is the sky's lowest field run, and the colour distance fog blends a surface toward, which
+// the environment map holds (sdf-sky-environment.comp.hlsl) and the composite reads.
 float3 sdfSkyGradient(float3 direction) {
     uint stops = sdfSky[0].StopCount;
     float elevation = direction.y;

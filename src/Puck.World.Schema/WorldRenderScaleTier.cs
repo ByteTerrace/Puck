@@ -4,15 +4,15 @@ using Puck.Abstractions.Documents;
 namespace Puck.World;
 
 /// <summary>
-/// The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the
+/// The enumerated world render-scale tiers a player picks at the console and a view's floor names, over the
 /// continuous render-scale ceiling a view carries (<c>SdfViewSnapshot.RenderScale</c>). A view's output keeps its
 /// rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each
 /// axis to a step of the render graph's extent quantization (<c>RenderGraphExtent.Quantize</c>, sixteen steps per
 /// power-of-two octave), and its own <c>resolve</c> pass reconstructs the grid into the output at
 /// <c>world.upscale-sharpness</c>. A layout transition's dip moves that grid inside the ceiling
 /// (<c>SdfViewSnapshot.ResolvedRenderScale</c>); the enumerated set lives only at the user surface. <see cref="WorldRenderScaleTiers"/> is
-/// the one definition of the names and scales, which the world document's quality presets, the console
-/// <c>world.render-scale</c> verb and the boot resolution read. Each extent below is a lone whole-display view at
+/// the one definition of the names and scales, which the quality presets' floors, the console
+/// <c>world.render-scale</c> verb and the per-view floors read; a ceiling is a scalar. Each extent below is a lone whole-display view at
 /// 1280x800.
 /// </summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldRenderScaleTier>))]

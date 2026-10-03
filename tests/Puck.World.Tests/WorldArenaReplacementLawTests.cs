@@ -1,11 +1,65 @@
 using Puck.Commands;
 using Puck.World.Protocol;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
 
 /// <summary>Pins the document-and-arena unit prepared for a declaration-changing mutation.</summary>
 public sealed class WorldArenaReplacementLawTests {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ACapacityShrinkRefusesBeforePreparingAnArena(bool administrative) {
+        var document = Document();
+
+        document = document with {
+            PopulationRaw = document.Population with {
+                CapacityRaw = 128,
+            },
+        };
+        var candidate = document with { PopulationRaw = document.Population with { CapacityRaw = 32 } };
+
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(compilation: out _, definition: candidate, reason: out var reason), userMessage: reason);
+        using var fixture = Fixtures.FreshServer(definition: document);
+        var first = fixture.JoinSeat(slot: 0);
+        var second = fixture.JoinSeat(slot: 1);
+        var arena = fixture.Server.Arena;
+        var before = fixture.DefinitionBytes();
+        var keyCount = arena.Keys.Count;
+        var hash = WorldStateHashComposition.HashAuthoritative(server: fixture.Server, tick: 0UL);
+        var refusals = new List<string>();
+
+        fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
+        fixture.Server.EnqueueRebuild(
+            principal: Principal.Console,
+            request: new WorldRebuildRequest(
+                ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: candidate)),
+                Definition: candidate,
+                Force: true,
+                Kind: WorldRebuildKind.Load,
+                Origin: new WorldRebuildOrigin.File(Path: "capacity.world.json")
+            )
+        );
+        var failure = Xunit.Record.Exception(testCode: () => {
+            if (administrative) { fixture.Server.DrainAdministrative(); } else { fixture.Step(); }
+        });
+
+        Assert.Null(@object: failure);
+        Assert.Contains(collection: refusals, filter: static refusal => refusal.Contains(
+            comparisonType: StringComparison.Ordinal,
+            value: "population capacity 32 differs from the boot-allocated capacity 128"
+        ));
+        Assert.Same(expected: arena, actual: fixture.Server.Arena);
+        Assert.Equal(expected: before, actual: fixture.DefinitionBytes());
+        Assert.Equal(expected: keyCount, actual: arena.Keys.Count);
+        Assert.Same(expected: first, actual: fixture.Server.Body(index: 0));
+        Assert.Same(expected: second, actual: fixture.Server.Body(index: 1));
+        Assert.Equal(expected: 128, actual: fixture.Server.Population.Capacity);
+        if (administrative) {
+            Assert.Equal(expected: hash, actual: WorldStateHashComposition.HashAuthoritative(server: fixture.Server, tick: 0UL));
+        }
+    }
     [Fact]
     public void AScalarMintRefusedByTheLiveKeyLedgerLeavesDefinitionAndArenaAlone() {
         using var fixture = Fixtures.FreshServer(definition: Document());

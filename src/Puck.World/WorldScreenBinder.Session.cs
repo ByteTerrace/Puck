@@ -371,6 +371,16 @@ internal sealed partial class WorldScreenBinder {
                     Quality = WorldSessionSceneEmitter.ReducedQuality,
                 }
                 : null);
+            // The fitted camera and the default-projection fallback take the same named policy.
+            var width = ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth));
+            var height = ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight));
+
+            if (window.View is { } view) {
+                window.View = ResolveResolution(view, feed.RegistrationName, width, height);
+            }
+            window.FallbackResolution ??= (fallback => ResolveResolution(fallback, feed.RegistrationName,
+                ((uint)(feed.Resolution?.Width ?? WorldViewInstances.DefaultSessionWidth)),
+                ((uint)(feed.Resolution?.Height ?? WorldViewInstances.DefaultSessionHeight))));
         }
     }
     // The routed window a session view renders through this frame, once the presenter's latch includes it.
