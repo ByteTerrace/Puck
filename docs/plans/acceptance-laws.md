@@ -20,9 +20,11 @@ only on those lanes, and each is marked.
 
 ## Implementation status
 
-Law 1 is implemented, in `tests/Puck.World.Tests/ProjectionAnchorLawTests.Seek.cs`,
-and law 5 in `tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`; the rest
-are not yet. The design was read against the
+Law 1 is implemented, in `tests/Puck.World.Tests/ProjectionAnchorLawTests.Seek.cs`;
+law 3's write, read and collision legs in
+`tests/Puck.World.Tests/MachineRestoreContinuityLawTests.cs`; and law 5 in
+`tests/Puck.World.Tests/FederatedCommitPrivacyLawTests.cs`. The rest are not
+yet. The design was read against the
 integration branch and the lanes the coming integration batch lands, and a
 review checked that no law can pass while its claim is false. Designing the
 laws found seven gaps. The coming integration batch fixes five of them (G1 to
@@ -278,8 +280,19 @@ memo with a checkpoint.
 
 **Lives in** `tests/Puck.World.Tests`. **GPU:** none.
 
-**Witness for G5:** on the integration branch today the restored guest reads 99
-where the uninterrupted one reads 7.
+**As implemented.** One theory runs the write and read legs, and both carry the
+collision: two machines, `left` and `right`, each bind `value` and `other` at the
+same ordinals, and each guest edits each bound value differently. B restores A's
+checkpoint in place (`WorldServer.RestoreCheckpoint`). The seek leg's in-place
+door is G5's own law (`MachineBindingCheckpointLawTests`, a seek over a running
+machine). The load-door seek and `replay.drive` doors have no leg yet.
+
+**Witness for G5:** the law is red when the restore drops the captured memo. The
+write leg's guests are rewritten to the world's values (11 where the
+uninterrupted run holds 7), and the read leg journals four mirror writes the
+uninterrupted run never makes. Restoring each observation under its binding
+name alone is red too: the left machine takes the right machine's memo and is
+rewritten.
 
 ## Law 4: a displayed source survives the screen's changes
 
