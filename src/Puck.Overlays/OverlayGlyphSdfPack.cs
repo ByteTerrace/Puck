@@ -35,7 +35,7 @@ public sealed class OverlayGlyphSdfPack {
     // repertoire reads 1.4-ish MiB and never touches the image decoder. Written on first run (a rebake changes the
     // key and rebuilds); OverlayGlyphAtlasSet.LoadOverlayPack orchestrates.
 
-    // 'P','O','G','P' + format version. Bump the version on any layout change — the key check then misses cleanly.
+    // 'P','O','G','P' + format version; the pack layout's shape is recorded in FormatVersions.json.
     private const uint PackMagic = 0x50474F50u;
     private const uint PackVersion = 3u;
 

@@ -7,7 +7,7 @@
 // shadow's, a bounded volume's) and each query (a normal's taps). Never reset: it counts this pass alone, whatever
 // sdfEvalCount carries over from the visibility record.
 static uint sdfWorkSteps = 0u;
-// One when the pass wrote the pixel's output: an image texel, or any word of its visibility record
-// (sdfVisibilityStoreWord); zero when it wrote nothing for it.
+// Outputs written for this pixel: the visibility record counts once, and an incoming-visibility image store
+// counts once more. Zero means this invocation wrote neither output.
 static uint sdfWorkTexels = 0u;
 #endif

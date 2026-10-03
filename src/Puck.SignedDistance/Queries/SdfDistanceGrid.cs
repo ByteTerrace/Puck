@@ -204,10 +204,7 @@ public sealed class SdfDistanceGrid {
         foreach (var instance in program.Instances) {
             if (
                 instance.IsDynamic ||
-                program.HasUnmaskableInfluence(
-                first: instance.First,
-                end: instance.End
-            )
+                program.IsUnmaskable(instance: instance)
             ) {
                 continue;
             }

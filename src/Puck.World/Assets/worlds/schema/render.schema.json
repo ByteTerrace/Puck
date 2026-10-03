@@ -68,7 +68,7 @@
       ],
       "properties": {
         "lights": {
-          "description": "The lights, at most SdfLights.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
+          "description": "The lights, at most SdfLights.MaxLights, in authored order. Shadow-capable directionals compete for the quality row\u0027s shadow slots by mode and tick-resolved luminance.",
           "type": [
             "array",
             "null"
@@ -319,6 +319,30 @@
         "null"
       ],
       "default": null
+    },
+    "shadowLights": {
+      "description": "The boot number of held shadow slots, from 0 through 4; one keeps the pinned sun selected.",
+      "type": "integer",
+      "default": 1
+    },
+    "shadowFadeSlots": {
+      "description": "The boot number of additional shadow handoff slots, from 0 through 2.",
+      "type": "integer",
+      "default": 0
+    },
+    "shadowFadeTicks": {
+      "description": "The boot length of a shadow handoff in delivered ticks; zero selects instant changes.",
+      "type": "integer",
+      "default": 0
+    },
+    "shadowOverflow": {
+      "description": "How a crossing proceeds when its handoff capacity is occupied.",
+      "enum": [
+        "instant",
+        "queue"
+      ],
+      "default": "instant",
+      "title": "WorldShadowOverflow"
     }
   },
   "additionalProperties": false,

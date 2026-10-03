@@ -1105,11 +1105,9 @@ public static partial class CreationCanonicalizer {
             ));
         }
     }
-    // A NaN/infinite param would reach SdfProgramBuilder's own throwing guards at emission time (e.g.
-    // RequireDirection/RequireFinite), well past the point a document author could see a reason why — refused here
-    // instead, alongside the position/rotation/scale finite checks every other shape field already gets. Range clamps
-    // (spacing floors, non-negative limits, the enum fallbacks) are Normalize's job, mirroring NormalizeWallpaper's
-    // old clamp-not-refuse posture; only what Normalize cannot safely repair is refused here.
+    // A NaN/infinite param, or a wallpaper group SdfProgram would refuse, would reach the builder's own guards at
+    // emission, past the point an author could see why, so it is refused here. Range clamps (spacing floors, limits,
+    // the polar axis and wallpaper plane fallbacks) are Normalize's; only what Normalize cannot repair is refused.
     private static void ValidateDomain(IReadOnlyList<ShapeDomainOp>? domain, List<DocumentValidationError> errors, string path) {
         if (domain is not { Count: > 0 } ops) {
             return;
@@ -1159,12 +1157,12 @@ public static partial class CreationCanonicalizer {
                                     Path: $"{opPath}.limit"
                                 ));
                             } else if (
-                                (limit.X > ShapeDomainOp.Repeat.UnboundedLimit) ||
-                                (limit.Y > ShapeDomainOp.Repeat.UnboundedLimit) ||
-                                (limit.Z > ShapeDomainOp.Repeat.UnboundedLimit)
+                                (limit.X > SdfDomainOps.UnboundedRepeatLimit) ||
+                                (limit.Y > SdfDomainOps.UnboundedRepeatLimit) ||
+                                (limit.Z > SdfDomainOps.UnboundedRepeatLimit)
                             ) {
                                 errors.Add(item: new(
-                                    Message: $"limit exceeds {ShapeDomainOp.Repeat.UnboundedLimit}, which an absent limit already means.",
+                                    Message: $"limit exceeds {SdfDomainOps.UnboundedRepeatLimit}, which an absent limit already means.",
                                     Path: $"{opPath}.limit"
                                 ));
                             }
@@ -1212,28 +1210,10 @@ public static partial class CreationCanonicalizer {
                         break;
                     }
                 case ShapeDomainOp.Wallpaper wallpaper: {
-                        if (!Enum.IsDefined(value: wallpaper.Group)) {
+                        foreach (var (member, message) in wallpaper.Refusals()) {
                             errors.Add(item: new(
-                                Message: $"group '{wallpaper.Group}' is not recognized.",
-                                Path: $"{opPath}.group"
-                            ));
-                        }
-                        if (
-                            (wallpaper.Plane is { } plane) &&
-                            !Enum.IsDefined(value: plane)
-                        ) {
-                            errors.Add(item: new(
-                                Message: $"plane '{plane}' is not recognized.",
-                                Path: $"{opPath}.plane"
-                            ));
-                        }
-                        if (
-                            !float.IsFinite(f: wallpaper.Cell.X) ||
-                            !float.IsFinite(f: wallpaper.Cell.Y)
-                        ) {
-                            errors.Add(item: new(
-                                Message: "cell is non-finite.",
-                                Path: $"{opPath}.cell"
+                                Message: message,
+                                Path: $"{opPath}.{member}"
                             ));
                         }
 
@@ -1770,7 +1750,7 @@ public static partial class CreationCanonicalizer {
                 : 0f)
             ),
             ShapeDomainOp.Repeat repeat => new ShapeDomainOp.Repeat(
-                Limit: NormalizeCellLimit(value: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))),
+                Limit: NormalizeCellLimit(value: (repeat.Limit ?? new Vector3(value: SdfDomainOps.UnboundedRepeatLimit))),
                 Origin: NormalizeOptionalOrigin(value: repeat.Origin),
                 Spacing: NormalizeSpacing(value: repeat.Spacing)
             ),
@@ -1788,14 +1768,11 @@ public static partial class CreationCanonicalizer {
                     x: Math.Max(val1: wallpaper.Cell.X, val2: 0.001f),
                     y: Math.Max(val1: wallpaper.Cell.Y, val2: 0.001f)
                 ),
-                Group: (Enum.IsDefined(value: wallpaper.Group)
-                ? wallpaper.Group
-                : SdfWallpaperGroup.P1),
+                Group: wallpaper.Group,
                 Limit: new Vector2(
-                    x: Math.Max(val1: (wallpaper.Limit?.X ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f),
-                    y: Math.Max(val1: (wallpaper.Limit?.Y ?? ShapeDomainOp.Wallpaper.UnboundedLimit), val2: 0f)
+                    x: Math.Max(val1: (wallpaper.Limit?.X ?? SdfWallpaperFold.UnboundedLimit), val2: 0f),
+                    y: Math.Max(val1: (wallpaper.Limit?.Y ?? SdfWallpaperFold.UnboundedLimit), val2: 0f)
                 ),
-                LodDistance: Math.Max(val1: (wallpaper.LodDistance ?? 0f), val2: 0f),
                 MaterialStride: Math.Max(val1: (wallpaper.MaterialStride ?? 0), val2: 0),
                 Plane: (Enum.IsDefined(value: (wallpaper.Plane ?? SdfPlane.XZ))
                 ? (wallpaper.Plane ?? SdfPlane.XZ)
@@ -1810,7 +1787,7 @@ public static partial class CreationCanonicalizer {
             ? value
             : 0f),
             min: 0f,
-            max: ShapeDomainOp.Repeat.UnboundedLimit
+            max: SdfDomainOps.UnboundedRepeatLimit
         );
     private static Vector3 NormalizeCellLimit(Vector3 value) =>
         new(

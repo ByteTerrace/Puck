@@ -133,7 +133,7 @@ is representable without loss and falling back to `row { }` (the explicit
 form) otherwise.
 
 There is **no `$type`** and no `rows` member; both refuse as unmapped members.
-`kind` is `Int`|`Fixed`|`Bool`|`Text`; never float, the determinism
+`kind` is `Int`|`Fixed`|`Bool`|`Text`|`Vector`; never float, the determinism
 contract. A `Fixed` value (`value`, `min`, `max`, or a cell's own `value`) is
 a **DECIMAL STRING** through `FixedQ4816.TryParse`/`ToString`, never the raw
 Q48.16 bit pattern — only the per-cell mutation wire (`UpsertStateCell`) and
@@ -361,11 +361,11 @@ spelling). `state.lattices` declares one or more topologies (name, origin,
 `cellSize`, `width` × `depth` × `layers`, `stepEveryTicks`, `reactions`); at
 most one is `Field`-kind and drives THIS trait (`WorldTopologyCompilation.
 FindPhysical` — reactions, lattice-derived geometry) — the rest are discrete
-`Grid`/`Ring`/`Hex`/`Graph`/`Tiling` topologies: a placement's `board` facet
+`Grid`/`Ring`/`Hex`/`Graph`/`Tiling`/`Box` topologies: a placement's `board` facet
 (`$board:cellOf`/`offset`, `world.tabletop`) anchors a `Grid`, a `Hex`, a
 `Graph`, or a `Tiling` (`family`: triangular, kagome, truncatedSquare, rhombitrihexagonal, truncatedHexagonal,
 elongatedTriangular, truncatedTrihexagonal, penrose; `radius` in edge lengths; a graph generated at boot, directions
-`a<degrees>`) topology (`Ring` refuses it) — a grid resolves positions against its
+`a<degrees>`) topology (`Ring` and `Box` refuse it) — a grid resolves positions against its
 rectangular X/Z frame, a hex against its lattice (cell `(q, r)` at origin +
 cellSize · (q − r/2, 0, r·√3/2), ordinals in `HexagonalIndex` ring order,
 directions `E, SE, SW, W, NW, NE`), a graph to the nearest authored centre
@@ -374,9 +374,8 @@ opposite}]`, `edges: [{from, to, direction, oneWay?}]`; one neighbour per
 (cell, direction) slot, so k neighbours need k directions; `offset` refuses
 it; identity symmetry only) — and `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
-positions against (the garden's `chessBoard` alongside its own `pondBasin`
-water field — see `Puck.World.Schema/README.md`'s tabletop-primitive
-section). The board facet's own `enforcement` (`record`, the default, or
+positions against (the Parlor chess world's `chessBoard` — see
+`Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section). The board facet's own `enforcement` (`record`, the default, or
 `return`) is the one engine-side reaction to its `verdict` row refusing a
 move — `return` poses the mover back onto `move`'s `from` cell on the
 refuse edge; see that same section for the full contract. A discrete topology's own `directions` (optional; each kind's
@@ -451,9 +450,9 @@ interaction names the boundary.
 ### The tabletop primitive (`board` facet)
 
 The tabletop primitive: a placement's `board` facet (`WorldPlacementBoard`)
-anchors a discrete `Grid` `state.lattices` topology (only `Grid` carries the
-rectangular X/Z frame `$board:cellOf`/`offset` resolve against; `Ring`/`Hex`
-refuse the facet) to a physical row/body game (`$board:cellOf`/`offset`,
+anchors a discrete `Grid`, `Hex`, `Graph` or `Tiling` `state.lattices` topology
+(`Ring` and `Box` refuse the facet; only `Grid` carries the rectangular X/Z frame
+`offset` resolves against) to a physical row/body game (`$board:cellOf`/`offset`,
 `world.tabletop`). A `Grid` topology's `cellSize` must quantize to a
 positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
 positions against, so a zero or negative edge is refused at validation, not
@@ -473,7 +472,7 @@ one live `BodyFacts` bit (`Airborne`, `Grounded`, …) as 1/0 — the door a
 rule writes a body's transient into a world row through (an eased
 `airPose` cell a creation's drivers then read), where `$identity:` is the
 persisted fact lane.
-See `Puck.World.Schema/README.md`'s tabletop-primitive section; the garden's `chessBoard` is the worked example.
+See `Puck.World.Schema/README.md`'s "Discrete boards, cards, and turns" section; the Parlor package's `worlds/parlor/chess.puck` (`chessBoard`) is the worked example.
 
 ## Authored randomness — SOURCE x SITE x MOMENT
 
@@ -499,6 +498,9 @@ refused against their declared defaults:
   on a Markov alternative) is that many units per pass; a set's units total at
   most 256.
 - `streamDraw` — no fields. One raw 32-bit draw; refuses a `mode`.
+- `symmetryOrbit` — `ring` (0..7, its thirty nodes) or `node` (0..239) with an
+  optional `word`. One uniform node index over that orbit; exhausts the orbit
+  under `mode` through the site's single `drawnMasks` mask.
 
 The alias table over a source's full entry set is compiled once per
 `StateGenerator` instance (`GeneratorEngine`, a `ConditionalWeakTable`), so
@@ -531,12 +533,14 @@ sites, or inline it at one site — the two spellings compile to the identical
 record.
 
 **Site** (`Draw`) declares a value is drawn: exactly one of `source` (a
-declared row's name) or `generator` (inline), plus `timing`. Three sites:
+declared row's name) or `generator` (inline), plus `timing`. One site type
+exists, `WorldStateRow.Draw`. Two document fields read a drawn row at boot
+instead of drawing themselves:
 
 ```json
 {"name":"bark","kind":"Text","draw":{"source":"barkTable","timing":"event"}}
-"population": { "capacityDraw": {"generator":{"source":"uniformRange","rangeMin":128,"rangeMax":128},"timing":"boot"} }
-"host": { "backendDraw": {"source":"backendTable","timing":"boot"} }
+"bodies": { "capacityRow": "census" }
+"host": { "backendRow": "backendPick" }
 ```
 
 The CURSOR and drawn MASKS live on the SITE (`drawCursor`/`drawnMasks`, engine-
@@ -552,9 +556,9 @@ event-gated rule, so timing costs no mutation ordinal.
 
 **The seed ladder is four rungs**, each LENGTH-DELIMITED before its bytes:
 engine constant → `generation.worldSeed` → running INSTANCE identity → SITE
-DESCRIPTOR (`state.<row>`, `population.capacity`, `host.backend`). The descriptor
+DESCRIPTOR (`state.<row>`). The descriptor
 is an IDENTITY, never a positional ordinal: the live site set moves under
-ordinary operation (a settled facet clears, `world.row.remove state` retires a row,
+ordinary operation (`world.row.remove state` retires a row,
 `UpsertStateRow` adds one), and a positional stream would silently re-point a
 live site while its cursor kept counting.
 
@@ -579,23 +583,26 @@ is an authored seek: a rebuild advances `(skip + cursor) * cost` rather than
 `cursor * cost`, and never writes the cursor. `world.state <row>` echoes
 `extended k=<k> scripted=<n> skip=<s>` on a site carrying the facet.
 
-**Boot-only sites SETTLE AND CLEAR** into their ordinary literal field and
-NARRATE on stderr (`[world.draw: settled <site> instance=<name> -> <value>]`) —
-settling erases the only evidence the value was random. State sites keep facet +
-cursor and RESUME on reload; they fill only while the row carries no cell, so an
-authored `value` is a deliberate override. `host.backendDraw` draws its backend
-BY NAME from a weighted TEXT source over the backend tokens (never an unnamed
-ordinal) and is XOR-by-presence against `host.backend`;
-`population.capacityDraw` cannot be (its record is a STRUCT, so an authored
-an explicitly authored default-valued `capacity` is indistinguishable from the
-record default) — there the draw wins.
+**A draw site is a state row and is never cleared.** Its facet and cursor
+persist and RESUME on reload; it fills only while the row carries no cell, so an
+authored `value` is a deliberate override. `bodies.capacityRow` (a scalar `int`
+row) and `host.backendRow` (a scalar `text` row, parsed by name through
+`WorldHostTokens.ParseBackend`, never an unnamed ordinal) are boot-time READS of
+such a row, resolved after every row's first fill. Each writes the read value into
+the ordinary literal field (`bodies.capacity`/`host.backend`) and NARRATES on stderr
+(`[world.draw: settled <site> instance=<name> -> <value>]`); the row stays the
+persisted evidence. `host.backendRow` is XOR-by-presence against `host.backend`
+and is cleared once read; `bodies.capacityRow` beside a literal `capacity` is
+legitimate (`WorldBodiesDefaults` is a struct, so presence is not observable): the
+row overwrites the literal on every fresh load.
 
-**Domains narrow STATICALLY** against the site's own envelope, the census
-coherence sum, and every reachable backend token — so a roll can never decide
-whether the world boots. `population.capacityDraw` is TEMPORARILY floored at
-`WorldBodiesLimits.CapacityCeiling` (4096) because `world.population` crashes
-below it; that collapses its domain to a single value until the population lane
-lifts the floor.
+**Domains narrow STATICALLY**: a boot row consumer is proved over its source's
+whole outcome set, not the value one boot rolled, so a roll can never decide
+whether the world boots. `host.backendRow` refuses any emission naming no
+backend; `bodies.capacityRow` settles every census the source can draw into a
+candidate and runs the whole document validator on each, refusing a source
+spanning more than `WorldBodiesLimits.MaxDrawnCensusOutcomes` (16) values or an
+unbounded one such as `streamDraw`.
 
 ## `search` — what the board would be
 

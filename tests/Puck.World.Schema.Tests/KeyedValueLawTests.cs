@@ -174,12 +174,12 @@ public sealed class KeyedValueLawTests {
         );
         var lighting = new WorldRenderLighting(
             Clock: "day",
-            Keys: [new WorldRenderLightingKey(At: 0d, Lights: new Dictionary<string, WorldRenderLight> { ["sun"] = new WorldRenderLight.Directional(Shadows: false) })],
-            Lights: [new WorldRenderLight.Directional(Name: "sun", Shadows: true)]
+            Keys: [new WorldRenderLightingKey(At: 0d, Lights: new Dictionary<string, WorldRenderLight> { ["sun"] = new WorldRenderLight.Directional(Shadow: WorldShadowMode.Never) })],
+            Lights: [new WorldRenderLight.Directional(Name: "sun", Shadow: WorldShadowMode.Always)]
         );
 
         Assert.Contains(
-            expectedSubstring: "render.lighting.keys[0].lights.sun.shadows is structure",
+            expectedSubstring: "render.lighting.keys[0].lights.sun.shadow is structure",
             actualString: Validate(definition: Definition(lighting: lighting))
         );
         Assert.Contains(

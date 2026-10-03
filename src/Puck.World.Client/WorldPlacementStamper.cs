@@ -262,19 +262,6 @@ public static class WorldPlacementStamper {
             )
             : null
         );
-        var reach = CreationStampEmitter.RenderReach(
-            document: creation,
-            scale: placement.Scale,
-            // A method group, never a lambda over the catalog, which would allocate a closure on every placement.
-            fontFor: (hasText
-                ? textCatalog!.Resolve
-                : null),
-            textLayouts: textLayouts
-        );
-        var rotation = Quaternion.CreateFromAxisAngle(
-            axis: Vector3.UnitY,
-            angle: (frame.YawDegrees * (MathF.PI / 180f))
-        );
         // A creation whose parts carve each other (or that carries noise relief) is one SCOPED candidate against the
         // world field. A scope-free, text-free creation instead emits one TIGHT instance per shape — union-family
         // members mask bit-identically, and per-shape bounds keep a big creation (a tree's whole-canopy reach) from
@@ -282,6 +269,22 @@ public static class WorldPlacementStamper {
         var scoped = (
             (creation.Shapes is { Count: > 0 }) &&
             CreationStampEmitter.RequiresScope(document: creation)
+        );
+        var reach = CreationStampEmitter.RenderReach(
+            document: creation,
+            scale: placement.Scale,
+            // A method group, never a lambda over the catalog, which would allocate a closure on every placement.
+            fontFor: (hasText
+                ? textCatalog!.Resolve
+                : null),
+            textLayouts: textLayouts,
+            // One scoped instance holds the whole creation, so its bound is the blends' composition: an unbounded
+            // lattice a finite shape clips is as finite as that shape.
+            composeBlends: scoped
+        );
+        var rotation = Quaternion.CreateFromAxisAngle(
+            axis: Vector3.UnitY,
+            angle: (frame.YawDegrees * (MathF.PI / 180f))
         );
         var perShape = (
             !scoped &&

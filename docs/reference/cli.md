@@ -101,7 +101,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck firmware`](#puck-firmwarebundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
-| [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format token, or checks it with `--check`. |
+| [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format's token and shape, and each project's generated `FormatShapes.g.cs`, or checks them with `--check`. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
 | [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
@@ -632,9 +632,6 @@ retain all 256 bits.
 The artifact producer runs this check after its Release build, before packaging,
 using the built candidate CLI and the restored source graph.
 
-The next slices cover other compiled-world chunk versions, shader packages,
-`GpuPipelineCacheStore` content keys and kernel sets.
-
 ## `puck shaders`—shader compilation
 
 ```sh
@@ -911,10 +908,12 @@ against the merge base of `HEAD` and `--merge-base` (default
 29. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
 
-The device suites use `dotnet test` in Release with the same minimal console
-logger as affected. `Puck.World.Tests` runs only its device laws, selected by a
-name filter; the DirectX, Vulkan and Platform.Windows suites run whole. One list
-holds that selection, and it is where the Gpu trait filter replaces it. A law walks the complete
+The device suites run `dotnet test --project <suite> -c Release --no-build` over the
+solution build's binaries, as affected's suites do, since Microsoft.Testing.Platform hands
+MSBuild switches to the test application, which refuses them. Each selects its device laws
+with `--filter-trait Category=Gpu`, the trait GPU001 holds every class that opens a device to,
+and affected's CPU runs take the complement, `--filter-not-trait Category=Gpu`. One list
+holds that selection (`GatePlan.DeviceSuites`). A law walks the complete
 root command tree: every `--check` command has a step or an explicit reasoned
 exclusion beside the plan. Another law holds this ordered list and help to that
 plan.
@@ -1014,8 +1013,8 @@ Exit codes: 0 done, 2 refused (invalid thresholds or an interval or window below
 
 `puck laws prove <law>` shows that a law fails without its fix and passes
 with it, and prints the evidence for the commit that lands them. The law is a
-test name of dotted identifiers, `Class` or `Class.Method`, selected as
-`FullyQualifiedName~<law>`; its project is the test project whose sources
+test name of dotted identifiers, `Class` or `Class.Method`, matched anywhere in
+each test's fully qualified method name (`--filter-method "*<law>*"`); its project is the test project whose sources
 declare that class, or `--project`.
 
 The fix is one of:
@@ -1052,7 +1051,8 @@ solution, once for all tests the law name selects. Outcomes come from the test r
 TRX report together with the process's completion verdict. A run that selects
 no test, skips a selected test, aborts or executes different tests between legs
 is refused. Both legs execute the same tests, and every selected test must
-finish with a passed or failed outcome. Caller Git hooks are disabled, and
+finish with a passed or failed outcome; an explicit test the run did not opt into
+was never selected. Caller Git hooks are disabled, and
 projects outside the proof tree and links in it are refused.
 
 An exclusive lock file beside the clone leases it for the whole proof. A
@@ -1239,7 +1239,7 @@ backend never reads as a run on both. The option refuses any other value by
 name. It is refused with `--merge`, because the merge gate holds both
 backends, and with `--list`, which runs nothing.
 The `pipeline-feedback`, `pipeline-ink`, `pipeline-edit`, `pipeline-supersede`,
-`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault` and `pipeline-geometry` canaries use this shape to test shader
+`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault`, `pipeline-geometry` and `pipeline-echo` canaries use this shape to test shader
 pipelines, and `source-conversion` uses it to run the shipped image-source
 conversion kernels; the [World guide](../../src/Puck.World/README.md#shader-pipelines)
 covers the `pipeline.wait` phases their scripts use.
@@ -1517,7 +1517,7 @@ its own build output:
 
 ```text
 dotnet build src/Puck.Cli -c Release
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
 ```
 
 ---
@@ -1878,7 +1878,7 @@ The report is a `puck.counters.report.v1` document. Its schema,
 source revision (the `HEAD` commit and the World build's source-state key) and,
 for each backend, the device identity, the offscreen resolution, the shader
 toolchain identity, the World's GC mode, each render node's pass states, and
-every count. Each count names its section, node, pass and kind, and carries a
+every count. Each count names its section, node, pass, detail and kind, and carries a
 class:
 
 | Class | Meaning | Compared |
@@ -1895,6 +1895,16 @@ Each pass there also carries a class, `deterministic` or
 a deterministic kind counted in a per-backend-deterministic pass is recorded as
 per-backend-deterministic. A node's submission and revision identities are not
 kinds; the collector records them as `pacing`.
+
+An explicit null detail identifies a pass total or work outside named rows.
+Sky layers and shadow slots have labels within their pass, alongside its
+`plain` remainder; all detail rows sum to that pass's totals. Skipped and
+standing passes retain their labels with no counts. Comparisons include those
+labels, and ceilings record their zero rows using the same class and
+`requiredZero` rules as the totals. Detail identities and frame-slot buffer
+capacity grow during the installed graph's run. The sky counts each layer
+evaluation, each procedural hash and each field-run texture load under
+`gpu.sky.evaluations`, `gpu.sky.hashes` and `gpu.sky.texture-loads`.
 
 The run prints the report's path, then one line for each deterministic count or
 pass state that differs between the two backends, naming its kind, pass and
@@ -2682,11 +2692,12 @@ a converter-hidden shape the exporter cannot introspect on its own (a
 document-identifier list); a raw `JsonElement` slot decided by an id named
 elsewhere in the document (`views.post[].config`, `probes[].config`,
 `metadata.custom`) stays open but carries a `$comment` saying so. The root
-carries `x-puck: {schemaVersion, generator, commit}` (the silo root carries
+carries `x-puck: {schemaVersion, generator}` (the silo root carries
 its own) and `properties.schema.const` pins the exact tag a well-formed
-document's own `schema` field must equal; `--check` masks `x-puck.commit`
-before comparing, since the commit a checked-in file was generated at can
-never equal the commit that first introduces the file.
+document's own `schema` field must equal. A checked-in file names no commit,
+since the commit a file was generated at can never equal the commit that first
+introduces it; only the `--bundle` output, which nothing checks in, adds
+`x-puck.commit`, the commit the generator was built at.
 
 The output is SPLIT, not one file: a small root plus one file per top-level
 document section (`kits.schema.json`, `screens.schema.json`, …), plus
@@ -3410,14 +3421,25 @@ low cost. CI runs `puck canary-ceilings --check` in the `ledgers` job of `verify
 ## `puck formats`—strict format tokens
 
 `FormatVersions.json` at the repository root lists every strictly versioned wire, persisted, or cache format the
-tracked `src/` tree declares, each with its current token and declaring file. It is generated from the source, so
-the constants remain the one source of truth and the ledger is their checked-in mirror.
+tracked `src/` tree declares, each with its current token, declaring file and shape fingerprint. It is generated
+from the source, so the constants remain the one source of truth and the ledger is their checked-in mirror. The
+fingerprint, not the token, tells two layouts apart: each project that declares a format also holds a generated
+`FormatShapes.g.cs` with one constant per ledger entry, and the codec that owns the format writes that constant in its
+header or handshake and refuses data of any other shape by name (`… shape fingerprint X, expected Y`) before any state
+changes. A store that is content-identified, such as a bake keyed by its derivation fingerprint, already rejects by
+content and needs no header.
 
 ```text
-puck formats            write FormatVersions.json from the source
-puck formats --check    write nothing; exit 1 for an unrecorded, stale, bumped, reshaped, or moved format,
-                        or a ledger whose bytes differ from what the verb writes
+puck formats            write FormatVersions.json and every FormatShapes.g.cs from the source
+puck formats --check    write nothing; exit 1 for an unrecorded, stale, retokened, reshaped, or moved format,
+                        an open call the ledger does not record, a ledger whose bytes differ from what the verb
+                        writes, or a FormatShapes.g.cs that disagrees with it
+puck formats --explain ID   print what one format's shape covers, by file, and the calls it leaves open
 ```
+
+The check records shape and never demands a token bump: a format whose source changed is `reshaped` until
+`puck formats` records the new fingerprint, and the generated constant moves with it, so the codec that reads it
+refuses what was written under the old one.
 
 Both forms refuse with exit 2 before discovery if non-ignored, untracked C# sources exist under `src/`, excluding
 `*.g.cs` files. The refusal writes nothing and lists every such file in sorted, repository-relative paths with forward
@@ -3438,18 +3460,48 @@ whose initializer is one of two things:
 Declarations under a `*.Post` project and generated files are outside the ledger. An entry that is none of these
 needs its member added to the recognized names in `FormatVersionsLedger`, which is a deliberate edit of the verb.
 
-An entry holds its id (`Type.Member`), the file declaring it, its token and a `shape` digest, each on a line of its
-own. The digest covers canonical syntax of the declaring file and its partial siblings (`Stem.cs` and
-`Stem.*.cs` beside it), source-declared field and property types, record constructor types and base types,
-including their data dependencies. Shared World wire leaves also feed the wire, replay, checkpoint, federation
-and journal digests; snapshot identities cover their machine project's source and the shared state reader,
-writer and image layout. A version-shaped string inside an object initializer is an identity, not a schema literal.
-The digest is what lets two lanes collide. Git merges two identical edits of one line without a conflict,
-and two lanes that bump a codec to the same next token write the same token line; they changed the codec
-differently, so their digest lines differ and conflict. A lane that edits a codec without bumping its token fails
-`--check` with a `reshaped` finding until the author reruns `puck formats`, which is the moment to decide whether
-the encoding changed and the token should too. This also covers document schemas: a field change under an
-unchanged schema token requires recording its new shape.
+An entry holds its id (`Type.Member`), the file declaring it, its token, a `shape` digest and, when the format's boundary
+has open calls, an `open` list, each on a line of its own. The digest covers canonical syntax of the format's *closure*,
+computed with the Roslyn semantic model over units: a type's layout (header and data members: fields, constants, enum
+members, auto-properties, static constructors) and each code member on its own. The roots are where encoding is: the
+layouts of the declaring file and its partial siblings (`Stem.cs` and `Stem.*.cs` beside it), those files' members that
+touch bytes (a byte buffer, stream or binary reader or writer, a `u8` literal, a `[FormatLeaf]` member), and each unit
+anywhere that names the token. The rest of those files is neighbouring code: a method that drives the engine from decoded
+data is not the format's shape and is not open, and a helper an encoding member calls joins the closure through that
+call. A unit covers:
+
+- every enum it names, whole, and every constant it reads, so a reordered or renumbered enum a codec casts moves the
+  digest;
+- any other repository type it names, one level deep: the type's header and data members, never the types those members
+  name in turn;
+- a repository member it calls that is marked `[FormatLeaf]`, on the member or on a type that holds it, with that
+  member's own units in turn, and every override or implementation of a covered virtual or interface member, whether or
+  not the slot's own declaration has a body (an abstract property, an auto-property an override replaces, a static
+  abstract interface member); and a property whose body calls nothing in the repository.
+
+The depth limit applies to the types a layout names, not to what its initializers read: a covered layout's constants,
+enum values and method groups are followed whole, so a constant that chains through other classes, or a delegate a static
+field binds, is covered or open like any call. The calls the syntax does not name count too: a `foreach`'s
+`GetEnumerator`, `MoveNext` and `Current`, a `using`'s disposal, an `await`'s awaiter, a deconstruction, user-defined
+operators and conversions, and a method-group conversion.
+
+A closure over every call reaches the whole engine (a world codec's would hold ten thousand units), so the boundary is
+explicit. A call into any other repository member is *open*: the shape cannot see what it does. A member that is not part
+of any wire is marked `[FormatSeam("its behaviour sets no byte because …")]`, which is not followed and not open, and
+`puck formats` refuses a seam with an empty reason. Prefer moving the call out of the codec (decode to data, apply
+outside) to marking it. `puck formats` records each format's open calls in the ledger, so a call that joins or leaves
+the list is a reviewable ledger diff, and `--check` reports the difference as `open` drift until the ledger is
+re-recorded. `puck formats --explain <id>`
+prints the units a format covers, by file, and the calls it leaves open. Platform and package members are outside the
+repository and outside the digest.
+
+A version-shaped string inside an object initializer is an identity, not a schema literal. The generated files are
+`.g.cs`, which the digest never reads, so a fingerprint never depends on the file that holds it. Each is the nearest
+project's `FormatShapes.g.cs`, with one `internal static class FormatShapes` per namespace its declaring files use,
+holding a constant per entry named by the declaring symbol alone (`Type.Member` as `TypeMember`, whatever `@path` the
+ledger adds to tell two files' identical ids apart); a codec reads it unqualified from its own namespace. Two lanes that
+edit one codec differently write different digest lines, which conflict in the ledger, and git merges two identical edits
+without a conflict.
 
 The digest uses the existing formatter's syntactic and null-pattern normalizers before hashing syntax structure
 without trivia. Parentheses do not contribute an extra node, but operator grouping remains in the tree. Resolved
@@ -3457,7 +3509,11 @@ call arguments are identified by parameter position, and only expressions the fo
 are sorted. Local and parameter names are replaced by declaration identities; `nameof` retains its resulting text.
 Formatting, comments and local renames preserve the digest, while changed argument binding and evaluation order
 move it. Unresolved calls retain their written syntax. These are conservative source fingerprints: an implementation
-edit within the covered files can require recording even when its encoding stays the same.
+edit within the covered units moves the fingerprint even when its encoding stays the same, and data written before it
+is refused.
+
+An authored document carries no shape field: its schema token and the JSON-schema refusal of an unknown or missing
+member are its shape check, so a document format records a shape in the ledger and nothing writes it into the text.
 
 CI runs `puck formats --check` in the `ledgers` job of `verify.yml`.
 

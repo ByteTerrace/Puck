@@ -43,7 +43,7 @@ public sealed partial class SdfWorldTables {
     /// <summary>Returns every descriptor pool the tables create, which a device's heap admits them by: their own
     /// (<see cref="DescriptorPoolSizes"/>), then the one pool holding the copy sets they reserve for all their regions
     /// (<see cref="GpuRegionCopyPool"/>, sized by <see cref="GpuRegionCopyPool.SizesOf"/>), whatever policy the device
-    /// selects: the eight per-frame tables, the mesh region, and with a brick pool the brick staging. Construction creates
+    /// selects: the shared frame tables, the shadow handoff controls, the mesh region, and with a brick pool the brick staging. Construction creates
     /// both, so no later frame, the first to draw a mesh or a growing program included, takes a descriptor range.</summary>
     /// <param name="brickPool">Whether the tables keep a brick pool.</param>
     /// <returns>The pools' sizes, the tables' own first.</returns>

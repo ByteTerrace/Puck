@@ -21,17 +21,30 @@ the reasoning behind every decision is in
   profiles and affinities, per-cell provenance, the `puck canary` manifest
   runner, `WorldEntityAddress`, kit speed envelopes; the local group, role-aware
   grant, transfer, and external-operation foundation; the MCP host extension,
-  local stdio, tool and result contracts, and remote HTTP with OAuth (owned by
-  [`Puck.Mcp`](../../src/Puck.Mcp/README.md)); every tabletop primitive and
-  the shipped `games/` fragments.
+  the Operator profile's `puck_exec`, `puck_capture_frame` and
+  `puck_state_vector_write` tools over local stdio, remote HTTP with OAuth and
+  the Entra on-behalf-of services provider (owned by
+  [`Puck.Mcp`](../../src/Puck.Mcp/README.md) and
+  [`Puck.Mcp.Azure`](../../src/Puck.Mcp.Azure/README.md)); the typed agent
+  bridge, its Harness and the hosted participant
+  ([`WorldAgentBridge`](../../src/Puck.World.AgentBridge/README.md),
+  [`Puck.World.AgentHarness`](../../src/Puck.World.AgentHarness/README.md));
+  the audio core (the mixer, the voice synth, `MusicClock`, `MusicDirector`,
+  `VoiceBabbler` and their playback wiring, the diegetic tune instrument) with
+  the `voice-babble`, `music-conditional-layer-and-embellishment` and
+  `instrument-clock-source` canaries; the parlor package (physical chess with a
+  `search` opponent, Chinese checkers, Hearts and Lineup under `worlds/parlor`);
+  every tabletop primitive and the shipped `games/` fragments.
 - **Not started:** the One World re-authoring, the content and federation
-  waves, `Puck.Audio`, namespace normalization, the frames document, the
-  neighbour tape, the seat's view state, the finder's units A to C and its
-  slices, MCP milestones 2 to 5b, composed play, and the few-thousand-creature
-  acceptance workload. One security claim is open rather than unverified:
-  nothing yet witnesses that a binding cannot escalate its destination beyond
-  what its grant allows, so the claim is treated as false until a canary shows
-  it.
+  waves, namespace normalization, the frames document, the neighbour tape, the
+  seat's view state, the finder's units A to C and its slices, the Participant
+  profile and the document, recording and rule-cost tools of MCP's local surface,
+  the remote surface's parity job and approved device handles, composed play's
+  chess outcomes and two-table compositions, the audio remainder, and the
+  few-thousand-creature acceptance workload. One security claim is open rather
+  than unverified: nothing yet witnesses that a binding cannot escalate its
+  destination beyond what its grant allows, so the claim is treated as false
+  until a canary shows it.
 
 ## The forcing artifact
 
@@ -182,16 +195,31 @@ against the one world or deleted with a named successor.
 
 ### Wave 4 — `Puck.Audio`
 
-**Owns:** adaptive music, event voice, a rhythm judge, diegetic synthesizer
-machines; the tick clock, director, judge, and instrument machines in the
-simulation; the mixer and synthesis in presentation.
+**Owns:** the audio remainder: the syllable-count producer for voice, the
+live-body correlation of babble, the end-to-end proof of region-conditioned
+music, and the sole-coverage audio checks under `experimental/scripts`.
 
-**Delivers:** authored music as tracker-style data (patterns, sequences,
-instrument patches) under a structural layer (segments with transition
-markers, conditional layers, director embellishments), synthesized end to end
-with no sample assets; `Puck.Audio` parses no document; voice gains a producer
-that estimates syllable counts from dialogue text and babble correlated with
-a live body position.
+**Delivers:** `Puck.Audio` parses no document, and its mixer and synthesis run
+in presentation with the tick clock, director and instrument machines in the
+simulation. A score is an authored `puck.music.v1` document of segments with
+transition markers, conditional layers and director embellishments over
+tracker-style `puck.tune.v1` tunes and `puck.synthesizer-patch.v1` patches, all
+synthesized with no sample assets. A rhythm hit window is an authored
+`compareState` range over `$clock:<music>:phaseError`, and a diegetic
+instrument's tempo folds into the music clock while a seat holds its screen. What
+this package adds, each with its own proof:
+
+- a producer that estimates an utterance's syllable count from dialogue or
+  caption text, which `VoiceBabbler.ComputeTriggerTicks` takes from its caller
+  today;
+- babble correlated with a live body position, so syllables voice at a
+  resolved world position instead of listener-placed;
+- a region crossing proven end to end: the `music.transition` cue fires from a
+  driven body's crossing, locally and over `--connect` (the population
+  package's canary widening adds the region-conditioned music canary);
+- the mux determinism check (`experimental/scripts/recording/mux-check.cs`) and
+  the audio-device failure paths (`experimental/scripts/world/audio-device.cs`
+  and `audio-mix.cs`) as law tests or `puck` verbs.
 
 **Check:** the audio guide's and reference's recipes run against the real
 executable; the mux determinism check and audio-device failure paths become
@@ -219,7 +247,10 @@ clustering rides Storage; the second container app and managed identity are
 bicep in the sibling Azure.Resources repository), and the hub's ownership by
 the platform's public-content identity.
 
-**Delivers:** the wave above. The remainder is one package that waits for the
+**Delivers:** the wave above. `Puck.World.Silo` already hosts worlds as Orleans
+grains behind the door with `Localhost` clustering only; other clustering
+providers are refused until eligible world placement and exclusive ownership
+exist. The remainder is one package that waits for the
 forcing world to be played, because every row is a question a played world
 asks: per-viewport user- and group-scoped destination images; a
 destination-clock interpolation ease; verifying a crossing between processes
@@ -238,9 +269,11 @@ destination `Simulation` screen, a rule addressing one session rather than
 `any`, and hover feedback; issuer-qualified group and document claims, and
 hydrate, suspend, and migrate for persisted worlds; retry-safe
 cross-document write-back (an operation id, a precondition, atomic persistence,
-an observable receipt); cloud-catalog discovery through
-`storage.discoveryEndpoint`; latency equalisation from a real round-trip
-source; and local `Join`'s pre-allocation as enforceable admission semantics.
+an observable receipt); latency equalisation from a real round-trip source; and
+local `Join`'s pre-allocation as enforceable admission semantics. Cloud-catalog
+discovery is in place: a whole-catalog pull lists the cloud namespace
+through `storage.discoveryEndpoint` and refuses by name when none is authored
+(`WorldOwnedWorldSync`, [owned worlds and storage](../../src/Puck.World.Server/README.md#owned-worlds-and-storage)).
 
 **The gated ladder**, each row waiting on the one before: the extension
 registry as the selection mechanism; extensions validating their own
@@ -377,38 +410,60 @@ per group recorded.
 
 ### MCP — the local surface
 
-**Owns:** the Participant composition (`puck_affordances`, `puck_observe`,
-`puck_act` through `WorldAgentBridge`), binding lifecycle, bounded admission,
-receipts and retry semantics; `puck_doc` (read, validate, cost, mutate, save,
-with live mutation and offline save distinct and replacement preconditions),
-`puck_capture` (recording and replay controls, `puck_capture_frame`), and
-`world.cost`.
+**Owns:** the Operator profile's tools and attachment (`puck mcp --profile
+operator`, `OperatorMcpServer`), the Participant composition over
+`WorldAgentBridge`, the document, recording and rule-cost tools, and binding
+lifecycle, bounded admission, receipts and retry semantics.
 
-**Delivers:** the three participant tools with closed argument objects
-(observe requires exactly one of pose, channels, state, targets, contacts,
-properties and returns the typed observation including `Refused`; act is a
-closed move, press, stop union with positive durations, exact channel names,
-and a binding-scoped request key), mutations serialized per binding in
-admission order with overflow reported rather than dropped, identical retries
-returning the same receipt and changed input refusing, no automatic retry after
-an uncertain disconnect, and disconnect cleanup that never issues an
-unannounced privileged Stop; the Operator surface using Console identity and
-the full command registry through a dedicated session with its own barriers;
-frame capture after exec entering the same session ordering before arming;
-one awaitable still returning the completed PNG through
-`FrameCaptureRequest.Completion`, busy when the pending slot is occupied, and
-failing clearly without a renderer; `puck_doc`'s whole-document replacement
-carrying an expected revision enforced at application; `world.cost` returning
-`WorldCostReport.Generate`'s facts intact with `Admitted=false` distinct from
-validator rejection; MCP and IPC serialization, network waits, and still waits
-kept off the pump.
+**Delivers, in place:** the Operator surface uses Console identity and the
+full command registry through a dedicated session with its own barriers.
+`puck_exec` runs one console line, `puck_state_vector_write` writes a unit
+vector into a state cell, and `puck_capture_frame` enters the same session
+ordering and simulation barrier as the exec before arming a frame capture, then
+awaits `FrameCaptureRequest.Completion` and returns the completed PNG. It is
+refused clearly without a renderer, and the owning capture slot admits one
+pending request. Statuses distinguish `completed`, `submitted`, `refused` and
+`unknown`; a timeout or cancellation closes the attachment and is never
+replayed, and a mutation's verdict is console output rather than a durable
+receipt. MCP and IPC serialization, network waits and still waits stay off the
+pump.
+
+**Delivers, still to build:**
+
+- The Participant profile as an adapter over `WorldAgentBridge`. The bridge and
+  the Harness already publish `puck_get_affordances`, `puck_observe_body`,
+  `puck_move`, `puck_press_channel` and `puck_stop` (the Harness composes
+  them, and a hosted participant drains the bridge's mailbox); the MCP
+  profile settles whether it reuses those names, with closed argument objects
+  (observe takes exactly one of pose, channels, state, targets, contacts,
+  properties and returns the typed observation including `Refused`; act is a
+  closed move, press, stop union with positive durations, exact channel names
+  and a binding-scoped request key), mutations serialized per binding in
+  admission order with overflow reported rather than dropped, identical retries
+  returning the same receipt and changed input refusing, no automatic retry
+  after an uncertain disconnect, and disconnect cleanup that never issues an
+  unannounced privileged Stop. `puck mcp` refuses every other local profile as
+  a usage error today.
+- A document tool (read, validate, rule cost, mutate, save, with live mutation and
+  offline save distinct) whose whole-document replacement carries an expected
+  revision enforced at application. The Operator reaches the same verbs one
+  console line at a time; no dedicated tool exists.
+- A recording and replay tool beside `puck_capture_frame`. The Operator reaches
+  `replay.record` and the replay verbs through `puck_exec`.
+- A rule-cost read returning `WorldCostReport.Generate`'s facts intact, with
+  `Admitted=false` distinct from validator rejection. The console reads that
+  report through `world.budget.rules`; `world.cost` is the editor's
+  per-placement verb ([E9](editor.md#e9--cost-per-object-and-gpu-pass-timing)),
+  not this tool.
 
 **Check:** a Participant cannot reach exec, files, frame, or tape by guessing
 tool names or changing profile arguments; grant and revoke, channel reorder,
 body reuse, observe denial, cancellation, and saturation against the real
 host; concurrent document edits and malformed candidates, disk failures, codec
 declines, drops, stale recording handles, timeout after dispatch, and replay
-arming refusal, with the console available throughout.
+arming refusal, with the console available throughout. The Operator half is
+checked by the `McpAdversarialTests`, `McpInteropTests` and `RemoteMcp*Tests`
+suites in `tests/Puck.Cli.Tests`.
 
 ### MCP — the remote surface
 
@@ -417,38 +472,55 @@ with revocation; live Entra consent, DNS and ACME, first-party and external
 sign-in, deployment; Participant authority bindings and durable delegated
 mutations through `WorldExtensionClient`.
 
-**Delivers:** a parity job that boots the approved fixture in isolated
-directories and returns the content, state, and pixel verdicts from the real
-runner; ingress that exposes only host-approved source handles with consent
-and revocation; remote hosting on the official ASP.NET Core SDK with JWT
-bearer authentication and MCP 2026-07-28 on both transports; a
-tenant-qualified subject resolved through admission and bound to a world
-principal, index, generation, and approved body, never cast into a seat;
-OBO only for a valid user token intended for this API, obtaining a distinct
-downstream ARM token, with token passthrough and credential fallback
-forbidden; discover, invoke, and status over granted bindings by stable
-request key with claim-before-send, no blind resends, unknown outcomes, and
-replay suppression; one authentication mode.
+**Delivers, in place:** remote hosting on the official ASP.NET Core SDK with
+JWT bearer authentication, OAuth discovery, and MCP 2026-07-28 on remote HTTP
+(local stdio also answers the earlier initialize handshakes). The validated
+issuer and subject resolve through an explicit `OAuth` admission row to a Peer
+principal whose generation stamps every command, never cast into a seat.
+`puck_attach` and `puck_detach` bind an attachment to its subject, and removing
+a grant closes its attachments. Entra on-behalf-of (`Puck.Mcp.Azure`) obtains a
+distinct downstream token for `puck_onboard` and `puck_service_observe`, with
+token passthrough and host-credential fallback forbidden and a claims
+challenge answered before dispatch. App-only role tokens and opaque access
+tokens are refused, so delegated user tokens are the one authentication mode.
+
+**Delivers, still to build:** a parity job that boots the approved fixture in
+isolated directories and returns the content, state, and pixel verdicts from
+the real runner; ingress that exposes only host-approved source handles with
+consent and revocation; Participant authority bindings (the tenant-qualified
+subject resolved to a world principal, index, generation and approved body);
+discover, invoke, and status over granted bindings by stable request key with
+claim-before-send, no blind resends, unknown outcomes, and replay suppression,
+which is the durable delegated mutation the Azure provider leaves outside its
+surface.
 
 **Check:** each item established against the real tenant and the deployed
 host; owner routing, live consent, reauthentication, durable-job restart, a
-lost ARM response, binding revocation, and replay suppression.
+lost ARM response, binding revocation, and replay suppression. No test reaches
+a live tenant today; the Azure suite runs against scripted services.
 
 ### Composed play
 
-**Owns:** the chess module's `search` rows and board `enforcement`; the
+**Owns:** the chess source's board `enforcement` and result verdicts
+(`worlds/parlor/chess.puck`), a reusable rules fragment for it, and the
 composed-game acceptance check.
 
-**Delivers:** checkmate, stalemate, draws, and a CPU opponent authored in the
-shipped chess module; two chess instances in one world from one rules
-fragment, one moved by hand on the table and one driven by text, producing
-equivalent accepted histories while their motion and presentation differ; then
-two solitaire tables at once; then poker with two participant identities in
-the same roles. A capacity failure here needs accurate work pricing or a
-general correction, never a game-specific bypass.
+**Delivers:** the shipped chess source already has an authored `search` job as
+its CPU opponent, a board verdict that checks a settled physical arrangement
+against the last accepted position, castling, en passant, promotion, check,
+repetition counting and the 75-move limit. It records an illegal arrangement
+(the board's default `enforcement`) and names no checkmate or stalemate verdict.
+The package delivers checkmate and stalemate verdicts, then two chess
+instances in one world from one rules fragment, one moved by hand on the table
+and one driven by text, producing equivalent accepted histories while their
+motion and presentation differ; then two solitaire tables at once (the
+solitaire collection plays one table at a time through `solitaire.table`);
+then poker with two participant identities in the same roles. A capacity
+failure here needs accurate work pricing or a general correction, never a
+game-specific bypass.
 
-**Check:** the shipped `games/` fragments boot and their law suites pass; the
-three compositions run in one world.
+**Check:** the shipped `games/` fragments and the parlor package boot and
+their law suites pass; the three compositions run in one world.
 
 ## Sequencing
 
@@ -458,7 +530,7 @@ three compositions run in one world.
 | 2 — after the rebuild lands | The playthrough substrate remainder; the population's frames, tape, and ghosts; composed play | These rewrite or author the rows the rebuild is rewriting. |
 | 3 | The content wave and the One World re-authoring; the seat; parties and matching | The content wave needs districts; the seat opens with the view state so feel stays the gate. |
 | 4 | The federation wave; admission and release; MCP's remote surface; the gated ladder from its first row | Destination admission across sources needs the federation wave's attestation. |
-| 5 | The federation remainder; `Puck.Audio`; the forcing artifact end to end | The remainder's rows are what a played world asks for. |
+| 5 | The federation remainder; the audio remainder; the forcing artifact end to end | The remainder's rows are what a played world asks for. |
 | Last | Housekeeping | Once, over the settled tree. |
 
 Deferred until the forcing world plays, and re-asked at step 5: how another

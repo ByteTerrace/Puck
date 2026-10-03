@@ -183,6 +183,26 @@
               "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
               "type": "boolean"
             },
+            "shadowLights": {
+              "description": "The number of held shadow slots, from 0 through 4.",
+              "type": "integer"
+            },
+            "shadowFadeSlots": {
+              "description": "The number of additional shadow handoff slots, from 0 through 2.",
+              "type": "integer"
+            },
+            "shadowFadeTicks": {
+              "description": "The length of a shadow handoff in delivered ticks; zero selects instant changes.",
+              "type": "integer"
+            },
+            "shadowOverflow": {
+              "description": "How a crossing proceeds when its handoff capacity is occupied.",
+              "enum": [
+                "instant",
+                "queue"
+              ],
+              "title": "WorldShadowOverflow"
+            },
             "renderScaleFloor": {
               "description": "The per-view floor tier the preset selects (Quarter by default).",
               "enum": [
@@ -231,6 +251,26 @@
             "dynamicResolution": {
               "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
               "type": "boolean"
+            },
+            "shadowLights": {
+              "description": "The number of held shadow slots, from 0 through 4.",
+              "type": "integer"
+            },
+            "shadowFadeSlots": {
+              "description": "The number of additional shadow handoff slots, from 0 through 2.",
+              "type": "integer"
+            },
+            "shadowFadeTicks": {
+              "description": "The length of a shadow handoff in delivered ticks; zero selects instant changes.",
+              "type": "integer"
+            },
+            "shadowOverflow": {
+              "description": "How a crossing proceeds when its handoff capacity is occupied.",
+              "enum": [
+                "instant",
+                "queue"
+              ],
+              "title": "WorldShadowOverflow"
             },
             "renderScaleFloor": {
               "description": "The per-view floor tier the preset selects (Quarter by default).",
@@ -281,6 +321,26 @@
               "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
               "type": "boolean"
             },
+            "shadowLights": {
+              "description": "The number of held shadow slots, from 0 through 4.",
+              "type": "integer"
+            },
+            "shadowFadeSlots": {
+              "description": "The number of additional shadow handoff slots, from 0 through 2.",
+              "type": "integer"
+            },
+            "shadowFadeTicks": {
+              "description": "The length of a shadow handoff in delivered ticks; zero selects instant changes.",
+              "type": "integer"
+            },
+            "shadowOverflow": {
+              "description": "How a crossing proceeds when its handoff capacity is occupied.",
+              "enum": [
+                "instant",
+                "queue"
+              ],
+              "title": "WorldShadowOverflow"
+            },
             "renderScaleFloor": {
               "description": "The per-view floor tier the preset selects (Quarter by default).",
               "enum": [
@@ -305,7 +365,7 @@
           ],
           "properties": {
             "lights": {
-              "description": "The lights, at most SdfLights.MaxLights, in slot order. At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
+              "description": "The lights, at most SdfLights.MaxLights, in authored order. Shadow-capable directionals compete for the quality row\u0027s shadow slots by mode and tick-resolved luminance.",
               "type": [
                 "array",
                 "null"
@@ -542,16 +602,19 @@
                           }
                         ]
                       },
-                      "shadows": {
-                        "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
-                        "type": [
-                          "boolean",
-                          "null"
+                      "shadow": {
+                        "description": "How this light competes for shadow slots. Absent is Never. A directional without a presented shadow slot is scaled by ambient occlusion instead.",
+                        "enum": [
+                          "always",
+                          "auto",
+                          "never",
+                          null
                         ],
-                        "default": null
+                        "default": null,
+                        "title": "WorldShadowMode"
                       },
                       "name": {
-                        "description": "The name a section key addresses the light by, unique among the lights.",
+                        "description": "The unique identity a section key and the shadow allocator address. Required when Shadow is Always or Auto.",
                         "type": [
                           "string",
                           "null"
@@ -3814,6 +3877,30 @@
             "null"
           ],
           "default": null
+        },
+        "shadowLights": {
+          "description": "The boot number of held shadow slots, from 0 through 4; one keeps the pinned sun selected.",
+          "type": "integer",
+          "default": 1
+        },
+        "shadowFadeSlots": {
+          "description": "The boot number of additional shadow handoff slots, from 0 through 2.",
+          "type": "integer",
+          "default": 0
+        },
+        "shadowFadeTicks": {
+          "description": "The boot length of a shadow handoff in delivered ticks; zero selects instant changes.",
+          "type": "integer",
+          "default": 0
+        },
+        "shadowOverflow": {
+          "description": "How a crossing proceeds when its handoff capacity is occupied.",
+          "enum": [
+            "instant",
+            "queue"
+          ],
+          "default": "instant",
+          "title": "WorldShadowOverflow"
         }
       },
       "additionalProperties": false,
@@ -18409,18 +18496,22 @@
                               },
                               "limit": {
                                 "default": null,
-                                "description": "The per-axis repeat-cell limit \u2014 the lattice spans cell indices -limit..\u002Blimit (null = UnboundedLimit per axis, far past any authored reach)."
+                                "description": "The per-axis repeat-cell limit \u2014 the lattice spans cell indices -limit..\u002Blimit (null = UnboundedRepeatLimit per axis, a lattice with no edge)."
                               },
                               "origin": {
                                 "default": null,
                                 "description": "The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root \u2014 the lattice of physical copies is unchanged, so a null origin is byte-identical to today\u0027s fold."
+                              },
+                              "isUnbounded": {
+                                "type": "boolean",
+                                "description": "Whether the lattice has no edge: its limit, or an absent one, reaches UnboundedRepeatLimit on any axis. The program\u0027s own answer (IsUnboundedRepeat) decides it."
                               }
                             },
                             "required": [
                               "spacing"
                             ],
                             "additionalProperties": false,
-                            "description": "Bounded linear domain repeat \u2014 Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is UnboundedLimit and does not expand."
+                            "description": "Bounded linear domain repeat \u2014 Repeat. Expands for contact only when the limit is a whole number within the copy budget; an absent limit is unbounded (UnboundedRepeatLimit per axis) and does not expand."
                           },
                           {
                             "properties": {
@@ -18498,7 +18589,7 @@
                                   "P6",
                                   "P6M"
                                 ],
-                                "description": "The wallpaper group.",
+                                "description": "The wallpaper group: one whose fold is continuous (PMM, P4M, P3M1, P6M; see IsContinuous). A program refuses any other group by name when it builds.",
                                 "x-enumDescriptions": {
                                   "P1": "Pure lattice translation (bit-identical to a two-axis RepeatLimited).",
                                   "P2": "Half-turns keyed on the cell parity.",
@@ -18525,7 +18616,7 @@
                               },
                               "limit": {
                                 "default": null,
-                                "description": "The repeat-cell limit per plane axis (null = UnboundedLimit per axis)."
+                                "description": "The repeat-cell limit per plane axis (null = UnboundedLimit per axis): a non-negative whole number of cells for a square group, and unbounded for a hex group, which is bounded by intersecting it with a bounding shape instead (LimitRefusal)."
                               },
                               "plane": {
                                 "enum": [
@@ -18549,14 +18640,6 @@
                                 ],
                                 "default": null,
                                 "description": "The parity-material stride (null = 0, geometric only)."
-                              },
-                              "lodDistance": {
-                                "type": [
-                                  "number",
-                                  "null"
-                                ],
-                                "default": null,
-                                "description": "The symmetry-LOD distance threshold (null = 0, off)."
                               }
                             },
                             "required": [

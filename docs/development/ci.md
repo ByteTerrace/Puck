@@ -57,16 +57,14 @@ The compiled archive stores SHA-256-identical files once and records their other
 destinations. Restore validates the complete path and copy map before writing,
 then recreates ordinary independent files; symbols and runtime layouts are preserved.
 **Test compiled solution** (`build.yml`) restores the compiled output archive into
-a fresh Windows checkout, verifies its commit and platform, and runs its test
-assembly manifest through `dotnet test <assembly.dll>`, two assemblies at a time and largest first, so the
+a fresh Windows checkout, verifies its commit and platform, and runs each test
+assembly of its manifest as `dotnet <assembly.dll>`, two assemblies at a time and largest first, so the
 longest suite runs alongside the others; each run's output is printed whole when it finishes. This consumer does not
 evaluate the solution, restore project dependencies, or install WASM workloads.
 Missing, duplicate, or empty test selections fail. CLI integration tests resolve the
 producer's browser AppBundle inside that checkout. GPU tests skip when D3D11 reports an unsupported
 device, including the video capability needed by the shared-texture cleanup test.
-SDF culling timing benchmarks are tagged `Category=Performance` and
-excluded from this shared-runner gate; their calibrated ceilings remain available
-locally. Deterministic SDF result-equivalence laws still run in CI. CLI process
+Deterministic SDF result-equivalence laws run in CI. CLI process
 interop fixtures run without competing Roslyn/packaging test collections in the
 same assembly. Test projects run one at a time so their independent thread pools
 do not oversubscribe the runner and starve socket handshakes. Tests within each
@@ -75,8 +73,8 @@ Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The producer uploads the MSBuild binary log; the test consumer uploads
 available TRX results and diagnostics even when a later step fails.
 Every assembly must discover tests; hardware-dependent cases may still skip.
-Project run settings remain part of test execution, including the Maths suite's
-default tier selection. Direct assembly execution must not silently broaden that selection.
+Explicit tests, including the Maths suite's Deep and Exhaustive tiers, stay out of a
+direct assembly run exactly as they stay out of a plain `dotnet test`.
 
 Dependency caches accelerate locked NuGet restores in the producer, formatting,
 and documentation/application jobs. They use the active projects' lock files,
@@ -95,8 +93,8 @@ and AGB (Advanced GamingBrick) binaries
 on Linux, its exact deployable AppBundle under Node, and its candidate CLI for
 the generated schema, name-registry, project-map layering, and branding
 distribution checks, and for the two generated ledgers `puck formats --check`
-(`FormatVersions.json`, the token and source digest of every strictly versioned
-format) and `puck canary-ceilings --check` (`CanaryCeilings.json`, the recorded
+(`FormatVersions.json` and the generated `FormatShapes.g.cs` files, the token and
+shape fingerprint of every strictly versioned format) and `puck canary-ceilings --check` (`CanaryCeilings.json`, the recorded
 cost of the automatic and merge canary selections; a count must equal its plan).
 `puck schema --check` also compares the dashboard portal's
 generated world types, which `puck schema` writes from the same schema, so that
@@ -129,8 +127,8 @@ system, or the first document hash, where the hosts differ and prints the
 scenarios, ticks and hashes it compared.
 HGB and AGB share a job matrix while retaining their separate lanes, timeouts,
 corpus caches, and `hgb` and `agb` report artifacts.
-Linux world verification invokes each compiled assembly's portable xUnit
-runner directly, retains XML results, and refuses a filter that executes no tests.
+Linux world verification runs each compiled assembly directly as `dotnet <assembly.dll>`,
+retains TRX results, and refuses a filter that executes no tests.
 It does not require a Linux apphost or recompile the Windows-produced assemblies.
 
 No workflow runs the real-World canaries: their offscreen proofs need a GPU
@@ -279,7 +277,7 @@ dotnet workload install wasm-tools
 $env:CI = 'true'
 dotnet restore Puck.slnx --locked-mode
 dotnet build Puck.slnx -c Release --no-restore
-dotnet test Puck.slnx -c Release --no-build --no-restore -m:1 --filter Category!=Performance
+dotnet test --solution Puck.slnx -c Release --no-build --max-parallel-test-modules 1
 ```
 
 The browser project owns its runtime identifier. Use its
@@ -375,7 +373,7 @@ files in dependency order after all gates succeed. It does not rebuild them.
 Selection and failure paths have offline tests in `tests/Puck.Cli.Tests`:
 
 ```sh
-dotnet test tests/Puck.Cli.Tests -c Release --filter FullyQualifiedName~NuGetCommandTests
+dotnet test tests/Puck.Cli.Tests -c Release --filter-class "*NuGetCommandTests"
 ```
 
 `puck nuget --help` lists the release commands. The tests construct package

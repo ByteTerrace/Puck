@@ -55,8 +55,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     ViewportData view = worldView();
 
-    // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
-    sdfLodOrigin = view.position.xyz;
     // The per-invocation program-layout cache (field/sdf-layout.hlsli) — this kernel's cone march calls mapMasked once per
     // step, so the decode must happen exactly once here, before the first call below.
     sdfProgramLayout = sdfLoadProgramLayout();

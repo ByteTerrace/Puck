@@ -92,16 +92,9 @@ public sealed partial class SdfProgram {
             return false;
         }
 
-        // The direct evaluator discards the scope's final point/pose state. A following scope may save the parent
-        // field before ResetPoint, but no later instruction may observe the discarded point or carrier.
-        for (var next = instance.End; (next < m_instructions.Length); next++) {
-            if (m_instructions[next].Op == SdfOp.ResetPoint) {
-                break;
-            }
-            if (m_instructions[next].Op != SdfOp.PushField) {
-                return false;
-            }
-        }
+        // The direct evaluator discards the scope's final point/pose state. Nothing after the instance can observe it: the
+        // program refuses a stream whose next segment reads a point without a ResetPoint of its own
+        // (RequireSegmentsStartAtTheWorldPoint), so there is no tail to inspect here.
 
         var program = new List<PartLeafPlan>();
         var placement = new List<PartBinding>();

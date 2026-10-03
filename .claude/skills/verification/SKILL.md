@@ -19,7 +19,7 @@ same change. The user's current instruction outranks it.
 `puck gate` and `puck laws prove` are the routes. Run both from a CLI copy
 (below) outside the checkout.
 
-- **`puck gate --merge-base origin/<integration-branch>`** is the batch
+- **`puck gate --merge-base origin/<integration-branch>`** is the lane's
   qualification. Run it on the lane's final head against the integration branch
   the brief names and report its verdict; do not repeat steps it ran. `--gpu`
   adds the affected canaries and parity, the device suites, every recorded
@@ -101,10 +101,11 @@ check form:
 
 Run the recording form only to apply a deliberate change: `puck lengths` after
 shrinking a recorded file, `puck format --file-list` over your own files,
-`puck formats` after bumping a format token, `puck canary-ceilings` after
-changing canary cost, a baseline whose movement the change explains. Review
-the rewritten file's diff and commit it in the same change. A ledger rewritten
-during verification hides the drift the check exists to report.
+`puck formats` after editing a format's source (it records the shape and rewrites the generated
+`FormatShapes.g.cs` files; it never asks for a token bump), `puck canary-ceilings` after
+changing canary cost, a baseline whose movement the change explains. Review the rewritten file's diff
+and commit it in the same change. A ledger rewritten during verification hides
+the drift the check exists to report.
 
 A recording verb that exits nonzero has not recorded, whatever file it wrote.
 `puck counters --record` writes no file and exits 1 when the backends disagree
@@ -183,7 +184,7 @@ brief requires a manual proof, use these steps:
 
 In xUnit v3, `Assert.Throws`, `Assert.ThrowsAny`, `Assert.ThrowsAsync`,
 `Record.Exception` and `Record.ExceptionAsync` all rethrow the skip exception
-(verified on xUnit 3.2.2). A law that wraps a call which can skip, such as a
+(verified on xUnit 4.0.1). A law that wraps a call which can skip, such as a
 device or capability probe, can therefore report **Skipped** with its fix
 withheld and pin nothing. In such laws, catch the exception directly with a
 `try`/`catch` and assert on it.
@@ -198,7 +199,7 @@ owed when your change relies on it.
 GPU work is `puck parity`, `puck counters`, any canary requiring `gpu`
 (including `--merge`), a windowed or offscreen `Puck.World` run, any verb that
 boots one in those modes, and any test that opens a device. This includes a
-full `Puck.World.Tests` run: its device-law classes open the GPU. `puck docs
+full `Puck.World.Tests` run: its `Gpu` classes open the GPU. `puck docs
 citations` builds `Puck.World` and boots it headless and windowed to read its
 help vocabulary, so it waits for the GPU like any other GPU leg; given
 `--enumeration <file>`, a saved `help` listing, it boots nothing and may run
@@ -208,9 +209,12 @@ World run with effective `host.presentation: none` uses no GPU; the
 
 - A GPU runs one GPU leg at a time. Legs compete for the device, the ports and
   the frame budget, and a contended leg times out.
-- While another GPU leg runs, filter World tests with
-  `--filter "FullyQualifiedName!~DeviceLaw"` and list the skipped device-law
-  classes as owed. Keep the CPU-heavy work restriction below.
+- While another GPU leg runs, run test suites with
+  `--filter-not-trait Category=Gpu` and list the skipped `Gpu` classes as
+  owed. Every class that opens a hardware GPU device carries
+  `[Trait("Category", "Gpu")]`, whatever its name, and the build refuses a class
+  that reaches a way onto the GPU marked `[OpensGpuDevice]` without it (GPU001).
+  Keep the CPU-heavy work restriction below.
 - In delegated work, run GPU legs only under a grant the lead issues in your
   brief. Without one, run none: list each leg you need (verb, canaries,
   backend) in your hand-back report.

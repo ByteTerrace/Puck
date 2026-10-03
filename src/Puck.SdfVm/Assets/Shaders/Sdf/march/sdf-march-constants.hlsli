@@ -101,7 +101,7 @@ static const float FastShadowMaxDistance = 5.0;
 // contain for the shadow march to be sound. The march's samples read the field within the penumbra band about the
 // ray, so every occluder that can lower the estimate lies inside three penumbra half-slopes with margin; a wider cone
 // is always a superset, only less selective. SdfLights.MaxPenumbraSlope keeps the chord below one.
-float worldShadowPenumbraChord() { return (3.0 * worldShadowPenumbraSlope()); }
+float worldShadowPenumbraChord(int lightIndex) { return (3.0 * worldShadowPenumbraSlope(lightIndex)); }
 
 // Per-pixel query tally for world.debug-view evals, including primary local-part marches and shading probes.
 // Call sites in the march, the normals and the occlusion count their queries; the interpreter does not. This per-thread

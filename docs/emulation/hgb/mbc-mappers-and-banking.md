@@ -83,4 +83,4 @@ Used in compilation cartridges (*Taito Variety Pack*, *Momotarou Collection*):
 ### 9. Game Boy Camera (`CameraCartridge`)
 - Integrates a 128×128 pixel CMOS image sensor matrix (`Mitsubishi M64282FP`).
 - Features programmable exposure time registers, matrix gain, edge enhancement algorithms, and 2D dithering matrices.
-- In Puck, the Camera cartridge binds to diegetic world textures or virtual camera feeds, allowing in-game characters to take real camera photos of the signed-distance world!
+- In Puck, the cartridge reads its picture through the host-supplied `ICameraSensor`. With no host sensor attached it reads `GradientCameraSensor`, a fixed deterministic gradient; no World surface feeds it a camera or a rendered view yet.

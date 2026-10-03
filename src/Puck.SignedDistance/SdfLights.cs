@@ -34,10 +34,9 @@ public readonly record struct SdfCurvature(float Cavity, float Rim, float Ink, f
     );
 }
 /// <summary>
-/// A frame's lights table: up to <see cref="MaxLights"/> <see cref="SdfLight"/> records, the light that drives the
-/// soft-shadow march, and the curvature shading the lit path applies. The tables pack the records into the World-group
-/// table the shadow and views passes read (<see cref="Pack"/>), and every pass block carries the count, the shadow light
-/// and the curvature gains as values.
+/// A frame's lights table: up to <see cref="MaxLights"/> <see cref="SdfLight"/> records, the stable shadow slots and
+/// active handoffs, and the curvature shading the lit path applies. The tables pack the records into the World-group
+/// table the shadow and views passes read (<see cref="Pack"/>).
 /// </summary>
 public sealed class SdfLights {
     /// <summary>The pinned ambient floor.</summary>
@@ -64,8 +63,6 @@ public sealed class SdfLights {
 
     private int m_count;
 
-    private int m_shadowLight = -1;
-
     /// <summary>Gets the pinned sun direction, from a surface toward the sun.</summary>
     public static Vector3 DefaultSunDirection { get; } = new(
         x: 0.51343602f,
@@ -88,9 +85,9 @@ public sealed class SdfLights {
     /// <summary>Gets every record of the table, <see cref="MaxLights"/> of them; those at or past <see cref="Count"/> are
     /// never lit.</summary>
     public ReadOnlySpan<SdfLight> Records => m_lights;
-    /// <summary>Gets the index of the light that drives the soft-shadow march, or −1 when none does: the last
-    /// directional set with shadows, until a light without them is set in its place.</summary>
-    public int ShadowLight => m_shadowLight;
+
+    /// <summary>Gets the frame's explicit stable owners, policy and active handoffs.</summary>
+    public SdfShadowSlots ShadowSlots { get; } = new();
 
     /// <summary>Gets one light.</summary>
     /// <param name="index">The light's index in the table.</param>
@@ -130,10 +127,12 @@ public sealed class SdfLights {
             )
         );
         lights.Count = 2;
+        lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 1);
+        lights.ShadowSlots.SetSlot(light: 0, slot: 0);
 
         return lights;
     }
-    /// <summary>Copies every record, the count, the shadow light and the curvature from another table.</summary>
+    /// <summary>Copies every record, the count, the shadow slots and the curvature from another table.</summary>
     /// <param name="source">The table to copy.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
     public void CopyFrom(SdfLights source) {
@@ -144,7 +143,7 @@ public sealed class SdfLights {
             index: 0
         );
         m_count = source.m_count;
-        m_shadowLight = source.m_shadowLight;
+        ShadowSlots.CopyFrom(source: source.ShadowSlots);
         Curvature = source.Curvature;
     }
     /// <summary>Packs the records into the lights table the kernels read: each record as set, a directional's direction
@@ -172,8 +171,7 @@ public sealed class SdfLights {
             records[index] = light;
         }
     }
-    /// <summary>Sets one light and, when it shadows, makes it the shadow light; a light set without shadows where the
-    /// shadow light was leaves no shadow light.</summary>
+    /// <summary>Sets one light independently of the frame's explicit shadow-slot selection.</summary>
     /// <param name="index">The light's index in the table.</param>
     /// <param name="light">The light.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the table, or a point or
@@ -201,12 +199,6 @@ public sealed class SdfLights {
             DynamicSlot = (SdfLight.IsPositional(kind: light.Kind) ? light.DynamicSlot : 0),
             Shadows = ((light.Shadows != 0u) ? 1u : 0u),
         });
-
-        if (light.CastsShadow) {
-            m_shadowLight = index;
-        } else if (m_shadowLight == index) {
-            m_shadowLight = -1;
-        }
     }
     /// <summary>Returns a direction normalized in double and rounded once, or the pinned sun's for a zero one: a zero
     /// direction has no Lambert term, the authoring doors refuse one by name, and a frame assembled in code still must

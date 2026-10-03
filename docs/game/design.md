@@ -80,10 +80,10 @@ before any scoring, unlock or progression is layered on it. The nexus's own feel
 dungeon's — a promenading pace fit for a shared plaza.
 
 `studio` ships beside them as a non-game **dev canvas** for character work, and as Puck's first
-formal border crossing (owner amendment): the nexus and studio meet at a mapped border, so
-studio is reachable by walking through the island's fourth arch as well as by `--world`. It is not a
-game world and not a destination in the reveal graph. A doc counting "four worlds" is counting the
-charter's roster; the directory holds five documents.
+formal border crossing (owner amendment): the nexus and studio meet at a mapped border. It is not a
+game world and not a destination in the reveal graph. The island is `puck.world.json`; Dive, Kart,
+Jump, Studio and the other districts are modules under `Assets/worlds/modules` that it imports, so
+a doc counting "four worlds" is counting the charter's roster, not the files.
 
 **Reveals are a core world mechanic** — attunement-like achievement facts carried on the identity,
 general enough for cross-game unlocks between trusted servers. Every world is a starting point; all
@@ -105,7 +105,7 @@ document families `Puck.World` embeds inline; the ROM forges live beside their m
 `Puck.HumbleGamingBrick.Forge` (SM83/CGB) and `Puck.AdvancedGamingBrick.Forge` (ARM7TDMI/AGB), each packable on
 its own. The audio/synth document families sit in `Puck.Assets` so a forge package never drags a world assembly.
 
-**Everything is v1.** `puck.world.definition.v1`, `puck.world.projection.v1`, `puck.world.counterpart.v1` — no
+**Everything is v1.** `puck.world.definition.v1`, `puck.world.projection.v1`, `puck.world.counterpart-attestation.v1` — no
 schema in this repository carries a v2, and none is planned. Supergreen holds: zero consumers, so a
 breaking change edits the v1 shape in place and updates every internal caller in the same change, never
 a parallel version or a compatibility shim.

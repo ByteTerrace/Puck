@@ -498,7 +498,7 @@ public sealed partial class WorldBody {
     /// <returns>The body's world-space linear velocity.</returns>
     public FixedVector3 ApproximateWorldVelocity() => (IsRigid
         ? m_rigidVelocity
-        : (m_planarVelocity + (m_up * m_verticalVelocity))
+        : ComposedVelocity()
     );
 
     /// <summary>Builds (or refreshes) this body's persistent <see cref="FixedRigidBody"/> handle — the vehicle

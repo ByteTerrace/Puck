@@ -77,6 +77,8 @@ public readonly record struct WorldCodecFailure(WorldCodecRefusal Refusal, strin
 /// The one canonical encoder/decoder pair for each declared <see cref="WorldSubmissionPayload"/> leaf. The
 /// wire framer, loopback, and replay tape all call these methods; none owns a second command/grant vocabulary.
 /// </summary>
+[FormatLeaf]
+[FormatPart("WorldProtocol.WireProtocolKey")]
 public static partial class WorldSubmissionCodec {
     private const int MaxDurableStateValues = 256;
 
@@ -355,16 +357,44 @@ public static partial class WorldSubmissionCodec {
             WriteMask: writeMask
         );
     }
+
+    /// <summary>The longest UTF-8 text a lever's name or view may carry: a validated name is at most
+    /// <see cref="SafeName.MaxLength"/> characters and a UTF-16 character encodes to at most three UTF-8 bytes (a
+    /// surrogate pair is two characters and four bytes).</summary>
+    public const int MaxLeverTextBytes = (SafeName.MaxLength * 3);
+    /// <summary>The largest lever leaf the layout below can write: the section tag, the name and view behind their
+    /// 16-bit length prefixes at their longest, the four value lanes and the seat. The frame cap for the lever kind
+    /// is this number, so the cap follows the layout rather than a figure beside it.</summary>
+    public const int MaxLeverBytes = (((sizeof(byte) + (2 * (sizeof(ushort) + MaxLeverTextBytes))) + (4 * sizeof(double))) + sizeof(int));
+
+    private static void WriteLeverText(WireWriter writer, string field, string value) {
+        if (Encoding.UTF8.GetByteCount(s: value) > MaxLeverTextBytes) {
+            throw new LeafCodecException(failure: Fail(
+                detail: $"{field} exceeds {MaxLeverTextBytes} UTF-8 bytes",
+                refusal: WorldCodecRefusal.PayloadMalformed
+            ));
+        }
+
+        writer.WriteString(value: value);
+    }
     // The lever leaf is keyed by the knob's registered NAME, not an ordinal: the vocabulary is a composition-time
     // registration (Client.WorldSessionLevers), so the wire carries the token and the applier owns which tokens
     // resolve. An empty name can address no registration, so it is refused here rather than travelling.
     private static WorldSessionLever ReadLever(ref WireReader reader) {
         var section = WorldWireCodec.ReadSection(reader: ref reader);
-        var name = reader.ReadString(field: "SessionLever.Name");
+        var name = reader.ReadString(
+            field: "SessionLever.Name",
+            maxBytes: MaxLeverTextBytes
+        );
         var a = reader.ReadDouble();
         var b = reader.ReadDouble();
+        var c = reader.ReadDouble();
+        var d = reader.ReadDouble();
         var seat = reader.ReadInt32();
-        var view = reader.ReadString(field: "SessionLever.View");
+        var view = reader.ReadString(
+            field: "SessionLever.View",
+            maxBytes: MaxLeverTextBytes
+        );
 
         if (
             !reader.Failed &&
@@ -379,6 +409,8 @@ public static partial class WorldSubmissionCodec {
         return new WorldSessionLever(
             A: a,
             B: b,
+            C: c,
+            D: d,
             Name: name,
             Seat: seat,
             View: ((view.Length == 0) ? null : view),
@@ -1843,11 +1875,21 @@ public static partial class WorldSubmissionCodec {
                     writer,
                     lever.Section
                 );
-                writer.WriteString(value: lever.Name);
+                WriteLeverText(
+                    writer: writer,
+                    field: "SessionLever.Name",
+                    value: lever.Name
+                );
                 writer.WriteDouble(value: lever.A);
                 writer.WriteDouble(value: lever.B);
+                writer.WriteDouble(value: lever.C);
+                writer.WriteDouble(value: lever.D);
                 writer.WriteInt32(value: lever.Seat);
-                writer.WriteString(value: (lever.View ?? string.Empty));
+                WriteLeverText(
+                    writer: writer,
+                    field: "SessionLever.View",
+                    value: (lever.View ?? string.Empty)
+                );
             },
             out bytes,
             out failure

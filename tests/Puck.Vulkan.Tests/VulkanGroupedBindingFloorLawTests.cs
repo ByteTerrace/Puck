@@ -10,7 +10,8 @@ namespace Puck.Vulkan.Tests;
 /// <see cref="GpuPipelineLayoutDescription.PushIndexBytes"/> push-constant bytes is accepted, and one below either is
 /// refused as unavailable, naming each limit it misses; and a device that does not report
 /// <c>shaderSampledImageArrayDynamicIndexing</c>, which the SDF screen shading needs, or <c>fragmentStoresAndAtomics</c>,
-/// with which the SDF mesh pass counts its texels, is refused by name
+/// with which the SDF mesh pass counts its texels, or <c>shaderStorageImageExtendedFormats</c>, which the R8/R8G8 shadow
+/// handoff storage images require, is refused by name
 /// (<see cref="VulkanLogicalDeviceFactory.FeatureIndicesOf"/>).</summary>
 public sealed class VulkanGroupedBindingFloorLawTests {
     private static GpuDeviceCapabilities Device(uint sets, uint pushBytes) => new(
@@ -47,15 +48,17 @@ public sealed class VulkanGroupedBindingFloorLawTests {
             expectedSubstring: $"The Vulkan device cannot bind Puck's grouped binding contract: {missing}"
         );
     }
-    // A device reporting every base feature but a required one (dynamic indexing of sampled-image arrays, or fragment
-    // stores and atomics), or reporting too few features to name it, is refused naming the feature; one reporting both
+    // A device reporting every base feature but a required one, or reporting too few features to name it, is refused
+    // naming the feature; one reporting every required feature
     // enables them first, then the optional features it reports.
     [InlineData(34, "shaderSampledImageArrayDynamicIndexing")]
     [InlineData(26, "fragmentStoresAndAtomics")]
+    [InlineData(29, "shaderStorageImageExtendedFormats")]
     [Theory]
     public void ADeviceWithoutARequiredBaseFeatureIsRefusedByName(int required, string feature) {
         const int SampledImageArrayDynamicIndexing = 34;
         const int FragmentStoresAndAtomics = 26;
+        const int StorageImageExtendedFormats = 29;
         var every = Enumerable.Repeat(count: 55, element: true).ToArray();
         var without = every.ToArray();
 
@@ -71,12 +74,12 @@ public sealed class VulkanGroupedBindingFloorLawTests {
         }
 
         Assert.Equal(
-            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every).Take(count: 2),
-            expected: [((uint)FragmentStoresAndAtomics), ((uint)SampledImageArrayDynamicIndexing)]
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every).Take(count: 3),
+            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing)]
         );
         Assert.Equal(
-            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is SampledImageArrayDynamicIndexing or FragmentStoresAndAtomics))]),
-            expected: [((uint)FragmentStoresAndAtomics), ((uint)SampledImageArrayDynamicIndexing)]
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is SampledImageArrayDynamicIndexing or FragmentStoresAndAtomics or StorageImageExtendedFormats))]),
+            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing)]
         );
     }
 }

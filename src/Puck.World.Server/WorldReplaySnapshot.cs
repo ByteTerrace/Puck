@@ -237,7 +237,7 @@ public readonly record struct WorldReplayHashTraces(ulong[] Pose, ulong[] Author
 /// <remarks>
 /// <para>The seat's profile rates are pinned, not re-resolved. A seated profile's MoveSpeed/TurnSpeed are read live off
 /// the handle by <c>WorldBody.Advance</c> every frame, which makes them simulation input — and they reach the catalog
-/// through <c>SetPlayerSection</c>, which never crosses the <see cref="WorldCommand"/>/grant/revoke union the tick
+/// through the identity verbs (<c>identity.motion</c>), which write the owned-world catalog in process and never cross the <see cref="WorldCommand"/>/grant/revoke union the tick
 /// stream records, so an edit to them is structurally invisible to that stream. Each <see cref="WorldReplaySeat"/>
 /// therefore carries the projection its profile actually ran with (<see cref="WorldIdentityProjection"/>, with raw fixed-point rates),
 /// and <see cref="Drive"/> seats its bodies on those rather than on whatever the live catalog now holds. That makes a
@@ -303,6 +303,8 @@ public sealed partial class WorldReplaySnapshot {
     // its identity projection alone, federated input, and the seat identity a fork switches to. Refuse earlier tapes at
     // intake instead of reporting their old shape as a simulation divergence.
     private const uint ShapeToken = 9u;
+    // A shape fingerprint is sixteen hex digits (FormatShapes); the bound leaves room for none else.
+    private const int MaxFingerprintChars = 32;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -1062,9 +1064,9 @@ public sealed partial class WorldReplaySnapshot {
             maximum: WorldBodiesLimits.CapacityCeiling
         );
         var outcome = new WorldArrivalOutcome(
+            Adopted: adopted,
             Generations: generations,
-            RolledBack: rolledBack,
-            Adopted: adopted
+            RolledBack: rolledBack
         );
         var refused = new WorldReplayEntry.Arrival(
             Encoded: encoded,

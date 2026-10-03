@@ -82,8 +82,9 @@ public sealed class ChildProcessDrainTests {
             Assert.Equal(expected: new string(c: 'e', count: Length), actual: result[1]);
             output.Dispose();
             errors.Dispose();
-            Assert.False(condition: outputPipe.CanRead);
-            Assert.False(condition: errorPipe.CanRead);
+            // A disposed pipe refuses a read; CanRead stays true on Unix, so the refusal is what shows it closed.
+            _ = Assert.Throws<ObjectDisposedException>(testCode: () => outputPipe.Read(buffer: [], count: 0, offset: 0));
+            _ = Assert.Throws<ObjectDisposedException>(testCode: () => errorPipe.Read(buffer: [], count: 0, offset: 0));
         } finally {
             if (!process.HasExited) { process.Kill(entireProcessTree: true); }
             if (!inheritor.HasExited) { inheritor.Kill(); }
