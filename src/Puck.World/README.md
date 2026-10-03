@@ -620,7 +620,7 @@ reads back. The `pipeline.*` verbs address `views.graphs` rows by name.
 Start the three-pass feedback example from the repository root:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/pipeline.world.json --state-dir artifacts/pipeline/state
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/pipeline.puck --state-dir artifacts/pipeline/state
 ```
 
 The ink simulation feeds a color pass and a fullscreen finish. Drag the pointer

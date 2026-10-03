@@ -514,6 +514,6 @@ public class LinterSugarTests {
         "games/billiards.puck",
         "games/tictactoe.puck",
         "games/poker.puck",
-        "pipeline.world.json",
+        "pipeline.puck",
     };
 }

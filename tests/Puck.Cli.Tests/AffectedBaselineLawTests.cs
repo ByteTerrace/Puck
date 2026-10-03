@@ -55,7 +55,7 @@ public sealed class AffectedBaselineLawTests {
     [InlineData("src/Puck.World/Assets/worlds/games/tictactoe.puck", "browser-parity")]
     [InlineData("VerifiedCode.json", "maths-ledger")]
     [InlineData("src/Puck.World/Assets/worlds/games/go.puck", "state")]
-    [InlineData("src/Puck.World/Assets/worlds/pipeline.world.json", "state")]
+    [InlineData("src/Puck.World/Assets/worlds/pipeline.puck", "state")]
     [InlineData("worlds/parlor/lineup.puck", "state")]
     [Theory]
     public void ExternalTestDataReachesItsBaseline(string path, string name) {
