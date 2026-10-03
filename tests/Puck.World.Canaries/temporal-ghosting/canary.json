@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/temporal-ghosting/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/temporal-ghosting/fixture.puck",
     "script": "capture.script.txt",
     "runSchedule": true,
     "commands": [
@@ -122,7 +122,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/temporal-ghosting/discriminating.world.json",
+    "world": "tests/Puck.World.Canaries/temporal-ghosting/discriminating.puck",
     "script": "capture.script.txt",
     "runSchedule": true,
     "commands": [
