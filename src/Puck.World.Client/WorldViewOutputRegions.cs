@@ -2,11 +2,15 @@ using Puck.Abstractions.Presentation;
 
 namespace Puck.World.Client;
 
-/// <summary>The allocation envelope of each view and pane the composition places: the largest width and height its
-/// rect reaches over the transition in flight (<see cref="WorldViewComposer.StartSlots"/> to
-/// <see cref="WorldViewComposer.EndSlots"/>), so easing between the two never resizes a node. A settled composition
-/// requests each occupant's own rect. Reservations grow through interrupted transitions and shrink only when the
-/// chain settles, never as a rect eases. An envelope sizes an image, not a placement, so its origin is zero.</summary>
+/// <summary>The allocation envelope of each view and pane the composition places, which allocates at most once per
+/// transition. A slot whose endpoints (<see cref="WorldViewComposer.StartSlots"/> to
+/// <see cref="WorldViewComposer.EndSlots"/>) nest, one containing the other on both axes, reserves the larger, the
+/// largest width and height its rect reaches, so easing between the two never resizes a node: a growing slot
+/// allocates as the transition starts and a shrinking one as it settles. A slot whose endpoints oppose, growing on one
+/// axis and shrinking on the other, would need both, so it keeps its start's extent through the ease and resamples the
+/// eased rect from it, allocating once, when the transition settles. A settled composition requests each occupant's
+/// own rect. Reservations grow through interrupted transitions and shrink only when the chain settles, never as a rect
+/// eases. An envelope sizes an image, not a placement, so its origin is zero.</summary>
 public sealed class WorldViewOutputRegions {
     private readonly List<NormalizedRect> m_viewReservations = new();
     private readonly Dictionary<string, NormalizedRect> m_paneReservations = new(comparer: StringComparer.Ordinal);
@@ -15,7 +19,7 @@ public sealed class WorldViewOutputRegions {
     /// that render a view, as the presenter counts them: a camera slot whose camera the definition authors, and a seat
     /// slot whose seat order is joined; a pane renders none. An ordinal covers the slot it holds at the start and the
     /// slot it holds at the end, since an occupant cuts at the transition's midpoint and a cut can move an ordinal to
-    /// another slot, each slot over both its endpoints, which every rect it eases through lies between. With no slot
+    /// another slot, each slot over its reach (<see cref="Reach"/>). With no slot
     /// rendering a view, the one view is the presenter's whole-display spectator. Call before <see cref="Pane"/> each
     /// frame: settling releases the chain's pane reservations too.</summary>
     /// <param name="composer">The composer, after this frame's composition.</param>
@@ -29,8 +33,8 @@ public sealed class WorldViewOutputRegions {
         ArgumentNullException.ThrowIfNull(argument: envelopes);
 
         envelopes.Clear();
-        Cover(cameras: cameras, endpoint: composer.StartSlots, envelopes: envelopes, joinedCount: joinedCount, other: composer.EndSlots);
-        Cover(cameras: cameras, endpoint: composer.EndSlots, envelopes: envelopes, joinedCount: joinedCount, other: composer.StartSlots);
+        Cover(cameras: cameras, end: composer.EndSlots, envelopes: envelopes, joinedCount: joinedCount, ordinalsAtEnd: false, start: composer.StartSlots);
+        Cover(cameras: cameras, end: composer.EndSlots, envelopes: envelopes, joinedCount: joinedCount, ordinalsAtEnd: true, start: composer.StartSlots);
         if (composer.TransitionProgress < 1f) {
             for (var index = 0; ((index < envelopes.Count) && (index < m_viewReservations.Count)); index++) {
                 envelopes[index] = Union(first: envelopes[index], second: m_viewReservations[index]);
@@ -45,8 +49,8 @@ public sealed class WorldViewOutputRegions {
         m_viewReservations.AddRange(collection: envelopes);
     }
     /// <summary>Returns a pane's envelope: every slot it holds at either endpoint of the transition in flight, each over
-    /// both its endpoints, or its current rect when neither endpoint shows it, retaining its largest reservation until
-    /// the transition chain settles.</summary>
+    /// its reach (<see cref="Reach"/>), or its current rect when neither endpoint shows it, retaining its largest
+    /// reservation until the transition chain settles.</summary>
     /// <param name="composer">The composer, after this frame's composition.</param>
     /// <param name="instance">The pane's <c>views.graphs</c> instance name.</param>
     /// <param name="region">The pane's current rect.</param>
@@ -68,9 +72,11 @@ public sealed class WorldViewOutputRegions {
                 string.Equals(a: start[index].Instance, b: instance, comparisonType: StringComparison.Ordinal) ||
                 string.Equals(a: end[index].Instance, b: instance, comparisonType: StringComparison.Ordinal)
             ) {
+                var reach = Reach(end: end[index].Region, start: start[index].Region);
+
                 held = true;
-                width = MathF.Max(x: width, y: MathF.Max(x: start[index].Region.Width, y: end[index].Region.Width));
-                height = MathF.Max(x: height, y: MathF.Max(x: start[index].Region.Height, y: end[index].Region.Height));
+                width = MathF.Max(x: width, y: reach.Width);
+                height = MathF.Max(x: height, y: reach.Height);
             }
         }
 
@@ -85,14 +91,33 @@ public sealed class WorldViewOutputRegions {
         return envelope;
     }
 
+    /// <summary>Returns the extent a slot reserves over a transition from one rect to another: the larger of the two on
+    /// each axis when they nest, so every rect it eases through fits and only one boundary allocates, or the start's own
+    /// extent when they oppose, growing on one axis and shrinking on the other, where containing every eased rect would
+    /// allocate at both boundaries. Its origin is zero.</summary>
+    /// <param name="start">The slot's rect at the transition's start.</param>
+    /// <param name="end">The slot's rect at the transition's end.</param>
+    /// <returns>The reserved extent.</returns>
+    private static NormalizedRect Reach(NormalizedRect start, NormalizedRect end) {
+        var nests = (
+            ((start.Width >= end.Width) && (start.Height >= end.Height)) ||
+            ((end.Width >= start.Width) && (end.Height >= start.Height))
+        );
+
+        return (nests
+            ? Union(first: start, second: end)
+            : (start with { X = 0f, Y = 0f }));
+    }
     private static NormalizedRect Union(NormalizedRect first, NormalizedRect second) => new(
         Height: MathF.Max(x: first.Height, y: second.Height),
         Width: MathF.Max(x: first.Width, y: second.Width),
         X: 0f,
         Y: 0f
     );
-    // Widens each ordinal's envelope by the slot it holds at one endpoint, the slot spanning both its endpoints.
-    private static void Cover(IReadOnlyList<WorldComposedSlot> endpoint, IReadOnlyList<WorldComposedSlot> other, int joinedCount, IReadOnlyList<WorldCamera> cameras, List<NormalizedRect> envelopes) {
+    // Widens each ordinal's envelope by the slot it holds at one endpoint (the end's when ordinalsAtEnd), the slot over
+    // its reach.
+    private static void Cover(IReadOnlyList<WorldComposedSlot> start, IReadOnlyList<WorldComposedSlot> end, bool ordinalsAtEnd, int joinedCount, IReadOnlyList<WorldCamera> cameras, List<NormalizedRect> envelopes) {
+        var endpoint = (ordinalsAtEnd ? end : start);
         var ordinal = 0;
 
         for (var index = 0; (index < endpoint.Count); index++) {
@@ -102,8 +127,9 @@ public sealed class WorldViewOutputRegions {
                 continue;
             }
 
-            var width = MathF.Max(x: slot.Region.Width, y: other[index].Region.Width);
-            var height = MathF.Max(x: slot.Region.Height, y: other[index].Region.Height);
+            var reach = Reach(end: end[index].Region, start: start[index].Region);
+            var width = reach.Width;
+            var height = reach.Height;
 
             if (ordinal == envelopes.Count) {
                 envelopes.Add(item: new NormalizedRect(Height: height, Width: width, X: 0f, Y: 0f));

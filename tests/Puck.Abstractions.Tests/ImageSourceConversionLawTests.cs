@@ -396,6 +396,15 @@ public sealed class ImageSourceConversionLawTests {
         Assert.Equal(expected: ImageSourceConversion.TransferPass, actual: ImageSourceConversion.PassOf(color: ImageColorEncoding.Srgb, format: ImagePixelFormat.R16G16B16A16Float));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => ImageSourceConversion.PassOf(color: new ImageColorEncoding(Primaries: ImageColorPrimaries.Bt2020, Transfer: ImageTransferFunction.Pq), format: ImagePixelFormat.Nv12));
     }
+    /// <summary>An imported image converts on the device only as half-float scRGB, the format and encoding a capture of an
+    /// HDR display hands over; anything else names no image pass.</summary>
+    [Fact]
+    public void AnImportedImageNamesItsPassOnlyAsHalfFloatScRgb() {
+        Assert.Equal(expected: ImageSourceConversion.ScRgbImagePass, actual: ImageSourceConversion.ImagePassOf(color: ImageColorEncoding.Of(colorSpace: DisplayColorSpace.ScRgb), format: ImagePixelFormat.R16G16B16A16Float));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => ImageSourceConversion.ImagePassOf(color: ImageColorEncoding.Srgb, format: ImagePixelFormat.R16G16B16A16Float));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => ImageSourceConversion.ImagePassOf(color: ImageColorEncoding.Of(colorSpace: DisplayColorSpace.Hdr10), format: ImagePixelFormat.R16G16B16A16Float));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => ImageSourceConversion.ImagePassOf(color: ImageColorEncoding.Of(colorSpace: DisplayColorSpace.ScRgb), format: ImagePixelFormat.B8G8R8A8Unorm));
+    }
     [Fact]
     public void AHeaderRoundTripsAndARegionDisagreeingWithItsLayoutIsRefused() {
         var region = Region(

@@ -173,7 +173,7 @@ internal sealed partial class WorldScreenBinder {
             ended: Feed.Ended,
             fault: Feed.Fault,
             gpuHandle: (Feed.GpuTargets?.LatestHandle() ?? 0),
-            gpuRoute: Feed.RidesGpu,
+            gpuRoute: Feed.SamplesRing,
             pixels: Feed.Pixels
         );
         public ImageSourceDescriptor Descriptor { get; }
