@@ -839,6 +839,7 @@ public static partial class WorldDefinitionValidator {
             farDistance: definition.Render.FarDistance,
             errors: errors
         );
+        ValidateRenderResolution(definition: definition, errors: errors);
 
         ValidateTimeline(
             definition: definition,

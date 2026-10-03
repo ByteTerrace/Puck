@@ -83,9 +83,6 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <summary>The presentation's render settings, whose <see cref="WorldRenderSettings.DrawsBakes"/> says whether it
     /// draws its bakes, or <see langword="null"/> until the render factory has run.</summary>
     public WorldRenderSettings? Settings { get; set; }
-    /// <summary>The presentation's dynamic-resolution controller, whose grid and signal <c>world.dynamic-resolution</c>
-    /// reports, or <see langword="null"/> until the render factory has run.</summary>
-    public WorldDynamicResolution? DynamicResolution { get; set; }
 
     // A schedule must reconcile before readiness can decide whether it draws bakes, and settle while it draws them.
     private bool BakesSettled => ((Settings is not { } settings) || (Bakes is not { } bakes) || bakes.IsReadyForDrawing(bakes: settings.Bakes));

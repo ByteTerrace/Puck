@@ -54,6 +54,12 @@ namespace Puck.World;
 /// genuinely need a live render/pointer, which only <see cref="AddWorldPresentation"/> can supply.</para>
 /// </summary>
 public static class WorldBootComposition {
+    private static WorldRenderSettings ReadRenderQuality(WorldDefinition definition) {
+        var settings = new WorldRenderSettings(defaults: definition.Render);
+
+        settings.ReadQuality(definition: definition);
+        return settings;
+    }
     // Points the render probe's sdf.transforms forwarder at the presenter's moved set the moment the presenter is built,
     // so world.counters can register it, and read it, before the presenter exists.
     private static WorldFramePresenter AttachTo(this WorldFramePresenter presenter, WorldRenderProbe probe) {
@@ -324,7 +330,7 @@ public static class WorldBootComposition {
         services.AddSingleton<FrameRateMonitor>();
         // The live render settings boot from the definition's render-lever defaults (then the console verbs move
         // them live).
-        services.AddSingleton(implementationFactory: static sp => new WorldRenderSettings(defaults: sp.GetRequiredService<WorldDefinition>().Render));
+        services.AddSingleton(implementationFactory: static sp => ReadRenderQuality(definition: sp.GetRequiredService<WorldDefinition>()));
 
         // The live-content platform seams the screen binder pulls CPU pixels through: the webcam (Media Foundation
         // on Windows, the CPU tier) and compositor-owned desktop-window capture. Registered here (not presentation)

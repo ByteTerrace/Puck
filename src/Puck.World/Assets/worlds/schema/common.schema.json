@@ -19,7 +19,7 @@
       ]
     },
     "WorldRenderScaleTier": {
-      "description": "The enumerated world render-scale tiers a player or a quality preset picks, never a free numeric value, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view\u0027s output keeps its rect\u0027s extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph\u0027s extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition\u0027s dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the world document\u0027s quality presets, the console world.render-scale verb and the boot resolution read. Each extent below is a lone whole-display view at 1280x800.",
+      "description": "The enumerated world render-scale tiers a player picks at the console and a view\u0027s floor names, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view\u0027s output keeps its rect\u0027s extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph\u0027s extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition\u0027s dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the quality presets\u0027 floors, the console world.render-scale verb and the per-view floors read; a ceiling is a scalar. Each extent below is a lone whole-display view at 1280x800.",
       "enum": [
         "Native",
         "ThreeQuarter",
@@ -50,16 +50,20 @@
           "type": "boolean"
         },
         "renderScale": {
-          "$ref": "#/$defs/WorldRenderScaleTier",
-          "description": "The render-scale tier the preset selects."
+          "description": "The scalar render-scale ceiling the preset selects.",
+          "type": "number"
         },
         "temporal": {
           "description": "Whether the preset reconstructs the world\u0027s views over time (world.temporal).",
           "type": "boolean"
         },
         "dynamicResolution": {
-          "description": "Whether the preset moves each view\u0027s render extent with the load (world.dynamic-resolution).",
+          "description": "Whether the preset moves each view\u0027s render extent with the load (world.render-scale auto).",
           "type": "boolean"
+        },
+        "renderScaleFloor": {
+          "$ref": "#/$defs/WorldRenderScaleTier",
+          "description": "The per-view floor tier the preset selects (Quarter by default)."
         }
       },
       "additionalProperties": false,
@@ -7692,6 +7696,19 @@
       ],
       "additionalProperties": false,
       "title": "WorldCameraProgram"
+    },
+    "QualityTier": {
+      "title": "QualityTier",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        null
+      ]
     },
     "ShapeNonNullable50": {
       "anyOf": [

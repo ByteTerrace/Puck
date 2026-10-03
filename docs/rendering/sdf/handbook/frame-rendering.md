@@ -209,7 +209,7 @@ sets the reconstruction blend.
 
 ### Dynamic resolution
 
-With dynamic resolution on (`world.dynamic-resolution`), one controller,
+With dynamic resolution on (`world.render-scale auto`), one controller policy,
 `WorldDynamicResolution`, moves the world's own views' render grid each frame
 between a floor and the render-scale ceiling. The grid is
 `SdfViewSnapshot.ResolvedRenderScale`, the same grid a layout transition dips,

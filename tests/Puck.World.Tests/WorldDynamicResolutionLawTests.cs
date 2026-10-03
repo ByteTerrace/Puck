@@ -24,8 +24,8 @@ namespace Puck.World.Tests;
 /// exactly its period, the grid rises again when the GPU's time drops; where the device times nothing it is a new
 /// present's interval against the period; where neither is available, newly completed renders' counted march steps
 /// against the budget the committed counters ceilings give per output pixel, and no budget holds the ceiling. Every
-/// signal answers the same trace of load against budget with the same grids. A forced grid overrides them all, bounded
-/// by the ceiling. The grids it chooses are extents the render graph quantizes, so the views' extents follow them.
+/// signal answers the same trace of load against budget with the same grids. A pin overrides them all, bounded
+/// by the floor and ceiling. The grids it chooses are extents the render graph quantizes, so the views' extents follow them.
 /// </summary>
 public sealed class WorldDynamicResolutionLawTests {
     private const float Ceiling = 0.875f;
@@ -214,7 +214,7 @@ public sealed class WorldDynamicResolutionLawTests {
         // A timed GPU without a known display rate has no period to be held to, so it falls to the steps too.
         load.Timed = true;
         load.Present(periods: 1.0);
-        controller.Advance(ceiling: Ceiling, displayHertz: 0, floor: Floor, forced: 0f, load: load, outputPixels: OutputPixels);
+        controller.Advance(ceiling: Ceiling, displayHertz: 0, floor: Floor, load: load, outputPixels: OutputPixels, pin: 0f);
         Assert.Equal(expected: WorldDynamicResolutionSignal.Steps, actual: controller.Signal);
     }
     [Fact]
@@ -272,7 +272,7 @@ public sealed class WorldDynamicResolutionLawTests {
         // the counted steps meet the budget exactly at the mark.
         var load = new ScriptedLoad(controller: controller) { BudgetPerPixel = (units * units) };
 
-        controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: marked, load: load, outputPixels: OutputPixels);
+        controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, load: load, outputPixels: OutputPixels, pin: marked);
         void Sample(double share) {
             load.TimeFrame(periods: share);
             load.CompleteFrame(steps: ((long)Math.Round(a: ((share * load.BudgetPerPixel) * OutputPixels))));
@@ -320,7 +320,7 @@ public sealed class WorldDynamicResolutionLawTests {
             var controller = new WorldDynamicResolution();
             var load = new ScriptedLoad(controller: controller) { Timed = true };
 
-            controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: marked, load: load, outputPixels: OutputPixels);
+            controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, load: load, outputPixels: OutputPixels, pin: marked);
             load.TimeFrame(periods: 1.2d);
             Advance(controller: controller, load: load);
             load.TimeFrame(periods: 1.2d);
@@ -432,7 +432,7 @@ public sealed class WorldDynamicResolutionLawTests {
         // No budget holds the ceiling, and an unknown display rate reads the steps rather than the presents.
         load.BudgetPerPixel = 0d;
         load.Present(periods: 2.0);
-        Assert.Equal(expected: Ceiling, actual: controller.Advance(ceiling: Ceiling, displayHertz: 0, floor: Floor, forced: 0f, load: load, outputPixels: OutputPixels));
+        Assert.Equal(expected: Ceiling, actual: controller.Advance(ceiling: Ceiling, displayHertz: 0, floor: Floor, load: load, outputPixels: OutputPixels, pin: 0f));
         Assert.Equal(expected: WorldDynamicResolutionSignal.Steps, actual: controller.Signal);
     }
     [Fact]
@@ -484,21 +484,21 @@ public sealed class WorldDynamicResolutionLawTests {
         Assert.Equal(expected: 0d, actual: WorldDynamicResolution.StepBudgetPerPixel(backend: "vulkan", ceilings: (ceilings with { Runs = [] })));
     }
     [Fact]
-    public void AForcedGridOverridesTheLoadAndTheCeilingBoundsIt() {
+    public void APinOverridesTheLoadAndBothBoundsHoldIt() {
         var controller = new WorldDynamicResolution();
         var load = new ScriptedLoad(controller: controller);
 
         load.Present(periods: 3.0);
-        Assert.Equal(expected: 0.6f, actual: controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: 0.6f, load: load, outputPixels: OutputPixels));
-        Assert.Equal(expected: WorldDynamicResolutionSignal.Forced, actual: controller.Signal);
+        Assert.Equal(expected: 0.6f, actual: controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, load: load, outputPixels: OutputPixels, pin: 0.6f));
+        Assert.Equal(expected: WorldDynamicResolutionSignal.Pin, actual: controller.Signal);
         Assert.Equal(expected: 0.625d, actual: controller.Grid);
-        Assert.Equal(expected: Ceiling, actual: controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: 1f, load: load, outputPixels: OutputPixels));
-        // Below the floor too: a sweep forces any extent the ceiling allows.
-        Assert.Equal(expected: 0.25f, actual: controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: 0.25f, load: load, outputPixels: OutputPixels));
+        Assert.Equal(expected: Ceiling, actual: controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, load: load, outputPixels: OutputPixels, pin: 1f));
+        // A pin remains inside its floor as well as its ceiling.
+        Assert.Equal(expected: Floor, actual: controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, load: load, outputPixels: OutputPixels, pin: 0.25f));
     }
 
     private static float Advance(WorldDynamicResolution controller, IWorldFrameLoadSource load) =>
-        controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, forced: 0f, load: load, outputPixels: OutputPixels);
+        controller.Advance(ceiling: Ceiling, displayHertz: Hertz, floor: Floor, load: load, outputPixels: OutputPixels, pin: 0f);
     // One present sample: a present after a grid move only restarts the clock, so a move is followed by that present,
     // which moves nothing.
     private static float PresentSample(WorldDynamicResolution controller, ScriptedLoad load, double periods) {

@@ -1424,7 +1424,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         CutRevision = ViewCut(index: m_views.Count, source: m_namedCameraRigCache[cameraName], revision: m_namedCameraRigCache[cameraName].Revision),
                         Quality = quality,
                         RenderScale = m_settings.RenderCeiling,
-                        ResolvedRenderScale = (RenderGrid() * transitionScale),
+                        ResolvedRenderScale = transitionScale,
                         UpscaleSharpness = m_settings.UpscaleSharpness,
                     });
                     if (!hasSeatViewFallback) {
@@ -1481,7 +1481,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // passes: native renders its output grid directly, a lower tier reconstructs a reduced grid inside the view's
             // own package. A layout transition dips only the grid inside that ceiling (ResolvedRenderScale), which
             // allocates and rebuilds nothing, so a view at a native ceiling, which reconstructs nothing, does not dip.
-            m_views.Add(item: new SdfViewSnapshot(
+            var seatView = new SdfViewSnapshot(
                 Camera: camera,
                 Region: region
             ) {
@@ -1489,9 +1489,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 Grid = SeatGrid(slot: slot),
                 Quality = quality,
                 RenderScale = m_settings.RenderCeiling,
-                ResolvedRenderScale = (RenderGrid() * transitionScale),
+                ResolvedRenderScale = transitionScale,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
-            });
+            };
+
+            if (presentedElsewhere is not null) {
+                seatView = DressResolution(seatView, ViewProducerName(view: m_views.Count),
+                    ((uint)Math.Max(val1: 1, val2: (width * region.Width))), ((uint)Math.Max(val1: 1, val2: (height * region.Height))));
+                seatView = seatView with { ResolvedRenderScale = (seatView.ResolvedRenderScale * transitionScale) };
+            }
+            m_views.Add(item: seatView);
             // A seat presented elsewhere keeps its place among the views, so every view keeps its index, and its view
             // is latched into the scene of the world it is presented in, which renders it instead.
             if (m_continuum.PresentedElsewhere(slot: slot) is { } elsewhere) {
@@ -1582,13 +1589,23 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 CutRevision = ViewCut(index: m_views.Count, source: this, revision: 0),
                 Quality = quality,
                 RenderScale = m_settings.RenderCeiling,
-                ResolvedRenderScale = (m_settings.DynamicResolution ? RenderGrid() : 0f),
+                ResolvedRenderScale = 1f,
                 UpscaleSharpness = m_settings.UpscaleSharpness,
             });
         } else {
             m_noLocalSeatsNarrated = false;
         }
 
+        for (var viewIndex = 0; (viewIndex < m_views.Count); viewIndex++) {
+            var snapshot = m_views[viewIndex];
+            // Routed snapshots are dressed before the scene latches them; advance each policy once per frame.
+            if ((viewIndex < m_viewRoutes.Count) && (m_viewRoutes[viewIndex].Scene is not null)) { continue; }
+            var dip = ((snapshot.ResolvedRenderScale > 0f) ? snapshot.ResolvedRenderScale : 1f);
+
+            snapshot = DressResolution(snapshot, ViewProducerName(view: viewIndex),
+                ((uint)Math.Max(val1: 1, val2: (width * snapshot.Region.Width))), ((uint)Math.Max(val1: 1, val2: (height * snapshot.Region.Height))));
+            m_views[viewIndex] = snapshot with { ResolvedRenderScale = (snapshot.ResolvedRenderScale * dip) };
+        }
         m_outputRegions.Views(
             cameras: m_client.Definition.Cameras,
             composer: m_composer,

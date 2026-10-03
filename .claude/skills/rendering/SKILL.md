@@ -2246,18 +2246,24 @@ hold the plan and the convergence rule without a device.
 ## Dynamic resolution
 
 `WorldDynamicResolution` (`src/Puck.World.Client`) is the one controller; the
-presenter (`WorldFramePresenter.DynamicResolution.cs`) advances it once a
+presenter (`WorldFramePresenter.DynamicResolution.cs`) advances each view's instance once a
 frame and writes its grid as `ResolvedRenderScale`, times the transition dip,
-with `RenderScale = WorldRenderSettings.RenderCeiling`. Off, every view's
+with `RenderScale = WorldRenderSettings.Ceiling(view)`. Off, every view's
 values are exactly what they were without it. Never add a second grid or
 quantizer: the grid reaches `RenderGraphExtent.Quantize`, and the controller
 compares grids through `WorldDynamicResolution.GridOf`, the same quantization.
+The one parser is `WorldRenderScaleCommand`: `world.render-scale [view]`
+accepts ceilings, tier floors, pins and auto. `views.quality` saves per-view
+ceilings and floors; pins never enter save or replay. The floor defaults to
+Quarter and quality presets supply `renderScaleFloor`. The world-wide ceiling,
+automatic mode and default pin govern the player views (`world`, `world$N`); a
+camera or session view renders native until a lever or a row names it.
 All three signals go through `WorldDynamicResolution.Take` and `Respond`, so a
 policy change is one edit there. A sample counts only at the grid the views
 render now: a node records the grid each rendered submission ran at
 (`IShaderPipelineRenderExtent.Grid`, `ShaderPipelineRenderNode.TryGetRenderGrid`),
 and a reading names its renders' common grid. The load reaches the controller
-only through `IWorldFrameLoadSource`; the World's `WorldFrameLoadSource` sums
+only through `IWorldFrameLoadSource`; the World's `WorldFrameLoadSource` reads
 each view's newest timed (`LatestTimingSubmission`,
 `LatestTimingMilliseconds`) or completed (`TryReadCompleted`) submission not
 read before through a `WorldFrameLoadAggregate`, so a standing view adds

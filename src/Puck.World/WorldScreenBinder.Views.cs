@@ -163,7 +163,8 @@ internal sealed partial class WorldScreenBinder {
             frameSource: new WorldSessionFrameSource(
                 captureHostFirst: CaptureHostFirst,
                 inner: source,
-                resolution: resolution
+                resolution: resolution,
+                resolveResolution: (view, width, height) => ResolveResolution(height: height, name: name, view: view, width: width)
             ),
             height: ((uint)resolution.Height),
             instanceCapacity: source.WorstCaseInstanceCapacity,
