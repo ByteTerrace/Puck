@@ -242,7 +242,9 @@ population) or `all` (trusted only); Observe takes `body:<n>`, plus
 consumers, or
 `all` for trusted principals; Control takes `screen:<n>` (any),
 `body:<n>` (any, bounded by the population — a control-application possession
-target, [engagement.md](engagement.md)), `composition` (trusted), `all` (trusted
+target, [engagement.md](engagement.md)), `composition` (trusted), `history` (trusted:
+the in-session history timeline every bindable `world.history` form is checked
+against), `all` (trusted
 or Peer); Mutate takes `section:<name>`/`creation:<id>`/`placement:<id>` (the DISPATCH lane) or `state:<name>`
 (the CROSS-DOCUMENT write-back lane) or `all` (trusted); Edit takes
 `state:<name>` or `all` (trusted). The four State mutation kinds
@@ -436,7 +438,7 @@ grant activity, so re-minting everywhere would fake revocations).
 generation mismatch (revoked/re-sorted → the guest gets `StaleHandle`,
 distinct from a denial: withdrawn and never-granted are different states).
 A resolve yields a DESIGNATION only — the caller still asks `Allows`.
-Wildcard subjects (`all`, `composition`) are never projected into handles.
+Wildcard subjects (`all`, `composition`, `history`) are never projected into handles.
 
 ## Budgets
 

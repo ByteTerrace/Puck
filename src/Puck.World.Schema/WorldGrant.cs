@@ -270,6 +270,12 @@ public enum GrantSubjectKind : byte {
 
     /// <summary>A single named machine instance for live machine operation control.</summary>
     Machine,
+
+    /// <summary>The shared in-session history timeline — <see cref="Composition"/>'s twin for time travel: the
+    /// <see cref="WorldCapability.Control"/> subject a seat's bindable <c>world.history</c> forms (step, resume, branch,
+    /// and the scrubber's seek) are checked against at dispatch, since moving the timeline moves every seat's world.
+    /// Not a body, a screen, or a section; legitimate for the local trust boundary (console and seats) only.</summary>
+    History,
 }
 /// <summary>The typed target a <see cref="WorldGrant"/> scopes to — a wildcard, a body, a screen, a document section,
 /// or one named row of a section. A zero-alloc value key into the grant table's per-capability subject sets: row names
@@ -289,6 +295,12 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
     /// <summary>Gets the shared window-composition authority subject for live layout/camera composition overrides (<c>view.override</c>).</summary>
     public static GrantSubject Composition { get; } = new(
         Kind: GrantSubjectKind.Composition,
+        Value: 0
+    );
+    /// <summary>Gets the shared in-session history subject a seat's bindable <c>world.history</c> forms are checked
+    /// against.</summary>
+    public static GrantSubject History { get; } = new(
+        Kind: GrantSubjectKind.History,
         Value: 0
     );
 
@@ -313,7 +325,7 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         Value: 0
     );
     /// <summary>Describes a short stable label for console echoes — <c>all</c>, <c>body:&lt;n&gt;</c>, <c>screen:&lt;n&gt;</c>,
-    /// <c>section:&lt;name&gt;</c>, <c>state:&lt;name&gt;</c>, <c>composition</c>, <c>region:&lt;name&gt;</c>,
+    /// <c>section:&lt;name&gt;</c>, <c>state:&lt;name&gt;</c>, <c>composition</c>, <c>history</c>, <c>region:&lt;name&gt;</c>,
     /// <c>seat:&lt;n&gt;</c>, <c>creation:&lt;id&gt;</c>, <c>placement:&lt;id&gt;</c>,
     /// <c>adjacency:&lt;name&gt;</c>, <c>machine:&lt;name&gt;</c>.</summary>
     /// <returns>The label.</returns>
@@ -330,6 +342,7 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         GrantSubjectKind.Placement => $"placement:{Id}",
         GrantSubjectKind.Adjacency => $"adjacency:{Id}",
         GrantSubjectKind.Machine => $"machine:{Id}",
+        GrantSubjectKind.History => "history",
         _ => "?",
     };
     /// <summary>Creates a named machine instance subject for live operation control.</summary>
@@ -379,7 +392,7 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
         Kind: GrantSubjectKind.State,
         Value: 0
     );
-    /// <summary>Parses a subject token (<c>all</c> | <c>composition</c> | <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> |
+    /// <summary>Parses a subject token (<c>all</c> | <c>composition</c> | <c>history</c> | <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> |
     /// <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c> | <c>region:&lt;name&gt;</c> | <c>seat:&lt;n&gt;</c> |
     /// <c>creation:&lt;id&gt;</c> | <c>placement:&lt;id&gt;</c> | <c>adjacency:&lt;name&gt;</c> | <c>machine:&lt;name&gt;</c>) — shared by
     /// <c>Puck.World.GrantSubjectJsonConverter</c>
@@ -407,6 +420,15 @@ public readonly record struct GrantSubject(GrantSubjectKind Kind, int Value, str
             other: "composition"
         )) {
             subject = Composition;
+
+            return true;
+        }
+
+        if (token.Equals(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            other: "history"
+        )) {
+            subject = History;
 
             return true;
         }

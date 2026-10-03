@@ -66,6 +66,7 @@ public static class WorldWireTags {
             case 9: value = GrantSubjectKind.Placement; return true;
             case 10: value = GrantSubjectKind.Adjacency; return true;
             case 11: value = GrantSubjectKind.Machine; return true;
+            case 12: value = GrantSubjectKind.History; return true;
             default: value = default; return false;
         }
     }
@@ -161,6 +162,7 @@ public static class WorldWireTags {
             case GrantSubjectKind.Placement: wire = 9; return true;
             case GrantSubjectKind.Adjacency: wire = 10; return true;
             case GrantSubjectKind.Machine: wire = 11; return true;
+            case GrantSubjectKind.History: wire = 12; return true;
             default: wire = default; return false;
         }
     }
