@@ -21,14 +21,16 @@ namespace Puck.Testing;
 /// The verdict decides the rest (<see cref="Conclude"/>). A law that fails keeps the directory and writes its absolute
 /// path to the law's output as a <see cref="RunDirectory.KeptLine"/>, so the evidence survives. A law that passes deletes
 /// it, retrying while a handle closes, within the same bound; a delete that never completes fails the law naming its
-/// last error and what is still present. Nothing is deleted until every file has been read through a handle that shares
-/// reading and nothing else, which opens only once no writer holds the file, so each read is the file's final state, and
-/// a file that is new or changed since the owners returned fails the law by name. A write made through a handle that
-/// outlived the owners is therefore seen wherever the file system enforces sharing (on Unix, .NET's advisory lock refuses
-/// the read only to a handle that shares nothing); a reader that shares the file holds nothing up, and a worker that
-/// wrote and let go before the owners returned is part of the record, so the check proves nothing about it. A
-/// best-effort directory (<paramref name="bestEffortDelete"/>) skips the check and leaves a directory a handle still
-/// holds to a later sweep.
+/// last error and what is still present. Nothing is deleted until every file has been read through a handle that no
+/// writer can hold beside, so each read is the file's final state, and a file that is new or changed since the owners
+/// returned fails the law by name. A write made through a handle that outlived the owners is therefore always seen. Each
+/// platform's read is as narrow as its locks can make it honest (<see cref="TeardownReadShare"/>): Windows' share modes
+/// tell a reader from a writer, so a reader that shares the file holds nothing up there; Unix's advisory locks cannot,
+/// since a writer that shares reading takes the same shared lock a reader does, so there the read shares nothing and any
+/// holder, a harmless reader included, holds the delete up until it lets go or the bound runs out. A worker that wrote
+/// and let go before the owners returned is part of the record, so the check proves nothing about it. A best-effort
+/// directory (<paramref name="bestEffortDelete"/>) skips the check and leaves a directory a handle still holds to a later
+/// sweep.
 /// </para>
 /// <para>Disposal inside a running law, before its verdict exists, defers the resolution to the end of that law
 /// (<see cref="TemporaryDirectoryVerdictAttribute"/>); disposal from a test class's own <c>Dispose</c>, after the verdict,
@@ -154,10 +156,16 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan?
         Volatile.Write(location: ref m_teardownStep, value: $"recording {RootPath}");
         m_settled = Snapshot();
     }
-    // Reads every file under the directory through a handle that shares reading and nothing else, so each read is the
-    // file's final state: a worker that still holds a file for writing, or holds it exclusively, refuses the open, and the
-    // file is read again on the next try, while a reader that shares the file does not. A file that is new or changed since
-    // the owners returned is a stray. Returns the refusal of a file still held, or null when none is.
+
+    // How the teardown read shares a file it reads. Windows enforces share modes, so sharing reading refuses exactly a
+    // handle that writes or shares nothing. Unix's advisory locks give a writer that shares reading the same shared lock
+    // as a reader, so only an exclusive read refuses a writer there, and it refuses every other holder with it.
+    private static FileShare TeardownReadShare => (OperatingSystem.IsWindows() ? FileShare.Read : FileShare.None);
+
+    // Reads every file under the directory through a handle no writer can hold beside (TeardownReadShare), so each read is
+    // the file's final state: a worker that still holds a file for writing refuses the open, and the file is read again on
+    // the next try. A file that is new or changed since the owners returned is a stray. Returns the refusal of a file
+    // still held, or null when none is.
     private Exception? ReadReleased(Dictionary<string, (long Length, long Written)> settled, List<string> strays) {
         FileInfo[] files;
 
@@ -180,7 +188,7 @@ internal sealed class TemporaryDirectory(string prefix = "puck-test-", TimeSpan?
                     access: FileAccess.Read,
                     mode: FileMode.Open,
                     path: file.FullName,
-                    share: FileShare.Read
+                    share: TeardownReadShare
                 );
 
                 if (!settled.TryGetValue(key: key, value: out var before) || (before != (stream.Length, File.GetLastWriteTimeUtc(fileHandle: stream.SafeFileHandle).Ticks))) {
