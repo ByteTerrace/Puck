@@ -5,29 +5,33 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-/// <summary>A conversion package (<see cref="RenderGraphPackageCatalog.SourceConversions"/>): one compute dispatch of the
-/// build-compiled kernel its id names, from <c>Assets/Shaders/Sources</c>, over the uploaded source's extent, reading the
-/// region bound to its input port and writing the image bound to its output.
+/// <summary>A conversion package (<see cref="RenderGraphPackageCatalog.SourceConversions"/> and
+/// <see cref="RenderGraphPackageCatalog.ImageConversions"/>): one compute dispatch of the build-compiled kernel its id
+/// names, from <c>Assets/Shaders/Sources</c>, over the source's extent, reading what is bound to its input port (an
+/// uploaded source's region, or an imported image) and writing the image bound to its output.
 /// <para>
-/// The kernel reads the pass group the catalog declares (<see cref="RenderGraphPackageCatalog.SourceMembers"/>): the
-/// paper-white level in its pass block, which the recorder writes every frame, the region at binding 1, the image at
-/// binding 2 and the work counters at binding 3 of set 3, eight by eight threads a group, one thread a pixel, each pixel it
-/// writes counting one texel (<see cref="RenderGraphPackageWorkCounters"/>). Its build
+/// The kernel reads the pass group the catalog declares (<see cref="RenderGraphPackageCatalog.SourceMembers"/> or
+/// <see cref="RenderGraphPackageCatalog.ImageSourceMembers"/>): the paper-white level in its pass block, which the recorder
+/// writes every frame, the region or the imported image at binding 1, the image at binding 2 and the work counters at
+/// binding 3 of set 3, eight by eight threads a group, one thread a pixel, each pixel it writes counting one texel
+/// (<see cref="RenderGraphPackageWorkCounters"/>). Its build
 /// leases the compute pipeline, one for every conversion of its kind on the device, from the pass-pipeline cache on the
 /// thread pool; its recorder allocates its sets from the
-/// instance's pool. Its ports are a compute read and a compute write, so the node's planned barriers leave the region
-/// readable and the image in the storage layout; it records no barrier.</para>
+/// instance's pool. Its ports are a compute read and a compute write, so the node's planned barriers leave the region or
+/// the imported image readable and the image in the storage layout; it records no barrier.</para>
 /// </summary>
 public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
     private const uint GroupSize = 8;
 
     private readonly string m_directory;
+    // Whether the package reads an imported image rather than an uploaded source's region.
+    private readonly bool m_image;
     private readonly string m_package;
     private readonly float m_paperWhiteNits;
 
     /// <summary>Initializes a new instance of the <see cref="SourceConversionPackage"/> class.</summary>
-    /// <param name="package">The conversion package's id, one of <see cref="RenderGraphPackageCatalog.SourceConversions"/>,
-    /// which is also the stem of its kernel's file.</param>
+    /// <param name="package">The conversion package's id, one of <see cref="RenderGraphPackageCatalog.SourceConversions"/>
+    /// or <see cref="RenderGraphPackageCatalog.ImageConversions"/>, which is also the stem of its kernel's file.</param>
     /// <param name="directory">The directory holding the deployed kernels, or <see langword="null"/> for
     /// <c>Assets/Shaders/Sources</c> beside the executable.</param>
     /// <param name="paperWhiteNits">The paper-white level, in cd/m², a working value of one shows at: the host's
@@ -36,7 +40,9 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="paperWhiteNits"/> is outside the range
     /// <see cref="DisplayOutput.RequirePaperWhite"/> accepts.</exception>
     public SourceConversionPackage(string package, string? directory = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
-        if (!RenderGraphPackageCatalog.SourceConversions.Contains(value: package)) {
+        m_image = RenderGraphPackageCatalog.ImageConversions.Contains(value: package);
+
+        if (!m_image && !RenderGraphPackageCatalog.SourceConversions.Contains(value: package)) {
             throw new ArgumentException(
                 message: $"'{package}' is not a conversion package.",
                 paramName: nameof(package)
@@ -54,8 +60,8 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
         m_package = package;
     }
 
-    /// <summary>Registers one conversion package per pass <see cref="RenderGraphPackageCatalog.SourceConversions"/> names
-    /// with a host's packages.</summary>
+    /// <summary>Registers one conversion package per pass <see cref="RenderGraphPackageCatalog.SourceConversions"/> and
+    /// <see cref="RenderGraphPackageCatalog.ImageConversions"/> name with a host's packages.</summary>
     /// <param name="packages">The host's packages.</param>
     /// <param name="directory">The directory holding the deployed kernels, or <see langword="null"/> for
     /// <c>Assets/Shaders/Sources</c> beside the executable.</param>
@@ -67,7 +73,7 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
     public static void RegisterAll(RenderGraphPackageRecorders packages, string? directory = null, double paperWhiteNits = DisplayOutput.SdrWhiteNits) {
         ArgumentNullException.ThrowIfNull(argument: packages);
 
-        foreach (var package in RenderGraphPackageCatalog.SourceConversions) {
+        foreach (var package in RenderGraphPackageCatalog.SourceConversions.Concat(second: RenderGraphPackageCatalog.ImageConversions)) {
             packages.Register(
                 factory: new SourceConversionPackage(
                     directory: directory,
@@ -80,7 +86,8 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
     }
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidDataException">The pass does not read one buffer and write one image.</exception>
+    /// <exception cref="InvalidDataException">The pass does not read one buffer (one image for an image conversion) and
+    /// write one image.</exception>
     /// <exception cref="IOException">The deployed kernel is missing or cannot be read.</exception>
     public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: context);
@@ -88,10 +95,10 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
         if (
             (context.Inputs.Count != 1) ||
             (context.Outputs.Count != 1) ||
-            (context.Inputs[0].Kind != ShaderPipelineResourceKind.Buffer) ||
+            (context.Inputs[0].Kind != (m_image ? ShaderPipelineResourceKind.Image : ShaderPipelineResourceKind.Buffer)) ||
             (context.Outputs[0].Kind != ShaderPipelineResourceKind.Image)
         ) {
-            throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{m_package}' must read one buffer and write one image.");
+            throw new InvalidDataException(message: $"Pass '{context.Pass}' of package '{m_package}' must read one {(m_image ? "image" : "buffer")} and write one image.");
         }
 
         var bytecode = File.ReadAllBytes(path: Path.Combine(
@@ -144,6 +151,7 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
             built: objects,
             context: context,
             groups: groups,
+            image: m_image,
             paperWhiteNits: m_paperWhiteNits
         );
     }
@@ -156,21 +164,24 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
             lease.Release();
     }
     // Records one conversion. The pass set is per frame slot, since the instance waits only that slot's previous
-    // submission before recording into it, and the region's buffer is the slot's own.
+    // submission before recording into it, and the region's buffer is the slot's own; an imported image is bound again
+    // every frame, since its producer hands out another slot's image as it publishes.
     private sealed class Recorder : IRenderGraphPackageRecorder {
         private readonly Built m_built;
         private readonly uint m_image;
+        private readonly bool m_imported;
+        private readonly uint m_input;
         private readonly float m_paperWhiteNits;
         private readonly int m_paperWhiteOffset;
-        private readonly uint m_region;
         private readonly GpuDeviceServices m_services;
         private readonly RenderGraphPackageSets m_sets = null!;
         private readonly RenderGraphPackageWorkCounters m_workCounters = null!;
 
         private bool m_disposed;
 
-        public Recorder(RenderGraphPackageRecorderContext context, Built built, RenderGraphPackageGroups groups, float paperWhiteNits) {
+        public Recorder(RenderGraphPackageRecorderContext context, Built built, RenderGraphPackageGroups groups, bool image, float paperWhiteNits) {
             m_built = built;
+            m_imported = image;
             m_paperWhiteNits = paperWhiteNits;
             m_paperWhiteOffset = ((int)context.Parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.SourcePaperWhite));
             m_services = context.Services;
@@ -181,7 +192,9 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
                     groupLayoutHandles: built.Pipeline.GroupLayoutHandles,
                     groups: groups
                 );
-                m_region = m_sets.BindingOf(member: RenderGraphPackageCatalog.SourceRegion);
+                m_input = m_sets.BindingOf(member: (image
+                    ? RenderGraphPackageCatalog.SourceInput
+                    : RenderGraphPackageCatalog.SourceRegion));
                 m_image = m_sets.BindingOf(member: RenderGraphPackageCatalog.SourceImage);
                 m_workCounters = new RenderGraphPackageWorkCounters(
                     context: context,
@@ -207,8 +220,6 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
             var recorder = recording.Recorder;
             var pipeline = m_built.Pipeline;
             var set = m_sets.PassSet(slot: recording.Slot);
-            var region = recording.Inputs[0].Buffer!;
-
             BinaryPrimitives.WriteSingleLittleEndian(
                 destination: recording.PassBlock[m_paperWhiteOffset..],
                 value: m_paperWhiteNits
@@ -217,14 +228,25 @@ public sealed class SourceConversionPackage : IRenderGraphPackageFactory {
                 passSet: set,
                 recording: recording
             );
-            m_services.Bindings.WriteBuffer(
-                binding: m_region,
-                bufferHandle: region.BufferHandle,
-                bufferSize: region.SizeBytes,
-                descriptorSetHandle: set,
-                elementStride: 0U,
-                kind: GpuBindingKind.ReadOnlyBuffer
-            );
+            if (m_imported) {
+                m_services.Bindings.WriteSampledImage(
+                    arrayElement: 0,
+                    binding: m_input,
+                    descriptorSetHandle: set,
+                    imageViewHandle: recording.Inputs[0].Image.ImageViewHandle
+                );
+            } else {
+                var region = recording.Inputs[0].Buffer!;
+
+                m_services.Bindings.WriteBuffer(
+                    binding: m_input,
+                    bufferHandle: region.BufferHandle,
+                    bufferSize: region.SizeBytes,
+                    descriptorSetHandle: set,
+                    elementStride: 0U,
+                    kind: GpuBindingKind.ReadOnlyBuffer
+                );
+            }
             m_services.Bindings.WriteStorageImage(
                 arrayElement: 0,
                 binding: m_image,
