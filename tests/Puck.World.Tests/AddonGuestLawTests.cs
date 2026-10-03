@@ -8,10 +8,10 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: a real WebAssembly guest, compiled by the pinned Wasmtime, mounts through the addon handshake
-/// and ticks; its store holds linear memory to 256 pages, refusing a guest that grows past them and one that declares
-/// more at instantiation; and a guest that never returns exhausts its per-tick fuel and faults as OutOfFuel, spending
-/// the same fuel on every run. Each guest is WAT text the engine compiles here, so no prebuilt binary stands between
-/// the law and the runtime.
+/// and ticks; its store holds each linear memory to 256 pages, refusing a guest that grows past them and, as
+/// MemoryLimit, one that declares more at instantiation in any memory, exported or not; and a guest that never returns
+/// exhausts its per-tick fuel and faults as OutOfFuel, spending the same fuel on every run. Each guest is WAT text the
+/// engine compiles here, so no prebuilt binary stands between the law and the runtime.
 /// </summary>
 public sealed class AddonGuestLawTests {
     // The smallest handshake a guest can pass: a request channel speaking one verb and its response channel (the pair
@@ -106,6 +106,15 @@ public sealed class AddonGuestLawTests {
           (func (export "puck_on_tick") (param i32) (result i32) (i32.const 0))
         )
         """;
+    // Exports a one-page memory the handshake reads, and holds a second memory of the given size it never exports.
+    private static string UnexportedMemoryOf(int pages) => $$"""
+        (module
+          (memory (export "memory") 1)
+          (memory $held {{pages}})
+        {{Handshake}}
+          (func (export "puck_on_tick") (param i32) (result i32) (i32.const 0))
+        )
+        """;
 
     [Fact]
     public void AGuestThatPassesTheHandshakeMountsAndTicks() {
@@ -137,6 +146,17 @@ public sealed class AddonGuestLawTests {
         using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
         using var atCeiling = Mount(engine: engine, wat: MemoryOf(pages: 256));
         using var pastCeiling = Mount(engine: engine, wat: MemoryOf(pages: 257));
+
+        Assert.Equal(expected: AddonState.Enabled, actual: atCeiling.State);
+        Assert.Equal(expected: AddonState.Faulted, actual: pastCeiling.State);
+        Assert.Equal(expected: AddonFaultKind.MemoryLimit, actual: pastCeiling.Fault.Kind);
+    }
+    [Fact]
+    public void AGuestHoldingAnUnexportedMemoryPastTheCeilingIsRefusedAtInstantiation() {
+        // The ceiling bounds each memory a guest holds, not only the one it exports, and its refusal is named as such.
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        using var atCeiling = Mount(engine: engine, wat: UnexportedMemoryOf(pages: 256));
+        using var pastCeiling = Mount(engine: engine, wat: UnexportedMemoryOf(pages: 257));
 
         Assert.Equal(expected: AddonState.Enabled, actual: atCeiling.State);
         Assert.Equal(expected: AddonState.Faulted, actual: pastCeiling.State);

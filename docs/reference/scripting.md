@@ -614,10 +614,13 @@ deliberately carries no span.
 - **One `Store`/`Instance` per addon, single sim-tick thread only** (Wasmtime store thread affinity,
   issue #331). `GC.KeepAlive(store)` follows every guest invoke (wasmtime-dotnet finalizer-hazard
   discipline).
-- **Memory cap:** each store gets a hard `SetLimits(memorySize: …)` ceiling (256 pages) plus a
-  load-time region-bounds pre-flight; `memory.grow` is fuel-charged. A memory declared past the
-  ceiling is refused before instantiation as `MemoryLimit`; a `memory.grow` past it returns -1 to
-  the guest, which faults only if the guest traps on it.
+- **Memory cap:** each store gets a hard `SetLimits(memorySize: …)` ceiling of 256 pages for each
+  linear memory, plus a load-time region-bounds pre-flight; `memory.grow` is fuel-charged. A guest
+  that declares any memory past the ceiling, exported or not, fails instantiation as `MemoryLimit`.
+  Wasmtime reports the limiter's refusal only as an error message, so the host names it by
+  elimination: it instantiates the module again in a store without the ceiling, and if that gets
+  past creating the memories, the ceiling refused it. A `memory.grow` past the ceiling returns -1
+  to the guest, which faults only if the guest traps on it.
 
 | `AddonFaultKind` | Raised by |
 |---|---|
@@ -627,7 +630,7 @@ deliberately carries no span.
 | `HashMismatch` | Module content does not match the descriptor's declared `moduleHash` pin. |
 | `OutOfFuel` | The tick exhausted its fuel budget and trapped deterministically. |
 | `StackOverflow` / `MemoryOutOfBounds` / `Unreachable` / `Trap` | Guest traps, classified in that order of specificity. |
-| `MemoryLimit` | The guest's exported memory declares more pages than the 256-page ceiling, refused before instantiation. |
+| `MemoryLimit` | One of the guest's memories, exported or not, declares more pages than the 256-page ceiling, refused at instantiation. |
 
 Every fault is loud and attributed. Detail lines are formatted for the console and keyed by the
 addon's **name**, so an operator reading a run log sees which addon failed, why, and what to do:

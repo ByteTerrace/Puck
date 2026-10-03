@@ -191,21 +191,6 @@ public sealed class AddonInstance : IDisposable {
             return;
         }
 
-        // The store's limiter would refuse a memory declared past the ceiling inside Wasmtime's instantiation, where
-        // it surfaces only as an error message; read from the module's own declaration instead, it refuses by name.
-        foreach (var export in m_module.Exports) {
-            if (
-                (export is MemoryExport declared) &&
-                (declared.Minimum > (MaxMemoryBytes / WasmPageBytes))
-            ) {
-                SetFault(
-                    kind: AddonFaultKind.MemoryLimit,
-                    reason: $"MemoryLimit — {export.Name} declares {declared.Minimum} pages, past the {(MaxMemoryBytes / WasmPageBytes)}-page ceiling"
-                );
-                return;
-            }
-        }
-
         Store? store = null;
 
         try {
@@ -214,10 +199,31 @@ public sealed class AddonInstance : IDisposable {
             store.SetLimits(memorySize: MaxMemoryBytes);
             store.Fuel = ((ulong)m_fuelPerTick);
 
-            var instance = new Instance(
-                store: store,
-                module: m_module
-            );
+            Instance instance;
+
+            try {
+                instance = new Instance(
+                    store: store,
+                    module: m_module
+                );
+            } catch (WasmtimeException refusal) when (refusal is not TrapException) {
+                store.Dispose();
+
+                // The limiter reports its refusal only as an error message, so the store names it by elimination.
+                if (InstantiatesWithoutTheMemoryCeiling()) {
+                    SetFault(
+                        kind: AddonFaultKind.MemoryLimit,
+                        reason: $"MemoryLimit — a memory declares more than the {(MaxMemoryBytes / WasmPageBytes)}-page ceiling ({refusal.Message})"
+                    );
+                } else {
+                    SetFault(
+                        kind: AddonFaultKind.BadExport,
+                        reason: $"BadExport — {refusal.Message}"
+                    );
+                }
+
+                return;
+            }
 
             if (!TryHandshake(
                 instance: instance,
@@ -248,6 +254,27 @@ public sealed class AddonInstance : IDisposable {
             store?.Dispose();
 
             throw;
+        }
+    }
+    // Whether the module instantiates in a store that differs from the guest's only by having no memory ceiling: one
+    // that gets past creating its memories, whether it then runs its start function to the end or traps in it, was
+    // refused by the ceiling alone.
+    private bool InstantiatesWithoutTheMemoryCeiling() {
+        using var probe = new Store(engine: m_engine!.Engine);
+
+        probe.Fuel = ((ulong)m_fuelPerTick);
+
+        try {
+            _ = new Instance(
+                store: probe,
+                module: m_module!
+            );
+
+            return true;
+        } catch (TrapException) {
+            return true;
+        } catch (WasmtimeException) {
+            return false;
         }
     }
     private static bool RangeFits(long length, int start, long memoryLength, string name, out string error) {
