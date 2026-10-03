@@ -96,12 +96,12 @@ changing canary cost, a baseline whose movement the change explains. Review
 the rewritten file's diff and commit it in the same change. A ledger rewritten
 during verification hides the drift the check exists to report.
 
-A recording verb that exits nonzero has not recorded, whatever file it wrote:
-`puck counters --record` exits 1 when a deterministic count differs between
-backends, and the ceilings it wrote then accommodate both readings. Do not
-commit that ledger. Read the differences and the exit status, find the cause of
-the disagreement and fix it, and record again only after the backends agree and
-the exit status is 0.
+A recording verb that exits nonzero has not recorded, whatever file it wrote.
+`puck counters --record` writes no file and exits 1 when the backends disagree
+on a deterministic count or pass state, when the recorded ceilings fail their
+own check, or when it cannot write them; the existing ledger stays as it was.
+Read the refusal, find and fix its cause, and record again only once the exit
+status is 0.
 
 ## Choose what to run
 
@@ -215,8 +215,11 @@ World run with effective `host.presentation: none` uses no GPU; the
 - Treat `puck counters --check` on a non-recording device as partial ledger
   evidence under the
   [rules](../../../docs/reference/cli.md#puck-counterswork-counter-collector).
-  It judges `deterministic` ceilings, including required zeros, but skips
-  `per-backend-deterministic` values, including zero ceilings. Require each
+  On every device it judges `deterministic` ceilings and the required zeros of
+  kernel kinds (`requiredZero`: march steps, texels written, sky evaluations).
+  It skips `per-backend-deterministic` magnitudes and device-following zeros
+  (the SDF `upload` and `bricks` passes), and its note says how many counts
+  were not judged and how many required zeros still were. Require each
   backend's recorded device identity to match before claiming the whole ledger
   was judged; use the recording device (the floor GPU) for a re-record.
 
