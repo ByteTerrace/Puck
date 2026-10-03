@@ -31,7 +31,8 @@ public sealed class SdfShadowResourceLawTests {
             var fragment = SdfWorldPackage.FragmentFor(fadeCapacity: capacity, reconstructs: reconstructs, temporal: temporal);
             var image = Assert.Single(collection: fragment.Resources, predicate: resource => (resource.Name == SdfWorldPackage.IncomingVisibility));
 
-            Assert.True(condition: image.Transient);
+            Assert.True(condition: image.Retained);
+            Assert.False(condition: image.Transient);
             Assert.Equal(expected: format.ToString(), actual: image.Format);
             Assert.Same(expected: fragment, actual: SdfWorldPackage.FragmentFor(fadeCapacity: capacity, reconstructs: reconstructs, temporal: temporal));
             var shadow = fragment.Passes.Single(predicate: pass => (pass.Name == SdfWorldPackage.Parts.Shadow));
