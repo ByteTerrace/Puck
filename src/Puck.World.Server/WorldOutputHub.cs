@@ -99,10 +99,11 @@ public sealed partial class WorldOutputHub {
     /// a detached-but-not-yet-compacted slot never counts.</summary>
     public bool HasTypedSubscribers => (m_activeCount > 0);
 
-    /// <summary>Gets or sets whether the timeline's deliveries (a definition, a state update, a tick's snapshot)
-    /// reach no subscriber. A history seek withholds them for its whole span, so neither its restore, nor a load-door
-    /// install, nor any re-simulated tick reaches a viewer, and then delivers the restored timeline once
-    /// (<see cref="WorldTick.PresentRestoredTimeline"/>).</summary>
+    /// <summary>Gets or sets whether the timeline's deliveries (a definition, a state update, a tick's snapshot) and
+    /// the compositions a re-simulated tick re-applies reach no subscriber. A history seek withholds them for its whole
+    /// span, so neither its restore, nor a load-door install, nor any re-simulated tick reaches a viewer, and then
+    /// delivers the restored timeline once (<see cref="WorldTick.PresentRestoredTimeline"/>). A composition is a
+    /// presentation override the history does not rewind, so the viewer keeps the one it holds.</summary>
     internal bool WithholdsTimeline { get; set; }
 
     // Physically drops every trailing slot a Deliver* pass did not write back (each inactive subscription, whether
@@ -204,12 +205,17 @@ public sealed partial class WorldOutputHub {
     /// <summary>Fans an accepted live window-composition override out to every typed subscriber. A faulting sink is
     /// isolated and detached — see the class remarks.</summary>
     /// <param name="composition">The composition override.</param>
-    public void DeliverComposition(WorldComposition composition) =>
+    public void DeliverComposition(WorldComposition composition) {
+        if (WithholdsTimeline) {
+            return;
+        }
+
         Deliver(
             callSite: nameof(DeliverComposition),
             deliver: static (sink, payload) => sink.DeliverComposition(composition: payload),
             payload: composition
         );
+    }
     /// <summary>Fans the live world definition out to every typed subscriber (once per step with at least one applied
     /// edit, or a definition swap). A faulting sink is isolated and detached — see the class remarks.</summary>
     /// <param name="definition">The definition now live on the server.</param>

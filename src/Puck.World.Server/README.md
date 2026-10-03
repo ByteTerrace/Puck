@@ -2346,7 +2346,10 @@ is suspended for the re-simulation, and a seek delivers once: the output hub
 withholds every timeline delivery for the seek's span
 (`WorldOutputHub.WithholdsTimeline`, set and cleared beside `EnterReplay`), so
 neither the restore, nor a load-door install, nor any re-simulated tick's state
-or snapshot reaches a viewer, a session or a federation projection. The restored
+or snapshot reaches a viewer, a session or a federation projection. A recorded
+composition a re-simulated tick re-applies is withheld too: a composition is a
+presentation override the history does not rewind, so the viewer keeps the one
+it holds. Session levers are not recorded, so a seek never re-applies one. The restored
 timeline is then delivered once, the definition and the target tick's snapshot
 (`WorldTick.PresentRestoredTimeline`), through both the in-place and the
 load-door restore, and `TimelineRestored` refreshes the local route epochs

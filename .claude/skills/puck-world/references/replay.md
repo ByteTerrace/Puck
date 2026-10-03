@@ -675,6 +675,9 @@ The contracts a change must keep:
   restored and however many ticks were re-simulated, zero included
   (`HistorySeekDeliveryLawTests`). Nothing downstream may rely on seeing a
   re-simulated tick: a projection feed re-composes from that one definition.
+  A recorded composition the re-simulation re-applies is withheld as well (the
+  history does not rewind a presentation override); session levers have no
+  tape entry, so a seek never re-applies one.
 - **Refuse before moving; read once.** Every refusal precedes the first change
   to the live world. A recorded reload is read once, by the preflight, and the
   re-simulation installs those verified bytes, so a file changing mid-seek can

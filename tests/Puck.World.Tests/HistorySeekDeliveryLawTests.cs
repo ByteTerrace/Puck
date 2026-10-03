@@ -19,7 +19,7 @@ public sealed class HistorySeekDeliveryLawTests {
         public List<ulong> SnapshotTicks { get; } = [];
 
         public void DeliverAnswer(in QueryAnswer answer) { }
-        public void DeliverComposition(WorldComposition composition) { }
+        public void DeliverComposition(WorldComposition composition) => Log.Add(item: "composition");
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) => Log.Add(item: "definition");
         public void DeliverSessionLever(WorldSessionLever lever) { }
         public void DeliverSnapshot(in WorldSnapshot snapshot) {
@@ -176,6 +176,53 @@ public sealed class HistorySeekDeliveryLawTests {
         Assert.Equal(
             expected: 6,
             actual: forward.TicksResimulated
+        );
+    }
+    // The history records a composition through the transport's tap and a re-simulated tick re-applies it. A
+    // composition is a presentation override the history does not rewind, so a seek over one delivers it to no viewer:
+    // the viewer keeps the composition it holds and observes only the restored timeline.
+    [Fact]
+    public void ASeekOverARecordedCompositionDeliversNoComposition() {
+        using var harness = ScoredHarness(seed: 43UL);
+
+        harness.Steps(count: 200);
+
+        // The composition applies on the next tick, which the seek below must re-simulate.
+        var applied = (harness.Tick + 1UL);
+
+        harness.Transport.SubmitComposition(
+            composition: new WorldComposition.SetActiveLayout(Name: null),
+            principal: Principal.Console
+        );
+        harness.Steps(count: 3);
+
+        var composed = harness.Tick;
+
+        // The control: the composition the seek re-simulates reaches a viewer live.
+        var live = new CountingSink();
+
+        using (harness.Fixture.Server.AttachSink(sink: live)) {
+            live.Clear();
+            harness.Transport.SubmitComposition(
+                composition: new WorldComposition.SetActiveLayout(Name: null),
+                principal: Principal.Console
+            );
+        }
+
+        Assert.Equal(
+            expected: ["composition"],
+            actual: live.Log
+        );
+        harness.Steps(count: 3);
+
+        var report = SeekDeliversOnce(
+            harness: harness,
+            target: composed
+        );
+
+        Assert.True(
+            condition: (report.KeyframeTick < applied),
+            userMessage: $"the seek restored the keyframe at {report.KeyframeTick}, after the composition at {applied}"
         );
     }
 }
