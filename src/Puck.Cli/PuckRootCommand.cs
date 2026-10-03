@@ -140,7 +140,7 @@ internal static class PuckRootCommand {
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
             FormatsCommand.Create(),
-            GateCommand.Create(),
+            GateCommand.Create(clock: clock),
             HostCommand.Create(),
             LandingCommand.Create(),
             LawsCommand.Create(),

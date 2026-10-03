@@ -17,7 +17,9 @@ internal readonly record struct HostSample(DateTimeOffset At, double CpuPercent,
 /// <param name="CapacityRamGb">CAPACITY needs free memory above this.</param>
 /// <param name="PressureRamGb">PRESSURE when free memory is below this.</param>
 /// <param name="PressureDiskGb">PRESSURE when free disk is below this.</param>
-internal sealed record HostLoadThresholds(double? CapacityCpuPercent, double? CapacityRamGb, double? PressureRamGb, double? PressureDiskGb);
+internal sealed record HostLoadThresholds(double? CapacityCpuPercent, double? CapacityRamGb, double? PressureRamGb, double? PressureDiskGb) {
+    public static readonly HostLoadThresholds Default = new(CapacityCpuPercent: 50, CapacityRamGb: 5, PressureDiskGb: 10, PressureRamGb: 2);
+}
 /// <summary>
 /// Turns a stream of <see cref="HostSample"/>s into the lines an agent admits or holds work by. It reads nothing itself,
 /// so every rule is a law over injected samples:
@@ -41,6 +43,9 @@ internal sealed class HostLoadMonitor(HostLoadThresholds thresholds, int cpuSamp
     private bool? m_gpuBusy;
     private DateTimeOffset? m_lastCapacity;
     private DateTimeOffset? m_lastPressure;
+
+    /// <summary>Whether the latest reading has capacity, even when its CAPACITY line is throttled.</summary>
+    public bool HasCapacity { get; private set; }
 
     private static string Number(double value) => value.ToString(format: "0.0", provider: CultureInfo.InvariantCulture);
 
@@ -78,18 +83,17 @@ internal sealed class HostLoadMonitor(HostLoadThresholds thresholds, int cpuSamp
             pressure.Add(item: $"freeDisk<{Number(value: disk)}GB");
         }
 
+        HasCapacity = ((pressure.Count == 0) &&
+            (thresholds.CapacityCpuPercent is { } cpu) &&
+            (thresholds.CapacityRamGb is { } free) &&
+            (m_cpu.Count == cpuSamples) && (mean < cpu) && (sample.FreeRamGb > free));
+
         if (pressure.Count != 0) {
             if ((m_lastPressure is not { } lastPressure) || ((sample.At - lastPressure) >= PressureEvery)) {
                 lines.Add(item: $"PRESSURE {string.Join(separator: ',', values: pressure)} {values}");
                 m_lastPressure = sample.At;
             }
-        } else if (
-            (thresholds.CapacityCpuPercent is { } cpu) &&
-            (thresholds.CapacityRamGb is { } free) &&
-            (m_cpu.Count == cpuSamples) &&
-            (mean < cpu) &&
-            (sample.FreeRamGb > free)
-        ) {
+        } else if (HasCapacity) {
             if ((m_lastCapacity is not { } lastCapacity) || ((sample.At - lastCapacity) >= CapacityEvery)) {
                 lines.Add(item: $"CAPACITY {values}");
                 m_lastCapacity = sample.At;

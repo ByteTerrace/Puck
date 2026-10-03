@@ -102,7 +102,7 @@ whose command no longer breaks its rule, until the row is deleted.
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck formats`](#puck-formatsstrict-format-tokens) | regenerates `FormatVersions.json`, the ledger of every strictly versioned wire, persisted, and cache format token, or checks it with `--check`. |
-| [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds the affected canaries and parity. |
+| [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: builds the solution, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations; `--record` refreshes coverage after a green GPU qualification. |
 | [`puck host load`](#puck-host-loadadmission-lines-for-the-machine) | reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE` and `CAPACITY` lines an agent admits or holds work by; `--watch` streams each line when due. |
 | [`puck landing`](#puck-landinggit-loss-check-then-the-automatic-canary-set) | refuses a commit that silently drops content its author never worked from, then runs the automatic canary set. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in a worktree of its own, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
@@ -839,7 +839,9 @@ carries the recorder), runs the full canary set on it, and maps each leg's
 methods to their source files through the build's portable PDBs. It is a full
 run, so it happens when the owner asks for one; between recordings a new or
 moved source shows up as `unmapped`.
-The recording runs in one run directory that holds the recording World and
+A nonzero inner canary exit refuses recording with exit 2, naming that exit and
+the kept transcript, and leaves the coverage file byte-identical. Only a successful
+inner run can replace coverage. The recording runs in one run directory that holds the recording World and
 `canary.transcript.txt`, the inner canary run's exit code, standard output and
 standard error. The inner run keeps its legs (`--keep-transcripts`) until the
 recording has read them. When the recording and the inner run both pass, the
@@ -848,61 +850,74 @@ and named (see [Conventions](#conventions)).
 
 ## `puck gate`—the change-scoped gate
 
-`puck gate` verifies a branch's change before it merges. It reads the change
-against the merge base of `HEAD` and the branch it lands on, `--merge-base`
-(default `origin/features/gfx-pipeline`), and runs these steps in order:
+`puck gate` is the batch qualification for a branch. It reads the change
+against the merge base of `HEAD` and `--merge-base` (default
+`origin/features/gfx-pipeline`). The plan runs serially in this order:
 
-1. `dotnet build Puck.slnx -c Release`. A failed build prints its error lines
-   and stops the gate, so no later step runs against output an earlier build
-   left behind.
-2. Copy the CLI that build wrote into the run's own temporary directory. Every
-   later step runs that copy, so it runs the candidate's code, and no other
-   run's build or copy can replace it mid-gate.
-3. `puck affected --merge-base <merge base> --run`: the suites, `.puck` test
-   worlds and catalog check the change reaches. `--gpu` adds `--gpu`, which
-   runs the chosen canaries and then parity.
-4. The repository checks, each in its check form only: `puck format --check`
-   over the changed C# and `.puck` sources, `puck lengths --check`,
-   `puck comment-smells --check`, `puck docs links`, `puck schema --check`,
-   `puck architecture --check`, `puck registry --check`, `puck vocabulary --check`,
-   `puck shaders generate --check`, `puck branding --check`, `puck formats --check`
-   and `puck canary-ceilings --check`.
-   Nothing in the checkout is rewritten.
+1. `build`: `dotnet build Puck.slnx -c Release -v q -nologo`.
+   A failed build stops the gate before it can use stale binaries.
+2. `copy CLI`: copy the freshly built CLI into the run's own directory.
+   Subsequent puck steps use this candidate copy.
+3. `affected`: `puck affected --merge-base <merge base> --run`, adding `--gpu`
+   when selected, for the chosen canaries followed by parity.
+4. `format`: `puck format --check --file-list <file list>` over changed C# and
+   `.puck` sources; skipped when no such source changed.
+5. `lengths`: `puck lengths --check`.
+6. `comment-smells`: `puck comment-smells --check`.
+7. `docs links`: `puck docs links`.
+8. `schema`: `puck schema --check`.
+9. `architecture`: `puck architecture --check`.
+10. `registry`: `puck registry --check`.
+11. `vocabulary`: `puck vocabulary --check`.
+12. `shaders generate`: `puck shaders generate --check`.
+13. `branding`: `puck branding --check`.
+14. `formats`: `puck formats --check`.
+15. `canary-ceilings`: `puck canary-ceilings --check`.
+16. `derivations`: `puck derivations --check`.
+17. `Puck.World.Tests`: device suite, only with `--gpu`.
+18. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
+19. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
+20. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
+21. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.world.json`
+    with matching `<name>.ceilings.json`, in ordinal order. Each runs
+    `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
+    `<name>.script.txt` supplies `--script` when present; otherwise the script
+    recorded in the ceilings supplies it, or the verb's default when absent.
+22. `docs citations`: `puck docs citations`, only with `--gpu`.
+23. `affected record`: `puck affected --record`, only with `--gpu --record`
+    and only after every earlier step passes. It refreshes canary coverage.
 
-A failed step fails the gate, and the later steps still run. Each step's full
-output goes to `gate.log` in the run's directory, which the summary names and
-the run keeps; the console carries one verdict line a step and the tail of a
-failed one. The CLI copy and the format file list are removed when the run
-ends.
+The device suites use `dotnet test` in Release with the same minimal console
+logger as affected. `Puck.World.Tests` runs only its device laws, selected by a
+name filter; the DirectX, Vulkan and Platform.Windows suites run whole. One list
+holds that selection, and it is where the Gpu trait filter replaces it. A law walks the complete
+root command tree: every `--check` command has a step or an explicit reasoned
+exclusion beside the plan. Another law holds this ordered list and help to that
+plan.
 
-```text
-gate: 12 changed file(s) against <merge base>, the merge base of HEAD and origin/features/gfx-pipeline; full output in ../../Temp/puck-gate-x1y2/gate.log.
-gate: build passed
-gate: affected passed
-gate: format passed
-gate: lengths passed
-gate: comment-smells passed
-gate: docs links passed
-gate: schema passed
-gate: architecture passed
-gate: registry passed
-gate: vocabulary passed
-gate: shaders generate passed
-gate: branding passed
-gate: formats passed
-gate: canary-ceilings passed
-gate: passed; full output in ../../Temp/puck-gate-x1y2/gate.log
-```
+Before the solution build, affected run, each device suite, each counters
+workload, citations and recording, admission uses
+[`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s default
+classification in-process. Capacity with an idle GPU admits immediately.
+Otherwise the gate reports waiting on stderr, samples every ten seconds for
+at most thirty minutes, and reports when capacity returns. Expiry refuses the
+remaining run. Completed child processes do not hold admission; builds and
+reusable MSBuild nodes are not GPU holders.
 
-Run the gate from a CLI outside the checkout, such as a copy of
-`src/Puck.Cli/bin/Release/net10.0` in a directory of its own: the build
-rewrites that output, so a CLI running from it is refused. `--gpu` boots real
-Worlds on both GPU backends; run it with no competing build or GPU work on the
-machine.
+A failed build or CLI copy stops the gate. Other failed steps allow later checks
+to run, but prevent recording. Checks leave their ledgers untouched;
+`--record` requires `--gpu` and writes coverage only after successful qualification.
+`gate.log` keeps every step's full output. Beside it, `gate.steps` flushes a line
+at each start and exit, naming the step, its exit code (`-` until it exits),
+elapsed whole seconds and an ISO-8601 UTC time from the CLI host's clock. The
+console summary names both files. The CLI copy and format list are removed.
 
-Exit codes: 0 every step passed, 1 the build or a step failed, 2 refused (no
-merge base, or a CLI running from the checkout it would rebuild).
+Run from a CLI copy outside the checkout, because the build rewrites
+`src/Puck.Cli/bin/Release/net10.0`. GPU work runs serially on a machine with no
+competing GPU work.
 
+Exit codes: 0 every step passed, 1 a step failed, 2 refused (invalid record,
+missing merge base, admission timeout, or a CLI running from the checkout).
 ## `puck host load`—admission lines for the machine
 
 `puck host load` reports whether the machine an agent runs on has room for more
@@ -920,7 +935,8 @@ CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
 - `GPU busy` or `GPU idle` appears at the first reading and on every change
   after. GPU work is the World (`Puck.World` or `Puck.World.dll`), a
   `canary`, `parity` or `counters` verb, or a test host for
-  `Puck.DirectX.Tests`, `Puck.Vulkan.Tests` or `Puck.World.Tests`, whose
+  `Puck.DirectX.Tests`, `Puck.Vulkan.Tests`, `Puck.World.Tests` or
+  `Puck.Platform.Windows.Tests`, whose
   device laws open the GPU. Builds, restores, MSBuild nodes, compilers and
   shells never count, whatever project they name, and the verb never counts
   itself. The classifier uses the running executable or managed entry assembly;
@@ -933,8 +949,8 @@ CAPACITY cpu=12% freeRAM=7.9GB freeDisk=50.3GB reuseNodes=0
   It waits for a full CPU window. `PRESSURE` wins over `CAPACITY` within one
   reading.
 
-A threshold left out is never judged, so with none the verb reports only the GPU
-state. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
+The default thresholds require CPU below 50% and free RAM above 5GB for capacity;
+pressure means free RAM below 2GB or free disk below 10GB. Options override these defaults. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
 documents the thresholds for each machine class and what an agent does on each
 line. `reuseNodes` counts MSBuild nodes a build or restore left running because
 it ran without `-nodeReuse:false`.

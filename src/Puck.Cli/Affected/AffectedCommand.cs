@@ -353,6 +353,10 @@ internal static class AffectedCommand {
             Environment.CurrentDirectory = caller;
         }
     }
+
+    /// <summary>The shared Release suite invocation, including its failure-reporting console logger.</summary>
+    public static string[] TestArguments(string suite) => ["test", $"tests/{suite}/{suite}.csproj", "-c", "Release", "-v", "q", "-nologo", "--logger", "console;verbosity=minimal"];
+
     private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu) {
         var failed = new List<string>();
 
@@ -364,7 +368,7 @@ internal static class AffectedCommand {
         // and minimal prints each failure with its message and stack, and nothing for a pass.
         foreach (var suite in plan.Suites) {
             var run = CliProcess.RunCaptured(
-                arguments: ["test", Path.Combine(path1: repositoryRoot, path2: "tests", path3: suite, path4: $"{suite}.csproj"), "-c", "Release", "-v", "q", "-nologo", "--logger", "console;verbosity=minimal"],
+                arguments: TestArguments(suite: suite),
                 fileName: "dotnet",
                 input: string.Empty,
                 timeout: TimeSpan.FromMinutes(minutes: 30),
@@ -489,15 +493,9 @@ internal static class AffectedCommand {
 
         if (record) {
             using var scratch = RunDirectory.Create(prefix: "puck-affected-");
-            var exit = (AffectedCoverage.TryRecord(canaryExit: out var canaryExit, cli: typeof(AffectedCommand).Assembly.Location, error: out var recordError, repositoryRoot: repositoryRoot, scratch: scratch.Path)
-                ? CliExit.Success
-                : CliExit.Refuse(verb: Verb, what: AffectedCommand.CoveragePath, why: recordError)
-            );
-
-            // The run directory holds the recording World and the inner canary run's transcript
-            // (AffectedCoverage.CanaryTranscriptName): evidence whenever that run or the recording failed.
-            scratch.Conclude(passed: ((exit == CliExit.Success) && (canaryExit == CliExit.Success)));
-
+            var exit = Record(repositoryRoot, typeof(AffectedCommand).Assembly.Location, scratch.Path);
+            // A failed build or inner canary run keeps the recording World and transcript; coverage is unchanged.
+            scratch.Conclude(passed: (exit == CliExit.Success));
             return exit;
         }
 
@@ -528,6 +526,11 @@ internal static class AffectedCommand {
         );
     }
 
+    /// <summary>Refreshes coverage only after the recording build and inner canary run succeed.</summary>
+    internal static int Record(string repositoryRoot, string cli, string scratch, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? execute = null) =>
+        (AffectedCoverage.TryRecord(canaryExit: out _, cli: cli, error: out var error, execute: execute, repositoryRoot: repositoryRoot, scratch: scratch)
+            ? CliExit.Success
+            : CliExit.Refuse(verb: Verb, what: CoveragePath, why: error));
     /// <summary>Creates <c>--merge-base</c>, the revision whose merge base with <c>HEAD</c> a change is read against;
     /// <c>puck affected</c> and <c>puck gate</c> share it.</summary>
     /// <param name="description">What the verb compares against the merge base.</param>

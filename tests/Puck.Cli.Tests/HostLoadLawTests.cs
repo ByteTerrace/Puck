@@ -82,6 +82,7 @@ public sealed class HostLoadLawTests {
     [InlineData("puck", "puck counters --check")]
     [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net10.0\Puck.World.Tests.exe --port 1")]
     [InlineData("Puck.DirectX.Tests", "Puck.DirectX.Tests.exe")]
+    [InlineData("Puck.Platform.Windows.Tests", "Puck.Platform.Windows.Tests.exe")]
     [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.Vulkan.Tests\bin\Release\net10.0\Puck.Vulkan.Tests.dll")]
     [Theory]
     public void TheWorldAGpuVerbAndADeviceTestHostAreGpuWork(string name, string commandLine) =>
