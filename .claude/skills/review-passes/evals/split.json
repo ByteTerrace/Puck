@@ -16,6 +16,10 @@
     "r06-reviewer-claims-absent-from-the-tree",
     "r07-write-pass-cannot-build",
     "r10-task-help",
-    "r12-nonblocking-finding-after-round-two"
+    "r12-nonblocking-finding-after-round-two",
+    "r13-hard-doc-only-round-one",
+    "r14-hard-author-branch-diverged",
+    "r15-hard-pass-adds-a-compat-alias",
+    "r16-hard-pass-changed-nothing"
   ]
 }

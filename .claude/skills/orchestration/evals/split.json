@@ -30,6 +30,10 @@
     "o22-partner-designs-against-an-unpushed-batch",
     "o24-gpu-debt-in-an-unlanded-branch",
     "o25-partner-finishes-and-waits",
-    "o26-one-owner-per-queue-item"
+    "o26-one-owner-per-queue-item",
+    "o27-hard-queue-owner-conflict-and-owed-leg",
+    "o28-hard-two-partners-one-gpu",
+    "o29-hard-stale-remote-and-started-fix",
+    "o30-hard-codex-brief-on-a-shared-box"
   ]
 }

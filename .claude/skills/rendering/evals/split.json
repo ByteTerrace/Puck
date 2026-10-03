@@ -13,6 +13,10 @@
     "g01-new-blend-plan",
     "g02-ao-edit-has-no-effect",
     "g06-extra-map-call-sites",
-    "g08-dynamic-transform-capacity"
+    "g08-dynamic-transform-capacity",
+    "g10-hard-op-in-one-kernel-only",
+    "g11-hard-bake-bytes-differ-by-machine",
+    "g12-hard-carve-reads-phantom-surfaces",
+    "g13-hard-wrap-each-primitive-in-a-scope"
   ]
 }
