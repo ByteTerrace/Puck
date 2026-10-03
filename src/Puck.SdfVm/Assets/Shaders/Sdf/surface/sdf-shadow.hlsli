@@ -70,11 +70,7 @@ void sdfShadowStage(SdfPixel p) {
     if (!p.active) {
         return;
     }
-    if (sdfEvalCount > 0.0) {
-        SdfVisibilitySurface surface = sdfLoadVisibilitySurface(record);
-        surface.queries += sdfEvalCount;
-        sdfStoreVisibilitySurface(record, surface);
-    }
+    sdfStoreVisibilityQueries(record, SDF_VISIBILITY_SHADOW_QUERIES_WORD, sdfEvalCount);
     sdfStoreVisibilityShadows(record, stableVisibility);
 #if SDF_SHADOW_FADE_SLOTS > 0
     if (passGroup.shadowFadeCount > 0u) {
