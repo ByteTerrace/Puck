@@ -18,6 +18,7 @@
 #include "../march/sdf-march-constants.hlsli"
 #include "../surface/sdf-normals.hlsli"
 #include "../march/sdf-cone.hlsli"
+#include "../march/sdf-grid-walk.hlsli"
 #include "../frame/sdf-levers.hlsli"
 #include "../surface/sdf-shadow-gather.hlsli"
 #include "../surface/sdf-ambient.hlsli"

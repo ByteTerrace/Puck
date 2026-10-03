@@ -6,6 +6,7 @@
 #define DEBUG_SDF_DEBUG_VIEWS_HLSLI
 #ifdef SDF_VIEWS_PASS
 #include "../frame/sdf-reprojection.hlsli"
+#include "../indirect/sdf-indirect-read.hlsli"
 
 // A distinct, stable hue per material id (an HSV hue ramp), not the table albedo — so id boundaries read clearly
 // in the material-id debug view.
@@ -217,6 +218,16 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
             float evalRamp = saturate(sdfEvalCount / EvalHeatmapCeiling);
             float3 coldBand = lerp(float3(0.02, 0.04, 0.20), float3(0.14, 0.85, 0.30), saturate(evalRamp * 2.0));
             viewColor = lerp(coldBand, float3(0.95, 0.16, 0.10), saturate((evalRamp - 0.5) * 2.0));
+            break;
+        }
+        case DebugViewModeIndirectProbes: {
+            viewColor = sdfIndirectDebugProbes(p.rayOrigin, p.rayDirection, sdfIndirectDebugMaximum(s.hit, s.t, p.farDistance), color);
+            break;
+        }
+        case DebugViewModeIndirectCells: {
+            if (s.hit) {
+                viewColor = sdfIndirectDebugCells(p.rayOrigin + p.rayDirection * s.t, s.normal);
+            }
             break;
         }
         case 12: { // MOTION: red/green encode previous minus current pixel position at 1/32 per pixel;

@@ -206,6 +206,8 @@ public sealed record SdfFrame(
     /// without the gate. Presentation-only: never involves simulation state, and a skipped frame's simulation is
     /// unaffected.</summary>
     public bool EnableCadenceGate { get; init; }
+    /// <summary>The residency's indirect-cache demand. Off allocates and schedules no cache work.</summary>
+    public SdfIndirectTier IndirectTier { get; init; }
     /// <summary>Engine-bench lever (PATH B): when <see langword="true"/>, the soft-shadow march skips
     /// Subtraction-family carve instances (host-flagged shadow-transparent) and marches the pre-carve union hull — the
     /// carve cavities stop letting sun through (a carved tunnel stays shadowed), collapsing the O(cluster) shadow

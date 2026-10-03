@@ -4,6 +4,10 @@ namespace Puck.SdfVm;
 /// (<see cref="SdfKernelSet.StemOf"/>), pipeline, build order and loaded bytecode (<see cref="SdfKernelSet"/>) derive
 /// from.</summary>
 public enum SdfKernel {
+    /// <summary>Residency probe placement and cell partitioning.</summary>
+    IndirectClassify,
+    /// <summary>Residency transport records and visibility proofs.</summary>
+    IndirectTrace,
     /// <summary>The tile prepass, cone-marching each tile's field into its march planes and part bounds.</summary>
     Beam,
     /// <summary>The per-tile instance mask.</summary>

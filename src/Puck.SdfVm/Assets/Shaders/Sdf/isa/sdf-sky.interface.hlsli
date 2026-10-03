@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/3f813d181ac67f3261eef9bf0f97e66c8667ce2ed915c5a6b9e277996342df26). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/1a8c772b09893186e434d56da85f7f98c59ea4b3d1793f2620e8d55bee964778). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -168,8 +168,8 @@ struct SdfSkyPass {
     [[vk::offset(208)]] float3 gridWorldPitch;
     [[vk::offset(220)]] uint historyFrames;
     [[vk::offset(224)]] uint2 imageExtent;
-    [[vk::offset(232)]] uint instanceMaskWordCount;
-    [[vk::offset(236)]] uint _pad236;
+    [[vk::offset(232)]] uint indirectTier;
+    [[vk::offset(236)]] uint instanceMaskWordCount;
     [[vk::offset(240)]] float2 jitter;
     [[vk::offset(248)]] uint lightCount;
     [[vk::offset(252)]] uint meshDraws;
@@ -225,7 +225,7 @@ struct SdfSkyPass {
 // sky texture loads, then six shadow-slot step counts, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 22u;
+static const uint PuckWorkRowWords = 28u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
@@ -233,6 +233,7 @@ static const uint PuckWorkSkyHashesWord = 6u;
 static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShadowWord = 10u;
 static const uint PuckWorkShadowSlots = 6u;
+static const uint PuckWorkIndirectWord = 22u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -272,6 +273,15 @@ void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uin
     puckAddWork((row + PuckWorkSkyWord), evaluations);
     puckAddWork((row + PuckWorkSkyHashesWord), hashes);
     puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
+}
+// Each invocation names its level or proof detail; those rows sum into the pass once at readback.
+void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {
+    uint row = ((passGroup.workCounterRowDetail == 0u)
+        ? passGroup.workCounterRow
+        : (passGroup.workCounterRowDetail + detail)) * PuckWorkRowWords;
+    puckAddWork((row + PuckWorkIndirectWord), hits);
+    puckAddWork((row + PuckWorkIndirectWord + 2u), samples);
+    puckAddWork((row + PuckWorkIndirectWord + 4u), unresolved);
 }
 // The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
 void puckCountShadow(uint slot, uint steps) {

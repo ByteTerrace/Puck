@@ -66,6 +66,7 @@ public sealed partial class SdfWorldTables {
             m_work.SkipPass(pass: BricksPass);
         }
         m_work.EnterPass(pass: UploadPass);
+        RecordIndirectClear(commandBuffer: commandBuffer);
         RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
         RecordRegionCopies();
         CompletePreviousTables(commandBuffer: commandBuffer);

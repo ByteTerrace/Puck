@@ -11,7 +11,22 @@ public sealed partial class SdfWorldPasses {
     /// any render scale; otherwise a reduced view runs <see cref="SdfWorldPackage.Fragment"/> and a native one
     /// <see cref="SdfWorldPackage.NativeFragment"/>. Each uses the fade-capacity variant supplied by
     /// <see cref="SdfWorldPackage.FragmentFor"/>.</remarks>
-    public RenderGraphPackageFragment? FragmentOf(string instance) => Refresh(instance: instance).Fragment;
+    public RenderGraphPackageFragment? FragmentOf(string instance) {
+        var entry = Refresh(instance: instance);
+        var fragment = entry.Fragment;
+        var tier = (entry.View?.Residency.IndirectTier ?? Puck.SignedDistance.SdfIndirectTier.Off);
+
+        if (tier == Puck.SignedDistance.SdfIndirectTier.Off) { return fragment; }
+        var key = (fragment, tier);
+
+        if (!m_indirectFragments.TryGetValue(key: key, value: out var indirect)) {
+            indirect = SdfWorldPackage.WithIndirect(fragment: fragment, bytes: new Puck.SignedDistance.SdfIndirectLayout(tier: tier).ByteLength);
+            m_indirectFragments.Add(key: key, value: indirect);
+        }
+        return indirect;
+    }
+
+    private readonly Dictionary<(RenderGraphPackageFragment, Puck.SignedDistance.SdfIndirectTier), RenderGraphPackageFragment> m_indirectFragments = [];
 
     private sealed partial class Entry {
         private SdfViewSnapshot Snapshot {

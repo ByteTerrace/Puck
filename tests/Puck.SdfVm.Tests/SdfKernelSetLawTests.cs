@@ -24,6 +24,7 @@ public sealed class SdfKernelSetLawTests {
         "sdf-world-views-fade1", "sdf-world-views-core-fade1", "sdf-world-views-folds-fade1",
         "sdf-world-views-fade2", "sdf-world-views-core-fade2", "sdf-world-views-folds-fade2",
         "sdf-sky-environment", "sdf-sky-environment-reduce",
+        "sdf-indirect-classify", "sdf-indirect-trace",
     ];
 
     private static WorkCounterSet Work() =>
@@ -135,7 +136,7 @@ public sealed class SdfKernelSetLawTests {
     // Both interfaces the kernels read carry this host's instruction set in their pass blocks' variable names.
     [Fact]
     public void TheKernelInterfacesCarryTheHostsInstructionSetStamp() {
-        foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.BrickBakeLayout, SdfWorldInterfaces.ResolveParameters.Layout])) {
+        foreach (var layout in ((ReadOnlySpan<ShaderInterfaceLayout>)[SdfWorldInterfaces.WorldLayout, SdfWorldInterfaces.BrickBakeLayout, SdfWorldInterfaces.ResolveParameters.Layout, SdfWorldInterfaces.IndirectParameters.Layout])) {
             Assert.Equal(expected: SdfWorldInterfaces.Stamp, actual: layout.Interface.Stamp);
             Assert.Equal(
                 expected: ("passGroup" + SdfWorldInterfaces.Stamp),

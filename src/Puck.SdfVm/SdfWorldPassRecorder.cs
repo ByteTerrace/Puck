@@ -31,6 +31,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.ReactivityWritten,
+        SdfWorldPackage.IndirectCache,
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
@@ -617,6 +618,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
     private void BindPorts(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
         var slot = recording.Slot;
 
+        tables.WriteWorldBuffer(buffer: (tables.Indirect?.Regions[0].Buffer(tables.CurrentSlot) ?? tables.DummyBuffer),
+            member: SdfWorldPackage.IndirectBricks, set: set);
+
         if (ReferenceEquals(
             objA: m_portTables[slot],
             objB: tables
@@ -734,6 +738,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         (recording.WorkCounters ?? throw new InvalidOperationException(message: $"Pass '{m_context.Pass}' counts its kernels' work, but its recording carries no work counters."));
     // The member a pass reads a fragment buffer through, or null for one it reads through no member.
     private static string? ReadMemberOf(string version) => version switch {
+        SdfWorldPackage.IndirectCache => SdfWorldPackage.IndirectCache,
         SdfWorldPackage.Parts.InstanceMasks => SdfWorldPackage.InstanceMasks,
         SdfWorldPackage.Parts.Tiles => SdfWorldPackage.Tiles,
         SdfWorldPackage.Parts.CullBounds => SdfWorldPackage.CullBounds,

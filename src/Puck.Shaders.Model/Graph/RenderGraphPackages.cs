@@ -212,6 +212,8 @@ public sealed class RenderGraphPackageCatalog {
     /// read. It is world-scoped, one instance for the world, and its output is a buffer, so the views reach it over
     /// buffer edges.</summary>
     public const string SdfBricks = "sdf.bricks";
+    /// <summary>The residency's traced and partitioned indirect cache.</summary>
+    public const string Indirect = "indirect";
     /// <summary>The id of the unified overlay: the console, HUD, toasts and cursor drawn over its input.</summary>
     public const string Overlay = "overlay";
     /// <summary>The id of the film grain post-process package: a per-pixel integer-hashed offset added over its input.
@@ -542,6 +544,14 @@ public sealed class RenderGraphPackageCatalog {
     public IReadOnlyList<RenderGraphPackage> Packages { get; }
 
     private static IEnumerable<RenderGraphPackage> EnginePackages() => [
+        new RenderGraphPackage(
+            Id: Indirect,
+            Inputs: [],
+            Outputs: [RenderGraphPackagePort.Buffer(access: RenderGraphPortAccess.ComputeWrite, count: null, strideBytes: sizeof(uint))],
+            Members: SdfWorldPackage.IndirectMembers,
+            Fragment: SdfWorldPackage.IndirectFragment(bytes: sizeof(uint)),
+            Summary: "One residency's classified probes, cell partitions and traced transport."
+        ),
         new RenderGraphPackage(
             Fragment: SdfWorldPackage.NativeFragment,
             Id: SdfWorld,

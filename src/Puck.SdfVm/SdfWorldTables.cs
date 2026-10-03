@@ -578,6 +578,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         }
 
         DisposeRegions();
+        DisposeIndirect();
         m_previousDynamicTransforms.Dispose();
         m_previousMeshTransforms.Dispose();
         m_brickBakeFrameBlock?.Dispose();

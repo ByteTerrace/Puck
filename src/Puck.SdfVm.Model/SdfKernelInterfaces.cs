@@ -78,6 +78,11 @@ public sealed class SdfKernelInterfaces {
         ArgumentException.ThrowIfNullOrEmpty(argument: stamp);
 
         Stamp = stamp;
+        IndirectParameters = ShaderPipelineParameterLayout.ForPackage(
+            config: null,
+            package: RenderGraphPackageCatalog.Indirect,
+            members: [.. SdfWorldPackage.IndirectMembers, .. LightAndSkyTables]
+        ).Stamped(stamp: stamp);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             package: RenderGraphPackageCatalog.SdfWorld,
@@ -140,6 +145,7 @@ public sealed class SdfKernelInterfaces {
         );
         MeshLayout = new(shaderInterface: Mesh);
         Includes = [
+            (IncludePath(shaderInterface: IndirectParameters.Interface), IndirectParameters.Interface),
             (IncludePath(shaderInterface: World), World),
             (IncludePath(shaderInterface: WorldFadeParameters[1].Interface), WorldFadeParameters[1].Interface),
             (IncludePath(shaderInterface: WorldFadeParameters[2].Interface), WorldFadeParameters[2].Interface),
@@ -176,6 +182,8 @@ public sealed class SdfKernelInterfaces {
     /// the view's own resources. Its frame block is written through
     /// <see cref="ShaderPipelineParameterLayout.WriteFrame"/>.</summary>
     public ShaderPipelineParameterLayout WorldParameters { get; }
+    /// <summary>Gets the residency cache's classify and trace interface.</summary>
+    public ShaderPipelineParameterLayout IndirectParameters { get; }
     /// <summary>Gets each fade capacity's world interface, indexed by capacity from zero to two.</summary>
     public IReadOnlyList<ShaderPipelineParameterLayout> WorldFadeParameters { get; }
     /// <summary>Gets the reconstruction pass's interface, with the same frame values as the traversal passes.</summary>

@@ -169,6 +169,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         if (
             (entry.View is not { } view) ||
+            (view.Residency.Tables?.Indirect is { IsComplete: false }) ||
             !view.Residency.IsUnchanged(
                 context: in context,
                 view: view.View
@@ -307,21 +308,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             );
         }
     }
-
-    // The view an instance resolved this frame, which its passes follow in place when they can
-    // (SdfWorldPassRecorder.Follow).
-    internal SdfWorldView? ViewOf(string instance) {
-        lock (m_gate) {
-            return (m_entries.TryGetValue(
-                key: instance,
-                value: out var entry
-            )
-                ? entry.View
-                : null
-            );
-        }
-    }
-
+    /// <summary>Returns the view an instance resolves this frame, which its passes follow in place when possible.</summary>
+    public SdfWorldView? ViewOf(string instance) => Refresh(instance: instance).View;
+    /// <inheritdoc/>
+    public IReadOnlyList<RenderGraphRuntimeInput> InputsOf(string instance) =>
+        ((ViewOf(instance: instance) is { Residency: { IndirectTier: not Puck.SignedDistance.SdfIndirectTier.Off } residency })
+            ? [new(Version: SdfWorldPackage.IndirectCache, Producer: residency.IndirectInstanceName)] : []);
     /// <inheritdoc/>
     public void OnGraphReleased(string instance) {
         if (m_entries.TryGetValue(key: instance, value: out var entry)) {

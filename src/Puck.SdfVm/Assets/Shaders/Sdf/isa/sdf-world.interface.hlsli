@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/9944771930254a0366d96266e223faf0d2a548b8d905326b43c4941b9160ecb9). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/09ff2d368e81ed778b3056431cab79bad06f38ddf8a5bb1485a221bc89489be2). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -168,8 +168,8 @@ struct SdfWorldPass {
     [[vk::offset(208)]] float3 gridWorldPitch;
     [[vk::offset(220)]] uint historyFrames;
     [[vk::offset(224)]] uint2 imageExtent;
-    [[vk::offset(232)]] uint instanceMaskWordCount;
-    [[vk::offset(236)]] uint _pad236;
+    [[vk::offset(232)]] uint indirectTier;
+    [[vk::offset(236)]] uint instanceMaskWordCount;
     [[vk::offset(240)]] float2 jitter;
     [[vk::offset(248)]] uint lightCount;
     [[vk::offset(252)]] uint meshDraws;
@@ -203,27 +203,29 @@ struct SdfWorldPass {
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa506E1C21 : register(b0, space3);
 #define passGroup passGroupIsa506E1C21
-[[vk::binding(1, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t1, space3);
-[[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u2, space3);
-[[vk::binding(3, 3)]] StructuredBuffer<float> tiles : register(t3, space3);
-[[vk::binding(4, 3)]] RWStructuredBuffer<float> tilesRW : register(u4, space3);
-[[vk::binding(5, 3)]] StructuredBuffer<uint> cullBounds : register(t5, space3);
-[[vk::binding(6, 3)]] RWStructuredBuffer<uint> cullBoundsRW : register(u6, space3);
-[[vk::binding(7, 3)]] RWStructuredBuffer<uint> viewsArgsRW : register(u7, space3);
-[[vk::binding(8, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t8, space3);
-[[vk::binding(9, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u9, space3);
-[[vk::binding(10, 3)]] RWStructuredBuffer<float> reactivityRW : register(u10, space3);
-[[vk::binding(11, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u11, space3);
-[[vk::binding(12, 3)]] Texture2D<float4> screenSources[32] : register(t12, space3);
-[[vk::binding(44, 3)]] Texture2D<float4> meshVisibility : register(t44, space3);
-[[vk::binding(45, 3)]] RWStructuredBuffer<uint> workCounters : register(u45, space3);
+[[vk::binding(1, 3)]] StructuredBuffer<uint> indirectCache : register(t1, space3);
+[[vk::binding(2, 3)]] StructuredBuffer<int4> indirectBricks : register(t2, space3);
+[[vk::binding(3, 3)]] StructuredBuffer<uint> sdfInstanceMasks : register(t3, space3);
+[[vk::binding(4, 3)]] RWStructuredBuffer<uint> sdfInstanceMasksRW : register(u4, space3);
+[[vk::binding(5, 3)]] StructuredBuffer<float> tiles : register(t5, space3);
+[[vk::binding(6, 3)]] RWStructuredBuffer<float> tilesRW : register(u6, space3);
+[[vk::binding(7, 3)]] StructuredBuffer<uint> cullBounds : register(t7, space3);
+[[vk::binding(8, 3)]] RWStructuredBuffer<uint> cullBoundsRW : register(u8, space3);
+[[vk::binding(9, 3)]] RWStructuredBuffer<uint> viewsArgsRW : register(u9, space3);
+[[vk::binding(10, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t10, space3);
+[[vk::binding(11, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u11, space3);
+[[vk::binding(12, 3)]] RWStructuredBuffer<float> reactivityRW : register(u12, space3);
+[[vk::binding(13, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u13, space3);
+[[vk::binding(14, 3)]] Texture2D<float4> screenSources[32] : register(t14, space3);
+[[vk::binding(46, 3)]] Texture2D<float4> meshVisibility : register(t46, space3);
+[[vk::binding(47, 3)]] RWStructuredBuffer<uint> workCounters : register(u47, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
 // sky texture loads, then six shadow-slot step counts, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 22u;
+static const uint PuckWorkRowWords = 28u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
@@ -231,6 +233,7 @@ static const uint PuckWorkSkyHashesWord = 6u;
 static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShadowWord = 10u;
 static const uint PuckWorkShadowSlots = 6u;
+static const uint PuckWorkIndirectWord = 22u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -270,6 +273,15 @@ void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uin
     puckAddWork((row + PuckWorkSkyWord), evaluations);
     puckAddWork((row + PuckWorkSkyHashesWord), hashes);
     puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
+}
+// Each invocation names its level or proof detail; those rows sum into the pass once at readback.
+void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {
+    uint row = ((passGroup.workCounterRowDetail == 0u)
+        ? passGroup.workCounterRow
+        : (passGroup.workCounterRowDetail + detail)) * PuckWorkRowWords;
+    puckAddWork((row + PuckWorkIndirectWord), hits);
+    puckAddWork((row + PuckWorkIndirectWord + 2u), samples);
+    puckAddWork((row + PuckWorkIndirectWord + 4u), unresolved);
 }
 // The slot is uniform across the wave. Stable slots precede active handoffs in the shadow pass's row.
 void puckCountShadow(uint slot, uint steps) {

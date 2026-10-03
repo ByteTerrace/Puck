@@ -47,6 +47,8 @@ void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uin
 }
 void puckCountShadow(uint slot, uint steps) {
 }
+void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {
+}
 void puckCountFragmentWork(uint steps, uint texels) {
 }
 

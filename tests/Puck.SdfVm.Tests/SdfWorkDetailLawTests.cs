@@ -8,6 +8,11 @@ namespace Puck.SdfVm.Tests;
 /// <summary>The CPU row labels and packed row address agree with the counted sky kernel sites, and the shadow pass counts its slots as kinds of its own row.</summary>
 public sealed class SdfWorkDetailLawTests {
     [Fact]
+    public void IndirectDetailIndicesNameEachLevelLaunchAndProof() {
+        Assert.Equal(new[] { "near", "room", "world", "launch", "proof" }, SdfWorldWorkDetails.Indirect);
+        Assert.Equal(new[] { "indirect" }, SdfWorldWorkDetails.Of(SdfWorldPackage.Parts.Views));
+    }
+    [Fact]
     public void SkyAndShadowRowLabelsAndPassBlockReachTheirKernelIndices() {
         Assert.Equal(expected: new[] { "gradient", "disc", "stars", "clouds" }, actual: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Sky));
         Assert.Equal(expected: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Sky), actual: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Composite));
