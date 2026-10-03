@@ -74,10 +74,22 @@ public sealed class ShaderBuildTargetsLawTests {
 
         // Publisher A stalls holding its new sidecar: first the old sidecar is held open so A cannot replace or remove
         // it, then A's own temporary sidecar is held so A cannot move it in.
-        var heldSidecar = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash"), share: FileShare.Read);
+        using var heldSidecar = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash"), share: FileShare.Read);
         var first = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(target: "Build"));
-        var stalledSidecar = WaitFor(find: () => Directory.EnumerateFiles(path: directory, searchPattern: "a.comp.spv.hash.*.tmp").SingleOrDefault());
-        using var heldTemporary = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: stalledSidecar, share: FileShare.Read);
+        using var heldTemporary = WaitFor(find: () => {
+            var stalledSidecar = Directory.EnumerateFiles(path: directory, searchPattern: "a.comp.spv.hash.*.tmp").SingleOrDefault();
+
+            if (stalledSidecar is null) {
+                return null;
+            }
+
+            try {
+                // Denying write sharing succeeds only after A closes its writer; keep this same handle to stall rename.
+                return new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: stalledSidecar, share: FileShare.Read);
+            } catch (IOException) {
+                return null;
+            }
+        });
 
         heldSidecar.Dispose();
 
@@ -275,16 +287,15 @@ public sealed class ShaderBuildTargetsLawTests {
         Assert.Equal(expected: settled, actual: File.GetLastWriteTimeUtc(path: fixture.PathOf(path: "Assets/Probes/probe.first.dxbc")));
     }
 
-    private static string WaitFor(Func<string?> find) {
-        var deadline = (DateTime.UtcNow + TimeSpan.FromMinutes(value: 1));
+    private static T WaitFor<T>(Func<T?> find) where T : class {
+        T? found = null;
 
-        while (true) {
-            if (find() is { } found) {
-                return found;
-            }
-            Assert.True(condition: (DateTime.UtcNow < deadline), userMessage: "The publisher never reached the awaited point.");
-            Thread.Sleep(millisecondsTimeout: 20);
-        }
+        TestLiveness.Until(
+            reason: () => "The publisher never reached the awaited point.",
+            step: () => (found = find()) is not null
+        );
+
+        return found!;
     }
 
     private sealed class Fixture : IDisposable {
