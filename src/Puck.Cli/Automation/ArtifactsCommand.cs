@@ -2,7 +2,6 @@ using System.CommandLine;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
-using System.Xml.Linq;
 using Puck.Assets;
 
 namespace Puck.Cli.Automation;
@@ -121,24 +120,12 @@ internal static class ArtifactsCommand {
                     ) {
                         throw new InvalidDataException(message: $"Invalid test assembly marker: {file}");
                     }
-                    var test = new JsonObject {
+                    tests.Add(item: new JsonObject {
                         ["assembly"] = RepositoryRelative(
                         path: assembly,
                         root: root
                     ),
-                    };
-                    var settings = Path.Combine(
-                        path1: Path.GetDirectoryName(path: file)!,
-                        path2: "Puck.TestSettings"
-                    );
-
-                    if (File.Exists(path: settings)) {
-                        test["settings"] = File.ReadAllText(path: settings).Trim().Replace(
-                            newChar: '/',
-                            oldChar: '\\'
-                        );
-                    }
-                    tests.Add(item: test);
+                    });
                 }
             }
         }
@@ -271,7 +258,7 @@ internal static class ArtifactsCommand {
 
         archive.Dispose();
         var tests = (source["testAssemblies"]?.AsArray() ?? throw new InvalidDataException(message: "Missing evaluated test assembly manifest."));
-        var selected = new Dictionary<string, string?>(comparer: StringComparer.OrdinalIgnoreCase);
+        var selected = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
 
         foreach (var test in tests) {
             var name = (((string?)test?["assembly"]) ?? throw new InvalidDataException(message: "Missing test assembly path."));
@@ -279,23 +266,7 @@ internal static class ArtifactsCommand {
                 path1: root,
                 path2: name
             ));
-            var settings = ((string?)test?["settings"]);
 
-            if (
-                (settings is not null) &&
-                (Path.IsPathRooted(path: settings) || !WithinRoot(
-                path: Path.GetFullPath(path: Path.Combine(
-                    path1: root,
-                    path2: settings
-                )),
-                root: root
-            ) || !File.Exists(path: Path.Combine(
-                path1: root,
-                path2: settings
-            )))
-            ) {
-                throw new InvalidDataException(message: $"Invalid or missing test run settings: {settings}");
-            }
             if (
                 !paths.Contains(item: path) ||
                 !name.EndsWith(
@@ -303,10 +274,7 @@ internal static class ArtifactsCommand {
                 value: ".dll"
             ) ||
                 !File.Exists(path: path) ||
-                !selected.TryAdd(
-                key: path,
-                value: settings
-            )
+                !selected.Add(item: path)
             ) {
                 throw new InvalidDataException(message: $"Invalid, missing or duplicate test assembly: {name}");
             }
@@ -318,24 +286,16 @@ internal static class ArtifactsCommand {
         Directory.CreateDirectory(path: Results);
         // Two assemblies at a time, largest first, so the longest suite runs alongside the others instead of after
         // them. Each run's output is printed whole when it finishes, so two runs never interleave, and a failure
-        // cancels the other run.
+        // cancels the other run. The platform exits nonzero for a run that discovered no test; a hardware-only
+        // assembly may still skip every case.
         var console = new Lock();
-        var ordered = selected.OrderBy(
-            keySelector: entry => entry.Key,
-            comparer: StringComparer.Ordinal
-        ).Select(selector: (test, index) => (test, index)).OrderByDescending(keySelector: item => new FileInfo(fileName: item.test.Key).Length);
+        var ordered = selected.Order(comparer: StringComparer.Ordinal).Select(selector: (assembly, index) => (assembly, index)).OrderByDescending(keySelector: item => new FileInfo(fileName: item.assembly).Length);
 
         await Parallel.ForEachAsync(
             body: async (item, cancellationToken) => {
-                var (test, index) = item;
-                var assembly = test.Key;
-                var report = $"{index:D3}-{Path.GetFileNameWithoutExtension(path: assembly)}.trx";
-                string[] settings = ((test.Value is { } runSettings)
-                    ? ["--settings", runSettings]
-                    : []
-                );
+                var (assembly, index) = item;
                 var run = await CliProcess.RunAsync(
-                    arguments: ["test", assembly, .. settings, "--logger", $"trx;LogFileName={report}", "--results-directory", Results, "--filter", "Category!=Performance", "--blame-hang-timeout", "15m", "--blame-hang-dump-type", "mini"],
+                    arguments: [assembly, .. CliTestRun.Report(directory: Results, fileName: $"{index:D3}-{Path.GetFileNameWithoutExtension(path: assembly)}.trx"), .. CliTestRun.HangDump(timeout: TimeSpan.FromMinutes(minutes: 15))],
                     cancellationToken: cancellationToken,
                     capture: true,
                     fileName: "dotnet",
@@ -346,17 +306,7 @@ internal static class ArtifactsCommand {
                     Console.Write(value: run.Stdout);
                     Console.Error.Write(value: run.Stderr);
                 }
-                if (run.ExitCode != 0) { throw new InvalidOperationException(message: $"dotnet test {Path.GetFileName(path: assembly)} exited with code {run.ExitCode}."); }
-                var result = (XDocument.Load(uri: Path.Combine(
-                    path1: Results,
-                    path2: report
-                )).Root ?? throw new InvalidDataException(message: $"Missing test results: {report}"));
-                var ns = result.Name.Namespace;
-
-                // A hardware-only assembly may legitimately skip every case, but discovery must never be empty.
-                if (((int?)result.Element(name: (ns + "ResultSummary"))?.Element(name: (ns + "Counters"))?.Attribute(name: "total")) is not > 0) {
-                    throw new InvalidDataException(message: $"No tests discovered in {assembly}.");
-                }
+                if (run.ExitCode != 0) { throw new InvalidOperationException(message: $"{Path.GetFileName(path: assembly)} exited with code {run.ExitCode}."); }
             },
             parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = 2 },
             source: ordered
@@ -374,27 +324,16 @@ internal static class ArtifactsCommand {
             ("Puck.World.Schema.Tests", "WorldSiloDefinitionLawTests"),
             ("Puck.World.Tests", "WorldSiloLifecycleLawTests"),
         }) {
-            var report = Path.Combine(
-                path1: Results,
-                path2: (project + ".xml")
-            );
+            var report = (project + ".trx");
 
-            if (File.Exists(path: report)) { throw new IOException(message: $"Use a fresh test report: {report}"); }
-            // xUnit v3's in-process runner is portable; VSTest otherwise looks for the producer OS's apphost.
+            if (File.Exists(path: Path.Combine(path1: Results, path2: report))) { throw new IOException(message: $"Use a fresh test report: {report}"); }
+            // The test assembly is portable: dotnet runs the Windows build's dll here without its apphost. A run in
+            // which every selected test skipped exits nonzero, so a passing run executed the class.
             await CliProcess.RunCheckedAsync(
-                arguments: [$"artifacts/world-tests/{project}/{project}.dll", "-class", $"{project}.{testClass}", "-xml", report],
+                arguments: [$"artifacts/world-tests/{project}/{project}.dll", .. CliTestRun.Class(fullName: $"{project}.{testClass}"), .. CliTestRun.SomeTestExecutes(), .. CliTestRun.Report(directory: Results, fileName: report)],
                 fileName: "dotnet",
                 workingDirectory: root
             );
-            var result = (XDocument.Load(uri: report).Root?.Element(name: "assembly") ?? throw new InvalidDataException(message: $"Missing test result for {project}."));
-
-            if (
-                (((int?)result.Attribute(name: "total")) is not { } total) ||
-                (((int?)result.Attribute(name: "skipped")) is not { } skipped) ||
-                (total <= skipped)
-            ) {
-                throw new InvalidDataException(message: $"No tests executed for {project}.{testClass}.");
-            }
         }
         return 0;
     }

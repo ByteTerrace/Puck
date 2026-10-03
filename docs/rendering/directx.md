@@ -142,8 +142,7 @@ var adapterApi = new DirectXNativeAdapterApi();
 var deviceApi = new DirectXNativeDeviceApi();
 
 foreach (var adapter in adapterApi.EnumerateAdapters()) {
-    var maxLevel = deviceApi.ProbeMaxFeatureLevel(adapterLuid: adapter.AdapterLuid);
-    // adapter.Description, adapter.DedicatedVideoMemory, adapter.IsSoftware, maxLevel ...
+    // adapter.AdapterLuid, adapter.Description, adapter.DedicatedVideoMemory, adapter.IsSoftware ...
 }
 
 // WARP is always available — handy for headless/CI verification with no GPU.
@@ -158,7 +157,6 @@ it like any other Puck handle owner.
 | Concern | Interface | Native call(s) | Result |
 |---------|-----------|----------------|--------|
 | Adapter enumeration | `IDirectXAdapterApi` | `CreateDXGIFactory2`, `IDXGIFactory4::EnumAdapters1` | `IReadOnlyList<DirectXAdapterDescription>` |
-| Feature-level probe | `IDirectXDeviceApi` | `D3D12CreateDevice` (null device) | `DirectXFeatureLevel?` |
 | Device creation | `IDirectXDeviceApi` | `D3D12CreateDevice` | `DirectXDevice` (owns `ID3D12Device`) |
 | Software fallback | `IDirectXDeviceApi` | `IDXGIFactory4::EnumWarpAdapter` + `D3D12CreateDevice` | `DirectXDevice` (WARP) |
 | Memory profile | `IDirectXDeviceApi` | `ID3D12Device::CheckFeatureSupport` (architecture, options 16), `IDXGIAdapter1::GetDesc1` | `GpuMemoryProfile` |
@@ -180,7 +178,7 @@ everything created with it, so the context's next use creates the device again.
 
 When `DirectXDeviceContext` creates its device it reads the device's memory
 profile beside its identity (`IDirectXDeviceApi.GetMemoryProfile`) and reports
-it as `IGpuDeviceContext.MemoryProfile`. `DirectXNativeDeviceApi.MemoryProfile`
+it as `IGpuDeviceContext.MemoryProfile`. `DirectXFeatureReads.MemoryProfile`
 fills it from three native structures:
 
 - `D3D12_FEATURE_DATA_ARCHITECTURE`: `UMA` with `CacheCoherentUMA` is coherent

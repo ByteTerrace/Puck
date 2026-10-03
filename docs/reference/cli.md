@@ -888,10 +888,12 @@ against the merge base of `HEAD` and `--merge-base` (default
 23. `affected record`: `puck affected --record`, only with `--gpu --record`
     and only after every earlier step passes. It refreshes canary coverage.
 
-The device suites use `dotnet test` in Release with the same minimal console
-logger as affected. `Puck.World.Tests` runs only its device laws, selected by a
-name filter; the DirectX, Vulkan and Platform.Windows suites run whole. One list
-holds that selection, and it is where the Gpu trait filter replaces it. A law walks the complete
+The device suites run `dotnet test --project <suite> -c Release --no-build` over the
+solution build's binaries, as affected's suites do, since Microsoft.Testing.Platform hands
+MSBuild switches to the test application, which refuses them. Each selects its device laws
+with `--filter-trait Category=Gpu`, the trait GPU001 holds every class that opens a device to,
+and affected's CPU runs take the complement, `--filter-not-trait Category=Gpu`. One list
+holds that selection (`GatePlan.DeviceSuites`). A law walks the complete
 root command tree: every `--check` command has a step or an explicit reasoned
 exclusion beside the plan. Another law holds this ordered list and help to that
 plan.
@@ -980,8 +982,8 @@ Exit codes: 0 done, 2 refused (invalid thresholds or an interval or window below
 
 `puck laws prove <law>` shows that a law fails without its fix and passes
 with it, and prints the evidence for the commit that lands them. The law is a
-test name of dotted identifiers, `Class` or `Class.Method`, selected as
-`FullyQualifiedName~<law>`; its project is the test project whose sources
+test name of dotted identifiers, `Class` or `Class.Method`, matched anywhere in
+each test's fully qualified method name (`--filter-method "*<law>*"`); its project is the test project whose sources
 declare that class, or `--project`.
 
 The fix is one of:
@@ -1018,7 +1020,8 @@ solution, once for all tests the law name selects. Outcomes come from the test r
 TRX report together with the process's completion verdict. A run that selects
 no test, skips a selected test, aborts or executes different tests between legs
 is refused. Both legs execute the same tests, and every selected test must
-finish with a passed or failed outcome. Caller Git hooks are disabled, and
+finish with a passed or failed outcome; an explicit test the run did not opt into
+was never selected. Caller Git hooks are disabled, and
 projects outside the proof tree and links in it are refused.
 
 An exclusive lock file beside the clone leases it for the whole proof. A

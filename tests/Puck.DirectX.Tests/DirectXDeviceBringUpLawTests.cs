@@ -141,12 +141,11 @@ public sealed class DirectXDeviceBringUpLawTests {
         }
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
-        public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) => throw new NotSupportedException();
     }
     // Creates a real software device, then refuses to read it the way a capability probe refused by an older runtime
     // surfaces through CsWin32's throwing wrappers.
     private sealed class UnreadableDeviceApi : IDirectXDeviceApi {
-        private readonly DirectXNativeDeviceApi m_native = new();
+        private readonly DirectXWarpDeviceApi m_software = new();
 
         public const string UnreadableMessage = "Value does not fall within the expected range.";
 
@@ -156,7 +155,7 @@ public sealed class DirectXDeviceBringUpLawTests {
             DirectXDevice device;
 
             try {
-                device = m_native.CreateWarpDevice(minimumFeatureLevel: minimumFeatureLevel);
+                device = m_software.CreateWarpDevice(minimumFeatureLevel: minimumFeatureLevel);
             } catch (DirectXException) {
                 throw new ArgumentException(message: "no software device");
             }
@@ -170,6 +169,5 @@ public sealed class DirectXDeviceBringUpLawTests {
         public GpuDeviceIdentity GetDeviceIdentity(nint deviceHandle) => throw new ArgumentException(message: UnreadableMessage);
         public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) => throw new NotSupportedException();
         public GpuDeviceCapabilities GetDeviceCapabilities(nint deviceHandle) => throw new NotSupportedException();
-        public DirectXFeatureLevel? ProbeMaxFeatureLevel(long adapterLuid) => throw new NotSupportedException();
     }
 }

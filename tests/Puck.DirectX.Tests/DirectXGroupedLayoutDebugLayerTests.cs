@@ -18,6 +18,7 @@ namespace Puck.DirectX.Tests;
 /// host has no device or no debug layer.</summary>
 [Collection(name: nameof(ConsoleErrorCollection))]
 [SupportedOSPlatform("windows10.0.10240")]
+[Trait("Category", "Gpu")]
 public sealed unsafe class DirectXGroupedLayoutDebugLayerTests {
     [Fact]
     public void The_spike_layouts_create_on_the_default_adapter_with_no_debug_layer_message() {

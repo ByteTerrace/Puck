@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Puck.DirectX.Presentation;
 using Puck.Shaders;
@@ -18,7 +19,12 @@ public sealed class DirectXSurfaceCompositorLawTests {
     [Fact]
     public void AReplacementAtTheSameResourceAddressRewritesTheSourceDescriptor() {
         var bindings = new FakeGpuDevice(countCalls: true);
-        using var context = new DirectXDeviceContext();
+        // The context never creates its device; a software API keeps even an accidental creation off the GPU.
+        using var context = new DirectXDeviceContext(
+            adapterLuid: 1L,
+            deviceApi: new DirectXWarpDeviceApi(),
+            minimumFeatureLevel: DirectXFeatureLevel.Level110
+        );
         using var compositor = new DirectXSurfaceCompositor(
             commandListRecorder: new DirectXCommandListRecorder(),
             presentationOptions: new PresentationOptions(),

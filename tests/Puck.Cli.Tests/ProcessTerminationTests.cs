@@ -141,9 +141,8 @@ public sealed partial class ProcessTerminationTests {
             );
             m_connected = m_pipe.WaitForConnectionAsync(cancellationToken: TestContext.Current.CancellationToken);
             info.ArgumentList.Add(item: typeof(ProcessTerminationTests).Assembly.Location);
-            info.ArgumentList.Add(item: "-method");
-            info.ArgumentList.Add(item: $"{typeof(ProcessTerminationTests).FullName}.{nameof(TerminationChildAsync)}");
-            info.ArgumentList.Add(item: "-explicit");
+            foreach (var option in CliTestRun.Containing(name: $"{typeof(ProcessTerminationTests).FullName}.{nameof(TerminationChildAsync)}")) { info.ArgumentList.Add(item: option); }
+            info.ArgumentList.Add(item: "--explicit");
             info.ArgumentList.Add(item: "only");
             m_process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: "The child test host did not start."));
             m_process.StandardInput.WriteLine(value: $"{mode} {name}");

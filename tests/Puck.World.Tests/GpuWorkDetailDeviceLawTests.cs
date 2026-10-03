@@ -9,6 +9,7 @@ namespace Puck.World.Tests;
 
 /// <summary>The generated GPU atomics carry in mixed plain and named rows; pending frames retain their own identities.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class GpuWorkDetailDeviceLawTests {
     [Fact]
     public void VulkanMixedRowsCarryAndReconcileAcrossFrames() {

@@ -562,8 +562,8 @@ Run the focused laws after changing frames, handoff continuity, hysteresis,
 contact sweeping, or crossing durability:
 
 ```text
-dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldAdjacencyLawTests|FullyQualifiedName~WorldAdjacencyCornerContactLawTests|FullyQualifiedName~FederationTransferLawTests|FullyQualifiedName~MappedArrivalApplicationLawTests|FullyQualifiedName~HighSpeedGroundContactLawTests|FullyQualifiedName~CrossingRecoveryLawTests|FullyQualifiedName~CrossingHandoffTokenLawTests|FullyQualifiedName~CrossingReplayLawTests|FullyQualifiedName~WorldSiloCrossingRecoveryLawTests"
-dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldFrameIsometryLawTests"
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-restore --filter-class "*WorldAdjacencyLawTests" --filter-class "*WorldAdjacencyCornerContactLawTests" --filter-class "*FederationTransferLawTests" --filter-class "*MappedArrivalApplicationLawTests" --filter-class "*HighSpeedGroundContactLawTests" --filter-class "*CrossingRecoveryLawTests" --filter-class "*CrossingHandoffTokenLawTests" --filter-class "*CrossingReplayLawTests" --filter-class "*WorldSiloCrossingRecoveryLawTests"
+dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter-class "*WorldFrameIsometryLawTests"
 ```
 
 Run `puck canary seamless-adjacency` for the driven crossing on NW's east face

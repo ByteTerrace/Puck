@@ -1016,7 +1016,7 @@ These are one-line cautions; the owning pages hold the derivations.
   `IGpuDeviceContext.MemoryProfile` (`GpuMemoryProfile`) beside the identity —
   Vulkan through `GpuMemoryProfile.FromVulkan` over the device type and
   `vkGetPhysicalDeviceMemoryProperties`, Direct3D 12 through
-  `DirectXNativeDeviceApi.MemoryProfile` over the architecture, adapter and
+  `DirectXFeatureReads.MemoryProfile` over the architecture, adapter and
   options 16 structures. `GpuResidency.Select(profile, bytes, readersInFlight)`
   is the one choice of `InPlace`, `Ring` or `Staged`: in place only on coherent
   unified memory with no reader in flight while the host writes, so a per-frame
@@ -2243,11 +2243,11 @@ stations gate GPU kernel behavior by machine.
 ```bash
 dotnet build src/Puck.SdfVm -c Release                      # runs DXC; needs dxc on PATH
 dotnet test tests/Puck.SignedDistance.Tests -c Release      # ISA packing, Lipschitz, parts, rigid leaves, grid, SdfBakerLawTests
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~CreationBakeLawTests"   # bake keys, cache, BAKE chunk, background schedule
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*CreationBakeLawTests"   # bake keys, cache, BAKE chunk, background schedule
 dotnet test tests/Puck.SdfVm.Tests -c Release               # kernel variants, camera programs, environment packing
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~WorldRenderEnvelopeLawTests|FullyQualifiedName~ShapePanelLawTests|FullyQualifiedName~WorldStampPoolBoundLawTests"
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
-dotnet test tests/Puck.World.Tests -c Release --filter "FullyQualifiedName~WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*WorldRenderEnvelopeLawTests" --filter-class "*ShapePanelLawTests" --filter-class "*WorldStampPoolBoundLawTests"
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*SdfPipelineBuildLivenessLawTests"   # the pump never blocks on pipeline creation
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*WorldCaptureHoldLawTests"   # rendered hosts hold the capture tick, bounded, settled before disposal
 puck parity                                                 # parity world, offscreen, Vulkan then Direct3D 12
 puck canary sdf-decode-sign-refusal                         # puck.sdf.v1 decode sign refusals, offscreen on both backends
 puck canary world-counters                                  # world.counters gpu counted work, offscreen on both backends

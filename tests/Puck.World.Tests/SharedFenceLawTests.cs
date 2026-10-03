@@ -5,7 +5,6 @@ using Puck.DirectX;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Puck.Platform.Windows;
-using Puck.Testing;
 using Puck.Vulkan;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Factories;
@@ -23,6 +22,7 @@ namespace Puck.World.Tests;
 /// and skips by name on a device without <c>VK_KHR_external_semaphore_win32</c>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed unsafe class SharedFenceLawTests {
     private const int Extent = 64;
 
@@ -257,7 +257,7 @@ public sealed unsafe class SharedFenceLawTests {
         var context = new DirectXDeviceContext(
             adapterLuid: adapterLuid,
             deviceApi: (warp
-                ? new WarpDeviceApi()
+                ? new DirectXWarpDeviceApi()
                 : new DirectXNativeDeviceApi()),
             minimumFeatureLevel: DirectXFeatureLevel.Level110
         );

@@ -995,7 +995,7 @@ dotnet test tests/Puck.World.Transpiler.Tests -c Release
 ```
 
 ```bash
-dotnet test tests/Puck.World.Tests -c Release --filter ShippedWorldStateBaselineTests
+dotnet test tests/Puck.World.Tests -c Release --filter-class "*ShippedWorldStateBaselineTests"
 ```
 
 ```bash

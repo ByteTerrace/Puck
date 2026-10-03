@@ -21,6 +21,7 @@ namespace Puck.World.Tests;
 /// same bytes. Every binding the kernels do not read holds a filler of its kind.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class SdfSkyEnvironmentDeviceLawTests {
     private const int Coefficients = SdfSkyEnvironment.CoefficientCount;
 

@@ -44,8 +44,7 @@ public readonly unsafe struct DirectXDeviceFeatureSupport(ID3D12Device* device) 
 /// </summary>
 [SupportedOSPlatform("windows8.1")]
 public static unsafe class DirectXFeatureReads {
-    // Probed highest-first: the first level that accepts device creation is the adapter's maximum, and the
-    // feature-levels query is asked about the same list.
+    // Asked highest-first: the feature-levels query answers the highest level in the list the device supports.
     internal static readonly DirectXFeatureLevel[] FeatureLevelsHighToLow = [
         DirectXFeatureLevel.Level122,
         DirectXFeatureLevel.Level121,
@@ -139,6 +138,22 @@ public static unsafe class DirectXFeatureReads {
             viewHeapSize: options19.MaxViewDescriptorHeapSize
         );
     }
+    /// <summary>Fills a memory profile from the native structures Direct3D 12 and DXGI report: the architecture's
+    /// <c>UMA</c> and <c>CacheCoherentUMA</c>, the adapter's <c>DedicatedVideoMemory</c> and <c>SharedSystemMemory</c>,
+    /// and options 16's <c>GPUUploadHeapSupported</c>. A pure function of its arguments.</summary>
+    /// <param name="architecture">The device's <c>D3D12_FEATURE_DATA_ARCHITECTURE</c> for node zero.</param>
+    /// <param name="adapter">The adapter's <c>DXGI_ADAPTER_DESC1</c>.</param>
+    /// <param name="options16">The device's <c>D3D12_FEATURE_DATA_D3D12_OPTIONS16</c>, zeroed when the runtime does not
+    /// answer that query.</param>
+    /// <returns>The profile.</returns>
+    public static GpuMemoryProfile MemoryProfile(in D3D12_FEATURE_DATA_ARCHITECTURE architecture, in DXGI_ADAPTER_DESC1 adapter, in D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16) =>
+        GpuMemoryProfile.FromDirectX(
+            cacheCoherentUnifiedMemory: architecture.CacheCoherentUMA,
+            dedicatedVideoMemory: ((ulong)adapter.DedicatedVideoMemory),
+            gpuUploadHeapSupported: options16.GPUUploadHeapSupported,
+            sharedSystemMemory: ((ulong)adapter.SharedSystemMemory),
+            unifiedMemory: architecture.UMA
+        );
     /// <summary>Reads a device's memory profile. A device that does not answer the architecture query reports the
     /// default profile, which selects the staged copy; one that does not answer options 16 predates GPU upload
     /// heaps.</summary>
@@ -166,7 +181,7 @@ public static unsafe class DirectXFeatureReads {
             options16 = default;
         }
 
-        return DirectXNativeDeviceApi.MemoryProfile(
+        return MemoryProfile(
             adapter: in adapter,
             architecture: in architecture,
             options16: in options16

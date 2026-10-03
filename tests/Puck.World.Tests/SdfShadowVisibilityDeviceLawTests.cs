@@ -9,6 +9,7 @@ namespace Puck.World.Tests;
 
 /// <summary>Both hardware backends execute the production K-word functions for every byte in every stable slot.</summary>
 [SupportedOSPlatform("windows10.0.15063")]
+[Trait("Category", "Gpu")]
 public sealed class SdfShadowVisibilityDeviceLawTests {
     private const string Kernel = "sdf-shadow-visibility.comp";
 
