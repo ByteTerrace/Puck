@@ -30,7 +30,7 @@ public sealed class ReplayArmingLawTests {
         fixture.Step();
 
         Assert.False(condition: tape.TryBeginRecording(name: "late", refusal: out var refusal));
-        Assert.StartsWith(expectedStartString: "ArmedAfterFirstStep:", actualString: refusal, comparisonType: StringComparison.Ordinal);
+        Assert.StartsWith(actualString: refusal, comparisonType: StringComparison.Ordinal, expectedStartString: "ArmedAfterFirstStep:");
         Assert.Equal(expected: WorldReplayMode.Idle, actual: tape.Mode);
         Assert.False(condition: fixture.Server.Profiles.Recording);
     }

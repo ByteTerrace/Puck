@@ -1453,6 +1453,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         using var fixture = Fixtures.FreshServer(definition: SharedIdentityDocument());
         var server = fixture.Server;
         var catalog = server.Profiles;
+
         var (tape, owned) = RecordOwnedSeat(directory: directory.RootPath, fixture: fixture);
 
         Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "armed"), reason: out var reason, value: 1), userMessage: reason);

@@ -31,7 +31,7 @@ public sealed class ScreenViewReleaseLawTests {
     private static int Census(CommandRegistry registry) {
         var refresh = Run(line: "world.view-refresh", registry: registry);
 
-        return int.Parse(s: refresh[(refresh.IndexOf(value: "; ", comparisonType: StringComparison.Ordinal) + 2)..].Split(separator: ' ')[0], provider: System.Globalization.CultureInfo.InvariantCulture);
+        return int.Parse(s: refresh[(refresh.IndexOf(comparisonType: StringComparison.Ordinal, value: "; ") + 2)..].Split(separator: ' ')[0], provider: System.Globalization.CultureInfo.InvariantCulture);
     }
 
     [InlineData("qr hello")]

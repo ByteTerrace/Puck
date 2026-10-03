@@ -163,6 +163,7 @@ public sealed partial class WorldReplayTape {
         }
         m_mode = mode;
     }
+
     /// <summary>Gets the name the active recording will persist under.</summary>
     public string? Name => m_recordName;
     /// <summary>Gets the ticks captured so far in the active recording.</summary>

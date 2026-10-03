@@ -532,6 +532,6 @@ public sealed class ReplayStopFailureLawTests {
         Assert.False(condition: fixture.Server.Profiles.Recording);
         // A re-arm now meets the stepped world's refusal, never "already recording".
         Assert.False(condition: tape.TryBeginRecording(name: $"{name}-retry", refusal: out var retryRefusal));
-        Assert.StartsWith(expectedStartString: "ArmedAfterFirstStep:", actualString: retryRefusal, comparisonType: StringComparison.Ordinal);
+        Assert.StartsWith(actualString: retryRefusal, comparisonType: StringComparison.Ordinal, expectedStartString: "ArmedAfterFirstStep:");
     }
 }

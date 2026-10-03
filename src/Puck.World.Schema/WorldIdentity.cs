@@ -269,6 +269,7 @@ public sealed partial class WorldIdentity {
             Records: RecordState,
             Facts: (Facts ?? EmptyFacts())
         );
+
     // The row an identity that has written no fact projects, so its first fact abroad meets its declared name and
     // capacity. It is kept while that declaration holds: a profiled body projects every tick its continuation is
     // hashed, and the same instance writes without building a row.
@@ -291,6 +292,7 @@ public sealed partial class WorldIdentity {
 
         return row;
     }
+
     /// <summary>Replaces the backing owned world after a composed edit.</summary>
     /// <param name="document">The replacement owned world.</param>
     public void ReplaceDocument(WorldDefinition document) {
@@ -315,6 +317,7 @@ public sealed partial class WorldIdentity {
         Load(document: document);
         m_factsRevision++;
     }
+
     // Reads everything an owned document decides about its identity.
     private void Load(WorldDefinition document) {
         var identity = document.Identity!;
@@ -340,6 +343,7 @@ public sealed partial class WorldIdentity {
         // document, delivered on the same selection that delivers its bindings and HUD.
         SeatLook = document.PlayerDefaults.SeatLook;
     }
+
     /// <summary>Changes display identity in the owned world.</summary>
     /// <param name="name">The new display name.</param>
     /// <param name="colorHex">The new authored color, as <c>#RRGGBB</c>.</param>

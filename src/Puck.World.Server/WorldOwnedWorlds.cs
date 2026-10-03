@@ -28,6 +28,7 @@ public sealed class WorldOwnedWorlds {
 
     // The tapes reading this catalog that are recording now.
     private int m_recordingTapes;
+
     private readonly string m_catalogFingerprint;
     private readonly string m_directory;
     private readonly List<WorldOwnedWorldDisposal> m_discarded = [];
@@ -70,8 +71,10 @@ public sealed class WorldOwnedWorlds {
     /// file I/O. The copy narrates through this catalog's hub, so what a replay reports reaches the live session.</summary>
     /// <returns>The replay's own catalog.</returns>
     public WorldOwnedWorlds CreateReplayCopy() => new(source: this);
+
     /// <summary>Gets a value indicating whether a tape reading this catalog is recording.</summary>
     public bool Recording => (m_recordingTapes > 0);
+
     // A tape reading this catalog entered or left recording.
     internal void NoteRecording(bool recording) => m_recordingTapes += (recording ? 1 : -1);
 

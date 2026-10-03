@@ -68,7 +68,6 @@ public sealed class UnsupportedOperationLawTests {
             ]);
         }
     }
-
     // How one classified refusal is arranged and attempted: the document both twins boot from, what both do first, the
     // operation A attempts (answering its refusal text) and how many steps it takes, which B steps alike, the witness
     // over every surface the operation touches outside the checkpoint, and the legal variant: how its own twin is
@@ -84,6 +83,7 @@ public sealed class UnsupportedOperationLawTests {
         Func<WorldMachineCatalog>? Catalog = null,
         Func<WorldMachineCatalog>? LegalCatalog = null
     );
+
     private const int UndoDepth = 3;
 
     // Five journaled writes into a journal bounded to three entries, the earliest two compacted into the base.
@@ -97,6 +97,7 @@ public sealed class UnsupportedOperationLawTests {
             twin.Server.EnforceJournalDepth();
         }
     }
+
     // The machine operation laws' cabinet, with an operator granted Control over it.
     private static readonly Principal Operator = Principal.Addon(name: "operator");
 
@@ -116,12 +117,13 @@ public sealed class UnsupportedOperationLawTests {
     private static WorldMachineCatalog Inert() => new([new InertEngine(inner: new WorldMachineOperationServerLawTests.OperationEngine())]);
 
     private sealed class InertEngine(IMachineEngine inner) : IMachineEngine {
-        public string Id => inner.Id;
         public MachineEngineDescriptor Descriptor => inner.Descriptor;
+        public string Id => inner.Id;
 
         public IMachineRuntime Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) => inner.Create(audioSampleRate: audioSampleRate, contentBytes: contentBytes, options: options, savePath: savePath);
         public IMachineRuntime CreateMachine(MachineCreationRequest request) => inner.CreateMachine(request: request);
     }
+
     private static string Undo(Twin twin, int count) {
         var rejected = string.Empty;
 
@@ -135,7 +137,6 @@ public sealed class UnsupportedOperationLawTests {
         twin.Server.EchoTap = null;
         return rejected;
     }
-
     private static WorldDefinition Pulled(WorldIdentity owned) => (owned.Document! with { Identity = owned.Document.Identity! with { Name = "Pulled" } });
     private static string Catalog(Twin twin) {
         var owned = twin.Server.Profiles.BootProfile;
@@ -202,10 +203,10 @@ public sealed class UnsupportedOperationLawTests {
     };
 
     private static IEnumerable<string> ClassifiedIds() => RefusalCatalog.All().Where(predicate: static entry => entry.Unsupported).Select(selector: static entry => $"{entry.Door}/{entry.Id}");
-    public static TheoryData<string> Classified() => [.. ClassifiedIds()];
 
-    [Theory]
+    public static TheoryData<string> Classified() => [.. ClassifiedIds()];
     [MemberData(nameof(Classified))]
+    [Theory]
     public void AnUnsupportedOperationChangesNothingBeforeItRefuses(string refusal) {
         Assert.True(condition: Arrangements.TryGetValue(key: refusal, value: out var arrangement), userMessage: $"{refusal} is classified as an intentionally unsupported operation and law 6 has no arrangement for it");
 
@@ -245,6 +246,6 @@ public sealed class UnsupportedOperationLawTests {
     public void EveryArrangementNamesAClassifiedRefusal() {
         var classified = ClassifiedIds().ToHashSet(comparer: StringComparer.Ordinal);
 
-        Assert.All(collection: Arrangements.Keys, action: key => Assert.Contains(expected: key, collection: classified));
+        Assert.All(collection: Arrangements.Keys, action: key => Assert.Contains(collection: classified, expected: key));
     }
 }

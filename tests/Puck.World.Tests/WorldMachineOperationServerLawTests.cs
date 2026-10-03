@@ -16,6 +16,7 @@ public sealed class WorldMachineOperationServerLawTests {
         return document.RootElement.Clone();
     }
     private static byte[] DefinitionBytes(WorldServer server) => WorldDefinitionSerialization.Serialize(definition: server.Definition);
+
     internal static WorldDefinition Document() => Fixtures.BuildDocument() with {
         MachinesRaw = [
             new WorldMachine(

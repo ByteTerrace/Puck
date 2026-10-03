@@ -996,6 +996,7 @@ public sealed partial class WorldTransferEscrow {
 
         return reply;
     }
+
     /// <summary>Binds a re-drive's taped identity to the one detached identity its id names: built from the first
     /// projection taped under the id, and adopting each later one, so every seat a recorded switch or home adoption
     /// binds under one id shares it, as the live seats shared the one owned object.</summary>
@@ -1024,6 +1025,7 @@ public sealed partial class WorldTransferEscrow {
 
         return detached.TryAdopt(carried: carried, reason: out reason);
     }
+
     // The identity traveler `index` lands as: the projection its commit carried, or its reservation's when the commit
     // carries none, rebuilt against this world's player defaults. Nothing of the owned document behind it ever arrives.
     // Home adoption waits until every landing succeeds and the arrival is durable.
