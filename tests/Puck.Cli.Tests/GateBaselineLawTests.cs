@@ -20,7 +20,9 @@ public sealed partial class GateRunLawTests {
         using var directory = new TemporaryDirectory(prefix: "puck-gate-baseline-law-");
         var runner = new FakeRunner(build: new GateStepResult(ExitCode: 0, Output: ""));
 
-        Assert.Equal(expected: CliExit.Success, actual: Gate(branches, runner, directory, gpu: true).ExitCode);
+        var gate = Gate(branches, runner, directory, gpu: true);
+
+        Assert.Equal(actual: gate.ExitCode, expected: CliExit.Success);
         var expected = names.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ',');
         var checks = runner.Steps.Where(predicate: static arguments => (arguments[0] == "baselines")).ToArray();
 
@@ -44,6 +46,10 @@ public sealed partial class GateRunLawTests {
         Assert.DoesNotContain(collection: runner.Steps[0], expected: "--gpu");
         Assert.True(condition: (runner.Events.IndexOf(item: "run affected canaries") > previous));
         Assert.True(condition: (runner.Events.IndexOf(item: "run parity") > runner.Events.IndexOf(item: "run affected canaries")));
+        // Each canary's verdict reaches the console as it lands, and every step reports its wall time.
+        Assert.Contains(actualString: gate.Output, expectedSubstring: "gate:   PASS: canary example held");
+        Assert.Contains(actualString: gate.Output, expectedSubstring: "gate: affected canaries passed (");
+        Assert.Contains(actualString: gate.Output, expectedSubstring: "gate: derivations passed (");
     }
     [Fact]
     public void PrintedBaselineCommandsParseAndAreExactlyWhatTheGateRuns() {

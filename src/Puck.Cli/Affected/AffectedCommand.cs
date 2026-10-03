@@ -229,6 +229,12 @@ internal static class AffectedCommand {
 
         bool Reachable(string path) => ReachableExtensions.Any(predicate: extension => path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: extension));
 
+        // The paths the World build reads, the same roots its build key hashes: a build-infrastructure change outside
+        // them leaves every World a canary boots unchanged. Walked only when such a change is present.
+        var worldRoots = new Lazy<IReadOnlyList<string>>(valueFactory: () => WorldArtifactClosure.Walk(repositoryRoot: repositoryRoot).Roots);
+
+        bool WorldInput(string path) => worldRoots.Value.Any(predicate: root => (string.Equals(a: path, b: root, comparisonType: StringComparison.Ordinal) || path.StartsWith(comparisonType: StringComparison.Ordinal, value: (root + "/"))));
+
         plan = AffectedSelection.Select(
             canaries: canaries,
             changed: changed,
@@ -251,6 +257,7 @@ internal static class AffectedCommand {
                 tree: workingTree
             ),
             worldClosure: closure,
+            worldInput: WorldInput,
             deleted: deleted,
             // A file deleted since the base is placed through the index the base recorded, which is the only one that
             // can still name it, or through the stand-ins the base's own tree gave it there.
@@ -517,7 +524,7 @@ internal static class AffectedCommand {
             : $"affected: {changed.Count} changed file(s) against {resolved[..12]}, the merge base of HEAD and {mergeBase}."));
 
         if (plan!.Everything) {
-            Console.Out.WriteLine(value: "affected: build infrastructure changed, which reaches every project.");
+            Console.Out.WriteLine(value: "affected: build infrastructure changed, which reaches every suite.");
         }
 
         Describe(
@@ -567,8 +574,8 @@ internal static class AffectedCommand {
               coverage was last recorded ({CoveragePath}), or is a file the manifest's documents reach:
               the layers, neighbour worlds and graph documents a world names, and the pass shaders a
               graph document declares with their includes. Parity is chosen with any GPU canary. A file no
-              canary can execute is placed through the indexed sources it stands for: a project file,
-              restore lock or NativeMethods list through its project's sources, a shader source or
+              canary can execute is placed through the indexed sources it stands for: a project file or
+              NativeMethods list through its project's sources, a shader source or
               include through the C# that names each kernel whose include closure reaches it, in the
               kernel's project or one its build references, a post-process package's stage sources and
               its frame interface through the canaries whose worlds name the package in views.post, or
@@ -578,7 +585,10 @@ internal static class AffectedCommand {
               widening the run. A file deleted since --since is placed by the index the base recorded,
               directly or through the stand-ins the base's tree gave it, or by the canaries whose
               documents reached it in the base's tree; one none of these places is listed as deleted,
-              never unmapped.
+              never unmapped. A restore lock reaches its own project's suite alone, and every canary
+              only when its project is one the World is built from. Build infrastructure (build/,
+              Directory.Build.*, Directory.Packages.props, global.json, Puck.slnx, NuGet.config)
+              reaches every suite, and every canary only when the file is an input of the World build.
               Changing build infrastructure (build/, Directory.Build.*, global.json, Puck.slnx) chooses
               every suite. A changed .puck source that declares test blocks is run with puck test, and
               prints as a test line. A catalog line names the game's Release catalog, followed by the

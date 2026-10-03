@@ -115,6 +115,11 @@ public sealed class HostLoadLawTests {
     [InlineData("VBCSCompiler", "VBCSCompiler.exe -pipename:x")]
     [InlineData("pwsh", "pwsh -c Get-Process Puck.World; puck canary x")]
     [InlineData("bash", "bash -c 'grep -E \"Puck.Cli.dll canary\"'")]
+    // A filter or follower whose arguments name a test assembly runs no test: a run is the process executing it.
+    [InlineData("grep", "grep.exe --line-buffered -E \"passed|Puck.World.Tests exit\"")]
+    [InlineData("tail", @"tail -f C:\scratch\Puck.World.Tests\gate.steps")]
+    [InlineData("node", "node watch.js tests/Puck.World.Tests/bin/Release/net10.0/Puck.World.Tests.dll")]
+    [InlineData("dotnet", "dotnet tool run report --assembly Puck.World.Tests.dll")]
     [InlineData("dotnet", "dotnet /tmp/cli/Puck.Cli.dll host load --watch")]
     [InlineData("Puck.Cli.Tests", @"C:\Puck\tests\Puck.Cli.Tests\bin\Release\net10.0\Puck.Cli.Tests.exe -class Puck.Cli.Tests.CanaryPlanLawTests")]
     [InlineData("testhost", @"testhost.exe C:\Puck\tests\Puck.Cli.Tests\bin\Release\net10.0\Puck.Cli.Tests.dll")]

@@ -11,7 +11,9 @@ internal sealed record GateStepResult(int ExitCode, string Output);
 internal interface IGateRunner {
     GateStepResult Dotnet(string repositoryRoot, IReadOnlyList<string> arguments);
     string CopyCli(string repositoryRoot, string directory);
-    GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments);
+    /// <summary>Runs one verb of the copied CLI against the checkout; <paramref name="progress"/>, when given, sees each
+    /// line the verb writes as it writes it, so a long step can report while it runs.</summary>
+    GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments, Action<string>? progress = null);
     bool WaitForCapacity(string repositoryRoot, string step);
 }
 /// <summary>Executes the batch plan serially, recording each step and withholding coverage on any failure.</summary>
@@ -109,6 +111,14 @@ internal static class GateRun {
                             cli = runner.CopyCli(directory: cliDirectory, repositoryRoot: repositoryRoot);
                             result = new GateStepResult(ExitCode: 0, Output: CliPaths.ToDisplay(fullPath: cli));
                             break;
+                        case GateStepKind.Canaries:
+                            // Each canary's verdict is echoed as it lands, so a long GPU leg shows its progress.
+                            result = runner.Puck(cli, repositoryRoot, step.Arguments, progress: static line => {
+                                if (line.StartsWith(comparisonType: StringComparison.Ordinal, value: "PASS: canary ") || line.StartsWith(comparisonType: StringComparison.Ordinal, value: "FAIL: canary ")) {
+                                    Console.Out.WriteLine(value: $"gate:   {line}");
+                                }
+                            });
+                            break;
                         default:
                             result = runner.Puck(cli, repositoryRoot, step.Arguments);
                             break;
@@ -116,16 +126,18 @@ internal static class GateRun {
                 } catch (Exception exception) {
                     result = new GateStepResult(ExitCode: CliExit.Refused, Output: exception.ToString());
                 }
-                summary.WriteLine(value: $"{clock.GetUtcNow():O} exit {step.Name} exit={result.ExitCode} elapsed={((long)clock.GetElapsedTime(startingTimestamp: started).TotalSeconds)}s");
+                var elapsed = ((long)clock.GetElapsedTime(startingTimestamp: started).TotalSeconds);
+
+                summary.WriteLine(value: $"{clock.GetUtcNow():O} exit {step.Name} exit={result.ExitCode} elapsed={elapsed}s");
                 Log(log: log, result: result, step: step.Name);
                 if (result.ExitCode == 0) {
-                    Console.Out.WriteLine(value: $"gate: {step.Name} passed");
+                    Console.Out.WriteLine(value: $"gate: {step.Name} passed ({elapsed}s)");
                     continue;
                 }
                 failed.Add(item: step.Name);
                 var prerequisite = (step.Kind is GateStepKind.Build or GateStepKind.CopyCli);
 
-                Console.Out.WriteLine(value: $"gate: {step.Name} FAILED (exit {result.ExitCode}){(prerequisite ? "; nothing else ran." : string.Empty)}");
+                Console.Out.WriteLine(value: $"gate: {step.Name} FAILED (exit {result.ExitCode}, {elapsed}s){(prerequisite ? "; nothing else ran." : string.Empty)}");
                 var lines = Lines(text: result.Output);
                 var errors = lines.Where(predicate: line => line.Contains(comparisonType: StringComparison.Ordinal, value: ": error ")).Distinct(comparer: StringComparer.Ordinal).ToArray();
 

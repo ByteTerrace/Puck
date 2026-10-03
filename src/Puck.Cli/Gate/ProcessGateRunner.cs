@@ -60,7 +60,7 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
         );
     }
     /// <inheritdoc/>
-    public GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments) => Captured(
+    public GateStepResult Puck(string cli, string repositoryRoot, IReadOnlyList<string> arguments, Action<string>? progress = null) => Captured(
         run: CliProcess.RunCaptured(
             arguments: [cli, .. arguments],
             fileName: "dotnet",
@@ -68,7 +68,8 @@ internal sealed class ProcessGateRunner(TimeProvider clock, CancellationToken ca
             clock: clock,
             cancellationToken: cancellationToken,
             timeout: StepTimeout,
-            workingDirectory: repositoryRoot
+            workingDirectory: repositoryRoot,
+            onOutput: ((progress is null) ? null : line => progress(obj: line.Line))
         ),
         timeout: StepTimeout
     );

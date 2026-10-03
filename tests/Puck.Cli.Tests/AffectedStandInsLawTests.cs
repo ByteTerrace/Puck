@@ -33,7 +33,7 @@ public sealed class AffectedStandInsLawTests {
     [Fact]
     public void AProjectsBuildInputsStandForItsIndexedSources() {
         Assert.True(condition: AffectedStandIns.IsProjectInput(path: "src/Engine/Engine.csproj"));
-        Assert.True(condition: AffectedStandIns.IsProjectInput(path: "src/Engine/packages.lock.json"));
+        Assert.False(condition: AffectedStandIns.IsProjectInput(path: "src/Engine/packages.lock.json"));
         Assert.True(condition: AffectedStandIns.IsProjectInput(path: "src/Engine/NativeMethods.txt"));
         Assert.False(condition: AffectedStandIns.IsProjectInput(path: "src/Engine/Model.cs"));
         Assert.Equal(
@@ -168,9 +168,6 @@ public sealed class AffectedStandInsLawTests {
         foreach (var path in ((string[])[
             "src/Puck.DirectX/NativeMethods.txt",
             "src/Puck.Overlays/Puck.Overlays.csproj",
-            "src/Puck.Overlays/packages.lock.json",
-            "src/Puck.World.Client/packages.lock.json",
-            "src/Puck.World/packages.lock.json",
             "src/Puck.World/Assets/worlds/schema/prototypes.schema.json",
         ])) {
             var standIns = standInsFor(arg: path);

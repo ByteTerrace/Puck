@@ -772,8 +772,13 @@ base, so passing both is refused.
   them.
   `puck parity` is chosen whenever a chosen canary renders on a GPU.
 - A file no canary can execute is placed through the indexed C# sources it
-  stands for. A project file, restore lock or `NativeMethods.txt` stands for
-  its project's sources. A shader source or include stands for the C# that
+  stands for. A project file or `NativeMethods.txt` stands for its project's
+  sources. A restore lock (`packages.lock.json`) reaches its own project's
+  suite alone, never the projects that reference it, and every canary only when
+  its project is one the World is built from. Build infrastructure reaches every
+  suite, and every canary only when the file is an input of the World build: one
+  of the paths the World build key hashes (`WorldArtifactClosure`), which
+  include every file at the repository root. A shader source or include stands for the C# that
   names, by its file name, each kernel whose include closure reaches it: the
   kernels are the stage sources the projects' shader items declare, the
   Direct3D 11 kernels (`Direct3D11KernelSource`) among them, and the naming C#
@@ -936,7 +941,11 @@ to run, but prevent recording. Checks leave their ledgers untouched;
 `gate.log` keeps every step's full output. Beside it, `gate.steps` flushes a line
 at each start and exit, naming the step, its exit code (`-` until it exits),
 elapsed whole seconds and an ISO-8601 UTC time from the CLI host's clock. The
-console summary names both files. The CLI copy and format list are removed.
+console summary names both files. The CLI copy and format list are removed. Each
+step's console verdict carries its wall time (`gate: lengths passed (3s)`), the
+canary step echoes each canary's `PASS`/`FAIL` verdict as it lands, and a wait for
+host capacity names what holds it back: the process holding the GPU, named again
+when it changes, or the CPU and memory reading.
 
 Run from a CLI copy outside the checkout, because the build rewrites
 `src/Puck.Cli/bin/Release/net10.0`. GPU work runs serially on a machine with no

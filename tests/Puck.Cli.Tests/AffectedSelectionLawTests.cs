@@ -22,7 +22,7 @@ public sealed class AffectedSelectionLawTests {
     ];
     private static readonly HashSet<string> WorldClosure = new(collection: ["World", "Core"], comparer: StringComparer.OrdinalIgnoreCase);
 
-    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null, IReadOnlySet<string>? deleted = null, Dictionary<string, IReadOnlySet<string>>? recorded = null) => AffectedSelection.Select(
+    private static AffectedPlan Select(string[] changed, Dictionary<string, IReadOnlySet<string>>? coverage = null, Func<string, IReadOnlyList<string>>? consumersOf = null, Func<string, IReadOnlyList<string>>? standInsFor = null, Func<string, IReadOnlySet<string>>? canariesReaching = null, IReadOnlySet<string>? deleted = null, Dictionary<string, IReadOnlySet<string>>? recorded = null, Func<string, bool>? worldInput = null) => AffectedSelection.Select(
         canaries: Canaries,
         changed: changed,
         consumersOf: (consumersOf ?? (static _ => [])),
@@ -33,6 +33,9 @@ public sealed class AffectedSelectionLawTests {
         canariesReaching: (canariesReaching ?? (static _ => new HashSet<string>())),
         standInsFor: (standInsFor ?? (static _ => [])),
         worldClosure: WorldClosure,
+        // As WorldArtifactClosure walks it: every repository-root file is an input of the World build, and build/ is
+        // one only where the World imports it.
+        worldInput: (worldInput ?? (static path => !path.Contains(value: '/'))),
         deleted: deleted,
         recorded: recorded
     );
@@ -156,6 +159,45 @@ public sealed class AffectedSelectionLawTests {
         Assert.Empty(collection: prose.Suites);
         Assert.Empty(collection: prose.Canaries);
         Assert.Empty(collection: prose.Unmapped);
+    }
+    [Fact]
+    public void ARestoreLockReachesItsOwnSuiteAloneAndNoCanaryUnlessItsProjectBuildsTheWorld() {
+        var suite = Select(changed: ["tests/World.Tests/packages.lock.json"]);
+
+        Assert.Equal(actual: suite.Suites, expected: ["World.Tests"]);
+        Assert.Empty(collection: suite.Canaries);
+        Assert.False(condition: suite.Everything);
+
+        // A library's lock reaches that library alone, not the suites that reference it; outside the World build it
+        // selects no canary.
+        var library = Select(changed: ["src/Maths/packages.lock.json"]);
+
+        Assert.Empty(collection: library.Suites);
+        Assert.Empty(collection: library.Canaries);
+
+        // A lock of a project the World is built from changes what every canary boots.
+        var world = Select(changed: ["src/Core/packages.lock.json"]);
+
+        Assert.Equal(actual: world.Canaries, expected: ["doors", "ink"]);
+        Assert.Empty(collection: world.Suites);
+        Assert.True(condition: world.Parity);
+    }
+    [Fact]
+    public void BuildInfrastructureReachesTheCanariesOnlyThroughTheWorldBuild() {
+        var outside = Select(changed: ["build/Shaders.targets", "tests/Maths.Tests/packages.lock.json"]);
+
+        Assert.True(condition: outside.Everything);
+        Assert.Equal(actual: outside.Suites, expected: ["Cli.Tests", "Maths.Tests", "World.Tests"]);
+        Assert.Empty(collection: outside.Canaries);
+        Assert.False(condition: outside.Parity);
+
+        foreach (var path in ((string[])["Directory.Build.props", "Directory.Build.targets", "global.json"])) {
+            var inside = Select(changed: [path]);
+
+            Assert.Equal(actual: inside.Suites, expected: ["Cli.Tests", "Maths.Tests", "World.Tests"]);
+            Assert.Equal(actual: inside.Canaries, expected: ["doors", "ink"]);
+        }
+        Assert.Equal(actual: Select(changed: ["build/World.targets"], worldInput: static path => (path == "build/World.targets")).Canaries, expected: ["doors", "ink"]);
     }
     [Fact]
     public void AFileNoProjectOwnsChoosesTheProjectsThatNameItsDirectory() {
