@@ -113,7 +113,7 @@ with — optionally adding rows a sibling district would have supplied
 | lineup | `worlds/parlor/lineup.puck` | source | 135 | yes |
 | mancala | `games/mancala.puck` | spliced | 590 | yes |
 | moth-courtyard | `moth-courtyard.puck` | document | 600 | yes |
-| paddleball | `games/paddleball.puck` | fixture `minimal-paddleball-host.world.json` | 2941 | yes |
+| paddleball | `games/paddleball.puck` | fixture `minimal-paddleball-host.puck` | 2941 | yes |
 | pipeline | `pipeline.world.json` | document | 600 | no |
 | poker | `games/poker.puck` | spliced | 610 | yes |
 | reversi | `games/reversi.puck` | document | 600 | yes |

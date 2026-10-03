@@ -94,7 +94,7 @@ public sealed class ContinuationHashLawTests {
     }
     [Fact]
     public void ARigidBallComingToRestFoldsTheBytesItsCheckpointEntryEncodes() {
-        var definition = AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.world.json");
+        var definition = AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.puck");
         using var fixture = Fixtures.FreshServer(definition: definition);
         var ordinal = definition.Placements.ToList().FindIndex(match: static row => (row.Id == "paddleballBall"));
         var ball = fixture.Server.Body(index: fixture.Server.Population.BodyForPlacementOrdinal(ordinal: ordinal))!;

@@ -702,7 +702,7 @@ second run, and dies again — ending before the second deadline passes, so
 [paddleball.puck](paddleball.puck) is a module, not a bootable document: it declares a court,
 three bodies that play on it, and the rules that judge them, and leaves the seat,
 the `attack` channel and the population to a host.
-[minimal-paddleball-host.world.json](../../../../../tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.world.json)
+[minimal-paddleball-host.puck](../../../../../tests/Puck.World.Tests/Fixtures/minimal-paddleball-host.puck)
 is the smallest host that completes it—one local seat, the `walk` program, the
 three looks and a population of six.
 
