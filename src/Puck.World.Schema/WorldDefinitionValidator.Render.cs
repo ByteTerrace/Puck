@@ -307,17 +307,6 @@ public static partial class WorldDefinitionValidator {
 
                         break;
                     }
-                case WorldRenderSkyLayer.Fog fog: {
-                        JudgeScalar(
-                            definition: definition,
-                            errors: errors,
-                            field: WorldValueFields.FogDensity,
-                            path: $"{layerPath}.density",
-                            scalar: fog.Density
-                        );
-
-                        break;
-                    }
                 case WorldRenderSkyLayer.SunDisc disc: {
                         JudgeScalar(
                             definition: definition,
@@ -653,6 +642,43 @@ public static partial class WorldDefinitionValidator {
             clock.IsStateClock
         ) {
             errors.Add(item: $"{path} is a rate the tick integrates and may key only on a tick clock; clock '{clock.Name}' reads state row '{clock.State}', whose history the integral would depend on.");
+        }
+    }
+    // Every value the atmosphere carries within its field's domain, and every colour in its grammar. The kinds are
+    // structure, so the section carries no keys of its own; each value keys on a clock alone.
+    private static void ValidateRenderAtmosphere(WorldDefinition definition, WorldRenderAtmosphere? atmosphere, List<string> errors, string path = "render.atmosphere") {
+        if (atmosphere is null) {
+            return;
+        }
+
+        if (atmosphere.Fog is { } fog) {
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FogDensity, path: $"{path}.fog.density", scalar: fog.Density);
+            JudgeColor(color: fog.Color, definition: definition, errors: errors, path: $"{path}.fog.color");
+            JudgeHeight(definition: definition, errors: errors, height: fog.Height, path: $"{path}.fog.height");
+        }
+        if (atmosphere.Haze is { } haze) {
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.HazeAmount, path: $"{path}.haze.amount", scalar: haze.Amount);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.HazeAnisotropy, path: $"{path}.haze.anisotropy", scalar: haze.Anisotropy);
+            JudgeHeight(definition: definition, errors: errors, height: haze.Height, path: $"{path}.haze.height");
+        }
+        if (atmosphere.Medium is { } medium) {
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.MediumSurface, path: $"{path}.medium.surface", scalar: medium.Surface);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.MediumExtinction, path: $"{path}.medium.extinction", scalar: medium.Extinction);
+            JudgeColor(color: medium.Color, definition: definition, errors: errors, path: $"{path}.medium.color");
+        }
+
+        static void JudgeHeight(WorldRenderAirHeight? height, WorldDefinition definition, string path, List<string> errors) {
+            if (height is null) {
+                return;
+            }
+
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.AirBase, path: $"{path}.base", scalar: height.Base);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.AirFalloff, path: $"{path}.falloff", scalar: height.Falloff);
+        }
+        static void JudgeColor(BindableColor? color, WorldDefinition definition, string path, List<string> errors) {
+            if ((color is { } authored) && !authored.IsAuthorable(definition: definition)) {
+                errors.Add(item: $"{path} '{authored}' {BindableColor.Grammar}.");
+            }
         }
     }
     private static void ValidateRenderEnvironment(WorldDefinition definition, WorldRenderEnvironment? environment, List<string> errors, string path = "render.environment") {

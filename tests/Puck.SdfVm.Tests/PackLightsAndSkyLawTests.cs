@@ -27,6 +27,7 @@ public sealed class PackLightsAndSkyLawTests {
     private static SdfSkyBlock Sky(SdfSky sky, SdfLights lights) {
         sky.Pack(
             block: out var block,
+            farDistance: 40f,
             lights: lights,
             softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes],
             stops: new SdfSkyStop[SdfSky.MaxStops]

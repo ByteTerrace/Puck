@@ -1,16 +1,16 @@
-// Generated from shader interface 'sdf-sky-environment' (sha256/5516fd81f67eca340d4fdbf0108ae9a0bf031f13b71d55485beafaff1d320285). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky-environment' (sha256/b8859fca70024dac7ef4329377a56eb4c0171b21a1abcb93d0c30ad10880c60c). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 #define PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 
 struct SdfSkyBlock {
-    [[vk::offset(0)]] float FogDensity;
+    [[vk::offset(0)]] uint AirFlags;
     [[vk::offset(4)]] uint StopCount;
     [[vk::offset(8)]] uint SoftboxCount;
     [[vk::offset(12)]] int DiscLight;
     [[vk::offset(16)]] float3 DiscDirection;
     [[vk::offset(28)]] float DiscIntensity;
     [[vk::offset(32)]] float DiscExponent;
-    [[vk::offset(36)]] uint _pad36;
+    [[vk::offset(36)]] uint AirLightCount;
     [[vk::offset(40)]] float StarDensity;
     [[vk::offset(44)]] float StarBrightness;
     [[vk::offset(48)]] uint StarSeed;
@@ -32,7 +32,35 @@ struct SdfSkyBlock {
     [[vk::offset(144)]] float3 HorizonLow;
     [[vk::offset(156)]] uint _pad156;
     [[vk::offset(160)]] float3 HorizonHigh;
-    [[vk::offset(172)]] uint _pad172;
+    [[vk::offset(172)]] float FogExtinction;
+    [[vk::offset(176)]] float3 FogColor;
+    [[vk::offset(188)]] float FogBase;
+    [[vk::offset(192)]] float FogFalloff;
+    [[vk::offset(196)]] float HazeExtinction;
+    [[vk::offset(200)]] float HazeBase;
+    [[vk::offset(204)]] float HazeFalloff;
+    [[vk::offset(208)]] float3 MediumColor;
+    [[vk::offset(220)]] float MediumExtinction;
+    [[vk::offset(224)]] float MediumSurface;
+    [[vk::offset(228)]] float HazeAnisotropy;
+    [[vk::offset(232)]] uint _pad232;
+    [[vk::offset(236)]] uint _pad236;
+    [[vk::offset(240)]] float3 AirLight0Direction;
+    [[vk::offset(252)]] uint _pad252;
+    [[vk::offset(256)]] float3 AirLight0Radiance;
+    [[vk::offset(268)]] uint _pad268;
+    [[vk::offset(272)]] float3 AirLight1Direction;
+    [[vk::offset(284)]] uint _pad284;
+    [[vk::offset(288)]] float3 AirLight1Radiance;
+    [[vk::offset(300)]] uint _pad300;
+    [[vk::offset(304)]] float3 AirLight2Direction;
+    [[vk::offset(316)]] uint _pad316;
+    [[vk::offset(320)]] float3 AirLight2Radiance;
+    [[vk::offset(332)]] uint _pad332;
+    [[vk::offset(336)]] float3 AirLight3Direction;
+    [[vk::offset(348)]] uint _pad348;
+    [[vk::offset(352)]] float3 AirLight3Radiance;
+    [[vk::offset(364)]] uint _pad364;
 };
 
 struct SdfSkyStop {
@@ -70,8 +98,8 @@ struct SdfSkyEnvironmentPass {
 };
 [[vk::binding(0, 3)]] ConstantBuffer<SdfSkyEnvironmentPass> passGroupIsa506E1C21 : register(b0, space3);
 #define passGroup passGroupIsa506E1C21
-[[vk::binding(1, 3)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6 : register(t1, space3);
-#define sdfSky sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6
+[[vk::binding(1, 3)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayout700384204459cafc8ea769a9caa5c1b1600eed679e2b1f6a1a2cb1d3c9bbd3e5 : register(t1, space3);
+#define sdfSky sdfSkyLayout700384204459cafc8ea769a9caa5c1b1600eed679e2b1f6a1a2cb1d3c9bbd3e5
 [[vk::binding(2, 3)]] StructuredBuffer<SdfSkyStop> sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224 : register(t2, space3);
 #define sdfSkyStops sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224
 [[vk::binding(3, 3)]] RWStructuredBuffer<uint2> sdfSkyEnvironmentRW : register(u3, space3);

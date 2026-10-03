@@ -5,9 +5,10 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The <c>render.lighting</c>/<c>render.sky</c>/<c>render.environment</c>/<c>render.grounding</c>/
-/// <c>render.tonemap</c> read-back: <c>world.lighting</c> reports every authored light by slot, the curvature
-/// enrichment, every sky layer, the studio-reflection softbox count and horizon colors, the grounding
+/// The <c>render.lighting</c>/<c>render.sky</c>/<c>render.atmosphere</c>/<c>render.environment</c>/
+/// <c>render.grounding</c>/<c>render.tonemap</c> read-back: <c>world.lighting</c> reports every authored light by slot,
+/// the curvature enrichment, every sky layer, the atmosphere's kinds (fog, haze, medium; <c>default</c> when the section
+/// is absent, the default look's fog), the studio-reflection softbox count and horizon colors, the grounding
 /// strength/radius, the tonemap mode, and the clock and key count of each keyed section; a keyed value reads as its
 /// clock and key count. The sections are authored through <c>world.row.set render</c>; every field is optional and an
 /// absent one reads <c>default</c>, which is the engine's pinned value for that field of that kind, not zero.
@@ -110,17 +111,6 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
                     }
 
                     return echo;
-                }
-            case WorldRenderSkyLayer.Fog fog: {
-                    return echo
-                        .Field(
-                        key: "type",
-                        value: "fog"
-                    )
-                        .Field(
-                        key: "density",
-                        value: Describe(value: fog.Density)
-                    );
                 }
             case WorldRenderSkyLayer.SunDisc disc: {
                     return echo
@@ -337,6 +327,40 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
         ),
         });
     }
+    // The atmosphere's kinds, each "none" when an authored section leaves it out and "default" when the section is absent.
+    private static CommandEcho DescribeAtmosphere(CommandEcho echo, WorldRenderAtmosphere? atmosphere) {
+        static string Height(WorldRenderAirHeight? height) => ((height is { } profile)
+            ? $"{Describe(value: profile.Base)}/{Describe(value: profile.Falloff)}"
+            : "level");
+
+        echo = echo.Segment().Head(head: "atmosphere");
+        if (atmosphere is null) {
+            return echo.Field(key: "fog", value: "default").Field(key: "haze", value: "none").Field(key: "medium", value: "none");
+        }
+
+        echo = ((atmosphere.Fog is { } fog)
+            ? echo
+                .Field(key: "fog", value: "on")
+                .Field(key: "fogDensity", value: Describe(value: fog.Density))
+                .Field(key: "fogColor", value: ((fog.Color is null) ? "sky" : Describe(color: fog.Color)))
+                .Field(key: "fogHeight", value: Height(height: fog.Height))
+            : echo.Field(key: "fog", value: "none"));
+        echo = ((atmosphere.Haze is { } haze)
+            ? echo
+                .Field(key: "haze", value: "on")
+                .Field(key: "hazeAmount", value: Describe(value: haze.Amount))
+                .Field(key: "hazeAnisotropy", value: Describe(value: haze.Anisotropy))
+                .Field(key: "hazeHeight", value: Height(height: haze.Height))
+            : echo.Field(key: "haze", value: "none"));
+
+        return ((atmosphere.Medium is { } medium)
+            ? echo
+                .Field(key: "medium", value: "on")
+                .Field(key: "mediumSurface", value: Describe(value: medium.Surface))
+                .Field(key: "mediumExtinction", value: Describe(value: medium.Extinction))
+                .Field(key: "mediumColor", value: Describe(color: medium.Color))
+            : echo.Field(key: "medium", value: "none"));
+    }
     private static string DescribeLightAnchor(WorldAnchor? anchor) => anchor switch {
         WorldAnchor.Entity entity => $"entity:{entity.Index}",
         WorldAnchor.EntityPart part => $"entityPart:{part.Index}/{part.PartId}",
@@ -416,6 +440,8 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
             }
         }
 
+        echo = DescribeAtmosphere(atmosphere: definition.Render.Atmosphere, echo: echo);
+
         var environment = definition.Render.Environment;
 
         echo = echo
@@ -464,7 +490,7 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority,
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return authority.CreateServerQueryCommand(
-            description: "Reports the render.lighting, render.sky, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the last presented named shadow holders with their selection ranks and transition state, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, the grounding strength/radius, the tonemap mode, and the clock and key count of each keyed section. A keyed value reads keys(clock: <name>, <n> keys); an unauthored field reads 'default' — the engine's pinned value for it, not zero.",
+            description: "Reports the render.lighting, render.sky, render.atmosphere, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the last presented named shadow holders with their selection ranks and transition state, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the atmosphere's fog, haze and medium, the studio-reflection softbox count and horizon colors, the grounding strength/radius, the tonemap mode, and the clock and key count of each keyed section. A keyed value reads keys(clock: <name>, <n> keys); an unauthored field reads 'default' — the engine's pinned value for it, not zero.",
             describe: server => ((DescribeLighting(definition: server.Definition) + " | ") + (shadowReport?.Invoke(server.Definition) ?? "shadowSlots unavailable: no presented frame of this authority")),
             name: "world.lighting"
         );

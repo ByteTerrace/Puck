@@ -42,7 +42,7 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
         foreach (var sky in new[] { new SdfSky(), FourStops() }) {
             var stops = new SdfSkyStop[SdfSky.MaxStops];
 
-            sky.Pack(block: out var block, lights: SdfLights.Default(), softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes], stops: stops);
+            sky.Pack(block: out var block, farDistance: 40f, lights: SdfLights.Default(), softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes], stops: stops);
 
             var expected = new Vector3[SdfSkyEnvironment.Texels];
 

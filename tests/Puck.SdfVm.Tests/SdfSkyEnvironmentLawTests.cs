@@ -168,7 +168,7 @@ public sealed partial class SdfSkyEnvironmentLawTests {
         var map = new Vector3[SdfSkyEnvironment.Texels];
         var stops = new SdfSkyStop[SdfSky.MaxStops];
 
-        sky.Pack(block: out block, lights: SdfLights.Default(), softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes], stops: stops);
+        sky.Pack(block: out block, farDistance: 40f, lights: SdfLights.Default(), softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes], stops: stops);
         SdfSkyEnvironment.Render(block: in block, map: map, stops: stops);
 
         return map;

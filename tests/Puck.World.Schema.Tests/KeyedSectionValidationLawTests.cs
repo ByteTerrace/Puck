@@ -18,7 +18,7 @@ public sealed class KeyedSectionValidationLawTests {
                 ))
                 : new WorldRenderDefaults(Sky: new WorldRenderSky(
                     Clock: "day",
-                    Layers: [new WorldRenderSkyLayer.Fog(Name: "haze")],
+                    Layers: [new WorldRenderSkyLayer.SunDisc(Name: "haze")],
                     Keys: [null!]
                 )))
         );
@@ -38,7 +38,7 @@ public sealed class KeyedSectionValidationLawTests {
                 : definition.Render with {
                     Sky = definition.Render.Sky! with {
                         Keys = [new WorldRenderSkyKey(At: 0d, Layers: new Dictionary<string, WorldRenderSkyLayer> {
-                        ["haze"] = new WorldRenderSkyLayer.Fog(Density: 0.01f),
+                        ["haze"] = new WorldRenderSkyLayer.SunDisc(Intensity: 0.01f),
                     })],
                     },
                 }),

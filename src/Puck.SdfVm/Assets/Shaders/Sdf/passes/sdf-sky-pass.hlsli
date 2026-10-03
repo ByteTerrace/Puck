@@ -27,16 +27,17 @@ float4 sdfSkyPassLit(int2 pixel) {
 
     return (sdfSkyPassCurrent(clamped) ? lit.Load(int3(clamped, 0)) : float4(0.0, 0.0, 0.0, 0.0));
 }
-// The transport of the surface share a pixel shows, of coverage `coverage` (sdf-transport.hlsli): its fog's in-scatter
-// weight, at most its coverage, and the ray distance its media are clipped at, zero where it shows no surface. A pixel
-// that is one render sample, every pixel of a native view and each pixel a resolve copied whole (the first frame of a
-// temporal epoch at its render grid's extent among them), takes only that sample's ray distance from its source and
-// derives the rest at the one site below that both reach, so a resolved copy of a sample composites with exactly the
-// arithmetic its native view runs. A reconstruction's transport is the resolve's.
-void sdfSkyPassSurface(uint2 pixel, float coverage, out float fog, out float distance) {
+// The transport of the surface share a pixel shows, of coverage `coverage`, along its ray from `origin` along `direction`
+// (sdf-transport.hlsli): each atmosphere kind's in-scatter weight, fog in x, haze in y and medium in z, each at most its
+// coverage, and the ray distance its media are clipped at, zero where it shows no surface. A pixel that is one render
+// sample, every pixel of a native view and each pixel a resolve copied whole (the first frame of a temporal epoch at its
+// render grid's extent among them), takes only that sample's ray distance from its source and derives the rest at the one
+// site below that both reach, so a resolved copy of a sample composites with exactly the arithmetic its native view runs.
+// A reconstruction's transport is the resolve's.
+void sdfSkyPassSurface(uint2 pixel, float coverage, float3 origin, float3 direction, out float3 weights, out float distance) {
     bool sample = true;
     float t = 0.0;
-    uint word = 0u;
+    uint2 word = uint2(0u, 0u);
 
     if (passGroup.resolvedSurface != 0u) {
         word = transport[((pixel.y * passGroup.extent.x) + pixel.x)];
@@ -48,9 +49,9 @@ void sdfSkyPassSurface(uint2 pixel, float coverage, out float fog, out float dis
         t = (sdfVisibilityHit(visibility) ? visibility.t : 0.0);
     }
 
-    float2 surface = (sample ? sdfSampleTransport(coverage, t) : sdfUnpackTransport(word));
+    float4 surface = (sample ? sdfSampleTransport(coverage, t, origin, direction) : sdfUnpackTransport(word));
 
-    fog = clamp(surface.x, 0.0, coverage);
+    weights = clamp(surface.xzw, 0.0, coverage);
     distance = (sample ? ((surface.y > 0.0) ? t : 0.0) : sdfTransportDistance(coverage, surface));
 }
 // The pixel's view without the sample's jitter.
@@ -106,8 +107,8 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scale, out float3 o
 
     return true;
 }
-// The sky the fog in-scatters in a direction: the residency's environment map (sdfSkyEnvironment), the gradient with no
-// body, filtered bilinearly over the four texels about the direction. It evaluates no sky.
+// The sky the fog and the haze in-scatter in a direction: the residency's environment map (sdfSkyEnvironment), the
+// gradient with no body, filtered bilinearly over the four texels about the direction. It evaluates no sky.
 float3 sdfSkyPassEnvironment(float3 direction) {
     uint taps[4];
     float weights[4];

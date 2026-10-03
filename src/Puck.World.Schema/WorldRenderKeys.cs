@@ -325,21 +325,6 @@ public static class WorldRenderKeys {
 
                     return gradient with { Stops = expanded };
                 }
-            case WorldRenderSkyLayer.Fog fog: {
-                    var parts = Parts(
-                        keys: stated,
-                        select: static part => (part as WorldRenderSkyLayer.Fog)
-                    );
-
-                    return fog with {
-                        Density = Scalar(
-                            authored: fog.Density,
-                            clock: clock,
-                            field: static part => part.Density,
-                            parts: parts
-                        ),
-                    };
-                }
             case WorldRenderSkyLayer.SunDisc disc: {
                     var parts = Parts(
                         keys: stated,

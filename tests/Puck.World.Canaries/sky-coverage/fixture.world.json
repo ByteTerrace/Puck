@@ -31,16 +31,17 @@
           ]
         },
         {
-          "$type": "fog",
-          "density": 0
-        },
-        {
           "$type": "sunDisc",
           "light": 0,
           "radius": 0.3,
           "intensity": 16
         }
       ]
+    },
+    "atmosphere": {
+      "fog": {
+        "density": 0
+      }
     },
     "lighting": {
       "lights": [

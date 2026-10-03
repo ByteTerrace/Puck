@@ -1,7 +1,7 @@
 {
   "id": "sky-layers",
   "title": "Each authored sky layer contributes pixels and disappears when removed",
-  "binding": "A still empty scene presents a black gradient. The script adds a uniform blue gradient, a star field, a directional disc and a static cloud layer one at a time, capturing each against the same black base and removing it before the next. The upper half of each present capture must contain light; every pixel of that region is black after removal. The discriminating leg changes only the star brightness to zero, so the stars presence bound fails while every other layer and absence bound holds. The camera then turns to a red sphere outside the earlier views: dense cyan distance fog must cover its center, while the same region without fog must fail the cyan bound.",
+  "binding": "A still empty scene presents a black gradient. The script adds a uniform blue gradient, a star field, a directional disc and a static cloud layer one at a time, capturing each against the same black base and removing it before the next. The upper half of each present capture must contain light; every pixel of that region is black after removal. The discriminating leg changes only the star brightness to zero, so the stars presence bound fails while every other layer and absence bound holds. The camera then turns to a red sphere outside the earlier views: a dense render.atmosphere fog in-scattering the cyan sky must cover its center, while the same region with the fog at zero density must fail the cyan bound.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -207,6 +207,11 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.row.set",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
         "verb": "world.wait",
         "occurrence": 20,
         "outcome": "accepted"
@@ -223,7 +228,7 @@
       },
       {
         "verb": "world.row.set",
-        "occurrence": 11,
+        "occurrence": 12,
         "outcome": "accepted"
       },
       {
@@ -680,6 +685,11 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.row.set",
+        "occurrence": 11,
+        "outcome": "accepted"
+      },
+      {
         "verb": "world.wait",
         "occurrence": 20,
         "outcome": "accepted"
@@ -696,7 +706,7 @@
       },
       {
         "verb": "world.row.set",
-        "occurrence": 11,
+        "occurrence": 12,
         "outcome": "accepted"
       },
       {

@@ -9,12 +9,14 @@ public sealed record VolumeDensityStopDocument(float Density, string Color);
 /// <summary>A bounded participating medium carried beside a creation's shapes. Its parent names a shape frame,
 /// or null for the creation root. Ramp is evaluated against local density before ray integration.
 /// Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size;
-/// Coverage and Softness control their density threshold and transition width. Axis is a flow-only control.</summary>
+/// Coverage and Softness control their density threshold and transition width. Axis is a flow-only control. Scatter, in
+/// [0, 1], is the share of the medium's extinction that scatters the light-casting bodies' light toward the eye; absent
+/// scatters none.</summary>
 public sealed record VolumeDocument(string Kind, DocumentVector3 Position, DocumentQuaternion Rotation,
     DocumentVector3 HalfExtent, IReadOnlyList<VolumeDensityStopDocument> Ramp, string? Parent = null,
     float? Axis = null, float? Width = null, float? Speed = null, uint? Seed = null, int? Steps = null,
     float? Intensity = null, float? Extinction = null, float? PulseAmplitude = null, float? PulseFrequency = null,
-    int? IntensityLane = null, bool Enabled = true, float? Coverage = null, float? Softness = null) {
+    int? IntensityLane = null, bool Enabled = true, float? Coverage = null, float? Softness = null, float? Scatter = null) {
     /// <summary>The bounded three-dimensional cloud density family.</summary>
     public const string CloudKind = "cloud";
     /// <summary>The default absorption coefficient.</summary>
@@ -69,6 +71,7 @@ public sealed record VolumeDocument(string Kind, DocumentVector3 Position, Docum
         (PulseFrequency ?? 0f),
         IntensityLane,
         (Coverage ?? 0.55f),
-        (Softness ?? 0.18f)
+        (Softness ?? 0.18f),
+        (Scatter ?? 0f)
     );
 }

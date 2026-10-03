@@ -8728,6 +8728,7 @@ export type WorldPrototype = {
       enabled?: boolean;
       coverage?: number | null;
       softness?: number | null;
+      scatter?: number | null;
       /**
        * Whether the family is supported.
        */
@@ -8916,6 +8917,35 @@ export type WorldReference = {
 };
 
 /**
+ * An air kind's height profile: its density falls by a factor of e over each Falloff world units above Base, and rises as much below it, so a ray's optical depth through it has a closed form.
+ */
+export type WorldRenderAirHeight = {
+  /**
+   * The height at which the kind's density is its authored one. Absent is zero.
+   */
+  base?: BindableScalar;
+  /**
+   * The rise over which the density thins by a factor of e, at least SdfAtmosphere.MinFalloff world units. Absent is SdfAtmosphere.DefaultFalloff.
+   */
+  falloff?: BindableScalar;
+};
+
+export type WorldRenderAtmosphere = {
+  /**
+   * The fog: an exponential medium, level or thinning with height. Absent is no fog.
+   */
+  fog?: WorldRenderFog | null;
+  /**
+   * The haze: aerial perspective that scatters the sky and the light of the bodies that cast light, brightest toward them. Absent is no haze.
+   */
+  haze?: WorldRenderHaze | null;
+  /**
+   * The medium: water below a level surface, with its own extinction and colour. Absent is no medium.
+   */
+  medium?: WorldRenderMedium | null;
+};
+
+/**
  * The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures at each hit. Every field is optional individually — absent resolves to the engine's pinned default. The three gains share one runtime gate: while all of them are zero the renderer skips the extra field tap the curvature normal needs, so an unauthored world pays nothing.
  */
 export type WorldRenderCurvature = {
@@ -8991,7 +9021,7 @@ export type WorldRenderDefaults = {
    */
   lighting?: WorldRenderLighting | null;
   /**
-   * The procedural sky — a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the default look, the two-stop gradient and fog SdfSky starts from, as data the kernels read like any authored sky.
+   * The procedural sky — a gradient, sun disc, star field and clouds. Optional; an absent section renders the default look, the two-stop gradient SdfSky starts from, as data the kernels read like any authored sky.
    */
   sky?: WorldRenderSky | null;
   /**
@@ -8999,11 +9029,15 @@ export type WorldRenderDefaults = {
    */
   environment?: WorldRenderEnvironment | null;
   /**
+   * The air between the camera and what it sees: fog, height fog, haze and a medium. Optional; an absent section renders the default look's fog (SdfAtmosphere.Default), and a present one is exactly the kinds it states.
+   */
+  atmosphere?: WorldRenderAtmosphere | null;
+  /**
    * The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is None — the stylized shaded color, unchanged.
    */
   tonemap?: WorldTonemap | null;
   /**
-   * The far distance in world units: the depth at which every camera march ends — the far plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
+   * The far distance in world units: the depth at which every camera march ends — the far plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the fog has absorbed it (render.atmosphere.fog). Optional; absent resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.
    */
   farDistance?: number | null;
   /**
@@ -9033,6 +9067,36 @@ export type WorldRenderEnvironment = {
    * The reflection horizon gradient. Absent is black — contributes nothing.
    */
   horizon?: WorldRenderHorizon | null;
+};
+
+export type WorldRenderFog = {
+  /**
+   * The density per world unit, at the base when Height is authored. Absent is the default look's density.
+   */
+  density?: BindableScalar;
+  /**
+   * BindableColor's grammar: the colour the fog in-scatters. Absent is the sky in the pixel's direction, so a distant surface fades into the horizon behind it.
+   */
+  color?: BindableColor;
+  /**
+   * The height fog's profile. Absent is a fog alike at every height.
+   */
+  height?: WorldRenderAirHeight | null;
+};
+
+export type WorldRenderHaze = {
+  /**
+   * The share of the light the haze takes over the far distance, in [0, 0.99]. Absent is zero, which draws none.
+   */
+  amount?: BindableScalar;
+  /**
+   * The Henyey-Greenstein anisotropy of its scattering toward the bodies, in [0, 0.9]: zero scatters alike in every direction. Absent is SdfAtmosphere.DefaultHazeAnisotropy.
+   */
+  anisotropy?: BindableScalar;
+  /**
+   * The haze's height profile, the amount taken at its base. Absent is a haze alike at every height.
+   */
+  height?: WorldRenderAirHeight | null;
 };
 
 export type WorldRenderHorizon = {
@@ -9231,6 +9295,21 @@ export type WorldRenderLightingKey = {
   curvature?: WorldRenderCurvature | null;
 };
 
+export type WorldRenderMedium = {
+  /**
+   * The surface's height. Absent is zero.
+   */
+  surface?: BindableScalar;
+  /**
+   * The extinction per world unit below the surface. Absent is SdfAtmosphere.DefaultMediumExtinction.
+   */
+  extinction?: BindableScalar;
+  /**
+   * BindableColor's grammar: the colour the medium in-scatters, which a deep view through it reaches. Absent is SdfAtmosphere.DefaultMediumColor.
+   */
+  color?: BindableColor;
+};
+
 /**
  * The enumerated world render-scale tiers a player picks at the console and a view's floor names, over the continuous render-scale ceiling a view carries (SdfViewSnapshot.RenderScale). A view's output keeps its rect's extent; below native it traces and shades a grid of that extent times its render scale, rounded up on each axis to a step of the render graph's extent quantization (RenderGraphExtent.Quantize, sixteen steps per power-of-two octave), and its own resolve pass reconstructs the grid into the output at world.upscale-sharpness. A layout transition's dip moves that grid inside the ceiling (SdfViewSnapshot.ResolvedRenderScale); the enumerated set lives only at the user surface. WorldRenderScaleTiers is the one definition of the names and scales, which the quality presets' floors, the console world.render-scale verb and the per-view floors read; a ceiling is a scalar. Each extent below is a lone whole-display view at 1280x800.
  */
@@ -9271,7 +9350,7 @@ export type WorldRenderSkyKey = {
 /**
  * One sky layer. The $type string is the JSON discriminator.
  */
-export type WorldRenderSkyLayer = WorldRenderSkyLayerGradient | WorldRenderSkyLayerFog | WorldRenderSkyLayerSunDisc | WorldRenderSkyLayerStars | WorldRenderSkyLayerClouds | null;
+export type WorldRenderSkyLayer = WorldRenderSkyLayerGradient | WorldRenderSkyLayerSunDisc | WorldRenderSkyLayerStars | WorldRenderSkyLayerClouds | null;
 
 /**
  * The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.
@@ -9314,22 +9393,6 @@ export type WorldRenderSkyLayerClouds = {
    * The wind of the shaping field relative to the cloud field, in layer units per second. A rate, as Drift is. Absent holds the shapes.
    */
   shear?: BindableVector2;
-  /**
-   * The name a section key addresses the layer by, unique among the layers.
-   */
-  name?: string | null;
-  layerName?: string | null;
-};
-
-/**
- * The exponential distance fog fading toward the sky gradient.
- */
-export type WorldRenderSkyLayerFog = {
-  $type?: "fog";
-  /**
-   * The density per world unit. Absent is the pinned density.
-   */
-  density?: BindableScalar;
   /**
    * The name a section key addresses the layer by, unique among the layers.
    */

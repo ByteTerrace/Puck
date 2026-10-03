@@ -18,7 +18,7 @@ public sealed partial class ProjectionAnchorLawTests {
             _ => Row(dynamics: new StateDynamics(Row: "chase"), raw: 16384L),
         };
         var definition = Document(row: row) with {
-            RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: density, Name: "haze")])),
+            RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: density))),
             TimelineRaw = null,
         };
         using var fixture = Fixtures.FreshServer(definition: definition);

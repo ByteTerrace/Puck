@@ -773,9 +773,13 @@ render {
         { elevation: 1, color: "#375F88" }
       ]
       )
-      fog(density: 0.0015)
       sunDisc(light: 0, radius: 0.02, intensity: 1.4)
     ]
+  }
+  atmosphere {
+    fog {
+      density: 0.0015
+    }
   }
   environment {
     softboxes [

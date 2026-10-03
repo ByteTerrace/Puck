@@ -50,7 +50,7 @@ public static partial class SdfWorldPackage {
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: LitImage, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),
             Read(element: ShaderValueType.Uint, name: CullBounds),
-            Read(element: ShaderValueType.Uint, name: TransportRead),
+            Read(element: ShaderValueType.Uint2, name: TransportRead),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyBaseImage, type: ShaderValueType.Float4),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyScaleImage, type: ShaderValueType.Float4),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyOffsetImage, type: ShaderValueType.Float4),

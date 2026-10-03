@@ -1,13 +1,15 @@
 using System.Numerics;
 using System.Text.RegularExpressions;
+using Puck.Shaders;
 using Puck.SignedDistance;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
 /// <summary>The sky's validity alpha guards unwritten run images; every field evaluation reaches its pass's counters, a
-/// composite's in-place fallback and the environment map's texels included; the composite's fog reads the residency's
-/// environment map and evaluates no sky; and the environment map evaluates the gradient alone, never a body, star or cloud.
+/// composite's in-place fallback and the environment map's texels included; the composite's atmosphere reads the
+/// residency's environment map, evaluates no sky layer and counts each kind it evaluates in its own atmosphere row; and the
+/// environment map evaluates the gradient alone, never a body, star or cloud.
 /// These laws inspect the shipped shader sources.</summary>
 public sealed partial class SdfSkySamplingLawTests {
     private static string Root => RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
@@ -42,13 +44,18 @@ public sealed partial class SdfSkySamplingLawTests {
             actualString: CodeOf(path: "shade/sdf-sky.hlsli"));
     }
     [Fact]
-    public void TheCompositesFogReadsTheEnvironmentMapAndEvaluatesNoSky() {
+    public void TheCompositesAtmosphereReadsTheEnvironmentMapAndCountsInItsOwnRow() {
         var composite = CodeOf(path: "passes/sdf-composite.comp.hlsl");
-        var fog = FogBlockPattern().Match(input: composite);
+        var kinds = KindBlockPattern().Matches(input: composite);
 
-        Assert.True(condition: fog.Success, userMessage: "The composite's fog reads the environment map under a positive in-scatter weight.");
-        Assert.DoesNotMatch(expectedRegexPattern: EvaluatorPattern, actualString: fog.Value);
-        Assert.DoesNotContain(expectedSubstring: "evaluations", actualString: fog.Value);
+        // One block a kind, each under a positive in-scatter weight, each counting one evaluation in the atmosphere row and
+        // evaluating no sky layer: the fog and the haze read the sky from the environment map.
+        Assert.Equal(expected: 3, actual: kinds.Count);
+        foreach (Match kind in kinds) {
+            Assert.Contains(expectedSubstring: "puckCountDetail(SdfCompositeAtmosphereDetail, 0u, 0u, 1u, 0u, 0u);", actualString: kind.Value);
+            Assert.DoesNotMatch(expectedRegexPattern: EvaluatorPattern, actualString: kind.Value);
+        }
+        Assert.Matches(expectedRegexPattern: $@"static const uint SdfCompositeAtmosphereDetail = {SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Composite).ToList().IndexOf(item: SdfWorldWorkDetails.Atmosphere)}u;", actualString: composite);
 
         // The lookup filters the map's texels and evaluates no layer.
         var lookup = LookupPattern().Match(input: CodeOf(path: "passes/sdf-sky-pass.hlsli"));
@@ -74,11 +81,15 @@ public sealed partial class SdfSkySamplingLawTests {
     }
     [Fact]
     public void DisabledFogReadsNoMap() {
-        // The composite reads the fog's sky only under a positive in-scatter weight, which a zero density makes exactly
-        // zero: its transmittance is exactly one.
-        Assert.Matches(expectedRegexPattern: @"if \(fog > 0\.0\) \{[^{}]*sdfSkyPassEnvironment\(", actualString: CodeOf(path: "passes/sdf-composite.comp.hlsl"));
-        Assert.Matches(expectedRegexPattern: @"\(\(density > 0\.0\) \? exp\(-density \* t\) : 1\.0\)", actualString: CodeOf(path: "shade/sdf-transport.hlsli"));
-        Assert.Equal(expected: 0f, actual: SdfSurfaceTransport.Sample(fogDensity: 0f, sample: new SdfRenderSample(Color: Vector3.One, Coverage: 1f, Distance: 100f)).Fog);
+        // The composite reads the sky the fog and the haze in-scatter only under a positive in-scatter weight of either,
+        // which a zero density makes exactly zero: its depth is zero and its transmittance exactly one.
+        Assert.Matches(expectedRegexPattern: @"float3 ambient = \(\(\(kinds\.y > 0\.0\) \|\| \(\(kinds\.x > 0\.0\) && sdfAirFogReadsSky\(\)\)\) \? sdfSkyPassEnvironment\(", actualString: CodeOf(path: "passes/sdf-composite.comp.hlsl"));
+        Assert.Matches(expectedRegexPattern: @"if \(\(extinction <= 0\.0\) \|\| \(extent <= 0\.0\)\) \{\s*return 0\.0;", actualString: CodeOf(path: "shade/sdf-atmosphere.hlsli"));
+
+        var block = default(SdfSkyBlock);
+
+        SdfSky.PackAtmosphere(atmosphere: (SdfAtmosphere.Default with { FogDensity = 0f }), block: ref block, farDistance: 40f, lights: new SdfLights());
+        Assert.Equal(expected: 0f, actual: SdfSurfaceTransport.Sample(air: new SdfAirRay(Block: block, Direction: -Vector3.UnitZ, Origin: Vector3.Zero), sample: new SdfRenderSample(Color: Vector3.One, Coverage: 1f, Distance: 100f)).Fog);
     }
 
     // A call of any sky layer's evaluator.
@@ -92,8 +103,8 @@ public sealed partial class SdfSkySamplingLawTests {
     private static partial Regex ValidTapPattern();
     [GeneratedRegex(pattern: @"\bsdfSkyGradient\(")]
     private static partial Regex GradientCallPattern();
-    [GeneratedRegex(pattern: @"if \(fog > 0\.0\) \{[^{}]*\}")]
-    private static partial Regex FogBlockPattern();
+    [GeneratedRegex(pattern: @"if \(kinds\.[xyz] > 0\.0\) \{[^{}]*\}")]
+    private static partial Regex KindBlockPattern();
     [GeneratedRegex(pattern: @"float3 sdfSkyPassEnvironment\(float3 direction\) \{.*?\n\}", options: RegexOptions.Singleline)]
     private static partial Regex LookupPattern();
 }

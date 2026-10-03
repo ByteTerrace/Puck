@@ -1,6 +1,6 @@
 # The same edge with the disc gone, so the sky behind it is the black gradient alone.
 world.wait ready 180
-world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]},{"$type":"fog","density":0}]}
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#000000"},{"elevation":1,"color":"#000000"}]}]}
 world.wait 10
 world.screenshot {run}/edge.png
 world.wait captures 30

@@ -4555,8 +4555,12 @@ render {
         }
       ]
       )
-      fog(density: 0.012)
     ]
+  }
+  atmosphere {
+    fog {
+      density: 0.012
+    }
   }
   upscaleSharpness: 0
   tonemap: Filmic

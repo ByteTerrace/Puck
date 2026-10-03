@@ -47,7 +47,7 @@ public sealed class KeyedValueResolutionLawTests {
         ? ClientFixtures.StateMirror(definition: WithRow(definition: definition, row: clock.State!, value: phase))
         : ClientFixtures.StateMirror(definition: definition, engineTick: TickAt(clock: clock, phase: phase)));
     private static WorldDefinition TickClockFog(BindableScalar density) => Fixtures.BuildDocument() with {
-        RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: density)])),
+        RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: density))),
         TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", PeriodSeconds: 1d)]),
     };
 
@@ -125,7 +125,7 @@ public sealed class KeyedValueResolutionLawTests {
             revision: 0
         );
 
-        Assert.Equal(expected: 0f, actual: night.Sky.Block.FogDensity);
+        Assert.Equal(expected: 0f, actual: night.Sky.Atmosphere.FogDensity);
         Assert.Equal(expected: 0f, actual: night.Sky.Block.DiscIntensity);
         Assert.Equal(expected: (0xB6 / 255f), actual: night.Sky.Stops[3].Color.X, precision: 6);
 
@@ -136,7 +136,7 @@ public sealed class KeyedValueResolutionLawTests {
             revision: 0
         );
 
-        Assert.Equal(expected: 0.004f, actual: day.Sky.Block.FogDensity, precision: 6);
+        Assert.Equal(expected: 0.004f, actual: day.Sky.Atmosphere.FogDensity, precision: 6);
         Assert.Equal(expected: 1.5f, actual: day.Sky.Block.DiscIntensity, precision: 6);
         Assert.Equal(expected: (0x3C / 255f), actual: day.Sky.Stops[3].Color.X, precision: 6);
 
@@ -145,7 +145,7 @@ public sealed class KeyedValueResolutionLawTests {
 
         Assert.Equal(
             expected: 0.002f,
-            actual: new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: dusk, mirror: ClientFixtures.StateMirror(definition: dusk), revision: 0).Sky.Block.FogDensity,
+            actual: new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: dusk, mirror: ClientFixtures.StateMirror(definition: dusk), revision: 0).Sky.Atmosphere.FogDensity,
             precision: 6
         );
     }
@@ -200,7 +200,7 @@ public sealed class KeyedValueResolutionLawTests {
         mirror.Advance(engineTick: (EngineTicks.PerSecond / 4UL), tick: 1UL);
         mirror.Apply(fraction: 1f);
 
-        Assert.Equal(expected: 0.05f, actual: environment.Resolve(definition: keyed, mirror: mirror, revision: 0).Sky.Block.FogDensity, precision: 6);
+        Assert.Equal(expected: 0.05f, actual: environment.Resolve(definition: keyed, mirror: mirror, revision: 0).Sky.Atmosphere.FogDensity, precision: 6);
         Assert.Equal(expected: 2, actual: environment.Resolutions);
 
         // Red leg: a still literal sky never resolves again while the tick moves.

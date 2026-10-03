@@ -1974,8 +1974,8 @@ monotonic for a large instance field—read both `world.counters gpu` and
 `world.fps` at the intended population and view layout. `world.budget` is the DERIVED cost
 sheet, not a lever: the live render program's packed words/instances against
 their frozen envelopes, the Lipschitz step scale and march multiplier, the far
-distance with its reach multiplier, horizon-ray step tax, and far-plane fog
-remnant, the field lattice program's node/cadence counts and exact
+distance with its reach multiplier, horizon-ray step tax, far-plane fog
+remnant and the atmosphere kinds the composite may evaluate at a pixel, the field lattice program's node/cadence counts and exact
 full-cell/body-slot pass costs, and the state row count—
 how an authored choice's price becomes legible instead of a silent frame tax.
 Navigation adds its compiled cell count, fixed A*/shared-tree workspace bytes,
@@ -2053,7 +2053,7 @@ not a loadable or durable asset format.
 `render.farDistance` is the depth every camera march ends at (default 40 when
 unauthored; 1..8192), re-read on every definition revision like the lighting
 below—geometry beyond it is never marched, so an infinite ground plane shows
-a horizon curve there unless the `render.sky` fog layer absorbs it first.
+a horizon curve there unless the `render.atmosphere` fog absorbs it first.
 
 Two document sections author the scene's lighting instead of a verb, re-read
 on every definition revision (a live edit lands on the next frame).
@@ -2064,13 +2064,23 @@ the material shade); absent, the pinned sun and hemisphere render.
 `render.lighting.curvature` adds cavity darkening, ridge light and an ink outline
 read through the `inkLow`/`inkHigh` curvature band (1 / fillet radius).
 `render.sky.layers[]` is a stack of `$type` `gradient` (two to four `stops` of
-`elevation`/`color`), `fog`, `sunDisc` (bound to a light slot), `stars` (each
+`elevation`/`color`), `sunDisc` (bound to a light slot), `stars` (each
 star hash-dealt its own blackbody colour and apparent luminosity;
 `twinkle { share, depth, rate }` scintillates a share of them on the tick clock)
 and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
 —a hashed, warped noise layer over everything above it, all on the tick clock),
 composited in that order whatever order they are authored in. Every field is
-optional individually, and a layer may carry a `name`. A directional's
+optional individually, and a layer may carry a `name`. `render.atmosphere` is the
+air before them: a `fog { density, color, height { base, falloff } }` that
+in-scatters the sky (or its `color`) and thins above its base when it has a
+height, a `haze { amount, anisotropy, height }` that takes `amount` of the light
+over the far distance and scatters the sky and every directional light's glow
+forward toward it, and a `medium { surface, extinction, color }`, water below a
+level surface. An absent section is the default look's fog; an authored one is
+exactly the kinds it states, and the kinds are structure no key states, so each
+value keys on its own. A creation's bounded volume takes a `scatter` in
+`[0, 1]`, the share of its extinction that scatters the directional lights'
+glow toward the eye. A directional's
 `shadow` is `always`, `auto` or `never` (the default). `always` and `auto`
 require a unique light `name`; `never` consumes no shadow slot. Each delivered
 tick selects `always` lights first, then `auto` lights by their tick-state color
@@ -2147,8 +2157,8 @@ across a whole turn, a direction along the great circle, a scalar or vector
 linearly—and the earlier key's `ease` (`Linear`, `Smooth` or `Step`) shapes
 the time. `render.lighting` and `render.sky` may also be keyed whole: a
 section's `clock` and `keys` hold partial records that address a light or a
-layer by its `name`, of its own kind (`keys [ { at: 0, layers { haze:
-fog(density: 0) } } ]`), each field keyed through the keys that state it. A
+layer by its `name`, of its own kind (`keys [ { at: 0, layers { sun:
+sunDisc(intensity: 0) } } ]`), each field keyed through the keys that state it. A
 key states values only: a count, a seed, a kind, a name, a light's shadowing,
 the sun disc's light slot and a gradient's stop count are structure and
 refused by name, as is a field keyed both by its own keys and by the
@@ -2169,9 +2179,10 @@ clock a key reads moves.
 
 Every scalar or angle a presentation section authors declares one domain
 (`WorldValueFields`): a light's weight, radius, power and angular radius, the
-curvature gains and ink band, a stop's elevation, the fog's density, the sun
-disc's radius and intensity, the stars' brightness and twinkle, the clouds'
-coverage, softness and scale, the theme's bloom and scrim alphas, a marker's
+curvature gains and ink band, a stop's elevation, the sun disc's radius and
+intensity, the stars' brightness and twinkle, the clouds' coverage, softness
+and scale, the atmosphere's fog density, height falloff, haze amount and
+anisotropy and medium extinction, the theme's bloom and scrim alphas, a marker's
 chip and ring alphas, and a camera program's operands (blend weight, path
 fraction, orbit angles, field of view, select key). The validator refuses a literal or a key outside
 its field's domain by name, and a load refuses a field bound to a state row

@@ -718,8 +718,9 @@ submission, and every pass of the view reads the tables that upload wrote. The
 upload also renders the sky's environment map and its coefficients, one pair
 for the residency however many views read it (its `environment` pass,
 `SdfWorldTables.SkyEnvironment.cs`), only when the sky draws another gradient
-than the map holds and the fog reads the map; the composite's fog reads the map
-instead of evaluating the sky. At
+than the map holds and the atmosphere reads the map (a fog in-scattering the
+sky, or a haze); the composite's atmosphere reads the map instead of evaluating
+the sky. At
 the start of each frame the factory starts and prepares every residency it
 holds (`IRenderGraphPackageFactory.BeginFrame`); it answers `IsUnchanged` from
 the residency's record of what each view last rendered, and sizes a view's

@@ -10,7 +10,9 @@ public sealed class SdfWorkDetailLawTests {
     [Fact]
     public void SkyAndShadowRowLabelsAndPassBlockReachTheirKernelIndices() {
         Assert.Equal(expected: new[] { "gradient", "disc", "stars", "clouds" }, actual: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Sky));
-        Assert.Equal(expected: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Sky), actual: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Composite));
+        // The composite counts the sky's rows and, after them, the atmosphere's (SdfCompositeAtmosphereDetail).
+        Assert.Equal(expected: new[] { "gradient", "disc", "stars", "clouds", "atmosphere" }, actual: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Composite));
+        Assert.Contains(expectedSubstring: "static const uint SdfCompositeAtmosphereDetail = 4u;", actualString: Source(path: "passes/sdf-composite.comp.hlsl"));
         Assert.Empty(collection: SdfWorldWorkDetails.Of(part: SdfWorldPackage.Parts.Shadow));
         var block = new byte[SdfFrameBlock.SizeBytes];
 

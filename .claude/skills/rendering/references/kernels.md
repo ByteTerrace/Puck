@@ -79,7 +79,7 @@ under the residency as `sdf:<name>` with four passes (`SdfWorldTables.PassLabels
 `bricks`, the brick staging copy, the bake dispatches and the pool's barriers
 when that work is pending; `upload`, the region copies; and `environment`, the
 sky's environment map and its coefficients, rendered only on an upload whose sky
-gradient moved while the fog reads it (`SdfWorldTables.SkyEnvironment.cs`;
+gradient moved while the atmosphere reads it (a fog in-scattering the sky, or a haze) (`SdfWorldTables.SkyEnvironment.cs`;
 `sdf-sky-environment.comp` then `sdf-sky-environment-reduce.comp`). An upload
 skips a pass it has no work for. Every pass of the view counts its own march steps
 (`sdfWorkSteps`: each field evaluation of a march or a query, and each bounded
@@ -115,7 +115,7 @@ of its passes. The upload and the view's passes, in order:
 | `views` | `sdf-world-views*.comp` | Materials, lighting through the one light interface and diagnostics, shading the hits only into the lit image: premultiplied by coverage, the coverage in alpha, a miss left uncovered. In a reduced or temporal view it writes `currentColor` at the render grid instead. |
 | `resolve` | `sdf-resolve.comp` | Only in `Fragment` and `TemporalFragment`: reconstructs the render grid's samples into the lit image and each output pixel's surface transport at the output grid, over history when the view is temporal. |
 | `sky` | `sdf-sky-runs.comp` | The sky's field runs on the render grid, from views' color, only where a pixel or one of its neighbours is not wholly covered: the gradient's offset, then the cloud run's scale and offset, the base's alpha marking an evaluated texel. Counts `gpu.sky.evaluations`. Binds the sky interface (`SdfWorldInterfaces.SkyParameters`) and the World set. |
-| `composite` | `sdf-composite.comp` | The view's color: the lit image (already through each hit's fog transmittance) plus the sky environment map the residency's upload renders (`sdfSkyEnvironment`, filtered bilinearly along the pixel's ray; it evaluates no sky) by the surface transport's in-scatter weight, the sky's runs in their authored order, filtered from the texels the sky evaluated, beneath it by its coverage (the disc and stars evaluated at the pixel), then the bounded media over the surface share to the transport's distance and over the sky share to the far distance. |
+| `composite` | `sdf-composite.comp` | The view's color: the lit image (already through each hit's atmosphere transmittance) plus each atmosphere kind's in-scatter colour by the surface transport's weight for it (the fog's and the haze's sky from the environment map the residency's upload renders, `sdfSkyEnvironment`, filtered bilinearly along the pixel's ray, evaluating no sky layer; each kind counted once a pixel in the `atmosphere` detail row), the sky's runs in their authored order, filtered from the texels the sky evaluated, beneath it by its coverage (the disc and stars evaluated at the pixel), then the bounded media over the surface share to the transport's distance and over the sky share to the far distance. |
 
 The ceiling (`SdfViewSnapshot.RenderCeiling`) and the temporal ask
 (`SdfViewQuality.Temporal`) select the fragment (`SdfWorldPasses.FragmentOf`)

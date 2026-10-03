@@ -1,7 +1,7 @@
 {
-  "id": "sky-environment",
-  "title": "Fog in-scatters the sky's gradient from the residency's environment map: before a bright disc it reads the gradient alone, the composite evaluates no sky, and a still sky renders its map once",
-  "binding": "The positive leg boots an offscreen 128x128 native view, cadence off so every frame renders every pass, looking into the core of a sun disc sixteen times as bright as the sky, whose glow saturates every sky pixel about it, through a black unlit sphere of radius one five units away, centred on the disc, under fog of density 1, over a uniform mid-grey gradient. The sphere's pixels lie about four units away, so the fog in-scatters about 98 percent of the sky they look into, and the composite reads that sky from the residency's environment map, which holds the sky's gradient and never a body: every pixel of a box in the sphere's interior, straight in front of the disc, reads the gradient's grey through the fog (code 127 of 255, within 0.48 to 0.515 and a code), where a map that held the disc would saturate it. The composite's line in the one world.counters gpu read counts no sky evaluation beyond its atmosphere row's, one for each pixel the fog in-scatters, although every sphere pixel fogs, and the residency's environment pass, after the upload that rendered the map once, reads skipped. The discriminating leg turns the fog off, so the sphere shows its own black and the box falls below the grey, while the composite evaluates no sky and no atmosphere and the map still stands.",
+  "id": "atmosphere",
+  "title": "Haze scatters toward the light-casting bodies: brighter toward a low sun than away from it, each kind's evaluations counted in the composite's atmosphere row and none with the haze off",
+  "binding": "The positive leg boots an offscreen 128x128 native view, cadence off so every frame renders every pass, of a black sky with no geometry under render.atmosphere's haze alone (amount 0.5 over the far distance, anisotropy 0.6) and one white directional light of weight 1 low over the horizon, the light a sun-like body casts. Looking toward the sun, every pixel of the view's central box is the sky's black through the haze, which in-scatters the sun's light by the Henyey-Greenstein phase's forward lobe, about ten times the light, so the box saturates white; turned to face away from it, the box holds the back lobe's few percent, below 0.4. The composite counts one atmosphere evaluation for each sky pixel the haze crosses, in its atmosphere detail row, and every sky evaluation it counts is that row's. The discriminating leg turns the haze off with world.row.set render atmosphere.haze.amount 0: the box toward the sun shows the sky's black, so the toward observation turns red, the box away from it stays dim, and the composite's atmosphere row counts nothing, the off-switch's zero.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -13,7 +13,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/sky-environment/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/atmosphere/fixture.world.json",
     "script": "positive.script.txt",
     "commands": [
       {
@@ -32,11 +32,6 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.counters",
-        "occurrence": 1,
-        "outcome": "accepted"
-      },
-      {
         "verb": "world.screenshot",
         "occurrence": 1,
         "outcome": "accepted"
@@ -45,13 +40,38 @@
         "verb": "world.wait",
         "occurrence": 3,
         "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
       }
     ],
     "expect": [
       {
         "type": "imageRegion",
-        "name": "fog-before-the-disc-is-the-skys-field-runs",
-        "capture": "fog.png",
+        "name": "haze-toward-the-low-sun-glows",
+        "capture": "toward.png",
         "extent": [
           128,
           128
@@ -64,15 +84,45 @@
         ],
         "reduce": "every",
         "minimum": [
-          0.48,
-          0.48,
-          0.48,
+          0.9,
+          0.9,
+          0.9,
           1
         ],
         "maximum": [
-          0.515,
-          0.515,
-          0.515,
+          1,
+          1,
+          1,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
+      },
+      {
+        "type": "imageRegion",
+        "name": "haze-away-from-the-sun-stays-dim",
+        "capture": "away.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.4,
+          0.6,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.4,
+          0.4,
+          0.4,
           1
         ],
         "toleranceCodes": 1,
@@ -100,7 +150,7 @@
       },
       {
         "type": "relation",
-        "name": "the-composite-evaluates-no-sky-layer",
+        "name": "every-composite-sky-evaluation-is-the-atmospheres",
         "operator": "equal",
         "left": {
           "value": "composite-sky",
@@ -112,7 +162,7 @@
       },
       {
         "type": "relation",
-        "name": "the-fog-counts-its-in-scatter",
+        "name": "the-haze-counts-its-sky-pixels",
         "operator": "greater",
         "left": {
           "value": "composite-atmosphere"
@@ -120,19 +170,11 @@
         "right": {
           "literal": 0
         }
-      },
-      {
-        "type": "line",
-        "name": "a-still-sky-renders-its-environment-once",
-        "stream": "stdout",
-        "match": "contains",
-        "text": "  work environment skipped",
-        "present": true
       }
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/sky-environment/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/atmosphere/fixture.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       {
@@ -156,11 +198,6 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.counters",
-        "occurrence": 1,
-        "outcome": "accepted"
-      },
-      {
         "verb": "world.screenshot",
         "occurrence": 1,
         "outcome": "accepted"
@@ -169,13 +206,38 @@
         "verb": "world.wait",
         "occurrence": 3,
         "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 4,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.counters",
+        "occurrence": 1,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.screenshot",
+        "occurrence": 2,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 5,
+        "outcome": "accepted"
       }
     ],
     "expect": [
       {
         "type": "imageRegion",
-        "name": "fog-before-the-disc-is-the-skys-field-runs",
-        "capture": "fog.png",
+        "name": "haze-toward-the-low-sun-glows",
+        "capture": "toward.png",
         "extent": [
           128,
           128
@@ -188,19 +250,49 @@
         ],
         "reduce": "every",
         "minimum": [
-          0.48,
-          0.48,
-          0.48,
+          0.9,
+          0.9,
+          0.9,
           1
         ],
         "maximum": [
-          0.515,
-          0.515,
-          0.515,
+          1,
+          1,
+          1,
           1
         ],
         "toleranceCodes": 1,
         "holds": false
+      },
+      {
+        "type": "imageRegion",
+        "name": "haze-away-from-the-sun-stays-dim",
+        "capture": "away.png",
+        "extent": [
+          128,
+          128
+        ],
+        "region": [
+          0.4,
+          0.4,
+          0.6,
+          0.6
+        ],
+        "reduce": "every",
+        "minimum": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "maximum": [
+          0.4,
+          0.4,
+          0.4,
+          1
+        ],
+        "toleranceCodes": 1,
+        "holds": true
       },
       {
         "type": "response",
@@ -224,19 +316,7 @@
       },
       {
         "type": "relation",
-        "name": "the-composite-evaluates-no-sky-layer",
-        "operator": "equal",
-        "left": {
-          "value": "composite-sky",
-          "minus": "composite-atmosphere"
-        },
-        "right": {
-          "literal": 0
-        }
-      },
-      {
-        "type": "relation",
-        "name": "no-fog-counts-no-atmosphere",
+        "name": "no-haze-counts-no-atmosphere",
         "operator": "equal",
         "left": {
           "value": "composite-atmosphere"
@@ -244,14 +324,6 @@
         "right": {
           "literal": 0
         }
-      },
-      {
-        "type": "line",
-        "name": "a-still-sky-renders-its-environment-once",
-        "stream": "stdout",
-        "match": "contains",
-        "text": "  work environment skipped",
-        "present": true
       }
     ]
   }

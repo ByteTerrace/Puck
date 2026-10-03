@@ -6438,9 +6438,9 @@ packaging, and compiled worlds in the runtime and delivery programme.
   periodic noise of `field/sdf-noise.hlsli`. Views shades hits only, into a lit
   image with its coverage; the `sky` pass evaluates the field runs on the
   render grid only where coverage is below one, and the `composite` pass puts
-  the lit image over the runs and integrates the bounded media. The fog's
-  in-scatter is the gradient, which the composite reads from the residency's
-  environment map rather than evaluating it at each fogged pixel.
+  the lit image over the runs and integrates the bounded media. The
+  atmosphere's fog and haze in-scatter the gradient, which the composite reads
+  from the residency's environment map rather than evaluating it at each pixel.
 - **A sky-only change re-runs the view.** The cadence
   (`SdfWorldTables.Cadence.cs`) hashes the tables and the pass block, the light
   and sky regions and the volume table among them, with their presented-tick
@@ -6558,9 +6558,9 @@ residency's upload renders the environment map and its ambient coefficients (its
 
 **Authoring.** The `timeline` section, a section keyed on a clock (`clock:` and
 `keys [ … ]`, each key's partial record written as its kind under the name of the
-layer it addresses), the `gradient`, `fog`, `sunDisc`, `stars` and `clouds`
-layers and the `min`, `h`, `deg` and `hz` units are shipped, and the courtyard
-keys its sky on a state clock:
+layer it addresses), the `gradient`, `sunDisc`, `stars` and `clouds`
+layers, `render.atmosphere` (P18-10), and the `min`, `h`, `deg` and `hz` units
+are shipped, and the courtyard keys its sky and its fog on a state clock:
 
 ```puck
 timeline {
@@ -6576,7 +6576,6 @@ render {
   sky {
     layers [
       gradient(name: "air", stops: skyStops)
-      fog(name: "haze", density: 0.004)
       sunDisc(name: "sun", light: 0, radius: 0.018, intensity: 1.5)
     ]
     clock: skyMode
@@ -6585,7 +6584,6 @@ render {
         at: 0
         layers {
           air: gradient(stops: nightStops)
-          haze: fog(density: 0)
           sun: sunDisc(intensity: 0)
         }
       }
@@ -6593,17 +6591,24 @@ render {
         at: 0.5
         layers {
           air: gradient(stops: skyStops)
-          haze: fog(density: 0.004)
           sun: sunDisc(intensity: 1.5)
         }
       }
     ]
   }
+  atmosphere {
+    fog {
+      density {
+        clock: skyMode
+        keys [{ at: 0, value: 0 }, { at: 0.5, value: 0.004 }]
+      }
+    }
+  }
 }
 ```
 
 The same clock and key vocabulary spells three very different skies once the
-steps below land their `bodies`, further layer kinds and `atmosphere`. The
+steps below land their `bodies` and further layer kinds. The
 spellings of those three are targets. **An Earth day and night**, which a
 `skies.puck` module (P18-8) would also offer as a template
 (`skies.earth(latitude: 40deg, day: day)`):
@@ -6737,8 +6742,8 @@ render {
 
 Every value above can be changed while the World runs, by `world.row.set`,
 by a `.puck` save with `world.watch` on, or by the editor's inspector (see the
-last build step), and lands on the next frame. The `bodies`, `atmosphere`, `frame`
-and further layer spellings are targets; each step settles its own vocabulary
+last build step), and lands on the next frame. The `atmosphere` spelling is
+shipped; the `bodies`, `frame` and further layer spellings are targets; each step settles its own vocabulary
 rows in `src/Puck.World.Transpiler/Vocabulary/` and the generated inventory.
 
 **Decisions.**
@@ -7675,24 +7680,69 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
    - Counted-cost gate: the `environment` pass's 4,096 texel evaluations and
      one reduction dispatch per sky change crossing a display code, zero on a
      still sky.
-10. **P18-10, the atmosphere.**
-    - Delivers: `render.atmosphere` with fog, height fog, haze that scatters
-      toward light-casting bodies, a medium (water, with its own extinction and
-      colour below a surface), and the bounded media authored under it by
-      creations, lit by bodies.
-    - Deletes: `WorldRenderSkyLayer.Fog` and the fog density lane.
-    - Carries each kind's transmittance and in-scatter weight per render sample
-      as the surface transport carries the fog's (`shade/sdf-transport.hlsli`),
-      so the resolve reconstructs them with the color's weights.
-    - Touches: the records, `composite`, `shade/sdf-transport.hlsli`,
-      `shade/shade-volumes.hlsli`,
-      `CreationStampEmitter`'s volume emission, `tests/Puck.Parity`.
-    - Done when: a law holds height fog's integral along a ray to its closed
-      form (red leg: a ray parallel to the base); an `atmosphere` canary holds
-      haze brighter toward a low sun than away from it; parity re-recorded,
-      explained.
-    - Counted-cost gate: atmosphere evaluations counted under `composite`, zero
-      on a covered pixel with no atmosphere authored.
+10. **P18-10, the atmosphere.** Landed; its GPU legs are owed.
+    - Landed: `render.atmosphere` (`WorldRenderAtmosphere`) with a `fog`
+      (`density`, `color`, and a `height { base, falloff }` profile, the height
+      fog), a `haze` (`amount` over the far distance, `anisotropy`, `height`)
+      that in-scatters the sky and every directional light, which is what a
+      light-casting body binds, by a Henyey-Greenstein phase, and a `medium`
+      (`surface`, `extinction`, `color`), water below a level surface. An absent
+      section is the default look's fog (`SdfAtmosphere.Default`); an authored
+      one is exactly the kinds it states, each off at zero, and the kinds are
+      structure, so each value keys on its own clock. The resolve writes them
+      into the sky block's atmosphere lanes (`SdfSky.PackAtmosphere`, which
+      bakes the haze's extinction from the far distance and the first four lit
+      directionals as the air lights), so the kernels branch on no light kind.
+      `shade/sdf-atmosphere.hlsli` evaluates each kind's optical depth in closed
+      form (`SdfAir` is the CPU reference): a height profile's integral, with
+      its series for a ray parallel to the base, and the medium's surface
+      crossed in order, air then water or the reverse, the transmittance the
+      exact product of the segments'. Views carries each hit through the
+      transmittance, and the surface transport carries the fog's, the haze's
+      and the medium's in-scatter weights apart, two words a pixel, so the
+      resolve reconstructs each with the color's weights and the composite
+      applies each kind's colour at the pixel's direction; the history surface
+      holds four words. The sky share passes through the haze and the medium
+      to the far distance; the fog ends at the sky. The bounded media a
+      creation authors take a `scatter`, the share of each sample's extinction
+      that scatters the air lights toward the eye. `world.lighting` echoes the
+      atmosphere and `world.budget` its kinds. The courtyard, the moth studio,
+      the mirror tool, the parity world, the counted sky workloads and the sky
+      canaries moved their fog from the sky into the atmosphere.
+    - Deletes: `WorldRenderSkyLayer.Fog`, the sky block's fog density lane and
+      the fog's density as a sky section key.
+    - Done when: `SdfAtmosphereLawTests` hold height fog's integral along a ray
+      to its closed form within a relative 1e-4 of a quadrature (red leg: a ray
+      parallel to the base without its series reads NaN), the medium crossed in
+      order (red leg: the water's in-scatter not seen through the air before
+      it), the haze's amount over the far distance and its glow toward a low
+      sun (red leg: an isotropic phase), an atmosphere of no kind doing nothing
+      (red leg: an absent fog read as the default density), and the kernel's
+      constants and series held to the reference's (red leg: the kernel's series
+      dropped); `SdfSurfaceTransportLawTests` hold each kind's in-scatter to
+      the weighted in-scatter of any footprint's samples and a sample's
+      composite to its kinds' colours (red leg: the kinds carried as one
+      weight); `SdfWorldTablesWorkLawTests` hold the environment map owed only
+      while a fog in-scatters the sky or a haze reads it (red leg: a haze that
+      renders no map); the validator refuses a negative fog density, a haze
+      taking all the light, a falloff under its floor and a medium colour
+      outside its grammar, each with a control; `VolumeLawTests` carry a
+      volume's scatter and refuse one outside the unit range. The `atmosphere`
+      canary holds haze brighter toward a low sun than away from it and its
+      evaluations counted, and none with the haze off.
+    - Counted-cost gate: each kind the composite evaluates at a pixel counts one
+      `gpu.sky.evaluations` in its `atmosphere` detail row, none with an
+      atmosphere authoring no kind; `SdfCompositeAtmosphereDeviceLawTests` hold
+      a wholly covered 16x8 image to 0, 128 and 384 with no kind, the fog, and
+      the fog, the haze and the medium. A bounded medium's scatter adds no
+      sample; its samples stay the composite's march steps.
+    - Open: the GPU legs (the device law, the `atmosphere`, `sky-*`,
+      `world-counters` and `kernel-counters` canaries, parity) and the sky
+      workloads' composite ceilings on the RTX 2060, which now count the
+      atmosphere row. A bounded medium's scatter casts no shadow of its own and
+      the air's lights are not shadowed by geometry. The haze reads the
+      directional lights as P18-7's bodies will bind them; P18-9's lighting from
+      the sky changes none of it.
 11. **P18-11, infinity views: other worlds and far geometry.** The sharing
     prerequisites are available: routed seats and eligible windows share an
     endpoint residency, and camera views render from the world's own residency.

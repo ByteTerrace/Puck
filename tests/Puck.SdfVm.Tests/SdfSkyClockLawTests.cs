@@ -24,6 +24,7 @@ public sealed class SdfSkyClockLawTests {
         // the phase and offsets the sky holds, which no tick reaches.
         sky.Pack(
             block: out var block,
+            farDistance: 40f,
             lights: SdfLights.Default(),
             softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes],
             stops: new SdfSkyStop[SdfSky.MaxStops]

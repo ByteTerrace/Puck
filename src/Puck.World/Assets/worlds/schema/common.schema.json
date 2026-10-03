@@ -824,35 +824,6 @@
       "additionalProperties": false,
       "title": "WorldRenderSkyLayerGradient"
     },
-    "WorldRenderSkyLayerFog": {
-      "description": "The exponential distance fog fading toward the sky gradient.",
-      "properties": {
-        "$type": {
-          "const": "fog"
-        },
-        "density": {
-          "$ref": "#/$defs/BindableScalar",
-          "description": "The density per world unit. Absent is the pinned density.",
-          "default": null
-        },
-        "name": {
-          "description": "The name a section key addresses the layer by, unique among the layers.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "layerName": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldRenderSkyLayerFog"
-    },
     "WorldRenderSkyLayerSunDisc": {
       "description": "The visible sun disc \u2014 an additive highlight about one directional light\u0027s direction.",
       "properties": {
@@ -1121,9 +1092,6 @@
           "$ref": "#/$defs/WorldRenderSkyLayerGradient"
         },
         {
-          "$ref": "#/$defs/WorldRenderSkyLayerFog"
-        },
-        {
           "$ref": "#/$defs/WorldRenderSkyLayerSunDisc"
         },
         {
@@ -1152,6 +1120,27 @@
           "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
         }
       ]
+    },
+    "WorldRenderAirHeight": {
+      "description": "An air kind\u0027s height profile: its density falls by a factor of e over each Falloff world units above Base, and rises as much below it, so a ray\u0027s optical depth through it has a closed form.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "base": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The height at which the kind\u0027s density is its authored one. Absent is zero.",
+          "default": null
+        },
+        "falloff": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The rise over which the density thins by a factor of e, at least SdfAtmosphere.MinFalloff world units. Absent is SdfAtmosphere.DefaultFalloff.",
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderAirHeight"
     },
     "WorldScreenSourceNone": {
       "description": "No provider is bound \u2014 the engine shades the slot as dark glass, lit faintly by the sun.",

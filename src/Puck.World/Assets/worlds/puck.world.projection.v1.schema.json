@@ -2429,7 +2429,7 @@
           "title": "WorldRenderLighting"
         },
         "sky": {
-          "description": "The procedural sky \u2014 a gradient, sun disc, star field, and distance fog. Optional; an absent section renders the default look, the two-stop gradient and fog SdfSky starts from, as data the kernels read like any authored sky.",
+          "description": "The procedural sky \u2014 a gradient, sun disc, star field and clouds. Optional; an absent section renders the default look, the two-stop gradient SdfSky starts from, as data the kernels read like any authored sky.",
           "type": [
             "object",
             "null"
@@ -2596,83 +2596,6 @@
                     },
                     "additionalProperties": false,
                     "title": "WorldRenderSkyLayerGradient"
-                  },
-                  {
-                    "description": "The exponential distance fog fading toward the sky gradient.",
-                    "properties": {
-                      "$type": {
-                        "const": "fog"
-                      },
-                      "density": {
-                        "description": "The density per world unit. Absent is the pinned density.",
-                        "default": null,
-                        "title": "BindableScalar",
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "clock": {
-                                "type": "string"
-                              },
-                              "keys": {
-                                "type": "array",
-                                "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "at": {
-                                      "type": "number"
-                                    },
-                                    "value": {
-                                      "type": "number"
-                                    },
-                                    "ease": {
-                                      "type": "string",
-                                      "enum": [
-                                        "Linear",
-                                        "Smooth",
-                                        "Step"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "at",
-                                    "value"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              }
-                            },
-                            "required": [
-                              "clock",
-                              "keys"
-                            ],
-                            "additionalProperties": false
-                          }
-                        ]
-                      },
-                      "name": {
-                        "description": "The name a section key addresses the layer by, unique among the layers.",
-                        "type": [
-                          "string",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "layerName": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      }
-                    },
-                    "additionalProperties": false,
-                    "title": "WorldRenderSkyLayerFog"
                   },
                   {
                     "description": "The visible sun disc \u2014 an additive highlight about one directional light\u0027s direction.",
@@ -3860,6 +3783,655 @@
           "default": null,
           "title": "WorldRenderEnvironment"
         },
+        "atmosphere": {
+          "description": "The air between the camera and what it sees: fog, height fog, haze and a medium. Optional; an absent section renders the default look\u0027s fog (SdfAtmosphere.Default), and a present one is exactly the kinds it states.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "fog": {
+              "description": "The fog: an exponential medium, level or thinning with height. Absent is no fog.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "density": {
+                  "description": "The density per world unit, at the base when Height is authored. Absent is the default look\u0027s density.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "color": {
+                  "description": "BindableColor\u0027s grammar: the colour the fog in-scatters. Absent is the sky in the pixel\u0027s direction, so a distant surface fades into the horizon behind it.",
+                  "default": null,
+                  "title": "BindableColor",
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "string"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "height": {
+                  "description": "The height fog\u0027s profile. Absent is a fog alike at every height.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "base": {
+                      "description": "The height at which the kind\u0027s density is its authored one. Absent is zero.",
+                      "default": null,
+                      "title": "BindableScalar",
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "clock": {
+                              "type": "string"
+                            },
+                            "keys": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "at": {
+                                    "type": "number"
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "ease": {
+                                    "type": "string",
+                                    "enum": [
+                                      "Linear",
+                                      "Smooth",
+                                      "Step"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "at",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "clock",
+                            "keys"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "falloff": {
+                      "description": "The rise over which the density thins by a factor of e, at least SdfAtmosphere.MinFalloff world units. Absent is SdfAtmosphere.DefaultFalloff.",
+                      "default": null,
+                      "title": "BindableScalar",
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "clock": {
+                              "type": "string"
+                            },
+                            "keys": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "at": {
+                                    "type": "number"
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "ease": {
+                                    "type": "string",
+                                    "enum": [
+                                      "Linear",
+                                      "Smooth",
+                                      "Step"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "at",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "clock",
+                            "keys"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "WorldRenderAirHeight"
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldRenderFog"
+            },
+            "haze": {
+              "description": "The haze: aerial perspective that scatters the sky and the light of the bodies that cast light, brightest toward them. Absent is no haze.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "amount": {
+                  "description": "The share of the light the haze takes over the far distance, in [0, 0.99]. Absent is zero, which draws none.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "anisotropy": {
+                  "description": "The Henyey-Greenstein anisotropy of its scattering toward the bodies, in [0, 0.9]: zero scatters alike in every direction. Absent is SdfAtmosphere.DefaultHazeAnisotropy.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "height": {
+                  "description": "The haze\u0027s height profile, the amount taken at its base. Absent is a haze alike at every height.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "base": {
+                      "description": "The height at which the kind\u0027s density is its authored one. Absent is zero.",
+                      "default": null,
+                      "title": "BindableScalar",
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "clock": {
+                              "type": "string"
+                            },
+                            "keys": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "at": {
+                                    "type": "number"
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "ease": {
+                                    "type": "string",
+                                    "enum": [
+                                      "Linear",
+                                      "Smooth",
+                                      "Step"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "at",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "clock",
+                            "keys"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "falloff": {
+                      "description": "The rise over which the density thins by a factor of e, at least SdfAtmosphere.MinFalloff world units. Absent is SdfAtmosphere.DefaultFalloff.",
+                      "default": null,
+                      "title": "BindableScalar",
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "clock": {
+                              "type": "string"
+                            },
+                            "keys": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "at": {
+                                    "type": "number"
+                                  },
+                                  "value": {
+                                    "type": "number"
+                                  },
+                                  "ease": {
+                                    "type": "string",
+                                    "enum": [
+                                      "Linear",
+                                      "Smooth",
+                                      "Step"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "at",
+                                  "value"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "clock",
+                            "keys"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "WorldRenderAirHeight"
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldRenderHaze"
+            },
+            "medium": {
+              "description": "The medium: water below a level surface, with its own extinction and colour. Absent is no medium.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "surface": {
+                  "description": "The surface\u0027s height. Absent is zero.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "extinction": {
+                  "description": "The extinction per world unit below the surface. Absent is SdfAtmosphere.DefaultMediumExtinction.",
+                  "default": null,
+                  "title": "BindableScalar",
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "number"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "color": {
+                  "description": "BindableColor\u0027s grammar: the colour the medium in-scatters, which a deep view through it reaches. Absent is SdfAtmosphere.DefaultMediumColor.",
+                  "default": null,
+                  "title": "BindableColor",
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "clock": {
+                          "type": "string"
+                        },
+                        "keys": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "at": {
+                                "type": "number"
+                              },
+                              "value": {
+                                "type": "string"
+                              },
+                              "ease": {
+                                "type": "string",
+                                "enum": [
+                                  "Linear",
+                                  "Smooth",
+                                  "Step"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "clock",
+                        "keys"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldRenderMedium"
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderAtmosphere"
+        },
         "tonemap": {
           "description": "The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is None \u2014 the stylized shaded color, unchanged.",
           "enum": [
@@ -3871,7 +4443,7 @@
           "title": "WorldTonemap"
         },
         "farDistance": {
-          "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
+          "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the fog has absorbed it (render.atmosphere.fog). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
           "type": [
             "number",
             "null"
@@ -20302,6 +20874,13 @@
                       ],
                       "default": null
                     },
+                    "scatter": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
                     "isKnownKind": {
                       "type": "boolean",
                       "description": "Whether the family is supported."
@@ -20315,7 +20894,7 @@
                     "ramp"
                   ],
                   "additionalProperties": false,
-                  "description": "A bounded participating medium carried beside a creation\u0027s shapes. Its parent names a shape frame, or null for the creation root. Ramp is evaluated against local density before ray integration. Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size; Coverage and Softness control their density threshold and transition width. Axis is a flow-only control."
+                  "description": "A bounded participating medium carried beside a creation\u0027s shapes. Its parent names a shape frame, or null for the creation root. Ramp is evaluated against local density before ray integration. Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size; Coverage and Softness control their density threshold and transition width. Axis is a flow-only control. Scatter, in [0, 1], is the share of the medium\u0027s extinction that scatters the light-casting bodies\u0027 light toward the eye; absent scatters none."
                 },
                 "default": null,
                 "description": "The bounded participating volumes (null = none), at most MaxVolumes \u2014 see VolumeDocument. Each rides the creation root\u0027s or a named shape\u0027s dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider."

@@ -134,7 +134,7 @@ public sealed class WorldRenderLightingSkyLawTests {
         Assert.Equal(expected: 2u, actual: resolved.Sky.Block.StopCount);
         Assert.Equal(
             expected: SdfSky.DefaultFogDensity,
-            actual: resolved.Sky.Block.FogDensity
+            actual: resolved.Sky.Atmosphere.FogDensity
         );
     }
     [Fact]
@@ -380,7 +380,6 @@ public sealed class WorldRenderLightingSkyLawTests {
                     Color: new BindableColor(Raw: "#1B2350")
                 ),
             ]),
-            new WorldRenderSkyLayer.Fog(Density: 0.02f),
             new WorldRenderSkyLayer.SunDisc(
                 Radius: 0.045f,
                 Intensity: 6f
@@ -391,7 +390,7 @@ public sealed class WorldRenderLightingSkyLawTests {
                 Seed: 1337u
             ),
         ]);
-        var resolved = Resolve(defaults: BaseDefaults() with { Lighting = SunAndSky(), Sky = sky });
+        var resolved = Resolve(defaults: BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.02f)), Lighting = SunAndSky(), Sky = sky });
 
         Assert.Equal(
             expected: 3,
@@ -407,7 +406,7 @@ public sealed class WorldRenderLightingSkyLawTests {
         );
         Assert.Equal(
             expected: 0.02f,
-            actual: resolved.Sky.Block.FogDensity
+            actual: resolved.Sky.Atmosphere.FogDensity
         );
         Assert.Equal(
             expected: 0,
@@ -435,13 +434,13 @@ public sealed class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void AuthoredSky_FogAlone_KeepsTheDefaultGradient() {
-        var resolved = Resolve(defaults: BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.05f)]) });
+    public void AuthoredAtmosphere_FogAlone_KeepsTheDefaultGradient() {
+        var resolved = Resolve(defaults: BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.05f)) });
 
         Assert.Equal(expected: 2u, actual: resolved.Sky.Block.StopCount);
         Assert.Equal(
             expected: 0.05f,
-            actual: resolved.Sky.Block.FogDensity
+            actual: resolved.Sky.Atmosphere.FogDensity
         );
     }
     [Fact]
@@ -875,26 +874,78 @@ public sealed class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void SkyFogDensity_Negative_RefusesByName_ControlNonNegativeClean() {
+    public void AtmosphereFogDensity_Negative_RefusesByName_ControlNonNegativeClean() {
         Laws.RefusalWithControl(
-            lawId: "render.sky.fog-density-negative",
+            lawId: "render.atmosphere.fog-density-negative",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: -0.01f)]) },
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: -0.01f)) },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.01f)]) },
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.01f)) },
             }))
         );
+    }
+    [Fact]
+    public void AtmosphereHazeAmount_TakingAllTheLight_RefusesByName_ControlBelowCeilingClean() {
+        Laws.RefusalWithControl(
+            lawId: "render.atmosphere.haze-amount-ceiling",
+            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Amount: 1f)) },
+            })),
+            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Amount: SdfAtmosphere.MaxHazeAmount)) },
+            }))
+        );
+    }
+    [Fact]
+    public void AtmosphereHeightFalloff_ThinnerThanTheFloor_RefusesByName_ControlAtTheFloorClean() {
+        Laws.RefusalWithControl(
+            lawId: "render.atmosphere.falloff-floor",
+            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Height: new WorldRenderAirHeight(Falloff: 0f))) },
+            })),
+            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Height: new WorldRenderAirHeight(Falloff: SdfAtmosphere.MinFalloff))) },
+            }))
+        );
+    }
+    [Fact]
+    public void AtmosphereMediumColor_OutsideItsGrammar_RefusesByName_ControlHexClean() {
+        Laws.RefusalWithControl(
+            lawId: "render.atmosphere.medium-color",
+            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Medium: new WorldRenderMedium(Color: new BindableColor(Raw: "teal"))) },
+            })),
+            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Medium: new WorldRenderMedium(Color: new BindableColor(Raw: "#1F6F78"))) },
+            }))
+        );
+    }
+    [Fact]
+    public void AnAuthoredAtmosphereIsExactlyTheKindsItStates() {
+        // An absent section renders the default look's fog; an authored one carries no kind it leaves out.
+        var unauthored = Resolve(defaults: BaseDefaults());
+        var hazeOnly = Resolve(defaults: BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Amount: 0.3f)) });
+        var water = Resolve(defaults: BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Medium: new WorldRenderMedium(Surface: -2f)) });
+
+        Assert.Equal(expected: SdfAtmosphere.Default, actual: unauthored.Sky.Atmosphere);
+        Assert.Equal(expected: 0f, actual: hazeOnly.Sky.Atmosphere.FogDensity);
+        Assert.Equal(expected: 0.3f, actual: hazeOnly.Sky.Atmosphere.HazeAmount);
+        Assert.Equal(expected: SdfAtmosphere.DefaultHazeAnisotropy, actual: hazeOnly.Sky.Atmosphere.HazeAnisotropy);
+        Assert.Equal(expected: 0f, actual: water.Sky.Atmosphere.FogDensity);
+        Assert.Equal(expected: -2f, actual: water.Sky.Atmosphere.MediumSurface);
+        Assert.Equal(expected: SdfAtmosphere.DefaultMediumExtinction, actual: water.Sky.Atmosphere.MediumExtinction);
+        Assert.Equal(expected: SdfAtmosphere.DefaultMediumColor, actual: water.Sky.Atmosphere.MediumColor);
     }
     [Fact]
     public void SkyLayerKind_Repeated_RefusesByName_ControlOnceClean() {
         Laws.RefusalWithControl(
             lawId: "render.sky.layer-once",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.01f), new WorldRenderSkyLayer.Fog(Density: 0.02f)]) },
+                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(Brightness: 0.5f), new WorldRenderSkyLayer.Stars(Brightness: 0.7f)]) },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.01f)]) },
+                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(Brightness: 0.5f)]) },
             }))
         );
     }

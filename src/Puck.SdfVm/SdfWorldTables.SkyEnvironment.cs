@@ -142,13 +142,19 @@ public sealed partial class SdfWorldTables {
         // How many times the map has rendered.
         public long Renders { get; private set; }
 
-        // Whether an upload of a sky owes the map: the fog reads it, and it holds no sky or other field runs.
+        // Whether an upload of a sky owes the map: the atmosphere reads it (a fog in-scattering the sky, or a haze), and it
+        // holds no sky or other field runs.
         public bool Owes(in SdfSkyBlock block, ReadOnlySpan<SdfSkyStop> stops) => (
-            (block.FogDensity > 0f) &&
+            ReadsMap(block: in block) &&
             (
                 !m_holdsSky ||
                 !SdfSkyEnvironment.SameMap(block: in block, otherBlock: in m_renderedBlock, otherStops: m_renderedStops, stops: stops)
             )
+        );
+        // Whether a packed sky's atmosphere reads the map: its fog in-scatters the sky, or its haze does.
+        public static bool ReadsMap(in SdfSkyBlock block) => (
+            ((block.FogExtinction > 0f) && ((block.AirFlags & SdfAir.FogColorAuthored) == 0u)) ||
+            (block.HazeExtinction > 0f)
         );
         // Records that the map holds a sky's gradient.
         public void Rendered(in SdfSkyBlock block, ReadOnlySpan<SdfSkyStop> stops) {

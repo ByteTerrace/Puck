@@ -62,7 +62,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
 | `render.sky.layers[][gradient].stops[].elevation` | State | Binding | Binding | `WorldRenderSkyStop.Elevation` |
 | `render.sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
-| `render.sky.layers[][fog].density` | State | Binding | Binding | `WorldRenderSkyLayer.Fog.Density` |
 | `render.sky.layers[][sunDisc].radius` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Radius` |
 | `render.sky.layers[][sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
 | `render.sky.layers[][stars].brightness` | State | Binding | Binding | `WorldRenderSkyLayer.Stars.Brightness` |
@@ -78,7 +77,6 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.clock` | Clock | Names | Read | `WorldRenderSky.Clock` |
 | `render.sky.keys[].layers{*}[gradient].stops[].elevation` | State | Binding | Binding | `WorldRenderSkyStop.Elevation` |
 | `render.sky.keys[].layers{*}[gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
-| `render.sky.keys[].layers{*}[fog].density` | State | Binding | Binding | `WorldRenderSkyLayer.Fog.Density` |
 | `render.sky.keys[].layers{*}[sunDisc].radius` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Radius` |
 | `render.sky.keys[].layers{*}[sunDisc].intensity` | State | Binding | Binding | `WorldRenderSkyLayer.SunDisc.Intensity` |
 | `render.sky.keys[].layers{*}[stars].brightness` | State | Binding | Binding | `WorldRenderSkyLayer.Stars.Brightness` |
@@ -94,6 +92,17 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.environment.softboxes[].color` | State | Binding | Binding | `WorldRenderSoftbox.Color` |
 | `render.environment.horizon.low` | State | Binding | Binding | `WorldRenderHorizon.Low` |
 | `render.environment.horizon.high` | State | Binding | Binding | `WorldRenderHorizon.High` |
+| `render.atmosphere.fog.density` | State | Binding | Binding | `WorldRenderFog.Density` |
+| `render.atmosphere.fog.color` | State | Binding | Binding | `WorldRenderFog.Color` |
+| `render.atmosphere.fog.height.base` | State | Binding | Binding | `WorldRenderAirHeight.Base` |
+| `render.atmosphere.fog.height.falloff` | State | Binding | Binding | `WorldRenderAirHeight.Falloff` |
+| `render.atmosphere.haze.amount` | State | Binding | Binding | `WorldRenderHaze.Amount` |
+| `render.atmosphere.haze.anisotropy` | State | Binding | Binding | `WorldRenderHaze.Anisotropy` |
+| `render.atmosphere.haze.height.base` | State | Binding | Binding | `WorldRenderAirHeight.Base` |
+| `render.atmosphere.haze.height.falloff` | State | Binding | Binding | `WorldRenderAirHeight.Falloff` |
+| `render.atmosphere.medium.surface` | State | Binding | Binding | `WorldRenderMedium.Surface` |
+| `render.atmosphere.medium.extinction` | State | Binding | Binding | `WorldRenderMedium.Extinction` |
+| `render.atmosphere.medium.color` | State | Binding | Binding | `WorldRenderMedium.Color` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `cameras[].rig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
@@ -2583,12 +2592,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].lights{*}[point].name` | `WorldRenderLight.Point.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
 | `render.sky.layers[][gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
-| `render.sky.layers[][fog].name` | `WorldRenderSkyLayer.Fog.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][stars].name` | `WorldRenderSkyLayer.Stars.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][clouds].name` | `WorldRenderSkyLayer.Clouds.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
-| `render.sky.keys[].layers{*}[fog].name` | `WorldRenderSkyLayer.Fog.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[stars].name` | `WorldRenderSkyLayer.Stars.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[clouds].name` | `WorldRenderSkyLayer.Clouds.Name` | a sky layer name a section key addresses |

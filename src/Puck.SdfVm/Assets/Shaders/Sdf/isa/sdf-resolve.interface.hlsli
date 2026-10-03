@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/f5e7f6f8b58cbd7e83e670d752359be76c68fdbda0c1d556953a43bfd2e41e37). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/e3c8041ed929fe5288f5de71fb9bf506804fee03ac8c4067114b9c606c2b7a03). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -14,14 +14,14 @@ struct SdfLight {
 };
 
 struct SdfSkyBlock {
-    [[vk::offset(0)]] float FogDensity;
+    [[vk::offset(0)]] uint AirFlags;
     [[vk::offset(4)]] uint StopCount;
     [[vk::offset(8)]] uint SoftboxCount;
     [[vk::offset(12)]] int DiscLight;
     [[vk::offset(16)]] float3 DiscDirection;
     [[vk::offset(28)]] float DiscIntensity;
     [[vk::offset(32)]] float DiscExponent;
-    [[vk::offset(36)]] uint _pad36;
+    [[vk::offset(36)]] uint AirLightCount;
     [[vk::offset(40)]] float StarDensity;
     [[vk::offset(44)]] float StarBrightness;
     [[vk::offset(48)]] uint StarSeed;
@@ -43,7 +43,35 @@ struct SdfSkyBlock {
     [[vk::offset(144)]] float3 HorizonLow;
     [[vk::offset(156)]] uint _pad156;
     [[vk::offset(160)]] float3 HorizonHigh;
-    [[vk::offset(172)]] uint _pad172;
+    [[vk::offset(172)]] float FogExtinction;
+    [[vk::offset(176)]] float3 FogColor;
+    [[vk::offset(188)]] float FogBase;
+    [[vk::offset(192)]] float FogFalloff;
+    [[vk::offset(196)]] float HazeExtinction;
+    [[vk::offset(200)]] float HazeBase;
+    [[vk::offset(204)]] float HazeFalloff;
+    [[vk::offset(208)]] float3 MediumColor;
+    [[vk::offset(220)]] float MediumExtinction;
+    [[vk::offset(224)]] float MediumSurface;
+    [[vk::offset(228)]] float HazeAnisotropy;
+    [[vk::offset(232)]] uint _pad232;
+    [[vk::offset(236)]] uint _pad236;
+    [[vk::offset(240)]] float3 AirLight0Direction;
+    [[vk::offset(252)]] uint _pad252;
+    [[vk::offset(256)]] float3 AirLight0Radiance;
+    [[vk::offset(268)]] uint _pad268;
+    [[vk::offset(272)]] float3 AirLight1Direction;
+    [[vk::offset(284)]] uint _pad284;
+    [[vk::offset(288)]] float3 AirLight1Radiance;
+    [[vk::offset(300)]] uint _pad300;
+    [[vk::offset(304)]] float3 AirLight2Direction;
+    [[vk::offset(316)]] uint _pad316;
+    [[vk::offset(320)]] float3 AirLight2Radiance;
+    [[vk::offset(332)]] uint _pad332;
+    [[vk::offset(336)]] float3 AirLight3Direction;
+    [[vk::offset(348)]] uint _pad348;
+    [[vk::offset(352)]] float3 AirLight3Radiance;
+    [[vk::offset(364)]] uint _pad364;
 };
 
 struct SdfSkyStop {
@@ -117,8 +145,8 @@ struct SdfResolveFrame {
 [[vk::binding(24, 1)]] Texture2D<float4> sdfImpostorEmission : register(t24, space1);
 [[vk::binding(25, 1)]] StructuredBuffer<SdfLight> sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2 : register(t25, space1);
 #define sdfLights sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2
-[[vk::binding(26, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6 : register(t26, space1);
-#define sdfSky sdfSkyLayoutc21dea5f8b5a7c8005406de8a2810f1fa8c9cd0b443a9e283a9cb686059d22c6
+[[vk::binding(26, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayout700384204459cafc8ea769a9caa5c1b1600eed679e2b1f6a1a2cb1d3c9bbd3e5 : register(t26, space1);
+#define sdfSky sdfSkyLayout700384204459cafc8ea769a9caa5c1b1600eed679e2b1f6a1a2cb1d3c9bbd3e5
 [[vk::binding(27, 1)]] StructuredBuffer<SdfSkyStop> sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224 : register(t27, space1);
 #define sdfSkyStops sdfSkyStopsLayoutc67b283a50546f3478912c5a37ff211db26fe56f6c28a0d47e41ba92e1238224
 [[vk::binding(28, 1)]] StructuredBuffer<SdfSoftbox> sdfSoftboxesLayoutddae489dd1b4237e319f8128eb0f94690a24eb786baf81f815c4d4d43d5d55cf : register(t28, space1);
@@ -207,7 +235,7 @@ struct SdfResolvePass {
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
 [[vk::binding(4, 3)]] StructuredBuffer<uint> cullBounds : register(t4, space3);
-[[vk::binding(5, 3)]] RWStructuredBuffer<uint> transportRW : register(u5, space3);
+[[vk::binding(5, 3)]] RWStructuredBuffer<uint2> transportRW : register(u5, space3);
 [[vk::binding(6, 3)]] StructuredBuffer<float> reactivity : register(t6, space3);
 [[vk::binding(7, 3)]] Texture2D<float4> historyColor : register(t7, space3);
 [[vk::binding(8, 3)]] StructuredBuffer<uint> historySurface : register(t8, space3);

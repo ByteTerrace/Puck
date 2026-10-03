@@ -38,7 +38,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         sky.Block.TwinklePhase = 0.25f;
         sky.Block.StarBrightness = 2f;
         sky.Block.DiscLight = 0;
-        sky.Block.FogDensity = (2f * SdfSky.DefaultFogDensity);
+        sky.Atmosphere.FogDensity = (2f * SdfSky.DefaultFogDensity);
         sky.Block.HorizonLow = Vector3.One;
         sky.Block.CloudCoverage = 0.5f;
         rig.Render();
@@ -64,17 +64,40 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     public void AnUnfoggedSkyRendersNoEnvironmentUntilItsFogReadsIt() {
         using var rig = new Rig();
 
-        rig.Frame.Sky.Block.FogDensity = 0f;
+        rig.Frame.Sky.Atmosphere.FogDensity = 0f;
         rig.Render();
         rig.Render();
         rig.Render();
         Assert.Equal(expected: 0L, actual: rig.Engine.SkyEnvironmentRenders);
         Assert.Contains(actualString: rig.Report(), expectedSubstring: "\nwork environment skipped\n");
 
-        rig.Frame.Sky.Block.FogDensity = SdfSky.DefaultFogDensity;
+        rig.Frame.Sky.Atmosphere.FogDensity = SdfSky.DefaultFogDensity;
         rig.Render();
         rig.Render();
         Assert.Equal(expected: 1L, actual: rig.Engine.SkyEnvironmentRenders);
+    }
+    [Fact]
+    public void TheAtmosphereOwesTheEnvironmentOnlyWhileItInScattersTheSky() {
+        using var rig = new Rig();
+
+        // A fog in-scattering its own colour reads no sky, so it renders no map.
+        rig.Frame.Sky.Atmosphere = (SdfAtmosphere.Default with { FogColor = Vector3.One, FogColorAuthored = true });
+        rig.Render();
+        rig.Render();
+        Assert.Equal(expected: 0L, actual: rig.Engine.SkyEnvironmentRenders);
+        Assert.Contains(actualString: rig.Report(), expectedSubstring: "\nwork environment skipped\n");
+
+        // A haze in-scatters the sky toward the bodies, so it reads the map with no fog at all.
+        rig.Frame.Sky.Atmosphere = (SdfAtmosphere.None with { HazeAmount = 0.3f });
+        rig.Render();
+        rig.Render();
+        Assert.Equal(expected: 1L, actual: rig.Engine.SkyEnvironmentRenders);
+
+        // A medium in-scatters its own colour: with the haze gone the map is owed no more, and the one it holds stands.
+        rig.Frame.Sky.Atmosphere = (SdfAtmosphere.None with { MediumExtinction = 0.4f });
+        rig.Render();
+        Assert.Equal(expected: 1L, actual: rig.Engine.SkyEnvironmentRenders);
+        Assert.Contains(actualString: rig.Report(), expectedSubstring: "\nwork environment skipped\n");
     }
     [Fact]
     public void AnInstalledKernelReloadRendersTheEnvironmentAgain() {

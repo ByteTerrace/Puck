@@ -35,11 +35,12 @@ world.screenshot {run}/clouds-absent.png
 world.wait captures 30
 world.row.set cameras sky-cam rig.operations[1].subject.point [0,-10,-8]
 world.wait 12
-world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#00FFFF"},{"elevation":1,"color":"#00FFFF"}]},{"$type":"fog","density":0}]}
+world.row.set render sky {"layers":[{"$type":"gradient","stops":[{"elevation":-1,"color":"#00FFFF"},{"elevation":1,"color":"#00FFFF"}]}]}
+world.row.set render atmosphere {"fog":{"density":0}}
 world.wait 12
 world.screenshot {run}/fog-absent.png
 world.wait captures 30
-world.row.set render sky.layers[1].density 1
+world.row.set render atmosphere.fog.density 1
 world.wait 12
 world.screenshot {run}/fog.png
 world.wait captures 30

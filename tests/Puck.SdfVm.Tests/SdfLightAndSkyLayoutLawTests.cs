@@ -67,7 +67,7 @@ public sealed class SdfLightAndSkyLayoutLawTests {
 
         ref var block = ref sky.Block;
 
-        block.FogDensity = 0.004f;
+        sky.Atmosphere.FogDensity = 0.004f;
         block.DiscLight = 0;
         block.DiscIntensity = 1.5f;
         block.StarDensity = 52f;
@@ -117,7 +117,7 @@ public sealed class SdfLightAndSkyLayoutLawTests {
             rows[(row * 4)] = x; rows[((row * 4) + 1)] = y; rows[((row * 4) + 2)] = z; rows[((row * 4) + 3)] = w;
         }
 
-        Row(row: ControlRow, w: block.FogDensity, x: lights.Count, y: lights.ShadowSlots[0], z: 0f);
+        Row(row: ControlRow, w: sky.Atmosphere.FogDensity, x: lights.Count, y: lights.ShadowSlots[0], z: 0f);
         for (var index = 0; (index < SdfLights.MaxLights); index++) {
             var light = lights[index];
             var direction = ((light.Kind == SdfLightKind.Directional) ? Normalized(direction: light.Direction, fallback: SdfLights.DefaultSunDirection) : light.Direction);
@@ -250,7 +250,7 @@ public sealed class SdfLightAndSkyLayoutLawTests {
         var block = new byte[SdfFrameBlock.SizeBytes];
 
         lights.Pack(records: lightRecords);
-        sky.Pack(block: out var skyBlock, lights: lights, softboxes: softboxes, stops: stops);
+        sky.Pack(block: out var skyBlock, farDistance: 40f, lights: lights, softboxes: softboxes, stops: stops);
         SdfFrameBlock.Write(
             block: block,
             frame: Frame(lights: lights, sky: sky),
@@ -314,7 +314,7 @@ public sealed class SdfLightAndSkyLayoutLawTests {
 
         double[] Sky(string field) => Field(field: field, record: 0, structure: sky, table: bytes.Sky);
 
-        values["sky.fog"] = Sky(field: nameof(SdfSkyBlock.FogDensity));
+        values["sky.fog"] = Sky(field: nameof(SdfSkyBlock.FogExtinction));
 
         var stops = ((uint)Sky(field: nameof(SdfSkyBlock.StopCount))[0]);
         var disc = ((int)Sky(field: nameof(SdfSkyBlock.DiscLight))[0]);

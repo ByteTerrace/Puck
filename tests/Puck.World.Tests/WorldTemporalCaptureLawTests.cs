@@ -101,7 +101,7 @@ public sealed class WorldTemporalCaptureLawTests {
             frame: frame, view: 0, width: 64, height: 64
         );
         frame.Lights.Pack(records: lights);
-        frame.Sky.Pack(block: out var sky, lights: frame.Lights, softboxes: softboxes, stops: stops);
+        frame.Sky.Pack(block: out var sky, farDistance: frame.FarDistance, lights: frame.Lights, softboxes: softboxes, stops: stops);
 
         return [
             .. block,
