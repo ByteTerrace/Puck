@@ -346,6 +346,9 @@ public sealed partial class WorldHistory {
             }
             m_tape.SuspendCapture();
             m_server.Extensions.EnterReplay();
+            // Nothing the seek passes through reaches a viewer: not the restore's delivery, not a load-door install,
+            // not a re-simulated tick. PresentRestoredTimeline below delivers the target once.
+            m_server.Output.WithholdsTimeline = true;
             var save = m_server.SaveEffectTap;
 
             m_server.SaveEffectTap = static _ => { };
@@ -385,6 +388,7 @@ public sealed partial class WorldHistory {
                 return null;
             } finally {
                 m_server.SaveEffectTap = save;
+                m_server.Output.WithholdsTimeline = false;
                 m_server.Extensions.CompleteReplay();
                 m_tape.ResumeCapture();
             }

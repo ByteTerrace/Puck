@@ -155,7 +155,8 @@ public abstract record WorldReplayEntry {
     /// pairs against the source's <see cref="Transfer"/>.</param>
     /// <param name="TransferId">The source-scoped transfer id.</param>
     /// <param name="Encoded">The encoded arrival.</param>
-    /// <param name="Outcome">What the commit decided: each landed traveler's generation, and whether it rolled back.</param>
+    /// <param name="Outcome">What the commit decided: each landed traveler's generation, whether it rolled back, and the
+    /// projection each traveler coming home was bound to.</param>
     public sealed record Arrival(string SourceAuthority, ulong TransferId, byte[] Encoded, WorldArrivalOutcome Outcome) : WorldReplayEntry;
 
     /// <summary>One source body a crossing detached or restored (<see cref="WorldServer.DepartureTap"/>), at the
@@ -986,8 +987,8 @@ public sealed partial class WorldReplaySnapshot {
     }
     // The arrival's carried identity hydrates against the recorded world's own player defaults, which only the
     // re-drive holds; read validates the leaf against the engine defaults and keeps the bytes. An outcome must name a
-    // landing for every traveler of a commit that stood, and at least one and at most every traveler of one that
-    // rolled back, each at a generation an admission can mint.
+    // landing and a home binding for every traveler of a commit that stood, and at least one and at most every
+    // traveler of one that rolled back with no home binding, each at a generation an admission can mint.
     private static WorldReplayEntry ReadArrivalEntry(ref WireReader reader) {
         var encoded = reader.ReadBlock(
             field: "arrival",
@@ -998,9 +999,16 @@ public sealed partial class WorldReplaySnapshot {
             readItem: static (ref WireReader r) => r.ReadInt32(),
             maximum: WorldBodiesLimits.CapacityCeiling
         );
+        var rolledBack = reader.ReadBoolean();
+        var adopted = reader.ReadArray(
+            field: "arrival home bindings",
+            readItem: static (ref WireReader r) => WorldIdentityProjectionWire.ReadOptional(reader: ref r),
+            maximum: WorldBodiesLimits.CapacityCeiling
+        );
         var outcome = new WorldArrivalOutcome(
             Generations: generations,
-            RolledBack: reader.ReadBoolean()
+            RolledBack: rolledBack,
+            Adopted: adopted
         );
         var refused = new WorldReplayEntry.Arrival(
             Encoded: encoded,
@@ -1030,10 +1038,11 @@ public sealed partial class WorldReplaySnapshot {
             (generations.Length == 0) ||
             (generations.Length > travelers) ||
             (!outcome.RolledBack && (generations.Length != travelers)) ||
+            (adopted.Length != (outcome.RolledBack ? 0 : generations.Length)) ||
             generations.Any(predicate: static generation => (generation <= 0))
         ) {
             reader.Fail(
-                detail: $"arrival #{arrival.Request.TransferId} records {generations.Length} landing(s) for {travelers} traveler(s){(outcome.RolledBack ? " before its rollback" : string.Empty)}, or a generation no admission mints",
+                detail: $"arrival #{arrival.Request.TransferId} records {generations.Length} landing(s) and {adopted.Length} home binding(s) for {travelers} traveler(s){(outcome.RolledBack ? " before its rollback" : string.Empty)}, or a generation no admission mints",
                 refusal: WireRefusal.PayloadMalformed
             );
             return refused;
@@ -1171,10 +1180,10 @@ public sealed partial class WorldReplaySnapshot {
     }
 
     /// <summary>Reports, as a pinned seat's drift is reported, where the owned identity as it stands now differs from the
-    /// projection a re-driven home arrival's tape carried: the name, either rate, and every fact whose presence or value
-    /// differs, in ordinal key order. The re-drive binds the taped projection, so an edit made to the owned identity
-    /// after the recording does not reach it; this names the edit rather than letting it pass unseen. It reads the owned
-    /// identity and refuses nothing.</summary>
+    /// projection a re-driven home arrival's tape records the seat bound to after its adoption: the name, either rate,
+    /// and every fact whose presence or value differs, in ordinal key order. The re-drive binds the taped projection, so
+    /// an edit made to the owned identity after the recording does not reach it; this names the edit rather than
+    /// letting it pass unseen. It reads the owned identity and refuses nothing.</summary>
     /// <param name="narrationHub">The hub the report is narrated through, or <see langword="null"/> for none.</param>
     /// <param name="taped">The identity rebuilt from the taped projection.</param>
     /// <param name="current">The owned identity as it stands now.</param>
@@ -1451,6 +1460,13 @@ public sealed partial class WorldReplaySnapshot {
                     writeItem: static (w, generation) => w.WriteInt32(value: generation)
                 );
                 writer.WriteBoolean(value: arrival.Outcome.RolledBack);
+                writer.WriteArray(
+                    items: arrival.Outcome.Adopted,
+                    writeItem: static (w, adopted) => WorldIdentityProjectionWire.WriteOptional(
+                        projection: adopted,
+                        writer: w
+                    )
+                );
 
                 break;
             case WorldReplayEntry.Departure departure:

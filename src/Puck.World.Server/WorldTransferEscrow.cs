@@ -770,6 +770,7 @@ public sealed partial class WorldTransferEscrow {
                 m_server.ArrivalTap?.Invoke(
                     arg1: arrival,
                     arg2: new WorldArrivalOutcome(
+                        Adopted: [],
                         Generations: [.. generations],
                         RolledBack: true
                     )
@@ -883,11 +884,13 @@ public sealed partial class WorldTransferEscrow {
             );
         }
         m_committedIncarnations[key] = committedIncarnations;
-        AdoptHomeProfiles(arrival: arrival);
-        // Reported once the commit stands, with the generation each traveler landed at.
+        var adopted = AdoptHomeProfiles(arrival: arrival);
+        // Reported once the commit stands, with the generation each traveler landed at and the projection each
+        // traveler that came home is bound to.
         m_server.ArrivalTap?.Invoke(
             arg1: arrival,
             arg2: new WorldArrivalOutcome(
+                Adopted: adopted,
                 Generations: [.. generations],
                 RolledBack: false
             )
@@ -984,46 +987,96 @@ public sealed partial class WorldTransferEscrow {
         );
     }
     // Catalog writes cannot be undone by detaching a seat. Adopt only after the arrival stands, on recovery too;
-    // a taped rollback never reaches this point. Keep the material color the ordinary landing already installed.
-    private void AdoptHomeProfiles(WorldCrossingArrival arrival) {
+    // a taped rollback never reaches this point. Returns, in member order, the projection each traveler that came home
+    // is bound to (what its owned identity holds once the adoption stands, a partial one included) and null for a
+    // traveler that did not; the tape records it as part of the arrival's outcome.
+    // Several travelers of one arrival may come home under one owned identity: live, they bind the one object, so each
+    // adoption writes into what the others hold, and the tape records every binding once every adoption has run. A
+    // re-drive binds travelers whose taped projections name one identity to one shared detached identity, so they
+    // alias exactly as they did live.
+    private WorldIdentityProjection?[] AdoptHomeProfiles(WorldCrossingArrival arrival) {
+        var adopted = new WorldIdentityProjection?[arrival.Slots.Count];
+        var bound = new WorldIdentity?[arrival.Slots.Count];
+        Dictionary<string, WorldIdentity>? detachedById = null;
+
         for (var index = 0; (index < arrival.Slots.Count); index++) {
             var slot = arrival.Slots[index];
+            var carried = m_server.Population.EntryBody(index: slot)?.Profile;
+            var owned = ((carried is null)
+                ? null
+                : HomeIdentity(arrival: arrival, index: index, id: carried.Id));
 
-            if ((m_server.Population.EntryBody(index: slot)?.Profile is not { } carried) ||
-                (HomeIdentity(arrival: arrival, index: index, id: carried.Id) is not { } owned)) {
+            // A re-drive of a recorded outcome is a function of its tape: a traveler the tape records coming home binds
+            // the projection the live adoption bound, facts and records included, in a detached identity that saves
+            // nothing, and nothing of the live catalog enters it. Where the owned identity has moved since the
+            // recording is reported, read-only.
+            if (m_relandOutcome is { } recorded) {
+                if (recorded.Adopted[index] is not { } taped) {
+                    continue;
+                }
+
+                detachedById ??= new Dictionary<string, WorldIdentity>(comparer: StringComparer.Ordinal);
+
+                if (!detachedById.TryGetValue(
+                    key: taped.Id,
+                    value: out var detached
+                )) {
+                    detached = WorldIdentity.FromProjection(
+                        defaults: m_server.Definition.PlayerDefaults,
+                        projection: in taped
+                    );
+                    detachedById.Add(
+                        key: taped.Id,
+                        value: detached
+                    );
+
+                    if (owned is not null) {
+                        WorldReplaySnapshot.ReportAdoptionDrift(
+                            current: owned,
+                            narrationHub: m_server.Profiles.NarrationHub,
+                            taped: detached
+                        );
+                    }
+                }
+                BindHomeProfile(profile: detached, slot: slot);
+                adopted[index] = taped;
                 continue;
             }
-            // A re-drive of a recorded outcome is a function of its tape: the seat binds the taped projection
-            // exactly, facts and records included, in a detached identity that saves nothing, and nothing of the live
-            // catalog enters it. Where the owned identity has moved since the recording is reported, read-only.
-            var bound = owned;
-            var adopted = true;
-            var reason = string.Empty;
-
-            if (m_relandOutcome is null) {
-                adopted = m_server.Profiles.TryAdopt(carried: carried, owned: owned, reason: out reason);
-            } else {
-                bound = WorldIdentity.FromProjection(
-                    defaults: m_server.Definition.PlayerDefaults,
-                    projection: carried.Project()
-                );
-                WorldReplaySnapshot.ReportAdoptionDrift(
-                    current: owned,
-                    narrationHub: m_server.Profiles.NarrationHub,
-                    taped: carried
-                );
+            if (
+                (carried is null) ||
+                (owned is null)
+            ) {
+                continue;
             }
-            if (!adopted && m_server.Output.HasNarrationSink) {
+            if (
+                !m_server.Profiles.TryAdopt(carried: carried, owned: owned, reason: out var reason) &&
+                m_server.Output.HasNarrationSink
+            ) {
                 m_server.Output.Narrate(
                     channel: "world.identity",
                     text: $"[world.identity: world:{owned.Id} came home and did not adopt everything it carried — {reason}]"
                 );
             }
-            var color = m_server.Population.BodyColor(index: slot);
-
-            m_server.Population.SetSeatProfile(profile: bound, slot: slot);
-            m_server.Population.SetBodyColor(color: color, slot: slot);
+            BindHomeProfile(profile: owned, slot: slot);
+            bound[index] = owned;
         }
+
+        // Projected after every adoption: a later traveler's adoption into a shared identity is part of what each
+        // traveler bound to it holds.
+        for (var index = 0; (index < bound.Length); index++) {
+            if (bound[index] is { } identity) {
+                adopted[index] = identity.Project();
+            }
+        }
+
+        return adopted;
+    }
+    // Binds a home traveler's identity, keeping the material color the ordinary landing already installed.
+    private void BindHomeProfile(WorldIdentity profile, int slot) {
+        var color = m_server.Population.BodyColor(index: slot);
+
+        m_server.Population.SetSeatProfile(profile: profile, slot: slot);
+        m_server.Population.SetBodyColor(color: color, slot: slot);
     }
     // The owned identity a local seat of this authority left with, when traveler `index` is that seat coming home: a
     // colocated arrival of this process's own local seats (a remote one admits peers, and a remote incarnation claim is
@@ -1507,8 +1560,9 @@ public sealed partial class WorldTransferEscrow {
     /// a restored checkpoint still holds, or the one the arrival recorded, restored without deciding its reservation
     /// again, since the commit stood under the reservation's own decision. Recovery re-executes a crossing-log arrival its checkpoint does
     /// not reflect, with no recorded outcome: every traveler lands. A replay re-executes a destination tape's arrival
-    /// with the outcome the commit decided live: each traveler must land at the generation it landed at, and a recorded
-    /// rollback stops at the same traveler and undoes the landings ahead of it. The record is already durable, so it is
+    /// with the outcome the commit decided live: each traveler must land at the generation it landed at, a recorded
+    /// rollback stops at the same traveler and undoes the landings ahead of it, and a traveler coming home binds the
+    /// projection the live adoption bound it to, detached. The record is already durable, so it is
     /// not written again. The caller holds the authority gate.</summary>
     /// <param name="arrival">The recorded arrival.</param>
     /// <param name="recorded">The outcome the commit decided live, or <see langword="null"/> when every traveler must
@@ -1524,9 +1578,10 @@ public sealed partial class WorldTransferEscrow {
             (recorded is not null) &&
             ((recorded.Generations.Count == 0) ||
              (recorded.Generations.Count > arrival.Members.Count) ||
-             (!recorded.RolledBack && (recorded.Generations.Count != arrival.Members.Count)))
+             (!recorded.RolledBack && (recorded.Generations.Count != arrival.Members.Count)) ||
+             (recorded.Adopted.Count != (recorded.RolledBack ? 0 : recorded.Generations.Count)))
         ) {
-            reason = $"transfer {arrival.Request.TransferId} records {recorded.Generations.Count} landing(s) for {arrival.Members.Count} traveler(s){(recorded.RolledBack ? " before its rollback" : string.Empty)}";
+            reason = $"transfer {arrival.Request.TransferId} records {recorded.Generations.Count} landing(s) and {recorded.Adopted.Count} home binding(s) for {arrival.Members.Count} traveler(s){(recorded.RolledBack ? " before its rollback" : string.Empty)}";
             return false;
         }
 

@@ -394,9 +394,20 @@ public sealed record WorldStateFieldTrait(
     float Max = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float HeightScale = 0f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Color = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLatticeFill>? Paint = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldLatticeMedium? Medium = null
-);
+    IReadOnlyList<WorldLatticeFill>? Paint = null,
+    WorldLatticeMedium? Medium = null
+) {
+    /// <summary>The initial fills, applied in order over <see cref="Initial"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<WorldLatticeFill>? Paint { get => field; init => field = StateLists.Freeze(items: value); } = StateLists.Freeze(items: Paint);
+    /// <summary>Marks this field a fluid MEDIUM, or <see langword="null"/> for an ordinary field. A medium field's
+    /// value times <see cref="HeightScale"/> over the lattice origin is a free surface every active body samples
+    /// each tick at its coupled cell — the same body-coupling ceiling <see cref="WorldReaction.Emit"/>/
+    /// <see cref="WorldReaction.Expose"/> resolve against — refused unless <see cref="HeightScale"/> is greater than
+    /// zero (a surface-less medium is meaningless).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WorldLatticeMedium? Medium { get; init; } = Medium;
+}
 /// <summary>Marks a lattice-shaped field as a fluid medium (see <see cref="WorldStateFieldTrait.Medium"/>). No
 /// required members today — the growth seam a future medium trait (density, drag) widens without moving what
 /// already exists, the same trailing-member shape as every other optional-facet record in this document.</summary>

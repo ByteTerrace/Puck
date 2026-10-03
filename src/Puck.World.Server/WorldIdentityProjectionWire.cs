@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Puck.Networking;
 
@@ -11,6 +12,14 @@ namespace Puck.World.Server;
 /// Try-shaped, since a federated peer's bytes are untrusted.
 /// </summary>
 public static class WorldIdentityProjectionWire {
+    // A projection's records and facts are immutable values, and a profiled body's continuation folds its projection
+    // on every tick a replay records or a history captures. Each instance is validated, and its records serialized,
+    // the first time it is written; a later write of the same instance writes what that first write produced, so the
+    // steady fold allocates nothing and every leaf still writes the one encoding below. A write or an adoption that
+    // changes a row or a pool builds a new instance, which misses here.
+    private static readonly ConditionalWeakTable<WorldStateSection, byte[]> RecordBytes = new();
+    private static readonly ConditionalWeakTable<WorldStateRow, object> ValidatedFacts = new();
+    private static readonly object Validated = new();
     /// <summary>Writes a projection.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="projection">The projection to write.</param>
@@ -91,17 +100,23 @@ public static class WorldIdentityProjectionWire {
     }
 
     private static void WriteRecords(WireWriter writer, WorldStateSection? records) {
-        WorldIdentityRecords.Validate(section: records);
+        if (records is null) {
+            writer.WriteBlock(value: []);
 
-        var bytes = ((records is null)
-            ? []
-            : JsonSerializer.SerializeToUtf8Bytes(
+            return;
+        }
+        if (!RecordBytes.TryGetValue(key: records, value: out var bytes)) {
+            WorldIdentityRecords.Validate(section: records);
+            bytes = JsonSerializer.SerializeToUtf8Bytes(
                 jsonTypeInfo: WorldJsonContext.Default.WorldStateSection,
                 value: records
-            ));
+            );
 
-        if (bytes.Length > WireLimits.MaxDocumentBytes) {
-            throw new InvalidOperationException(message: "identity records exceed the document wire budget");
+            if (bytes.Length > WireLimits.MaxDocumentBytes) {
+                throw new InvalidOperationException(message: "identity records exceed the document wire budget");
+            }
+
+            RecordBytes.AddOrUpdate(key: records, value: bytes);
         }
 
         writer.WriteBlock(value: bytes);
@@ -138,11 +153,14 @@ public static class WorldIdentityProjectionWire {
         }
     }
     private static void WriteFacts(WireWriter writer, WorldStateRow? facts) {
-        WorldIdentityFacts.Validate(row: facts);
         writer.WriteBoolean(value: (facts is not null));
 
         if (facts is null) {
             return;
+        }
+        if (!ValidatedFacts.TryGetValue(key: facts, value: out _)) {
+            WorldIdentityFacts.Validate(row: facts);
+            ValidatedFacts.AddOrUpdate(key: facts, value: Validated);
         }
 
         var cells = (facts.Cells ?? []);
@@ -151,9 +169,10 @@ public static class WorldIdentityProjectionWire {
         writer.WriteInt32(value: facts.Capacity!.Value);
         writer.WriteInt32(value: cells.Count);
 
-        foreach (var cell in cells) {
-            writer.WriteString(value: cell.Key.Value);
-            writer.WriteInt64(value: cell.Value.AsInt);
+        // Indexed rather than enumerated: an interface enumerator over the cells is an allocation per write.
+        for (var index = 0; (index < cells.Count); index++) {
+            writer.WriteString(value: cells[index].Key.Value);
+            writer.WriteInt64(value: cells[index].Value.AsInt);
         }
     }
     private static WorldStateRow? ReadFacts(ref WireReader reader) {

@@ -96,6 +96,12 @@ sink and the federation projection sink each hold one): a whole projection first
 then member deltas (`WorldDocumentBasis.Diff`) only when a member changed, all as
 compact canonical JSON (`WorldProjection.SerializeCompact`), and a
 timeline delta at the authoritative ticks a held anchor's prediction misses.
+A held anchor ahead of the authority's engine tick (a restore or a history seek
+moved the authority behind it) is stale: `WorldClockAnchorLedger.Carry` and
+`Step` drop it first, counted as a released anchor row, and carry what a fresh
+recipient composed at that tick holds (the row's anchor, the clock's seed, or no
+anchor), and the step's timeline delta clears it on the recipient
+(`ProjectionAnchorLawTests`).
 `WorldProjectionHold` is the receiving half. The feed counts under
 `WorldProjectionWork` (`world.projection`), whose anchor rows retained and
 released are the per-recipient anchor memory.

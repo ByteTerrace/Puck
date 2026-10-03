@@ -200,8 +200,9 @@ public sealed partial class WorldTick {
 
         return applied;
     }
-    /// <summary>Delivers a timeline a history seek restored without stepping it: the whole definition, then the
-    /// completed tick's snapshot, so a paused world shows the state it was moved to.</summary>
+    /// <summary>Delivers a timeline a history seek moved: the whole definition, then the completed tick's snapshot, so
+    /// a paused world shows the state it was moved to. The seek withholds every delivery of its span
+    /// (<see cref="WorldOutputHub.WithholdsTimeline"/>), so this is the one delivery a viewer observes per seek.</summary>
     internal void PresentRestoredTimeline() {
         lock (Host.AuthorityGate) {
             Host.Document.MarkDefinitionDeliveryPending();
@@ -213,9 +214,13 @@ public sealed partial class WorldTick {
         }
     }
 
-    // Build and deliver the tick's snapshot to every typed-lane subscriber. Skipped with no subscriber attached.
+    // Build and deliver the tick's snapshot to every typed-lane subscriber. Skipped with no subscriber attached, and
+    // while a history seek withholds its span.
     private void EmitSnapshot(ulong tick, ulong stepTicks) {
-        if (!Host.Output.HasTypedSubscribers) {
+        if (
+            !Host.Output.HasTypedSubscribers ||
+            Host.Output.WithholdsTimeline
+        ) {
             return;
         }
 

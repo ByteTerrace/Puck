@@ -670,9 +670,14 @@ authority's own state newer than its checkpoint. An in-doubt transfer already ca
 checkpoint uses that checkpoint's catalog. An eventual abort reseats and saves the current owned
 identity, so neither the departure's facts nor owner writes made while recovery waits are lost.
 
-Replay verification saves no identity. A replay is a function of its tape: a re-driven home arrival
-binds the taped projection exactly, its facts and records included, in a detached identity, and
-takes nothing from the live catalog. It reports on `replay.profile` where the owned identity as it
+Replay verification saves no identity. A replay is a function of its tape: the tape records the
+projection a home arrival's seat was bound to once its owned identity adopted what it carried, a
+partial adoption included, and a re-driven home arrival binds exactly that projection, its facts and
+records included, in a detached identity, and takes nothing from the live catalog. Travelers of one
+arrival that come home under one owned identity bind that one identity live, so a later traveler's
+adoption is what every one of them holds: the tape records each binding once every adoption has run,
+and the re-drive binds them to one shared detached identity, so a write through one seat reaches the
+others exactly as it did live. It reports on `replay.profile` where the owned identity as it
 stands now differs from the taped projection, as a pinned seat's drifted rate is reported, so an
 owner's edit since the recording is named without making the replay diverge. A live
 `replay.drive` refuses a tape that lands travelers.
@@ -766,7 +771,9 @@ tick. Only a write or a jump of the authoritative state changes an observation, 
 projection: every jump (a whole-document rebuild by `world.reset`, `world.load` or `world.reload`, an
 undo, a replay drive, and a checkpoint restore) marks the definition for
 the one delivery door (`WorldDocument.MarkDefinitionDeliveryPending`), and a restore, which completes
-outside the tick, delivers at once. So the per-tick step sends anchors alone and nothing while a value
+outside the tick, delivers at once. A history seek is one jump however it gets there: it withholds every
+delivery of its span (its restore, a load-door install, each re-simulated tick's state and snapshot)
+and then delivers the restored definition and the target tick's snapshot once. So the per-tick step sends anchors alone and nothing while a value
 only moves as its trait says; the `world.projection` work
 source counts every composition. A late view hydrates the exact current phase; while a
 clock's row holds no number, an early view keeps predicting its last anchor and a late view seeds from
@@ -775,10 +782,13 @@ recipient per clock is a counted row under the `world.projection` work source. I
 kept: one replaced before a delivery reached the recipient is gone. A recipient therefore presents the
 latest authoritative tick it was told about and predicts only forward from the anchor it holds. A frame
 that interpolates toward the delivery that brought an anchor presents the anchor's own phase, and
-`WorldClockAnchor.Predict` refuses a tick before its anchor by name. An authority restored to a tick
-before the anchor it sent re-anchors. The anchor row is released when the
-recipient leaves or loses disclosure, when its projection stops carrying the clock, or when its stream
-detaches, without waiting for the socket to drain.
+`WorldClockAnchor.Predict` refuses a tick before its anchor by name. A held anchor ahead of the
+authority's tick is stale: the authority was restored or sought behind it. The next composition or step
+drops it, released like any other anchor row, and carries what a fresh recipient would hold at that
+tick: the clock's own anchor, its seed while its row holds no number, or no anchor. A recipient therefore
+never holds a frozen phase from a future the authority never presented. The anchor row is also released
+when the recipient leaves or loses disclosure, when its projection stops carrying the clock, or when its
+stream detaches, without waiting for the socket to drain.
 
 A portal window renders its destination from its own disclosed mirror unless its session is delivered
 everything the destination holds: a live session admitted at `Replica`, holding `observe all`,
@@ -1120,6 +1130,13 @@ commit, since a destination that commits with a lost acknowledgement would other
 body. The destination may not commit after the lease deadline and the source may not resurrect before
 it, so the deadline partitions every history into exactly-one-authority outcomes. The deadline is
 denominated in the source's own ticks and converted across rates by the exact 50400 bridge.
+
+**A reservation changes nothing the source's hash folds.** The source's tape records departures and
+restores, not reservations, and the authoritative hash folds every body's mobility credential each
+tick. So the reservation only reads the traveler's credential, the one its authority, slot and
+generation derive when none is stored, and the departure's detach mints it, which a re-drive runs
+too. A refused and retried reservation, an abort before the detach, an in-doubt restore and a reused
+body slot replay tick for tick.
 
 **Policy is authorable; the guarantee is not.** Hold duration, queue-or-refuse, party all-or-nothing
 and per-border capacity are document fields. Atomicity is not: a field that could break "the body

@@ -501,6 +501,35 @@ public sealed partial class WorldDocument {
             return false;
         }
 
+        // A document the live arena cannot reload in place installs a replacement arena, prepared here so a section no
+        // arena holds refuses by name before anything moves. Nothing is carried from the replaced layout but the key
+        // ledger and the session lanes: the candidate's rows are the truth, so a row it re-declares with another kind
+        // or shape installs as declared. The arena settles the candidate's rows at this tick, which is what installs;
+        // the authored candidate stays the base, so a reset settles it again at its own tick.
+        StateArena? rebuildArena = null;
+        var installed = candidate;
+
+        if (!Host.ReloadsArenaInPlace(definition: candidate)) {
+            if (!Host.TryPrepareArenaReplacement(
+                definition: candidate,
+                prepared: out var preparedArena,
+                reason: out var arenaReason,
+                settled: out var settledCandidate
+            )) {
+                RejectRebuild(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    reason: $"the state section does not load into an arena: {arenaReason}",
+                    verb: verb
+                );
+
+                return false;
+            }
+
+            rebuildArena = preparedArena;
+            installed = settledCandidate;
+        }
+
         // A loaded document's overrides bind against the CANDIDATE's own directory, not Host.PipelineSources (still
         // the currently installed document's), since the candidate is not installed until this whole gate passes.
         // A reset reinstalls the base already bound to its own directory.
@@ -681,8 +710,9 @@ public sealed partial class WorldDocument {
             var rebuiltFrom = m_definition;
 
             Install(
+                arena: rebuildArena,
                 compilation: compilation,
-                definition: candidate,
+                definition: installed,
                 rebuildPopulation: true
             );
             Host.RepaintChangedLatticeDraws(

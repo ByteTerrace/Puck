@@ -15,12 +15,13 @@ namespace Puck.World.Tests;
 /// whose commit stays in doubt across ticks and is then rolled back leaves the seat empty for those ticks, so the
 /// replay must leave it empty too. Red legs: with departures applied at settlement, the return refuses its arrival and
 /// the in-doubt rollback diverges at the departure tick.</summary>
-public sealed class CrossingTapeOrderLawTests {
+public sealed partial class CrossingTapeOrderLawTests {
     private static readonly WorldChannelTable Channels = WorldChannelTable.Compile(channels: Fixtures.BuildDocument().Channels);
 
-    // Forwards every call to a co-hosted destination's own server, with two seams: a commit that never reaches it,
-    // answered as lost or as uncertain, and an action run once the destination has heard the acknowledgement.
-    private sealed class SeamPeerCall(WorldServer destination, string commitFault, Action? afterAcknowledge) : IWorldPeerCall {
+    // Forwards every call to a co-hosted destination's own server, with three seams: a commit that never reaches it,
+    // answered as lost or as uncertain, an action run once the destination has heard the acknowledgement, and a
+    // reservation answered by a seam that may forward it to the destination.
+    private sealed class SeamPeerCall(WorldServer destination, string commitFault, Action? afterAcknowledge, Func<WorldTransferReservationRequest, Func<WorldTransferReservationReply>, WorldTransferReservationReply>? reserve = null) : IWorldPeerCall {
         public void Abort(string sourceAuthority, ulong transferId) => destination.AbortTransfer(
             sourceAuthority: sourceAuthority,
             transferId: transferId
@@ -52,7 +53,9 @@ public sealed class CrossingTapeOrderLawTests {
             );
             return WorldTransferStep.Answered;
         }
-        public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) => destination.ReserveTransfer(request: request);
+        public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) => ((reserve is null)
+            ? destination.ReserveTransfer(request: request)
+            : reserve(arg1: request, arg2: () => destination.ReserveTransfer(request: request)));
         public bool TryStatus(string sourceAuthority, ulong transferId, out WorldTransferStatus status) {
             status = destination.TransferStatus(
                 sourceAuthority: sourceAuthority,

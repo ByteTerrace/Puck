@@ -149,11 +149,17 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         for (var index = 0; (index < carried.Length); index++) {
             var clock = clocks[index];
 
-            carried[index] = ((clock.IsAnchored && m_anchors.TryHeld(
-                anchor: out var anchor,
-                clock: clock.Name
-            ))
-                ? (clock with { Anchor = anchor })
+            // An anchored clock carries what the ledger holds, which is nothing once a stale anchor was dropped with
+            // no seed to replace it.
+            carried[index] = (clock.IsAnchored
+                ? (clock with {
+                    Anchor = (m_anchors.TryHeld(
+                        anchor: out var anchor,
+                        clock: clock.Name
+                    )
+                        ? anchor
+                        : null),
+                })
                 : clock);
         }
 

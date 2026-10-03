@@ -66,7 +66,7 @@ can never claim a local seat, since a remote incarnation claim is unauthenticate
 whose source restarts restores its logged departure's facts and records before live writes
 resume. A transfer already in the checkpoint uses that checkpoint's catalog. An abort reseats
 and saves the current owned identity, preserving both the departing facts and later owner
-writes while recovery waits. A replay's re-driven home arrival binds the taped projection in a detached identity and saves nothing.
+writes while recovery waits. A replay's re-driven home arrival binds the projection its taped outcome records the live adoption bound, in a detached identity, and saves nothing.
 Foreign-written
 facts are unsigned until provenance attestation for carried state exists. The
 [rulepush package](../../../../worlds/rulepush/README.md) relies on this: a level
@@ -169,6 +169,15 @@ IDs. Acknowledgement retires that outcome; a later epoch for the same traveler
 may supersede a lost acknowledgement. The one current credential per mobility
 identity rejects delayed replay. These tables are bounded by active
 transactions/travelers, not lifetime crossing count.
+The source's reservation reads the traveler's credential and never mints it
+(`WorldPopulation.ReadMobility`, a pure read: the stored credential of the
+occupant's generation, else the one its authority, index and generation
+derive). Only the departure's detach mints it (`EnsureMobility` in
+`WorldServer.DetachForTransfer`), which a replay's re-drive runs too, because
+the authoritative hash folds a body's credential every recorded tick and the
+tape records no reservation. A refused and retried reservation, an abort
+before the detach, an in-doubt restore and a reused body slot each replay tick
+for tick (`CrossingTapeOrderLawTests`).
 An exact committed retry includes action-continuity collection order and every
 channel/register value, not just profile and motion. Escrow retains detached
 continuity values at commit and checkpoint restore; mutating a caller's original

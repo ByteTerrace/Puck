@@ -290,7 +290,9 @@ public sealed partial class WorldInstanceHost {
             var sourceSlot = members[reservationIndex];
             var traveler = source.Server.ExecuteAuthorityOperation(operation: () => {
                 var body = source.Server.Population.EntryBody(index: sourceSlot);
-                var mobility = source.Server.Population.EnsureMobility(
+                // Read, never minted: a reservation is no recorded authority step, so it may change nothing the
+                // authoritative hash folds. The detach mints this same credential (EnsureMobility).
+                var mobility = source.Server.Population.ReadMobility(
                     index: sourceSlot,
                     authority: source.Server.AuthorityIdentity
                 );

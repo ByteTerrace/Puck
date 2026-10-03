@@ -341,6 +341,15 @@ A re-declared row set (`WorldMutation.UpsertStateRow`, an addon-installed row)
 prepares its replacement arena before the mutation commits. The replacement
 carries the runtime key ledger plus the participant and identity lanes; a
 capacity refusal therefore leaves both the installed document and arena alone.
+A whole-document rebuild (`world.load`, `world.reload`, `world.reset`, and the
+load door a history seek restores through) prepares its replacement the same
+way, before anything moves, whenever the candidate's state catalog is not the
+live arena's (`WorldServer.ReloadsArenaInPlace`): the candidate's rows are the
+truth it installs, so a row it re-declares with another kind, shape or trait
+installs as declared, and a section no arena holds refuses the rebuild by name
+(`RowReshapeJumpLawTests`). `SyncArena`, which the doors that cannot refuse
+(an undo, a checkpoint's rule recompile) reach, installs the same replacement;
+it reloads the live columns in place only for the catalog they already hold.
 
 ### The action-state slot lanes (`WorldActionStateLane.cs`)
 
@@ -362,10 +371,9 @@ hands a body its address only; a restore marks the slot occupied before writing
 the registers it captured. A binding reconciles the roster against the live
 table, so a fresh arena re-joins every active ordinal.
 
-Replacing the arena does not lose what the lanes hold. A prepared mutation
-copies them before commit; reconstruction paths use `SyncArena`'s relayout and
-refuse without falling back to a fresh store. Replacement therefore cannot
-silently re-birth every live body's registers.
+Replacing the arena does not lose what the lanes hold. Every replacement, a
+prepared mutation's, a rebuild's or `SyncArena`'s, copies them before it is
+adopted, so replacement cannot silently re-birth every live body's registers.
 
 The values therefore fold into the `Arena` hash component with the rest of the
 store; `BodyActionState` folds the declaration and the per-lane trigger runtime
@@ -1261,6 +1269,10 @@ authority journal (`Puck.World.Silo`'s `WorldSiloHost.Crossings.cs`).
 An occupied source slot retains its pending recovery; a rollback-only checkpoint
 keeps only the remaining paired body/profile records and can never retry Commit.
 Restoration reinstalls the original mobility identity even if that slot was reused.
+A reservation only reads the traveler's mobility credential
+(`WorldPopulation.ReadMobility`); the departure's detach mints it
+(`DetachForTransfer`), the one step a replay's re-drive also runs, so a refused,
+retried or aborted reservation changes nothing the authoritative hash folds.
 A contradictory peer commit verdict after rollback leaves recovery held and
 reports once; it cannot create another body or stop unrelated worlds.
 Non-atomic parties split before reservation, so a parent lease cannot block its
@@ -1652,7 +1664,8 @@ Remote round trips do not adopt: the federation reservation leaf has no
 admission field, so a decoded reservation is always a peer admission, since a
 remote incarnation claim is unauthenticated. Offline replay uses a detached
 catalog (`WorldOwnedWorlds.CreateReplayCopy`), and a re-driven home arrival
-binds the taped projection in a detached identity and reports where the owned
+binds the projection its taped `WorldArrivalOutcome` records the live adoption
+bound, in a detached identity, and reports where the owned
 identity has drifted from it since the recording
 (`WorldReplaySnapshot.ReportAdoptionDrift`), so replay changes no live identity
 or saved document and takes nothing from the live catalog. Checkpoint restore and source rollback
@@ -2337,9 +2350,18 @@ the proof covers what they fed into world state and not the cores themselves; th
 history keeps no per-tick machine digest, which would wait on every queued machine
 worker every tick. When the world has stepped a machine, the seek's verdict says
 its cores were not compared (`WorldHistorySeekReport.MachineCoresOutsideProof`). The capture
-is suspended for the re-simulation, the restored timeline is delivered without a
-step (`WorldTick.PresentRestoredTimeline`), and `TimelineRestored` refreshes the
-local route epochs. A re-simulated step sets `ReplaysInput`, so nothing is
+is suspended for the re-simulation, and a seek delivers once: the output hub
+withholds every timeline delivery for the seek's span
+(`WorldOutputHub.WithholdsTimeline`, set and cleared beside `EnterReplay`), so
+neither the restore, nor a load-door install, nor any re-simulated tick's state
+or snapshot reaches a viewer, a session or a federation projection. A recorded
+composition a re-simulated tick re-applies is withheld too: a composition is a
+presentation override the history does not rewind, so the viewer keeps the one
+it holds. Session levers are not recorded, so a seek never re-applies one. The restored
+timeline is then delivered once, the definition and the target tick's snapshot
+(`WorldTick.PresentRestoredTimeline`), through both the in-place and the
+load-door restore, and `TimelineRestored` refreshes the local route epochs
+(`HistorySeekDeliveryLawTests`). A re-simulated step sets `ReplaysInput`, so nothing is
 forwarded through a portal to a world that is not rewinding. Save effects are
 suppressed during the seek. Providers from the abandoned timeline are retired;
 an explicit extension epoch admits fresh providers when the host is ready.
