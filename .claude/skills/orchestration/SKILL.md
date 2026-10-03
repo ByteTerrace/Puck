@@ -11,6 +11,13 @@ repository rules; this skill routes verification and review execution to their
 owners. The user's current instruction outranks this skill; a rule that argues
 against a requested change is stale and is corrected in the same change.
 
+## Plan from the milestone
+
+Plan backward from the milestone's critical path. Find the least-prepared item
+on it and put the best-fit partner there. Busy is not progress: never queue
+filler to make a partner look busy, and meet an owner's remark that partners
+look idle by checking the path, not by inventing work.
+
 ## Write and track assignments
 
 [AGENTS.md](../../../AGENTS.md#delegated-work) owns what a brief holds and how
