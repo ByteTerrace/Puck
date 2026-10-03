@@ -341,6 +341,15 @@ A re-declared row set (`WorldMutation.UpsertStateRow`, an addon-installed row)
 prepares its replacement arena before the mutation commits. The replacement
 carries the runtime key ledger plus the participant and identity lanes; a
 capacity refusal therefore leaves both the installed document and arena alone.
+A whole-document rebuild (`world.load`, `world.reload`, `world.reset`, and the
+load door a history seek restores through) prepares its replacement the same
+way, before anything moves, whenever the candidate's state catalog is not the
+live arena's (`WorldServer.ReloadsArenaInPlace`): the candidate's rows are the
+truth it installs, so a row it re-declares with another kind, shape or trait
+installs as declared, and a section no arena holds refuses the rebuild by name
+(`RowReshapeJumpLawTests`). `SyncArena`, which the doors that cannot refuse
+(an undo, a checkpoint's rule recompile) reach, installs the same replacement;
+it reloads the live columns in place only for the catalog they already hold.
 
 ### The action-state slot lanes (`WorldActionStateLane.cs`)
 
@@ -362,10 +371,9 @@ hands a body its address only; a restore marks the slot occupied before writing
 the registers it captured. A binding reconciles the roster against the live
 table, so a fresh arena re-joins every active ordinal.
 
-Replacing the arena does not lose what the lanes hold. A prepared mutation
-copies them before commit; reconstruction paths use `SyncArena`'s relayout and
-refuse without falling back to a fresh store. Replacement therefore cannot
-silently re-birth every live body's registers.
+Replacing the arena does not lose what the lanes hold. Every replacement, a
+prepared mutation's, a rebuild's or `SyncArena`'s, copies them before it is
+adopted, so replacement cannot silently re-birth every live body's registers.
 
 The values therefore fold into the `Arena` hash component with the rest of the
 store; `BodyActionState` folds the declaration and the per-lane trigger runtime
