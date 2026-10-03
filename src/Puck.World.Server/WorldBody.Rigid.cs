@@ -626,7 +626,8 @@ public sealed partial class WorldBody {
     /// <param name="policy">The authored, once-compiled rigid-contact tunables (rest thresholds/hold window, the
     /// substep travel fraction, and the substep ceiling <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>
     /// bounds) — <see cref="RigidContactPolicy"/>.</param>
-    private void AdvanceRigid(int entityIndex, ulong stepTicks, RigidContactPolicy policy) {
+    /// <param name="scratch">The caller's step scratch, which a refused substep restores the tick from.</param>
+    private void AdvanceRigid(int entityIndex, ulong stepTicks, RigidContactPolicy policy, StepScratch scratch) {
         m_entityIndex = entityIndex;
 
         if (
@@ -652,7 +653,7 @@ public sealed partial class WorldBody {
 
         // A refused sweep is a full block: the body does not move this tick (WorldBody.SweepRefusal.cs). The capture
         // precedes damping and gravity, so a refused tick leaves the velocity it began with.
-        CaptureMotion();
+        CaptureMotion(scratch: scratch);
 
         m_sweepRefusal = ContactRefusal.None;
 
@@ -757,7 +758,7 @@ public sealed partial class WorldBody {
             // The substeps stop at a refusal, and every one before it is undone with the rest of the tick's motion.
             if (resolution.Refusal != ContactRefusal.None) {
                 NoteSweepRefusal(refusal: resolution.Refusal);
-                RestoreMotion();
+                RestoreMotion(scratch: scratch);
 
                 return;
             }

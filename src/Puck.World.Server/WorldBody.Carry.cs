@@ -181,7 +181,9 @@ public sealed partial class WorldBody {
     /// relationship in that case). Pushing and being blocked by another BODY (rather than static geometry) is the
     /// caller's own separate pass — see <c>WorldPopulation.ResolveCarriedBodyPush</c> — since only the population
     /// can see every other body.</summary>
-    internal void FollowCarrier(WorldBody carrier) {
+    /// <param name="carrier">The body carrying this one.</param>
+    /// <param name="scratch">The caller's step scratch, which a refused sweep restores this body from.</param>
+    internal void FollowCarrier(WorldBody carrier, StepScratch scratch) {
         if (carrier.m_carry is not { } carry) {
             return;
         }
@@ -190,7 +192,7 @@ public sealed partial class WorldBody {
         var desiredPosition = (carrier.m_position + carrier.m_orientation.Rotate(vector: (carry.Offset * carrier.m_scale)));
         // A refused sweep is a full block for this body alone (WorldBody.SweepRefusal.cs): it stays as it was, and the
         // carrier is handed no correction, so a refusal never reaches it.
-        CaptureMotion();
+        CaptureMotion(scratch: scratch);
 
         m_sweepRefusal = ContactRefusal.None;
         m_orientation = carrier.m_orientation;
@@ -214,7 +216,7 @@ public sealed partial class WorldBody {
 
             if (resolution.Refusal != ContactRefusal.None) {
                 NoteSweepRefusal(refusal: resolution.Refusal);
-                RestoreMotion();
+                RestoreMotion(scratch: scratch);
 
                 return;
             }
