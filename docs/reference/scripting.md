@@ -13,10 +13,20 @@ every determinism knob explicit (fuel on, threads/SIMD off, NaN canonicalization
 fixed optimization level), no floating point ever crosses the boundary, and a runaway module halts
 at a fuel-deterministic point rather than a wall-clock one.
 
+The engine also turns Wasmtime's signal-based traps off, so Wasmtime installs no signal handlers in
+the host process. Addons share the World process with its managed code. With Wasmtime's handlers
+installed, a hardware fault in that code on a thread that never ran a guest, such as an integer
+division fault, runs .NET's exception dispatch on the thread's small alternate signal stack, and
+the process aborts with "Stack overflow." With signal-based traps off, Wasmtime checks memory
+bounds, division and stack depth explicitly in the code it generates. Traps keep their kinds, and
+guest memory accesses each pay an explicit bounds check. The binding has no setter for the option,
+so `WasmtimeSignals` sets it on the native config, and `AddonGuestLawTests` holds it with a child
+test host that runs a guest and then raises a division fault on other threads.
+
 ```text
 namespace Puck.Scripting
 target     net10.0
-deps       Puck.Assets, Puck.Maths + Wasmtime [44.0.0] (exact pin)
+deps       Puck.Assets, Puck.Maths + Wasmtime [48.0.2] (exact pin)
 ```
 
 Deliberately **no** `Puck.Commands` or `Puck.Input` reference—this is the neutral core of
@@ -677,7 +687,7 @@ straight into a sticky `HashMismatch` fault naming the reason, at boot and re-pr
   byte length back rather than assuming `count * stride`. Every reserved-must-be-zero and shape guard
   is checked in order, and any failure is a deterministic refusal naming the cell index (or entry
   index, for the name table)—a stale guest can smuggle no meaning into a reserved field.
-- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[44.0.0]`. Nothing in the
+- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[48.0.2]`. Nothing in the
   build asserts the loaded assembly's major version, so the pin is held by review, not by a gate.
 - **Single-threaded, one store per addon.** Do not share a `Store` across threads or reuse one
   across addons; hot-swap a script by `Enable()` (dispose + re-instantiate), not by mutation.
@@ -697,7 +707,7 @@ dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj
 
 `ByteTerrace.Puck.Scripting` depends on `Puck.Assets` (module bytes through `IAssetSource`),
 `Puck.Maths` (`FixedQ4816` for every quantized payload lane), and the third-party `Wasmtime`
-`[44.0.0]` exact pin (a real, flowing runtime dependency—not a build-only generator). It carries
+`[48.0.2]` exact pin (a real, flowing runtime dependency—not a build-only generator). It carries
 no `Puck.Commands`, `Puck.Input`, or `Puck.World` dependency; `Puck.World.Addons` and `Puck.World`
 depend on it for the addon host and reference the wire vocabulary this file defines.
 

@@ -23,7 +23,7 @@ public sealed class ScriptingEngine : IDisposable {
     public static string PinnedWasmtimeVersion => typeof(Wasmtime.Engine).Assembly.GetName().Version!.ToString();
 
     private static Config BuildConfig(ScriptingEngineOptions options) {
-        return new Config()
+        return WasmtimeSignals.WithoutSignalHandlers(config: new Config())
             .WithFuelConsumption(enable: true)
             .WithWasmThreads(enable: false)
             .WithSIMD(enable: false)

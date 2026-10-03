@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using Puck.Assets;
 using Puck.Scripting;
@@ -10,9 +11,13 @@ namespace Puck.World.Tests;
 /// CONTRACT UNDER TEST: a real WebAssembly guest, compiled by the pinned Wasmtime, mounts through the addon handshake
 /// and ticks; its store holds each linear memory to 256 pages, refusing a guest that grows past them and, as
 /// MemoryLimit, one that declares more at instantiation in any memory, exported or not; and a guest that never returns
-/// exhausts its per-tick fuel and faults as OutOfFuel, spending the same fuel on every run. Each guest is WAT text the
-/// engine compiles here, so no prebuilt binary stands between the law and the runtime.
+/// exhausts its per-tick fuel and faults as OutOfFuel, spending the same fuel on every run. A guest's out-of-bounds
+/// access faults as MemoryOutOfBounds, and once a guest has run, a hardware fault in the host's own managed code, on a
+/// thread that never ran a guest, is still an ordinary managed exception: the engine installs no signal handlers. Each
+/// guest is WAT text the engine compiles here, so no prebuilt binary stands between the law and the runtime. The class
+/// measures allocation, so it runs alone.
 /// </summary>
+[Collection(name: AllocationCollection.Name)]
 public sealed class AddonGuestLawTests {
     // The smallest handshake a guest can pass: a request channel speaking one verb and its response channel (the pair
     // is one facility), an empty out ring, and an in ring of one cell, each in its own region of the first page.
@@ -102,6 +107,27 @@ public sealed class AddonGuestLawTests {
 
         return instance;
     }
+    // Loads from the last bytes of the 32-bit address space, far past its one page.
+    private const string OutOfBounds = (("""
+        (module
+          (memory (export "memory") 1)
+        """ + Handshake) + """
+          (func (export "puck_on_tick") (param i32) (result i32)
+            (drop (i32.load (i32.const -4)))
+            (i32.const 0))
+        )
+        """);
+
+    // An integer division fault raised by the processor in managed code, through operands the compiler cannot fold.
+    private static Exception? DivisionFault() {
+        try {
+            _ = checked((long.Parse(s: "-9223372036854775808", provider: CultureInfo.InvariantCulture) / long.Parse(s: "-1", provider: CultureInfo.InvariantCulture)));
+
+            return null;
+        } catch (Exception fault) {
+            return fault;
+        }
+    }
     private static string MemoryOf(int pages) => $$"""
         (module
           (memory (export "memory") {{pages}})
@@ -190,6 +216,68 @@ public sealed class AddonGuestLawTests {
         var refusal = Assert.Throws<InvalidDataException>(testCode: () => Load(bytes: module, engine: engine));
 
         Assert.Contains(expectedSubstring: "memory section entry 0: its limits flags 0x10 are not declared", actualString: refusal.Message);
+    }
+    [Fact]
+    public void AGuestReadingPastItsMemoryFaultsAsMemoryOutOfBounds() {
+        using var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic);
+        using var guest = Mount(engine: engine, wat: OutOfBounds);
+        var tick = guest.Tick(input: []);
+
+        Assert.Equal(expected: AddonTickStatus.Faulted, actual: tick.Status);
+        Assert.Equal(expected: AddonFaultKind.MemoryOutOfBounds, actual: tick.Fault.Kind);
+    }
+    [Fact]
+    public async Task AHostHardwareFaultAfterAGuestRanIsAManagedException() {
+        // With Wasmtime's signal handlers installed this fault aborts the whole process, so it runs in a child test host
+        // and the law reads how that host exits.
+        var info = new ProcessStartInfo(fileName: "dotnet") {
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        };
+
+        info.ArgumentList.Add(item: typeof(AddonGuestLawTests).Assembly.Location);
+        info.ArgumentList.Add(item: "-method");
+        info.ArgumentList.Add(item: $"{typeof(AddonGuestLawTests).FullName}.{nameof(HostFaultChildAsync)}");
+        info.ArgumentList.Add(item: "-explicit");
+        info.ArgumentList.Add(item: "only");
+
+        using var child = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: "The child test host did not start."));
+        var output = child.StandardOutput.ReadToEndAsync(cancellationToken: TestContext.Current.CancellationToken);
+        var errors = child.StandardError.ReadToEndAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        await child.WaitForExitAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        var printed = $"{await output}{await errors}";
+
+        Assert.True(
+            condition: (child.ExitCode == 0),
+            userMessage: $"the child test host exited {child.ExitCode}:{Environment.NewLine}{printed[Math.Max(val1: 0, val2: (printed.Length - 2000))..]}"
+        );
+        Assert.Contains(expectedSubstring: "Total: 1, Errors: 0, Failed: 0", actualString: printed);
+    }
+    // Runs only as the child of AHostHardwareFaultAfterAGuestRanIsAManagedException, which selects it explicitly. A guest
+    // runs on this thread, then the processor raises an integer division fault in managed code on a thread that never
+    // ran one, and on pool threads, each of which must surface as the managed exception it is.
+    [Fact(Explicit = true)]
+    public async Task HostFaultChildAsync() {
+        using (var engine = new ScriptingEngine(options: ScriptingEngineOptions.Deterministic)) {
+            using var guest = Mount(engine: engine, wat: Quiet);
+
+            Assert.Equal(expected: AddonTickStatus.Ok, actual: guest.Tick(input: []).Status);
+        }
+
+        Exception? onAFreshThread = null;
+        var fresh = new Thread(start: () => onAFreshThread = DivisionFault());
+
+        fresh.Start();
+        fresh.Join();
+
+        var onPoolThreads = await Task.WhenAll(tasks: Enumerable.Range(start: 0, count: 8).Select(selector: _ => Task.Run(function: DivisionFault)));
+
+        _ = Assert.IsType<OverflowException>(@object: onAFreshThread);
+        Assert.All(collection: onPoolThreads, action: fault => Assert.IsType<OverflowException>(@object: fault));
     }
     [Fact]
     public void AGuestThatNeverReturnsRunsOutOfFuelAndSpendsTheSameFuelEveryRun() {
