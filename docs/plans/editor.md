@@ -878,8 +878,8 @@ checked when it runs against `control` over the `history` grant subject, under
 the seat's principal. `world.history switch` and `world.history save` take a kept
 branch somewhere. A tape can start from a checkpoint, so `replay.record` armed
 mid-session matches from its first tick, and the `ArmedAfterFirstStep` refusal is
-gone. The laws are `HistoryScrubLawTests`, `ReplayArmingLawTests` and
-`ReplayStartPrivacyLawTests`. The pointer drag is checked through the row's own
+gone. The laws are `HistoryScrubLawTests`, `HistoryRowDrawLawTests`,
+`ReplayArmingLawTests` and `ReplayStartPrivacyLawTests`. The pointer drag is checked through the row's own
 hit test and the seat's command session. No canary drives a physical mouse
 press onto the row.
 
