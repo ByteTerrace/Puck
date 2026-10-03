@@ -1120,4 +1120,73 @@ public sealed class CrossingIdentityPrivacyLawTests {
         NarrationPaths.AssertNone(root: catalog.FilePath, text: reason);
         Assert.True(condition: catalog.TrySave(identity: owned, reason: out reason), userMessage: reason);
     }
+
+    // A world whose one rule reads a fact of the identity seat 0 drives: `seen` becomes 1 while that fact is 1.
+    private static WorldDefinition FactReadingDocument() => Fixtures.BuildDocument() with {
+        StateRaw = new WorldStateSection(World: [
+            new WorldStateRow(Name: Name(value: WorldIdentityFactLane.RowName), Kind: CellKind.Int, Capacity: 16),
+            new WorldStateRow(Name: Name(value: "seen"), Kind: CellKind.Int, Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: CellValue.Int(value: 0L))]),
+        ]),
+        Rules = [new WorldRule(
+            Name: Name(value: "read"),
+            Effects: [new ActionEffect.SetState(State: "seen", Value: 1m)],
+            Gate: new ActionPredicate.CompareState(State: $"{WorldRuleFacts.IdentityPrefix}body:0:dived", Comparison: ExpressionOp.Equal, Value: 1m)
+        )],
+    };
+
+    // THE LAW: a fork records the identity it continues with. A tape is recorded with the owned identity carrying no
+    // `dived` fact; the owner then writes it as 1 and the tape is driven to its end as a fork, which rebinds the seat to
+    // that live identity. The fork's rule reads the fact, so the fork's world is not the tape's: the fork's own recording,
+    // re-driven through a fresh world, must reproduce every tick bit-identically. The red leg records the old tape's pins
+    // as the fork's starting identity, so the re-drive reads no fact and diverges from the tick the live fork's rule fired.
+    [Fact]
+    public void AForkRecordsTheIdentityItContinuesWith() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-fork-");
+        using var fixture = Fixtures.FreshServer(definition: FactReadingDocument());
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+
+        var (tape, owned) = RecordOwnedSeat(directory: directory.RootPath, fixture: fixture);
+
+        Assert.Equal(0L, SeenSlot(fixture: fixture));
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "dived"), reason: out var reason, value: 1), userMessage: reason);
+        Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: "branch", name: "arrivals", refusal: out reason, toTick: null), userMessage: reason);
+
+        while (tape.Mode == WorldReplayMode.Replaying) {
+            tape.InjectDriveTick();
+            fixture.Step();
+            tape.NoteTick();
+        }
+
+        Assert.Equal(WorldReplayMode.Recording, tape.Mode);
+        Assert.Same(expected: owned, actual: server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Equal(0L, SeenSlot(fixture: fixture));
+
+        for (var tick = 0; (tick < 3); tick++) {
+            fixture.Step();
+            tape.NoteTick();
+        }
+
+        Assert.Equal(1L, SeenSlot(fixture: fixture));
+        _ = tape.StopRecording();
+
+        var verdict = tape.Verify(name: "branch");
+
+        Assert.Equal(-1, verdict.Primary.DivergedAt);
+
+        WorldReplaySnapshot recorded;
+
+        using (var stream = File.OpenRead(path: tape.PathFor(name: "branch"))) {
+            recorded = WorldReplaySnapshot.Read(stream: stream);
+        }
+
+        var switches = recorded.Ticks.SelectMany(selector: static tick => tick.Authority).Where(predicate: static entry => (entry.GetType().Name == "SeatIdentity")).ToArray();
+
+        Assert.Single(collection: switches);
+    }
+
+    private static long SeenSlot(WorldFixture fixture) => StateRows.FindCell(
+        cells: WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "seen")!.Cells,
+        key: WorldStateRow.SlotKey
+    )!.Value.AsInt;
 }

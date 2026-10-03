@@ -679,7 +679,8 @@ owner's edit since the recording is named without making the replay diverge. A l
 copy too, and when the drive ends or is cancelled every seat this authority's catalog owns rebinds to
 the live catalog identity and the copy is discarded: a write the drive made never reaches the catalog,
 the same differences are reported on `replay.profile`, and a write after the drive is saved again. A
-seat the catalog does not own keeps what it carries.
+seat the catalog does not own keeps what it carries. A drive that ends in a fork records the switch on the fork's own tape,
+at the head of its first tick, so the fork's tape holds the identity the fork continues with.
 
 A world names a cross-owner neighbour without reaching its storage directly — worlds are users, so one
 owner's storage container is never reachable from another's. A cross-owner reference resolves through

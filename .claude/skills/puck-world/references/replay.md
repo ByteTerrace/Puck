@@ -154,7 +154,9 @@ actor)` (6), `Session(request)` (7), `Designation(designation, actor)` (8),
 `Composition(composition, actor)` (13), `Query(query, actor)` (14),
 `LinkDelivery(adjacencyName)` (15), the session events (16–18),
 `Arrival(sourceAuthority, transferId, encoded, outcome)` (19),
-`FederatedIntents(held)` (20), and `Departure(transferId, slot, restored)` (21).
+`FederatedIntents(held)` (20), `Departure(transferId, slot, restored)` (21), and
+`SeatIdentity(slot, projection)` (22: a fork's switch of a rebound seat to the live owned identity, applied at the head
+of the tick it is recorded on).
 `Departure` is one source body a crossing detached, or restored in a rollback,
 taped by `WorldServer.DepartureTap` inside the authority operation that did it,
 so it keeps the decision's own position however long the crossing then stays in
@@ -567,8 +569,9 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   mobility `WorldServer.HomeSeatIdentity` resolves to an owned identity rebinds to it, the
   detached copy is discarded, and `ReportAdoptionDrift` reports the copy's
   difference from the live identity on `replay.profile` first. A replay's identity effects are
-  never persisted; a seat the catalog does not own is untouched. A fork hands over from
-  the same rebound seats.
+  never persisted; a seat the catalog does not own is untouched. A fork records one
+  `SeatIdentity` per rebound seat at the head of its first tick (`m_recordPrefix`), so the child's tape holds the
+  identity the fork continues with and its re-drive switches at the same step; its boot image keeps the parent's pins.
   `VerifyMountedAddons` then pins the live receipts. On
   success `LoopbackTransport.InputMasked = true` and the mode is
   `Replaying`. The authority clock rewinds to the boot image. Hosts call

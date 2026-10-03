@@ -392,14 +392,14 @@
             "token": "puck.world.rewind.closed-group.v1"
         },
         "WorldReplaySnapshot.Magic": {
-            "shape": "1bff9c45e6c7bf6e",
+            "shape": "86e06945bcdcc251",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
             "token": "WLRP"
         },
         "WorldReplaySnapshot.ShapeToken": {
-            "shape": "1bff9c45e6c7bf6e",
+            "shape": "86e06945bcdcc251",
             "source": "src/Puck.World.Server/WorldReplaySnapshot.cs",
-            "token": "9"
+            "token": "10"
         },
         "WorldScheduleSection.ManifestSchemaId": {
             "shape": "a63d4c4af217e350",

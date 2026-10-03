@@ -90,9 +90,10 @@ public sealed partial class WorldReplayTape {
     // catalog owns returns to the live owned identity, where a later write is saved again, and where the copy differs from
     // it the difference is narrated as drift. A seat the catalog does not own (a visitor, or an id it holds no document
     // for) keeps what it carries.
-    private void RebindOwnedSeats() {
+    private HashSet<int> RebindOwnedSeats() {
         var population = m_liveServer.Population;
         var profiles = m_liveServer.Profiles;
+        var rebound = new HashSet<int>();
 
         for (var slot = 0; (slot < population.LocalSeatCount); slot++) {
             if (
@@ -125,7 +126,10 @@ public sealed partial class WorldReplayTape {
                 color: color,
                 slot: slot
             );
+            _ = rebound.Add(item: slot);
         }
+
+        return rebound;
     }
     private void EndDriveCore(bool completed) {
         var drive = m_drive!;
@@ -133,7 +137,7 @@ public sealed partial class WorldReplayTape {
         m_drive = null;
         m_liveServer.Extensions.CompleteReplay();
         m_transport.InputMasked = false;
-        RebindOwnedSeats();
+        var rebound = RebindOwnedSeats();
 
         var verdict = ((drive.DivergedAt < 0)
             ? "every driven tick matched the recording"
@@ -184,6 +188,17 @@ public sealed partial class WorldReplayTape {
             ParentName: drive.SourceName,
             Tick: drive.Target
         );
+        // The seats the drive rebound continue as the live owned identity, which is not the identity this recording's boot
+        // image pins: the fork's own tape switches them at the head of its first tick, where the live fork switched.
+        foreach (var slot in rebound.Order()) {
+            if (m_liveServer.Body(index: slot)?.Profile?.Project() is { } continued) {
+                m_recordPrefix.Add(item: new WorldReplayEntry.SeatIdentity(
+                    Profile: continued,
+                    Slot: slot
+                ));
+            }
+        }
+
         m_mode = WorldReplayMode.Recording;
         RefreshCapture();
         if (m_liveServer.Output.HasNarrationSink) {
