@@ -133,6 +133,13 @@ Run a load governor on any machine that hosts many agents, through
   4 GB free. A 16 GB, 6-thread machine has capacity while CPU is under 50% and
   free RAM over 5 GB, and is under pressure below 2 GB free or 10 GB of disk.
 
+A brief that asks an agent for deliberate CPU contention, such as a burner for a
+flake proof, gates it on GPU idle on the same box: no canary, parity, `Puck.World`
+run or device test host is running, checked just before the burner starts and
+again while it runs, and the burner stops when a GPU leg starts. Contention that
+overlaps another lane's GPU leg makes that lane's timeouts untrustworthy, so the
+brief names the check and the stop.
+
 Every build, a Codex brief's included, passes `-nodeReuse:false`
 ([`verification`](../verification/SKILL.md#build-before-you-test) says why).
 
