@@ -1,0 +1,169 @@
+schema: "puck.world.definition.v1"
+documentId: "instrument-clock-source-canary"
+
+bodies {
+  localSeats: 1
+}
+
+simulation {
+  rateHz: 240
+}
+
+audio {
+  masterGain: 1
+  defaultSpeakerRadius: 8
+  defaultCurve: "smoothstep"
+  defaultBedFadeSeconds: 0.5
+  listener: "focus"
+  cues []
+}
+
+spawnPoints [
+  {
+    id: "origin"
+    position [0, 0, 0]
+  }
+]
+
+channels [
+  {
+    name: "forward"
+    shape: Bipolar
+    role: MoveAdvance
+  }
+  {
+    name: "strafe"
+    shape: Bipolar
+    role: MoveStrafe
+  }
+  {
+    name: "turn"
+    shape: Bipolar
+    role: Turn
+  }
+]
+
+collision {
+  requirements []
+  contactSkin: 0.02
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  gradientProbe: 0
+}
+
+bodyMotionPrograms [
+  {
+    name: "grounded"
+    version: "puck.body.program.v1"
+    kind: Motion
+    operations [ResolveYawAttitudeAndPlanarFrame, ResolveHold, ComputePlanarTargetVelocity, ShapeVelocity, SnapYawToPlanarIntent, ApplyHold, IntegratePlanarAndVerticalVelocity, CommitPose]
+  }
+]
+
+kits {
+  rows [
+    {
+      name: "idle"
+      bodyMotionProgram: "grounded"
+      motion {
+        speed {
+          value: 4
+        }
+        turn {
+          rate: 2
+        }
+        shaping [
+          {
+            along {}
+          }
+        ]
+        holds [
+          {
+            name: "ground"
+            bond: Surface
+            cone [0, 60]
+            hold: Gravity
+            reach: 1.2
+            gravity {
+              rise: 20
+              fall: 30
+            }
+            envelope {
+              sinkSpeed: 30
+            }
+          }
+          {
+            name: "air"
+            bond: Free
+            hold: Gravity
+            gravity {
+              rise: 20
+              fall: 30
+            }
+            envelope {
+              sinkSpeed: 30
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
+defaultSeatKit: "idle"
+
+views {
+  seatControl {
+    yawReference: World
+    minPitch: -0.35
+    maxPitch: 1.2
+  }
+
+  seatRig "seatChase" {
+    version: "puck.camera.program.v1"
+    operations [
+      orbit(distance: 5.4626001, yaw: 0, pitch: 0.4145069, pivotOffset: [0, 0, 0])
+      lookAt(subject: reference(), targetOffset: [0, 1, 0], worldAxes: false)
+      fieldOfView(fieldOfViewRadians: 0.9599311)
+    ]
+  }
+}
+
+machines [
+  {
+    name: "instrument"
+    engine: "tune-instrument"
+    configuration {
+      schema: "puck.tune-instrument.configuration.v1"
+      content {
+        path: "fast-instrument.audio.json"
+      }
+    }
+  }
+]
+
+screens [
+  {
+    index: 0
+    origin [0, 1, 2]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 1
+    halfHeight: 1
+    halfDepth: 0.1
+    round: 0
+    source: machine(instance: instrument, output: "video")
+    route {
+      engageable: true
+      engageRadius: 1000
+    }
+  }
+]
+
+music [
+  {
+    name: "instrument-clock-source-canary"
+    source: "canary-instrument-clock-source.music.json"
+    hash: "642dfa199ba323bf4e503fcf972df3fa4b882bd4768d4572f2f61969be20ca2b"
+  }
+]
