@@ -20,7 +20,8 @@ only on those lanes, and each is marked.
 
 ## Implementation status
 
-Nothing on this page is implemented. The design was read against the
+Law 1 is implemented, in `tests/Puck.World.Tests/ProjectionAnchorLawTests.Seek.cs`;
+the rest are not yet. The design was read against the
 integration branch and the lanes the coming integration batch lands, and a
 review checked that no law can pass while its claim is false. Designing the
 laws found seven gaps. The coming integration batch fixes five of them (G1 to
@@ -64,12 +65,17 @@ it fails at its assertion, not by a skip.
 **Claim.** Restore or seek, then delivery to an existing viewer: the projection,
 time travel and recipients agree.
 
-**Scenario.** A world with one clock row that advances every tick and a fog
-density bound to it. At tick 0 a federation projection sink attaches at the
-Presentation tier, the way the projection lane's jump laws attach theirs. The
-world steps three ticks, the oldest keyframe tick is noted, a state cell is
-written, and the world steps three more. `world.history seek` then returns to
-the keyframe, and the sink's stream is decoded into a projection hold.
+**Scenario.** A world with one clock row that advances every tick, a fog
+density bound to it, and a row only another seat may read. At tick 0 a
+federation projection sink attaches at the Presentation tier, the way the
+projection lane's jump laws attach theirs, and is drained as the world steps
+past the history's second keyframe. `world.history seek` then returns to that
+keyframe, and the sink's stream is decoded into a projection hold.
+
+What the seek discards depends on the door. A journaled write between the
+keyframe and the seek changes the history's fingerprint and sends the restore
+through the load door. So the in-place variants discard only the clock's own
+advance, and the load-door variants journal a write.
 
 The viewer is a sink, not a session: a seek refuses while a session is live,
 because session input and grants are not captured, so a session cannot witness
@@ -89,8 +95,10 @@ Four variants run the same steps:
 **Decided by.**
 
 - The sink is still attached: its detach reason is empty.
-- The eased value read from the hold equals the authority's read at the
-  server's time, and differs from the value written after the keyframe.
+- The hold presents what the authority presents at the restored tick: the
+  clock's phase and the keyed fog. The authority's value there differs from
+  the one the seek discarded. A clock with no number at the keyframe presents
+  what a fresh viewer presents, its seed.
 - The anchor the hold carries is at or before the authority's engine tick, so
   the viewer is never left predicting from a future anchor.
 - The authoritative hash after the seek equals the hash the live run recorded
@@ -104,7 +112,10 @@ Four variants run the same steps:
   kinds, and the definition it was built from) equals the projection a fresh
   sink receives when it attaches after the seek. Correct counts and a correct
   clock are not enough: a hold that kept a row the structural edit added, or
-  lost one it removed, fails here.
+  lost one it removed, fails here. Clock anchors are compared by what they
+  present, not by value: the authority replaces a recipient's anchor only when
+  its prediction misses, so a held anchor and a fresh one may differ while
+  presenting the same phase.
 
 **Crosses.**
 
