@@ -2993,12 +2993,13 @@ refuses.
 
 The source composes to the document it came from: a list or object the document holds
 empty prints as `rows []` or the like, because composition replaces a list that is
-present and keeps the layers beneath one that is absent, and a section held `null`
-prints as `null`. A number prints in the spelling the document holds it in (`0.0` stays
+present and keeps the layers beneath one that is absent, and a member held `null`
+prints as `null`: a bare `null` holds nothing in every member, a name or key member
+included, so a row or key actually named null is written `$"null"`. A number prints in the spelling the document holds it in (`0.0` stays
 `0.0`), and a member a construct defaults (a transfer's `insertFirst: false`) is left
 to the construct's default, which composes to the same definition. The world-document round-trip law
 (`WorldDecompileRoundTripLawTests`) holds every JSON world document in the repository,
-and every empty list and object and every `null` section the generated schema declares,
+and every empty list and object and every `null` member the generated schema declares,
 to this.
 
 `embed` resolves all authored `embed(...)` text expressions and vector table literals in a

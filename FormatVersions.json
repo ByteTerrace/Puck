@@ -1250,6 +1250,7 @@
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.FindMultiColumnCandidateGroups(System.Text.Json.Nodes.JsonArray)",
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.FormatValue(System.Text.Json.Nodes.JsonNode,System.Int32,System.Type)",
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.HasUnsupportedTraits(System.Text.Json.Nodes.JsonObject)",
+                "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.HoldsNull(System.Text.Json.Nodes.JsonNode,System.Int32)",
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.IsKeyOnlyRow(System.Text.Json.Nodes.JsonObject)",
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.IsPileRow(System.Text.Json.Nodes.JsonObject)",
                 "M:Puck.World.Transpiler.Decompiler.WorldDecompiler.IsSlotRow(System.Text.Json.Nodes.JsonObject)",
@@ -1493,7 +1494,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "304d7ac94f8e2ee7",
+            "shape": "f497dba17269c758",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },

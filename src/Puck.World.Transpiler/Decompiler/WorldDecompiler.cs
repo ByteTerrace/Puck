@@ -215,7 +215,8 @@ public static partial class WorldDecompiler {
             propertyName: "imports"
         ) &&
             (importsNode is JsonArray importsArr) &&
-            (importsArr.Count > 0)
+            (importsArr.Count > 0) &&
+            !HoldsNull(levels: 1, node: importsArr)
         ) {
             if (hasHeaders) {
                 sb.AppendLine();
@@ -259,7 +260,8 @@ public static partial class WorldDecompiler {
             propertyName: "exports"
         ) &&
             (exportsNode is JsonObject exportsObj) &&
-            (exportsObj.Count > 0)
+            (exportsObj.Count > 0) &&
+            !HoldsNull(levels: 1, node: exportsObj)
         ) {
             if (hasHeaders) {
                 sb.AppendLine();
@@ -355,7 +357,9 @@ public static partial class WorldDecompiler {
         }
 
         foreach (var (key, value) in root) {
-            if (knownRootKeys.Contains(item: key)) {
+            if (knownRootKeys.Contains(item: key) && !(
+                (key is "imports" or "exports") && (value is not null) && HoldsNull(node: new JsonObject { [key] = value.DeepClone() }, levels: 2)
+            )) {
                 continue;
             }
             if (sugaredGroups && string.Equals(
@@ -492,7 +496,7 @@ public static partial class WorldDecompiler {
     // or sugar requirement does not hold prints as an ordinary field instead, which is the fallback the row's own
     // description names.
     private static bool TryDecompileAddons(StringBuilder sb, JsonNode? value) {
-        if (value is not JsonArray addons) {
+        if ((value is not JsonArray addons) || HoldsNull(levels: 1, node: addons)) {
             return false;
         }
         DecompileAddonsBlock(
@@ -545,6 +549,7 @@ public static partial class WorldDecompiler {
     private static bool TryDecompilePlacements(StringBuilder sb, JsonNode? value) {
         if (
             (value is not JsonObject placements) ||
+            HoldsNull(levels: 2, node: placements) ||
             !CanSugarPlacements(placements: placements)
         ) {
             return false;
@@ -683,8 +688,50 @@ public static partial class WorldDecompiler {
 
         return true;
     }
+    // Whether a node holds an explicit null in a member within `levels` containers (arrays do not count as a level). A
+    // construct prints the members it names, so a null where it has no spelling for one would be dropped; the section
+    // prints as the field it is instead, which keeps it.
+    private static bool HoldsNull(JsonNode? node, int levels) {
+        switch (node) {
+            case JsonObject holder:
+                foreach (var (_, member) in holder) {
+                    if ((member is null) || ((levels > 1) && HoldsNull(levels: (levels - 1), node: member))) {
+                        return true;
+                    }
+                }
+
+                return false;
+            case JsonArray items:
+                foreach (var item in items) {
+                    if (HoldsNull(levels: levels, node: item)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            default:
+                return false;
+        }
+    }
+    // The nulls the views block has no spelling for: a section held null, a row without its name, and the seat rig's own
+    // name, version and operations. Any other member prints as a property of its block, null included.
+    private static bool HoldsUnprintedNull(JsonObject views) {
+        if (HoldsNull(levels: 1, node: views)) {
+            return true;
+        }
+        foreach (var key in ((ReadOnlySpan<string>)["graphs", "layouts", "post"])) {
+            if ((views[key] is JsonArray rows) && rows.OfType<JsonObject>().Any(predicate: static row => (row.ContainsKey(propertyName: "name") && (row["name"] is null)))) {
+                return true;
+            }
+        }
+        if ((views["graphs"] is JsonArray graphs) && graphs.OfType<JsonObject>().Any(predicate: static row => (row.ContainsKey(propertyName: "parameters") && (row["parameters"] is null)))) {
+            return true;
+        }
+
+        return ((views["seatRig"] is JsonObject rig) && ((rig.ContainsKey(propertyName: "name") && (rig["name"] is null)) || (rig.ContainsKey(propertyName: "version") && (rig["version"] is null)) || (rig.ContainsKey(propertyName: "operations") && (rig["operations"] is null))));
+    }
     private static bool TryDecompileViews(StringBuilder sb, JsonNode? value) {
-        if (value is not JsonObject views) {
+        if ((value is not JsonObject views) || HoldsUnprintedNull(views: views)) {
             return false;
         }
         DecompileViewsBlock(
