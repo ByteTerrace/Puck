@@ -207,13 +207,18 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.wait",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
         "verb": "world.row.set",
         "occurrence": 11,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
-        "occurrence": 20,
+        "occurrence": 21,
         "outcome": "accepted"
       },
       {
@@ -223,7 +228,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 21,
+        "occurrence": 22,
         "outcome": "accepted"
       },
       {
@@ -233,7 +238,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 22,
+        "occurrence": 23,
         "outcome": "accepted"
       },
       {
@@ -243,7 +248,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 23,
+        "occurrence": 24,
         "outcome": "accepted"
       }
     ],
@@ -685,13 +690,18 @@
         "outcome": "accepted"
       },
       {
+        "verb": "world.wait",
+        "occurrence": 20,
+        "outcome": "accepted"
+      },
+      {
         "verb": "world.row.set",
         "occurrence": 11,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
-        "occurrence": 20,
+        "occurrence": 21,
         "outcome": "accepted"
       },
       {
@@ -701,7 +711,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 21,
+        "occurrence": 22,
         "outcome": "accepted"
       },
       {
@@ -711,7 +721,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 22,
+        "occurrence": 23,
         "outcome": "accepted"
       },
       {
@@ -721,7 +731,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 23,
+        "occurrence": 24,
         "outcome": "accepted"
       }
     ],
