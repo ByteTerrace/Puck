@@ -178,7 +178,7 @@ descriptor set every frame:
 | `pointerDown` | `uint` | One while the pointer is pressed. |
 | `pointerPresses` | `uint` | How many presses the pointer has made over the instance. |
 | `cameraPosition`, `cameraTarget`, `cameraUp` | `float3` | The paired camera. |
-| `cameraFov` | `float` | The paired camera's vertical field of view in radians; zero when none is paired. |
+| `cameraFov` | `float` | The paired camera's vertical field of view in radians; zero when none is paired. A pass that renders through its paired camera projects exactly as the camera does, with no factor of its own on this field of view, since a hit through the pane continues along the camera's ray for the same pixel; a model in another frame maps the camera's ray into it by a similarity, which leaves the projection unchanged. |
 | `placedExtent` | `float2` | The extent, in display pixels, of the rect the root places the instance's output in this frame, or the node's own extent when nothing places it. A pane renders at its layout's allocation envelope, which holds one extent while its rect eases, and the placement stretches the whole output into the rect, so a pass maps its output onto that rect and projects at `placedExtent.x / placedExtent.y`, the paired camera's aspect, never at `extent`'s. |
 
 A World has one presentation clock, its state mirror

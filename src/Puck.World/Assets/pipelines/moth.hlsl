@@ -2,7 +2,7 @@
 // Swept shoulders, curved boots and surface finish: 02-face-and-armor.png.
 // The avatars/moth world runs this file as the one-off moth-pipeline source; pipeline.watch moth-pipeline on reloads saved edits.
 // Reference sheets: docs/game/art/moth-concept-pack/.
-// The shader uses its paired camera when supplied; otherwise the orbit below.
+// The shader projects through its paired camera when supplied, exactly as the camera does; otherwise the orbit below.
 // Drag mouse: orbit. Release: hold view. Set AUTO_TURN to 1 for a turntable.
 // Approximate sculpt, not a mesh reconstruction. Front is +Z; units are artistic.
 // CLOSE_UP: face/shoulder framing. AA: 1 = fast, 2 = four samples per pixel.
@@ -1433,20 +1433,18 @@ float3 compositeJets(float3 col,float3 ro,float3 rd,float solidDepth,float2 samp
 float3 render(float2 uv,float2 lightSample) {
     float3 ro,ww,uu,vv,rd;
     float focal=2.25;
-    // The world model faces -Z at half this pipeline's scale. Rotate 180 degrees
-    // about Y and scale uniformly, preserving handedness and the ground plane.
-    const float3 worldToPipeline=float3(-2.,2.,-2.);
+    // A paired camera's ray is the camera's own: the pixel's ray through its vertical field of view, at the placed
+    // aspect, in world space. The world model faces -Z at half this model's scale, so the model's placement maps the ray
+    // into the model's frame by a rotation of 180 degrees about Y and a uniform scale, which preserves handedness, the
+    // ground plane and every projection, so the pane shows each surface on the ray a pick through it continues along.
+    const float3 modelFromWorld=float3(-2.,2.,-2.);
     if(frameGroup.cameraFov>0.) {
-        float3 target=frameGroup.cameraTarget*worldToPipeline;
-        ro=frameGroup.cameraPosition*worldToPipeline;
-        ww=normalize(target-ro);
-        uu=normalize(cross(ww,normalize(frameGroup.cameraUp*worldToPipeline)));
-        vv=cross(uu,ww);
+        float3 forward=normalize(frameGroup.cameraTarget-frameGroup.cameraPosition);
+        float3 right=normalize(cross(forward,normalize(frameGroup.cameraUp)));
+        float3 up=cross(right,forward);
         focal=.5/tan(frameGroup.cameraFov*.5);
-#if ISOLATE_PACK == 1
-        focal*=1.48;
-#endif
-        rd=normalize(uv.x*uu+uv.y*vv+focal*ww);
+        ro=frameGroup.cameraPosition*modelFromWorld;
+        rd=normalize((uv.x*right+uv.y*up+focal*forward)*modelFromWorld);
     } else {
     float yaw=POSE==7?-.75:.22, pitch=.055;
     if(PACK_VIEW==1) { yaw=-2.65; pitch=.10; }
