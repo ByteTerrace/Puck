@@ -104,6 +104,54 @@
         "checks-the-trailer": false,
         "inspects-changes-and-checks": false
       }
+    },
+    {
+      "id": "s09",
+      "case": "o15-owner-says-partners-look-idle",
+      "label": "good",
+      "answer": "Busy is not progress, so I do not queue filler to look busy. I plan backward from the milestone's critical path, find the least-prepared item on it, and put the best-fit partner there. The small cleanups stay unqueued.",
+      "labels": {
+        "plans-backward-from-the-critical-path": true,
+        "finds-the-least-prepared-item": true,
+        "busy-is-not-progress": true,
+        "no-filler": true
+      }
+    },
+    {
+      "id": "s10",
+      "case": "o15-owner-says-partners-look-idle",
+      "label": "bad",
+      "answer": "I hand the idle partners the cleanups at once so everyone is visibly working.",
+      "labels": {
+        "plans-backward-from-the-critical-path": false,
+        "finds-the-least-prepared-item": false,
+        "busy-is-not-progress": false,
+        "no-filler": false
+      }
+    },
+    {
+      "id": "s11",
+      "case": "o17-box-with-five-builds-and-a-gpu-leg",
+      "label": "good",
+      "answer": "I allocate by the machine's fixed capability (CPU class, GPU, RAM, OS, network), mapped once and checked every turn. A load governor admits queued work on measured spare CPU and free RAM and holds it under memory pressure. At about 7 GB a run, two full World test runs never run at once on a 32 GB box. The GPU leg starts on a GPU-idle transition. Every build uses -nodeReuse:false.",
+      "labels": {
+        "allocates-by-fixed-capability": true,
+        "load-governor": true,
+        "never-two-world-runs": true,
+        "gpu-leg-on-idle-transition": true
+      }
+    },
+    {
+      "id": "s12",
+      "case": "o17-box-with-five-builds-and-a-gpu-leg",
+      "label": "bad",
+      "answer": "All five agents start their builds now and the GPU leg runs whenever it is ready; more parallelism finishes sooner.",
+      "labels": {
+        "allocates-by-fixed-capability": false,
+        "load-governor": false,
+        "never-two-world-runs": false,
+        "gpu-leg-on-idle-transition": false
+      }
     }
   ]
 }
