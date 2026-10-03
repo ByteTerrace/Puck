@@ -327,7 +327,7 @@ dotnet publish src/Puck.World.Browser -c Release
 the ordinary net10.0 test host—no wasm runtime needed to exercise the pure
 core. The wasm-specific proof is the Node harness, which needs the AppBundle
 the `dotnet publish` line above produces and the system Node on `PATH`. Its
-package declares no `engines` requirement, and CI runs it on Node 24.20.0
+package declares no `engines` requirement, and CI runs it on Node 24.21.0
 (the `browser` job in `.github/workflows/verify.yml`). Use the system install,
 not a version manager:
 
