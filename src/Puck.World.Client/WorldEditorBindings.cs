@@ -20,6 +20,14 @@ public static class WorldEditorBindings {
     public const string ReadOnlyLabel = "Build (read-only)";
     /// <summary>The bindable verb that flips a seat between playing and building.</summary>
     public const string ToggleCommand = "player.build";
+    /// <summary>The in-session history verb whose seat forms the build page binds: a tick back or on, resume, and keep
+    /// the future as a branch.</summary>
+    public const string HistoryCommand = "world.history";
+    /// <summary>The held verb the build page binds to the left mouse button: a drag along the history scrubber row seeks
+    /// to the tick under the pointer.</summary>
+    public const string HistoryDragCommand = "world.history.drag";
+    /// <summary>The branch name the build page's keep entry keeps the future under.</summary>
+    public const string KeptBranch = "kept";
 
     private const string BarLayout = "build";
     private const string GamepadTable = "gamepad";
@@ -71,8 +79,9 @@ public static class WorldEditorBindings {
         );
     }
 
-    /// <summary>The build page: the toggle back to play, the grid and snapping, placing, and nudging and turning the
-    /// seat's current placement by whole grid and angle steps.</summary>
+    /// <summary>The build page: the toggle back to play, the grid and snapping, placing, nudging and turning the seat's
+    /// current placement by whole grid and angle steps, and scrubbing the in-session history: a tick back or on,
+    /// resume, keep the future as a branch, and a left-button drag along the scrubber row.</summary>
     public static BindingPageDefinition BuildPageDefinition { get; } = new(
         Entries: [
             Toggle(label: "Play"),
@@ -91,6 +100,11 @@ public static class WorldEditorBindings {
             Entry(command: "world.nudge", id: "editor.nudge.down", label: "Down", sources: [Key(letter: 'f')], text: "y -1"),
             Entry(command: "world.turn", id: "editor.turn.left", label: "Turn left", sources: [Key(letter: 'q'), InputSources.Gamepad.LeftShoulder], text: "-1"),
             Entry(command: "world.turn", id: "editor.turn.right", label: "Turn right", sources: [Key(letter: 'e'), InputSources.Gamepad.RightShoulder], text: "1"),
+            Entry(command: HistoryCommand, id: "editor.history.back", label: "Tick back", sources: [Key(letter: 'z')], text: "step -1"),
+            Entry(command: HistoryCommand, id: "editor.history.forward", label: "Tick on", sources: [Key(letter: 'x')], text: "step 1"),
+            Entry(command: HistoryCommand, id: "editor.history.resume", label: "Resume", sources: [Key(letter: 'v')], text: "resume"),
+            Entry(command: HistoryCommand, id: "editor.history.keep", label: "Keep", sources: [Key(letter: 'b')], text: $"branch {KeptBranch}"),
+            Entry(command: HistoryDragCommand, id: "editor.history.drag", label: "Scrub", sources: [InputSources.Mouse.LeftButton], text: null),
         ],
         Id: BuildPage,
         Label: BuildLabel

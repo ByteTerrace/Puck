@@ -198,9 +198,10 @@ public sealed class ScheduledStepVocabularyLawTests {
     // The registry refuses an operator verb for every principal but the console before its handler runs
     // (Puck.Commands' CommandAudienceLawTests), so what a host must get right is which verbs carry the audience. The
     // evaluation diagnostics print values the rules computed, some of them from state a seat is not shown; every one
-    // of them, in whichever module the host composes it, answers the operator alone. So does world.history, which
-    // prints the state it diffs and moves the whole world's timeline. In the headless host this class boots nothing
-    // else does. A GPU shape adds the verb that arms its device's creation faults and nothing
+    // of them, in whichever module the host composes it, answers the operator alone. world.history is bindable instead:
+    // its handler answers the operator alone for every form that prints state or administers the history, and runs its
+    // seat forms for a seat that holds control over history (HistoryScrubLawTests in Puck.World.Tests). In the
+    // headless host this class boots nothing else does. A GPU shape adds the verb that arms its device's creation faults and nothing
     // more (WorldBootCompositionLawTests). A read step a schedule admits is never an operator verb.
     [Fact]
     public void TheHeadlessHostsOperatorVerbsAreExactlyTheEvaluationDiagnostics() {
@@ -219,7 +220,7 @@ public sealed class ScheduledStepVocabularyLawTests {
                 b: "operator",
                 comparisonType: StringComparison.Ordinal
             )).Select(selector: static entry => entry.Key).Order(comparer: StringComparer.Ordinal),
-            expected: ["world.decisions", "world.history", "world.responses", "world.rule.failures", "world.rule.trace", "world.rules", "world.search", "world.verdicts"]
+            expected: ["world.decisions", "world.responses", "world.rule.failures", "world.rule.trace", "world.rules", "world.search", "world.verdicts"]
         );
         Assert.DoesNotContain(
             collection: WorldScheduleCommands.Admitted,

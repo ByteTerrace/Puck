@@ -217,11 +217,10 @@ crossing with a profiled traveller, through both tapes.
 **Lives in** `tests/Puck.World.Tests/CrossingReplayTravellerLawTests.cs`.
 **GPU:** none.
 
-**As implemented.** The recording starts at the rows' first tick: a tape
-re-establishes the document and the seats, never a pose or other state a row
-reached before it was armed, so arming after the world's first step refuses by
-name (`ArmedAfterFirstStep`, `ReplayArmingLawTests`). Row A's document therefore
-authors seat 0's spawn a short walk in front of its door. The isolated reland is the companion tape's own
+**As implemented.** The recording starts at the rows' first tick, so each tape
+starts from its row's boot image. Row A's document authors seat 0's spawn a
+short walk in front of its door. A recording armed later would start from a
+checkpoint of its row instead (`ReplayArmingLawTests`). The isolated reland is the companion tape's own
 re-drive: at every recorded tick the replayed destination is read through
 `DriveTraces`' tick observer and compared with the live destination, field for
 field. A reservation that mints the credential is not red on this walk, because

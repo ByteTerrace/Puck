@@ -95,9 +95,8 @@ surface.
   recorded departure or its rollback the shadow's own population does not
   reproduce (`DepartureRefused`), and a recorded seat switch naming no active
   local seat (`SeatSwitchRefused`). The fourteenth is `replay.record`'s
-  `ArmedAfterFirstStep`: a tape re-establishes the definition and the seats,
-  never state a step reached, so a recording arms only before the world's first
-  step.
+  `StartNotCheckpointable`: the world has stepped, so the tape would start from a
+  checkpoint of the live state, and that state is one no checkpoint captures.
   `ScreenOpContentMismatch`
   is emitted by `WorldMachineHost` as a named screen-op refusal, not a
   `ReplayRefusal` enum member.
@@ -125,7 +124,19 @@ Record-start state: the live `WorldDefinition` as canonical JSON
 module content hash, fuel/tick — copied from the instances that MOUNTED,
 never the document rows), and the active local seats with a pinned profile
 (`WorldIdentityProjection`, including id, name, authored color, records and raw
-fixed-point movement rates). There is no captured identity/profile catalog on the tape —
+fixed-point movement rates). A recording armed after the world stepped (or after a
+guest or machine ran) also carries a start checkpoint
+(`WorldReplaySnapshot.StartCheckpoint`, an optional header block after the document
+path, `WorldReplayTape.Start.cs`): the authority checkpoint taken at the arm,
+passed through `WorldReplaySnapshot.ForTape`, which empties the owned-world section
+and the host row. The re-drive restores it (`WorldServer.FromCheckpoint` with
+`restoreOwnedIdentities: false`) instead of booting the definition and joining the
+seats, so its seats keep the projections the population checkpoint carries. Encode
+and `Read` both refuse a start checkpoint that holds an owned document or describes
+another document than the tape embeds; `ReplayStartPrivacyLawTests` searches a
+mid-run tape's bytes for an owned document's markers. Input the history's capture
+already held for the open tick at the arm reached the server before the checkpoint,
+so the recording's first tick leaves it out (`TrimStartSkip`). There is no captured identity/profile catalog on the tape —
 owned identities are ordinary `puck.world.definition.v1` documents on disk, outside
 the tape's scope. An arrival entry is the exception for the travellers it lands: its
 leaf carries each landed profile's identity projection and nothing of its owned document, so a
@@ -395,15 +406,18 @@ and fed the recorded ticks, with local seat input masked at the loopback.
 
 - `replay.record <name>` — in addition to bad args/name/already-recording,
   refuses while a drive is in progress (`replay.cancel` ends it; a fork is
-  the way to record from a drive), and after any addon has pumped, any
-  screen machine has stepped, or any authority-admitted screen operation has
-  reached host dispatch. The last gate includes host refusals because a
-  failed `Select` can still move its selector; authority denials return
-  before dispatch and do not latch it. Guest and machine accumulated state
-  and pre-arm screen operations are not in the record-start image. A world
-  with named machines must arm before its first world
-  tick, because paused machines still synchronize bindings and replay starts
-  with fresh hardware and an empty binding memo. The
+  the way to record from a drive). Before the world's first step (and before
+  any guest or machine has run) the tape starts from the boot image, and it
+  refuses once any authority-admitted screen operation has reached host
+  dispatch. That gate includes host refusals because a failed `Select` can
+  still move its selector; authority denials return before dispatch and do not
+  latch it. Later the tape starts from a checkpoint taken at the arm, which
+  holds what the session reached: poses, cells, grants, latches, the machine
+  cores and binding memo a checkpoint host captures. A state no checkpoint
+  captures refuses by name with `StartNotCheckpointable`: a mounted or pumped
+  addon guest, a screen operation, a stepped machine without checkpoint
+  support, a coupled link or rewind history, a live session, an engagement in
+  flight, or an edit not yet applied. The
   grant/revoke leaf carries the whole `WorldGrant` row on tape, `KindMask`
   and `WriteMask` included.
 - `replay.stop` — persists FIRST (the tape is evidence of the capture),
@@ -425,10 +439,12 @@ and fed the recorded ticks, with local seat input masked at the loopback.
 
 ## Verify semantics
 
-`Verify` rehydrates a FRESH boot-image world: deserialize the embedded
+`Verify` rehydrates a FRESH world: deserialize the embedded
 definition → new population/server (fresh unconfigured render envelope reads
 as "fits") → rejoin the recorded seats with pinned profile rates (drift
-against the live catalog is printed, never thrown) → mount addons after
+against the live catalog is printed, never thrown), or, for a tape with a start
+checkpoint, restore that checkpoint into the fresh server instead
+(`WorldReplaySnapshot.CreateShadow`) → mount addons after
 seats, matching live composition order → `VerifyMountedAddons` → per tick:
 apply authority and peer-lifecycle entries in recorded order through the
 same population/grant doors, enqueue intents,
@@ -461,11 +477,10 @@ recorded world authored), hash.
   what was actually a prepare/validate/authority divergence.
 - The comparison is LIVE-vs-replay: the recorded per-tick hash trace against
   the shadow drive's trace; the verdict names the first divergence.
-- **Tick 0 indicts the STARTING STATE** — a mid-session capture the
-  definition boot image cannot reproduce (the tape's start is the document
-  boot image plus document grants, the record-start player document, the active
-  seat list, and the permissive seed, not arbitrary live mid-session state;
-  pre-record mutations, grant edits, and session changes are not captured).
+- **Tick 0 indicts the STARTING STATE** — the boot image and seats, or the
+  start checkpoint, are not where the live session stood at the arm
+  (`ReplayArmingLawTests` doctors a tape with a checkpoint from the wrong tick
+  and reads MISMATCH at tick 0).
   **Any later tick means the start matched and the trajectory
   drifted — a genuine determinism defect.** `replay.stop` echoes exactly
   this reading.
@@ -713,6 +728,30 @@ The contracts a change must keep:
 - **Steady ticks allocate nothing.** Capture buffers are reused when only the
   history records, spans are sized on the keyframe tick, and per-tick paths
   avoid capturing lambdas. `ASteadyRecordedTickAllocatesNothing` pins it.
+- **Branches go somewhere.** `switch <name>` (`WorldHistory.TrySwitch`) is a seek
+  to the branch's fork under the seek's own refusals plus the branch's own
+  entries. The displaced future is kept under the same name in its place, and
+  the branch's ticks are re-simulated through `StepRecorded` and appended as the
+  timeline that now stands, each proved against the hash the branch recorded. A
+  branch keeps its step widths for this. `save <name> <tape>` drafts a tape
+  (`TryBranchTape`) that starts from the keyframe checkpoint at or before the
+  fork, without its owned-world section, carries the timeline's ticks to the fork
+  and then the branch's, and names `ForkedFrom = ('world.history', ticks
+  copied)`. `WorldReplayTape.SaveDraft` re-drives it once for its pose trace,
+  writes it and returns the verdict; a tick whose step width differs from the
+  rate's refuses the save.
+- **Seats scrub under their own principal.** `step`, `scrub`, `resume` and
+  `branch` are bindable. Each is checked when it runs by
+  `WorldHistory.TryAuthorize`, which requires `Control` over
+  `GrantSubject.History`; the seeded `Control/all` covers it until revoked.
+  `row` answers anyone, and every other form answers the console only
+  (`WorldHistoryCommandModule.Seat.cs`). The scrubber row reads only what
+  `PublishRow` copies under its lock at the end of a closed tick, a seek, a
+  switch or a cleared window. `world.history row` echoes exactly that.
+  `world.history.drag` reads `WorldHistory.Pointer`, the row a presented host
+  attaches, which hit-tests the rectangle the overlay draws
+  (`HistoryRowWriter.Rect`). `HistoryScrubLawTests` drives all of it from a
+  seat's command session.
 - **Shadows for what-ifs.** `diff` and `replay-edit` run on a
   `WorldHistoryShadow` (`FromCheckpoint`, its own machine host, a scratch
   owned-world catalog), never on the live server.

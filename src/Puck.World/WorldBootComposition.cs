@@ -1418,6 +1418,23 @@ public static class WorldBootComposition {
         services.AddSingleton<CursorStore>();
         services.AddSingleton<WorldInspector>();
         services.AddSingleton<IInspectorSource>(implementationFactory: static sp => sp.GetRequiredService<WorldInspector>());
+        // The in-session history's scrubber row: the editor overlay draws it for each building seat, and the same row,
+        // attached as the history's pointer, turns a seat's pointer into the tick world.history.drag seeks to. A
+        // headless boot attaches none, so the drag does nothing there.
+        services.AddSingleton(implementationFactory: static sp => {
+            var history = sp.GetRequiredService<WorldHistory>();
+            var row = new WorldHistoryRow(
+                bindings: sp.GetRequiredService<WorldSeatBindings>(),
+                history: history,
+                pointer: sp.GetRequiredService<WorldPointer>(),
+                viewports: sp.GetRequiredService<WorldSeatViewports>()
+            );
+
+            history.Pointer = row;
+
+            return row;
+        });
+        services.AddSingleton<IHistoryRowSource>(implementationFactory: static sp => sp.GetRequiredService<WorldHistoryRow>());
         services.AddSingleton(implementationFactory: static sp => new WorldCursorFeed(
             bindings: sp.GetRequiredService<WorldSeatBindings>(),
             pointer: sp.GetRequiredService<WorldPointer>(),
@@ -1672,7 +1689,8 @@ public static class WorldBootComposition {
                         HudBindings: sp.GetRequiredService<IHudBindingResolver>(),
                         Cursor: sp.GetRequiredService<CursorStore>(),
                         Wheel: sp.GetRequiredService<WheelStore>(),
-                        Inspector: sp.GetRequiredService<IInspectorSource>()
+                        Inspector: sp.GetRequiredService<IInspectorSource>(),
+                        HistoryRow: sp.GetRequiredService<IHistoryRowSource>()
                     ),
                     theme: themeResolve.Resolve(
                         definition: sp.GetRequiredService<WorldDefinition>(),

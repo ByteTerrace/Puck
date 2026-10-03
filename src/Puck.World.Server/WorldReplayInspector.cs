@@ -121,6 +121,10 @@ public sealed class WorldReplayInspector {
         lines.Add(item: $"{Prefix}shape magic=0x{loaded.Magic:X8} token={loaded.ShapeToken}]");
         lines.Add(item: $"{Prefix}rate {recording.SimulationRate} Hz | ticks {recording.TickCount} | tail hash 0x{recording.RecordedTailHash:X16}]");
 
+        lines.Add(item: ((recording.StartTick is { } startTick)
+            ? $"{Prefix}starts from a checkpoint after live tick {startTick}]"
+            : $"{Prefix}starts from the boot image]"));
+
         if (recording.ForkedFrom is { } fork) {
             lines.Add(item: $"{Prefix}forked from '{fork.ParentName}' at tick {fork.Tick}]");
         }

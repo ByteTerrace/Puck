@@ -1801,6 +1801,7 @@ Capabilities are `Drive`, `Observe`, `Control`, `Mutate`, and `Edit`
 sections); subjects are the `all`
 wildcard, `body:<n>`, `screen:<n>`, `section:<name>`,
 `state:<name>`, `composition` (the shared window-composition authority),
+`history` (the shared in-session history timeline, `Control` only),
 `creation:<id>`/`placement:<id>` (one creations/placements row apiece,
 `Mutate`-only), or the two world-events-feed subjects
 `region:<name>`/`seat:<n>` (legitimate
@@ -1952,19 +1953,19 @@ before anything (re-)establishes), so a re-shape that moves a screen from
 one declared link to another within the SAME reconcile always succeeds
 rather than silently failing while the old link still owns the screen.
 Every op rides the replay tape (`WorldReplayEntry.ScreenOp`), and
-`replay.record`'s arm gate refuses on three latches, none sufficient alone:
-`WorldServer.AnyAddonEverPumped`, `AnyMachineEverPumped` (once any machine
-has stepped), and `AnyScreenOpEverApplied` (once any screen op has applied
-AT ALL, independent of stepping—screen ops apply synchronously, between
-fixed steps, so an insert/eject/select/options/link/unlink can change live
-host state before a single tick has run, which the other two latches would
-miss). Successful screen memory access sets the screen-operation latch too.
-A world with named machines also refuses recording after its first world tick:
-paused machines still synchronize bindings, and neither their prior writes nor
-their memo belongs to the tape's boot image. Offline replay reconstructs a fresh host from the tape's embedded
-definition, so a machine's accumulated core state (or a screen op's effect)
-from before recording began can never be re-established, and the population
-hash covers no machine state to catch the divergence. `Puck.World.WorldScreenBinder`
+`replay.record` starts a tape from the boot image only while nothing has stepped:
+no world tick, no pumped addon (`WorldServer.AnyAddonEverPumped`) and no stepped
+machine (`AnyMachineEverPumped`). There it refuses once any screen op has
+applied (`AnyScreenOpEverApplied`), because screen ops apply synchronously,
+between fixed steps, and change live host state the definition never reflects.
+Successful screen memory access sets that latch too. Past that point the tape
+starts from an authority checkpoint taken at the arm
+(`WorldReplaySnapshot.StartCheckpoint`). The checkpoint holds the machine cores
+and the named bindings' memo a checkpoint host captures, and the offline
+replay restores them into its fresh host. A state the checkpoint cannot
+capture refuses the arm by name (`ReplayRefusal.StartNotCheckpointable`): a
+pumped addon guest, a screen op, a stepped machine without checkpoint support,
+a coupled link or rewind history. `Puck.World.WorldScreenBinder`
 is a pure reader of this type's outputs for presentation (a machine source
 instance's upload writes an output's frames, `WriteFrame`, and the light
 lights the room) and still owns the genuinely presentation
@@ -2280,9 +2281,15 @@ state-system lanes, not the whole document, grant table, HUD, or machine cores. 
 captures every one of the twelve envelope payload kinds except `Lever`
 (command, grant, revoke, session, designation, rebuild, mutation, undo,
 composition, query, and screen-op) plus intents and the two
-peer-lifecycle server events; a mid-session capture honestly reports
-MISMATCH at tick 0—carried in
-[`docs/game/design.md`](../../docs/game/design.md).
+peer-lifecycle server events—carried in
+[`docs/game/design.md`](../../docs/game/design.md). A capture armed mid-session
+starts from the checkpoint taken at the arm (`WorldReplayTape.Start.cs`,
+`WorldReplaySnapshot.Start.cs`). The checkpoint leaves out the owned-world
+catalog and the host row, so its seats carry their identities as projections,
+and the re-drive restores it with `restoreOwnedIdentities: false`. Its tick 0
+therefore indicts the checkpoint, never a boot image. Input the history's capture
+already held for the open tick when the recording armed has reached the server,
+and the checkpoint holds it, so the recording's first tick leaves it out.
 
 Each authority tapes its own half of a crossing: a source its departure
 (`Transfer`, naming the target authority and the slots that left), a
@@ -2364,7 +2371,33 @@ an explicit extension epoch admits fresh providers when the host is ready.
 
 The first live tick taken while the cursor sits behind the head replaces the
 recorded future: it is discarded, or kept as a named `WorldHistoryBranch` (the
-tape's tick groups and their hashes from the fork) when `TryArmBranch` named one.
+tape's tick groups, their hashes and step widths from the fork) when
+`TryArmBranch` named one.
+
+A kept branch goes somewhere (`WorldHistory.Branches.cs`). `TrySwitch` moves the
+live world to the branch's fork exactly as a seek does, under the same refusals
+plus the branch's own recorded entries. It keeps the future after the fork as a
+branch under the same name, then re-simulates the branch's ticks through
+`StepRecorded`. Each tick is proved against the hash the branch recorded and
+appended to the window as the timeline that now stands, keyframing on the
+interval. `TryBranchTape` drafts the branch as a tape that starts from the
+keyframe checkpoint at or before the fork, without its owned-world section. The
+tape carries the timeline's ticks to the fork, then the branch's, and its
+`ForkedFrom` names `world.history` and the number of ticks copied from the
+timeline. `TrySaveBranch` writes it through `WorldReplayTape.SaveDraft`, which
+re-drives the draft once and keeps that re-drive's pose trace (the history
+records authoritative hashes only).
+
+The scrubber row reads what the history publishes (`WorldHistory.Row.cs`). At the
+end of every closed tick, seek, switch and cleared window, the step thread copies
+the window, the cursor, the keyframe ticks and the kept branches into reused
+buffers under a lock. `TryReadRow` copies them out for a presentation thread,
+sampling at most `RowKeyframes` keyframes evenly, and `TryTickAt` turns a
+fraction of the window into a tick. `TryAuthorize` checks
+`WorldCapability.Control` over `GrantSubject.History`, the check every bindable
+`world.history` form runs under the pressing seat's principal. `Pointer` is the
+`IWorldHistoryPointer` a presented host attaches, which `world.history.drag`
+reads.
 
 `TryDiff` and `TryReplayEdit` never touch the live world. Each opens a
 `WorldHistoryShadow` — `WorldServer.FromCheckpoint` over a keyframe, its own

@@ -60,9 +60,13 @@ coupling this project cannot see through, so only the verb surface lives here; t
 module reaches the tape, the inspector, and `WorldInstanceHost` by their
 already-public surface. `world.history` (`WorldHistoryCommandModule`) is the
 in-session time-travel surface over the boot world's `WorldHistory`: on/off,
-status, seek, step, resume, branch, diff, and replay-edit; it pauses the boot
-row through `WorldInstanceHost` when a seek lands behind the head and releases
-it on resume. The history itself lives in
+status, row, seek, step, scrub, resume, branch, switch, save, diff, and
+replay-edit, plus the held `world.history.drag` the scrubber row's pointer binds.
+It pauses the boot row through `WorldInstanceHost` when a seek lands behind the
+head and releases it on resume. The verb is bindable. `step`, `scrub`, `resume`
+and `branch` run for a seat that holds `control` over `history`
+(`WorldHistoryCommandModule.Seat.cs`, `WorldHistory.TryAuthorize`), `row` for
+anyone, and every other form for the operator only. The history itself lives in
 [`Puck.World.Server`](../Puck.World.Server/README.md#in-session-history-worldhistorycs-worldreplaytapecapturecs).
 `WorldCommandArguments` (the free-text-tail
 reconstruction every JSON/prose-tailed verb shares) lives in

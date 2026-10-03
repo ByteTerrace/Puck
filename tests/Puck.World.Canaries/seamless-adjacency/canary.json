@@ -33,7 +33,7 @@
       { "type": "line", "name": "automatic adjacency handoff fired", "stream": "stdout", "match": "contains", "text": "[world.adjacency: 'boot/east' seat 1 crossed", "present": true },
       { "type": "line", "name": "remote entity carries authority slot and generation", "stream": "stdout", "match": "contains", "text": "entities=6~global2~ne/0:1", "present": true },
       { "type": "line", "name": "the destination's own tape replays the arrival and the set verifies the crossing", "stream": "stdout", "match": "contains", "text": "crossing transfer=0 'boot' -> '6~global2~ne' verified", "present": true },
-      { "type": "line", "name": "every authority of the set replays to the state it reached", "stream": "stdout", "match": "contains", "text": "— faithful, boot-anchored capture]", "present": true },
+      { "type": "line", "name": "every authority of the set replays to the state it reached", "stream": "stdout", "match": "contains", "text": "— faithful capture]", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   },
@@ -64,7 +64,7 @@
       { "type": "line", "name": "no automatic handoff without a crossing", "stream": "stdout", "match": "contains", "text": "[world.adjacency: 'boot/east' seat 1 crossed", "present": false },
       { "type": "line", "name": "no remote entity without a crossing", "stream": "stdout", "match": "contains", "text": "entities=6~global2~ne/0:1", "present": false },
       { "type": "line", "name": "no crossing is paired without a crossing", "stream": "stdout", "match": "contains", "text": "crossing transfer=", "present": false },
-      { "type": "line", "name": "the control set replays to the state it reached", "stream": "stdout", "match": "contains", "text": "— faithful, boot-anchored capture]", "present": true },
+      { "type": "line", "name": "the control set replays to the state it reached", "stream": "stdout", "match": "contains", "text": "— faithful capture]", "present": true },
       { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
     ]
   }

@@ -502,8 +502,10 @@ public sealed partial class WorldPersistence {
     /// acquiring a host-construction-only pending wake afterward.</param>
     /// <param name="documentDirectory">The directory the captured document's relative paths resolve against, or
     /// <see langword="null"/> for a document that names none.</param>
+    /// <param name="restoreOwnedIdentities">Whether to restore the catalog and bind its home seats. A replay tape's start
+    /// checkpoint carries no owned documents, so its re-drive keeps every seat on the projection the tape pinned.</param>
     /// <returns>The restored server and the population it owns.</returns>
-    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null) {
+    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: machines);
@@ -525,7 +527,7 @@ public sealed partial class WorldPersistence {
 
         server.Adjacencies = adjacencies;
 
-        server.Persistence.RestoreCheckpointCore(admission: admission, checkpoint: checkpoint);
+        server.Persistence.RestoreCheckpointCore(admission: admission, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
 
         return (server, population);
     }
