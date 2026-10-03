@@ -17,7 +17,7 @@ count); it reads the island's.
 
 | Alias | File | District |
 |---|---|---|
-| `granaries` | `granaries.world.json` | The platform twin's storage court, dealt from the deployment's inventory rows |
+| `granaries` | `granaries.puck` | The platform twin's storage court, dealt from the deployment's inventory rows |
 | `arcade` | `arcade.world.json` | Two cabinets and a handheld, each booting an authored cartridge |
 | `dive` | `dive.world.json` | The pool: a medium lattice, a diver kit, fish, a depth row |
 | `kart` | `kart.world.json` | A track on a curve, a kart kit, gates, a lap counter |

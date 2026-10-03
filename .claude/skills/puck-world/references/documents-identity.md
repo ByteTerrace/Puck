@@ -129,7 +129,7 @@ Part of [`puck.world.definition.v1`](documents.md). See
   spelling `/` refuses by name. Read back with `world.placements` (`dealt
   from <row> (<n> of <capacity>)` / `dealt by <template>`); `world.budget`
   counts every template's offsets. The granaries module
-  (`modules/granaries.world.json`) is the worked example.
+  (`modules/granaries.puck`) is the worked example.
 
 ## Owned-world identities
 

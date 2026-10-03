@@ -40,7 +40,7 @@ granary court renders the deployment's storage inventory today, and every furthe
 platform (traffic, queues, compute, gateways, caches) enters the same way, as observation rows a
 module's placements, bodies, and rules read — the engine learns no cloud noun and no game noun for it.
 The roster of retired prototypes (`play`, `nexus`, `dive`, `kart`, `jump`, `studio`, the quilt corners,
-the frozen diorama, the two scenario documents, `granaries.world.json`) is realized inside the one world
+the frozen diorama, the two scenario documents, `granaries.puck`) is realized inside the one world
 and deleted as each is realized, never repaired beside it. The 51-game tabletop roster
 (chess through billiards, Riichi Mahjong, Chinese Checkers) is a real target the market district is
 built toward, and every capability it needs lands as a game-agnostic primitive — chance and
