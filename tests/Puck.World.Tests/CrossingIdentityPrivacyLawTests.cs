@@ -27,7 +27,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
     private static readonly string[] Markers = [PrivateRow, PrivatePayload, PrivatePanel];
 
     private static CellName Name(string value) => CellName.Parse(candidate: value);
-    private static WorldDefinition OwnedDocument() {
+    internal static WorldDefinition OwnedDocument() {
         var basis = Fixtures.BuildDocument();
 
         return basis with {
@@ -64,7 +64,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         };
     }
     // An owned identity carrying one fact and one written record field beside its private rows.
-    private static WorldIdentity Owned(WorldIdentity? identity = null) {
+    internal static WorldIdentity Owned(WorldIdentity? identity = null) {
         var owned = (identity ?? new WorldIdentity(
             defaults: Fixtures.BuildDocument().PlayerDefaults,
             document: OwnedDocument()
@@ -506,32 +506,45 @@ public sealed class CrossingIdentityPrivacyLawTests {
     // `carried`, and returns the stopped tape. The live commit adopts the fact into the catalog's identity.
     private static WorldReplayTape RecordHomeArrival(WorldFixture fixture, string directory, long carried) {
         var server = fixture.Server;
-        var owned = server.Profiles.BootProfile;
-        var traveller = WorldIdentity.FromProjection(defaults: server.Definition.PlayerDefaults, projection: owned.Project());
+        var traveller = WorldIdentity.FromProjection(defaults: server.Definition.PlayerDefaults, projection: server.Profiles.BootProfile.Project());
 
         Assert.True(condition: traveller.TrySetFact(changed: out _, key: Name(value: "replayFact"), reason: out var reason, value: carried), userMessage: reason);
+        return RecordHomeArrival(carried: traveller.Project(), directory: directory, fixture: fixture);
+    }
+    // Records, on the fixture's own server, `before` ticks, then a colocated home arrival at seat 0 carrying `carried`
+    // and the tick it lands on, then `after` more ticks, and returns the stopped tape.
+    private static WorldReplayTape RecordHomeArrival(WorldFixture fixture, string directory, WorldIdentityProjection carried, int before = 0, int after = 0) {
+        var server = fixture.Server;
+        var owned = server.Profiles.BootProfile;
         var tape = Tape(directory: directory, server: server);
+        var reason = string.Empty;
 
         Assert.True(condition: tape.TryBeginRecording(name: "arrivals", refusal: out var refusal), userMessage: refusal);
+        for (var tick = 0; (tick < before); tick++) {
+            fixture.Step();
+            tape.NoteTick();
+        }
         var address = new WorldEntityAddress(Authority: server.AuthorityIdentity, Generation: 1, Index: 0);
         var request = new WorldTransferReservationRequest(
             TransferId: 1, SourceAuthority: "away", SourceRateHz: 240, SourceTick: 0,
             DeadlineSourceTick: 60, Border: "", BorderCapacity: null, PartyAllOrNothing: true,
             PeerAdmission: false, Members: [new WorldTransferReservationMember(
-                Principal: Principal.Console, PreferredSlot: 0, Identity: traveller.Project(),
+                Principal: Principal.Console, PreferredSlot: 0, Identity: carried,
                 Source: IntentSource.Live, BodyColor: owned.Color, CatalogRig: 0,
                 Mobility: new WorldMobilityIdentity(DepartedFrom: address, Epoch: 1, Incarnation: address)
             )]
         );
 
         Assert.True(condition: server.ReserveTransfer(request: request).Accepted);
-        var member = new WorldTransferCommitMember(Profile: traveller.Project(), HasMappedArrival: false,
+        var member = new WorldTransferCommitMember(Profile: carried, HasMappedArrival: false,
             BodyMotionProgramName: "", Position: default, YawRadians: default, PlanarVelocity: default, VerticalVelocity: default);
 
         Assert.Equal(WorldTransferStatus.Committed, server.CommitTransfer(sourceAuthority: request.SourceAuthority,
             transferId: request.TransferId, members: [member], reason: out reason));
-        fixture.Step();
-        tape.NoteTick();
+        for (var tick = 0; (tick <= after); tick++) {
+            fixture.Step();
+            tape.NoteTick();
+        }
         _ = tape.StopRecording();
         return tape;
     }
@@ -648,6 +661,50 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.Equal(1L, Fact(identity: copied, key: "copyFact"));
         Assert.Null(@object: Fact(identity: owned, key: "copyFact"));
         AssertUnchanged(before: before, catalog: catalog, owned: owned);
+    }
+    // THE LAW: a partial home adoption replays its live hash. The owned identity declares a facts capacity of 1 and
+    // holds homeFact=3; its traveler comes home carrying a capacity of 2 with homeFact=3 and replayFact=5. The live
+    // adoption keeps homeFact, refuses replayFact and binds the owned identity, and the tape records that bound
+    // projection as the arrival's outcome, so the re-drive binds it, detached, and the live and replayed authoritative
+    // hashes agree on every tick: the tick before the arrival, the arrival's own, and the ticks after it. The red leg
+    // tapes only the incoming projection, and the re-drive binds replayFact the live seat never held.
+    [Fact]
+    public void APartialHomeAdoptionReplaysItsLiveHash() {
+        using var directory = new TemporaryDirectory(prefix: "puck-privacy-partial-");
+        using var fixture = Fixtures.FreshServer();
+        var catalog = fixture.Server.Profiles;
+        var owned = catalog.BootProfile;
+        var factsRow = owned.FactsDefinition.State;
+
+        owned.ReplaceDocument(document: owned.Document! with {
+            Identity = owned.Document!.Identity! with { Facts = new WorldIdentityFacts(State: factsRow, Capacity: 1) },
+        });
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: owned, key: Name(value: "homeFact"), reason: out var reason, value: 3), userMessage: reason);
+        Assert.True(condition: catalog.TrySave(identity: owned, reason: out reason), userMessage: reason);
+        var carried = owned.Project() with {
+            Facts = new WorldStateRow(Name: factsRow, Kind: CellKind.Int, Capacity: 2, Cells: [
+                new StateCell(Key: Name(value: "homeFact"), Value: CellValue.Int(value: 3)),
+                new StateCell(Key: Name(value: "replayFact"), Value: CellValue.Int(value: 5)),
+            ]),
+        };
+        var tape = RecordHomeArrival(after: 2, before: 1, carried: carried, directory: directory.RootPath, fixture: fixture);
+
+        Assert.Same(expected: owned, actual: fixture.Server.Population.EntryBody(index: 0)!.Profile);
+        Assert.Equal(3L, Fact(identity: owned, key: "homeFact"));
+        Assert.Null(@object: Fact(identity: owned, key: "replayFact"));
+
+        WorldReplaySnapshot snapshot;
+
+        using (var stream = File.OpenRead(path: tape.PathFor(name: "arrivals"))) {
+            snapshot = WorldReplaySnapshot.Read(stream: stream);
+        }
+        Assert.Equal(expected: 4, actual: snapshot.Ticks.Count);
+        Assert.Single(collection: snapshot.Ticks[1].Authority.OfType<WorldReplayEntry.Arrival>());
+
+        var verdict = tape.Verify(name: "arrivals");
+
+        Assert.True(condition: verdict.Primary.Match, userMessage: verdict.Primary.Describe());
+        Assert.Equal(expected: 4, actual: verdict.Primary.Ticks);
     }
     // Reducing the owned facts capacity can prevent a taped fact from being adopted. No surplus live key is needed
     // for that drift, and every missing fact must be reported in ordinal key order through the catalog's hub.

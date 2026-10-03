@@ -132,9 +132,10 @@ rate). The shadow server holds a detached
 `WorldOwnedWorlds.CreateReplayCopy` of that catalog: session changes, facts and
 records change only the replay's identities, their saves perform no file I/O,
 and the copy narrates through the live catalog's hub. A re-driven home arrival
-(any `TryReland` with a recorded outcome) binds the taped projection exactly,
-facts and records included, in a detached identity that takes nothing from the
-live catalog, and `WorldReplaySnapshot.ReportAdoptionDrift` reports on
+(any `TryReland` with a recorded outcome) binds the projection the outcome
+records it bound to, facts and records included, in a detached identity that
+takes nothing from the live catalog and decides no adoption again, and
+`WorldReplaySnapshot.ReportAdoptionDrift` reports on
 `replay.profile`, as `ReportProfileDrift` does for a pin, where the owned
 identity as it stands now (read-only) differs from the taped projection: the
 name, either rate, and every differing fact in ordinal key order, including a
@@ -247,9 +248,11 @@ its tape close hold the same gate (`WorldServerStepShell.Step`), so an arrival
 after a step joins the next tick. The tape records it as an `Arrival` carrying
 the same leaf the crossing log writes
 (`WorldAuthorityCheckpointCodec.EncodeCrossingArrival`) and the commit's
-`WorldArrivalOutcome`: each landed traveler's generation, and whether the commit
+`WorldArrivalOutcome`: each landed traveler's generation, whether the commit
 rolled the landings back (a refused member, or a record that could not be made
-durable). Read refuses an arrival no commit could have decided: a malformed
+durable), and, for a commit that stood, the projection each traveler coming home
+was bound to once its owned identity adopted what it carried, a partial adoption
+included. Read refuses an arrival no commit could have decided: a malformed
 cohort, an outcome that does not fit it, or a handoff token arriving again after
 its commit stood. The re-drive decodes it against the recorded world's player
 defaults and lands it again through the shadow's own escrow
@@ -331,7 +334,10 @@ the state arena stores, the host-owned field cells, the state section's own
 declaration, the declared topologies, rule/interaction latches, rule-group
 progress, decision runtime, board enforcement, body action state, every body's
 simulation continuation (the checkpoint's field codecs over a view of each
-live slot, excluding rendered color and rig; it allocates nothing, so the scope
+live slot, excluding rendered color and rig, a seat's identity projection with
+its facts and records included; it allocates nothing, because the projection
+wire validates each facts row and serializes each records section once per
+instance and a projection with no fact reuses its empty row, so the scope
 is taken on every tick a replay records or a history captures), cached
 navigation and shared destination-tree/scheduler/pending-request state,
 flock perception/cadence/sample state (including the cached result of state

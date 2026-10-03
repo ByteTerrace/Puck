@@ -66,7 +66,7 @@ can never claim a local seat, since a remote incarnation claim is unauthenticate
 whose source restarts restores its logged departure's facts and records before live writes
 resume. A transfer already in the checkpoint uses that checkpoint's catalog. An abort reseats
 and saves the current owned identity, preserving both the departing facts and later owner
-writes while recovery waits. A replay's re-driven home arrival binds the taped projection in a detached identity and saves nothing.
+writes while recovery waits. A replay's re-driven home arrival binds the projection its taped outcome records the live adoption bound, in a detached identity, and saves nothing.
 Foreign-written
 facts are unsigned until provenance attestation for carried state exists. The
 [rulepush package](../../../../worlds/rulepush/README.md) relies on this: a level

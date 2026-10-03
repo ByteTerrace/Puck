@@ -30,6 +30,7 @@ public sealed partial class WorldIdentity {
     private readonly float m_noseFactor;
 
     private int m_factsRevision;
+    private WorldStateRow? m_emptyFacts;
     private WorldStateRow? m_travelFacts;
     private FixedQ4816? m_moveSpeed;
     private FixedQ4816? m_turnSpeed;
@@ -283,13 +284,30 @@ public sealed partial class WorldIdentity {
             MoveSpeed: m_moveSpeed,
             TurnSpeed: m_turnSpeed,
             Records: RecordState,
-            Facts: (Facts ?? new WorldStateRow(
-                Name: FactsDefinition.State,
-                Kind: CellKind.Int,
-                Capacity: FactsDefinition.Capacity,
-                Cells: []
-            ))
+            Facts: (Facts ?? EmptyFacts())
         );
+    // The row an identity that has written no fact projects, so its first fact abroad meets its declared name and
+    // capacity. It is kept while that declaration holds: a profiled body projects every tick its continuation is
+    // hashed, and the same instance writes without building a row.
+    private WorldStateRow EmptyFacts() {
+        var definition = FactsDefinition;
+
+        if (
+            (m_emptyFacts is not { } row) ||
+            (row.Name != definition.State) ||
+            (row.Capacity != definition.Capacity)
+        ) {
+            row = new WorldStateRow(
+                Name: definition.State,
+                Kind: CellKind.Int,
+                Capacity: definition.Capacity,
+                Cells: []
+            );
+            m_emptyFacts = row;
+        }
+
+        return row;
+    }
     /// <summary>Replaces the backing owned world after a composed edit.</summary>
     /// <param name="document">The replacement owned world.</param>
     public void ReplaceDocument(WorldDefinition document) {

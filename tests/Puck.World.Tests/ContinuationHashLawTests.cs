@@ -1,4 +1,7 @@
+using Puck.Abstractions.Counting;
+using Puck.Commands;
 using Puck.Maths;
+using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
 
@@ -9,23 +12,47 @@ namespace Puck.World.Tests;
 /// (<see cref="WorldPopulation.AppendContinuationHash"/>), and the views fold exactly the bytes the checkpoint's own
 /// entries encode (<see cref="WorldAuthorityCheckpointCodec.AppendPopulationEntries"/> over
 /// <see cref="WorldPopulation.Capture"/>): over a carried body sweeping against a wall behind a walking carrier, and
-/// over a rigid ball that comes to rest, tick by tick. A steady fold allocates nothing.
+/// over a rigid ball that comes to rest, tick by tick, and over a seat driven by an owned identity carrying facts and
+/// records. A steady fold allocates nothing, a profiled seat's included.
 /// </summary>
+[Collection(AllocationCollection.Name)]
 public sealed class ContinuationHashLawTests {
-    private static void AssertStreamedFoldsTheCapturedEntries(WorldPopulation population, string context) {
+    // Returns the streamed fold after asserting it equals the captured entries' fold, and the fold of the same entries
+    // with every profile's records and facts copied into new instances, which the projection wire has never encoded:
+    // an encoding remembered from an earlier write cannot stand in for the one these values write.
+    private static ulong AssertStreamedFoldsTheCapturedEntries(WorldPopulation population, string context) {
         var streamed = Fnv1aHash.Create();
         var captured = Fnv1aHash.Create();
+        var copied = Fnv1aHash.Create();
+        var entries = population.Capture().Entries;
 
         population.AppendContinuationHash(hash: ref streamed);
         WorldAuthorityCheckpointCodec.AppendPopulationEntries(
-            entries: population.Capture().Entries,
+            entries: entries,
             hash: ref captured
+        );
+        WorldAuthorityCheckpointCodec.AppendPopulationEntries(
+            entries: [.. entries.Select(selector: static entry => ((entry.Profile is { } profile)
+                ? (entry with {
+                    Profile = profile with {
+                        Facts = (profile.Facts is { } facts) ? (facts with { Cells = [.. (facts.Cells ?? [])] }) : null,
+                        Records = (profile.Records is { } records) ? (records with { }) : null,
+                    },
+                })
+                : entry))],
+            hash: ref copied
         );
 
         Assert.True(
             condition: (streamed.Value == captured.Value),
             userMessage: $"{context}: the streamed continuation {streamed.Value:X16} differs from the captured entries' {captured.Value:X16}"
         );
+        Assert.True(
+            condition: (streamed.Value == copied.Value),
+            userMessage: $"{context}: the streamed continuation {streamed.Value:X16} differs from freshly encoded profiles' {copied.Value:X16}"
+        );
+
+        return streamed.Value;
     }
 
     [Fact]
@@ -118,5 +145,71 @@ public sealed class ContinuationHashLawTests {
         }
 
         Assert.Equal(actual: allocated, expected: 0L);
+    }
+    // THE LAW: a seat driven by an owned identity folds the bytes its checkpoint entry encodes, its facts and records
+    // included, and a fact or record written on that identity moves the fold. The identity carries one fact and one
+    // written record field; each write lands on the identity alone, between two folds with no step between them. The
+    // red leg is a hash path that skips the profile to save its encoding: the streamed fold no longer equals the
+    // captured entry's, and a fact write leaves it unmoved.
+    [Fact]
+    public void AProfiledSeatFoldsTheBytesItsCheckpointEntryEncodes() {
+        using var fixture = Fixtures.FreshServer();
+        var owned = CrossingIdentityPrivacyLawTests.Owned();
+
+        _ = fixture.JoinSeat();
+        fixture.Server.Population.SetSeatProfile(profile: owned, slot: 0);
+        fixture.Step();
+
+        var population = fixture.Server.Population;
+        var steady = AssertStreamedFoldsTheCapturedEntries(context: "profiled seat", population: population);
+
+        Assert.True(condition: owned.TrySetFact(changed: out _, key: CellName.Parse(candidate: "laterFact"), reason: out var reason, value: 9), userMessage: reason);
+        var afterFact = AssertStreamedFoldsTheCapturedEntries(context: "after a fact write", population: population);
+
+        Assert.NotEqual(expected: steady, actual: afterFact);
+        Assert.True(condition: owned.TryWriteRecord(field: CellName.Parse(candidate: "score"), reason: out reason, record: CellName.Parse(candidate: "stats"), value: CellValue.Int(value: 42)), userMessage: reason);
+        var afterRecord = AssertStreamedFoldsTheCapturedEntries(context: "after a record write", population: population);
+
+        Assert.NotEqual(expected: afterFact, actual: afterRecord);
+        for (var step = 0; (step < 10); step++) {
+            fixture.Step();
+            _ = AssertStreamedFoldsTheCapturedEntries(context: $"profiled step {step}", population: population);
+        }
+    }
+    // THE LAW: a profiled seat's steady fold allocates nothing. Seat 0 joins as the catalog's boot identity with one
+    // integer fact, and seat 1 is driven by an owned identity carrying a fact and records. Once warm, folding with
+    // nothing changed allocates nothing. The red leg validates the facts row and serializes the records on every
+    // write, and projects a fresh facts row for an identity that has none.
+    [Fact]
+    public void AProfiledSteadyFoldAllocatesNothing() {
+        using var fixture = Fixtures.FreshServer();
+        var server = fixture.Server;
+        var catalog = server.Profiles;
+        var boot = catalog.BootProfile;
+
+        Assert.True(condition: server.ApplySession(request: new SessionRequest.Join(
+            IdentityName: boot.Name,
+            Principal: Principal.Seat(slot: 0),
+            Slot: 0,
+            WireProtocolKey: WorldProtocol.WireProtocolKey
+        )).Accepted);
+        Assert.True(condition: catalog.TrySetFact(changed: out _, identity: boot, key: CellName.Parse(candidate: "score"), reason: out var reason, value: 4), userMessage: reason);
+        Assert.Same(expected: boot, actual: server.Population.EntryBody(index: 0)!.Profile);
+        _ = fixture.JoinSeat(slot: 1);
+        server.Population.SetSeatProfile(profile: CrossingIdentityPrivacyLawTests.Owned(), slot: 1);
+        fixture.Step();
+
+        var population = server.Population;
+        var warm = Fnv1aHash.Create();
+
+        population.AppendContinuationHash(hash: ref warm);
+        Assert.Equal(
+            actual: AllocationWindow.Least(window: () => {
+                var hash = Fnv1aHash.Create();
+
+                population.AppendContinuationHash(hash: ref hash);
+            }),
+            expected: 0L
+        );
     }
 }
