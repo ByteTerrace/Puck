@@ -1178,7 +1178,7 @@ backend never reads as a run on both. The option refuses any other value by
 name. It is refused with `--merge`, because the merge gate holds both
 backends, and with `--list`, which runs nothing.
 The `pipeline-feedback`, `pipeline-ink`, `pipeline-edit`, `pipeline-supersede`,
-`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault` and `pipeline-geometry` canaries use this shape to test shader
+`pipeline-shapes`, `pipeline-resize`, `pipeline-counters`, `pipeline-override`, `pipeline-package`, `pipeline-budget`, `pipeline-churn`, `pipeline-fault`, `pipeline-geometry` and `pipeline-echo` canaries use this shape to test shader
 pipelines, and `source-conversion` uses it to run the shipped image-source
 conversion kernels; the [World guide](../../src/Puck.World/README.md#shader-pipelines)
 covers the `pipeline.wait` phases their scripts use.
@@ -1456,7 +1456,7 @@ its own build output:
 
 ```text
 dotnet build src/Puck.Cli -c Release
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll canary pipeline-feedback pipeline-ink pipeline-edit pipeline-supersede pipeline-shapes pipeline-resize pipeline-counters pipeline-override pipeline-package pipeline-budget pipeline-churn pipeline-fault pipeline-geometry pipeline-echo
 ```
 
 ---
@@ -2621,11 +2621,12 @@ a converter-hidden shape the exporter cannot introspect on its own (a
 document-identifier list); a raw `JsonElement` slot decided by an id named
 elsewhere in the document (`views.post[].config`, `probes[].config`,
 `metadata.custom`) stays open but carries a `$comment` saying so. The root
-carries `x-puck: {schemaVersion, generator, commit}` (the silo root carries
+carries `x-puck: {schemaVersion, generator}` (the silo root carries
 its own) and `properties.schema.const` pins the exact tag a well-formed
-document's own `schema` field must equal; `--check` masks `x-puck.commit`
-before comparing, since the commit a checked-in file was generated at can
-never equal the commit that first introduces the file.
+document's own `schema` field must equal. A checked-in file names no commit,
+since the commit a file was generated at can never equal the commit that first
+introduces it; only the `--bundle` output, which nothing checks in, adds
+`x-puck.commit`, the commit the generator was built at.
 
 The output is SPLIT, not one file: a small root plus one file per top-level
 document section (`kits.schema.json`, `screens.schema.json`, …), plus
