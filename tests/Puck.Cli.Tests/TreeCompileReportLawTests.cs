@@ -76,6 +76,22 @@ public sealed class TreeCompileReportLawTests {
             Assert.DoesNotContain(actualString: run.Output, expectedSubstring: "\\");
         }
     }
+    [Fact]
+    public void ADocumentWithNoCompiledWorldIsReportedWithForwardSlashedPaths() {
+        using var directory = new TemporaryDirectory();
+        var composed = Path.GetFullPath(path: Path.Combine(path1: directory.RootPath, path2: "worlds", path3: "rooms", path4: "fragment.world.json"));
+        var line = Transpiler.CompileCommand.NoCompiledWorld(
+            besidePath: Path.Combine(path1: directory.RootPath, path2: "output", path3: "rooms", path4: "fragment.world.json"),
+            composeAt: composed,
+            reason: $"{composed} is not a valid puck.world.definition.v1 document: definition.creationsRaw[0] names no state.\n\"payload\\n quoted\""
+        );
+
+        // The loader's refusal names the source it composed; that path crosses the output boundary with forward slashes,
+        // and the quoted payload's own escapes are left as they are.
+        Assert.Contains(actualString: line, expectedSubstring: "worlds/rooms/fragment.world.json is not a valid");
+        Assert.DoesNotContain(actualString: line, expectedSubstring: "\\worlds");
+        Assert.Contains(actualString: line, expectedSubstring: "\"payload\\n quoted\"");
+    }
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
