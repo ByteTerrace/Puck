@@ -151,6 +151,11 @@ bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndir
     return false;
 }
 
+// Preserve this shared comparison body in SPIR-V: expanding it into Views overflows or crashes legalization.
+// DXIL retains ordinary inlining because its validator rejects vector values in retained helper functions.
+#ifdef __spirv__
+[noinline]
+#endif
 SdfIndirectSources sdfIndirectAlternative(SdfPixel p, SdfSurfaceSample receiver, float3 launched, SdfIndirectSources fallback) {
     if (passGroup.indirectMethod == SdfIndirectMethodCache || passGroup.indirectTier == SdfIndirectTierOff) { return fallback; }
     uint phase = passGroup.historyFrames % SdfIndirectAlternativePhases;

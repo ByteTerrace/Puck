@@ -191,6 +191,12 @@ register.
 
 ## Editing kernels
 
+The indirect comparison helper keeps its SPIR-V function boundary with
+`[noinline]` under DXC's `__spirv__` macro. Expanding that complete field/shadow
+body into Views exceeds legalization capacity or crashes the compiler. DXIL
+keeps ordinary inlining; retain identical arithmetic, policy restoration and
+work counts on both paths.
+
 - **Know which dispatch owns the code.** Primary traversal, surface (normals,
   curvature), ambient (AO), shadow (the selected slots' soft shadows), and views
   (materials, lighting) are separate dispatches sharing `sdf-world-views.comp.hlsl`'s entry point through
