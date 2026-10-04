@@ -282,6 +282,14 @@ copy submission admits the first shade batch. A newer environment publication
 does not alter an active solve. Its exact owner and sequence participate in
 desired-source matching, so readiness waits for a solve using that newer source.
 
+Sky is enabled by default with direct light, feedback and emission. Only a ray
+certified clear to the world's far boundary samples the pinned full environment
+map, through four counted bilinear loads before artistic ambient or reflection
+gains. Hits add no unoccluded sky term: light reflected from the previous complete
+bank remains Feedback. Continuations keep their source categories; unresolved
+rays supply no radiance and enter no cosine denominator. Turning Sky off skips
+the map lookup and its four loads.
+
 `LightingSource` describes the active solve, while `PublishedLightingSource`
 describes the complete generation readers still see during a later solve.
 Each is an immutable CPU capture; `CopyFrame()` supplies independent mutable

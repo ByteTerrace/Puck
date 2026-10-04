@@ -24,9 +24,12 @@ public sealed class SdfFrameBlockLawTests {
     [Fact]
     public void IndirectSourceBitsUseTheSameCategoryOrderInTheFrameAndGeneratedConstants() {
         var block = new byte[SdfFrameBlock.SizeBytes];
+        var offset = checked((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(SdfWorldPackage.IndirectSources));
+        SdfFrameBlock.Write(block: block, frame: Frame(), height: 1, tables: default, view: 0, width: 1);
+        // Direct, Feedback, Emission and the captured Sky are enabled by default; Screens awaits its own capture.
+        Assert.Equal(15u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(block.AsSpan(offset)));
         var frame = Frame() with { IndirectSources = SdfIndirectSources.Sky | SdfIndirectSources.Screens };
         SdfFrameBlock.Write(block: block, frame: frame, height: 1, tables: default, view: 0, width: 1);
-        var offset = checked((int)SdfWorldInterfaces.WorldParameters.BlockOffsetOf(SdfWorldPackage.IndirectSources));
         Assert.Equal(24u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(block.AsSpan(offset)));
         var generated = SdfIndirectHlsl.Generate();
         Assert.Contains("SdfIndirectSourcesSky = 8u;", generated, StringComparison.Ordinal);

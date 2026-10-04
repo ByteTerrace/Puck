@@ -178,7 +178,11 @@ public sealed partial class SdfWorldPassesLawTests {
                     Y: 0f
                 )
             )]
-        );
+        ) {
+            // This fixture installs ordinary view/cache factories only. Environment laws add their actual producer
+            // and explicitly enable Sky; a finite solve must never pretend an absent producer supplied its map.
+            IndirectSources = SdfIndirectSources.Direct | SdfIndirectSources.Feedback | SdfIndirectSources.Emission,
+        };
     }
 
     private sealed class CapturingFrameSource(Func<SdfFrame> capture) : ISdfFrameSource {

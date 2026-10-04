@@ -5,6 +5,7 @@ internal static class SdfIndirectProbeBytecode {
         "sdf-indirect-trace-proof.comp" => ((8 * 1024) * 1024),
         "sdf-indirect-gather.comp" => ((3 * 1024) * 1024),
         "sdf-indirect-debug-proof.comp" => (64 * 1024),
+        "sdf-indirect-sky-proof.comp" => (64 * 1024),
         "sdf-indirect-light-proof.comp" => ((3 * 1024) * 1024),
         _ => throw new ArgumentOutOfRangeException(nameof(kernel), kernel, "Not an indirect probe kernel."),
     };

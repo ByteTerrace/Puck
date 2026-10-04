@@ -84,6 +84,11 @@ and successful copy submission admits shading. Pin the actual submitted
 environment owner/sequence, and include it in desired-source readiness; never
 relabel old buffers with a newer live projection. Count the pinned regions,
 their rings and the one 65,680-byte device-local environment pair beside the cache.
+The default source mask includes physical Sky. Only certified world exits read
+its pinned full map, through the shared four-load radiance helper; never add
+unoccluded SH at a hit or apply artistic Ambient/Reflection gains to transport.
+Reflected previous-bank light at hits belongs to Feedback; disabled Sky and
+unresolved terminals read no map.
 The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
 owns this flow and its remaining receiver work. Views consume the complete bank
 and share bounded receiver-proof admission and deferred counters. Their reset is

@@ -3,6 +3,7 @@
 #ifndef SDF_INDIRECT_SHADE_HLSLI
 #define SDF_INDIRECT_SHADE_HLSLI
 #include "sdf-indirect-diffuse.hlsli"
+#include "sdf-indirect-sky.hlsli"
 
 // 256 rays * (five float3 sources, one direction and one terminal) = 19,456 bytes, beside the VM's gather mask.
 groupshared SdfIndirectSources sdfIndirectShaded[SdfIndirectMaximumRaysPerProbe];
@@ -92,8 +93,10 @@ void sdfIndirectShadeProbe(uint index, uint level, int3 lattice, uint lane, uint
             puckCountIndirect(detail, 1u, 0u, 0u);
         } else if (kind == SdfIndirectKindContinuation) {
             result = sdfIndirectShadeContinuation(endpoint, direction, hit.w, writeGeneration, writePublication);
+        } else {
+            result.values[SdfIndirectSourceSky] = sdfIndirectSky(kind, direction, passGroup.indirectSources);
         }
-        // Sky exits are filled by the environment snapshot seam. Unresolved rays never enter the cosine denominator.
+        // Unresolved rays contribute no source and never enter the cosine denominator.
         [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
             uint packed = sdfIndirectPackRadiance((passGroup.indirectSources & (1u << source)) != 0u ? result.values[source] : 0.0);
             sdfIndirectShaded[ray].values[source] = sdfIndirectUnpackRadiance(packed);
