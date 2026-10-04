@@ -329,9 +329,12 @@ stratified cosine samples. Screen-space rays take at most twelve projection
 samples in this consumer's current visibility slice; missing, offscreen and
 unsupported witnesses keep the cache fallback. Cones take at most twenty-four
 full-field evaluations over four world units, including their surface gradient
-and sign witness. Existing directional shadow fallbacks retain their separately
-counted bounds. A certified secondary hit uses the shared explicit diffuse source
-fold; its result replaces a sample rather than adding another bounce. A local
+and sign witness, including a gradient whose normal rejects the hit. Existing
+directional shadow fallbacks retain their own bounds. Views attribute those
+light queries and every field step once to their reserved indirect row; the
+finite cache solve retains its separate map and fallback rows. A certified
+secondary hit uses the shared explicit diffuse source fold; its result replaces
+a sample rather than adding another bounce. A local
 clear interval cannot declare a sky exit, and a hit's unproved sky hemisphere
 retains the cache sky contribution. Both methods return independent categories
 before the receiver's material response. Their device laws and measured

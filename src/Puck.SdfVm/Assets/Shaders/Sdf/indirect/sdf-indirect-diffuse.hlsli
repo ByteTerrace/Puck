@@ -7,6 +7,9 @@
 #include "../shade/sdf-material.hlsli"
 #include "../frame/sdf-levers.hlsli"
 #include "../shade/sdf-light.hlsli"
+#ifdef SDF_VIEWS_PASS
+#include "../isa/sdf-sky-kinds.hlsli"
+#endif
 
 float sdfIndirectDiffuseVisibility(int light, float3 surfacePoint, float3 normal) {
     if (light < 0) { return 1.0; }
@@ -14,10 +17,17 @@ float sdfIndirectDiffuseVisibility(int light, float3 surfacePoint, float3 normal
     if (record.Kind != SDF_LIGHT_DIRECTIONAL) { return 1.0; }
     bool fallback;
     uint region;
+#ifndef SDF_VIEWS_PASS
     uint before = sdfIndirectEvaluations;
+#endif
     float visibility = sdfIndirectLightVisibility((uint)light, surfacePoint, normal, record.Direction, fallback, region);
+#ifdef SDF_VIEWS_PASS
+    // The receiver's outer fold owns every field step once; views have one reserved indirect detail row.
+    puckCountIndirect(SDF_SKY_DETAIL_INDIRECT, 0u, 1u, fallback ? 1u : 0u);
+#else
     puckCountIndirect(fallback ? 6u : 5u, 0u, 1u, fallback ? 1u : 0u);
     puckCountDetail(6u, sdfIndirectEvaluations - before, 0u, 0u, 0u, 0u);
+#endif
     return visibility;
 }
 

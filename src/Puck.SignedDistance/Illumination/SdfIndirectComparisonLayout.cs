@@ -8,7 +8,8 @@ public static class SdfIndirectComparisonLayout {
     /// <summary>The projection samples along one screen-space ray.</summary>
     public const int ScreenSteps = 12;
     /// <summary>The field evaluations available to one cone, including its hit gradient and sign witness.
-    /// Directional-light shadow fallbacks have their own existing bounds and counted rows.</summary>
+    /// Directional-light shadow fallbacks have their own existing bounds; the view counts their queries and
+    /// field steps in its reserved indirect row.</summary>
     public const int ConeSteps = 24;
     /// <summary>The existing temporal phases interleaving the four render-pixel parity classes.</summary>
     public const int Phases = 4;

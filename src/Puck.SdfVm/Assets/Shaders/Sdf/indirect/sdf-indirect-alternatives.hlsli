@@ -66,8 +66,8 @@ bool sdfIndirectScreenBounce(SdfPixel p, float3 origin, float3 direction, out Sd
         if (visible.mesh || visible.material < 0 || visible.material >= SDF_SCREEN_MATERIAL) { return false; }
         float2 uv = ((float2)pixel + 0.5) / (float2)worldViewDims(p.view);
         float3 ray = cameraRayDirection(p.view, uv);
-        float3 point = cameraRayOrigin(p.view, uv) + ray * visible.t;
-        float3 delta = point - origin;
+        float3 surfacePoint = cameraRayOrigin(p.view, uv) + ray * visible.t;
+        float3 delta = surfacePoint - origin;
         float along = dot(delta, direction);
         float radius = max(0.002, 2.0 * p.pixelFootprint * visible.t);
         if (along <= radius || along < previous - radius || along > travel + radius ||
@@ -84,7 +84,7 @@ bool sdfIndirectScreenBounce(SdfPixel p, float3 origin, float3 direction, out Sd
 #endif
         }
 #endif
-        sources = sdfIndirectAlternativeDiffuse(point, visible.normal, direction, visible.material, shadows, incoming);
+        sources = sdfIndirectAlternativeDiffuse(surfacePoint, visible.normal, direction, visible.material, shadows, incoming);
         return true;
     }
     return false;
@@ -109,11 +109,12 @@ bool sdfIndirectConeBounce(SdfPixel p, float3 origin, float3 direction, SdfIndir
         if (abs(hit.distance) <= SdfIndirectSurfaceEpsilon && budget >= 2u) {
             budget--;
             float3 normal = sdfIndirectGradient(position);
+            samples++;
             if (dot(normal, normal) == 0.0 || dot(normal, -direction) <= 0.0) { return false; }
             budget--;
             float offset = hit.distance < 0.0 ? SdfIndirectSurfaceEpsilon : -SdfIndirectSurfaceEpsilon;
             SdfHit witness = sdfIndirectSample(position + normal * offset, SDF_INSTANCE_MASK_ALL);
-            samples += 2u;
+            samples++;
             bool bracket = isfinite(witness.distance) && (hit.distance < 0.0 ? witness.distance > 0.0 : witness.distance <= 0.0);
             if (!bracket || hit.material < 0 || hit.material >= SDF_SCREEN_MATERIAL) { return false; }
             float4 shadows = 1.0;
