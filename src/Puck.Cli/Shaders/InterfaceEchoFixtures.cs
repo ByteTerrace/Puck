@@ -70,9 +70,9 @@ internal static class InterfaceEchoFixtures {
     }
 
     private static JsonNode Zero(ShaderValueType type) => ((type.ComponentCount() == 1)
-        ? JsonValue.Create(value: 0)
+        ? JsonValue.Create(value: 0)!
         : new JsonArray(items: [.. Enumerable.Range(start: 0, count: ((int)type.ComponentCount()))
-            .Select(selector: static _ => ((JsonNode)JsonValue.Create(value: 0)))]));
+            .Select(selector: static _ => JsonValue.Create(value: 0))]));
 
     private static void RequireSameBlocks(string name, ShaderInterface expected, ShaderInterface actual) {
         static IEnumerable<(ShaderInterfaceGroup Group, uint Set, uint Size, string Name, uint Offset, ShaderValueType Type, uint Length)> Members(ShaderInterface value) =>
