@@ -459,8 +459,8 @@ internal static partial class CanaryAssertions {
         : "stderr"
     );
     // The first line inside a response's record — the lines after its "[verb:" line that the console indents
-    // (ConsoleRecord) — whose text past the indent starts with the given prefix, rewritten as "<prefix>:<rest>" so the
-    // field reader parses the rest; an empty line, which carries no field, when none does. With after, the search starts
+    // (ConsoleRecord) — whose text past the indent starts with the given prefix. Named fields retain the whole row;
+    // count-only rows become "<prefix>:<rest>". An empty line carries no field. With after, the search starts
     // past the record's first line that starts with it, and finds nothing when none does.
     private static string ContinuationLine(CanaryTranscript transcript, CanaryStream stream, string verb, int occurrence, string start, string? after) {
         var lines = Lines(
@@ -495,7 +495,10 @@ internal static partial class CanaryAssertions {
                     comparisonType: StringComparison.Ordinal,
                     value: start
                 )) {
-                    return $"{start}:{text[start.Length..]}";
+                    return (text.Contains(value: '=')
+                        ? text
+                        : $"{start}:{text[start.Length..]}"
+                    );
                 }
             }
 
@@ -584,10 +587,7 @@ internal static partial class CanaryAssertions {
             : line.Length
         );
 
-        if (
-            (colon < 0) ||
-            (colon >= end)
-        ) {
+        if (colon >= end) {
             return false;
         }
 

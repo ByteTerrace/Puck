@@ -62,7 +62,33 @@ public sealed class IrradianceReference {
     /// <exception cref="ArgumentOutOfRangeException">The bounce depth or path count is outside its supported range.</exception>
     public IrradianceSourceEstimate EstimateSources(Double3 point, Double3 normal, int bounces, int paths) => EstimateCore(point, normal, bounces, paths).Sources;
 
-    private (IrradianceEstimate Total, IrradianceSourceEstimate Sources) EstimateCore(Double3 point, Double3 normal, int bounces, int paths) {
+    /// <summary>Estimates physical incoming radiance along a captured first ray, then follows the same attributed
+    /// finite-bounce paths as <see cref="EstimateSources"/>. This independent reference has the field's query budget,
+    /// not the renderer's bounded Near allowance, and consumes no cached radiance.</summary>
+    /// <param name="origin">The finite, already-launched first-ray origin. No second surface launch is applied.</param>
+    /// <param name="direction">The finite nonzero captured direction, normalized before averaging paths.</param>
+    /// <param name="bounces">The reflections after the fixed first hit, from zero through nine.</param>
+    /// <param name="paths">The number of paths, from one through 256. Their first direction is identical; later
+    /// reflections use the ordinary independent Halton samples for each path and bounce.</param>
+    /// <returns>Independent source means and the actual unresolved-path count. Any unresolved path prevents this
+    /// from being a reference answer. The field's counters retain every ray and point query performed.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The origin or direction is not finite, the direction is zero,
+    /// or the bounce depth or path count is outside its supported range.</exception>
+    public IrradianceSourceEstimate EstimateIncidentSources(Double3 origin, Double3 direction, int bounces, int paths = 64) {
+        if (!double.IsFinite(origin.X) || !double.IsFinite(origin.Y) || !double.IsFinite(origin.Z)) {
+            throw new ArgumentOutOfRangeException(nameof(origin), "The captured ray origin must be finite.");
+        }
+        if (!double.IsFinite(direction.X) || !double.IsFinite(direction.Y) || !double.IsFinite(direction.Z) || direction == Double3.Zero) {
+            throw new ArgumentOutOfRangeException(nameof(direction), "The captured ray direction must be finite and nonzero.");
+        }
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(paths, 256);
+        // Scaling first preserves a finite nonzero direction even when its raw squared length overflows or underflows.
+        var scale = Math.Max(Math.Abs(direction.X), Math.Max(Math.Abs(direction.Y), Math.Abs(direction.Z)));
+        var unit = new Double3(direction.X / scale, direction.Y / scale, direction.Z / scale).Normalize();
+        return EstimateCore(origin, default, bounces, paths, firstDirection: unit).Sources;
+    }
+
+    private (IrradianceEstimate Total, IrradianceSourceEstimate Sources) EstimateCore(Double3 point, Double3 normal, int bounces, int paths, Double3? firstDirection = null) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: bounces);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: bounces, other: ((Primes.Length / 2) - 1));
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: paths);
@@ -72,15 +98,15 @@ public sealed class IrradianceReference {
         var unresolved = 0;
 
         for (var path = 0; (path < paths); path++) {
-            var radiance = Incident(
-                bounce: 0,
-                bounces: bounces,
-                normal: normal,
-                path: (path + 1),
-                point: point,
-                resolved: out var resolved,
-                contributions: out var attributed
-            );
+            Double3 radiance;
+            bool resolved;
+            IrradianceContributions attributed;
+            if (firstDirection is { } direction) {
+                radiance = IncidentRay(point, direction, path + 1, 0, bounces, out resolved, out attributed);
+            }
+            else {
+                radiance = Incident(point, normal, path + 1, 0, bounces, out resolved, out attributed);
+            }
 
             if (!resolved) {
                 unresolved++;
@@ -135,15 +161,19 @@ public sealed class IrradianceReference {
             v: RadicalInverse(index: path, primeBase: Primes[((2 * bounce) + 1)])
         );
 
-        resolved = true;
-        contributions = default;
-
         if (IrradianceCells.Launch(field: m_field, height: LaunchHeight, normal: normal, surface: point) is not { } launch) {
             resolved = false;
+            contributions = default;
             return Double3.Zero;
         }
+        return IncidentRay(launch.Point, direction, path, bounce, bounces, out resolved, out contributions);
+    }
 
-        var ray = m_field.Cast(direction: direction, maxDistance: m_exitDistance, origin: launch.Point);
+    private Double3 IncidentRay(Double3 origin, Double3 direction, int path, int bounce, int bounces,
+        out bool resolved, out IrradianceContributions contributions) {
+        resolved = true;
+        contributions = default;
+        var ray = m_field.Cast(direction: direction, maxDistance: m_exitDistance, origin: origin);
 
         if (ray.Kind == IrradianceRayKind.Miss) {
             var sky = m_surfaces.Sky(arg: direction);

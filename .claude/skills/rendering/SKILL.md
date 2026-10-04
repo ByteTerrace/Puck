@@ -129,6 +129,11 @@ bindings outside the material-value table. Palette-value edits retain transport,
 proof and light-map identity but advance the pinned lighting source and Views
 signature. Reassignment, palette-size and topology changes remain geometry.
 Keep the old immutable palette while its published bank remains visible.
+For a captured Near incoming ray, use `IrradianceReference.EstimateIncidentSources`
+with that exact already-launched origin and direction, one through 256 paths and
+zero through nine later reflections. It shares the independent reference's
+attributed path fold; do not substitute a new receiver hemisphere, GPU cache
+colour, or the renderer's twelve-query budget for the physical answer.
 
 `SdfIndirectParticipation` owns whole-instance casting and receiving. Keep its
 packed instance and mesh bits, frame body default, field queries and receiver

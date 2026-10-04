@@ -32,8 +32,14 @@ public sealed class SdfIndirectLightViewLawTests {
         Assert.Equal(expected: revision, actual: views.Revision);
         Assert.Equal(expected: 4, actual: views.MapCount);
         Assert.Equal(expected: ((SdfShadowSlots.MaxSlots + SdfShadowSlots.MaxFadeSlots) * 2), actual: SdfIndirectLightLayout.MaxMaps);
-        views.InvalidateStorage();
+        lights.Set(0, lights[0] with { Color = Vector3.UnitX });
+        lights.Set(1, lights[1] with { Color = Vector3.UnitZ });
         Plan(views, lights, owner, 20);
+        Assert.Equal(-1, views.Pending);
+        Assert.Equal(revision, views.Revision);
+        Assert.All(Enumerable.Range(0, 4), index => Assert.True(views.Snapshot(index).Valid));
+        views.InvalidateStorage();
+        Plan(views, lights, owner, 21);
         Assert.Equal(expected: 0, actual: views.Pending);
         Assert.False(condition: views.Snapshot(index: 0).Valid);
     }

@@ -1486,7 +1486,8 @@ of lines (`lines`: each listed line matches, exactly or as contained text, past
 the previous one's match), named response field
 extraction (from the response's first line, or with `"line"` from the first
 indented line of its record that starts with that text, past the first that
-starts with the text an `"after"` names; a `"line"` naming a whole
+starts with the text an `"after"` names; colonless `key=value` rows retain every
+named field, including a field named by the prefix itself; a `"line"` naming a whole
 counter kind reads that `<kind> <value>` line's value as the field the kind
 names), equality/inequality, strict ordering of two extracted numbers
 (`greater`: left above right), inclusive bounds, minimum margins,

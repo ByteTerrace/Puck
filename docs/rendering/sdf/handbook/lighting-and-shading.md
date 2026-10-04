@@ -242,6 +242,14 @@ complete publication replaces it. Changing a shape's material ID, palette size,
 instance flags or any field/layout word withdraws transport and its proofs;
 matching colour values do not make two material identities interchangeable.
 
+Lighting changes conservatively revisit every allocated probe in the finite
+solve. A positional light is evaluated at the stored hit, not the probe origin;
+its radius is a falloff scale, not a hard influence cutoff. The shadow path from
+that hit can cross a caster beyond every stored transport ray. Caster geometry
+therefore advances the light-map geometry identity even when no transport brick
+overlaps its changed bound. The CPU invalidation witnesses compare relit stored
+hits with a cold solve for both cases; they do not stand in for GPU qualification.
+
 The cache's geometry-change entry point coalesces old and new casting bounds while
 an admitted batch finishes or admission is frozen. On resumption, the existing
 schedule withdraws every trace stratum in each affected placement brick and
@@ -337,7 +345,14 @@ The cache snapshot reports admitted shade probes and submitted whole sweeps.
 The independent CPU reference uses the same captured program and its immutable
 material palette. `EstimateSources` follows the ordinary Halton paths while
 attributing first-hit direct light, emission, sky and screens separately from
-later feedback. The solve source's mask applies during transport; a rendered
+later feedback. `EstimateIncidentSources` instead fixes its first ray to the
+captured, already-launched origin and finite nonzero direction. It normalizes
+that direction, repeats it for one through 256 paths, then uses the same Halton
+reflection samples and finite source fold for zero through nine later bounces.
+It neither averages a new first hemisphere nor launches off the receiver again.
+This is an independent physical incoming reference, with actual field query
+counts, rather than a simulation of Near's twelve-query allowance.
+The solve source's mask applies during transport; a rendered
 receiver's captured mask selects the final categories. A failed launch or ray
 remains unresolved and supplies no numerical divergence. Point-specific
 reflectance includes attenuation on reflected light and feedback, leaving

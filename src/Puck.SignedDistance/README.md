@@ -11,6 +11,11 @@ compiled programs and fixed march budgets. These counts carry no cycle price.
 irradiance estimator over the evaluator, and a model of the cache's transport
 and schedule that the GPU cache is held to. The reference attributes first-hit
 analytic light, emission, sky and screens independently from later feedback.
+`EstimateIncidentSources` fixes the first ray to a captured origin and direction,
+then uses the same finite-bounce path fold and independent Halton reflections.
+It accepts one through 256 paths and zero through nine reflections; the ordinary
+hemisphere estimator retains its larger sampling counts. This reference reads
+the field directly and is independent of the renderer's twelve-query Near budget.
 A failed launch is unresolved. Point-specific reflectance can attenuate reflected
 light without attenuating self-emission. SdfProgram.Materials exposes the same
 snapshotted palette the packed shader reads, including immutable nested lists.

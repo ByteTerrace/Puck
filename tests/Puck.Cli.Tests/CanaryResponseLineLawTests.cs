@@ -104,6 +104,74 @@ public sealed class CanaryResponseLineLawTests {
             occurrence: 1
         ));
     }
+    [Fact]
+    public void AFieldNamedInThePrefixKeepsItsSelectedRecordAndComponents() {
+        var transcript = (string[])[
+            "[world.counters: gpu",
+            "  cpu-reference=(1,2,3) emission=7,8,9",
+            "]",
+            "[world.counters: gpu",
+            "  cpu-reference=(4,5,6) emission=10,11,12",
+            "]",
+            "cpu-reference=(99,99,99) emission=99,99,99",
+        ];
+
+        Assert.True(condition: Evaluate(
+            line: "cpu-reference=",
+            occurrence: 1,
+            expected: 2,
+            field: "cpu-reference",
+            component: 1,
+            transcript: transcript
+        ));
+        Assert.True(condition: Evaluate(
+            line: "cpu-reference=",
+            occurrence: 2,
+            expected: 4,
+            field: "cpu-reference",
+            component: 0,
+            transcript: transcript
+        ));
+        Assert.True(condition: Evaluate(
+            line: "cpu-reference=",
+            occurrence: 2,
+            expected: 12,
+            field: "emission",
+            component: 2,
+            transcript: transcript
+        ));
+        Assert.False(condition: Evaluate(
+            line: "cpu-reference=",
+            occurrence: 2,
+            expected: 99,
+            field: "cpu-reference",
+            component: 0,
+            transcript: transcript
+        ));
+        Assert.False(condition: Evaluate(
+            line: "cpu-reference=",
+            occurrence: 2,
+            expected: 2,
+            field: "cpu-reference",
+            component: 1,
+            transcript: transcript
+        ));
+        Assert.False(condition: Evaluate(
+            line: "cpu-reference=",
+            occurrence: 2,
+            expected: 4,
+            field: "missing",
+            transcript: transcript
+        ));
+        Assert.False(condition: Evaluate(
+            line: "missing=",
+            occurrence: 2,
+            expected: 4,
+            field: "cpu-reference",
+            component: 0,
+            transcript: transcript
+        ));
+    }
     /// <summary>An operand with <c>minus</c> is the numeric difference of its two extracted values: the world node moved
     /// from submission 5 to 8 between the two reads, a change of 3 and not their sum or either read.</summary>
     [InlineData(3, true)]
@@ -174,7 +242,7 @@ public sealed class CanaryResponseLineLawTests {
         ScriptPath: "script.txt",
         WorldPath: "world.json"
     );
-    private static bool Evaluate(string? line, int occurrence, double expected, string field = "submission", string? after = null) =>
+    private static bool Evaluate(string? line, int occurrence, double expected, string field = "submission", string? after = null, int? component = null, IReadOnlyList<string>? transcript = null) =>
         CanaryAssertions.Evaluate(
             leg: new CanaryLeg(
                 Assertions: [
@@ -183,7 +251,7 @@ public sealed class CanaryResponseLineLawTests {
                         Count: 2,
                         Extractions: [new CanaryValueExtraction(
                             After: after,
-                            Component: null,
+                            Component: component,
                             Field: field,
                             Line: line,
                             Name: "submission"
@@ -222,7 +290,7 @@ public sealed class CanaryResponseLineLawTests {
             primaryTranscript: new CanaryTranscript(
                 RunDirectory: ".",
                 Stderr: [],
-                Stdout: Transcript
+                Stdout: transcript ?? Transcript
             )
         ).Passed;
 }
