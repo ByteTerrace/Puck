@@ -62,7 +62,8 @@ public sealed partial class SdfIndirectGatherLawTests {
             Assert.True(condition: (MathF.Abs(x: (masked.Y - full.Y)) <= 0.002f),
                 userMessage: $"{item.Name}: masked distance {masked.Y}, full distance {full.Y}");
             if (item.ExpectedHit is { } expected) {
-                Assert.Equal(actual: full.X, expected: ((float)IrradianceHitKind.Hit));
+                Assert.True(condition: (full.X == ((float)IrradianceHitKind.Hit)),
+                    userMessage: $"{item.Name}: expected a full-field hit at {expected}; kind {full.X}, distance {full.Y}, remaining budget {full.W}; masked kind {masked.X}, distance {masked.Y}, remaining budget {masked.W}");
                 Assert.InRange(actual: full.Y, high: (expected + 0.002f), low: (expected - 0.002f));
             }
             Assert.True(condition: (intervals.X == 0f), userMessage: $"{item.Name}: {intervals.X} full-field occupied samples in a cleared interval");

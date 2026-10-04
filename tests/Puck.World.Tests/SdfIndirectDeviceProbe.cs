@@ -28,8 +28,9 @@ internal static class SdfIndirectDeviceProbe {
         using var readback = services.SurfaceTransferFactory.CreateReadback();
         using var commands = services.CommandPoolFactory.Create(name: default);
         using var inputs = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: rows.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
-        var cacheWords = new uint[128];
-        using var cache = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: cacheWords.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
+        // The shader writes this cache: its 128 words need device-local storage, cleared before the first dispatch.
+        // A host-visible upload buffer cannot supply Direct3D's unordered-access view.
+        using var cache = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: (128U * sizeof(uint)), usage: GpuBufferUsage.Storage);
         // Three rows per dynamic slot (position, orientation, lanes); slot zero is the identity unless the caller supplies a table.
         var slots = (transforms ?? [Vector4.Zero, new Vector4(w: 1, x: 0, y: 0, z: 0), Vector4.Zero]);
         using var transformTable = services.BufferFactory.CreateHostVisible(data: MemoryMarshal.AsBytes(span: slots.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
@@ -50,6 +51,11 @@ internal static class SdfIndirectDeviceProbe {
             var command = commands.CommandBufferHandle;
 
             recorder.BeginCommandBuffer(commandBufferHandle: command);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: cache.BufferHandle,
+                sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+            recorder.ClearStorageBuffer(commandBufferHandle: command, bufferHandle: cache.BufferHandle, sizeBytes: cache.SizeBytes);
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: cache.BufferHandle,
+                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer, destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
             recorder.TransitionImageLayout(commandBufferHandle: command, destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader,
                 imageHandle: output.ImageHandle, newLayout: GpuImageLayout.General, oldLayout: GpuImageLayout.Undefined, sourceAccessMask: GpuAccess.None,
                 sourceStageMask: GpuStage.TopOfPipe);
