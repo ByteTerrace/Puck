@@ -6,6 +6,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
+[Collection(AllocationCollection.Name)]
 public sealed class WorldSkyCostLawTests {
     private sealed class Registry(IGpuWorkSource source) : IGpuWorkRegistry {
         public GpuDeviceIdentity? DeviceIdentity => null;

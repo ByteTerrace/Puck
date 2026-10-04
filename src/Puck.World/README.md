@@ -2204,14 +2204,15 @@ continue normally. Clock previews never save or enter replay.
 restores the stack. `world.sky-layer mute <index> on|off` toggles a row, with
 mute taking precedence over solo. Indices are the zero-based `sky[index]`
 rows in `world.lighting`. These render levers apply across World views and
-session screens and never save. Solo removes the default gradient and fog
-unless the selected row supplies that contribution.
+session screens and never save. Solo removes the default gradient; muting an
+authored gradient keeps that contribution absent. Atmosphere remains the
+separate fog, haze and medium authored under `render.atmosphere`.
 
-`world.debug-view sky-cost` shows evaluations in red (one quarter per layer
+`world.debug-view sky-cost` shows evaluations in red (one quarter per layer or atmosphere
 evaluation), procedural hashes in green (one sixty-fourth per hash), and
 texture loads in blue (one sixteenth per load), clamped at one. Field-run
 cost is filtered with the field's pixels and combined with the output
-pixel's point and fog work. It is cost attributed to a pixel; `world.cost sky`
+pixel's point and atmosphere work. It is cost attributed to a pixel; `world.cost sky`
 reports exact completed pass totals. `world.debug-view off` restores the image.
 
 Sky edits use the ordinary authoring loop: `world.compare hold`, edit the

@@ -20,12 +20,12 @@ public sealed class WorldTimelineLeverLawTests {
             new WorldClock("day", PeriodSeconds: 1d),
             new WorldClock("tide", State: "phase"),
         ]),
-        RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [
-            new WorldRenderSkyLayer.Fog(Density: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "tide", keys: [
+        RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Noise(Clock: "tide")]), Atmosphere: new WorldRenderAtmosphere(
+            Fog: new WorldRenderFog(Density: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "tide", keys: [
                 new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
                 new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.1f),
             ]))),
-        ])),
+        )),
     }).WithWorldState([new WorldStateRow(
         Name: CellName.Parse(candidate: "phase"), Kind: CellKind.Fixed,
         Advance: new StateAdvance(PerSecondDenominator: 1L, PerSecondNumerator: 1L),
@@ -51,7 +51,8 @@ public sealed class WorldTimelineLeverLawTests {
         Assert.Equal(before, WorldDefinitionSerialization.Serialize(definition: row.Server.Definition));
         using var environment = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
 
-        Assert.Equal(0.1f, environment.Resolve(row.Server.Definition, 0, mirror).Sky.Block.FogDensity, 6);
+        Assert.Equal(0.1f, environment.Resolve(row.Server.Definition, 0, mirror).Sky.Atmosphere.FogDensity, 6);
+        Assert.Equal(0.5f, environment.Resolve(row.Server.Definition, 0, mirror).Sky.Layers[1].Phase);
         var resolutions = environment.Resolutions;
         var keyed = mirror.KeyedResolutionCount;
 
@@ -62,7 +63,8 @@ public sealed class WorldTimelineLeverLawTests {
             Assert.True(condition: mirror.TryReadPhase(clock: out _, name: "tide", phase: out var phase));
             Assert.True(condition: (phase == 0.5d), userMessage: "A held clock must not advance its presented state row.");
             Assert.Equal(new PresentedTick(Fraction: 0d, Whole: 25200UL), mirror.ClockTick(name: "tide"));
-            Assert.Equal(0.1f, environment.Resolve(row.Server.Definition, 0, mirror).Sky.Block.FogDensity, 6);
+            Assert.Equal(0.1f, environment.Resolve(row.Server.Definition, 0, mirror).Sky.Atmosphere.FogDensity, 6);
+            Assert.Equal(0.5f, environment.Resolve(row.Server.Definition, 0, mirror).Sky.Layers[1].Phase);
         }
         Assert.True(condition: (row.Server.CompletedEngineTicks > 0UL));
         Assert.Equal(row.Server.CompletedEngineTicks, mirror.EngineTick);

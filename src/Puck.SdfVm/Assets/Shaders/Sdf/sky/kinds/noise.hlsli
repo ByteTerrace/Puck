@@ -10,7 +10,7 @@ float4 sdfSkyNoiseLayer(SdfSkyNoise noise, SdfSkyLayer layer, SdfSkySample sampl
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 0u);
 
     uint octaves = clamp(noise.Octaves, 1u, 8u);
 
@@ -21,7 +21,7 @@ float4 sdfSkyNoiseLayer(SdfSkyNoise noise, SdfSkyLayer layer, SdfSkySample sampl
     float3 q = ((sample.local * noise.Scale) + float3(0.0, (layer.Phase * (float)SDF_NOISE_PERIOD_CELLS), 0.0));
     float value = sdfPeriodicFbm3(q, noise.Seed, octaves, noise.Gain);
 
-    puckCountDetail(layer.Detail, 0u, 0u, 0u, (8u * octaves), 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 0u, (8u * octaves), 0u);
 
     float alpha = ((noise.Coverage >= 1.0) ? 1.0 : sdfSkyRise(((1.0 - noise.Coverage) + noise.Softness), noise.Softness, value));
 

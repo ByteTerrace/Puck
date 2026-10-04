@@ -17,7 +17,7 @@ float4 sdfSkyDiscLayer(SdfSkyDisc disc, SdfSkyLayer layer, SdfSkySample sample) 
     float cosine = dot(sample.world, disc.Direction);
 
     if (disc.Screen < 0) {
-        puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 0u);
+        sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 0u);
 
         return float4((disc.Color * disc.Intensity), pow(saturate(cosine), disc.Exponent));
     }
@@ -54,7 +54,7 @@ float4 sdfSkyDiscLayer(SdfSkyDisc disc, SdfSkyLayer layer, SdfSkySample sample) 
     float2 source = clamp(lerp(mapping.crop.xy, mapping.crop.zw, uv), mapping.sampleClamp.xy, mapping.sampleClamp.zw);
     float4 sampled = screenSources[screen].SampleLevel(samplers[(uint)mapping.state.y], source, 0.0);
 
-    puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 1u);
+    sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 1u);
 
     return float4(((sampled.rgb * disc.Color) * disc.Intensity), coverage);
 #else

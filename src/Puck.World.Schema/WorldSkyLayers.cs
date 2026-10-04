@@ -53,7 +53,7 @@ public static class WorldSkyLayers {
         };
     }
     /// <summary>Returns who sees a layer: its authored visibility, or its kind's, the camera and the lighting for a
-    /// gradient and the camera alone for every other kind.</summary>
+    /// gradient, the lighting alone for a panel, and the camera alone for every other kind.</summary>
     /// <param name="layer">The layer.</param>
     /// <returns>The visibility.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
@@ -85,7 +85,7 @@ public static class WorldSkyLayers {
         _ => SdfSkyTier.Low,
     };
     /// <summary>Returns the kind name a layer's rows are labelled with when it has no name: <c>gradient</c>, <c>disc</c>,
-    /// <c>stars</c>, <c>clouds</c>, <c>aurora</c>, <c>noise</c>, <c>pattern</c> or <c>panorama</c>.</summary>
+    /// <c>stars</c>, <c>clouds</c>, <c>aurora</c>, <c>noise</c>, <c>pattern</c>, <c>panorama</c> or <c>panel</c>.</summary>
     /// <param name="layer">The layer.</param>
     /// <returns>The name, or <see langword="null"/> for a layer of no kind the engine draws.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>

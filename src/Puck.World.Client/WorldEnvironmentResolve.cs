@@ -50,6 +50,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     private int m_revision = -1;
 
     private WorldRenderSky? m_sky;
+    private WorldSkyAudition? m_layers;
+    private int m_layersRevision;
 
     // Each expanded layer's label (WorldSkyLayers.LabelsOf), and where the last resolution wrote it in the stack.
     private string?[] m_skyLabels = [];
@@ -76,10 +78,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     /// <param name="shadowSelection">A session's complete delivered selection, or this resolver's own subscription.</param>
     /// <param name="skyQuality">The sky's quality tier (<c>world.sky-quality</c>), or <see langword="null"/> for the
     /// definition's boot tier (<c>render.skyQuality</c>).</param>
+    /// <param name="layers">Session-only solo and mute controls for the authored sky rows. Atmosphere remains separate.</param>
     /// <returns>The lights and the sky.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="mirror"/> is
     /// <see langword="null"/>.</exception>
-    public WorldResolvedEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null, WorldShadowSettings? shadows = null, WorldShadowSelection? shadowSelection = null, SdfSkyTier? skyQuality = null) {
+    public WorldResolvedEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null, WorldShadowSettings? shadows = null, WorldShadowSelection? shadowSelection = null, SdfSkyTier? skyQuality = null, WorldSkyAudition? layers = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
@@ -241,8 +244,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         return false;
     }
-    // Notes what a keyed value reads besides its keys: a state clock's slot, the presented tick a tick clock or a moving
-    // anchor moves with, or nothing for an anchor held still, which moves only with the definition.
+    // A keyed value follows its named clock's presented phase, including a held or scrubbed preview.
     private void NoteKeys(WorldStateMirror mirror, IWorldKeyTrack? keys) {
         if (keys is null) {
             return;
@@ -592,7 +594,9 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         var layers = (sky?.Layers ?? []);
-        m_layers?.ClearExcluded(m_resolvedSky, layers);
+        if (m_layers is { Solo: >= 0 }) {
+            m_resolvedSky.ClearLayers();
+        }
 
         // An authored gradient replaces the default look's; a stack with none draws over it.
         for (var index = 0; (index < layers.Count); index++) {
@@ -610,6 +614,10 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         for (var index = 0; (index < layers.Count); index++) {
+            if ((m_layers is { } audition) && !audition.Includes(index)) {
+                m_skyLayerIndex[index] = -1;
+                continue;
+            }
             m_skyLayerIndex[index] = WriteLayer(
                 into: m_resolvedSky,
                 label: m_skyLabels[index],
@@ -736,20 +744,13 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             record.MaskSoftness = ((float)(Math.Cos(d: spread) - Math.Cos(d: Math.Min(val1: (spread + feather), val2: Math.PI))));
         }
     }
-    // A layer clock's phase at the presented tick, in cycles in [0, 1), noting what it reads: a state clock's slot, or the
-    // tick for a tick clock.
+    // A layer clock's phase follows the same preview and dependency path as a keyed value.
     private float ClockPhase(WorldStateMirror mirror, string? clock) {
         if (clock is null) {
             return 0f;
         }
 
-        var slot = mirror.ClockSlotOf(name: clock);
-
-        if (slot >= 0) {
-            NoteSlot(mirror: mirror, slot: slot);
-        } else if (!mirror.ClockHoldsStill(name: clock)) {
-            m_readsTick = true;
-        }
+        m_clocks.Note(mirror, clock);
 
         return (mirror.TryPhase(clock: out _, name: clock, phase: out var phase) ? ((float)phase) : 0f);
     }

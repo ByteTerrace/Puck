@@ -147,7 +147,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     private readonly WorldEnvironmentResolve m_environment;
     private readonly Func<WorldShadowSettings>? m_shadowSettings;
     /// <summary>The presentation's session-only layer audition.</summary>
-    public WorldSkyLayers? SkyLayers { get; set; }
+    public WorldSkyAudition? SkyLayers { get; set; }
 
     private readonly WorldShadowSelection m_deliveredShadows = new();
 

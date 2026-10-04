@@ -7820,8 +7820,8 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       its rect; its residency's aperture bytes and the live count against the
       cap in `world.budget`.
 12. **P18-12, the artist's surface in the running World.**
-    - Delivered for the current gradient, fog, disc, stars and clouds rows:
-      the sky, air and timeline in the editor's inspector
+    - Implemented for the open sky stack and the separate atmosphere:
+      the sky, atmosphere and timeline in the editor's inspector
       ([E5](editor.md#e5--the-inspector), through its one formatter); clock
       levers `world.timeline hold|run|at|rate <clock>` (presentation-only, never
       saved, like `pipeline.time`); layer solo and mute and a per-pixel sky-cost
@@ -7833,11 +7833,23 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       ([E9](editor.md#e9--cost-per-object-and-gpu-pass-timing)).
     - Touches: `WorldLightingCommandModule`, `WorldRenderLeverCommandModule`,
       `WorldSessionLevers`, `DebugViewModes`, the editor's formatter.
-    - Done when: `WorldTimelineLeverLawTests` hold a scrubbed clock's
-      presentation to the tick it names and the simulation untouched (red leg:
-      a held clock that advances the state row); the inspector's sky text
-      equals `world.lighting`'s echo.
-    - Counted-cost gate: a held clock renders nothing new after one frame.
+    - `WorldSkyAudition` filters authored rows before emission, keeping named
+      and repeated kinds distinct. Solo removes the fallback gradient, while
+      the separate atmosphere stays authored. `WorldClockReads` follows both
+      keyed values and per-layer clock phases through held and scrubbed previews.
+      `WorldLightingText` owns the console and inspector's common sky and
+      atmosphere text; atmosphere-only edits invalidate its cached readout.
+    - The sky-cost view records evaluations, hashes and texture loads at the
+      existing evaluation sites. Its base image carries field costs in RGB
+      while the upper-run images keep their packed summaries; the composite
+      filters the field costs and adds point and atmosphere work. Completed
+      work is counted once, where executed, through `world.cost sky`.
+    - Verification remains owed for the combined source: the focused timeline,
+      layer, inspector, cost and reload/save CPU laws and their withheld-fix
+      legs; both backends of the timeline, cost and edit GPU laws; the touched
+      sky evaluation law, editor/sky canaries and parity. The held-clock GPU
+      law requires no submission after the first frame. No GPU result follows
+      from a CPU law, and counted ceilings must be recorded from completed work.
 13. **P18-13, temporal amortization of secondary shadows.** Implemented after P15-5;
     GPU qualification and floor-device ceiling recordings remain owed.
     - Delivers: with reconstruction on, each shadow slot after the first marches

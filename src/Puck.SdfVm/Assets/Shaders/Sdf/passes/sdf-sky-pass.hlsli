@@ -15,6 +15,7 @@
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-visibility.hlsli"
 #include "../frame/sdf-work.hlsli"
+#include "../frame/sdf-debug-modes.hlsli"
 #include "../frame/sdf-environment.hlsli"
 #include "../sky/sdf-sky.hlsli"
 #include "../shade/sdf-sky-environment.hlsli"
@@ -78,7 +79,6 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scales[SDF_SKY_MAX_
     float2 fraction = (position - float2(origin));
     uint upper = min(sdfSky[0].UpperRuns, SDF_SKY_MAX_UPPER_FIELD_RUNS);
     float total = 0.0;
-    float2 fieldCost = float2(0.0, 0.0);
 
     base = float3(0.0, 0.0, 0.0);
     [unroll] for (uint run = 0u; (run < SDF_SKY_MAX_UPPER_FIELD_RUNS); run++) {
@@ -105,13 +105,13 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scales[SDF_SKY_MAX_
                 float4 upper0 = skyUpper0.Load(tap);
                 float4 upper1 = skyUpper1.Load(tap);
 
-                puckCountDetail(1u, 0u, 0u, 0u, 0u, 2u);
+                sdfCountSky(1u, 0u, 0u, 0u, 0u, 2u);
                 scales[0] += (weight * upper0.xyz);
                 offsets[0] += (weight * float3(upper0.w, upper1.xy));
                 if (upper > 1u) {
                     float4 upper2 = skyUpper2.Load(tap);
 
-                    puckCountDetail(2u, 0u, 0u, 0u, 0u, 1u);
+                    sdfCountSky(2u, 0u, 0u, 0u, 0u, 1u);
                     scales[1] += (weight * float3(upper1.zw, upper2.x));
                     offsets[1] += (weight * upper2.yzw);
                 }
@@ -123,6 +123,10 @@ bool sdfSkyPassRuns(uint2 pixel, out float3 base, out float3 scales[SDF_SKY_MAX_
         return false;
     }
     base /= total;
+    if (passGroup.debugMode == DebugViewModeSkyCost) {
+        sdfSkyCost += base;
+        base = float3(0.0, 0.0, 0.0);
+    }
     [unroll] for (uint summary = 0u; (summary < SDF_SKY_MAX_UPPER_FIELD_RUNS); summary++) {
         scales[summary] = ((summary < upper) ? (scales[summary] / total) : float3(1.0, 1.0, 1.0));
         offsets[summary] = ((summary < upper) ? (offsets[summary] / total) : float3(0.0, 0.0, 0.0));
@@ -142,7 +146,7 @@ float3 sdfSkyPassEnvironment(float3 direction) {
     [unroll] for (uint i = 0u; i < 4u; i++) {
         color += (weights[i] * sdfSkyEnvironmentUnpack(sdfSkyEnvironment[taps[i]]));
     }
-    sdfCountSky(0u, 0u, 0u, 0u, 0u, 4u);
+    sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 0u, 0u, 4u);
 
     return color;
 }

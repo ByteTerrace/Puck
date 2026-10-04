@@ -30,7 +30,7 @@ public enum AmbientOcclusionMode {
 /// </summary>
 public sealed partial class WorldRenderSettings {
     /// <summary>The sky layer audition, never folded into a saved definition.</summary>
-    public Client.WorldSkyLayers SkyLayers { get; } = new();
+    public Client.WorldSkyAudition SkyLayers { get; } = new();
     private bool m_ambientOcclusion;
     private AmbientOcclusionMode m_ambientOcclusionQuality;
     private volatile int m_bakes;

@@ -16,12 +16,14 @@ namespace Puck.SdfVm;
 // mesh draws into its target through the mesh pipeline, with a set of its own per frame slot binding its pass block. A
 // recorder records no barrier: the planner's are the instance's, and the node's orders the work counters.
 internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRenderGraphPackageReadback {
-    public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part == "views" ? m_view.Residency.SkyDetails.Labels : [];
-
     private const uint WorkgroupEdge = 8;
 
-    // The shadow pass counts each secondary pixel into the row of its decision; every other part names none.
-    public IReadOnlyList<string> WorkDetails(in FrameContext context) => ((m_part == SdfWorldPackage.Parts.Shadow) ? SdfShadowDecisions.Labels : []);
+    // Views attribute analytic sky lighting by layer; the shadow pass attributes secondary pixels by decision.
+    public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
+        SdfWorldPackage.Parts.Views => m_view.Residency.SkyDetails.Labels,
+        SdfWorldPackage.Parts.Shadow => SdfShadowDecisions.Labels,
+        _ => [],
+    };
 
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
     private static readonly string[] ScratchMembers = [

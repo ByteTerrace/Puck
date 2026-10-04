@@ -35,6 +35,7 @@ public sealed partial class WorldInspectorText {
 
     private string m_reloadLine = "reload=none";
     private WorldRenderSky? m_sky;
+    private WorldRenderAtmosphere? m_atmosphere;
     private string? m_skyText;
 
     /// <summary>Gets whether this snapshot's fixed lines exceeded the editor writer's declared line reservation.</summary>
@@ -103,9 +104,10 @@ public sealed partial class WorldInspectorText {
 
     private void Environment(in WorldInspectorSnapshot snapshot) {
         if (snapshot.Definition is not { } definition) { return; }
-        if (m_skyText is null || !ReferenceEquals(m_sky, definition.Render.Sky)) {
+        if (m_skyText is null || !ReferenceEquals(m_sky, definition.Render.Sky) || !ReferenceEquals(m_atmosphere, definition.Render.Atmosphere)) {
             m_sky = definition.Render.Sky;
-            m_skyText = WorldLightingText.DescribeSky(m_sky);
+            m_atmosphere = definition.Render.Atmosphere;
+            m_skyText = WorldLightingText.DescribeSky(m_sky, m_atmosphere);
         }
         _ = Line(m_skyText, lines: 4, optional: true);
         var scratch = m_scratch.AsSpan();

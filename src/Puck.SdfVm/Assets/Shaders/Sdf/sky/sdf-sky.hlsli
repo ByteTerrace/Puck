@@ -17,6 +17,14 @@
 
 #include "../shade/sdf-sky-common.hlsli"
 
+// The same evaluation sites feed completed work rows and the per-pixel cost view. In that view alone the field pass
+// carries all three costs in the base image's RGB; the composite filters them and adds its point and texture work.
+static float3 sdfSkyCost = float3(0.0, 0.0, 0.0);
+void sdfCountSky(uint detail, uint steps, uint texels, uint evaluations, uint hashes, uint loads) {
+    sdfSkyCost += float3(evaluations, hashes, loads);
+    puckCountDetail(detail, steps, texels, evaluations, hashes, loads);
+}
+
 // Each kind's module and the evaluation switch (sdfSkyKindEvaluate), generated from the kind table. Its modules read the
 // declarations above.
 #include "sdf-sky-kind-table.hlsli"

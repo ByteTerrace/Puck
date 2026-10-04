@@ -1553,10 +1553,13 @@ handoff history follow delivered readings; previews change resolved light
 values without scrubbing that history.
 `WorldRenderSettings.SkyLayers` reaches the environment resolver in boot,
 routed and session-screen presentations through the existing lever sink;
-solo and mute never fold into source. A muted gradient has zero stops in
-both the CPU reference and shader. `DebugViewModes` and
+solo and mute never fold into source. `WorldSkyAudition` filters authored
+rows before the open stack is emitted; solo removes the fallback gradient,
+and muting an authored gradient does not restore it. Atmosphere is separate
+from the sky rows and stays authored during audition. `DebugViewModes` and
 `frame/sdf-debug-modes.hlsli` share the sky-cost mode index. Sky field-run
-alphas carry evaluation and hash attribution for that view; the completed
+base RGB carries evaluation, hash and texture-load attribution in that debug
+view alone, leaving the packed upper-run images intact; the completed
 ledger still counts work only at the site that runs it. `world.cost sky`
 filters that ledger through `GpuWorkReport`, including skipped rows.
 The artist-facing syntax belongs to the [World reference](../../../src/Puck.World/README.md).

@@ -49,7 +49,7 @@ public sealed class WorldSkyCostGpuLawTests {
             return PngDecoder.Decode(File.ReadAllBytes(request.Path)).RgbaPixels;
         }
         var active = Capture("p18-12-active.png");
-        source.Sky.StopCount = 0;
+        source.Sky.ClearLayers();
         var muted = Capture("p18-12-muted.png");
         for (var pixel = 0; pixel < active.Length; pixel += 4) {
             Assert.True(active[pixel] > 0 && muted[pixel] == 0, "The sky-cost red channel must lose the muted gradient's evaluation.");

@@ -54,16 +54,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float3 hazeColor = float3(0.0, 0.0, 0.0);
 
         if (kinds.x > 0.0) {
-            puckCountDetail(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
+            sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
             surface += ((sdfAirFogReadsSky() ? ambient : sdfSky[0].FogColor) * weights.x);
         }
         if (kinds.y > 0.0) {
-            puckCountDetail(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
+            sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
             hazeColor = (ambient + sdfAirBodies(direction, sdfSky[0].HazeAnisotropy));
             surface += (hazeColor * weights.y);
         }
         if (kinds.z > 0.0) {
-            puckCountDetail(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
+            sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);
             surface += (sdfSky[0].MediumColor * weights.z);
         }
         if (coverage < 1.0) {
@@ -83,6 +83,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         float covered;
 
         color = shadeVolumes(surface, coverage, ((t > 0.0) ? t : far), sky, origin, direction, worldRayDistanceAt(view, direction, worldNearDistance(view)), far, id.xy, covered);
+        if (passGroup.debugMode == DebugViewModeSkyCost) {
+            // RGB: layer/atmosphere evaluations / 4, procedural hashes / 64, texture loads / 16.
+            color = saturate(sdfSkyCost / float3(4.0, 64.0, 16.0));
+        }
     }
 
     // The float working color; the display encode dithers and quantizes it.

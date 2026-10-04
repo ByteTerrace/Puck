@@ -14,6 +14,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
+[Collection(AllocationCollection.Name)]
 public sealed class WorldSkyEditLawTests {
     internal sealed class Session : IDisposable {
         private readonly TemporaryDirectory m_files = new();
@@ -31,7 +32,7 @@ public sealed class WorldSkyEditLawTests {
         public Session() {
             var host = m_files.Own(WorldBootHarness.Compose(m_files, WorldHostPresentation.Offscreen,
                 "tests/Puck.World.Canaries/editor-grid/fixture.world.json", definition => definition with {
-                    RenderRaw = definition.Render with { Sky = Sky("#FF0000", 0.01f) },
+                    RenderRaw = definition.Render with { Sky = Sky("#FF0000"), Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.01f)) },
                     TimelineRaw = new WorldTimelineSection([new WorldClock("day", PeriodSeconds: 1d)]),
                 }).Build());
             Assert.True(WorldPostBuildWiring.Install(host.Services));
@@ -54,7 +55,7 @@ public sealed class WorldSkyEditLawTests {
             "\n// Retain this unrelated constant.\nlet retained = 3\n";
         public WorldResolvedEnvironment Resolve() => m_environment.Resolve(Client.Definition, Client.DefinitionRevision, Client.StateMirror);
         public void EditAndReload() {
-            var edited = Server.Definition with { RenderRaw = Server.Definition.Render with { Sky = Sky("#0000FF", 0.03f) } };
+            var edited = Server.Definition with { RenderRaw = Server.Definition.Render with { Sky = Sky("#0000FF"), Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.03f)) } };
             File.WriteAllText(m_live, Text(edited));
             var result = Commands.Submit("world.reload");
             Assert.False(result.IsError, result.Output);
@@ -71,16 +72,16 @@ public sealed class WorldSkyEditLawTests {
             var sky = compiled.RequireJson()["render"]!["sky"];
             var live = JsonNode.Parse(WorldDefinitionSerialization.Serialize(Server.Definition))!["render"]!["sky"];
             Assert.True(JsonNode.DeepEquals(live, sky), "The saved .puck sky rows must reproduce the edited live sky.");
+            Assert.Equal(0.03f, compiled.RequireJson()["render"]!["atmosphere"]!["fog"]!["density"]!.GetValue<float>());
             Assert.DoesNotContain("#FF0000", saved);
             Assert.Contains("#0000FF", saved);
         }
         public void Dispose() { m_environment.Dispose(); m_files.Dispose(); }
-        private static WorldRenderSky Sky(string color, float density) => new(Layers: [
+        private static WorldRenderSky Sky(string color) => new(Layers: [
             new WorldRenderSkyLayer.Gradient(Name: "horizon", Stops: [
                 new WorldRenderSkyStop(Elevation: -1f, Color: new BindableColor(color)),
                 new WorldRenderSkyStop(Elevation: 1f, Color: new BindableColor(color)),
             ]),
-            new WorldRenderSkyLayer.Fog(Name: "haze", Density: density),
             new WorldRenderSkyLayer.Stars(Name: "stars", Brightness: 0.2f),
             new WorldRenderSkyLayer.Clouds(Name: "clouds", Coverage: 0.2f),
         ]);
@@ -110,15 +111,15 @@ public sealed class WorldSkyEditLawTests {
         session.EditAndReload();
         Compare("world.compare diff");
         Assert.Equal(SdfSkyEnvironment.Texels, session.Comparison.Seat(0)!.Difference!.Value.ChangedPixels);
-        Assert.Equal(0.03f, session.Resolve().Sky.Block.FogDensity);
+        Assert.Equal(0.03f, session.Resolve().Sky.Atmosphere.FogDensity);
         session.SaveAndAssert();
     }
     private static PngImage ReferenceMap(WorldResolvedEnvironment environment) {
         var sky = environment.Sky;
-        var stops = new SdfSkyStop[SdfSky.MaxStops];
-        sky.Pack(environment.Lights, out var block, stops, new SdfSoftbox[SdfSky.MaxSoftboxes]);
+        var layers = new SdfSkyLayer[SdfSky.MaxLayers];
+        sky.Pack(lights: environment.Lights, block: out var block, layers: layers, details: new SdfSkyDetails(), farDistance: 40f);
         var map = new Vector3[SdfSkyEnvironment.Texels];
-        SdfSkyEnvironment.Render(in block, stops, map);
+        SdfSkyEnvironment.Render(in block, layers, map);
         var pixels = new byte[map.Length * 4];
         for (var index = 0; index < map.Length; index++) {
             pixels[index * 4] = (byte)Math.Clamp(map[index].X * 255f, 0f, 255f);

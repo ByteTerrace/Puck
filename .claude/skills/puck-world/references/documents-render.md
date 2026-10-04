@@ -31,7 +31,7 @@ before the field existed; an authored value must lie in
 [`WorldRenderDefaults.MinFarDistance` 1, `MaxFarDistance` 8192], refused by
 `ValidateRenderFarDistance` as `render.farDistance <v> must be finite and
 within [1, 8192].` Geometry past it is never marched, so an infinite plane
-ends on a horizon curve at that depth unless `sky.fogDensity` has absorbed it
+ends on a horizon curve at that depth unless `render.atmosphere.fog.density` has absorbed it
 first. Read back with `world.row.set render` (the section's read arm) and
 `world.budget`, which quotes the far distance with its derived costs: the
 reach multiplier over the default, the horizon-ray step count per unit of

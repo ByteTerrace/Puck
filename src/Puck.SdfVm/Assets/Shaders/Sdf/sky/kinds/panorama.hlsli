@@ -33,7 +33,7 @@ float4 sdfSkyPanoramaLayer(SdfSkyPanorama panorama, SdfSkyLayer layer, SdfSkySam
     float2 source = clamp(lerp(mapping.crop.xy, mapping.crop.zw, uv), mapping.sampleClamp.xy, mapping.sampleClamp.zw);
     float4 sampled = screenSources[screen].SampleLevel(samplers[(uint)mapping.state.y], source, 0.0);
 
-    puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 1u);
+    sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 1u);
 
     return float4((sampled.rgb * panorama.Intensity), 1.0);
 #else
