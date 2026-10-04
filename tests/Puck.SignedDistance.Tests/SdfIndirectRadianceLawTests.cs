@@ -5,6 +5,17 @@ namespace Puck.SignedDistance.Tests;
 
 public sealed class SdfIndirectRadianceLawTests {
     [Fact]
+    public void SignedZeroIsBlackAndCannotLeakIntoAnotherChannel() {
+        var negativeZero = BitConverter.Int32BitsToSingle(int.MinValue);
+        Assert.Equal(0u, SdfIndirectRadiance.Pack(new Vector3(negativeZero, 0, 0)));
+        Assert.Equal(0u, SdfIndirectRadiance.Pack(new Vector3(0, negativeZero, 0)));
+        Assert.Equal(0u, SdfIndirectRadiance.Pack(new Vector3(0, 0, negativeZero)));
+        Assert.Equal(0x781E0000u, SdfIndirectRadiance.Pack(new Vector3(negativeZero, 1, 1)));
+        Assert.Equal(0x780003C0u, SdfIndirectRadiance.Pack(new Vector3(1, negativeZero, 1)));
+        Assert.Equal(0x001E03C0u, SdfIndirectRadiance.Pack(new Vector3(1, 1, negativeZero)));
+    }
+
+    [Fact]
     public void StorageRetainsIndependentHdrChannelsAndRoundsAtTheDeclaredMantissa() {
         Assert.Equal(0u, SdfIndirectRadiance.Pack(Vector3.Zero));
         Assert.Equal(0x781E03C0u, SdfIndirectRadiance.Pack(Vector3.One));

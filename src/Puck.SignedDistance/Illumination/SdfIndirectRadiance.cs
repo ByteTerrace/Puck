@@ -6,7 +6,7 @@ namespace Puck.SignedDistance;
 /// red and green and five for blue. Values round through half precision, then ties to even in the stored format.</summary>
 public static class SdfIndirectRadiance {
     /// <summary>Packs finite lighting, saturating negative values and non-finite inputs to black or the largest finite
-    /// channel value. This is the CPU reference for sdfIndirectPackRadiance.</summary>
+    /// channel value. Both signed zeros encode as black. This is the CPU reference for sdfIndirectPackRadiance.</summary>
     /// <param name="value">Linear nonnegative radiance or normalized irradiance.</param>
     /// <returns>One word, with red in its low eleven bits.</returns>
     public static uint Pack(Vector3 value) => Channel(value.X, 4) | (Channel(value.Y, 4) << 11) | (Channel(value.Z, 5) << 22);
@@ -20,8 +20,10 @@ public static class SdfIndirectRadiance {
         (float)BitConverter.UInt16BitsToHalf((ushort)((value >> 22) << 5)));
 
     private static uint Channel(float value, int shift) {
+        // The sign bit has no place in an unsigned channel and would spill into its neighbor.
+        if (!(value > 0.0f)) { return 0; }
         var maximum = shift == 4 ? 65024.0f : 64512.0f;
-        var half = (uint)BitConverter.HalfToUInt16Bits((Half)(float.IsNaN(value) ? 0.0f : Math.Clamp(value, 0.0f, maximum)));
+        var half = (uint)BitConverter.HalfToUInt16Bits((Half)Math.Min(value, maximum));
         return (half + ((1u << (shift - 1)) - 1u) + ((half >> shift) & 1u)) >> shift;
     }
 }
