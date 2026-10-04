@@ -18,6 +18,11 @@ public sealed partial class TemporalShadowCanaryLawTests {
         var occluder = Assert.Single(collection: definition.Placements, predicate: row => (row.Id == "occluder"));
         var creation = Assert.Single(collection: definition.Creations, predicate: row => (row.Id == occluder.PrototypeId));
 
+        // An unused reserved face still emits a parked screen slab outside every instance. Its world segments
+        // select the conservative flat motion check, so this proof reserves no screen that its geometry never uses.
+        Assert.Equal(expected: 0, actual: definition.Authoring.DerivedFaceScreens);
+        Assert.Empty(collection: definition.Screens);
+        Assert.Empty(collection: WorldFaceCatalog.For(definition: definition).Rows);
         Assert.True(condition: WorldPlacementStamper.IsAnimated(creation: creation),
             userMessage: "The occluder must ride dynamic transforms; a static-stamp edit rebuilds geometry instead of testing motion rejection.");
         using var files = new TemporaryDirectory(prefix: "temporal-shadow-grid-");

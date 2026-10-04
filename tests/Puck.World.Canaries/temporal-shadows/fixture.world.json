@@ -241,7 +241,7 @@
       "candidateRadius": 1,
       "candidateCap": 1,
       "previewDeadlineFrames": 1,
-      "derivedFaceScreens": 1
+      "derivedFaceScreens": 0
     },
     "rows": [
       {
