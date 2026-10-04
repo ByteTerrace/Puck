@@ -93,7 +93,7 @@ public sealed partial class RenderGraphHistoryLawTests {
 
         private sealed class Recorder(IndirectModel owner, bool counts) : IRenderGraphPackageRecorder {
             public void Dispose() { }
-            public ulong? Signature(in FrameContext context) => (counts ? 1UL : null);
+            public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => (counts ? 1UL : null);
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 if (counts) {
                     owner.Writes.Add(item: recording.Outputs[0].Buffer!.BufferHandle);

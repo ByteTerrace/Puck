@@ -75,7 +75,7 @@ public sealed partial class RenderGraphCadenceLawTests {
 
         private sealed class Recorder(ImageFactory owner, string pass) : IRenderGraphPackageRecorder {
             public void Dispose() { }
-            public ulong? Signature(in Puck.Hosting.FrameContext context) => 1;
+            public ulong? Signature(in Puck.Hosting.FrameContext context, Puck.Hosting.RenderGraphExternalReads? reads) => 1;
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 owner.Images[pass] = recording.Outputs[0].Image.ImageHandle;
                 return RenderGraphPackageOutcome.Drew;

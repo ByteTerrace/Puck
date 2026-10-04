@@ -222,7 +222,7 @@ public sealed partial class RenderGraphHistoryLawTests {
             public void Dispose() { }
             public void Submitted() { if (package == Lit) { owner.CommittedWrites++; } }
             public bool Skips(in FrameContext context) => ((package == Lit) && owner.SkipLit);
-            public ulong? Signature(in FrameContext context) => ((package == Lit) ? owner.Signature : null);
+            public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => ((package == Lit) ? owner.Signature : null);
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 foreach (var cleared in owner.Gpu!.ClearedImages) { owner.Contents.Remove(key: cleared); owner.Clears.Add(item: cleared); }
                 owner.Gpu.ClearedImages.Clear();

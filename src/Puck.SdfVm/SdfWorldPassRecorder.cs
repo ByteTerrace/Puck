@@ -293,7 +293,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         return (quality.DisableSoftShadows || (frame.Lights.ShadowSlots.SlotCount == 0));
     }
-    public ulong? Signature(in FrameContext context) => m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context);
+    public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => m_owner.SignatureOf(instance: m_context.Instance, part: m_part, temporal: m_temporal, context: in context);
     public void Submitted() {
         if (m_part == SdfWorldPackage.LightDepth) { m_view.Residency.SubmitLightView(); }
         if ((m_part == SdfWorldPackage.Parts.Views) && !m_resolved) { m_owner.MarkSampleRendered(instance: m_context.Instance); }

@@ -86,7 +86,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     }
     // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_view.Residency.SkyDetails.Labels;
-    public ulong? Signature(in FrameContext context) {
+    public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) {
         var signature = m_owner.SignatureOf(instance: m_context.Instance, part: m_context.Part!, temporal: m_temporal, context: in context);
 
         if (signature is not { } value) { return null; }

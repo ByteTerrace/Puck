@@ -155,8 +155,11 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// current-frame graph input's last write and the retained or history output contents
     /// also remain valid. A standing pass records neither work nor barriers; its consumers read its retained result.</summary>
     /// <param name="context">The frame being recorded.</param>
+    /// <param name="reads">The same acquired unbound image reads the recording receives, or null when none. A signature
+    /// may inspect their publication identities, but must not take their leases: a standing pass samples nothing, and
+    /// the runtime retires those acquisitions. A pass that records takes the leases through its recording.</param>
     /// <returns>The output's package-input identity, or null to force execution.</returns>
-    ulong? Signature(in FrameContext context) => null;
+    ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => null;
 }
 /// <summary>Makes the recorders of one package id. A candidate graph's package passes build with its shader passes:
 /// <see cref="BuildAsync"/> creates a pass's shader modules, pipelines and render passes on the thread pool before the

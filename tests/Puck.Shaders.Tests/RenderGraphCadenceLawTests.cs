@@ -324,7 +324,7 @@ public sealed partial class RenderGraphCadenceLawTests {
         private sealed class Recorder(Model owner, string package) : IRenderGraphPackageRecorder {
             public void Dispose() { }
             public bool Skips(in FrameContext context) => ((package == Shade) && owner.InactiveShade);
-            public ulong? Signature(in FrameContext context) => ((package == Writer) ? owner.WriterSignature : owner.ShadeSignature);
+            public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => ((package == Writer) ? owner.WriterSignature : owner.ShadeSignature);
             public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
                 if (package == Composite) {
                     if (owner.RefuseComposite) { throw new InvalidOperationException(message: "Injected composite refusal."); }

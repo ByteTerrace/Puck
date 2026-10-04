@@ -555,7 +555,10 @@ that signature, its extent, its graph inputs' last writes and its retained
 outputs all remain valid. Its later consumers then read the last retained
 result. Null forces execution. The signature covers borrowed regions, view
 state and unbound inputs; their existing preparation keeps its own counting
-and queue ordering. Graph-bound external, history or rotating inputs force
+and queue ordering. It receives the recording's already acquired unbound image
+reads, so an image-dependent signature uses the publication protected by that
+same lease. It only inspects the reads; a recording takes the leases it samples,
+and the runtime retires untaken leases when a pass stands. Graph-bound external, history or rotating inputs force
 execution because this path has no persistent content identity for them.
 The node also invalidates a standing result when its config bytes change.
 

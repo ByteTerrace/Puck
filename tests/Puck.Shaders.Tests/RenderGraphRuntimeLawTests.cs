@@ -316,7 +316,7 @@ public sealed partial class RenderGraphRuntimeLawTests : IDisposable {
     }
     private sealed class FakeRecorder(Counter counter, string pass) : IRenderGraphPackageRecorder {
         public void Dispose() => counter.Disposed++;
-        public ulong? Signature(in FrameContext context) => counter.CadenceSignature;
+        public ulong? Signature(in FrameContext context, RenderGraphExternalReads? reads) => counter.CadenceSignature;
         public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
             if (counter.RefuseRecording) { throw new InvalidOperationException(message: "Injected history writer recording refusal."); }
             counter.Records++;
