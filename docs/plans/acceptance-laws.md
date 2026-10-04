@@ -401,7 +401,10 @@ on screen 0 and reads the mapping's source instance, the first token of its
 mapping segment. A pipeline node has no rendered instance to pause headless, and
 only the render root configures the views, so the pipeline pause, the
 camera-view retarget and a census that moves are the offscreen canary
-`displayed-source-render-root`, which requires a GPU and is owed on a GPU host;
+`displayed-source-render-root`, which requires a GPU. `pipeline.time` addresses
+only a source-driven graph row, and the fixture's graphs are packages while its
+screens show producers, so the canary layers the feedback pipeline over the
+fixture and pauses that;
 the headless law still reads the census before and after. The
 retarget is a QR source, and under it the route leg also reads the QR's
 authoring back, which proves the live bind survived. Red legs: a `row` form that

@@ -1,14 +1,14 @@
 {
   "id": "displayed-source-render-root",
   "title": "a displayed source survives a pipeline pause and a camera-view retarget, and the view census returns to its baseline",
-  "binding": "Acceptance law 4's legs that need the render root, which only a rendering World configures (DisplayedSourceLawTests covers the headless rest). The positive leg boots the uploaded-sources fixture offscreen, pauses and resumes the 'pattern' pipeline node, retargets screen 1 to the camera 'edge' with screen.source, and returns it with screen.source 1 row: world.view-refresh reads 0, then 1, then 0 camera view(s) registered. The discriminating leg runs the same boot and pause with no retarget, so no view ever registers and the ordered census turns red.",
+  "binding": "Acceptance law 4's legs that need the render root, which only a rendering World configures (DisplayedSourceLawTests covers the headless rest). The positive leg boots offscreen the uploaded-sources fixture with one source-driven pipeline layered over it (the feedback graph; the fixture's own graphs are packages and its screens show producers, which pipeline.time does not address), pauses and resumes that pipeline, retargets screen 1 to the camera 'edge' with screen.source, and returns it with screen.source 1 row: world.view-refresh reads 0, then 1, then 0 camera view(s) registered. The discriminating leg runs the same boot and pause with no retarget, so no view ever registers and the ordered census turns red.",
   "bootShape": "offscreen",
   "backends": ["vulkan", "directx"],
   "requirements": ["gpu"],
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/displayed-source-render-root/fixture.world.json",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },
@@ -36,7 +36,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.World.Canaries/uploaded-sources/fixture.world.json",
+    "world": "tests/Puck.World.Canaries/displayed-source-render-root/fixture.world.json",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" },

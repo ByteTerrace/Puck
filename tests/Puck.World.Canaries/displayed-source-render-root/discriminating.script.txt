@@ -2,9 +2,9 @@ wire.errors reset
 # The same boot and pause, with no retarget: no view ever registers.
 world.wait ready 45
 world.view-refresh
-pipeline.time pattern pause
+pipeline.time feedback pause
 world.wait 5
-pipeline.time pattern resume
+pipeline.time feedback resume
 world.wait 5
 world.view-refresh
 world.wait 5

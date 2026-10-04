@@ -2,10 +2,10 @@ wire.errors reset
 # The engine ready: its render root built and the views configured.
 world.wait ready 45
 world.view-refresh
-# A pipeline node pauses and resumes; the screen keeps its source.
-pipeline.time pattern pause
+# The pipeline node pauses and resumes; the screen keeps its source.
+pipeline.time feedback pause
 world.wait 5
-pipeline.time pattern resume
+pipeline.time feedback resume
 # Screen 1 retargets to the camera 'edge': one view registers.
 screen.source 1 view edge
 world.wait 5
