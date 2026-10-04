@@ -163,7 +163,7 @@ public sealed class GeneratedNameReversalLawTests {
                 behavior { faces [{ name: "portal", shapeId: 0 }] }
             } }]
             placements { rows [{
-                id: "arch1", prototypeId: "arch", position [0, 0, 0], yawDegrees: 0, scale: 1,
+                id: "arch1", prototypeId: arch, position [0, 0, 0], yawDegrees: 0, scale: 1,
                 faceSources [{ face: "portal", source { "$type": "none" } }]
             }] }
             ground floor { size [12m, 8m] }
