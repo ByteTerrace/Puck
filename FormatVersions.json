@@ -258,7 +258,7 @@
                 "M:Puck.World.Transpiler.WorldCompiler.Compile(System.String,System.String,System.String,Puck.World.Transpiler.ImportHandling,Puck.World.Transpiler.Embeddings.EmbeddingLock,System.String,Puck.Transpiler.Diagnostics.DiagnosticBag,Puck.Transpiler.Diagnostics.SourceMap,System.Threading.CancellationToken,Puck.World.Transpiler.Lowering.WorldDocumentVocabulary,System.Boolean,System.Boolean,System.Boolean)",
                 "P:Puck.Transpiler.CompilationResult`1.Success"
             ],
-            "shape": "e688d04e540f5ea8",
+            "shape": "be4449be55e3dba0",
             "source": "src/Puck.GamingBricks.Forge/CartridgeDocument.cs",
             "token": "puck.cartridge.v1"
         },
@@ -1208,17 +1208,8 @@
         },
         "WorldCompileCache.Magic": {
             "open": [
-                "M:Puck.Abstractions.Counting.WorkCounterSet.#ctor(System.String,System.ReadOnlySpan{Puck.Abstractions.Counting.WorkKind})",
-                "M:Puck.Abstractions.Counting.WorkKind.#ctor(System.String,System.String,Puck.Abstractions.Counting.WorkClass)",
-                "M:Puck.Abstractions.PuckPaths.Normalize(System.String)",
                 "M:Puck.Assets.AtomicFile.Write(System.String,System.Action{System.IO.Stream},System.Nullable{System.IO.UnixFileMode})",
-                "M:Puck.Assets.CompileInput.StillHolds",
-                "M:Puck.Assets.CompileInputs.Record(Puck.Assets.CompileInputLog)",
-                "M:Puck.Assets.CompileInputs.Restate(System.Collections.Generic.IReadOnlyList{Puck.Assets.CompileInput})",
-                "M:Puck.Assets.CompileInputs.Scope.Dispose",
                 "M:Puck.Assets.ContentPin.Compute(System.ReadOnlySpan{System.Byte})",
-                "M:Puck.World.Transpiler.WorldCompiler.CompileFile(System.String,Puck.World.Transpiler.ImportHandling,Puck.World.Transpiler.Embeddings.EmbeddingLock,Puck.Transpiler.Diagnostics.DiagnosticBag,Puck.Transpiler.Diagnostics.SourceMap,System.Threading.CancellationToken,System.Boolean,System.Boolean,System.Boolean)",
-                "M:Puck.World.WorldBootWork.Count(Puck.Abstractions.Counting.WorkKind)",
                 "M:System.IO.Stream.Dispose(System.Boolean)",
                 "M:System.IO.Stream.DisposeAsync",
                 "P:Puck.World.Transpiler.WorldCompilation.EmitsDocument",
@@ -1226,7 +1217,7 @@
                 "P:System.IO.Stream.Length",
                 "P:System.IO.Stream.Position"
             ],
-            "shape": "53badf7fdd4302f9",
+            "shape": "234a178527f77267",
             "source": "src/Puck.World.Transpiler/Composition/WorldCompileCache.cs",
             "token": "PUCKWCC1"
         },
@@ -1592,7 +1583,7 @@
                 "P:Puck.World.WorldThemeElevation.Zero",
                 "P:Puck.World.WorldThemeElevation.ZeroColor"
             ],
-            "shape": "404ed455f242ffc0",
+            "shape": "a927d962efd1faa4",
             "source": "src/Puck.World.Schema/WorldDefinition.cs",
             "token": "puck.world.definition.v1"
         },
