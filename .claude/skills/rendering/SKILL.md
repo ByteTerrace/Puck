@@ -1458,7 +1458,7 @@ light's occlusion deficit scales by `1 - progress` and its incoming light's by
 `progress`; radiance never crossfades and two visibilities are never blended
 together.
 
-`incomingVisibility` is policy-sized transient-aliased graph storage: R8 at
+`incomingVisibility` is policy-sized retained graph storage: R8 at
 F = 1, R8G8 at F = 2, absent with zero bytes and no read binding at F = 0.
 Its allocation belongs to the graph's policy variant, never a handoff crossing.
 Recorders select the fade kernel and bind ports from the planned resource

@@ -752,6 +752,26 @@ projection unchanged. Projections and deltas travel as compact canonical JSON
 (`WorldDefinitionSerialization.SerializeCompact`); the indented canonical forms are kept for what hashes, stores
 or displays a document.
 
+A projection's `prototypes` rows carry their local `id` and a full `sha256/` content pin.
+The pin names the compact canonical creation document and mesh, independently of the prototype's
+name in a world. State-backed values are disclosed and flattened before the body is hashed. The
+recipient resolves each reference through `Puck.Assets.ContentAddressedStore`, shared under the
+per-user `projections` directory across joins and worlds. Hosts can configure the shared content store
+before its first use; feeds and recipients can also take an explicit store. A missing body is fetched through the
+authenticated federation request lane; its bytes must match the pin before they enter the cache or
+hydrate a projection. A rejoin sends no cached prototype bodies, and a changed prototype fetches only
+its new body. The `world.projection.prototype-fetches` and `world.projection.prototype-bytes`
+counters record those fetches separately from projection and delta bytes.
+Those two counters, and compositions that include fetch authorization, are pacing-class because
+the recipient cache survives runs; the laws count them against explicit cold and warm caches.
+
+A content pin grants no access. Every fetch recomposes the recipient's current projection and
+requires the requested pin to occur in it. Traveler fetches follow the existing committed forwarding
+route, carrying its disclosure ceiling and hop bound, and each hop checks its current admission;
+the final authority checks the traveler's Observe grant. A frames-tier request, an unknown pin or a
+prototype no longer disclosed is refused. The content store has no unrestricted remote read door.
+Only the projection's disclosed body crosses; owned identity documents stay at home.
+
 A projection carries a timeline's tick clocks as authored, and each state clock a carried value keys on
 as an anchored clock: an anchor of its phase (`WorldClockAnchor`: the engine tick, the phase as a `u64`
 share of a turn, which for a Fixed row is its fractional bits exactly, and the phase one authoritative

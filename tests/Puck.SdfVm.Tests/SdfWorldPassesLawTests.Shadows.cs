@@ -52,7 +52,7 @@ public sealed partial class SdfWorldPassesLawTests {
             }
             var storage = Assert.Single(collection: node.Plan!.Storages, predicate: IsIncoming);
 
-            Assert.True(condition: storage.Declaration.Transient);
+            Assert.True(condition: storage.Declaration.Retained);
             Assert.Equal(expected: ((capacity == 1) ? GpuPixelFormat.R8Unorm : GpuPixelFormat.R8G8Unorm), actual: ShaderPipelineRenderNode.ParseFormat(format: storage.Declaration.Format));
             var shadow = node.Plan.Passes.Single(predicate: pass => (pass.Package?.Part == SdfWorldPackage.Parts.Shadow));
             var views = node.Plan.Passes.Single(predicate: pass => (pass.Package?.Part == SdfWorldPackage.Parts.Views));

@@ -4,7 +4,7 @@ namespace Puck.SignedDistance.Baking;
 /// <summary>Source provenance of derived bake products.</summary>
 public static class DerivationFingerprint {
     /// <summary>The bake producer's transitive csharp-tokens-v1 SHA-256.</summary>
-    public const string Bake = "fabb53412519613f0512b0a9f800c41e23c550baf0413b1b0dd753cc20615cf2";
+    public const string Bake = "705aed9b4a5ddd23f3ad660c0c1a6860becf5cbb667672daef0deaeed8693fb9";
     /// <summary>The first four fingerprint bytes, interpreted as an unsigned big-endian integer.</summary>
-    public const uint BakeChunkVersion = 0xfabb5341;
+    public const uint BakeChunkVersion = 0x705aed9b;
 }

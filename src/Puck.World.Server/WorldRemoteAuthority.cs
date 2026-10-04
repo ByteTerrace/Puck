@@ -1,3 +1,4 @@
+using Puck.Assets;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -22,6 +23,9 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
         authority.Endpoint,
         authority.Definition
     );
+    /// <inheritdoc/>
+    public byte[]? FetchPrototype(ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
+        authority.FetchPrototype(pin: pin, traveler: new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility, ceiling, remainingHops));
     /// <inheritdoc/>
     public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
         authority.RelayProjectionAsync(
@@ -408,6 +412,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         route = default;
         var target = (m_submissionAuthority ?? this);
         var mobility = credential.Mobility;
+        var credentialSource = credential.SourceAuthority;
         var answer = target.AwaitAnswer(
             sourceAuthority: credential.SourceAuthority,
             kind: WorldFederationRequest.Route,
@@ -420,6 +425,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
         if (
             (answer.Kind != WorldFederationResponse.Route) ||
             !WorldFederationCodec.TryDecodeRoute(
+            fetch: pin => target.FetchPrototype(pin: pin, traveler: new WorldTravelerObservation(credentialSource, mobility)),
             body: answer.Body.Span,
             route: out route,
             failure: out _
@@ -678,7 +684,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
             )
         );
     private static WorldFederationLane LaneOf(WorldFederationRequest kind) =>
-        ((kind is WorldFederationRequest.Route or WorldFederationRequest.Submission)
+        ((kind is WorldFederationRequest.Route or WorldFederationRequest.Submission or WorldFederationRequest.Prototype)
             ? WorldFederationLane.Routed
             : WorldFederationLane.Transaction
         );
@@ -716,7 +722,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
 
         // The projection this session holds: a presentation-tier delta merges over it, and a new session starts from a
         // whole projection again.
-        var hold = new WorldProjectionHold();
+        byte[]? Fetch(ContentPin pin) => upstream.FetchPrototype(pin: pin, traveler: ((m_submissionCredential is { } credential)
+            ? new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility) : null));
+        var hold = new WorldProjectionHold(fetch: Fetch);
 
         while (!ct.IsCancellationRequested) {
             var frame = await WorldFederationCodec.ReadResponseAsync(
@@ -752,7 +760,8 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
                         !WorldFederationCodec.TryDecodeRoute(
                         frame.Body.Span,
                         out var route,
-                        out _
+                        out _,
+                        fetch: Fetch
                     )
                     ) {
                         return false;
@@ -1279,6 +1288,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IDispos
 
         if (
             !WorldFederationCodec.TryDecodeReservationReply(
+            fetch: pin => FetchPrototype(pin: pin, traveler: null),
             body: answer.Body.Span,
             reply: out var decoded,
             failure: out var failure

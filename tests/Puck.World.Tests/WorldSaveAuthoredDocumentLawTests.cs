@@ -183,6 +183,8 @@ public sealed class WorldSaveAuthoredDocumentLawTests(WorldSaveAuthoredDocumentL
             WorldDocumentCorpus.FixtureDirectory,
             // The verdicts' composition library, which canary sources import.
             "tests/Puck.World.Verdicts/composition",
+            // The counters workloads, which canaries boot as their worlds.
+            "tests/Puck.Counters",
             "worlds",
         ];
 

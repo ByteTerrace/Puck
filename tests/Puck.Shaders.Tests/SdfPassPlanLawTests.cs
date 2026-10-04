@@ -10,7 +10,7 @@ namespace Puck.Shaders.Tests;
 /// arguments, mesh, primary, surface, ambient, shadow, views, sky and composite, the sky's field runs and the composite
 /// after the hits are shaded, and plans between them exactly the buffer transitions the
 /// kernels' reads and writes need, each after the pass that last wrote or read what the next writes or reads. Every
-/// scratch buffer is transient, one allocation shared by every frame slot, whose first use of a frame orders it after the
+/// scratch buffer is retained, one allocation shared by every frame slot, whose first use of a frame orders it after the
 /// frame before, and at every capacity the planner sizes each buffer as the kernels index it. Every compute pass counts its
 /// kernels' work into the node's kernel counters, which are no planned storage.
 /// </summary>
@@ -196,11 +196,11 @@ public sealed partial class SdfPassPlanLawTests {
         );
     }
     [Fact]
-    public void EveryScratchStorageIsTransientAndTheColorIsPublishedPerSlot() {
-        var transient = Plan.Pipeline.Storages.Where(predicate: static storage => storage.Declaration.Transient).Select(selector: static storage => storage.Name).Order(comparer: StringComparer.Ordinal);
+    public void EveryScratchStorageIsRetainedAndTheColorIsPublishedPerSlot() {
+        var retained = Plan.Pipeline.Storages.Where(predicate: static storage => storage.Declaration.Retained).Select(selector: static storage => storage.Name).Order(comparer: StringComparer.Ordinal);
 
         Assert.Equal(
-            actual: transient,
+            actual: retained,
             expected: new[] {
                 SdfWorldPackage.Parts.Arguments,
                 SdfWorldPackage.Parts.CullBounds,
@@ -227,7 +227,7 @@ public sealed partial class SdfPassPlanLawTests {
     }
     [Fact]
     public void EachBuffersFirstUseInTheFrameStartsFromTheFrameBefore() {
-        // The planner gives each buffer's first use of a frame a cross-frame prior, whose barrier orders the one transient
+        // The planner gives each buffer's first use of a frame a cross-frame prior, whose barrier orders the one retained
         // allocation after the frame before, and every later use a pass prior.
         foreach (var storage in Buffers) {
             var accesses = Plan.Pipeline.Passes.SelectMany(selector: static pass => pass.Accesses).Where(predicate: access => (access.Storage == storage.Index)).ToArray();

@@ -43,6 +43,8 @@ public interface IWorldForwardedAuthority {
     /// carry their endpoint and a definition for reconnecting; no live stream or held-input lease is persisted.</summary>
     /// <returns>The destination descriptor, independent of connection availability.</returns>
     WorldForwardingDestination DescribeForCheckpoint();
+    /// <summary>Fetches a prototype disclosed through this authenticated hop.</summary>
+    byte[]? FetchPrototype(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops);
     /// <summary>Streams the current owner's projection through this authenticated hop without closing the output stream.</summary>
     /// <param name="output">The caller-owned downstream stream.</param>
     /// <param name="ceiling">The maximum document disclosure admitted upstream.</param>
@@ -297,6 +299,10 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
         WorldSubmissionPayload.Mutation mutation => (mutation with { Value = (mutation.Value with { Principal = principal }) }),
         _ => payload,
     };
+    /// <inheritdoc/>
+    public byte[]? FetchPrototype(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
+        WorldProjectionPrototypeFetch.Fetch(server: m_server, pin: pin, sourceAuthority: m_sourceAuthority, ceiling: ceiling,
+            traveler: new WorldTravelerObservation(Ceiling: ceiling, Mobility: m_mobility, RemainingHops: remainingHops, SourceAuthority: m_sourceAuthority));
     /// <inheritdoc/>
     public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
         WorldTravelerProjection.StreamAsync(

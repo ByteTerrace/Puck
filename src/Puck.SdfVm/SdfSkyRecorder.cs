@@ -83,6 +83,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     }
     // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_view.Residency.SkyDetails.Labels;
+    public ulong? Signature(in FrameContext context) => m_owner.SignatureOf(instance: m_context.Instance, part: m_context.Part!, temporal: m_temporal, context: in context);
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         if ((m_owner.ViewOf(instance: m_context.Instance) is { } current) && (current != m_view)) {
             if (!ReferenceEquals(objA: current.Residency, objB: m_view.Residency)) {
@@ -104,7 +105,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
 
         frameBlock.Clear();
         SdfFrameBlock.Write(block: frameBlock, tables: tables.PassValues, frame: frame, view: index, width: recording.RenderWidth, height: recording.RenderHeight);
-        var temporal = m_owner.TemporalOf(instance: m_context.Instance, view: m_view, width: recording.FrameWidth, height: recording.FrameHeight, debug: tables.PassValues.DebugMode, temporal: m_temporal, unread: recording.UnreadFrames, renderWidth: recording.RenderWidth, renderHeight: recording.RenderHeight);
+        var temporal = m_owner.SkyTemporalOf(instance: m_context.Instance);
 
         SdfFrameBlock.WriteTemporal(block: frameBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: frameBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);

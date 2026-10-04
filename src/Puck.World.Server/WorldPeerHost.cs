@@ -902,6 +902,20 @@ public sealed class WorldPeerHost : IDisposable {
                     tier: tier
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
+            case WorldFederationRequest.Prototype:
+                if (!WorldFederationCodec.TryDecodePrototypeRequest(body: body.Span, pin: out var pin, traveler: out var traveler)) {
+                    await WriteFederationRefusal(ct: ct, detail: "invalid prototype request", refusal: WorldFederationRefusal.FrameMalformed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
+                    return true;
+                }
+                var prototype = WorldProjectionPrototypeFetch.Fetch(server: m_server, pin: pin,
+                    sourceAuthority: sourceAuthority, ceiling: tier, traveler: traveler);
+                if (prototype is null) {
+                    await WriteFederationRefusal(ct: ct, detail: "the current projection does not disclose this prototype", refusal: WorldFederationRefusal.PrototypeUndisclosed, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
+                } else {
+                    await WorldFederationCodec.WriteResponseAsync(body: prototype, ct: ct, kind: WorldFederationResponse.Prototype, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
+                }
+                return true;
+
             case WorldFederationRequest.ObserveTraveler:
                 if (!WorldFederationCodec.TryDecodeTravelerObservation(
                     body.Span,
