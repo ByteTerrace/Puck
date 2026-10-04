@@ -8,7 +8,6 @@ using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.Testing;
-using Puck.World.Client;
 using Puck.World.Server;
 using Xunit;
 
@@ -110,7 +109,7 @@ public sealed class WorldIndirectConsoleLawTests {
             StepTicks: 0, TargetHeight: 32, TargetWidth: 32);
         TestLiveness.Until(step: () => { residency.BeginFrame(); return residency.Prepare(context); },
             reason: () => residency.NotReadyReason, wait: residency.WaitPipelineBuilds);
-        SdfIndirectCache? reader = residency.Tables!.Indirect!.Retain();
+        var reader = (SdfIndirectCache?)residency.Tables!.Indirect!.Retain();
         try {
             var bytes = reader.Bytes;
             var probe = new WorldRenderProbe();
