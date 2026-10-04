@@ -183,7 +183,8 @@ public sealed partial class SdfProgram {
             m_convexPolygonProfiles[profileIndex] = (profile.InstructionIndex, ((Vector2[])[.. profile.Vertices]));
         }
 
-        SdfMaterial[] materialTable = [.. materials];
+        var materialTable = SnapshotMaterials(materials);
+        m_materialsView = Array.AsReadOnly(materialTable);
 
         m_instancesView = Array.AsReadOnly(array: m_instances);
         m_instructionsView = Array.AsReadOnly(array: m_instructions);

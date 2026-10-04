@@ -259,6 +259,18 @@ describes the complete generation readers still see during a later solve.
 Each is an immutable CPU capture; `CopyFrame()` supplies independent mutable
 light and sky tables for a CPU reference without consulting a newer live frame.
 The cache snapshot reports admitted shade probes and submitted whole sweeps.
+The independent CPU reference uses the same captured program and its immutable
+material palette. `EstimateSources` follows the ordinary Halton paths while
+attributing first-hit direct light, emission, sky and screens separately from
+later feedback. The solve source's mask applies during transport; a rendered
+receiver's captured mask selects the final categories. A failed launch or ray
+remains unresolved and supplies no numerical divergence. Point-specific
+reflectance includes attenuation on reflected light and feedback, leaving
+emission independent. Explicit World explanations run this reference once for
+a supported cache pick, at the visible publication's sweep depth. Uncaptured
+screen/portal radiance, alternative rendered-frame sources, triangle meshes
+and unsupported CPU field instructions report named refusals. Procedural sky
+uses the existing quantized environment reference without artistic gain.
 `CompletedSweeps` follows the active solve; `PublishedSweeps` follows the visible
 bank and retains its previous depth until a whole new sweep replaces it.
 The shared `sdfIndirectDiffuse` fold evaluates explicit lights in their table

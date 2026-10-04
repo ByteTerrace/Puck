@@ -17,13 +17,15 @@ public sealed class IrradianceSurfaces {
     /// <see langword="null"/> for a black sky.</param>
     /// <param name="screens">Screen lights' normalized irradiance at a hit, independently attributed from analytic
     /// light; null for none.</param>
+    /// <param name="reflection">Optional point-specific diffuse reflectance; null uses the material albedo.</param>
     /// <exception cref="ArgumentNullException"><paramref name="albedo"/> or <paramref name="emission"/> is
     /// <see langword="null"/>.</exception>
-    public IrradianceSurfaces(Func<int, Double3> albedo, Func<int, Double3> emission, Func<Double3, Double3, int, Double3>? direct = null, Func<Double3, Double3>? sky = null, Func<Double3, Double3, int, Double3>? screens = null) {
+    public IrradianceSurfaces(Func<int, Double3> albedo, Func<int, Double3> emission, Func<Double3, Double3, int, Double3>? direct = null, Func<Double3, Double3>? sky = null, Func<Double3, Double3, int, Double3>? screens = null, Func<Double3, Double3, int, Double3>? reflection = null) {
         ArgumentNullException.ThrowIfNull(argument: albedo);
         ArgumentNullException.ThrowIfNull(argument: emission);
 
         Albedo = albedo;
+        Reflection = reflection ?? ((_, _, material) => albedo(material));
         Emission = emission;
         Direct = (direct ?? (static (_, _, _) => Double3.Zero));
         Sky = (sky ?? (static _ => Double3.Zero));
@@ -32,6 +34,8 @@ public sealed class IrradianceSurfaces {
 
     /// <summary>Gets the function returning a material's diffuse albedo.</summary>
     public Func<int, Double3> Albedo { get; }
+    /// <summary>Gets the point-specific diffuse reflectance, including reflected-light attenuation. Emission is independent.</summary>
+    public Func<Double3, Double3, int, Double3> Reflection { get; }
     /// <summary>Gets the function returning a material's outgoing self-emission.</summary>
     public Func<int, Double3> Emission { get; }
     /// <summary>Gets the function returning the direct light's normalized irradiance at a surface point.</summary>
@@ -48,9 +52,10 @@ public sealed class IrradianceSurfaces {
     /// <param name="direct">The function returning the direct light at a surface point; <see langword="null"/> for none.</param>
     /// <param name="sky">The function returning the sky's radiance in a direction; <see langword="null"/> for black.</param>
     /// <param name="screens">Screen lights' normalized irradiance at a hit; null for none.</param>
+    /// <param name="reflection">Optional point-specific diffuse reflectance; null uses the material diffuse albedo.</param>
     /// <returns>The surfaces.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
-    public static IrradianceSurfaces FromMaterials(IReadOnlyList<SdfMaterial> materials, Func<Double3, Double3, int, Double3>? direct = null, Func<Double3, Double3>? sky = null, Func<Double3, Double3, int, Double3>? screens = null) {
+    public static IrradianceSurfaces FromMaterials(IReadOnlyList<SdfMaterial> materials, Func<Double3, Double3, int, Double3>? direct = null, Func<Double3, Double3>? sky = null, Func<Double3, Double3, int, Double3>? screens = null, Func<Double3, Double3, int, Double3>? reflection = null) {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
         return new IrradianceSurfaces(
@@ -69,7 +74,8 @@ public sealed class IrradianceSurfaces {
                 return new Double3(X: (entry.Albedo.X * entry.Emissive * bleed.X), Y: (entry.Albedo.Y * entry.Emissive * bleed.Y), Z: (entry.Albedo.Z * entry.Emissive * bleed.Z));
             },
             sky: sky,
-            screens: screens
+            screens: screens,
+            reflection: reflection
         );
     }
 }

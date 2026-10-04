@@ -50,12 +50,25 @@ public sealed class IrradianceReference {
     /// <returns>The estimate.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="bounces"/> is negative or needs more prime bases
     /// than the sequence holds, or <paramref name="paths"/> is not positive.</exception>
-    public IrradianceEstimate Estimate(Double3 point, Double3 normal, int bounces, int paths) {
+    public IrradianceEstimate Estimate(Double3 point, Double3 normal, int bounces, int paths) => EstimateCore(point, normal, bounces, paths).Total;
+
+    /// <summary>Estimates independent first-hit source categories and later feedback on the same paths, without
+    /// deriving proportions from their final sum.</summary>
+    /// <param name="point">The receiver surface point.</param>
+    /// <param name="normal">The unit receiver normal.</param>
+    /// <param name="bounces">The number of reflections after the first hit, from zero through nine.</param>
+    /// <param name="paths">The positive number of Halton paths.</param>
+    /// <returns>The source means and actual unresolved count.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The bounce depth or path count is outside its supported range.</exception>
+    public IrradianceSourceEstimate EstimateSources(Double3 point, Double3 normal, int bounces, int paths) => EstimateCore(point, normal, bounces, paths).Sources;
+
+    private (IrradianceEstimate Total, IrradianceSourceEstimate Sources) EstimateCore(Double3 point, Double3 normal, int bounces, int paths) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: bounces);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: (2 * (bounces + 1)), other: Primes.Length, paramName: nameof(bounces));
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: paths);
 
         var sum = Double3.Zero;
+        var contributions = default(IrradianceContributions);
         var unresolved = 0;
 
         for (var path = 0; (path < paths); path++) {
@@ -65,7 +78,8 @@ public sealed class IrradianceReference {
                 normal: normal,
                 path: (path + 1),
                 point: point,
-                resolved: out var resolved
+                resolved: out var resolved,
+                contributions: out var attributed
             );
 
             if (!resolved) {
@@ -75,9 +89,10 @@ public sealed class IrradianceReference {
             }
 
             sum += radiance;
+            contributions += attributed;
         }
 
-        return new IrradianceEstimate(Irradiance: (sum * (1.0 / paths)), Paths: paths, Unresolved: unresolved);
+        return (new IrradianceEstimate(Irradiance: (sum * (1.0 / paths)), Paths: paths, Unresolved: unresolved), new IrradianceSourceEstimate(contributions * (1.0 / paths), paths, unresolved));
     }
     /// <summary>Returns a cosine-weighted direction on the hemisphere about a normal from two numbers in [0, 1).</summary>
     /// <param name="normal">The unit normal.</param>
@@ -113,7 +128,7 @@ public sealed class IrradianceReference {
     }
 
     // The radiance arriving at a point from one sampled direction, following the path through its remaining bounces.
-    private Double3 Incident(Double3 point, Double3 normal, int path, int bounce, int bounces, out bool resolved) {
+    private Double3 Incident(Double3 point, Double3 normal, int path, int bounce, int bounces, out bool resolved, out IrradianceContributions contributions) {
         var direction = CosineDirection(
             normal: normal,
             u: RadicalInverse(index: path, primeBase: Primes[(2 * bounce)]),
@@ -121,15 +136,19 @@ public sealed class IrradianceReference {
         );
 
         resolved = true;
+        contributions = default;
 
         if (IrradianceCells.Launch(field: m_field, height: LaunchHeight, normal: normal, surface: point) is not { } launch) {
+            resolved = false;
             return Double3.Zero;
         }
 
         var ray = m_field.Cast(direction: direction, maxDistance: m_exitDistance, origin: launch.Point);
 
         if (ray.Kind == IrradianceRayKind.Miss) {
-            return m_surfaces.Sky(arg: direction);
+            var sky = m_surfaces.Sky(arg: direction);
+            contributions = new(default, default, default, sky, default);
+            return sky;
         }
 
         if ((ray.Kind == IrradianceRayKind.Unresolved) || !m_field.TryGradient(gradient: out var hitNormal, point: ray.Point)) {
@@ -142,20 +161,19 @@ public sealed class IrradianceReference {
             hitNormal = -hitNormal;
         }
 
-        var arriving = m_surfaces.Direct(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material)
-            + m_surfaces.Screens(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
-
+        var direct = m_surfaces.Direct(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
+        var screens = m_surfaces.Screens(arg1: ray.Point, arg2: hitNormal, arg3: ray.Material);
+        var arriving = direct + screens;
+        var feedback = Double3.Zero;
         if (bounce < bounces) {
-            arriving += Incident(
-                bounce: (bounce + 1),
-                bounces: bounces,
-                normal: hitNormal,
-                path: path,
-                point: ray.Point,
-                resolved: out resolved
-            );
+            feedback = Incident(bounce: bounce + 1, bounces: bounces, normal: hitNormal, path: path,
+                point: ray.Point, resolved: out resolved, contributions: out _);
+            arriving += feedback;
         }
-
-        return (Double3.Multiply(a: m_surfaces.Albedo(arg: ray.Material), b: arriving) + m_surfaces.Emission(arg: ray.Material));
+        var reflected = m_surfaces.Reflection(ray.Point, hitNormal, ray.Material);
+        var emission = m_surfaces.Emission(arg: ray.Material);
+        contributions = new(Double3.Multiply(reflected, direct), Double3.Multiply(reflected, feedback), emission,
+            default, Double3.Multiply(reflected, screens));
+        return Double3.Multiply(reflected, arriving) + emission;
     }
 }

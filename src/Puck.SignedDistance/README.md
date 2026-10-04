@@ -9,7 +9,11 @@ compiled programs and fixed march budgets. These counts carry no cycle price.
 
 `Puck.SignedDistance.Illumination` holds the radiance cache's CPU reference: an
 irradiance estimator over the evaluator, and a model of the cache's transport
-and schedule that the GPU cache is held to.
+and schedule that the GPU cache is held to. The reference attributes first-hit
+analytic light, emission, sky and screens independently from later feedback.
+A failed launch is unresolved. Point-specific reflectance can attenuate reflected
+light without attenuating self-emission. SdfProgram.Materials exposes the same
+snapshotted palette the packed shader reads, including immutable nested lists.
 
 `SdfProgram.InspectInstance` reads exclusive packed ownership and culling facts for a
 live instance. Its count includes instructions and their data/bounds, owned segment

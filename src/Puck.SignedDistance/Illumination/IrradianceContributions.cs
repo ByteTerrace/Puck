@@ -25,6 +25,16 @@ public readonly record struct IrradianceContributions(Double3 Direct, Double3 Fe
     /// <summary>Gets the sum of the independently accumulated sources.</summary>
     public Double3 Total => Direct + Feedback + Emission + Sky + Screens;
 
+    /// <summary>Returns the categories admitted by the rendered receiver, independently of its solve's source mask.</summary>
+    /// <param name="sources">The final receiver selection.</param>
+    /// <returns>The admitted incident irradiance.</returns>
+    public Double3 Select(SdfIndirectSources sources) =>
+        ((sources & SdfIndirectSources.Direct) != 0 ? Direct : Double3.Zero)
+        + ((sources & SdfIndirectSources.Feedback) != 0 ? Feedback : Double3.Zero)
+        + ((sources & SdfIndirectSources.Emission) != 0 ? Emission : Double3.Zero)
+        + ((sources & SdfIndirectSources.Sky) != 0 ? Sky : Double3.Zero)
+        + ((sources & SdfIndirectSources.Screens) != 0 ? Screens : Double3.Zero);
+
     /// <summary>Gets one source's contribution.</summary>
     /// <param name="source">The source category.</param>
     /// <returns>The category's linear RGB value.</returns>
