@@ -36,7 +36,8 @@ namespace Puck.World;
 /// already hold. Machine lifecycle mutation (insert/eject/select/options/link/unlink) routes through
 /// <c>ScreenCommandModule</c> submitting a <c>WorldScreenOp</c> through
 /// <c>IServerLink.SubmitScreenOp</c> instead, landing in the ordered submission domain (see <c>WorldScreenOp</c>'s
-/// own remarks). Producer, jumbotron-view, probe and session screen sources remain genuinely presentation-owned.
+/// own remarks). Producer, jumbotron-view and probe feeds belong to presentation. Session feeds render the
+/// authority-owned observations <see cref="WorldInstanceHost"/> admits and releases.
 /// <para>An unbound slot (a <see cref="WorldScreenSource.None"/> screen, or a live feed with no signal) binds 0, so the
 /// engine leaves its surface unbound. One webcam session is opened engine-wide per sensor and shared by every camera screen
 /// naming that sensor. A capture device may expose both streams while supporting only one at a time; a dual open must

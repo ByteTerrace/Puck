@@ -107,7 +107,7 @@ internal sealed partial class WorldScreenBinder {
         }
     }
     // The session the boot world's authority holds for a screen, when it holds one for this very source.
-    private WorldScreenSession? HostedSession(int index, WorldScreenSource.Session source) => (((m_instanceHost.ScreenSession(
+    private WorldObservationSession? HostedSession(int index, WorldScreenSource.Session source) => (((m_instanceHost.ScreenSession(
         instanceName: WorldInstanceHost.BootInstanceName,
         screenIndex: index
     ) is { } hosted) && (hosted.Source == source))
@@ -477,7 +477,7 @@ internal sealed partial class WorldScreenBinder {
     // offscreen view. A mutable class so a lifecycle transition (re-point, teardown, instance-retired) updates it in
     // place; the constructor parameters are immutable facts about ONE resolution (a re-point builds a fresh instance
     // rather than mutating this one — see ApplySessionSource).
-    private sealed class SessionFeed(int depth, string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldScreenSession hosted, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution, int screenIndex) : IDisposable {
+    private sealed class SessionFeed(int depth, string destination, string? requestedCamera, string? effectiveCamera, string instanceName, ulong generationId, WorldObservationSession hosted, string registrationName, WorldScreenProjection projection, WorldScreenResolution? resolution, int screenIndex) : IDisposable {
         // How many screens deep the destination is seen: 1 for a boot or routed world's own screen, one more a level.
         public int Depth { get; } = depth;
         public string Destination { get; } = destination;
@@ -502,7 +502,7 @@ internal sealed partial class WorldScreenBinder {
         public string InstanceName { get; } = instanceName;
         public ulong GenerationId { get; } = generationId;
         // The authority's session this feed renders: its mirror, and the observation it currently holds.
-        public WorldScreenSession Hosted { get; } = hosted;
+        public WorldObservationSession Hosted { get; } = hosted;
 
         public WorldSessionMirror Mirror => Hosted.Mirror;
 

@@ -842,15 +842,18 @@ memory the shared residency saves. The session stays the gate: once it no longer
 everything, the window leaves the scene and shows its own session again, and its input stays on the
 session either way.
 
-A world's authority owns its session screens' sessions, not the presentation that draws them.
-`WorldInstanceHost` opens one for every screen or placement face whose source is a session when the
-world's definition declares it, re-points or closes it when an edit changes the screen's destination
-or removes the screen (an edit of its camera, projection or resolution keeps the session), asks a destination that ended one to admit the screen again, and stops a destination left with
-neither a screen nor anyone in it, as it stops one whose admission it just refused. The boot world's
-screens always hold their sessions; any other world's hold them while someone stands in it, so a
-portal in a world a traveller reached works for them there. A paused or stopped world keeps its
-sessions in step with its definition and its occupants, but forwards nothing. A presentation reads
-the session (`WorldInstanceHost.ScreenSession`) and renders its mirror.
+A world's authority owns the sessions its screens and named infinity layers observe through.
+`WorldInstanceHost` opens one for every screen or placement face whose source is a session and every
+named sky view whose layer names a destination. A screen index and a layer name identify separate
+observations, even when both resolve the same destination. An edit that changes the destination or
+removes the observer closes its session; an edit of its rendering members keeps it. The host asks a
+destination that ended a session to admit its observer again and stops a destination left with
+neither an observer nor anyone in it, as it stops one whose admission it just refused. These
+sessions follow the boot world's nesting depth, including worlds a traveller stands in and worlds
+they observe through another session. A paused or stopped world keeps its sessions in step with its
+definition and occupants, but forwards nothing. Presentation reads `ScreenSession` or
+`InfinitySession` and renders that session's disclosed mirror. Only physical portal faces forward
+input; an infinity layer opens no control route.
 
 A click through a portal reaches the destination's rules as the session's input. A body engages the
 portal face with `Control` over it, as it engages a machine screen, and the fold routes its
@@ -958,9 +961,10 @@ show nothing too: the authority holds a screen's session only for the worlds thi
 no message carries a remote world's screen session to the presenting process. A remote world's
 camera views and producers show.
 
-The authority opens the sessions a world's screens show while that world is fewer screens deep than
-the nesting depth. The boot world and every world a human stands in are at depth zero, and a world a
-live session observes is one deeper than the shallowest screen showing it. An ended observation
+The authority opens the sessions a world's screens and infinity layers show while that world is
+fewer observations deep than the nesting depth. The boot world and every world a human stands in
+are at depth zero, and a world a live session observes is one deeper than the shallowest observation
+showing it. An ended observation
 holds no descendant sessions open, and its retained document grants no live view of those descendants. What a world observes
 therefore follows the documents and the sessions already open, never what a frame draws. The
 presentation renders a level only while something sees it: each view that reads a session tests the

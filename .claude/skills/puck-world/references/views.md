@@ -457,10 +457,15 @@ Free Cam do not alter the logical movement basis.
   world's own host, followed by the fault that leaves it dark in parentheses),
   `source$color$<digest>` past the depth, `text`, or `none`; then
   `text-fault <why>` when that world's fonts do not resolve.
-- `views.nestingDepth` (document) — how many screens deep a portal seen through
-  a portal renders: 3 unauthored, 0 through 8, refused by name past either end.
-  The boot world's governs the presentation and which worlds its authority
-  opens screen sessions for. A session screen at the depth shows its session's
+- `views.nestingDepth` (document) — how many observations deep a world shown
+  through screens or named infinity layers renders: 3 unauthored, 0 through 8,
+  refused by name past either end. The boot world's governs the presentation
+  and which worlds its authority opens observations for. `WorldObservationSite`
+  distinguishes physical screen indices from named sky layers; both use the
+  same destination admission, re-admission and release path in
+  `WorldInstanceHost`. Presentation reads `ScreenSession` or `InfinitySession`
+  and never opens an observation itself. Only physical portal faces forward
+  input. A session screen at the depth shows its session's
   `fallback` colour (`#RRGGBB`, black unauthored). Every other screen of a
   world shown through a screen, or of a world a seat is presented in, shows
   that world's own source: its machines from its own host (stepped on its own

@@ -6,15 +6,50 @@ using Puck.World.Server;
 
 namespace Puck.World;
 
-/// <summary>One session a world's screen observes its destination through, owned by the authority that declares the
-/// screen: the destination it resolved, the mirror its observation feeds, and the observation itself. A presentation
-/// reads it (<see cref="WorldInstanceHost.ScreenSession"/>) and renders the mirror; it never admits or ends one.</summary>
-public sealed class WorldScreenSession {
+/// <summary>The declared surface that observes another world: a physical screen index or a named infinity layer.
+/// The two arms have separate identities even when their authored names contain the same digits.</summary>
+public abstract record WorldObservationSite : IComparable<WorldObservationSite> {
+    private WorldObservationSite() { }
+
+    /// <summary>A screen or placement face on the owning world.</summary>
+    /// <param name="Index">The screen's resolved index.</param>
+    public sealed record Screen(int Index) : WorldObservationSite;
+
+    /// <summary>A named view layer in the owning world's sky.</summary>
+    /// <param name="Name">The authored layer name.</param>
+    public sealed record InfinityLayer(string Name) : WorldObservationSite;
+
+    /// <summary>Orders screens by index, then infinity layers by ordinal name.</summary>
+    /// <param name="other">The other surface, or null.</param>
+    /// <returns>The comparison result.</returns>
+    public int CompareTo(WorldObservationSite? other) => (this, other) switch {
+        (_, null) => 1,
+        (Screen left, Screen right) => left.Index.CompareTo(value: right.Index),
+        (Screen, InfinityLayer) => -1,
+        (InfinityLayer, Screen) => 1,
+        (InfinityLayer left, InfinityLayer right) => StringComparer.Ordinal.Compare(x: left.Name, y: right.Name),
+        _ => throw new InvalidOperationException(message: "Unknown world observation site."),
+    };
+
+    /// <summary>Describes the screen index or named infinity layer.</summary>
+    /// <returns>The surface's diagnostic label.</returns>
+    public sealed override string ToString() => this switch {
+        Screen screen => screen.Index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
+        InfinityLayer layer => $"sky '{layer.Name}'",
+        _ => throw new InvalidOperationException(message: "Unknown world observation site."),
+    };
+}
+
+/// <summary>One session a world's screen or infinity layer observes its destination through, owned by the authority that
+/// declares it: the destination it resolved, the mirror its observation feeds, and the observation itself. A presentation
+/// reads it through <see cref="WorldInstanceHost.ScreenSession"/> or <see cref="WorldInstanceHost.InfinitySession"/>
+/// and renders the mirror; it never admits or ends one.</summary>
+public sealed class WorldObservationSession {
     private volatile WorldSessionObservation? m_observation;
 
-    internal WorldScreenSession(string owner, int screenIndex, WorldScreenSource.Session source) {
+    internal WorldObservationSession(string owner, WorldObservationSite site, WorldScreenSource.Session source) {
         Owner = owner;
-        ScreenIndex = screenIndex;
+        Site = site;
         Source = source;
         Mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed);
     }
@@ -25,47 +60,60 @@ public sealed class WorldScreenSession {
     public string? InstanceName { get; internal set; }
     /// <summary>Gets a value indicating whether the resolution minted a fresh generation.</summary>
     public bool IsNewGeneration { get; internal set; }
-    /// <summary>Gets the mirror the session's observation feeds: what the destination discloses to the screen.</summary>
+    /// <summary>Gets the mirror the session's observation feeds: what the destination discloses to the observer.</summary>
     public WorldSessionMirror Mirror { get; }
     /// <summary>Gets the live observation, or <see langword="null"/> when the destination refused one.</summary>
     public WorldSessionObservation? Observation {
         get => m_observation;
         internal set => m_observation = value;
     }
-    /// <summary>Gets the name of the instance whose screen this is.</summary>
+    /// <summary>Gets the name of the instance that declares the observing surface.</summary>
     public string Owner { get; }
-    /// <summary>Gets why the screen observes nothing, or <see langword="null"/> while it observes.</summary>
+    /// <summary>Gets why the surface observes nothing, or <see langword="null"/> while it observes.</summary>
     public string? Refusal { get; internal set; }
-    /// <summary>Gets the screen index on the owning world.</summary>
-    public int ScreenIndex { get; }
-    /// <summary>Gets the authored session source the screen declares, following an edit of its rendering members; an
+    /// <summary>Gets the physical screen or named infinity layer that owns this observation.</summary>
+    public WorldObservationSite Site { get; }
+    /// <summary>Gets the session source the surface declares, following an edit of its rendering members; an
     /// edit of its destination opens a new session instead.</summary>
     public WorldScreenSource.Session Source { get; internal set; }
 
-    // Set once a destination that ended the session refused another: the screen holds its last image.
+    // Set once a destination that ended the session refused another: the observer holds its last image.
     internal bool ReadmissionRefused { get; set; }
     // Whether the last settle forwarded input through this screen, so a stop sends one release.
     internal bool WasForwarding { get; set; }
 }
 public sealed partial class WorldInstanceHost {
-    // Each owning instance's screen sessions by screen index, and the definition they were reconciled against.
-    private readonly Dictionary<string, (WorldDefinition? Reconciled, SortedDictionary<int, WorldScreenSession> Rows)> m_screenSessions = new(comparer: StringComparer.Ordinal);
-    // The published read view a presentation thread consults: replaced whole whenever a session opens or closes.
-    private volatile IReadOnlyDictionary<(string Owner, int Screen), WorldScreenSession> m_publishedScreenSessions = new Dictionary<(string Owner, int Screen), WorldScreenSession>();
+    // Each owning instance's observations, and the definition they were reconciled against.
+    private readonly Dictionary<string, (WorldDefinition? Reconciled, SortedDictionary<WorldObservationSite, WorldObservationSession> Rows)> m_screenSessions = new(comparer: StringComparer.Ordinal);
+    // Both indexes publish together. Presentation's per-frame lookups use value keys, so reading an existing session
+    // does not construct another observation identity.
+    private sealed record PublishedObservations(
+        IReadOnlyDictionary<(string Owner, int Screen), WorldObservationSession> Screens,
+        IReadOnlyDictionary<(string Owner, string Layer), WorldObservationSession> InfinityLayers
+    );
+    private volatile PublishedObservations m_publishedScreenSessions = new(Screens: new Dictionary<(string Owner, int Screen), WorldObservationSession>(), InfinityLayers: new Dictionary<(string Owner, string Layer), WorldObservationSession>());
 
     /// <summary>Reads the session a world's screen observes its destination through. Safe from any thread.</summary>
     /// <param name="instanceName">The owning instance.</param>
     /// <param name="screenIndex">The screen index.</param>
     /// <returns>The session, or <see langword="null"/> when the screen declares none or its owner holds none now.</returns>
-    public WorldScreenSession? ScreenSession(string instanceName, int screenIndex) => m_publishedScreenSessions.GetValueOrDefault(key: (instanceName, screenIndex));
+    public WorldObservationSession? ScreenSession(string instanceName, int screenIndex) => m_publishedScreenSessions.Screens.GetValueOrDefault(key: (instanceName, screenIndex));
 
-    // The screens a definition declares that observe a destination: its own screens, then its placement faces.
-    private static SortedDictionary<int, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition) {
-        var declared = new SortedDictionary<int, WorldScreenSource.Session>();
+    /// <summary>Reads the authority-owned session a named infinity layer observes its destination through.
+    /// It follows the same admission and nesting lifetime as a screen session. Safe from any thread.</summary>
+    /// <param name="instanceName">The owning instance.</param>
+    /// <param name="layerName">The authored layer name.</param>
+    /// <returns>The session, or null when the layer declares none or its owner holds none now.</returns>
+    public WorldObservationSession? InfinitySession(string instanceName, string layerName) => m_publishedScreenSessions.InfinityLayers.GetValueOrDefault(key: (instanceName, layerName));
+
+    // Every authored observation: screens, placement faces and named infinity layers. Their destinations all use the
+    // same resolver and the owning authority's principal; presentation never opens an observation itself.
+    private static SortedDictionary<WorldObservationSite, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition) {
+        var declared = new SortedDictionary<WorldObservationSite, WorldScreenSource.Session>();
 
         foreach (var screen in definition.Screens) {
             if (screen.Source is WorldScreenSource.Session session) {
-                declared[screen.Index] = session;
+                declared[new WorldObservationSite.Screen(Index: screen.Index)] = session;
             }
         }
 
@@ -74,14 +122,20 @@ public sealed partial class WorldInstanceHost {
                 (row.ScreenIndex >= 0) &&
                 (row.Source is WorldScreenSource.Session session)
             ) {
-                declared[row.ScreenIndex] = session;
+                declared[new WorldObservationSite.Screen(Index: row.ScreenIndex)] = session;
+            }
+        }
+
+        foreach (var layer in definition.Render.Sky?.Layers ?? []) {
+            if (layer is WorldRenderSkyLayer.View { Name: { } name, Destination: { } destination }) {
+                declared[new WorldObservationSite.InfinityLayer(Name: name)] = new WorldScreenSource.Session(Destination: destination);
             }
         }
 
         return declared;
     }
 
-    // How many screens deep each running instance is seen, as of the sessions open now (ScreenDepths), and the queue its
+    // How many observations deep each running instance is seen, as of the sessions open now (ScreenDepths), and the queue its
     // walk takes; both reused, so a steady step allocates nothing.
     private readonly Dictionary<string, int> m_screenDepths = new(comparer: StringComparer.Ordinal);
     private readonly Queue<string> m_screenDepthQueue = new();
@@ -99,8 +153,8 @@ public sealed partial class WorldInstanceHost {
         return false;
     }
 
-    // The boot world's nesting depth (views.nestingDepth): how many screens deep a presentation shows another world, so
-    // how deep the screens it shows observe. The boot world's document decides it, as it decides the presentation's.
+    // The boot world's nesting depth (views.nestingDepth): how many observations deep a presentation shows another
+    // world, through screens or infinity layers. The boot world's document decides it for authority and presentation.
     private int NestingDepth => (m_instances.TryGetValue(
         key: BootInstanceName,
         value: out var boot
@@ -109,8 +163,8 @@ public sealed partial class WorldInstanceHost {
         : RenderGraphInstanceSet.DefaultNestingDepth);
 
     // Walks the open sessions from every world a presentation shows directly, the boot world and every world a human
-    // stands in, at depth 0: a world a session observes is one screen deeper than the world whose screen observes it,
-    // at the shallowest such screen.
+    // stands in, at depth 0: a world a session observes is one observation deeper than the world that observes it,
+    // at its shallowest observation.
     private void ScreenDepths() {
         m_screenDepths.Clear();
         m_screenDepthQueue.Clear();
@@ -153,13 +207,12 @@ public sealed partial class WorldInstanceHost {
             }
         }
     }
-    // Whether an instance's screens observe right now: a world a presentation shows directly (the boot world, as a
-    // desktop presents it, and any world a human stands in) and every world seen through those worlds' screens, while it
-    // is fewer screens deep than the nesting depth. So a portal seen through a portal observes its destination too, to
-    // the depth the presentation renders, and a world nobody stands in and nothing within that depth shows boots no
-    // destination for its screens. Two portals facing each other end at the depth, since the walk visits each world
-    // once, at its shallowest. The depth is document data and sessions are the authority's, so what a world observes
-    // never depends on what a presentation draws.
+    // Whether an instance's screens and infinity layers observe right now: a world a presentation shows directly
+    // (the boot world and any world a human stands in) and every world they observe, while it is fewer observations
+    // deep than the nesting depth. A portal or infinity layer seen through another observation holds its destination
+    // to that same depth. A world nobody stands in and nothing within that depth shows boots no destination.
+    // Cycles end at the depth, since the walk visits each world once, at its shallowest. The depth is document data
+    // and sessions are the authority's, so what a world observes never depends on what a presentation draws.
     private bool PresentsScreens(WorldInstance instance) {
         ScreenDepths();
 
@@ -181,23 +234,31 @@ public sealed partial class WorldInstanceHost {
         }
     }
     private void PublishScreenSessions() {
-        var published = new Dictionary<(string Owner, int Screen), WorldScreenSession>();
+        var screens = new Dictionary<(string Owner, int Screen), WorldObservationSession>();
+        var layers = new Dictionary<(string Owner, string Layer), WorldObservationSession>();
 
         foreach (var (owner, sessions) in m_screenSessions) {
-            foreach (var (screen, session) in sessions.Rows) {
-                published[(owner, screen)] = session;
+            foreach (var (site, session) in sessions.Rows) {
+                switch (site) {
+                    case WorldObservationSite.Screen screen:
+                        screens[(owner, screen.Index)] = session;
+                        break;
+                    case WorldObservationSite.InfinityLayer layer:
+                        layers[(owner, layer.Name)] = session;
+                        break;
+                }
             }
         }
 
-        m_publishedScreenSessions = published;
+        m_publishedScreenSessions = new PublishedObservations(Screens: screens, InfinityLayers: layers);
     }
-    // Opens one screen's session: resolves its destination through the observation door, then observes it through the
+    // Opens one declared session: resolves its destination through the observation door, then observes it through the
     // destination's own admission. A refusal that leaves a destination this resolution started with nobody in it stops
     // that instance again.
-    private WorldScreenSession OpenScreenSession(WorldInstance owner, int screenIndex, WorldScreenSource.Session source) {
-        var session = new WorldScreenSession(
+    private WorldObservationSession OpenScreenSession(WorldInstance owner, WorldObservationSite site, WorldScreenSource.Session source) {
+        var session = new WorldObservationSession(
             owner: owner.Name,
-            screenIndex: screenIndex,
+            site: site,
             source: source
         );
 
@@ -209,7 +270,7 @@ public sealed partial class WorldInstanceHost {
             target: out var target
         )) {
             session.Refusal = reason;
-            NarrateScreenSession(text: $"[world.screen: {owner.Name} session {screenIndex} refused ({reason})]");
+            NarrateScreenSession(text: $"[world.screen: {owner.Name} session {site} refused ({reason})]");
 
             return session;
         }
@@ -224,7 +285,7 @@ public sealed partial class WorldInstanceHost {
             sourceAuthority: owner.Server.AuthorityIdentity
         ) is { } observation) {
             session.Observation = observation;
-            NarrateScreenSession(text: $"[world.screen: {owner.Name} session {screenIndex} -> destination '{source.Destination}' resolved to instance '{resolved.InstanceName}' generation {resolved.GenerationId}{(resolved.IsNewGeneration
+            NarrateScreenSession(text: $"[world.screen: {owner.Name} session {site} -> destination '{source.Destination}' resolved to instance '{resolved.InstanceName}' generation {resolved.GenerationId}{(resolved.IsNewGeneration
                 ? " (new)"
                 : "")} as {observation.Session.Describe()} disclosed {observation.Tier}]");
 
@@ -232,7 +293,7 @@ public sealed partial class WorldInstanceHost {
         }
 
         session.Refusal = $"destination '{source.Destination}' refuses a session: {refusal}";
-        NarrateScreenSession(text: $"[world.screen: {owner.Name} session {screenIndex} refused ({session.Refusal})]");
+        NarrateScreenSession(text: $"[world.screen: {owner.Name} session {site} refused ({session.Refusal})]");
 
         if (
             resolved.IsNewGeneration &&
@@ -243,9 +304,9 @@ public sealed partial class WorldInstanceHost {
 
         return session;
     }
-    // Closes one screen's session: ends it, and stops its destination when no other screen observes it and nobody
+    // Closes one declared session: ends it, and stops its destination when no other session observes it and nobody
     // stands in it (a retained destination stays, by ReapIfEmpty's own rule).
-    private void CloseScreenSession(WorldScreenSession session) {
+    private void CloseScreenSession(WorldObservationSession session) {
         session.Observation?.Dispose();
         session.Observation = null;
 
@@ -273,7 +334,7 @@ public sealed partial class WorldInstanceHost {
 
         _ = ReapIfEmpty(name: name);
     }
-    // Ends every session an instance's screens hold: it stopped presenting, or it retired.
+    // Ends every session an instance's screens and infinity layers hold: it stopped presenting, or it retired.
     private void CloseScreenSessions(string owner) {
         if (!m_screenSessions.Remove(
             key: owner,
@@ -368,10 +429,13 @@ public sealed partial class WorldInstanceHost {
     // tick, or an owner that did not step). Each travels the destination's own link, where its tape records it. A
     // destination that is not taking input (paused, stopped, held, or driving its own tape) is sent nothing, and a
     // release owed to it waits.
-    private void ForwardScreenSessions(WorldInstance owner, SortedDictionary<int, WorldScreenSession> sessions, bool stepped) {
+    private void ForwardScreenSessions(WorldInstance owner, SortedDictionary<WorldObservationSite, WorldObservationSession> sessions, bool stepped) {
         var engagement = owner.Server.Engagement;
 
         foreach (var (screen, session) in sessions) {
+            if (screen is not WorldObservationSite.Screen physical) {
+                continue;
+            }
             if (
                 (session.Observation is not { Ended: false } observation) ||
                 (session.InstanceName is not { } name) ||
@@ -396,12 +460,12 @@ public sealed partial class WorldInstanceHost {
                 stepped &&
                 engagement.TryPortalFace(
                 face: out var face,
-                screenIndex: screen
+                screenIndex: physical.Index
             )
             ) {
                 foreach (var forward in engagement.PortalForwards) {
                     if (
-                        (forward.ScreenIndex == screen) &&
+                        (forward.ScreenIndex == physical.Index) &&
                         TryMapForward(
                         destination: destination.Server.Definition,
                         face: in face,
@@ -434,13 +498,14 @@ public sealed partial class WorldInstanceHost {
         }
     }
 
-    /// <summary>Settles one instance's screen sessions after it stepped (or when it was admitted): opens a session for
-    /// every screen its live definition declares that observes a destination, closes the sessions of screens it no longer
-    /// declares or re-pointed, asks a destination that ended a session to admit it again, and forwards what its
-    /// engagement routed through a portal face this step. A world holds sessions only while a presentation shows it
-    /// within the nesting depth (the boot world's <c>views.nestingDepth</c>): the boot
-    /// world, a world a human stands in, or a world one of their screens shows, to that depth. A replayed tick routes nothing (<see cref="Server.WorldServer.ReplaysInput"/>), since its destinations
-    /// are not replaying with it. Called on the thread that steps the instance.</summary>
+    /// <summary>Settles one instance's observations after it stepped (or when it was admitted): opens a session for
+    /// each declared screen or named infinity layer that observes a destination, closes removed or re-pointed sessions,
+    /// and asks a destination that ended a session to admit it again. Physical portal faces also forward the input
+    /// their engagement routed this step. A world holds sessions only while a presentation shows it within the nesting
+    /// depth (the boot world's <c>views.nestingDepth</c>): the boot world, a world a human stands in, or a world they
+    /// observe through screens or infinity layers, to that depth. A replayed tick routes no input
+    /// (<see cref="Server.WorldServer.ReplaysInput"/>), since its destinations are not replaying with it.
+    /// Called on the thread that steps the instance.</summary>
     /// <param name="instance">The instance that stepped, or that was admitted or held this tick.</param>
     /// <param name="stepped">Whether the instance stepped: false when it was admitted, or held by a pause or a stop,
     /// when its sessions still follow its definition but it forwards nothing.</param>
@@ -457,7 +522,7 @@ public sealed partial class WorldInstanceHost {
             key: instance.Name,
             value: out var owned
         )) {
-            owned = (null, new SortedDictionary<int, WorldScreenSession>());
+            owned = (null, new SortedDictionary<WorldObservationSite, WorldObservationSession>());
         }
 
         var definition = instance.Server.Definition;
@@ -493,7 +558,7 @@ public sealed partial class WorldInstanceHost {
                 if (!owned.Rows.ContainsKey(key: screen)) {
                     owned.Rows[screen] = OpenScreenSession(
                         owner: instance,
-                        screenIndex: screen,
+                        site: screen,
                         source: source
                     );
                     changed = true;
@@ -504,7 +569,7 @@ public sealed partial class WorldInstanceHost {
             m_screenSessions[instance.Name] = owned;
         }
 
-        // A destination that ended a session (a rebuild ends every one) is asked once to admit the screen again,
+        // A destination that ended a session (a rebuild ends every one) is asked once to admit the observer again,
         // observing into the same mirror; a refusal holds the last image.
         foreach (var (screen, session) in owned.Rows) {
             if (

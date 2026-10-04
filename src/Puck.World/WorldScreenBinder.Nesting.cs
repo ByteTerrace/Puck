@@ -621,7 +621,7 @@ internal sealed partial class WorldScreenBinder {
     // authority holds that same session, and closes it, with every level beneath it, when the screen moves on.
     private sealed class NestedSessions(WorldScreenBinder binder) : IWorldNestedSessions<SessionFeed> {
         // The session the authority holds for a level's screen, when it holds one for this very source.
-        private WorldScreenSession? Hosted(WorldNestedScreens<SessionFeed> screens, int screen, WorldScreenSource.Session source) => ((
+        private WorldObservationSession? Hosted(WorldNestedScreens<SessionFeed> screens, int screen, WorldScreenSource.Session source) => ((
             binder.m_nestedOwners.TryGetValue(
                 key: screens,
                 value: out var owner

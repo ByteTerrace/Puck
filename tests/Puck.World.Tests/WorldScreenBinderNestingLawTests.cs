@@ -174,7 +174,7 @@ public sealed class WorldScreenBinderNestingLawTests {
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static WeakReference<WorldScreenSession> RemovePortal(IHost host) {
+    private static WeakReference<WorldObservationSession> RemovePortal(IHost host) {
         var binder = BindScreens(host: host);
         var instances = host.Services.GetRequiredService<WorldInstanceHost>();
 
@@ -182,7 +182,7 @@ public sealed class WorldScreenBinderNestingLawTests {
         Publish(binder: binder);
         Assert.Contains(expectedSubstring: $"session${Screen}${Screen} depth 2", actualString: Nesting(host: host));
 
-        var retired = new WeakReference<WorldScreenSession>(target: instances.ScreenSession(
+        var retired = new WeakReference<WorldObservationSession>(target: instances.ScreenSession(
             instanceName: WorldInstanceHost.BootInstanceName,
             screenIndex: Screen
         )!);
