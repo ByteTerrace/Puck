@@ -136,6 +136,33 @@ public sealed class SdfIndirectCacheLawTests {
         Assert.False(rig.Cache.LightingComplete);
     }
     [Fact]
+    public void ANewSolveRetainsThePublishedSweepDepthUntilItsFirstWholeSweep() {
+        using var rig = new Rig();
+        for (var frame = 0; frame < 16; frame++) { rig.Cache.Plan(Inputs); rig.Cache.Submitted(); }
+        rig.Cache.BeginLighting();
+        for (var batch = 0; batch < 6; batch++) { rig.Cache.PlanLighting(); rig.Cache.SubmittedLighting(); }
+        var previous = rig.Cache.Snapshot();
+        Assert.Equal(3, previous.CompletedSweeps);
+        Assert.Equal(3, previous.PublishedSweeps);
+        rig.Cache.BeginLighting();
+        Assert.Equal(0, rig.Cache.CompletedSweeps);
+        Assert.Equal(3, rig.Cache.Snapshot().PublishedSweeps);
+        Assert.Equal(previous.PublishedStamp, rig.Cache.PublishedStamp);
+        rig.Cache.PlanLighting();
+        rig.Cache.SubmittedLighting();
+        Assert.Equal(0, rig.Cache.CompletedSweeps);
+        Assert.Equal(3, rig.Cache.PublishedSweeps);
+        rig.Cache.PlanLighting();
+        rig.Cache.SubmittedLighting();
+        Assert.Equal(1, rig.Cache.CompletedSweeps);
+        Assert.Equal(1, rig.Cache.Snapshot().PublishedSweeps);
+        Assert.NotEqual(previous.PublishedStamp, rig.Cache.PublishedStamp);
+        Assert.Equal(3, previous.PublishedSweeps);
+        rig.Cache.Reset(2);
+        Assert.Equal(0, rig.Cache.Snapshot().PublishedSweeps);
+    }
+
+    [Fact]
     public void CompletedDemandAndAnIdlePanLeaveNoPendingWork() {
         using var rig = new Rig();
 

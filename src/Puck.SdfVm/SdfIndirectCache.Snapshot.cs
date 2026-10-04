@@ -35,13 +35,15 @@ public sealed record SdfIndirectBrickSnapshot(IrradianceBrickKey Key, int Slot, 
 /// <param name="LightingComplete">Whether the finite direct and feedback solve finished.</param>
 /// <param name="PublishedGeneration">The visible lighting bank, or minus one before a whole sweep.</param>
 /// <param name="PublishedStamp">The exact per-probe stamp of that visible sweep.</param>
+/// <param name="PublishedSweeps">The visible publication's completed sweep depth, independent of a later in-progress solve;
+/// zero means no publication, and the first sweep contains direct sources without feedback.</param>
 /// <param name="Frozen">Whether later update admission is paused; an already admitted frame may finish.</param>
 /// <param name="Bytes">Every owned cache and host-region byte, including their rings.</param>
 /// <param name="Levels">The allocation's immutable level descriptions.</param>
 /// <param name="Bricks">The current brick inventory in lattice order.</param>
 public sealed record SdfIndirectCacheSnapshot(long Allocation, SdfIndirectTier Tier, uint Epoch, uint Submission, float FarDistance,
     bool TraceComplete, int PendingPlacements, int PendingClassifications, int PendingTraces, int PendingShades,
-    int CompletedSweeps, bool LightingComplete, int PublishedGeneration, uint PublishedStamp, bool Frozen, GpuMemoryBytes Bytes,
+    int CompletedSweeps, bool LightingComplete, int PublishedGeneration, uint PublishedStamp, int PublishedSweeps, bool Frozen, GpuMemoryBytes Bytes,
     IReadOnlyList<IrradianceLevel> Levels, IReadOnlyList<SdfIndirectBrickSnapshot> Bricks);
 
 public sealed partial class SdfIndirectCache {
@@ -66,6 +68,6 @@ public sealed partial class SdfIndirectCache {
         }
         return new SdfIndirectCacheSnapshot(m_allocation, Layout.Tier, Epoch, Frame, FarDistance, IsComplete,
             PlaceCount, ClassifyCount, TraceCount, ShadeCount, CompletedSweeps, LightingComplete, PublishedGeneration, PublishedStamp,
-            Frozen, Bytes, Array.AsReadOnly(Layout.Levels.ToArray()), Array.AsReadOnly(bricks));
+            PublishedSweeps, Frozen, Bytes, Array.AsReadOnly(Layout.Levels.ToArray()), Array.AsReadOnly(bricks));
     }
 }

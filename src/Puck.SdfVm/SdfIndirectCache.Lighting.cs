@@ -13,6 +13,9 @@ public sealed partial class SdfIndirectCache {
     public int PublishedGeneration { get; private set; } = -1;
     /// <summary>Gets the exact stamp every probe of the visible sweep carries; zero means no publication.</summary>
     public uint PublishedStamp { get; private set; }
+    /// <summary>Gets the completed sweep depth of the visible publication, retained while a later solve starts;
+    /// zero means no published lighting. Its first sweep contains direct sources and later sweeps add feedback.</summary>
+    public int PublishedSweeps { get; private set; }
     /// <summary>Gets the complete sweeps of the current finite solve.</summary>
     public int CompletedSweeps => m_solve?.CompletedSweeps ?? 0;
     /// <summary>Gets whether the current direct and feedback sweeps have all been submitted.</summary>
@@ -73,6 +76,7 @@ public sealed partial class SdfIndirectCache {
         if (batch.CompletesSweep) {
             PublishedGeneration = batch.WriteGeneration;
             PublishedStamp = m_writeLightingStamp;
+            PublishedSweeps = m_solve.CompletedSweeps;
             PublishedLightingSource = LightingSource;
             LightingPublication++;
             Count(name: "indirect.sweeps.completed", amount: 1);
@@ -87,6 +91,7 @@ public sealed partial class SdfIndirectCache {
         m_shade = null;
         PublishedGeneration = -1;
         PublishedStamp = 0;
+        PublishedSweeps = 0;
         PublishedLightingSource = null;
         LightingPublication++;
     }
