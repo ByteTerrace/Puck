@@ -47,6 +47,9 @@ public readonly record struct SdfPickResult(long Request, uint X, uint Y, uint W
     public long CutRevision { get; init; }
     /// <summary>Gets the rendered unit surface normal, or zero when no normal was requested or the pixel missed.</summary>
     public Vector3 Normal { get; init; }
+    /// <summary>Gets the indirect receiver answer and actual cache census captured by a surface inspection,
+    /// or null when that request did not read indirect diagnostics.</summary>
+    public SdfIndirectPick? Indirect { get; init; }
     /// <summary>Gets the hit point reconstructed from the captured ray, never a later camera; null for a miss or an
     /// ordinary identity pick.</summary>
     public Vector3? Point {
