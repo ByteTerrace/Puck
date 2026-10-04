@@ -62,7 +62,10 @@ record.
 
 `lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most
 `SdfLights.MaxLights` 8, in slot order, each optionally `name`d) and
-`curvature`. Every value may be keyed on a `timeline` clock, and the section may
+`curvature`. Each light also carries a nonnegative bindable `bounce`, default
+one, which scales its diffuse contribution to indirect transport independently
+of direct shading. Rim and attenuation-only lights have no diffuse term.
+Every value may be keyed on a `timeline` clock, and the section may
 be keyed whole (`clock`, `keys`): each key a partial record addressing a light
 by its `name`, of its own kind, stating values only (a light's `name` and
 `shadow` are structure and refused). The sky keys the same way, addressing a

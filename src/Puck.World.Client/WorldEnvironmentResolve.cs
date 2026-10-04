@@ -436,6 +436,13 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                     Index: index,
                     Section: "render.lighting.lights"
                 );
+                pinned.Bounce = Scalar(
+                    fallback: 1f,
+                    field: WorldValueFields.LightBounce,
+                    mirror: mirror,
+                    scalar: authored.Bounce,
+                    site: in lightSite
+                );
 
                 into.Set(
                     index: index,

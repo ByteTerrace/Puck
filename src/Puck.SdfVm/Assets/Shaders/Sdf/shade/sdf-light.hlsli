@@ -14,6 +14,8 @@ struct SdfLightSource {
     float3 color;
     // A screen's glow strength (its screen-light row's alpha).
     float weight;
+    // Only indirect diffuse transport uses this gain; direct shading does not.
+    float bounce;
     // A directional's unit direction toward the light; a point's, an occluder's or a screen's world position.
     float3 position;
     // A rim's exponent, a point's falloff radius or an occluder's radius.
@@ -95,6 +97,7 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
         light.kind = record.Kind;
         light.color = record.Color;
         light.weight = record.Weight;
+        light.bounce = record.Bounce;
         light.position = (((record.Kind == SDF_LIGHT_POINT) || (record.Kind == SDF_LIGHT_OCCLUDER))
             ? worldPointLightPosition(record)
             : record.Direction);
@@ -117,6 +120,7 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
     light.kind = SdfLightScreen;
     light.color = sdfScreenLights[screenIndex].rgb;
     light.weight = sdfScreenLights[screenIndex].a;
+    light.bounce = 1.0;
     light.position = surface.origin.xyz;
     light.facing = normalize(cross(surface.right.xyz, surface.up.xyz));
 

@@ -160,7 +160,8 @@ public sealed class SdfLights {
     /// <param name="light">The light.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the table, or a point or
     /// occluder light's <see cref="SdfLight.DynamicSlot"/> is neither <see cref="SdfProgram.NoDynamicTransformSlot"/>
-    /// nor a slot in [0, <see cref="SdfProgram.MaxDynamicTransformSlot"/>].</exception>
+    /// nor a slot in [0, <see cref="SdfProgram.MaxDynamicTransformSlot"/>], or its
+    /// <see cref="SdfLight.Bounce"/> is negative or nonfinite.</exception>
     public void Set(int index, SdfLight light) {
         if (
             (index < 0) ||
@@ -177,6 +178,10 @@ public sealed class SdfLights {
                 message: $"light {index}'s dynamic slot is {light.DynamicSlot}; {LightSlotRule}",
                 paramName: nameof(light)
             );
+        }
+
+        if (!float.IsFinite(light.Bounce) || (light.Bounce < 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(light), message: $"light {index}'s bounce must be finite and nonnegative.");
         }
 
         m_lights[index] = (light with {

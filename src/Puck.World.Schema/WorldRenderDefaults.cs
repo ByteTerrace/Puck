@@ -242,6 +242,12 @@ public abstract record WorldRenderLight {
     private WorldRenderLight() {
     }
 
+    /// <summary>Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport.
+    /// Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and
+    /// attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BindableScalar? Bounce { get; init; }
+
     /// <summary>Gets the light's name, which a section key addresses it by, or <see langword="null"/> for an unnamed
     /// light no key can address.</summary>
     [JsonIgnore]

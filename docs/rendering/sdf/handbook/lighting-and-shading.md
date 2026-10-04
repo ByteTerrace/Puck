@@ -7,6 +7,13 @@ shadow penumbrae, and treats diegetic CRT screens as both pictures and lights.
 Runtime switches let a user isolate these terms for measurement or restyle the
 frame.
 
+An authored light's `bounce` is a finite nonnegative gain for its diffuse
+contribution to indirect transport. It defaults to one and accepts the same
+state bindings and section keys as the light's weight. Zero keeps the direct
+light while removing its indirect source. Rim highlights and attenuation-only
+lights have no diffuse source to scale. The packed light record retains its
+48-byte stride; its last word holds this gain.
+
 ## The epilogue and its field-unit discipline
 
 The primary march ([SDF frame rendering](frame-rendering.md)) is a loop that answers one question: *where does this ray

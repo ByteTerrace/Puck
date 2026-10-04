@@ -50,6 +50,9 @@ public record struct SdfLight {
     /// <see cref="SdfProgram.NoDynamicTransformSlot"/> for the static authored position in <see cref="Direction"/>;
     /// zero for every other kind.</summary>
     [FieldOffset(40)] public int DynamicSlot;
+    /// <summary>The finite nonnegative gain of this light's diffuse contribution to indirect transport. Direct
+    /// shading is unchanged; rim and attenuation-only lights have no diffuse contribution to scale.</summary>
+    [FieldOffset(44)] public float Bounce;
 
     /// <summary>Creates a light.</summary>
     /// <param name="Kind">What the light is.</param>
@@ -61,7 +64,8 @@ public record struct SdfLight {
     /// <param name="Shadows">A directional only: whether this light may cast a shadow; the frame's slots select its march.</param>
     /// <param name="DynamicSlot">A point or an occluder only: the dynamic-transform slot its position rides, or
     /// <see cref="SdfProgram.NoDynamicTransformSlot"/>. Packed as zero for every other kind.</param>
-    public SdfLight(SdfLightKind Kind, Vector3 Direction, Vector3 Color, float Weight, float Param, bool Shadows, int DynamicSlot = SdfProgram.NoDynamicTransformSlot) {
+    /// <param name="Bounce">The indirect diffuse gain, one by default.</param>
+    public SdfLight(SdfLightKind Kind, Vector3 Direction, Vector3 Color, float Weight, float Param, bool Shadows, int DynamicSlot = SdfProgram.NoDynamicTransformSlot, float Bounce = 1f) {
         this.Kind = Kind;
         this.Direction = Direction;
         this.Color = Color;
@@ -69,6 +73,7 @@ public record struct SdfLight {
         this.Param = Param;
         this.Shadows = (Shadows ? 1u : 0u);
         this.DynamicSlot = (IsPositional(kind: Kind) ? DynamicSlot : 0);
+        this.Bounce = Bounce;
     }
 
     /// <summary>Gets whether the light may cast a shadow: a directional with <see cref="Shadows"/> set.</summary>

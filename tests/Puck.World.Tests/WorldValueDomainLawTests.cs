@@ -46,6 +46,7 @@ public sealed class WorldValueDomainLawTests {
     private sealed record Case(Func<BindableScalar, WorldDefinition> Author, string Path, Func<WorldDefinition, WorldStateMirror, WorldValueDomainGuard, float>? Present = null, float[]? Controls = null);
 
     private static readonly IReadOnlyDictionary<WorldValueField, Case> Cases = new Dictionary<WorldValueField, Case> {
+        [WorldValueFields.LightBounce] = Lit(author: s => new WorldRenderLight.Directional { Bounce = s }, present: static e => e.Lights[0].Bounce, member: "bounce"),
         [WorldValueFields.DirectionalWeight] = Lit(author: s => new WorldRenderLight.Directional(Weight: s), present: static e => e.Lights[0].Weight, member: "weight"),
         [WorldValueFields.DirectionalAngularRadius] = Lit(author: s => new WorldRenderLight.Directional(AngularRadius: s), present: static e => MathF.Atan(x: e.Lights[0].Param), member: "angularRadius"),
         [WorldValueFields.EnvironmentAmbient] = Env(s => new WorldRenderEnvironment(Ambient: s), e => e.Sky.Block.Ambient, "ambient"),

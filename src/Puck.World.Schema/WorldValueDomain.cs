@@ -27,6 +27,8 @@ public sealed record WorldValueField(Type Owner, string Member, WorldValueDomain
 /// its document is validated.
 /// </summary>
 public static class WorldValueFields {
+    /// <summary>A light's indirect diffuse gain.</summary>
+    public static WorldValueField LightBounce { get; } = new(typeof(WorldRenderLight), nameof(WorldRenderLight.Bounce), WorldValueDomain.NonNegative);
     /// <summary>A directional light's weight.</summary>
     public static WorldValueField DirectionalWeight { get; } = new(typeof(WorldRenderLight.Directional), nameof(WorldRenderLight.Directional.Weight), WorldValueDomain.NonNegative);
     /// <summary>A directional light's positive angular radius, in radians, up to the widest penumbra the lights table carries.
@@ -207,6 +209,7 @@ public static class WorldValueFields {
 
     /// <summary>Gets every field, in declaration order.</summary>
     public static IReadOnlyList<WorldValueField> All { get; } = [
+        LightBounce,
         DirectionalWeight,
         DirectionalAngularRadius,
         PanelIntensity,

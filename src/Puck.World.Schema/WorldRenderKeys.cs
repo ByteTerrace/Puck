@@ -73,6 +73,15 @@ public static class WorldRenderKeys {
             ? part
             : null)));
 
+        light = light with {
+            Bounce = Scalar(
+                authored: light.Bounce,
+                clock: clock,
+                field: static part => part.Bounce,
+                parts: Parts(keys: stated, select: static part => part)
+            ),
+        };
+
         switch (light) {
             case WorldRenderLight.Directional directional: {
                     var parts = Parts(

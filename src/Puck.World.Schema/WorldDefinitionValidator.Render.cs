@@ -82,6 +82,14 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
+                JudgeScalar(
+                    definition: definition,
+                    errors: errors,
+                    field: WorldValueFields.LightBounce,
+                    path: $"{lightPath}.bounce",
+                    scalar: light.Bounce
+                );
+
                 switch (light) {
                     case WorldRenderLight.Directional directional: {
                             JudgeDirection(
