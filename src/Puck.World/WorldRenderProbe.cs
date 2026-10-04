@@ -22,7 +22,7 @@ namespace Puck.World;
 /// (<see cref="WorldRenderSettings.DrawsBakes"/>), is settled, so a capture or a <c>world.wait ready</c> never lands
 /// between a placement's field and its bake.
 /// </summary>
-internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
+public sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness {
     private readonly Lock m_gate = new();
     private readonly List<WorkEntry> m_views = [];
     private readonly Dictionary<string, string> m_residencyNames = new(comparer: StringComparer.Ordinal);
@@ -56,6 +56,7 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <summary>Records the existing graph host's demand transition without losing an allocation still retiring.</summary>
     /// <param name="residency">The unique residency registered by the host.</param>
     /// <param name="active">Whether the host currently demands its cache.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="residency"/> is null.</exception>
     public void RegisterIndirectResidency(SdfWorldResidency residency, bool active) {
         ArgumentNullException.ThrowIfNull(residency);
         m_indirectResidencies[residency] = active;

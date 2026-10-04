@@ -4,6 +4,7 @@ using Puck.Commands;
 using Puck.Hosting;
 using Puck.SignedDistance;
 using Puck.Testing;
+using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;

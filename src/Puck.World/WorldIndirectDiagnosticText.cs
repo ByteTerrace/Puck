@@ -10,7 +10,10 @@ namespace Puck.World;
 
 /// <summary>Reads the host-owned indirect inventory and actual allocations on the console/frame owner thread.
 /// GPU probe classes, solve results and divergence require a fenced readback and are not inferred here.</summary>
-internal static class WorldIndirectDiagnosticText {
+public static class WorldIndirectDiagnosticText {
+    /// <summary>Formats each unique active or retiring host cache and its actual allocation breakdown.</summary>
+    /// <param name="probe">The live presentation inventory, or null when no renderer exists. Read on its console/frame owner thread.</param>
+    /// <returns>The host inventory and unread GPU-fact labels, or a named unavailable/off result.</returns>
     public static string Describe(WorldRenderProbe? probe) {
         if (probe is null) { return "indirect unavailable: no renderer"; }
         var residencies = probe.IndirectAllocationResidencies;
@@ -53,7 +56,14 @@ internal static class WorldIndirectDiagnosticText {
 
     /// <summary>Formats disjoint slices of the active cache and separate actual active/retiring and light-fragment
     /// allocations. A fragment's total already includes its depth bank and regions; these are breakdowns, not additions.</summary>
-    internal static string DescribeMemory(SdfIndirectLayout? layout, GpuMemoryBytes allCaches, GpuMemoryBytes activeCache,
+    /// <param name="layout">The active cache's word layout, or null when no active cache is allocated.</param>
+    /// <param name="allCaches">The sum of unique active and retiring cache allocations.</param>
+    /// <param name="activeCache">The active cache allocation, included in <paramref name="allCaches"/>.</param>
+    /// <param name="lightDepth">The depth-bank bytes already included in <paramref name="lightFragment"/>.</param>
+    /// <param name="lightFragment">The complete light-fragment allocation, added once to the cache total.</param>
+    /// <returns>Disjoint cache slices, active regions, retiring allocations and the complete byte total.</returns>
+    /// <exception cref="OverflowException">The supplied allocation totals contradict their included slices, or the sum exceeds the byte counter.</exception>
+    public static string DescribeMemory(SdfIndirectLayout? layout, GpuMemoryBytes allCaches, GpuMemoryBytes activeCache,
         ulong lightDepth, ulong lightFragment) {
         ulong Slice(int first, int end) => checked((ulong)(end - first) * sizeof(uint));
         var state = (layout is null ? 0UL : Slice(layout.ProbeWordOffset, layout.CellWordOffset));

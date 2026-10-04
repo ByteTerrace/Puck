@@ -20,7 +20,12 @@ namespace Puck.World;
 /// presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
 /// canary can set the same levers a player can. Headless composes no renderer and refuses these as unknown.
 /// </summary>
-internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
+/// <param name="population">The authority's population supplying adaptive-quality demand.</param>
+/// <param name="settings">The presentation settings receiving admitted render levers.</param>
+/// <param name="server">The authority whose live definition and grants the commands inspect.</param>
+/// <param name="link">The existing submission path for authoritative session levers.</param>
+/// <param name="renderProbe">The presentation owner's live renderer and indirect residency inventory.</param>
+public sealed class WorldRenderLeverCommandModule(WorldPopulation population, WorldRenderSettings settings, WorldServer server, IServerLink link, WorldRenderProbe renderProbe) : ICommandModule {
     /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
     private string DescribeAdaptiveQuality(string verb, int mode, string exact = "exact", string fast = "fast") {
         var (configured, isFast) = mode switch {
