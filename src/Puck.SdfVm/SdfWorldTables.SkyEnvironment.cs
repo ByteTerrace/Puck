@@ -1,242 +1,173 @@
-using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
+using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-// The residency's two-plane environment and SH coefficients are shared by every view. The upload refreshes them
-// only when a lighting-visible candidate crosses one irradiance display code (SdfSkyEnvironmentRefresh).
-// Candidate projection and sub-code skips count on the host; map evaluation and reduction count on the device.
-// Queue barriers order the previous views' reads before this upload's writes and its writes before later views.
-public sealed partial class SdfWorldTables {
-    // The map's dispatch groups along each axis: sdf-sky-environment.comp's [numthreads(8, 8, 1)].
-    private const uint SkyEnvironmentGroups = (SdfSkyEnvironment.Size / 8);
+/// <summary>One submitted environment projection. Its map and coefficients belong to the tables and may be replaced
+/// by a later submission; a consumer pins them through the graph dependency before that next write.</summary>
+/// <param name="Owner">The tables that own both buffers.</param>
+/// <param name="Sequence">Their monotonically increasing projection sequence.</param>
+/// <param name="Fence">The actual projection submission's fence, valid until its recording slot is reused.</param>
+public readonly record struct SdfSkyEnvironmentSubmission(SdfWorldTables Owner, long Sequence, IGpuSubmissionFence Fence) {
+    /// <summary>Gets the projection's publication identity.</summary>
+    public GpuImagePublication Publication => new(Owner: Owner, Sequence: Sequence);
+}
 
+// One map and coefficient table per residency. The graph's environment producer writes both after acquiring its
+// panorama inputs; upload owns only the packed source tables and the CPU candidate projection's host counts.
+public sealed partial class SdfWorldTables {
     private readonly SkyEnvironmentPass m_skyEnvironment;
 
-    // The environment pass's named rows follow the pass rows: its plain row, then one row each of the sky's detail rows
-    // (SdfSkyDetails). Each completed slot grows when the composition has acquired more named layer identities.
-    private const uint EnvironmentDetailRow = (EnvironmentPass + 2);
-
-    /// <summary>Gets the bytes the sky's environment keeps on the device: the map and its coefficients
-    /// (<see cref="SdfSkyEnvironment.PayloadBytes"/>), one pair however many views read it.</summary>
+    /// <summary>Gets the map and coefficient payload bytes, one pair however many views read it.</summary>
     public static int SkyEnvironmentBytes => SdfSkyEnvironment.PayloadBytes;
-    /// <summary>Gets how many times the upload has rendered the sky's environment: once for each change of the lit layers
-    /// the fog, ambient or reflection reads, and never on an upload whose sky draws the lit layers the map holds.</summary>
+    /// <summary>Gets how many environment projections have actually been submitted.</summary>
     public long SkyEnvironmentRenders => m_skyEnvironment.Renders;
+    /// <summary>Gets the shared two-plane environment map. Its graph producer owns access ordering.</summary>
+    public IGpuBuffer SkyEnvironmentMap => m_skyEnvironment.Map;
+    /// <summary>Gets the shared nine-coefficient irradiance table. Its graph producer owns access ordering.</summary>
+    public IGpuBuffer SkyEnvironmentCoefficients => m_skyEnvironment.Coefficients;
+    /// <summary>Gets the latest submitted projection, or null before any projection. A pending newer submission means
+    /// the buffers no longer describe an older completed publication.</summary>
+    public SdfSkyEnvironmentSubmission? SubmittedSkyEnvironment => m_skyEnvironment.Submitted;
+    /// <summary>Gets the latest projection whose actual fence was observed complete. Completion is latched before its
+    /// recorder reuses that fence; it is not inferred from a displayed view.</summary>
+    public GpuImagePublication CompletedSkyEnvironment { get { m_skyEnvironment.Poll(); return m_skyEnvironment.Completed; } }
 
-    // The descriptor pool the environment's sets take from the tables' own: its frame set and a pass set per ring slot.
-    private static GpuDescriptorPoolSizes SkyEnvironmentPoolSizes() {
-        var groups = PipelineLayouts.Environment.Groups;
-        var sizes = GpuDescriptorPoolSizes.ForGroups(groups: groups.Where(predicate: static group => (group.Ordinal == FrameGroup)).ToArray());
-        var pass = GpuDescriptorPoolSizes.ForGroups(groups: groups.Where(predicate: static group => (group.Ordinal == PassGroup)).ToArray());
+    internal bool SkyEnvironmentDemand => m_skyEnvironment.Demand;
+    internal bool SkyEnvironmentHasImages => SdfSkyEnvironmentRefresh.HasImages(block: m_skyRecord[0], layers: m_skyLayerRecords);
+    internal bool SkyEnvironmentOwes => m_skyEnvironment.Owes;
+    internal ReadOnlySpan<bool> SkyEnvironmentScreens => m_skyEnvironment.Screens;
 
-        for (var slot = 0; (slot < FrameRingSize); slot++) {
-            sizes += pass;
-        }
-
-        return sizes;
+    private void PrepareSkyEnvironment(bool physical) => m_skyEnvironment.Prepare(physical: physical);
+    internal ulong? SkyEnvironmentSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
+        m_skyEnvironment.Poll();
+        var known = m_skyEnvironment.ObserveSources(residency: residency, view: view, reads: reads);
+        return known ? unchecked((ulong)(m_skyEnvironment.Renders + (m_skyEnvironment.Owes ? 1 : 0))) : null;
     }
-    // Counts the candidate projection even when it is too small to owe a device refresh.
-    private void RecordSkyEnvironment(nint commandBuffer, int slot) {
-        var owes = m_skyEnvironment.Owes(block: in m_skyRecord[0], layers: m_skyLayerRecords);
+    internal long SubmitSkyEnvironment(IGpuSubmissionFence fence) => m_skyEnvironment.Publish(fence: fence);
+    internal void PollSkyEnvironment() => m_skyEnvironment.Poll();
+    internal void WithdrawSkyEnvironment(long sequence) => m_skyEnvironment.Withdraw(sequence: sequence);
 
+    private void RecordSkyEnvironmentDecision() {
         if (m_skyEnvironment.Projected) {
             m_work.EnterPass(pass: EnvironmentPass);
             m_work.CountEnvironmentProjection(texels: SdfSkyEnvironment.Texels, skipped: m_skyEnvironment.Skipped);
             m_work.LeavePass();
-        }
-        if (!owes) {
-            if (m_skyEnvironment.Projected) { return; }
+            m_skyEnvironment.Projected = false;
+        } else {
             m_work.SkipPass(pass: EnvironmentPass);
-
-            return;
         }
-
-        m_work.EnterPass(pass: EnvironmentPass);
-        m_skyEnvironment.Record(
-            commandBuffer: commandBuffer,
-            pipelines: m_pipelines,
-            recorder: m_gpu.Recorder,
-            slot: slot
-        );
-        m_work.LeavePass();
-        m_work.ReadOnCompletion(readback: m_skyEnvironment.Counters, slot: slot);
-        m_skyEnvironment.Rendered();
+    }
+    // A graph slot rewrites only after its own fence retires. These source regions were copied by this frame's upload.
+    internal void BindSkyEnvironment(nint set, IGpuBindings bindings) {
+        var layout = SdfWorldInterfaces.EnvironmentParameters.Layout;
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.Sky, buffer: m_skyRegion.Buffer(slot: CurrentSlot), bindings: bindings);
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.SkyLayers, buffer: m_skyLayerRegion.Buffer(slot: CurrentSlot), bindings: bindings);
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfWorldPackage.ScreenMappings, buffer: m_screenMappingRegion.Buffer(slot: CurrentSlot), bindings: bindings);
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.SkyEnvironment, buffer: m_skyEnvironment.Map, bindings: bindings);
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.SkyEnvironmentWritten, buffer: m_skyEnvironment.Map, bindings: bindings);
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.SkyCoefficientsWritten, buffer: m_skyEnvironment.Coefficients, bindings: bindings);
+        var binding = SdfKernelInterfaces.BindingOf(layout: layout, member: SdfWorldPackage.Samplers);
+        for (var index = 0; index < m_samplers.Length; index++) {
+            bindings.WriteSampler(arrayElement: (uint)index, binding: binding, descriptorSetHandle: set, samplerHandle: m_samplers[index]);
+        }
     }
 
-    // The environment's objects and the lit layers its map holds.
     private sealed class SkyEnvironmentPass : IDisposable {
-        private readonly IGpuBuffer m_map;
-        private readonly IGpuBuffer m_coefficients;
-        private readonly IGpuStorageBuffer m_frameBlock;
-        private readonly IGpuStorageBuffer m_block;
-        private readonly nint m_frameSet;
-
-        private readonly nint[] m_sets = new nint[FrameRingSize];
-
-        private readonly GpuKernelCounters m_counters;
-
-        private readonly SdfSkyEnvironmentRefresh m_refresh = new();
-
         private readonly SdfWorldTables m_tables;
-        private readonly IGpuBindings m_bindings;
+        private readonly SdfSkyEnvironmentRefresh m_refresh = new();
+        private readonly GpuImagePublication[] m_sources = new GpuImagePublication[MaxScreenSurfaces];
+        private readonly GpuImagePublication[] m_renderedSources = new GpuImagePublication[MaxScreenSurfaces];
+        private readonly byte[] m_renderedMappings = new byte[MaxScreenSurfaces * ScreenMappingByteLength];
+        private bool m_physical;
 
-        private bool m_written;
-
-        // Creates the map, the coefficients, the blocks and the sets, each owned by the tables' construction scope. Nothing is
-        // written into them until the first refresh (WriteOnce), so the writes count under the environment pass that
-        // needs them, never outside every pass of the tables' first submission.
         public SkyEnvironmentPass(SdfWorldTables tables, GpuDeviceServices gpu, GpuCreationScope scope) {
-            var layout = SdfWorldInterfaces.EnvironmentParameters;
-            var groups = tables.m_pipelines.Pipeline(kernel: SdfKernel.SkyEnvironment).GroupLayoutHandles;
-
             m_tables = tables;
-            m_bindings = gpu.Bindings;
-            m_map = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
-                name: NameOf(part: "sky-environment", detail: "map"),
-                sizeBytes: SdfSkyEnvironment.MapBytes,
-                usage: GpuBufferUsage.Storage
-            ));
-            m_coefficients = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(
-                name: NameOf(part: "sky-environment", detail: "coefficients"),
-                sizeBytes: SdfSkyEnvironment.CoefficientBytes,
-                usage: GpuBufferUsage.Storage
-            ));
-            m_counters = scope.Own(created: new GpuKernelCounters(
-                buffers: gpu.BufferFactory,
-                owner: ObjectOwner,
-                part: "sky-environment-counters",
-                rows: (PassLabelTable.Length + 1 + Math.Max(SdfSkyDetails.InitialCapacity, tables.m_skyDetails.Labels.Count)),
-                slots: FrameRingSize
-            ));
-            m_frameBlock = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
-                name: NameOf(part: "sky-environment", detail: "frame block"),
-                sizeBytes: ((ulong)UniformBytes(blockBytes: layout.FrameBlockSizeBytes)),
-                usage: GpuBufferUsage.Uniform
-            ));
-            m_block = scope.Own(created: gpu.BufferFactory.CreateHostVisible(
-                name: NameOf(part: "sky-environment", detail: "block"),
-                sizeBytes: ((ulong)UniformBytes(blockBytes: layout.SizeBytes)),
-                usage: GpuBufferUsage.Uniform
-            ));
-            m_frameSet = gpu.Bindings.AllocateSet(
-                name: NameOf(part: "sky-environment", detail: "frame group"),
-                descriptorSetLayoutHandle: groups[((int)FrameGroup)],
-                poolHandle: tables.m_pool
-            );
-            for (var slot = 0; (slot < FrameRingSize); slot++) {
-                m_sets[slot] = gpu.Bindings.AllocateSet(
-                    name: NameOf(part: "sky-environment", index: slot),
-                    descriptorSetLayoutHandle: groups[((int)PassGroup)],
-                    poolHandle: tables.m_pool
-                );
-            }
+            Map = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "sky-environment", detail: "map"),
+                sizeBytes: SdfSkyEnvironment.MapBytes, usage: GpuBufferUsage.Storage));
+            Coefficients = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "sky-environment", detail: "coefficients"),
+                sizeBytes: SdfSkyEnvironment.CoefficientBytes, usage: GpuBufferUsage.Storage));
         }
 
-        // The map, which every view's composite binds in the World set.
-        public IGpuBuffer Map => m_map;
-        public IGpuBuffer Coefficients => m_coefficients;
-        // The counter buffers the upload's environment pass counts into.
-        public GpuKernelCounters Counters => m_counters;
-        // How many times the map has rendered.
+        public IGpuBuffer Map { get; }
+        public IGpuBuffer Coefficients { get; }
+        public bool[] Screens { get; } = new bool[MaxScreenSurfaces];
+        public bool Demand { get; private set; }
+        public bool Owes { get; private set; }
+        public bool Projected { get; set; }
+        public bool Skipped { get; private set; }
         public long Renders { get; private set; }
+        public SdfSkyEnvironmentSubmission? Submitted { get; private set; }
+        public GpuImagePublication Completed { get; private set; }
 
-        // Whether an upload owes a lighting refresh.
-        public bool Owes(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers) => m_refresh.Owes(block: block, layers: layers);
-
-        public bool Projected => m_refresh.Projected;
-        public bool Skipped => m_refresh.Skipped;
-
-        public void Rendered() {
-            m_refresh.Rendered();
-            Renders++;
+        public void Prepare(bool physical) {
+            var sky = m_tables.m_skyRecord[0];
+            m_physical = physical;
+            Demand = physical || sky.Ambient > 0f || sky.Reflection > 0f || sky.HazeExtinction > 0f ||
+                (sky.FogExtinction > 0f && (sky.AirFlags & SdfAir.FogColorAuthored) == 0);
+            Owes = m_refresh.Owes(block: sky, layers: m_tables.m_skyLayerRecords, physical: physical);
+            if (m_refresh.Projected) { Projected = true; Skipped = m_refresh.Skipped; }
         }
-        public void Forget() => m_refresh.Forget();
-        // Records a refresh: on the first, the blocks' and sets' writes (WriteOnce); then the counters' clear, the map's readers before its writes, the map, its writes before the
-        // reduction reads it and the coefficients' readers before the reduction writes them, the reduction, both handed to
-        // their readers, then the counters' copy.
-        public void Record(IGpuRecorder recorder, nint commandBuffer, SdfWorldPipelines pipelines, int slot) {
-            // SubmitUpload has waited and read the preceding upload before this slot can replace its buffers.
-            var rows = checked(PassLabelTable.Length + 1 + m_tables.m_skyDetails.Labels.Count);
-            if (rows > m_counters.RowsOf(slot: slot)) {
-                m_counters.EnsureRows(slot: slot, rows: rows);
-                if (m_written) {
-                    m_tables.WriteInterfaceBuffer(buffer: m_counters.RowOf(row: EnvironmentPass, slot: slot).Buffer,
-                        layout: SdfWorldInterfaces.EnvironmentParameters.Layout, member: ShaderWorkCounters.Buffer, set: m_sets[slot]);
+        public bool ObserveSources(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
+            Array.Clear(array: Screens);
+            Array.Clear(array: m_sources);
+            var known = true;
+            var changed = false;
+            var layers = m_tables.m_skyLayerRecords;
+            var count = Math.Min((int)m_tables.m_skyRecord[0].LayerCount, layers.Length);
+            for (var index = 0; index < count; index++) {
+                ref var layer = ref layers[index];
+                if (layer.Kind != SdfSkyLayerKind.Panorama || layer.Opacity <= 0f || !SdfSkyEnvironment.IsLit(layer: layer)) { continue; }
+                var screen = SdfSky.PayloadOf<SdfSkyPanorama>(layer: ref layer).Screen;
+                if ((uint)screen < MaxScreenSurfaces) { Screens[screen] = true; }
+            }
+            for (var screen = 0; screen < Screens.Length; screen++) {
+                if (!Screens[screen]) { continue; }
+                // A residency projects one canonical panorama, independent of the consuming camera's fit.
+                if (residency.ScreenSources is { } sources && sources.Screens.Contains(screen) &&
+                    sources.ReadOf(view: view, screen: screen) is { } producer && reads is not null &&
+                    reads.IndexOf(producer: producer) is var read and >= 0) {
+                    var input = reads[read];
+                    m_sources[screen] = input.Publication;
+                    if (input.Lease.ImageViewHandle != 0 && !input.Publication.IsKnown) { known = false; }
                 }
+                var offset = screen * ScreenMappingByteLength;
+                if (!m_tables.m_screenMappingRegion.Contents.Slice(offset, ScreenMappingByteLength)
+                    .SequenceEqual(m_renderedMappings.AsSpan(offset, ScreenMappingByteLength))) { changed = true; }
             }
-            WriteOnce();
-            recorder.BeginDebugGroup(commandBufferHandle: commandBuffer, label: "sky-environment");
-            m_counters.RecordClear(commandBuffer: commandBuffer, recorder: recorder, slot: slot);
-            Transition(access: (GpuAccess.ShaderRead, GpuAccess.ShaderWrite), buffer: m_map, commandBuffer: commandBuffer, recorder: recorder);
-            Dispatch(commandBuffer: commandBuffer, groupsX: SkyEnvironmentGroups, groupsY: SkyEnvironmentGroups, pipeline: pipelines.Pipeline(kernel: SdfKernel.SkyEnvironment), recorder: recorder, slot: slot);
-            Transition(access: (GpuAccess.ShaderWrite, GpuAccess.ShaderRead | GpuAccess.ShaderWrite), buffer: m_map, commandBuffer: commandBuffer, recorder: recorder);
-            Transition(access: (GpuAccess.ShaderRead, GpuAccess.ShaderWrite), buffer: m_coefficients, commandBuffer: commandBuffer, recorder: recorder);
-            Dispatch(commandBuffer: commandBuffer, groupsX: 1u, groupsY: 1u, pipeline: pipelines.Pipeline(kernel: SdfKernel.SkyEnvironmentReduce), recorder: recorder, slot: slot);
-            Transition(access: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite, GpuAccess.ShaderRead), buffer: m_map, commandBuffer: commandBuffer, recorder: recorder);
-            Transition(access: (GpuAccess.ShaderWrite, GpuAccess.ShaderRead), buffer: m_coefficients, commandBuffer: commandBuffer, recorder: recorder);
-            m_counters.RecordCopy(commandBuffer: commandBuffer, recorder: recorder, slot: slot);
-            recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
+            changed |= !m_sources.AsSpan().SequenceEqual(m_renderedSources);
+            Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: changed || !known);
+            return known;
         }
-
-        // Writes the blocks and the sets once, inside the first refresh's pass: the frame block, the block holding the map's
-        // extent and the environment pass's counter rows, the frame set, and a pass set per ring slot binding the slot's sky
-        // block and layer table, which the upload has copied before it renders, the map, the coefficients and the counters.
-        private void WriteOnce() {
-            if (m_written) {
-                return;
+        public long Publish(IGpuSubmissionFence fence) {
+            // Record polled after the graph waited this slot and before Submit reset its fence.
+            m_refresh.Rendered();
+            m_sources.CopyTo(array: m_renderedSources, index: 0);
+            m_tables.m_screenMappingRegion.Contents[..m_renderedMappings.Length].CopyTo(m_renderedMappings);
+            Owes = false;
+            Submitted = new SdfSkyEnvironmentSubmission(Owner: m_tables, Sequence: ++Renders, Fence: fence);
+            return Renders;
+        }
+        public void Poll() {
+            if (Submitted is { } submitted && submitted.Publication != Completed && submitted.Fence.IsSignaled) {
+                Completed = submitted.Publication;
             }
-
-            var layout = SdfWorldInterfaces.EnvironmentParameters;
-            var frameBlockBytes = new byte[layout.FrameBlockSizeBytes];
-            var blockBytes = new byte[layout.SizeBytes];
-
-            layout.WriteFrame(block: frameBlockBytes, extent: default, frame: 0UL, values: default);
-            m_frameBlock.Write<byte>(data: frameBlockBytes);
-            layout.WriteExtent(block: blockBytes, height: SdfSkyEnvironment.Size, width: SdfSkyEnvironment.Size);
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)layout.BlockOffsetOf(member: ShaderWorkCounters.Row))), value: EnvironmentPass);
-            BinaryPrimitives.WriteUInt32LittleEndian(destination: blockBytes.AsSpan(start: ((int)layout.BlockOffsetOf(member: ShaderWorkCounters.DetailRow))), value: EnvironmentDetailRow);
-            m_block.Write<byte>(data: blockBytes);
-            m_bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: m_frameBlock.BufferHandle, bufferSize: m_frameBlock.SizeBytes, descriptorSetHandle: m_frameSet);
-            for (var slot = 0; (slot < FrameRingSize); slot++) {
-                var set = m_sets[slot];
-
-                m_bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: m_block.BufferHandle, bufferSize: m_block.SizeBytes, descriptorSetHandle: set);
-                m_tables.WriteInterfaceBuffer(buffer: m_tables.m_skyRegion.Buffer(slot: slot), layout: layout.Layout, member: SdfKernelInterfaces.Sky, set: set);
-                m_tables.WriteInterfaceBuffer(buffer: m_tables.m_skyLayerRegion.Buffer(slot: slot), layout: layout.Layout, member: SdfKernelInterfaces.SkyLayers, set: set);
-                m_tables.WriteInterfaceBuffer(buffer: m_map, layout: layout.Layout, member: SdfKernelInterfaces.SkyEnvironmentWritten, set: set);
-                m_tables.WriteInterfaceBuffer(buffer: m_coefficients, layout: layout.Layout, member: SdfKernelInterfaces.SkyCoefficientsWritten, set: set);
-                m_tables.WriteInterfaceBuffer(buffer: m_counters.RowOf(row: EnvironmentPass, slot: slot).Buffer, layout: layout.Layout, member: ShaderWorkCounters.Buffer, set: set);
+        }
+        public void Withdraw(long sequence) {
+            // Recorder retirement can follow device loss, so do not query its fence here. A latched complete source
+            // remains valid; an unobserved submission must be projected again by the next recorder.
+            if (Submitted is { } submitted && submitted.Sequence == sequence && submitted.Publication != Completed) {
+                Forget();
             }
-            m_written = true;
         }
-
-        public void Dispose() {
-            m_counters.Dispose();
-            m_block.Dispose();
-            m_frameBlock.Dispose();
-            m_coefficients.Dispose();
-            m_map.Dispose();
+        public void Forget() {
+            m_refresh.Forget();
+            Owes = true;
+            Submitted = null;
+            Completed = default;
         }
-
-        // Binds a kernel and both sets, then dispatches its groups.
-        private void Dispatch(IGpuRecorder recorder, nint commandBuffer, IGpuComputePipeline pipeline, uint groupsX, uint groupsY, int slot) {
-            recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, pipelineHandle: pipeline.Handle);
-            recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, descriptorSetHandle: m_frameSet, group: FrameGroup, pipelineLayoutHandle: pipeline.LayoutHandle);
-            recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, descriptorSetHandle: m_sets[slot], group: PassGroup, pipelineLayoutHandle: pipeline.LayoutHandle);
-            recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: groupsX, groupCountY: groupsY, groupCountZ: 1);
-        }
-        // One compute-to-compute buffer barrier.
-        private static void Transition(IGpuRecorder recorder, nint commandBuffer, IGpuBuffer buffer, (GpuAccess Source, GpuAccess Destination) access) =>
-            recorder.TransitionBuffer(
-                bufferHandle: buffer.BufferHandle,
-                commandBufferHandle: commandBuffer,
-                destinationAccessMask: access.Destination,
-                destinationStageMask: GpuStage.ComputeShader,
-                sourceAccessMask: access.Source,
-                sourceStageMask: GpuStage.ComputeShader
-            );
+        public void Dispose() { Forget(); Coefficients.Dispose(); Map.Dispose(); }
     }
 }

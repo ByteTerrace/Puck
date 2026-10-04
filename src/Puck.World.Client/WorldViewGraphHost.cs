@@ -481,6 +481,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var footprints = new List<RenderGraphFootprint>();
 
         foreach (var instance in set.Instances) {
+            if (instance.ExternalPackage == RenderGraphPackageCatalog.SkyEnvironment) {
+                foreach (var read in instance.Reads) {
+                    footprints.Add(item: new RenderGraphFootprint(Consumer: instance.Name, Producer: read.Producer, Width: 1.0, Height: 1.0));
+                }
+                continue;
+            }
             if (
                 !RendersScreens(instance: instance, rendered: rendered) &&
                 !rendered.Contains(name: instance.Name)
@@ -545,6 +551,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         m_compose = compose;
         ResetIndirect();
+        ResetEnvironment();
         m_lastSources = null;
         m_lastRendered = null;
         m_lastViews = null;
@@ -857,7 +864,9 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         if (m_disposed) { return; }
         m_disposed = true;
         ResetIndirect();
+        ResetEnvironment();
         Indirect?.Dispose();
+        Environment?.Dispose();
         foreach (var entry in m_entries.Values) {
             CancelPending(entry: entry);
         }
@@ -1148,6 +1157,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 (m_lastTonemap == curve) &&
                 (m_lastSharpens == sharpens) &&
                 !IndirectChanged() &&
+                !EnvironmentChanged() &&
                 (m_lastComparisonRevision == (Comparison?.Revision ?? 0UL)) &&
                 ReferenceEquals(
                     objA: m_lastViews,
@@ -1228,6 +1238,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return;
         }
 
+        AppendEnvironment(graphs: ref graphs, set: ref set);
         AppendIndirect(graphs: ref graphs, set: ref set);
 
         // A synthesized root this host already runs keeps the graph it has installed.

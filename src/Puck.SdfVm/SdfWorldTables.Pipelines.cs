@@ -162,7 +162,7 @@ public sealed partial class SdfWorldTables {
         m_deviceContext.TryWaitIdle();
         m_pipelines.Exchange(reload: reload);
         m_pipelines.Commit(reload: reload);
-        // The environment map's kernels may be among them: the next upload whose fog reads the map renders it again.
+        // The environment map's kernels may be among them: its graph producer renders again when a consumer needs it.
         m_skyEnvironment.Forget();
         // New kernels render new pixels: every view renders again.
         m_programRevision++;

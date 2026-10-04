@@ -58,6 +58,7 @@ public sealed partial class SdfWorldTables {
         _ = m_lightRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_lightRecords.AsSpan()), offset: 0);
         _ = m_skyRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyRecord.AsSpan()), offset: 0);
         _ = m_skyLayerRegion.Write(bytes: MemoryMarshal.AsBytes(span: m_skyLayerRecords.AsSpan()), offset: 0);
+        PrepareSkyEnvironment(physical: frame.IndirectTier != SdfIndirectTier.Off && (frame.IndirectSources & SdfIndirectSources.Sky) != 0);
     }
     // Writes the generated record buffers and the shared sky environment map into a ring slot's World set.
     private void WriteLightAndSkySet(nint set, int slot) {

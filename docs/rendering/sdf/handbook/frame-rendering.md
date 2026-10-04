@@ -455,7 +455,19 @@ The planes share one evaluation of each lit layer per texel. Discs never enter
 the environment. The payload is 65,536 bytes of map and 144 of coefficients,
 shared by every view and frame in flight (`SdfWorldTables.SkyEnvironment.cs`).
 
-The host projects a changed lighting-visible candidate using the same packed
+One `sdf.environment` graph instance per residency produces both buffers before
+its lighting consumers. It acquires the canonical observed view's panorama
+images through the existing graph reads. Independent image feeds remain current;
+world-derived images, including postprocessing chains, use their previous
+publication to break feedback through the environment. The usual view reads
+still demand those producers. Map and coefficients are separate named exports,
+so a finite lighting solve declares both transfer reads when pinning them.
+The source identity is the producer's owner and completed sequence acquired
+with its image lease and fence. A changed publication or sampling map refreshes
+a lit panorama even when its packed sky parameters are unchanged. The CPU
+reference refuses panoramas; it supplies no invented image projection.
+
+For procedural layers, the host projects a changed lighting-visible candidate using the same packed
 layers, half-float map and solid-angle weights as the kernels. It compares the
 candidate with the last rendered coefficients: the largest absolute irradiance
 difference over every normal and RGB channel must reach 1/255 before the map
@@ -463,8 +475,9 @@ and coefficients render again. The maximum is the extremum of each channel's
 quadratic on the unit sphere (`SdfSkyEnvironment.IrradianceDifference`).
 Sub-code changes accumulate against the rendered sky; camera-only changes and
 a still sky perform no projection. A kernel reload invalidates the held result.
-With ambient and reflection both zero, no sky-coloured fog and no haze, even
-candidate projection is off. An authored fog colour does not read the map.
+With ambient and reflection both zero, no sky-coloured fog, no haze and no
+physical transport consumer, even candidate projection is off. An authored fog
+colour does not read the map.
 
 Each candidate counts `gpu.environment.projections` and 4,096
 `gpu.environment.projection-texels`; a sub-code candidate also counts
@@ -493,7 +506,10 @@ The map supplies the background beneath these reflection panels.
 
 The composite filters the full plane for fog, including lighting panels.
 Octahedral edge taps fold onto the adjoining texels. Queue barriers order all
-views' reads before the next upload's writes; no view owns a second map.
+views' reads before the next environment write; no view owns a second map.
+The producer publishes its submission sequence with the actual reduction fence,
+and completion is latched only when that fence signals. Displaying a view does
+not establish environment completion.
 
 ### Surface transport
 
@@ -785,8 +801,12 @@ upload bytes. The upload has four passes: `fillers`, the fillers' first
 transitions and clears, which only the first upload runs; `bricks`, a queued
 brick's staging copy and the carve bake's slices with the pool's barriers,
 which an upload runs only when it writes the pool; `upload`, the regions'
-writes and copies; and `environment`, the sky environment map's refresh, which
-an upload runs only when [the map](#the-environment-map) is owed. The `bricks` and `upload` passes follow each device's
+writes and copies; and `environment`, the CPU candidate projection that decides
+whether a procedural [map](#the-environment-map) needs refreshing. The separate
+`sdf.environment` graph node counts its map and coefficient dispatches, image
+bindings, and kernel counter copies. Its named layer rows grow through the same
+completed-slot retirement and memory accounting as other graph passes.
+The `bricks` and `upload` passes follow each device's
 residency policy, so they are per-backend deterministic, and `puck counters`
 does not hold the two backends to them.
 

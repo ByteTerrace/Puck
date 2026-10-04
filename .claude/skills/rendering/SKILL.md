@@ -1307,10 +1307,14 @@ These are one-line cautions; the owning pages hold the derivations.
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
   counts only where one is written (`sdfVisibilityStoreWord`, the output writes),
   and `SdfWorkCountingLawTests` hold both. The residency's upload counts its
-  `environment` pass (the sky's environment map and its reduction,
-  `SdfWorldTables.SkyEnvironment.cs`) the same way: the tables keep a
-  `GpuKernelCounters` of a row per upload pass over their ring slots and name the
-  slot to their ledger on an upload that renders the map. Vulkan devices are created with
+  `environment` pass for the CPU candidate projection only. One `sdf.environment`
+  graph producer per residency records the map and reduction after acquiring
+  actual panorama image publications; its ordinary node counters own their
+  growing layer details and readbacks. Independent source feeds are current;
+  world-derived image reads use previous-frame feedback. Consumers declare both
+  named map and coefficient dependencies, and a finite solve pins both through
+  declared transfer reads. The tables publish the actual reduction submission's
+  owner, sequence and fence; completion is never inferred from display. Vulkan devices are created with
   `fragmentStoresAndAtomics` for the fragment stages' counts,
   `shaderDemoteToHelperInvocation` for a fragment `discard`, and
   `shaderStorageImageExtendedFormats` for the R8/R8G8 incoming-visibility

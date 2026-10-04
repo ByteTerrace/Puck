@@ -1,6 +1,5 @@
 using System.Buffers.Binary;
 using System.Numerics;
-using System.Text.RegularExpressions;
 using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
 using Puck.Testing;
@@ -8,27 +7,27 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-// The sky's environment refreshes only on change: the upload renders the map and its coefficients when the layers its
-// lighting sees move while fog, ambient or reflection reads it, and otherwise records nothing, its pass reading skipped. A still sky renders
+// The sky's environment refreshes only on change: the graph producer renders the map and its coefficients when the layers its
+// lighting sees move while fog, ambient or reflection reads it, and otherwise records nothing. A still sky renders
 // once; a body, the stars, the twinkle, the fog's density, the clouds and every other layer only the camera sees leave the
 // map as it is; a stop, a lit layer added, and the sky frame render it again; a sky with all consumers disabled renders nothing until a consumer
-// reads the map; an installed kernel reload renders it again; and a refresh never overwrites the counts of the refresh two
-// uploads before it before the ledger reads them.
+// reads the map; an installed kernel reload renders it again; and a refresh never overwrites an earlier slot's counts
+// before the ledger reads them.
 public sealed partial class SdfWorldTablesWorkLawTests {
     [Fact]
     public void AStillSkyRendersItsEnvironmentOnceAndThenRecordsNothing() {
-        using var rig = new Rig();
+        using var rig = new EnvironmentRig();
 
         for (var upload = 0; (upload < 4); upload++) {
             rig.Render();
         }
 
         Assert.Equal(expected: 1L, actual: rig.Engine.SkyEnvironmentRenders);
-        Assert.Contains(actualString: rig.Report(), expectedSubstring: "\nwork environment skipped\n");
+        rig.AssertStanding();
     }
     [Fact]
     public void OnlyAMoveOfTheLayersTheLightingSeesRendersTheEnvironmentAgain() {
-        using var rig = new Rig();
+        using var rig = new EnvironmentRig();
         var sky = rig.Frame.Sky;
 
         rig.Render();
@@ -73,7 +72,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     }
     [Fact]
     public void DisabledEnvironmentRendersNothingUntilAConsumerReadsIt() {
-        using var rig = new Rig();
+        using var rig = new EnvironmentRig();
 
         rig.Frame.Sky.Atmosphere.FogDensity = 0f;
         rig.Frame.Sky.Block.Ambient = 0f;
@@ -82,7 +81,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Render();
         rig.Render();
         Assert.Equal(expected: 0L, actual: rig.Engine.SkyEnvironmentRenders);
-        Assert.Contains(actualString: rig.Report(), expectedSubstring: "\nwork environment skipped\n");
+        rig.AssertStanding();
 
         rig.Frame.Sky.Atmosphere.FogDensity = SdfSky.DefaultFogDensity;
         rig.Render();
@@ -91,7 +90,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     }
     [Fact]
     public void TheAtmosphereOwesTheEnvironmentOnlyWhileItInScattersTheSky() {
-        using var rig = new Rig();
+        using var rig = new EnvironmentRig();
 
         // Isolate atmosphere from the two surface-lighting consumers. A fog in-scattering its own colour reads no sky.
         rig.Frame.Sky.Block.Ambient = 0f;
@@ -100,7 +99,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Render();
         rig.Render();
         Assert.Equal(expected: 0L, actual: rig.Engine.SkyEnvironmentRenders);
-        Assert.Contains(actualString: rig.Report(), expectedSubstring: "\nwork environment skipped\n");
+        rig.AssertStanding();
 
         // A haze in-scatters the sky toward the bodies, so it reads the map with no fog at all.
         rig.Frame.Sky.Atmosphere = (SdfAtmosphere.None with { HazeAmount = 0.3f });
@@ -112,11 +111,11 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Frame.Sky.Atmosphere = (SdfAtmosphere.None with { MediumExtinction = 0.4f });
         rig.Render();
         Assert.Equal(expected: 1L, actual: rig.Engine.SkyEnvironmentRenders);
-        Assert.Contains(actualString: rig.Report(), expectedSubstring: "\nwork environment skipped\n");
+        rig.AssertStanding();
     }
     [Fact]
     public void AnInstalledKernelReloadRendersTheEnvironmentAgain() {
-        using var rig = new Rig();
+        using var rig = new EnvironmentRig();
 
         rig.Render();
         Assert.Equal(expected: 0, actual: rig.Reload(kernels: SdfTestPipelines.Kernels(beam: 1)));
@@ -128,110 +127,79 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Render();
         Assert.Equal(expected: 2L, actual: rig.Engine.SkyEnvironmentRenders);
     }
-    // A refresh two uploads after another records its counters' copy into the same ring slot's readback, so the ledger
-    // must have read the earlier refresh's counts before the later one is submitted. The fake device models a readback as
-    // holding what the latest submitted copy into it wrote, and holds every fence until an upload waits it, so nothing
-    // reads a slot before its upload is known complete. Refreshes at uploads 1, 3 and 5 each write a count of their own
-    // into ring slot 0: each is read before the next refresh into the slot is submitted, and the sample the ledger
-    // publishes for each refresh carries its own count in its environment row.
+    // The graph has three recording slots. Hold every fence until slot reuse waits for it, and model each readback
+    // as the last copy into that slot. Seven successive projections must retire all earlier counts before overwriting.
     [Fact]
-    public void ARefreshTwoUploadsAfterAnotherNeverOverwritesItsUnreadCounts() {
-        using var rig = new Rig(holdFences: true);
-        // Per ring slot: the count the latest submitted refresh copied into its readback, and whether the ledger has read it.
-        var written = new long[SdfWorldTables.FrameRingSize];
-        var unread = new bool[SdfWorldTables.FrameRingSize];
-        var overwritten = new List<int>();
-        var refreshSamples = new List<string>();
-        // The environment row's sky evaluations: the fourth row's third count.
-        var offset = (((3 * GpuKernelCounters.RowWords) + (2 * GpuKernelCounters.CountWords)) * sizeof(uint));
-
+    public void ARefreshNeverOverwritesItsUnreadGraphCounts() {
+        using var rig = new EnvironmentRig(holdFences: true);
+        rig.Render();
+        rig.Complete();
+        var written = new long[3];
+        var unread = new bool[3];
+        var observed = new List<long>();
+        var kind = GpuWork.KernelKinds.IndexOf(GpuWork.SkyEvaluations);
         rig.Gpu.WriteReadback = (name, destination) => {
-            if (!string.Equals(a: name.Part, b: "sky-environment-counters", comparisonType: StringComparison.Ordinal)) {
-                return;
-            }
-
-            BinaryPrimitives.WriteInt64LittleEndian(destination: destination[offset..], value: written[name.Index]);
+            if (name.Owner != SdfTestView.EnvironmentInstance || name.Part != "kernel counters") { return; }
+            if (unread[name.Index]) { observed.Add(written[name.Index]); }
+            BinaryPrimitives.WriteInt64LittleEndian(destination[(kind * sizeof(long))..], written[name.Index]);
             unread[name.Index] = false;
         };
 
-        for (var upload = 1; (upload <= 7); upload++) {
-            var refreshes = ((upload % 2) == 1);
-
-            if (refreshes && (upload > 1)) {
-                rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: (0.1f * upload)), elevation: 1f, index: 1);
-            }
-
+        for (var projection = 1; projection <= 7; projection++) {
+            var slot = (int)(rig.Node.FrameCounter % 3);
+            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(0.1f * projection), elevation: 1f, index: 1);
             rig.Render();
-            Assert.Equal(expected: ((upload + 1L) / 2L), actual: rig.Engine.SkyEnvironmentRenders);
-            if (refreshes) {
-                var slot = ((upload - 1) % SdfWorldTables.FrameRingSize);
-
-                if (unread[slot]) {
-                    overwritten.Add(item: upload);
-                }
-
-                written[slot] = (1000L * upload);
-                unread[slot] = true;
-            }
-
-            var report = rig.Report();
-
-            if (report.Contains(comparisonType: StringComparison.Ordinal, value: "work environment executed:")) {
-                refreshSamples.Add(item: $"{report[..report.IndexOf(value: '\n')]} {EnvironmentEvaluations().Match(input: report).Value}");
-            }
+            Assert.Equal(expected: projection + 1L, actual: rig.Engine.SkyEnvironmentRenders);
+            Assert.False(condition: unread[slot], userMessage: $"Projection {projection} overwrote unread slot {slot}.");
+            written[slot] = 1000L * projection;
+            unread[slot] = true;
         }
-
-        Assert.Empty(collection: overwritten);
-        Assert.Equal(
-            actual: refreshSamples.Distinct(),
-            expected: [
-                "work submission=1 revision=1 sky.evaluations=1000",
-                "work submission=3 revision=1 sky.evaluations=3000",
-                "work submission=5 revision=1 sky.evaluations=5000",
-            ]
-        );
+        rig.Complete();
+        Assert.Equal(expected: Enumerable.Range(1, 7).Select(static index => 1000L * index), actual: observed.Order());
+        var sample = new GpuWorkSample();
+        Assert.True(condition: rig.Node.TryReadCompleted(sample: sample));
+        Assert.True(condition: sample.TryGetPassCount(0, GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations), out var evaluations));
+        Assert.Equal(expected: 7000L, actual: evaluations);
     }
     [Fact]
     public void NewLayerIdentitiesGrowCompletedEnvironmentSlotsAndRetainEarlierSamples() {
-        using var rig = new Rig(holdFences: true);
-        var reads = new List<(int Slot, int Bytes)>();
+        using var rig = new EnvironmentRig(holdFences: true);
         rig.Render();
-        var oldLabels = rig.Engine.SkyDetails.Labels;
+        rig.Complete();
+        var earlier = new GpuWorkSample();
+        Assert.True(condition: rig.Node.TryReadCompleted(sample: earlier));
+        var oldLabels = rig.Engine.SkyDetails.Labels.ToArray();
+        var beforeBytes = rig.Node.OwnedBytes;
         for (var index = 0; index < 40; index++) { _ = rig.Engine.SkyDetails.RowOf($"retired-{index}"); }
         var lastRow = rig.Engine.SkyDetails.RowOf("retired-39");
-        var expectedBytes = (SdfWorldTables.PassLabels.Length + 1 + rig.Engine.SkyDetails.Labels.Count) * GpuKernelCounters.RowBytes;
+        // Two passes, the map's plain detail row, then each retained layer identity.
+        var expectedBytes = (3 + rig.Engine.SkyDetails.Labels.Count) * GpuKernelCounters.RowBytes;
+        var reads = new List<int>();
         rig.Gpu.WriteReadback = (name, destination) => {
-            if (name.Part != "sky-environment-counters") { return; }
-            reads.Add((name.Index, destination.Length));
-            if (destination.Length != expectedBytes) { return; }
+            if (name.Owner != SdfTestView.EnvironmentInstance || name.Part != "kernel counters") { return; }
+            reads.Add(destination.Length);
+            Assert.Equal(expected: expectedBytes, actual: destination.Length);
             var kind = GpuWork.KernelKinds.IndexOf(GpuWork.SkyEvaluations);
-            var passOffset = (3 * GpuKernelCounters.RowBytes) + (kind * sizeof(long));
-            var detailOffset = ((SdfWorldTables.PassLabels.Length + 1 + (int)lastRow) * GpuKernelCounters.RowBytes) + (kind * sizeof(long));
-            BinaryPrimitives.WriteInt64LittleEndian(destination[passOffset..], 70);
-            BinaryPrimitives.WriteInt64LittleEndian(destination[detailOffset..], 70);
+            BinaryPrimitives.WriteInt64LittleEndian(destination[(kind * sizeof(long))..], 70);
+            BinaryPrimitives.WriteInt64LittleEndian(destination[((3 + (int)lastRow) * GpuKernelCounters.RowBytes + kind * sizeof(long))..], 70);
         };
-
-        rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(0.4f), elevation: 1f, index: 1);
-        rig.Render();
-        var earlier = new GpuWorkSample();
-        Assert.True(rig.Engine.Work.TryReadCompleted(earlier));
-        Assert.Equal(oldLabels, earlier.Details.ToArray().Skip(1).Select(detail => detail.Detail));
-        rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(0.8f), elevation: 1f, index: 1);
-        rig.Render();
-        rig.Render();
-
-        Assert.Equal(new[] { (0, 5032), (1, expectedBytes), (0, expectedBytes) }, reads);
-        Assert.Equal(oldLabels, earlier.Details.ToArray().Skip(1).Select(detail => detail.Detail));
+        // Visit every recording slot; each new pair's actual bytes enter the graph's account.
+        for (var index = 1; index <= 3; index++) {
+            rig.Frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(0.2f * index), elevation: 1f, index: 1);
+            rig.Render();
+            rig.Complete();
+        }
+        Assert.Equal(expected: new[] { expectedBytes, expectedBytes, expectedBytes }, actual: reads);
+        Assert.Equal(expected: oldLabels, actual: earlier.Details.ToArray().Skip(1).Select(static detail => detail.Detail));
+        // The first slot already had the original details; the other two held only the two pass rows.
+        var originalCounterBytes = 2UL * (ulong)GpuKernelCounters.RowBytes * (ulong)(3 + oldLabels.Length + 2 + 2);
+        Assert.Equal(expected: beforeBytes - originalCounterBytes + 6UL * (ulong)expectedBytes, actual: rig.Node.OwnedBytes);
+        Assert.Equal(expected: rig.Node.OwnedBytes, actual: rig.Node.InstalledAccount.SteadyBytes);
         var sample = new GpuWorkSample();
-        Assert.True(rig.Engine.Work.TryReadCompleted(sample));
-        Assert.Equal(3L, sample.Submission);
-        Assert.True(sample.TryGetDetailCount((int)lastRow + 1, GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations), out var evaluations));
-        Assert.Equal(70L, evaluations);
-        Assert.Equal("retired-39", sample.Details[(int)lastRow + 1].Detail);
-        Assert.True(sample.TryGetPassCount(3, GpuWork.SubmissionKinds.IndexOf(GpuWork.BufferCopyBytes), out var copiedBytes));
-        Assert.Equal((long)expectedBytes, copiedBytes);
-        Assert.True(sample.TryGetPassCount(3, GpuWork.SubmissionKinds.IndexOf(GpuWork.DescriptorWrites), out var writes));
-        Assert.Equal(1L, writes);
+        Assert.True(condition: rig.Node.TryReadCompleted(sample: sample));
+        Assert.True(condition: sample.TryGetDetailCount((int)lastRow + 1, GpuWork.SubmissionKinds.IndexOf(GpuWork.SkyEvaluations), out var evaluations));
+        Assert.Equal(expected: 70L, actual: evaluations);
+        Assert.Equal(expected: "retired-39", actual: sample.Details[(int)lastRow + 1].Detail);
     }
     [Fact]
     public void TheEnvironmentKeepsOneMapAndOneSetOfCoefficients() {
@@ -241,13 +209,5 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             actual: (SdfSkyEnvironment.MapBytes, SdfSkyEnvironment.CoefficientBytes, SdfWorldTables.SkyEnvironmentBytes),
             expected: (65_536, 144, 65_680)
         );
-        // Its kernel counters: a counter and a readback buffer a ring slot, a row an upload pass, the environment's plain row
-        // and the initial sky detail rows, each row seventeen 64-bit counters, including
-        // secondary-shadow pixels, indirect work and primitive evaluations.
-        Assert.Equal(expected: 5_032, actual: (((SdfWorldTables.PassLabels.Length + 1) + SdfSkyDetails.InitialCapacity) * GpuKernelCounters.RowBytes));
     }
-
-    // The sky evaluations a report's environment line carries.
-    [GeneratedRegex(pattern: @"(?<=work environment executed:[^\n]*)sky\.evaluations=\d+")]
-    private static partial Regex EnvironmentEvaluations();
 }

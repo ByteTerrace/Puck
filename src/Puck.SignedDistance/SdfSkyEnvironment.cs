@@ -4,7 +4,8 @@ using Puck.SignedDistance.Illumination;
 namespace Puck.SignedDistance;
 
 /// <summary>
-/// The CPU reference for the sky's environment: the map and its coefficients a residency renders once per change of the
+/// The CPU reference for procedural sky environments; device panoramas require their actual acquired images. The map and
+/// its coefficients are rendered once per change of the
 /// layers its lighting sees, which the composite reads the fog's in-scattered colour from. The map is <see cref="Size"/>
 /// by <see cref="Size"/> texels over the octahedral projection the radiance cache's maps use, the pole at world +y
 /// (<see cref="IrradianceLattice.Encode"/>), so the upper hemisphere is the inner diamond and the lower one folds into
@@ -24,7 +25,7 @@ public static partial class SdfSkyEnvironment {
     /// <summary>The map's texels along each axis. KEEP IN SYNC with <c>SdfSkyEnvironmentSize</c> in
     /// <c>shade/sdf-sky-environment.hlsli</c>.</summary>
     public const int Size = 64;
-    /// <summary>The map's texels, each one sky evaluation when the map renders.</summary>
+    /// <summary>The map's sampled directions. Layer evaluations follow each layer's visible directional domain.</summary>
     public const int Texels = (Size * Size);
     /// <summary>The bytes one texel takes: four half floats, the colour and a zero.</summary>
     public const int TexelBytes = 8;
@@ -177,8 +178,8 @@ public static partial class SdfSkyEnvironment {
     );
     /// <summary>Renders a sky's map: each texel the layers the lighting sees, composed over black in their authored order
     /// at its centre's direction, as the texel holds it (<see cref="Quantize"/>). A disc never enters it. The reference
-    /// evaluates every lighting-capable kind and the stack's composition: the sky frame, each layer's
-    /// rotation, mask, opacity and blend.</summary>
+    /// evaluates lighting-capable procedural kinds and the stack's composition: the sky frame, each layer's
+    /// rotation, mask, opacity and blend. Device panorama images require the graph producer's acquired sources.</summary>
     /// <param name="block">The packed sky block.</param>
     /// <param name="layers">Its layer table.</param>
     /// <param name="map">Receives the map, <see cref="Texels"/> colours, row after row.</param>

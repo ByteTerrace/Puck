@@ -21,6 +21,10 @@ namespace Puck.World.Client;
 /// <c>&lt;camera&gt;$seat$&lt;seat&gt;</c>, three parts, the camera first because it is the
 /// name the view belongs to and the seat last because it is the qualifier that varies.</summary>
 public static class WorldViewNames {
+    /// <summary>Returns the single environment producer name belonging to a residency.</summary>
+    /// <param name="residency">The residency's complete name.</param>
+    /// <returns>The name with its environment part.</returns>
+    public static string Environment(string residency) => GeneratedName.Append(name: residency, part: "environment");
     /// <summary>Returns the one depth-camera name belonging to a residency's indirect producer.</summary>
     /// <param name="cache">The producer's complete generated name.</param>
     /// <returns>The name with its final light-camera part.</returns>

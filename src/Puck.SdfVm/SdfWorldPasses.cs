@@ -333,10 +333,20 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// <summary>Returns the view an instance resolves this frame, which its passes follow in place when possible.</summary>
     public SdfWorldView? ViewOf(string instance) => Refresh(instance: instance).View;
     /// <inheritdoc/>
-    public IReadOnlyList<RenderGraphRuntimeInput> InputsOf(string instance) =>
-        ((ViewOf(instance: instance) is { LightView: false, Residency: { IndirectTier: not Puck.SignedDistance.SdfIndirectTier.Off } residency })
-            ? [new(Version: SdfWorldPackage.IndirectCache, Producer: residency.IndirectInstanceName),
-                .. ((LightViewName(residency: residency) is { } light) ? new RenderGraphRuntimeInput[] { new(Version: SdfWorldPackage.IndirectLightDepth, Producer: light) } : [])] : []);
+    public IReadOnlyList<RenderGraphRuntimeInput> InputsOf(string instance) {
+        if (ViewOf(instance: instance) is not { LightView: false } view) { return []; }
+        var residency = view.Residency;
+        return [
+            .. (residency.IndirectTier != Puck.SignedDistance.SdfIndirectTier.Off
+                ? new RenderGraphRuntimeInput[] { new(Version: SdfWorldPackage.IndirectCache, Producer: residency.IndirectInstanceName),
+                    .. (LightViewName(residency: residency) is { } light ? new RenderGraphRuntimeInput[] { new(Version: SdfWorldPackage.IndirectLightDepth, Producer: light) } : []) } : []),
+            .. (EnvironmentName(residency: residency) is { } environment
+                ? new RenderGraphRuntimeInput[] {
+                    new(Version: SdfSkyEnvironmentGraph.Input, Producer: environment, Output: SdfSkyEnvironmentGraph.Coefficients),
+                    new(Version: SdfSkyEnvironmentGraph.MapInput, Producer: environment, Output: SdfSkyEnvironmentGraph.Map),
+                } : []),
+        ];
+    }
     /// <inheritdoc/>
     public void OnGraphReleased(string instance) {
         if (m_lightViews.TryGetValue(key: instance, value: out var light)) { light.IndirectLightViews.InvalidateStorage(); }

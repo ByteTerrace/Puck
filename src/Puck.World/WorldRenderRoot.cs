@@ -154,6 +154,8 @@ internal static class WorldRenderRoot {
                         )))
             );
         packages.Register(factory: host.Pickers, package: RenderGraphPackageCatalog.SdfWorld);
+        host.Environment = new SdfSkyEnvironmentPasses(views: host.Pickers);
+        packages.Register(factory: host.Environment, package: RenderGraphPackageCatalog.SkyEnvironment);
         host.Indirect = new SdfIndirectPasses(views: host.Pickers);
         host.ReadIndirectTier = () => sp.GetRequiredService<WorldRenderSettings>().IndirectTier;
         host.IndirectResidencyChanged = (cacheResidency, added) => {

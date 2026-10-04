@@ -8,8 +8,8 @@ namespace Puck.SdfVm;
 // The upload: one fenced submission a frame, recorded by the frame's earliest pass, ahead of every view's submission. It takes the next ring slot, waits the previous upload's fence, which signals once every submission queued
 // before it has finished, the views that read this slot two uploads earlier among them, flushes the slot's share of every
 // region, and records the fillers' first transitions, a queued host-baked brick, this frame's carve-bake slices, the
-// regions' copies and, when the sky's field runs moved, its environment, each handing what it wrote to every shader stage
-// that reads it in a later submission.
+// regions' copies, each handing what it wrote to every shader stage that reads it in a later submission. The graph's
+// environment producer runs afterward, once its panorama images have been acquired.
 public sealed partial class SdfWorldTables {
     /// <summary>Gets the ring slot the latest upload wrote, whose region buffers the frame's passes bind, or -1 before the
     /// first upload.</summary>
@@ -27,13 +27,10 @@ public sealed partial class SdfWorldTables {
 
         // Publishes the newest upload whose fence has already signaled.
         m_work.Poll();
-        ConfigureSkyDetails();
 
         var slot = ((int)(m_uploads % FrameRingSize));
 
-        // Waiting an upload completes it in the ledger (GpuWorkCountingFence.Wait), which reads its sky environment's
-        // counters from its ring slot's readback: the upload two before this one, whose slot this one takes, was waited by
-        // the previous upload, so its counts are read before this upload records a copy over them.
+        // Waiting an upload completes it in the ledger before another upload reuses its ring slot.
         if (m_uploads > 0UL) {
             m_frameFences[((int)((m_uploads - 1UL) % FrameRingSize))].Wait();
         }
@@ -72,7 +69,7 @@ public sealed partial class SdfWorldTables {
         RecordRegionCopies();
         CompletePreviousTables(commandBuffer: commandBuffer);
         m_work.LeavePass();
-        RecordSkyEnvironment(commandBuffer: commandBuffer, slot: slot);
+        RecordSkyEnvironmentDecision();
         recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
         recorder.EndCommandBuffer(commandBufferHandle: commandBuffer);
         m_gpu.QueueSubmitter.Submit(

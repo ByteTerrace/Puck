@@ -529,7 +529,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             }
         }
 
-        // The sky's environment, which the World sets bind and the upload renders when the sky's field runs move.
+        // The sky's environment, which the World sets bind and the graph's shared producer renders after upload.
         // Its constructor joins each object it creates to the scope, which releases them should a later step throw.
         m_skyEnvironment = new SkyEnvironmentPass(
             gpu: gpu,
@@ -547,10 +547,10 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // Writes a buffer at a resource of an interface whose group layouts the set was allocated against, as the kind its
     // member declares and at its element's stride (a record's or a value type's), the structured view the kernel's
     // generated declaration reads on Direct3D 12.
-    internal void WriteInterfaceBuffer(nint set, ShaderInterfaceLayout layout, string member, IGpuBuffer buffer) {
+    internal void WriteInterfaceBuffer(nint set, ShaderInterfaceLayout layout, string member, IGpuBuffer buffer, IGpuBindings? bindings = null) {
         var resource = SdfKernelInterfaces.ResourceOf(layout: layout, member: member);
 
-        m_bindings.WriteBuffer(
+        (bindings ?? m_bindings).WriteBuffer(
             binding: resource.Binding,
             bufferHandle: buffer.BufferHandle,
             bufferSize: buffer.SizeBytes,

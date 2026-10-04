@@ -183,6 +183,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
             tables.WriteInterfaceBuffer(buffer: tables.DummyBuffer, layout: layout, member: member, set: set);
         }
         for (var port = 0; (port < m_fragmentPass.Inputs.Count); port++) {
+            if (m_fragmentPass.Inputs[port].Name is SdfSkyEnvironmentGraph.Input or SdfSkyEnvironmentGraph.MapInput) { continue; }
             var member = ReadMemberOf(version: m_fragmentPass.Inputs[port].Name);
             var bound = recording.Inputs[port];
 

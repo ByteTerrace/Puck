@@ -1,8 +1,8 @@
 // The panorama kind: the image a diegetic screen shows, sampled by the layer-frame direction. Equirectangular maps
 // longitude across and latitude down, the image's top row the zenith; octahedral is the environment map's projection,
 // the pole at the zenith. The point is mapped into the screen's crop and clamped half a source pixel inside it
-// (frame/sdf-environment.hlsli's mapping), and read through the sampler the screen's row names. A pass that binds no
-// screens (SDF_SKY_SCREENS undefined: the environment map's) and a screen with no source bound this frame draw nothing.
+// (frame/sdf-screen-mapping.hlsli's mapping), and read through the sampler the screen's row names. A pass that binds no
+// screens (SDF_SKY_SCREENS undefined) and a screen with no source bound this frame draw nothing.
 // The screen index is the layer table's, uniform across a dispatch, so it indexes the screens array directly. One
 // evaluation and one texture load a sample. Opaque.
 #ifndef SKY_KINDS_PANORAMA_HLSLI

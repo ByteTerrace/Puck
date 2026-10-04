@@ -17,7 +17,7 @@ public sealed partial class SdfWorldPasses {
         var fragment = entry.Fragment;
         var tier = (entry.View?.Residency.IndirectTier ?? Puck.SignedDistance.SdfIndirectTier.Off);
 
-        if (tier == Puck.SignedDistance.SdfIndirectTier.Off) { return fragment; }
+        if (tier == Puck.SignedDistance.SdfIndirectTier.Off) { return WithEnvironment(fragment: fragment, residency: entry.View?.Residency); }
         var maps = ((entry.View is { } current) && (LightViewName(residency: current.Residency) is not null) ? LightMapCount(residency: current.Residency) : -1);
         var key = (fragment, tier, maps);
 
@@ -26,7 +26,7 @@ public sealed partial class SdfWorldPasses {
             if (maps >= 0) { indirect = SdfWorldPackage.WithLightViews(fragment: indirect, maps: maps); }
             m_indirectFragments.Add(key: key, value: indirect);
         }
-        return indirect;
+        return WithEnvironment(fragment: indirect, residency: entry.View?.Residency);
     }
 
     private readonly Dictionary<(RenderGraphPackageFragment, Puck.SignedDistance.SdfIndirectTier, int), RenderGraphPackageFragment> m_indirectFragments = [];
