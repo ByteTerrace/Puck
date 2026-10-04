@@ -2,6 +2,8 @@
 #ifndef SDF_INDIRECT_LAYOUT_HLSLI
 #define SDF_INDIRECT_LAYOUT_HLSLI
 static const uint SdfIndirectProbesPerBrick = 64u;
+static const uint SdfIndirectBrickLevelMask = 255u;
+static const uint SdfIndirectBrickClassified = 256u;
 static const uint SdfIndirectProbeWords = 4u;
 static const uint SdfIndirectCellWords = 3u;
 static const uint SdfIndirectHitWords = 4u;
@@ -35,9 +37,22 @@ static const uint SdfIndirectLightMaxMaps = 12u;
 static const uint SdfIndirectLightMetadataRows = 7u;
 static const uint SdfIndirectLightMarchSteps = 128u;
 static const uint SdfIndirectLightMapBytes = 1048576u;
+static const uint SdfIndirectAlternativeRays = 4u;
+static const uint SdfIndirectAlternativeScreenSteps = 12u;
+static const uint SdfIndirectAlternativeConeSteps = 24u;
+static const uint SdfIndirectAlternativePhases = 4u;
+static const float SdfIndirectAlternativeReach = 4;
+static const float SdfIndirectAlternativeConeSlope = 0.25;
 static const uint SdfIndirectTierOff = 0u;
 static const uint SdfIndirectTierMedium = 1u;
 static const uint SdfIndirectTierHigh = 2u;
+static const uint SdfIndirectSourcesNone = 0u;
+static const uint SdfIndirectSourcesDirect = 1u;
+static const uint SdfIndirectSourcesFeedback = 2u;
+static const uint SdfIndirectSourcesEmission = 4u;
+static const uint SdfIndirectSourcesSky = 8u;
+static const uint SdfIndirectSourcesScreens = 16u;
+static const uint SdfIndirectSourcesAll = 31u;
 static const uint SdfIndirectMethodCache = 0u;
 static const uint SdfIndirectMethodScreen = 1u;
 static const uint SdfIndirectMethodCone = 2u;
@@ -54,6 +69,7 @@ static const uint SdfIndirectSourceFeedback = 1u;
 static const uint SdfIndirectSourceEmission = 2u;
 static const uint SdfIndirectSourceSky = 3u;
 static const uint SdfIndirectSourceScreens = 4u;
+static const uint SdfIndirectPickWords = 68u;
 uint sdfIndirectBrickCapacity(uint tier) { return tier == SdfIndirectTierHigh ? 512u : (tier == SdfIndirectTierMedium ? 256u : 0u); }
 uint sdfIndirectProbeCapacity(uint tier) { return tier == SdfIndirectTierHigh ? 32768u : (tier == SdfIndirectTierMedium ? 16384u : 0u); }
 uint sdfIndirectRaysPerProbe(uint tier) { return tier == SdfIndirectTierHigh ? 256u : (tier == SdfIndirectTierMedium ? 128u : 0u); }
@@ -74,7 +90,8 @@ uint sdfIndirectRadianceGenerationWords(uint tier) { return tier == SdfIndirectT
 uint sdfIndirectIrradianceWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 77561856u : (tier == SdfIndirectTierMedium ? 14663680u : 0u); }
 uint sdfIndirectIrradianceGenerationWords(uint tier) { return tier == SdfIndirectTierHigh ? 10485760u : (tier == SdfIndirectTierMedium ? 5242880u : 0u); }
 uint sdfIndirectPublicationWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 98533376u : (tier == SdfIndirectTierMedium ? 25149440u : 0u); }
-uint sdfIndirectWordCount(uint tier) { return tier == SdfIndirectTierHigh ? 98598912u : (tier == SdfIndirectTierMedium ? 25182208u : 0u); }
+uint sdfIndirectReceiverProofWordOffset(uint tier) { return tier == SdfIndirectTierHigh ? 98598912u : (tier == SdfIndirectTierMedium ? 25182208u : 0u); }
+uint sdfIndirectWordCount(uint tier) { return tier == SdfIndirectTierHigh ? 98598914u : (tier == SdfIndirectTierMedium ? 25182210u : 0u); }
 uint sdfIndirectTraceEvaluationCeiling(uint tier) { return tier == SdfIndirectTierHigh ? 3440640u : (tier == SdfIndirectTierMedium ? 860160u : 0u); }
 uint sdfIndirectClassifyEvaluationCeiling(uint tier) { return tier == SdfIndirectTierHigh ? 460288u : (tier == SdfIndirectTierMedium ? 230144u : 0u); }
 static const float SdfIndirectSurfaceEpsilon = 0.001;

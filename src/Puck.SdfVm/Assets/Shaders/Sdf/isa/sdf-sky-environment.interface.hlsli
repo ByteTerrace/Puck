@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky-environment' (sha256/a975c44cf962a46bbc6494f2e59c651a896b84992bd3d71c90d069e6c21e3f37). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky-environment' (sha256/c2c32319e9d9aa6c819b9eca675be74895063ee1c2866fc707545b3abaa119e6). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 #define PUCK_SHADER_INTERFACE_SDF_SKY_ENVIRONMENT
 
@@ -98,9 +98,13 @@ struct SdfSkyEnvironmentPass {
 #define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
 [[vk::binding(2, 3)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t2, space3);
 #define sdfSkyLayers sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8
-[[vk::binding(3, 3)]] RWStructuredBuffer<uint2> sdfSkyEnvironmentRW : register(u3, space3);
-[[vk::binding(4, 3)]] RWStructuredBuffer<float4> sdfSkyCoefficientsRW : register(u4, space3);
-[[vk::binding(5, 3)]] RWStructuredBuffer<uint> workCounters : register(u5, space3);
+[[vk::binding(3, 3)]] StructuredBuffer<float4> screenMappings : register(t3, space3);
+[[vk::binding(4, 3)]] Texture2D<float4> screenSources[32] : register(t4, space3);
+[[vk::binding(36, 3)]] SamplerState samplers[2] : register(s36, space3);
+[[vk::binding(38, 3)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t38, space3);
+[[vk::binding(39, 3)]] RWStructuredBuffer<uint2> sdfSkyEnvironmentRW : register(u39, space3);
+[[vk::binding(40, 3)]] RWStructuredBuffer<float4> sdfSkyCoefficientsRW : register(u40, space3);
+[[vk::binding(41, 3)]] RWStructuredBuffer<uint> workCounters : register(u41, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
