@@ -6,7 +6,7 @@ namespace Puck.World.Tests;
 
 public sealed partial class WorldDecompileRoundTripLawTests {
     [Fact]
-    public void TheDocumentCorpusIncludesOnlyTrackedUnpairedWorlds() {
+    public async Task TheDocumentCorpusIncludesOnlyTrackedUnpairedWorlds() {
         using var directory = new TemporaryDirectory(prefix: "puck-world-roundtrip-corpus-");
 
         directory.WriteText(name: ".gitignore", text: "artifacts/\n");
@@ -20,13 +20,13 @@ public sealed partial class WorldDecompileRoundTripLawTests {
             ["init", "--quiet"],
             ["add", "--", ".gitignore", "world.world.json", "paired.world.json", "paired.puck", "experimental/old.world.json"],
         }) {
-            var result = ChildProcess.RunAsync(
+            var result = await ChildProcess.RunAsync(
                 arguments: ["-C", directory.RootPath, .. arguments],
                 cancellationToken: TestContext.Current.CancellationToken,
                 fileName: "git",
                 input: string.Empty,
                 timeout: TestLiveness.Bound
-            ).GetAwaiter().GetResult();
+            );
 
             Assert.True(condition: (result.ExitCode == 0), userMessage: result.Stderr);
         }

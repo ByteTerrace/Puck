@@ -20,7 +20,7 @@ public sealed class WorldTimelineLeverLawTests {
             new WorldClock("day", PeriodSeconds: 1d),
             new WorldClock("tide", State: "phase"),
         ]),
-        RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Noise(Clock: "tide")]), Atmosphere: new WorldRenderAtmosphere(
+        RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Noise() { Clock = "tide" }]), Atmosphere: new WorldRenderAtmosphere(
             Fog: new WorldRenderFog(Density: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "tide", keys: [
                 new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
                 new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.1f),

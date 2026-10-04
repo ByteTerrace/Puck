@@ -57,7 +57,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             var resolved = resolver.Resolve(definition: definition, mirror: mirror, revision: 0);
             var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-            resolved.Sky.Pack(resolved.Lights, new SdfSkyDetails(), out var block, layers);
+            resolved.Sky.Pack(lights: resolved.Lights, farDistance: WorldRenderFarDistance.Resolve(defaults: definition.Render), details: new SdfSkyDetails(), block: out var block, layers: layers);
             return refresh.Owes(block, layers);
         }
         Assert.True(Owes(0UL));
