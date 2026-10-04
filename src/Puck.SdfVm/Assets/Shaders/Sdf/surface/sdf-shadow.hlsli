@@ -4,6 +4,7 @@
 #define SURFACE_SDF_SHADOW_HLSLI
 #ifdef SDF_SHADOW_PASS
 #include "../frame/sdf-reprojection.hlsli"
+#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli"
 
 bool sdfShadowHistoryAt(uint record, SdfVisibility visibility, float3 currentPoint, uint viewIndex, out float4 history) {
     history = float4(1.0, 1.0, 1.0, 1.0);
@@ -12,15 +13,27 @@ bool sdfShadowHistoryAt(uint record, SdfVisibility visibility, float3 currentPoi
     if ((passGroup.historyFrames == 0u) || !sdfReprojection(record, currentPoint, previousPixel, previousT)) { return false; }
     uint2 extent = (uint2)passGroup.previousView[4].xy;
     if (any(previousPixel < 0.0) || any(previousPixel >= (float2)extent)) { return false; }
-    uint2 pixel = (uint2)floor(previousPixel);
-    uint word = (SDF_SHADOW_HISTORY_WORDS * (((viewIndex * extent.y + pixel.y) * extent.x) + pixel.x));
-    // A skipped shadow writer keeps its history cursor. Its sample stamp prevents an old dispatch box (or an old
-    // render-grid stride) from masquerading as the preceding camera's records.
-    if ((shadowHistory[word + 3u] != passGroup.historyFrames) ||
-        !sdfHistoryReceiverMatches(visibility.identity, shadowHistory[word + 1u], previousT, asfloat(shadowHistory[word + 2u]))) {
-        return false;
+    // Reconstruct K at the preceding sample grid's fractional position. Repeated nearest-pixel copies would carry
+    // one old sample across the jitter sequence while each write gave it the current pixel's receiver record.
+    PuckReconstructionFootprint footprint = puckReconstructionFootprintAt((previousPixel - 0.5), extent, 0.0);
+    float4 taps[16];
+    [unroll] for (uint tap = 0u; tap < 16u; tap++) { taps[tap] = float4(0.0, 0.0, 0.0, 0.0); }
+    [unroll] for (uint corner = 0u; corner < 4u; corner++) {
+        uint2 offset = uint2((corner & 1u), (corner >> 1u));
+        float2 weight = lerp((1.0 - footprint.f), footprint.f, (float2)offset);
+        if ((weight.x * weight.y) > 0.0) {
+            uint2 pixel = (uint2)clamp((footprint.origin + (int2)offset), int2(0, 0), ((int2)extent - 1));
+            uint word = (SDF_SHADOW_HISTORY_WORDS * (((viewIndex * extent.y + pixel.y) * extent.x) + pixel.x));
+            // Every contributing tap must belong to the preceding writer and the same receiver. One invalid tap
+            // rejects the reconstruction; no stale or other-surface K is blended into the current shadow.
+            if ((shadowHistory[word + 3u] != passGroup.historyFrames) ||
+                !sdfHistoryReceiverMatches(visibility.identity, shadowHistory[word + 1u], previousT, asfloat(shadowHistory[word + 2u]))) {
+                return false;
+            }
+            taps[5u + offset.x + (4u * offset.y)] = sdfUnpackShadowVisibility(shadowHistory[word]);
+        }
     }
-    history = sdfUnpackShadowVisibility(shadowHistory[word]);
+    history = puckReconstructionCombine(footprint, taps);
     return true;
 }
 

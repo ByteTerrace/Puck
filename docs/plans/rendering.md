@@ -8069,6 +8069,14 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       words per pixel: packed K, receiver identity, full ray distance, the
       writer's sample index and rejection reactivity. Its bytes enter the
       graph's memory accounting; native and spatial fragments have none.
+      The K field is reconstructed bilinearly at the preceding jittered grid's
+      fractional position, using the shared reconstruction footprint and its
+      edge clamp. Every tap with nonzero weight must pass the writer stamp,
+      receiver identity and five-percent depth checks; one invalid tap rejects
+      the whole reconstruction and marches the pixel. This prevents repeated
+      nearest-pixel copies from drifting across a still receiver as jitter
+      changes. Inside the grid, constant and affine visibility fields survive
+      the reconstruction apart from the stored eight-bit quantization.
       Skipped shadow writers cannot reuse another camera's history: a sample
       stamp validates the pixel against the preceding render. Each view keeps
       four owner names and penumbra anchors, committed only when its shadow
