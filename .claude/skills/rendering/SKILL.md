@@ -1506,8 +1506,8 @@ penumbra anchors only after the shadow writer submits. A name-only change also
 changes the cadence signature. Fading slots reject through their first
 nonfading rebuild; light directions stay within one eighth of their anchor's
 penumbra angle, bounding any retained pair to one quarter. Gather motion checks
-all three dynamic rows and both the current and previous bounds. During eligible
-secondary reuse, each lit group cooperatively scans the instance metadata before
+all three dynamic rows and both the current and previous bounds. During temporal
+secondary shading, each lit group cooperatively scans the instance metadata before
 walking the current grid, so an occluder departing every visited cell still
 rejects history. Only moved dynamic bounds reach the cone tests; this linear
 metadata scan performs no field evaluation. Flat fallbacks and unmasked world
@@ -1515,12 +1515,17 @@ segments conservatively scan the whole transform table.
 `SdfWorldPackage.TemporalFragment` owns the writer-ordered render-grid history:
 five words per pixel, packed K, identity, depth, writer sample and rejection
 reactivity. The sample stamp rejects skipped or stale writers, and receiver
-validation shares color history's five-percent depth rule. Rejection raises
-color reactivity. History writes count all five words; off writes none. The
+validation shares color history's five-percent depth rule. Ownership, light
+and occluder rejection raise color reactivity independently of K reuse;
+receiver rejection does so when K is reused. Reuse writes all five words;
+off writes only the current reactivity word, counted as one stored word,
+without reading or writing the four K-history words. The
 `interleaved`, `ownership`, `light-motion`, `occluder-motion`, `receiver` and
-`reprojected` detail rows partition secondary lit pixels and their march steps.
-Run `temporal-shadows` on both backends and qualify its receiver-only red leg
-and floor-device ceilings before claiming its images or savings verified.
+`reprojected` detail rows partition secondary lit pixels and their march steps
+with reuse on; off-switch fresh marches stay in the plain shadow row.
+Run `temporal-shadows` on both backends for image qualification. Qualify its
+receiver-only shader mutation separately, and record the counted-quarter
+comparison and floor-device ceilings before claiming savings verified.
 
 `incomingVisibility` is policy-sized retained graph storage: R8 at
 F = 1, R8G8 at F = 2, absent with zero bytes and no read binding at F = 0.

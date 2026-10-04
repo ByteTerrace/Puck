@@ -8135,12 +8135,15 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       it off. Off-switch fresh marches remain in the plain shadow row. There is
       no new dispatch.
     - The temporal rejection, history ownership, allocation, preset and
-      decision-row CPU laws have withheld-fix evidence. The later per-invocation
-      shadow-slot atomic change remains unqualified: its
+      decision-row CPU laws have withheld-fix evidence. The per-invocation
       `ShadowSlotDeltasCountEveryInvocationWithoutSubgroupReconvergence` law
-      still needs a red leg restoring the subgroup reduction, and the
-      `shadow-slots` Vulkan run must establish nonzero, reconciled counts.
-      A source assertion alone does not establish that the device counts them.
+      also has withheld-fix evidence against the subgroup reduction. The
+      `shadow-slots` canary on Vulkan and DirectX establishes nonzero counts for
+      both high-quality slots and the single medium-quality slot, zero counts
+      in unused slots, and the corresponding shadow regions; its opposite
+      observations and discriminating legs hold. This evidence qualifies the
+      per-slot counter correction; moving-shadow images, counted-cost savings
+      and floor-device ceiling recordings remain owed.
 14. **P18-14, the floor tier's sky defaults.** The lead's call from the
     counted rows.
     - Delivers: the sky leg recorded at each tier and field scale in the
