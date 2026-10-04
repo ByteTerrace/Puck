@@ -51,7 +51,7 @@ public sealed class IrradianceCacheModel {
         public Continuation[]?[]? Continuations { get; set; }
         public IrradianceHitRecord[]? Hits { get; set; }
 
-        public Double3[][] Radiance { get; } = [[], []];
+        public IrradianceContributions[][] Radiance { get; } = [[], []];
     }
     private readonly record struct Continuation(IrradianceProbeKey Probe, int Ray, double Weight);
     // A receiver proof: the corners an anchor point's own traces reached, and the clearance certified around it. Any
@@ -193,6 +193,13 @@ public sealed class IrradianceCacheModel {
     /// proof allowance ran out before this receiver was proven; or <see langword="null"/> when no level supports the
     /// receiver, where a view shades as it does with indirect light off.</returns>
     public Double3? Irradiance(Double3 surface, Double3 normal) =>
+        Contributions(surface: surface, normal: normal)?.Total;
+    /// <summary>Returns the independently transported sources of the same published receiver answer. Proof admission,
+    /// corner weights and normalization are shared with <see cref="Irradiance"/>.</summary>
+    /// <param name="surface">The receiver's surface point.</param>
+    /// <param name="normal">The receiver's unit normal.</param>
+    /// <returns>The source contributions, or null when no published level supports the receiver.</returns>
+    public IrradianceContributions? Contributions(Double3 surface, Double3 normal) =>
         ((m_published < 0) ? null : IrradianceAt(budgeted: true, generation: m_published, normal: normal, surface: surface));
     /// <summary>Returns the mask of corners a receiver reads at a level, bit n for corner n of the cell around its
     /// point.</summary>
@@ -215,7 +222,7 @@ public sealed class IrradianceCacheModel {
     /// <returns>The irradiance, or <see langword="null"/> when the probe is not traced or nothing is published.</returns>
     public Double3? ProbeIrradianceOf(IrradianceProbeKey key, Double3 normal) =>
         (((m_published >= 0) && m_probes.TryGetValue(key: key, value: out var probe) && (probe.Hits is not null))
-            ? ProbeIrradiance(generation: m_published, normal: normal, probe: probe)
+            ? ProbeIrradiance(generation: m_published, normal: normal, probe: probe).Total
             : null);
     /// <summary>Returns the cosine-weighted share of a probe's hemisphere about a normal whose rays are unresolved: the
     /// share of its irradiance the probe estimates from its other rays.</summary>
@@ -268,7 +275,7 @@ public sealed class IrradianceCacheModel {
     /// <returns>The radiance, or <see langword="null"/> when the probe is not traced or nothing is published.</returns>
     public Double3? RadianceOf(IrradianceProbeKey key, int ray) =>
         (((m_published >= 0) && m_probes.TryGetValue(key: key, value: out var probe) && (probe.Hits is not null))
-            ? probe.Radiance[m_published][ray]
+            ? probe.Radiance[m_published][ray].Total
             : null);
     /// <summary>Returns a probe's ray nearest a direction.</summary>
     /// <param name="key">The probe.</param>
@@ -348,8 +355,8 @@ public sealed class IrradianceCacheModel {
 
         probe.Hits = hits;
         probe.Continuations = continuations;
-        probe.Radiance[0] = new Double3[level.Rays];
-        probe.Radiance[1] = new Double3[level.Rays];
+        probe.Radiance[0] = new IrradianceContributions[level.Rays];
+        probe.Radiance[1] = new IrradianceContributions[level.Rays];
     }
     private IrradianceHitRecord RecordOf(IrradianceRay cast, Double3 direction) {
         if ((cast.Kind == IrradianceRayKind.Unresolved) || !m_field.TryGradient(gradient: out var normal, point: cast.Point)) {
@@ -547,27 +554,32 @@ public sealed class IrradianceCacheModel {
 
             radiance[ray] = record.Kind switch {
                 IrradianceHitKind.Hit => ShadeHit(feedback: feedback, read: read, record: record),
-                IrradianceHitKind.Exit => m_surfaces.Sky(arg: IrradianceLattice.Direction(key: probe.Key, level: level, ray: ray)),
+                IrradianceHitKind.Exit => new IrradianceContributions(Sky: m_surfaces.Sky(arg: IrradianceLattice.Direction(key: probe.Key, level: level, ray: ray)), Direct: default, Feedback: default, Emission: default, Screens: default),
                 IrradianceHitKind.Continuation => ShadeContinuation(support: probe.Continuations![ray]!, write: write),
-                _ => Double3.Zero,
+                _ => default,
             };
         }
     }
-    private Double3 ShadeHit(IrradianceHitRecord record, int read, bool feedback) {
-        var arriving = m_surfaces.Direct(arg1: record.Point, arg2: record.Normal, arg3: record.Material);
+    private IrradianceContributions ShadeHit(IrradianceHitRecord record, int read, bool feedback) {
+        var reflected = Double3.Zero;
 
         if (feedback && (m_options.Feedback > 0.0)) {
             var previous = IrradianceAt(budgeted: false, generation: read, normal: record.Normal, surface: record.Point);
 
             if (previous is { } value) {
-                arriving += (value * m_options.Feedback);
+                reflected = (value.Total * m_options.Feedback);
             }
         }
 
-        return (Double3.Multiply(a: m_surfaces.Albedo(arg: record.Material), b: arriving) + m_surfaces.Emission(arg: record.Material));
+        var albedo = m_surfaces.Albedo(arg: record.Material);
+        return new IrradianceContributions(
+            Direct: Double3.Multiply(albedo, m_surfaces.Direct(record.Point, record.Normal, record.Material)),
+            Feedback: Double3.Multiply(albedo, reflected),
+            Emission: m_surfaces.Emission(record.Material), Sky: default,
+            Screens: Double3.Multiply(albedo, m_surfaces.Screens(record.Point, record.Normal, record.Material)));
     }
-    private Double3 ShadeContinuation(Continuation[] support, int write) {
-        var sum = Double3.Zero;
+    private IrradianceContributions ShadeContinuation(Continuation[] support, int write) {
+        var sum = default(IrradianceContributions);
         var weight = 0.0;
 
         foreach (var entry in support) {
@@ -575,28 +587,28 @@ public sealed class IrradianceCacheModel {
             weight += entry.Weight;
         }
 
-        return ((weight > 0.0) ? (sum * (1.0 / weight)) : Double3.Zero);
+        return ((weight > 0.0) ? (sum * (1.0 / weight)) : default);
     }
-    private Double3? IrradianceAt(int generation, Double3 surface, Double3 normal, bool budgeted) {
+    private IrradianceContributions? IrradianceAt(int generation, Double3 surface, Double3 normal, bool budgeted) {
         for (var level = 0; (level < m_levels.Count); level++) {
             var spacing = m_levels[level].Spacing;
 
             if (IrradianceCells.Launch(field: m_field, height: (IrradianceCells.ReceiverBias * spacing), normal: normal, surface: surface) is not { } launch) {
-                return Double3.Zero;
+                return default(IrradianceContributions);
             }
 
             var point = launch.Point;
             var mask = CornersFor(budgeted: budgeted, cell: out var cell, clearance: launch.Clearance, corners: out var corners, level: level, lookup: out var lookup, point: point);
 
             if (lookup == Lookup.Deferred) {
-                return Double3.Zero;
+                return default(IrradianceContributions);
             }
 
             if (mask <= 0) {
                 continue;
             }
 
-            var sum = Double3.Zero;
+            var sum = default(IrradianceContributions);
             var total = 0.0;
 
             for (var corner = 0; (corner < IrradianceLattice.CellCorners); corner++) {
@@ -630,10 +642,10 @@ public sealed class IrradianceCacheModel {
 
         return null;
     }
-    private Double3 ProbeIrradiance(Probe probe, int generation, Double3 normal) {
+    private IrradianceContributions ProbeIrradiance(Probe probe, int generation, Double3 normal) {
         var level = m_levels[probe.Key.Level];
         var radiance = probe.Radiance[generation];
-        var sum = Double3.Zero;
+        var sum = default(IrradianceContributions);
         var total = 0.0;
 
         for (var ray = 0; (ray < level.Rays); ray++) {
@@ -649,6 +661,6 @@ public sealed class IrradianceCacheModel {
             }
         }
 
-        return ((total > 0.0) ? (sum * (1.0 / total)) : Double3.Zero);
+        return ((total > 0.0) ? (sum * (1.0 / total)) : default);
     }
 }

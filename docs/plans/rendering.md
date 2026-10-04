@@ -2842,23 +2842,23 @@ slots, never K alone.
 
 | Resource | Bytes |
 |---|---|
-| `room` probes: 12,288 × (128 hits × 16 + two generations of 8×8 irradiance texels × 4 + a 12-byte cell record + 16 bytes of state + two publication words) | 31,899,648 |
-| `world` probes: 4,096 × (the same, plus two generations of 128 rays' radiance × 4, because `room` continues into it) | 14,827,520 |
+| `room` probes: 12,288 × (128 hits × 16 + two generations of 8×8 irradiance texels × 5 source words × 4 + a 12-byte cell record + 16 bytes of state + two publication words) | 57,065,472 |
+| `world` probes: 4,096 × (the same, plus two generations of 128 rays' radiance × 5 source words × 4, because `room` continues into it) | 39,993,344 |
 | Light-view maps: 2 slots × 2 regions × 512² × 4 | 4,194,304 |
 | Light view's depth-only fragment: the 64-byte visibility record, 16-byte mesh target and 4-byte depth at 512² | 22,020,096 |
 | Light view's masks, tile bounds and dispatch arguments, at 512² (`SdfPassPlanLawTests`' sizes) | ≤ 1,048,576 |
 | Receiver-proof hash: 131,072 entries × 28 bytes (anchor, clearance, mask, key, publication) | 3,670,016 |
 | Brick tables, update list, screen reductions, counters, descriptors, alignment | ≤ 1,048,576 |
-| **Total before qualification** | **≤ 78,708,736** |
+| **Total before qualification** | **≤ 129,040,384** |
 
 A hit's feedback proof (an 8-bit mask and its level) lives beside its launch
 height in the terminal word; the view's launch uses the visibility record's
 reserved L word. Each irradiance generation also stamps its probes, so a reused
 brick slot cannot expose another brick's old lighting. At `high`, 256 rays per
-probe and the same full identities require 193,069,056 cache bytes, including
+probe and the same full identities require 394,395,648 cache bytes, including
 proofs, both irradiance generations and the coarser levels' ray radiance. Three
 slots' maps add 6,291,456; traversal and bounded small tables bring the proposed
-total to 223,477,760 bytes. Held fading owners add their explicitly counted map
+total to 424,804,352 bytes. Held fading owners add their explicitly counted map
 regions. The tables and constant rings must satisfy the recorded bounds; these
 are allocation counts, not a claim that the tier has passed hardware qualification.
 
@@ -2870,10 +2870,18 @@ Its successful
 proof entries also carry a publication sequence, 28 bytes each. The current raw
 geometry storage owns 37,683,200 bytes at `medium` and 142,475,264 at `high`.
 G4's declared layout retains those records and reserves both lighting generations
-and their stamps, giving 50,397,184 bytes at `medium` and 193,069,056 at `high`,
+and their stamps, giving 100,728,832 bytes at `medium` and 394,395,648 at `high`,
 plus the region rings, counters and descriptors that `world.budget` reports.
-Lighting uses nonnegative R11G11B10 words; no material identity or hit distance is
-compressed. The earlier eight-byte hit estimate cannot preserve the accepted
+Lighting stores five nonnegative R11G11B10 words per ray or irradiance texel:
+direct, feedback, emission, sky and screens. Contributions are accumulated and
+weighted independently, so inspection reads their actual quantized RGB and energy
+shares; it never divides the final RGB into guessed sources. Feedback identifies
+the last reflection from the preceding sweep, and continuations preserve each
+category. Quantization changes values within the packing format's bounds, not
+their source identities. No material identity or hit distance is compressed.
+Pinned lighting snapshots and readbacks add their actual counted allocations;
+the table's small-buffer estimates remain subject to those final counts.
+The earlier eight-byte hit estimate cannot preserve the accepted
 geometry contract and is replaced by these actual layout counts. G4's solve and
 apply remain open until their GPU implementation and named qualification pass.
 

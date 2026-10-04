@@ -26,6 +26,7 @@ public static class SdfIndirectHlsl {
         Enum<SdfIndirectTier>(prefix: "SdfIndirectTier");
         Enum<IrradianceProbeClass>(prefix: "SdfIndirectClass");
         Enum<IrradianceHitKind>(prefix: "SdfIndirectKind");
+        Enum<IrradianceSource>(prefix: "SdfIndirectSource");
         var medium = new SdfIndirectLayout(tier: SdfIndirectTier.Medium);
         var high = new SdfIndirectLayout(tier: SdfIndirectTier.High);
 

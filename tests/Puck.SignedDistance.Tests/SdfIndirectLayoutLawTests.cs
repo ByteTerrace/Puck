@@ -3,8 +3,8 @@ using Xunit;
 namespace Puck.SignedDistance.Tests;
 
 public sealed class SdfIndirectLayoutLawTests {
-    [InlineData(SdfIndirectTier.Medium, 256, 128, 4, 128, 50_397_184UL)]
-    [InlineData(SdfIndirectTier.High, 512, 256, 8, 512, 193_069_056UL)]
+    [InlineData(SdfIndirectTier.Medium, 256, 128, 4, 128, 100_728_832UL)]
+    [InlineData(SdfIndirectTier.High, 512, 256, 8, 512, 394_395_648UL)]
     [Theory]
     public void TierPoolsAndUpdateCeilingsFitTheirAllocation(SdfIndirectTier tier, int bricks, int rays, int classifications, int traces, ulong bytes) {
         var layout = new SdfIndirectLayout(tier: tier);
@@ -33,8 +33,9 @@ public sealed class SdfIndirectLayoutLawTests {
         Assert.Equal((layout.IrradianceWordOffset + (2 * layout.IrradianceGenerationWords)), layout.PublicationWordOffset);
         Assert.Equal((layout.PublicationWordOffset + (2 * layout.ProbeCapacity)), layout.WordCount);
         Assert.Equal(layout.ProbeCapacity - layout.RadianceProbeOffset, layout.RadianceProbeCapacity);
-        Assert.Equal(layout.RadianceProbeCapacity * layout.RaysPerProbe, layout.RadianceGenerationWords);
-        Assert.Equal(layout.ProbeCapacity * 64, layout.IrradianceGenerationWords);
+        Assert.Equal(5, SdfIndirectLayout.SourceCount);
+        Assert.Equal(layout.RadianceProbeCapacity * layout.RaysPerProbe * 5, layout.RadianceGenerationWords);
+        Assert.Equal(layout.ProbeCapacity * 64 * 5, layout.IrradianceGenerationWords);
         Assert.Equal((((ulong)layout.WordCount) * sizeof(uint)), layout.ByteLength);
     }
     [Fact]

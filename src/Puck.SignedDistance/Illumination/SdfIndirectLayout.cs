@@ -59,10 +59,14 @@ public sealed class SdfIndirectLayout {
     public const int LaunchHeightMask = ((1 << LaunchHeightBits) - 1);
     /// <summary>The independent read and write generations of a finite lighting solve.</summary>
     public const int LightingGenerations = 2;
+    /// <summary>The side of a stored irradiance map, including its octahedral fold border.</summary>
+    public const int IrradianceEdge = IrradianceLattice.BorderedTexels;
     /// <summary>The stored irradiance texels per probe, including the octahedral fold border.</summary>
     public const int IrradianceTexels = (IrradianceLattice.BorderedTexels * IrradianceLattice.BorderedTexels);
-    /// <summary>The words in a nonnegative R11G11B10 radiance value.</summary>
-    public const int RadianceWords = 1;
+    /// <summary>The independently stored source categories of each lighting value.</summary>
+    public const int SourceCount = 5;
+    /// <summary>The words in a lighting record: one nonnegative R11G11B10 value per source.</summary>
+    public const int RadianceWords = SourceCount;
 
     /// <summary>Creates the layout for a tier.</summary>
     /// <param name="tier">The requested cache tier.</param>
