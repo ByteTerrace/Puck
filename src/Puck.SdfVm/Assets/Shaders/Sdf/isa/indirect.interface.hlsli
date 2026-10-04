@@ -1,4 +1,4 @@
-// Generated from shader interface 'indirect' (sha256/d19faa4a00446b92533ea9c15d2d6fc2414bf931c7dfd35fe25c0d318fa07528). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'indirect' (sha256/790324ff3d2afcbc0fb12a5588297e2c074542da7a7a660b15c314b7a9ba2226). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_INDIRECT
 #define PUCK_SHADER_INTERFACE_INDIRECT
 
@@ -185,22 +185,22 @@ struct IndirectPass {
     [[vk::offset(236)]] uint indirectEpoch;
     [[vk::offset(240)]] float indirectFeedback;
     [[vk::offset(244)]] uint indirectFrame;
-    [[vk::offset(248)]] uint indirectPhase;
-    [[vk::offset(252)]] uint indirectPlaceCount;
-    [[vk::offset(256)]] uint indirectReadGeneration;
-    [[vk::offset(260)]] uint indirectReadPublication;
-    [[vk::offset(264)]] uint indirectShadeCount;
-    [[vk::offset(268)]] uint indirectTier;
-    [[vk::offset(272)]] uint indirectTraceCount;
-    [[vk::offset(276)]] uint indirectWriteGeneration;
-    [[vk::offset(280)]] uint indirectWritePublication;
-    [[vk::offset(284)]] uint instanceMaskWordCount;
-    [[vk::offset(288)]] float2 jitter;
-    [[vk::offset(296)]] uint lightCount;
-    [[vk::offset(300)]] uint lightMap;
-    [[vk::offset(304)]] uint lightMapCount;
-    [[vk::offset(308)]] uint _pad308;
-    [[vk::offset(312)]] uint _pad312;
+    [[vk::offset(248)]] uint indirectMethod;
+    [[vk::offset(252)]] uint indirectPhase;
+    [[vk::offset(256)]] uint indirectPlaceCount;
+    [[vk::offset(260)]] uint indirectReadGeneration;
+    [[vk::offset(264)]] uint indirectReadPublication;
+    [[vk::offset(268)]] uint indirectShadeCount;
+    [[vk::offset(272)]] uint indirectTier;
+    [[vk::offset(276)]] uint indirectTraceCount;
+    [[vk::offset(280)]] uint indirectWriteGeneration;
+    [[vk::offset(284)]] uint indirectWritePublication;
+    [[vk::offset(288)]] uint instanceMaskWordCount;
+    [[vk::offset(292)]] uint _pad292;
+    [[vk::offset(296)]] float2 jitter;
+    [[vk::offset(304)]] uint lightCount;
+    [[vk::offset(308)]] uint lightMap;
+    [[vk::offset(312)]] uint lightMapCount;
     [[vk::offset(316)]] uint _pad316;
     [[vk::offset(320)]] float4 lightMaps[84];
     [[vk::offset(1664)]] float lightSweepRadius;
@@ -235,8 +235,8 @@ struct IndirectPass {
     [[vk::offset(1920)]] uint workCounterRow;
     [[vk::offset(1924)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<IndirectPass> passGroupIsa61A351B3 : register(b0, space3);
-#define passGroup passGroupIsa61A351B3
+[[vk::binding(0, 3)]] ConstantBuffer<IndirectPass> passGroupIsa4308F2B0 : register(b0, space3);
+#define passGroup passGroupIsa4308F2B0
 [[vk::binding(1, 3)]] StructuredBuffer<int4> indirectBricks : register(t1, space3);
 [[vk::binding(2, 3)]] StructuredBuffer<uint4> indirectUpdates : register(t2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<float4> indirectDirections : register(t3, space3);

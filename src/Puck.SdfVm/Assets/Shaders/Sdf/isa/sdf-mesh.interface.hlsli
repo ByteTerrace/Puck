@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/2a95bc14f4502c0c191a8402f9e2590380a4774cb08b94fad90dc286068d4f59). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/5cb8dff4ec2dccf041b980ba743f5b99470b2ac9db5db7061530f0352c4379a8). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -43,14 +43,14 @@ struct SdfMeshPass {
     [[vk::offset(208)]] float3 gridWorldPitch;
     [[vk::offset(220)]] uint historyFrames;
     [[vk::offset(224)]] uint2 imageExtent;
-    [[vk::offset(232)]] uint indirectTier;
-    [[vk::offset(236)]] uint instanceMaskWordCount;
-    [[vk::offset(240)]] float2 jitter;
-    [[vk::offset(248)]] uint lightCount;
-    [[vk::offset(252)]] uint lightMap;
-    [[vk::offset(256)]] uint lightMapCount;
-    [[vk::offset(260)]] uint _pad260;
-    [[vk::offset(264)]] uint _pad264;
+    [[vk::offset(232)]] uint indirectMethod;
+    [[vk::offset(236)]] uint indirectTier;
+    [[vk::offset(240)]] uint instanceMaskWordCount;
+    [[vk::offset(244)]] uint _pad244;
+    [[vk::offset(248)]] float2 jitter;
+    [[vk::offset(256)]] uint lightCount;
+    [[vk::offset(260)]] uint lightMap;
+    [[vk::offset(264)]] uint lightMapCount;
     [[vk::offset(268)]] uint _pad268;
     [[vk::offset(272)]] float4 lightMaps[84];
     [[vk::offset(1616)]] float lightSweepRadius;

@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world-fade2' (sha256/c0dbaef5fe9c904e203e12468659a02ac5a920e9d3c7b845d4ec153cff7a23e9). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world-fade2' (sha256/3f4351189edd362f0bc97012b6ef6382f9cfb7372f313b9f370b41015c0e6946). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD_FADE2
 #define PUCK_SHADER_INTERFACE_SDF_WORLD_FADE2
 
@@ -181,14 +181,14 @@ struct SdfWorldFade2Pass {
     [[vk::offset(208)]] float3 gridWorldPitch;
     [[vk::offset(220)]] uint historyFrames;
     [[vk::offset(224)]] uint2 imageExtent;
-    [[vk::offset(232)]] uint indirectTier;
-    [[vk::offset(236)]] uint instanceMaskWordCount;
-    [[vk::offset(240)]] float2 jitter;
-    [[vk::offset(248)]] uint lightCount;
-    [[vk::offset(252)]] uint lightMap;
-    [[vk::offset(256)]] uint lightMapCount;
-    [[vk::offset(260)]] uint _pad260;
-    [[vk::offset(264)]] uint _pad264;
+    [[vk::offset(232)]] uint indirectMethod;
+    [[vk::offset(236)]] uint indirectTier;
+    [[vk::offset(240)]] uint instanceMaskWordCount;
+    [[vk::offset(244)]] uint _pad244;
+    [[vk::offset(248)]] float2 jitter;
+    [[vk::offset(256)]] uint lightCount;
+    [[vk::offset(260)]] uint lightMap;
+    [[vk::offset(264)]] uint lightMapCount;
     [[vk::offset(268)]] uint _pad268;
     [[vk::offset(272)]] float4 lightMaps[84];
     [[vk::offset(1616)]] float lightSweepRadius;
@@ -223,8 +223,8 @@ struct SdfWorldFade2Pass {
     [[vk::offset(1872)]] uint workCounterRow;
     [[vk::offset(1876)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldFade2Pass> passGroupIsa61A351B3 : register(b0, space3);
-#define passGroup passGroupIsa61A351B3
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldFade2Pass> passGroupIsa4308F2B0 : register(b0, space3);
+#define passGroup passGroupIsa4308F2B0
 [[vk::binding(1, 3)]] StructuredBuffer<float> indirectLightDepth : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<float> indirectLightDepthRW : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> indirectCache : register(t3, space3);

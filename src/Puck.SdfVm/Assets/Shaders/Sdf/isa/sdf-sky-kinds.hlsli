@@ -4,6 +4,7 @@
 
 // The sky's capacities.
 #define SDF_SKY_MAX_LAYERS 8u
+#define SDF_SKY_VIEW_ROWS 5u
 #define SDF_SKY_MAX_STOPS 4u
 #define SDF_SKY_MAX_UPPER_FIELD_RUNS 2u
 #define SDF_SKY_DETAIL_RUNS 3u
@@ -300,7 +301,7 @@ struct SdfSkyView {
     float3 Right;
     float Intensity;
     float3 Up;
-    int Screen;
+    int ImageSlot;
     float3 Forward;
     uint Coverage;
     float4 Rect;
@@ -311,7 +312,7 @@ SdfSkyView sdfSkyViewOf(SdfSkyLayer layer) {
     parameters.Right = layer.P0.xyz;
     parameters.Intensity = layer.P0.w;
     parameters.Up = layer.P1.xyz;
-    parameters.Screen = asint(layer.P1.w);
+    parameters.ImageSlot = asint(layer.P1.w);
     parameters.Forward = layer.P2.xyz;
     parameters.Coverage = asuint(layer.P2.w);
     parameters.Rect = layer.P3.xyzw;
