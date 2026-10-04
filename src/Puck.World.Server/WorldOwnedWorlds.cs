@@ -26,6 +26,9 @@ public sealed class WorldOwnedWorlds {
     /// document is never enumerated again.</summary>
     public const string QuarantineDirectoryName = "unloadable";
 
+    // The tapes reading this catalog that are recording now.
+    private int m_recordingTapes;
+
     private readonly string m_catalogFingerprint;
     private readonly string m_directory;
     private readonly List<WorldOwnedWorldDisposal> m_discarded = [];
@@ -68,6 +71,12 @@ public sealed class WorldOwnedWorlds {
     /// file I/O. The copy narrates through this catalog's hub, so what a replay reports reaches the live session.</summary>
     /// <returns>The replay's own catalog.</returns>
     public WorldOwnedWorlds CreateReplayCopy() => new(source: this);
+
+    /// <summary>Gets a value indicating whether a tape reading this catalog is recording.</summary>
+    public bool Recording => (m_recordingTapes > 0);
+
+    // A tape reading this catalog entered or left recording.
+    internal void NoteRecording(bool recording) => m_recordingTapes += (recording ? 1 : -1);
 
     /// <summary>Loads owned worlds from a directory, seeding authored identities when it is empty.</summary>
     /// <param name="template">The document every seeded identity derives from.</param>
@@ -1007,6 +1016,10 @@ public sealed class WorldOwnedWorlds {
     /// <returns>Whether the document was adopted.</returns>
     public bool ReplaceFromSync(WorldDefinition document, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: document);
+        if (m_recordingTapes > 0) {
+            reason = $"{nameof(WorldOwnedWorldSyncRefusal.PullWhileRecording)}: a tape is recording, and a pull would change an owned identity the tape cannot carry (an owned document never enters a tape); stop the recording first";
+            return false;
+        }
         if (document.Identity is null) {
             reason = "document has no identity section";
             return false;
@@ -1014,36 +1027,40 @@ public sealed class WorldOwnedWorlds {
         if (!WorldIdentity.TryValidateSpacesAgainstHost(identitySpaces: document.Spaces, hostSpaces: m_template.Spaces, out reason)) {
             return false;
         }
-        var incoming = new WorldIdentity(
-            document: document,
-            defaults: Defaults
-        );
+        string id = document.Identity.Id;
         var index = m_identities.FindIndex(match: candidate => DocumentName.Comparer.Equals(
             x: candidate.Id,
-            y: incoming.Id
+            y: id
         ));
+        WorldIdentity adopted;
 
         if (index >= 0) {
             if (!string.Equals(
                 a: m_identities[index].Id,
-                b: incoming.Id,
+                b: id,
                 comparisonType: StringComparison.Ordinal
             )) {
                 reason = DocumentName.Collision(
                     heldFile: WorldDocumentName.DocumentFile(name: m_identities[index].Id),
                     heldName: m_identities[index].Id,
-                    otherFile: WorldDocumentName.DocumentFile(name: incoming.Id),
-                    otherName: incoming.Id
+                    otherFile: WorldDocumentName.DocumentFile(name: id),
+                    otherName: id
                 );
                 return false;
             }
-            m_identities[index] = incoming;
+            // In place: an id names one live object, so a seat bound to this identity follows the pull.
+            adopted = m_identities[index];
+            adopted.ReplaceOwnedDocument(document: document);
             reason = "replaced the local copy";
         } else {
-            m_identities.Add(item: incoming);
+            adopted = new WorldIdentity(
+                document: document,
+                defaults: Defaults
+            );
+            m_identities.Add(item: adopted);
             reason = "added a new owned world";
         }
-        Persist(identity: incoming);
+        Persist(identity: adopted);
         return true;
     }
     /// <summary>Refuses, before anything is restored, a checkpoint whose owned documents' asset directories do not

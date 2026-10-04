@@ -57,6 +57,7 @@ public sealed partial class WorldReplayTape {
             RecordedHashes = [.. m_liveHashes],
             Seats = [.. m_seats],
             SimulationRate = m_recordRateHz,
+            StartCheckpoint = m_startCheckpoint,
             Ticks = [.. m_ticks],
         };
     }

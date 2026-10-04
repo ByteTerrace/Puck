@@ -1061,7 +1061,7 @@ internal sealed class GrantSubjectJsonConverter : TryParseStringJsonConverter<Gr
         }
 
         value = default;
-        reason = "must be 'all', 'composition', 'body:<n>', 'screen:<n>', 'section:<name>', 'state:<name>', 'region:<name>', 'seat:<n>', 'creation:<id>', or 'placement:<id>'";
+        reason = "must be 'all', 'composition', 'history', 'body:<n>', 'screen:<n>', 'section:<name>', 'state:<name>', 'region:<name>', 'seat:<n>', 'creation:<id>', or 'placement:<id>'";
 
         return false;
     }

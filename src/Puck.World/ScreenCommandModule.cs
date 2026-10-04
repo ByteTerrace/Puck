@@ -56,7 +56,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "screen.source",
-            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin). Changes the presentation binding. A named machine keeps its identity and continues running when the screen changes source; a legacy slot-owned machine is ejected through the ordered domain first. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
+            description: "Binds a declared screen's live PRESENTATION source, absorbing the five former per-kind verbs into one: screen.source <index> <kind> [args…] — <kind> is camera | capture | desktop | probe | qr | view | row, each carrying its own former arg grammar unchanged: camera [color|infrared] [seat N] (a camera is an input device seated like a pad — <seat> (1-based, default 1) names which seat's camera device to show, never hardware directly; one shared feed per (seat, sensor); concurrent color and infrared are used only when the seat's device proves both streams live; default color); probe <probeId> (a declared probe whose kind writes a texture output); capture <windowTitle...> (a case-insensitive substring match, may contain spaces); desktop [monitorIndex] (0-based, default 0 = primary); qr [payload] [ecLevel] [quietZoneModules] (payload a single token; ecLevel one of L|M|Q|H, default M; quietZoneModules default 4 — NO payload echoes the current authoring instead of changing it); view <cameraName> (the jumbotron recursion — one offscreen camera render, budgeted round-robin); row (drops the live bind and shows the source the screen's row authors again, re-binding a row's own camera view; an error when the screen already shows its row's source). Changes the presentation binding. A named machine keeps its identity and continues running when the screen changes source; a legacy slot-owned machine is ejected through the ordered domain first. Errors on an undeclared screen, an unresolved kind, or the kind's own refusal; an unassigned seat or an incompatible sensor is NOT a refusal — the bind succeeds and the fault surfaces through screen.state/screen.camera instead.",
             handler: SourceHandler,
             ackOnly: true
         );
@@ -550,7 +550,7 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
     // one position by the inserted <kind> token.
     private CommandResult SourceHandler(CommandContext context, WireArgs args) {
         if (args.Count < 2) {
-            return CommandResult.Error(output: "[screen.source: expected <index> <kind> [args…] — kind is camera | capture | desktop | qr | view]");
+            return CommandResult.Error(output: "[screen.source: expected <index> <kind> [args…] — kind is camera | capture | desktop | probe | qr | view | row]");
         }
 
         if (!args.TryInt(
@@ -634,7 +634,32 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             );
         }
 
-        return CommandResult.Error(output: $"[screen.source: '{args[1].ToString()}' must be camera, capture, desktop, qr, or view]");
+        if (args.Is(
+            index: 1,
+            value: "row"
+        )) {
+            return SourceRow(
+                args: in args,
+                index: index
+            );
+        }
+
+        return CommandResult.Error(output: $"[screen.source: '{args[1].ToString()}' must be camera, capture, desktop, probe, qr, view, or row]");
+    }
+    private CommandResult SourceRow(int index, in WireArgs args) {
+        if (args.Count != 2) {
+            return CommandResult.Error(output: "[screen.source: row takes no arguments]");
+        }
+
+        var (ok, message) = m_binder.TryShowRow(index: index);
+
+        return (ok
+            ? Success(
+                args: in args,
+                message: $"[screen.source: {message}]"
+            )
+            : CommandResult.Error(output: $"[screen.source: {message}]")
+        );
     }
     private CommandResult SourceProbe(int index, Principal principal, in WireArgs args) {
         if (args.Count != 3) {

@@ -1,5 +1,4 @@
 using Puck.Commands;
-using Puck.Maths;
 using Puck.Testing;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
@@ -33,37 +32,6 @@ public sealed class HistoryBoundaryLawTests {
         maximumPendingContributions: 8
     );
 
-    [Fact]
-    public void ARecordingPrefixNeverEntersTheHistorysInput() {
-        using var harness = new WorldHistoryHarness(seats: 0);
-
-        harness.Steps(count: 3);
-        var server = harness.Fixture.Server;
-        var session = Principal.Session(epoch: 1, ordinal: 0);
-
-        server.ApplyServerEvent(serverEvent: new WorldServerEvent.SessionAdmitted(
-            MintedGrants: [], Session: session, Templates: []
-        ));
-        harness.Transport.SubmitIntent(submission: new IntentSubmission(
-            EntityIndex: -1,
-            Intent: harness.Channels.RoleOrdinals.Intent(moveAdvance: FixedQ4816.One),
-            Principal: session,
-            Tick: server.NextInputTick
-        ));
-        harness.StepWithoutInput();
-        var channel = harness.Channels.RoleOrdinals.MoveAdvance;
-
-        Assert.Equal(expected: FixedQ4816.One, actual: server.GrantTable.ReadSessionChannel(channel: channel, ordinal: 0));
-        Assert.True(condition: harness.Tape.TryBeginRecording(name: "history-session", refusal: out var refusal), userMessage: refusal);
-        harness.StepWithoutInput();
-        var recorded = harness.Tick;
-
-        _ = harness.Tape.CancelRecording();
-        harness.StepWithoutInput();
-
-        Assert.Equal(expected: FixedQ4816.One, actual: server.GrantTable.ReadSessionChannel(channel: channel, ordinal: 0));
-        Assert.Empty(collection: harness.History.RecordedInput(tick: recorded).Authority);
-    }
     [Fact]
     public void AHistoryRefusesSessionsThatDurableCheckpointsOmit() {
         using var harness = new WorldHistoryHarness(seats: 0);

@@ -150,17 +150,17 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
             var verdict = result.Verdict!;
 
             if (verdict.Passing) {
-                return new CommandResult(Output: $"[replay.stop: wrote {result.Path} | {verdict.Describe()} — faithful, boot-anchored capture]");
+                return new CommandResult(Output: $"[replay.stop: wrote {result.Path} | {verdict.Describe()} — faithful capture]");
             }
 
             // Every authority matched, so the set fails only on a crossing whose other half no tape here replays.
-            // Otherwise tick 0 indicts the STARTING state (a mid-session capture the boot image cannot reproduce), and
+            // Otherwise tick 0 indicts the STARTING state (the boot image or start checkpoint the re-drive restored), and
             // any later tick means the start matched and the trajectory drifted, a determinism defect.
             var reading = (verdict.Match
                 ? "every authority replayed, but a crossing's other half is on no tape in this set, so the crossing is not verified"
                 : ((verdict.Primary.DivergedAtStart || verdict.Companions.Any(predicate: static companion => companion.Verdict.DivergedAtStart))
-                    ? "mid-session capture; the fresh re-drive starts from the definition boot image"
-                    : "the capture was boot-anchored, so this is TRAJECTORY drift — investigate the tick above"
+                    ? "the start the re-drive restored is not where the live session stood when the recording armed"
+                    : "the start matched, so this is TRAJECTORY drift — investigate the tick above"
                 )
             );
 
@@ -209,13 +209,13 @@ public sealed partial class WorldReplayCommandModule(WorldReplayTape tape, World
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.record",
-            description: "Arms deterministic recording (Immediate): replay.record <name> begins capturing the running session's per-tick server-input stream and starting state, and tapes every other row of the process beside it as one set (a row that cannot be taped is named on stderr); replay.stop persists the set. Refuses to arm, loudly, on any of THREE boot-anchored conditions this session: an addon has already had an admitted execution attempted (offline replay creates fresh guests at sim-counter zero, which cannot re-establish a guest's prior accumulated state), a screen machine has already stepped, or a screen op (insert/eject/select/options/link/unlink) has already applied — the latter two because offline replay reconstructs a FRESH WorldMachineHost from the tape's own definition snapshot, which can never recover a booted cartridge's accumulated core state or an already-landed screen op. Grant verb masks ride the shared tape leaf codec.",
+            description: "Arms deterministic recording (Immediate): replay.record <name> begins capturing the running session's per-tick server-input stream and starting state, and tapes every other row of the process beside it as one set (a row that cannot be taped is named on stderr); replay.stop persists the set. Armed before the world's first step, the tape starts from the definition's boot image and refuses once a screen op (insert/eject/select/options/link/unlink) has applied; armed later, it starts from an authority checkpoint taken at the arm (without the owned-world catalog), so it re-drives from exactly where the session stood, and refuses by name (StartNotCheckpointable) when that state is one no checkpoint captures: a mounted or pumped addon guest, a screen op, a stepped machine without checkpoint support, a coupled link or rewind history, a live session, an engagement in flight, or an edit not yet applied. Grant verb masks ride the shared tape leaf codec.",
             handler: (_, args) => Record(args: args)
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "replay.stop",
-            description: "Stops and persists the active recording (Immediate): writes <name>.puckreplay under the LIVE session's tail population hash FIRST — the tape is evidence, so it persists even when the verdict below will refuse — then re-drives it once through a fresh world and echoes the path plus either the tick count and MATCH/MISMATCH verdict (MISMATCH = a mid-session capture whose fresh re-drive starts from the definition boot image) or, if the re-drive itself could not run (e.g. the mount pin), a refusal naming the tape as written and the live tree as moved past it.",
+            description: "Stops and persists the active recording (Immediate): writes <name>.puckreplay under the LIVE session's tail population hash FIRST — the tape is evidence, so it persists even when the verdict below will refuse — then re-drives it once through a fresh world and echoes the path plus either the tick count and MATCH/MISMATCH verdict (MISMATCH at tick 0 = the start the re-drive restored is not where the session stood at the arm; later = trajectory drift) or, if the re-drive itself could not run (e.g. the mount pin), a refusal naming the tape as written and the live tree as moved past it.",
             handler: (_, args) => Stop(args: args)
         );
         yield return CommandDefinition.WithWireArgs(

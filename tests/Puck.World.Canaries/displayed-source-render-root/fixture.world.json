@@ -1,0 +1,7 @@
+{
+  "schema": "puck.world.definition.v1",
+  "basis": "../uploaded-sources/fixture",
+  "views": {
+    "graphs": [{ "name": "feedback", "source": "../pipeline-feedback/feedback.graph.json", "timeScale": 1 }]
+  }
+}

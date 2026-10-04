@@ -52,11 +52,12 @@ the atomic write. Generated rows refuse by name and offer a JSON delta.
 lists its forms). With it on, a builder seeks or steps to any tick of a bounded
 window, backward or forward, each move proved against the hash recorded there;
 resumes from the past, discarding the future or keeping it as a named branch;
-diffs the state at two ticks; and replays an edit some ticks earlier to see
-where it would first have changed the world. Its verbs are console-only, unbindable
-and operator-only. An authored HUD shows the cursor and window through the
-`history.cursor` and `history.window` bindings, as text or gauges; nothing draws
-the window as a scrubber a pointer can drag.
+re-enters a kept branch or saves it as a tape; diffs the state at two ticks; and
+replays an edit some ticks earlier to see where it would first have changed the
+world. A building seat scrubs it from bound keys and by dragging the scrubber row
+its view draws, under its own principal (E14). An authored HUD shows the cursor
+and window through the `history.cursor` and `history.window` bindings, as text or
+gauges.
 
 Several pieces exist with nothing using them:
 
@@ -933,9 +934,26 @@ stroke.
 
 ### E14 — Scrub the recorded past
 
-**Problem:** time travel answers on the console only. A builder cannot drag
+**Status:** all three deliveries are in place. A building seat's view draws the
+scrubber row on the editor overlay (`HistoryRowWriter`, fed by `WorldHistoryRow`
+from what `WorldHistory` publishes), and `world.history row` echoes it. The row
+does not wait for E2. It hit-tests its own drawn rectangle in overlay space and
+needs no world picking, and the left mouse button on the build page binds the
+held `world.history.drag`, which seeks to the tick under the pressing seat's
+pointer. `step`, `scrub`, `resume` and `branch` are bindable, and the build page
+binds `z`, `x`, `v` and `b` to a tick back, a tick on, resume and keep. Each is
+checked when it runs against `control` over the `history` grant subject, under
+the seat's principal. `world.history switch` and `world.history save` take a kept
+branch somewhere. A tape can start from a checkpoint, so `replay.record` armed
+mid-session matches from its first tick, and the `ArmedAfterFirstStep` refusal is
+gone. The laws are `HistoryScrubLawTests`, `HistoryRowDrawLawTests`,
+`ReplayArmingLawTests` and `ReplayStartPrivacyLawTests`. The pointer drag is checked through the row's own
+hit test and the seat's command session. No canary drives a physical mouse
+press onto the row.
+
+**Problem:** time travel answered on the console only. A builder could not drag
 through the window, step a tick from a key, or take a branch anywhere: a kept
-branch can be neither re-entered nor saved, and a tape can still only start from
+branch could be neither re-entered nor saved, and a tape could only start from
 a world's boot image.
 
 **Delivers:**
@@ -964,7 +982,8 @@ proves the re-entered branch reproduces its recorded hashes; a saved branch
 passes `replay.verify` (red leg: a tape whose checkpoint was taken at the wrong
 tick reports MISMATCH at its first tick).
 
-**Depends on:** E2 for the HUD row's picking.
+**Depends on:** nothing further. The row hit-tests its own overlay rectangle, so
+it does not need E2's world picking.
 
 ## Decisions
 

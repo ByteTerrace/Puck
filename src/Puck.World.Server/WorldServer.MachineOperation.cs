@@ -52,7 +52,7 @@ public sealed partial class WorldServer {
         if (ScreenOpTap is not null) {
             return new MachineOperationResult(
                 MachineOperationStatus.Refused,
-                reason: "machine operations cannot execute while recording; the current replay format does not capture provider operations"
+                reason: $"machine operations cannot execute while recording ({nameof(WorldMachineOperationRefusal.WhileRecording)}); the current replay format does not capture provider operations"
             );
         }
 

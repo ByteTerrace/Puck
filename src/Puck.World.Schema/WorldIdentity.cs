@@ -45,29 +45,12 @@ public sealed partial class WorldIdentity {
         ArgumentNullException.ThrowIfNull(argument: defaults);
         var identity = (document.Identity ?? throw new InvalidOperationException(message: "an owned world requires identity"));
 
-        Document = document;
         Id = identity.Id;
         Name = identity.Name;
         ColorHex = identity.Color;
-        Color = ParseColor(
-            hex: identity.Color,
-            fallbackHex: defaults.NeutralColor
-        );
-        m_moveSpeed = ReadFixed(
-            document.State,
-            identity.MoveSpeedState
-        );
-        m_turnSpeed = ReadFixed(
-            document.State,
-            identity.TurnSpeedState
-        );
-        Bindings = document.BindingOverlays.FirstOrDefault()?.Document;
-        Hud = document.Hud.Panels.FirstOrDefault();
-        // Control feel travels with the profile exactly as the two layers above do: read off this identity's OWN
-        // document, delivered on the same selection that delivers its bindings and HUD.
-        SeatLook = document.PlayerDefaults.SeatLook;
         m_noseFactor = defaults.NoseFactor;
         m_neutralColor = defaults.NeutralColor;
+        Load(document: document);
     }
 
     private WorldIdentity(string name, FixedQ4816? moveSpeed, FixedQ4816? turnSpeed, WorldPlayerDefaults defaults, string? id = null, string? colorHex = null) {
@@ -286,6 +269,7 @@ public sealed partial class WorldIdentity {
             Records: RecordState,
             Facts: (Facts ?? EmptyFacts())
         );
+
     // The row an identity that has written no fact projects, so its first fact abroad meets its declared name and
     // capacity. It is kept while that declaration holds: a profiled body projects every tick its continuation is
     // hashed, and the same instance writes without building a row.
@@ -308,12 +292,58 @@ public sealed partial class WorldIdentity {
 
         return row;
     }
+
     /// <summary>Replaces the backing owned world after a composed edit.</summary>
     /// <param name="document">The replacement owned world.</param>
     public void ReplaceDocument(WorldDefinition document) {
         Document = document;
         m_factsRevision++;
     }
+    /// <summary>Replaces this owned identity's document with another of the same id, and re-reads from it everything
+    /// the document decides: the name, the color, both rates, the bindings, the HUD and the seat look. An id names one
+    /// live object, so every seat bound to this identity follows the replacement.</summary>
+    /// <param name="document">The replacing document.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="document"/> declares no identity, or another id.</exception>
+    public void ReplaceOwnedDocument(WorldDefinition document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+        if (
+            (document.Identity is not { } identity) ||
+            !string.Equals(a: identity.Id, b: Id, comparisonType: StringComparison.Ordinal)
+        ) {
+            throw new ArgumentException(message: $"a replacing document must declare identity '{Id}'", paramName: nameof(document));
+        }
+
+        Load(document: document);
+        m_factsRevision++;
+    }
+
+    // Reads everything an owned document decides about its identity.
+    private void Load(WorldDefinition document) {
+        var identity = document.Identity!;
+
+        Document = document;
+        Name = identity.Name;
+        ColorHex = identity.Color;
+        Color = ParseColor(
+            hex: identity.Color,
+            fallbackHex: m_neutralColor
+        );
+        m_moveSpeed = ReadFixed(
+            document.State,
+            identity.MoveSpeedState
+        );
+        m_turnSpeed = ReadFixed(
+            document.State,
+            identity.TurnSpeedState
+        );
+        Bindings = document.BindingOverlays.FirstOrDefault()?.Document;
+        Hud = document.Hud.Panels.FirstOrDefault();
+        // Control feel travels with the profile exactly as the two layers above do: read off this identity's OWN
+        // document, delivered on the same selection that delivers its bindings and HUD.
+        SeatLook = document.PlayerDefaults.SeatLook;
+    }
+
     /// <summary>Changes display identity in the owned world.</summary>
     /// <param name="name">The new display name.</param>
     /// <param name="colorHex">The new authored color, as <c>#RRGGBB</c>.</param>

@@ -157,7 +157,7 @@ public sealed partial class WorldReplayTape {
             !completed ||
             (drive.ForkName is not { } forkName)
         ) {
-            m_mode = WorldReplayMode.Idle;
+            SetMode(mode: WorldReplayMode.Idle);
             RefreshCapture();
 
             return;
@@ -172,6 +172,7 @@ public sealed partial class WorldReplayTape {
 
         m_recordName = forkName;
         m_definitionJson = source.DefinitionJson;
+        m_startCheckpoint = source.StartCheckpoint;
         m_recordRateHz = source.SimulationRate;
         m_pipelineSourceDirectory = source.PipelineSourceDirectory;
         m_documentDirectory = source.DocumentDirectory;
@@ -199,7 +200,7 @@ public sealed partial class WorldReplayTape {
             }
         }
 
-        m_mode = WorldReplayMode.Recording;
+        SetMode(mode: WorldReplayMode.Recording);
         RefreshCapture();
         if (m_liveServer.Output.HasNarrationSink) {
             m_liveServer.Output.Narrate(
@@ -309,35 +310,41 @@ public sealed partial class WorldReplayTape {
     // pipeline), then the complete authority checkpoint a fresh server reaches after the recorded seats join.
     // This resets clocks, memory, decisions, latches, grants, and held input as well as the population image.
     private string? ResetLiveWorldToBootImage(WorldReplaySnapshot source, WorldDefinition definition, string? documentPath) {
-        var population = new WorldPopulation(definition: definition);
-        using var machines = m_machineHostFactory(
-            definition.Screens,
-            m_engines,
-            documentPath,
-            null
-        );
-        var shadow = new WorldServer(
-            definition: definition,
-            population: population,
-            profiles: m_profiles,
-            envelope: new WorldRenderEnvelope(),
-            machines: machines
-        );
+        // A tape that starts from a checkpoint carries its whole starting authority state; one that starts from the
+        // boot image has it rebuilt here, on a shadow with the recorded seats joined.
+        var checkpoint = source.StartCheckpoint;
 
-        source.SeatRecordedSeats(
-            definition: definition,
-            population: population,
-            profiles: m_profiles,
-            server: shadow
-        );
-        // A population-only reset leaves the old clock, latches, decisions, and held input alive.
-        // Reuse the complete authority checkpoint so a live drive starts from the same state as offline replay.
-        if (!shadow.TryCaptureCheckpoint(
-            WorldAuthorityHostRowCheckpoint.Empty,
-            out var checkpoint,
-            out var reason
-        )) {
-            return $"the replay boot image could not be captured: {reason}";
+        if (checkpoint is null) {
+            var population = new WorldPopulation(definition: definition);
+            using var machines = m_machineHostFactory(
+                definition.Screens,
+                m_engines,
+                documentPath,
+                null
+            );
+            var shadow = new WorldServer(
+                definition: definition,
+                population: population,
+                profiles: m_profiles,
+                envelope: new WorldRenderEnvelope(),
+                machines: machines
+            );
+
+            source.SeatRecordedSeats(
+                definition: definition,
+                population: population,
+                profiles: m_profiles,
+                server: shadow
+            );
+            // A population-only reset leaves the old clock, latches, decisions, and held input alive.
+            // Reuse the complete authority checkpoint so a live drive starts from the same state as offline replay.
+            if (!shadow.TryCaptureCheckpoint(
+                WorldAuthorityHostRowCheckpoint.Empty,
+                out checkpoint,
+                out var reason
+            )) {
+                return $"the replay boot image could not be captured: {reason}";
+            }
         }
         return m_liveServer.ExecuteAuthorityOperation<string?>(operation: () => {
             if (m_liveServer.Persistence.ReplayTimelineResetRefusal() is { } refusal) { return refusal; }
@@ -547,7 +554,7 @@ public sealed partial class WorldReplayTape {
             Target = target,
         };
         m_transport.InputMasked = true;
-        m_mode = WorldReplayMode.Replaying;
+        SetMode(mode: WorldReplayMode.Replaying);
         RefreshCapture();
         TimelineRestored?.Invoke();
         refusal = "";
