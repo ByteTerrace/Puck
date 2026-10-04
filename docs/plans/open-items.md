@@ -232,10 +232,10 @@ Every package below carries its own check on the programme page; tick it there a
   - [ ] P18-6: a cadence per pass, so a sky-only change runs only the sky and the composite (the generic retained-resource, signature, standing-counter and failure-recovery foundation has landed; SDF change classes, pass scheduling and temporal-history integration remain).
   - [ ] P18-7: celestial bodies with light binding and illumination, and up to four shadowed lights chosen by slot and tier, a slot changing hands by a counted crossfade.
   - [ ] P18-8: the open, ordered layer stack with one module per kind, the sky frame, per-layer tiers, one noise module and the `skies.puck` presets.
-  - [ ] P18-9: ambient and reflection derived from the same sky through a shared environment map, replacing the hemisphere light, the horizon and the softboxes.
-  - [ ] P18-10: the atmosphere: fog, height fog, haze, a medium, and the bounded media under it.
+  - [ ] P18-9: sky-derived SH ambient, reflection gains and analytic panel layers are implemented; device laws, ambient-from-sky, parity and counted ceiling recording remain open.
+  - [ ] P18-10: atmosphere fog, height fog, haze, a medium, and bounded media are implemented; combined verification, device laws, canaries, parity and the RTX 2060 sky ceilings remain.
   - [ ] P18-11: infinity views, a sky or a body that shows another world or far SDF geometry, with a per-world cap on infinity views refused by name. Routed seats and fully disclosed windows onto a live local endpoint share its residency; other session screens retain separate residencies. Camera views render as views of the world's own residency. These sharing paths are available to P18-11; its view routing and quality levers remain to be implemented.
-  - [ ] P18-12: the sky in the editor's inspector, reload, compare and save, with clock levers and sky debug views.
+  - [ ] P18-12: the open sky stack and separate atmosphere in the inspector, reload, compare and save, with presentation clock levers, per-row solo/mute and sky-cost diagnostics are implemented; combined CPU proofs, device laws, canaries and parity remain owed.
   - [ ] P18-13: temporal amortization of secondary shadows, following P15-5.
   - [ ] P18-14: the floor tier's sky defaults, the lead's call from the counted rows.
 - [ ] Later display work, unscheduled: HDR calibration, per-display metadata, and HDR on the Steam Deck OLED under Linux.

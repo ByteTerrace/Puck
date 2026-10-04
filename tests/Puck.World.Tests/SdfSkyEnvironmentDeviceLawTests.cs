@@ -17,8 +17,9 @@ namespace Puck.World.Tests;
 /// texel's channel within one half-float step of it, and reduce it to the reference's projection of the map they wrote
 /// (<see cref="SdfSkyEnvironment.Project"/>) within 1e-4 of the first coefficient's largest channel, for the default look's
 /// gradient, a four-stop sky with a bright disc and a covering cloud layer, neither of which the map holds, and a tilted
-/// sky frame under a second, turned gradient the lighting alone sees, masked to a cone and multiplied over the first. The
-/// map counts one sky evaluation a lit layer and one texel written a texel, and the reduction nine texels and no
+/// sky frame under a second, turned gradient the lighting alone sees, masked to a cone and multiplied over the first,
+/// two analytic panels, and every lighting-capable procedural kind. The
+/// map counts one sky evaluation a lit layer and two plane texels written per direction, and the reduction nine texels and no
 /// evaluation; two runs on one device write the same bytes. Every binding the kernels do not read holds a filler of its
 /// kind.
 /// </summary>
@@ -43,21 +44,36 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
     }
 
     private static void Verify(GpuDeviceServices services, string extension) {
-        foreach (var (sky, litLayers) in new[] { (new SdfSky(), 1L), (FourStops(), 1L), (Tilted(), 2L) }) {
+        foreach (var (sky, litLayers) in new[] {
+            (new SdfSky(), 1L), (FourStops(), 1L), (Tilted(), 2L), (Panels(), 3L),
+            (Lit(new SdfSkyStars { Brightness = 2f, Density = 16f }), 1L),
+            (Lit(new SdfSkyClouds { Coverage = .6f }), 1L),
+            (Lit(new SdfSkyAurora { Intensity = 1f }), 1L),
+            (Lit(new SdfSkyNoise { Coverage = .5f }), 1L),
+            (Lit(new SdfSkyPattern()), 1L),
+        }) {
             var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-            sky.Pack(block: out var block, details: new SdfSkyDetails(), layers: layers, lights: SdfLights.Default(), softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]);
+            sky.Pack(block: out var block, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: SdfLights.Default());
 
             var expected = new Vector3[SdfSkyEnvironment.Texels];
 
             SdfSkyEnvironment.Render(block: in block, layers: layers, map: expected);
+            var reflectionLayers = layers.ToArray();
+            for (var index = 0; index < reflectionLayers.Length; index++) {
+                if (reflectionLayers[index].Kind == SdfSkyLayerKind.Panel) {
+                    reflectionLayers[index].Visibility = SdfSkyVisibility.Camera;
+                }
+            }
+            var expectedReflection = new Vector3[SdfSkyEnvironment.Texels];
+            SdfSkyEnvironment.Render(block: in block, layers: reflectionLayers, map: expectedReflection);
 
             var first = Run(block: block, extension: extension, layers: layers, services: services);
             var second = Run(block: block, extension: extension, layers: layers, services: services);
 
             Assert.Equal(actual: second.Map, expected: first.Map);
             Assert.Equal(actual: second.Coefficients, expected: first.Coefficients);
-            Assert.Equal(actual: (first.MapTexels, first.ReduceTexels), expected: (4096L, 9L));
+            Assert.Equal(actual: (first.MapTexels, first.ReduceTexels), expected: (8192L, 9L));
             // One evaluation a lit layer a texel, but where a mask leaves it out.
             Assert.InRange(actual: first.Evaluations, high: (4096L * litLayers), low: (4096L + ((litLayers - 1L) * 64L)));
 
@@ -74,6 +90,12 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
                 );
                 foreach (var (actual, reference) in new[] { (map[texel].X, expected[texel].X), (map[texel].Y, expected[texel].Y), (map[texel].Z, expected[texel].Z) }) {
                     Assert.True(condition: (MathF.Abs(x: (actual - reference)) <= HalfStep(value: reference)), userMessage: $"Texel {texel} holds {map[texel]}; the reference holds {expected[texel]}.");
+                }
+                var reflectionOffset = (SdfSkyEnvironment.Texels + texel) * SdfSkyEnvironment.TexelBytes;
+                for (var channel = 0; channel < 3; channel++) {
+                    var actual = (float)BitConverter.UInt16BitsToHalf(BinaryPrimitives.ReadUInt16LittleEndian(first.Map.AsSpan(reflectionOffset + channel * 2)));
+                    var reference = expectedReflection[texel][channel];
+                    Assert.True(MathF.Abs(actual - reference) <= HalfStep(reference), $"Reflection texel {texel}, channel {channel}: {actual}, reference {reference}.");
                 }
             }
 
@@ -95,6 +117,18 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
                 Assert.True(condition: (MathF.Max(x: difference.X, y: MathF.Max(x: difference.Y, y: difference.Z)) <= bound), userMessage: $"Coefficient {index} is {actual}; the reference projects {projected[index]}.");
             }
         }
+    }
+    private static SdfSky Lit<T>(T parameters) where T : unmanaged, ISdfSkyKind {
+        var sky = new SdfSky();
+        sky.ClearLayers();
+        sky.Add(parameters, "lit", visibility: SdfSkyVisibility.Lighting);
+        return sky;
+    }
+    private static SdfSky Panels() {
+        var sky = new SdfSky();
+        sky.Add(new SdfSkyPanel { Direction = Vector3.UnitY, Size = new Vector2(.2f, .6f), Color = new Vector3(1f, .5f, .2f), Intensity = 2f, Blur = .1f }, "key", blend: SdfSkyBlend.Add, visibility: SdfSkyVisibility.Lighting);
+        sky.Add(new SdfSkyPanel { Direction = Vector3.UnitZ, Size = new Vector2(.4f, .1f), Color = Vector3.One, Intensity = .5f, Blur = .05f }, "fill", blend: SdfSkyBlend.Add, visibility: SdfSkyVisibility.Lighting);
+        return sky;
     }
     // A sky of four stops, a bright disc on the default sun and clouds over most of it.
     private static SdfSky FourStops() {

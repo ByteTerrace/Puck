@@ -200,7 +200,6 @@ The full slot and quality policy belongs to
 | `$type` | Fields |
 |---|---|
 | `directional` | `direction` (nonzero), `color`, `weight` ≥ 0, `angularRadius` in [0, atan(0.3)], `shadow`, `name` |
-| `hemisphere` | `color`, `base` ≥ 0, `gradient` |
 | `rim` | `color`, `weight` ≥ 0, `power` ≥ 0 |
 | `point` | `position`, `radius` > 0, `color`, `weight` ≥ 0, `anchor` |
 | `occluder` | `position`, `radius` > 0, `weight` in [0, 1], `anchor` |
@@ -217,12 +216,14 @@ closes the gate.
 
 ### Environment
 
-`render.environment.softboxes` is up to 4 `{ direction, size, color, weight,
-blur }`, with `direction` nonzero and both `size` axes strictly positive, plus
-`horizon.low` and `horizon.high`. This is what a `coat` or a high `metal`
-actually reflects — without softboxes an automotive material has nothing to
-catch and reads flat. A softbox uses `length(size)` as its angular radius;
-its footprint is isotropic. Unequal size axes do not produce a strip highlight.
+`render.environment` carries bindable `ambient` and `reflection` gains, each
+nonnegative and defaulting to one. Zero disables that contribution. The shared
+sky supplies SH ambient and map reflections. A repeatable `panel` sky layer
+adds an analytic rectangular highlight: `direction`, positive angular
+half-extents `size` in radians, `color`, nonnegative `intensity` and `blur`.
+Unequal axes make strip highlights. Panels default to lighting-only visibility
+and add blending; all ordinary layer controls apply. Colour, intensity and blur
+may be keyed. Author a lighting-only dark gradient and panels for a studio.
 
 `render.tonemap` is `None` or `Filmic`.
 
@@ -230,16 +231,18 @@ its footprint is isotropic. Unequal size axes do not produce a strip highlight.
 
 `render.sky` is an open stack of at most eight layers composited in their
 authored order, each by its `blend` (`over`, `add`, `multiply`, `screen`), a kind
-as often as authored; fog, the air, is read on its own and at most once. The kinds
+as often as authored; the air before it (fog, haze, a medium) is `render.atmosphere`'s,
+never a layer. The kinds
 are `gradient` (2 to 4 stops with `elevation` in [-1, 1] strictly ascending),
 `stars`, `clouds`, `aurora`, `noise`, `pattern`, `panorama` (a declared screen's
 image by direction) and `sunDisc` (a directional light slot, a glow or a
-`texture { screen }`). Every layer but fog also takes `opacity`, a `mask` (an
+`texture { screen }`). Every layer also takes `opacity`, a `mask` (an
 elevation `band` or a `cone`, with a `feather`), a `transform` (`turn`, `tilt`), a
 `clock`, a `visibility` (`camera`, `lighting`, `both`) and the lowest `tier` it
 draws at; `frame { up }` turns the whole sky. The layers the camera sees cut into
 at most two field runs above their lowest run. `skies.puck` holds preset
-templates (`clearDay`, `starryNight`, `polarNight`, `overcast`).
+templates (`clearDay`, `starryNight`, `polarNight`, `overcast`) and their air
+(`clearDayAir`, `overcastAir`, expanded inside `atmosphere`).
 
 ### Everything else
 

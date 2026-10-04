@@ -90,6 +90,9 @@ prototypes {
 }
 
 render {
+  atmosphere {
+    fog { density: 0.012 }
+  }
   sky {
     layers [
       gradient(stops: [
@@ -107,7 +110,6 @@ render {
         }
       ]
       )
-      fog(density: 0.012)
       sunDisc(light: 0, radius: 0.045, intensity: 2)
       stars(density: 32, brightness: 4, seed: 3, twinkle: {
         share: 0

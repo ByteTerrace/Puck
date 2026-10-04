@@ -285,7 +285,7 @@ public sealed class OfficialManifestTests {
         );
     }
     [InlineData("")]
-    [InlineData("standard.world.json")]
+    [InlineData("standard.puck")]
     [Theory]
     public void Validate_RefusesADocumentSourceThatNamesNoSourceFile(string source) {
         var bad = ValidDocument() with {

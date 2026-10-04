@@ -5,7 +5,7 @@
 #define SKY_KINDS_GRADIENT_HLSLI
 
 float4 sdfSkyGradientLayer(SdfSkyGradient gradient, SdfSkyLayer layer, SdfSkySample sample) {
-    puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 0u);
 
     float3 colors[SDF_SKY_MAX_STOPS] = { gradient.Color0, gradient.Color1, gradient.Color2, gradient.Color3 };
     float elevations[SDF_SKY_MAX_STOPS] = { gradient.Elevation0, gradient.Elevation1, gradient.Elevation2, gradient.Elevation3 };

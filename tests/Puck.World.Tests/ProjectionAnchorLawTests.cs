@@ -67,7 +67,7 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
                 Subject: null
             )],
             DynamicsRaw = [new DynamicsRow(Damping: 0.6f, Frequency: 1.5f, Name: "chase", Response: 0f)],
-            RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: Density, Name: "haze")])),
+            RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: Density))),
             TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: Clock, State: Clock)]),
         }).WithWorldState(rows: [.. document.State.Where(predicate: static existing => (existing.Name.Value != Clock)), row]);
     }
@@ -107,21 +107,19 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
     }
     // The authority's presentation and the recipient's, each through a real state mirror at the same tick: the clock's
     // phase and the keyed fog it resolves.
-    // The records the kernels read for a resolved environment: the light table, and the sky's block, layers and
-    // softboxes as the sky packs them over those lights.
-    private static (SdfLight[] Lights, SdfSkyBlock Block, SdfSkyLayer[] Stops, SdfSoftbox[] Softboxes) Packed(WorldResolvedEnvironment environment) {
+    // The records the kernels read: the light table, sky block and packed layers.
+    private static (SdfLight[] Lights, SdfSkyBlock Block, SdfSkyLayer[] Stops) Packed(WorldResolvedEnvironment environment) {
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
-        var softboxes = new SdfSoftbox[SdfSky.MaxSoftboxes];
 
         environment.Sky.Pack(
             block: out var block,
             details: new SdfSkyDetails(),
+            farDistance: 40f,
             layers: layers,
-            lights: environment.Lights,
-            softboxes: softboxes
+            lights: environment.Lights
         );
 
-        return (environment.Lights.Records.ToArray(), block, layers, softboxes);
+        return (environment.Lights.Records.ToArray(), block, layers);
     }
     private static void AssertPresentsAsTheHost(WorldDefinition host, WorldDefinition recipient, ulong tick, ulong engineTick) {
         var hostMirror = ClientFixtures.StateMirror(definition: host, engineTick: engineTick, tick: tick);
@@ -161,7 +159,6 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
             Assert.Equal(actual: actual.Lights, expected: expected.Lights);
             Assert.Equal(actual: actual.Block, expected: expected.Block);
             Assert.Equal(actual: actual.Stops, expected: expected.Stops);
-            Assert.Equal(actual: actual.Softboxes, expected: expected.Softboxes);
         }
     }
     [Fact]
@@ -416,7 +413,7 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
             var document = Document(row: Row(raw: 0L));
 
             return (document with {
-                RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: new BindableScalar(binding: "state.secret"), Name: "haze")])),
+                RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: new BindableScalar(binding: "state.secret")))),
             }).WithWorldState(rows: [
                 .. document.State,
                 new WorldStateRow(
@@ -446,7 +443,7 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
 
                 // The observer is handed nothing: neither the value at its fallback nor any other member.
                 Assert.Same(expected: WorldProjection.Undisclosed, actual: mirror.Definition);
-                Assert.Equal(expected: "render.sky.layers[0].density binds state row 'secret' this recipient may not read; a hidden source sends no derived value.", actual: thrown.Message);
+                Assert.Equal(expected: "render.atmosphere.fog.density binds state row 'secret' this recipient may not read; a hidden source sends no derived value.", actual: thrown.Message);
                 Assert.Contains(actualString: refusal, expectedSubstring: "binds state row 'secret'");
 
                 return (observation is not null);
@@ -461,7 +458,7 @@ public sealed partial class ProjectionAnchorLawTests(ITestOutputHelper output) {
 
         static long Raw(double value) => FixedQ4816.FromDouble(value: value).Value;
         var definition = (document with {
-            RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: density, Name: "haze")])),
+            RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: density))),
         }).WithWorldState(rows: [
             .. document.State,
             new WorldStateRow(

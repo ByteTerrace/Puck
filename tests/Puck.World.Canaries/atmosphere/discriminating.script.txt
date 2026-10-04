@@ -1,0 +1,12 @@
+# The same two views with the haze gone, so neither direction scatters the sun's light and the sky shows its own black.
+world.cadence off
+world.wait ready 180
+world.row.set render atmosphere.haze.amount 0
+world.wait 12
+world.screenshot {run}/toward.png
+world.wait captures 30
+world.row.set cameras haze-cam rig.operations[1].subject.point [0,0.4,4]
+world.wait 12
+world.counters gpu
+world.screenshot {run}/away.png
+world.wait captures 30

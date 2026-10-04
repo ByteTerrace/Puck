@@ -29,13 +29,13 @@ float4 sdfSkyStarsLayer(SdfSkyStars stars, SdfSkyLayer layer, SdfSkySample sampl
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 0u);
 
     float density = max(stars.Density, 1.0);
     float2 cellF = (((sdfOctEncode(direction) * 0.5) + 0.5) * density);
     float2 cellId = floor(cellF);
     uint3 h = sdfPcg3d(uint3(asuint(cellId.x), asuint(cellId.y), stars.Seed));
-    puckCountDetail(layer.Detail, 0u, 0u, 0u, 1u, 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 0u, 1u, 0u);
     float existence = ((float)h.x * SDF_INV_2POW32);
 
     if (existence > stars.Sparsity) {
@@ -43,7 +43,7 @@ float4 sdfSkyStarsLayer(SdfSkyStars stars, SdfSkyLayer layer, SdfSkySample sampl
     }
 
     uint3 h2 = sdfPcg3d(h);
-    puckCountDetail(layer.Detail, 0u, 0u, 0u, 1u, 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 0u, 1u, 0u);
     float luminosity = min(1.0, (stars.LuminosityFloor * pow(max(((float)h2.x * SDF_INV_2POW32), 1e-6), -0.6666667)));
     float spectrum = (((float)h2.y * SDF_INV_2POW32) * 6.0);
     uint spectrumIndex = min((uint)spectrum, 5u);
@@ -53,7 +53,7 @@ float4 sdfSkyStarsLayer(SdfSkyStars stars, SdfSkyLayer layer, SdfSkySample sampl
         // Two sines at distinct small harmonics of the period, phase-offset per star, multiplied: an irregular dip
         // pattern that still closes exactly at the period boundary, so the phase's wrap never shows a seam.
         uint3 h3 = sdfPcg3d(h2);
-        puckCountDetail(layer.Detail, 0u, 0u, 0u, 1u, 0u);
+        sdfCountSky(layer.Detail, 0u, 0u, 0u, 1u, 0u);
         float phase = stars.TwinklePhase;
         float harmonicA = (float)(1u + (h3.x % 3u));
         float harmonicB = (float)(2u + (h3.y % 3u));

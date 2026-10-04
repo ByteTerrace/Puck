@@ -90,6 +90,14 @@ prototypes {
 }
 
 render {
+  atmosphere {
+    fog {
+      density {
+        clock: skyMode
+        keys [{ at: 0, value: 0.012 }, { at: 0.5, value: 0.035 }]
+      }
+    }
+  }
   sky {
     layers [
       gradient(stops: [
@@ -107,7 +115,6 @@ render {
         }
       ], name: "air"
       )
-      fog(density: 0.012, name: "haze")
       sunDisc(light: 0, radius: 0.045, intensity: 2, name: "sun")
       stars(density: 32, brightness: 4, seed: 3, twinkle: {
         share: 0
@@ -116,6 +123,7 @@ render {
       }, name: "stars"
       )
       clouds(coverage: 0.4, softness: 0.2, scale: 0.5, seed: 5, color: "#91A5C8", drift: [0, 0], shear: [0, 0], spin: 0, curl: 0.3, name: "clouds")
+      panel(name: "studio-key", direction: [0.2, 1, 0.3], size: [0.2, 0.5], color: "#FFF4E8", intensity: 2, blur: 0.02, visibility: lighting)
     ]
     clock: skyMode
     keys [
@@ -134,7 +142,6 @@ render {
             }
           ]
           )
-          haze: fog(density: 0.012)
           sun: sunDisc(intensity: 2)
           stars: stars(brightness: 4)
           clouds: clouds(coverage: 0.4)
@@ -155,7 +162,6 @@ render {
             }
           ]
           )
-          haze: fog(density: 0.035)
           sun: sunDisc(intensity: 3)
           stars: stars(brightness: 0.2)
           clouds: clouds(coverage: 0.65)

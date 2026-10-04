@@ -29,6 +29,9 @@ project is for is [`docs/project-map.md`](../../docs/project-map.md).
 `world.inspect` prints the same formatted snapshot. It includes the completed
 GPU hit and captured palette address, point, normal, pixel cost, selection,
 camera, ticks, render levers, counted work, capacity and reload refusal.
+The acting seat's sky and air use the same text as `world.lighting`, followed
+by its named clocks' presented ticks, phases, holds and rates. Long sky text
+uses the panel's ordinary wrapping and elision.
 Point and normal read `unavailable` until an inspector surface sample completes;
 an ordinary hover still reports its measured identity, distance and pixel cost.
 A passthrough pane follows its own rendered residency, scale and shading quality;
@@ -36,6 +39,11 @@ its placement costs and pass timings use that same view.
 `world.cost <placement>` reads live placement ownership; bare `world.cost`
 uses the completed pointer hit, and `world.cost top [n]` lists the largest rows.
 Shared program overhead is reported separately and reconciles to `world.budget`.
+`world.cost sky` prints each node's latest completed sky, composite and
+environment passes, including the gradient, disc, stars and clouds detail
+rows. Evaluations, hashes and texture loads are counted where they run. Fog's
+environment-map reads belong to the gradient row. A skipped pass has no
+counts; a retained submission keeps its identity and reports historical work.
 These are presentation queries and never submit simulation input.
 
 Every inspector line fits the panel's 96 columns: a long line wraps onto
@@ -639,7 +647,7 @@ reads back. The `pipeline.*` verbs address `views.graphs` rows by name.
 Start the three-pass feedback example from the repository root:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/pipeline.world.json --state-dir artifacts/pipeline/state
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/pipeline.puck --state-dir artifacts/pipeline/state
 ```
 
 The ink simulation feeds a color pass and a fullscreen finish. Drag the pointer
@@ -1006,7 +1014,7 @@ Facts a script needs:
 - `WorldRecordingCommandModule.cs`—the recording-session command surface;
   generic frame capture lives in Hosting and is driven by Launcher.
 - `Assets/`—the one shipped world, `worlds/puck.world.json` (the island; the
-  boot default), a delta over `worlds/standard.world.json` (the standards as
+  boot default), a delta over `worlds/standard.puck` (the standards as
   state, the safety net under everything at y = -64, and its debug texture);
   its districts under `worlds/modules/` (`modules/README.md`) and the tabletop
   games under `worlds/games/`, each an imported fragment; the corner shards
@@ -1938,7 +1946,7 @@ All render levers are live verbs with no-arg echoes of the current value:
 `world.temporal`, `world.upscale-sharpness`, `world.sky-quality`,
 `world.target`, `world.shadow-mask`,
 `world.shadow-march`, `world.ao-quality`, `world.view-refresh`,
-`world.debug-view`, `world.fps`. `world.quality low|medium|high` applies the
+`world.debug-view`, `world.sky-layer`, `world.fps`. `world.quality low|medium|high` applies the
 world's own `render.low`, `render.medium` or `render.high` preset, each a
 shadow tier, a shadow-slot policy, an ambient-occlusion switch, a
 temporal-reconstruction switch, a dynamic-resolution switch, render-scale
@@ -1997,8 +2005,8 @@ monotonic for a large instance field—read both `world.counters gpu` and
 `world.fps` at the intended population and view layout. `world.budget` is the DERIVED cost
 sheet, not a lever: the live render program's packed words/instances against
 their frozen envelopes, the Lipschitz step scale and march multiplier, the far
-distance with its reach multiplier, horizon-ray step tax, and far-plane fog
-remnant, the field lattice program's node/cadence counts and exact
+distance with its reach multiplier, horizon-ray step tax, far-plane fog
+remnant and the atmosphere kinds the composite may evaluate at a pixel, the field lattice program's node/cadence counts and exact
 full-cell/body-slot pass costs, and the state row count—
 how an authored choice's price becomes legible instead of a silent frame tax.
 Navigation adds its compiled cell count, fixed A*/shared-tree workspace bytes,
@@ -2076,24 +2084,34 @@ not a loadable or durable asset format.
 `render.farDistance` is the depth every camera march ends at (default 40 when
 unauthored; 1..8192), re-read on every definition revision like the lighting
 below—geometry beyond it is never marched, so an infinite ground plane shows
-a horizon curve there unless the `render.sky` fog layer absorbs it first.
+a horizon curve there unless the `render.atmosphere` fog absorbs it first.
 
-Two document sections author the scene's lighting instead of a verb, re-read
-on every definition revision (a live edit lands on the next frame).
-`render.lighting.lights[]` is a typed list, at most eight, each `$type`
-`directional` (`direction`, `color`, `weight`, `angularRadius`, `shadow`), `hemisphere`
-(`color`, `base`, `gradient`) or `rim` (`color`, `weight`, `power`, added after
-the material shade); absent, the pinned sun and hemisphere render.
-`render.lighting.curvature` adds cavity darkening, ridge light and an ink outline
-read through the `inkLow`/`inkHigh` curvature band (1 / fillet radius).
-`render.sky.layers[]` is a stack of `$type` `gradient` (two to four `stops` of
-`elevation`/`color`), `fog`, `sunDisc` (bound to a light slot), `stars` (each
-star hash-dealt its own blackbody colour and apparent luminosity;
-`twinkle { share, depth, rate }` scintillates a share of them on the tick clock)
-and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
-—a hashed, warped noise layer over everything above it, all on the tick clock),
-composited in that order whatever order they are authored in. Every field is
-optional individually, and a layer may carry a `name`. A directional's
+The lighting, sky, atmosphere and environment sections are re-read on every definition
+revision. `render.lighting.lights[]` holds at most eight typed lights:
+`directional`, `point`, `occluder` and `rim`. An absent list supplies the
+pinned sun. `render.lighting.curvature` adds cavity darkening, ridge light and
+an ink outline through the `inkLow`/`inkHigh` curvature band.
+
+`render.sky.layers[]` is the authored-order stack of repeatable `gradient`,
+`sunDisc`, `stars`, `clouds`, `aurora`, `noise`, `pattern`, `panorama`
+and `panel` layers, with opacity, blend, visibility, masks, transforms and
+quality tiers. `render.atmosphere` controls the air outside that stack: a
+`fog { density, color, height { base, falloff } }` in-scatters the sky or its
+authored colour; a `haze { amount, anisotropy, height }` scatters the sky and
+directional lights; a `medium { surface, extinction, color }` fills the space
+below a level surface. An absent section supplies the default fog, and a
+present section contains exactly its authored kinds. A bounded volume's
+`scatter` is the share of its extinction that scatters directional light.
+Lighting-visible layers supply the shared environment map and second-order
+spherical harmonics. `render.environment.ambient` scales the sky irradiance
+through AO; `reflection` scales map reflections with analytic rectangular
+panels. Both gains default to one and skip their shading work at zero.
+A `panel` defaults to lighting-only visibility and additive blending; its
+colour, intensity and blur use the same bindings and key clocks as the sky.
+The [frame rendering guide](../../docs/rendering/sdf/handbook/frame-rendering.md)
+describes the environment's refresh threshold and counted work.
+
+A directional's
 `shadow` is `always`, `auto` or `never` (the default). `always` and `auto`
 require a unique light `name`; `never` consumes no shadow slot. Each delivered
 tick selects `always` lights first, then `auto` lights by their tick-state color
@@ -2170,8 +2188,8 @@ across a whole turn, a direction along the great circle, a scalar or vector
 linearly—and the earlier key's `ease` (`Linear`, `Smooth` or `Step`) shapes
 the time. `render.lighting` and `render.sky` may also be keyed whole: a
 section's `clock` and `keys` hold partial records that address a light or a
-layer by its `name`, of its own kind (`keys [ { at: 0, layers { haze:
-fog(density: 0) } } ]`), each field keyed through the keys that state it. A
+layer by its `name`, of its own kind (`keys [ { at: 0, layers { sun:
+sunDisc(intensity: 0) } } ]`), each field keyed through the keys that state it. A
 key states values only: a count, a seed, a kind, a name, a light's shadowing,
 the sun disc's light slot and a gradient's stop count are structure and
 refused by name, as is a field keyed both by its own keys and by the
@@ -2190,11 +2208,44 @@ start in engine ticks, its phase and reading at the authority's tick, and how
 many keyed values the presentation has resolved, which rises only while a
 clock a key reads moves.
 
+`world.timeline hold <clock>` keeps the current presented reading;
+`world.timeline at <clock> <engine-tick>` scrubs to an exact unsigned engine
+tick and holds it. `world.timeline rate <clock> <multiplier>` selects a finite,
+nonnegative rate without moving the current reading, and `world.timeline run
+<clock>` resumes from it. A state clock samples the delivered row at the
+requested tick and holds that phase; this is a preview of the row's current
+prediction, not a stored simulation history. The controls affect presentation
+keys and their integrated rates. The simulation, its state rows and its tick
+continue normally. Clock previews never save or enter replay.
+
+`world.sky-layer solo <index>` auditions one authored sky row; `solo off`
+restores the stack. `world.sky-layer mute <index> on|off` toggles a row, with
+mute taking precedence over solo. Indices are the zero-based `sky[index]`
+rows in `world.lighting`. These render levers apply across World views and
+session screens and never save. Solo removes the default gradient; muting an
+authored gradient keeps that contribution absent. Atmosphere remains the
+separate fog, haze and medium authored under `render.atmosphere`.
+
+`world.debug-view sky-cost` shows evaluations in red (one quarter per layer or atmosphere
+evaluation), procedural hashes in green (one sixty-fourth per hash), and
+texture loads in blue (one sixteenth per load), clamped at one. Field-run
+cost is filtered with the field's pixels and combined with the output
+pixel's point and atmosphere work. It is cost attributed to a pixel; `world.cost sky`
+reports exact completed pass totals. `world.debug-view off` restores the image.
+
+Sky edits use the ordinary authoring loop: `world.compare hold`, edit the
+sky's `.puck` rows, `world.reload`, then `world.compare diff`, `split` or
+`wipe`. `world.save <path.puck>` writes the live sky back through the source
+printer and preserves unrelated authored text. The CPU sky-edit law drives
+those commands with the reference environment map; rendered comparisons and
+the held-clock submission gate remain GPU verification legs.
+
 Every scalar or angle a presentation section authors declares one domain
 (`WorldValueFields`): a light's weight, radius, power and angular radius, the
-curvature gains and ink band, a stop's elevation, the fog's density, the sun
-disc's radius and intensity, the stars' brightness and twinkle, the clouds'
-coverage, softness and scale, the theme's bloom and scrim alphas, a marker's
+curvature gains and ink band, a stop's elevation, the sun disc's radius and
+intensity, the stars' brightness and twinkle, the clouds' coverage, softness
+and scale, the atmosphere's fog density, height falloff, haze amount and
+anisotropy and medium extinction, the theme's bloom and scrim alphas, a marker's
 chip and ring alphas, and a camera program's operands (blend weight, path
 fraction, orbit angles, field of view, select key). The validator refuses a literal or a key outside
 its field's domain by name, and a load refuses a field bound to a state row

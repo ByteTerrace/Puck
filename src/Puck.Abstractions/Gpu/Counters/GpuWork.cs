@@ -42,10 +42,19 @@ public static partial class GpuWork {
     internal const int SkyEvaluationsColumn = 18;
     internal const int SkyHashesColumn = 19;
     internal const int SkyTextureLoadsColumn = 20;
-    internal const int SubmissionColumnCount = (ShadowStepsFirstColumn + ShadowSlotCount);
+    internal const int EnvironmentProjectionsColumn = (ShadowPixelsColumn + 1);
+    internal const int EnvironmentProjectionTexelsColumn = (EnvironmentProjectionsColumn + 1);
+    internal const int EnvironmentSkippedColumn = (EnvironmentProjectionsColumn + 2);
+    internal const int SubmissionColumnCount = (EnvironmentProjectionsColumn + 3);
     internal const int TexelsWrittenColumn = 16;
     internal const int TimestampPoolsCreatedIndex = 6;
 
+    /// <summary>Gets the number of CPU sky projections used to decide environment refreshes.</summary>
+    public static WorkKind EnvironmentProjections { get; } = new(name: "gpu.environment.projections", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the texels evaluated by CPU sky projections.</summary>
+    public static WorkKind EnvironmentProjectionTexels { get; } = new(name: "gpu.environment.projection-texels", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the changed candidates whose environment re-render was skipped below one display code.</summary>
+    public static WorkKind EnvironmentSkipped { get; } = new(name: "gpu.environment.skipped", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting compute dispatches whose group counts the CPU supplies.</summary>
     public static WorkKind Dispatches { get; } = new(name: "gpu.dispatches", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting compute dispatches whose group counts the GPU reads from a buffer.</summary>
@@ -138,7 +147,7 @@ public static partial class GpuWork {
     // A nested holder initializes after every kind above, whatever order the members are declared in. Each array is
     // filled through the column constants, so a kind's index is its column by construction.
     private static class Order {
-        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps];
+        internal static readonly WorkKind[] Kernel = [MarchSteps, TexelsWritten, SkyEvaluations, SkyHashes, SkyTextureLoads, .. ShadowSteps, ShadowPixels];
         internal static readonly WorkKind[] Lifetime = CreateLifetime();
         internal static readonly WorkKind[] Submission = CreateSubmission();
 
@@ -158,6 +167,10 @@ public static partial class GpuWork {
         private static WorkKind[] CreateSubmission() {
             var kinds = new WorkKind[SubmissionColumnCount];
 
+            kinds[EnvironmentProjectionsColumn] = EnvironmentProjections;
+            kinds[EnvironmentProjectionTexelsColumn] = EnvironmentProjectionTexels;
+            kinds[EnvironmentSkippedColumn] = EnvironmentSkipped;
+            kinds[ShadowPixelsColumn] = ShadowPixels;
             kinds[DispatchesColumn] = Dispatches;
             kinds[IndirectDispatchesColumn] = IndirectDispatches;
             kinds[DrawsColumn] = Draws;

@@ -27,7 +27,7 @@ public enum WorldSkyVisibility {
     /// <summary>The camera alone: the sky and composite passes draw it, the environment map leaves it out.</summary>
     [JsonStringEnumMemberName("camera")]
     Camera = 1,
-    /// <summary>The lighting alone: the environment map (the fog's in-scatter) draws it, the camera never sees it.</summary>
+    /// <summary>The lighting alone: the environment map (the atmosphere's in-scatter) draws it, the camera never sees it.</summary>
     [JsonStringEnumMemberName("lighting")]
     Lighting = 2,
     /// <summary>The camera and the lighting.</summary>

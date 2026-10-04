@@ -41,7 +41,7 @@ internal sealed partial class WorldScreenBinder {
 
     /// <summary>Hands the binder the frame the world renders once the presenter has captured it: its packed transforms and
     /// simulation tick, which the camera views filmed it with (<see cref="FilmViews"/>). The routed residencies no scene
-    /// presents any longer are released, and an armed crossing capture is served.</summary>
+    /// presents any longer are released, and an armed crossing capture follows the pinned route and render completion.</summary>
     /// <param name="transforms">The frame's packed dynamic transforms.</param>
     /// <param name="authoritativeTick">The latest authoritative simulation tick available to presentation.</param>
     /// <exception cref="ArgumentNullException"><paramref name="transforms"/> is <see langword="null"/>.</exception>
@@ -51,7 +51,7 @@ internal sealed partial class WorldScreenBinder {
         m_viewTransforms = transforms;
         m_viewAuthoritativeTick = authoritativeTick;
         ReconcileRoutedResidencies();
-        CrossingCapture?.Present();
+        CrossingCapture?.Present(previousFrame: (Runtime?.Render ?? FrameRender.Waiting(reason: "the renderer is not built")));
     }
     /// <summary>Returns the view a view instance renders: a camera registration's view of the world's frame, a session
     /// screen's residency, created the first time the render graph's package asks for it once the views are configured,

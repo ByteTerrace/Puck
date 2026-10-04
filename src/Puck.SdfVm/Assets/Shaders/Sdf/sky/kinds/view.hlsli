@@ -47,7 +47,7 @@ float4 sdfSkyViewLayer(SdfSkyView view, SdfSkyLayer layer, SdfSkySample sample) 
         shown = (mapping.state.x != 0.0);
     }
 
-    puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 1u);
+    sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 1u);
 
     if (!shown) {
         return float4((view.Fallback * view.Intensity), 1.0);

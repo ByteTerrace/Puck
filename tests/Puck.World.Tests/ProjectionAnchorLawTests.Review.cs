@@ -32,7 +32,7 @@ public sealed partial class ProjectionAnchorLawTests {
             Row(cycle: new StateCycle(Output: CycleOutput.Turns, TicksPerStep: 3L), raw: 0L),
         }) {
             var definition = Document(row: row) with {
-                RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: density, Name: "haze")])),
+                RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: density))),
                 TimelineRaw = null,
             };
             using var fixture = Fixtures.FreshServer(definition: definition);
@@ -304,7 +304,7 @@ public sealed partial class ProjectionAnchorLawTests {
             Visibility: new StateVisibility()
         );
         var definition = Document(row: Row(raw: 1000L)) with {
-            RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: density, Name: "haze")])),
+            RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: density))),
         };
 
         definition = definition.WithWorldState(rows: [first, .. definition.State]);
@@ -344,10 +344,10 @@ public sealed partial class ProjectionAnchorLawTests {
         var one = FixedQ4816.FromDouble(value: 1d).Value;
         // An underdamped follower overshoots its target, so the envelope it is clamped to crosses with it.
         var definition = Document(row: Row(dynamics: new StateDynamics(Row: "chase"), max: one, min: 0L, raw: 0L)) with {
-            RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [
-                new WorldRenderSkyLayer.Fog(Density: eased, Name: "eased"),
-                new WorldRenderSkyLayer.SunDisc(Intensity: target, Name: "sun"),
-            ])),
+            RenderRaw = new WorldRenderDefaults(
+                Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: eased)),
+                Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(Intensity: target, Name: "sun")])
+            ),
             TimelineRaw = null,
         };
         using var fixture = Fixtures.FreshServer(definition: definition);

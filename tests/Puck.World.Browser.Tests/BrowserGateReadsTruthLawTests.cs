@@ -56,7 +56,7 @@ public sealed class BrowserGateReadsTruthLawTests {
             "Puck.World",
             "Assets",
             "worlds",
-            "standard.world.json"
+            "standard.puck"
         ));
         var fragmentBytes = ShippedWorldDocuments.Read(path: Path.Combine(
             root,

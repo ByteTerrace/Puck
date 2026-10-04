@@ -228,8 +228,8 @@ public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldHudCur
 /// <param name="Enabled">Whether the world-scope HUD panels render at all — a world-level kill switch independent of
 /// any individual panel's row (a diegetic reveal gate can flip this without editing every panel).</param>
 /// <param name="Cursor">The drawn pointer cursor's presentation policy, or <see langword="null"/> for no drawn
-/// cursor at all — the engine draws no cursor of its own; the standard policy is AUTHORED, in
-/// <c>Assets/worlds/standard.world.json</c>. Whole-row replace semantics apply: a <c>SetHudDefaults</c> authored
+/// cursor at all — the engine draws no cursor of its own; a world AUTHORS the policy or inherits its
+/// basis's. Whole-row replace semantics apply: a <c>SetHudDefaults</c> authored
 /// without it clears any earlier authored policy back to hidden.</param>
 /// <param name="Visible">The visibility condition every world-scope panel is gated by, beside its own, or
 /// <see langword="null"/> for always.</param>
@@ -244,8 +244,7 @@ public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<Wo
     private readonly IReadOnlyList<WorldHudPanel> m_panels = (Panels ?? []);
 
     /// <summary>Gets the inert absence: HUD disabled, no cursor, no panels. The engine holds no HUD policy of its
-    /// own — the standard enabled-with-cursor row is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a
-    /// world inherits it by naming that document as its basis.</summary>
+    /// own — a world AUTHORS its row or inherits it from its basis.</summary>
     public static WorldHudSection Absent { get; } = new(
         Defaults: new WorldHudDefaults(Enabled: false),
         Panels: []

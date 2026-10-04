@@ -66,6 +66,8 @@ internal sealed class WorldInspector(WorldEditorSeats seats, WorldCursorFeed cur
         var mirror = (route?.Endpoint.FollowState() ?? client.StateMirror);
         var pick = ((cursor.Status.Slot == slot) ? cursor.Pick : null);
         var snapshot = new WorldInspectorSnapshot {
+            Definition = route?.Endpoint.Definition ?? client.Definition,
+            Mirror = mirror,
             Slot = slot,
             Pick = pick,
             Camera = (pick?.Sample?.Camera ?? viewports.Seat(slot: slot).Camera),

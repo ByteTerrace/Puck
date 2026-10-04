@@ -964,7 +964,7 @@ These are one-line cautions; the owning pages hold the derivations.
 - **Host uploads go through regions.** Every table the SDF kernels read from
   the host that a residency writes (program words, dynamic transforms, the frame
   instance grid, screen surfaces, screen mappings, screen lights, volumes, glyph
-  decals, mesh draws, the lights table and the sky's block, stops and softboxes)
+  decals, mesh draws, the lights table and the sky's block and layers)
   is a `GpuRegion` of its `SdfWorldTables`
   (`SdfWorldTables.Regions.cs`, created by `CreateRegion` under
   `GpuResidency.Select` with a reader in flight), and brick staging is a staged
@@ -978,7 +978,7 @@ These are one-line cautions; the owning pages hold the derivations.
   a descriptor range; a new region takes a slice of that pool too. The lights
   and the sky are tables of generated records (`SdfWorldTables.LightsAndSky.cs`:
   `SdfLights.Pack` and `SdfSky.Pack` fill the lights table, the sky block, its
-  stops and its softboxes with their host bakes, each written whole into its
+  layers with their host bakes, each written whole into its
   region), which only the kernels that read them reference. A view's camera and
   quality, the frame's bench levers, its light count, shadow slot table and
   curvature shading are no table: each `sdf.world` pass writes them into its
@@ -1165,8 +1165,10 @@ These are one-line cautions; the owning pages hold the derivations.
   for a fragment stage, `puckCountDetail` (a per-invocation add to one of the
   pass's named detail rows, which the sky, composite and sky-environment kernels
   call for each layer's evaluations, hashes and texture loads) and
-  `puckCountShadow` (a wave sum of one shadow slot's march steps, which the
-  shadow stage calls for each slot it marches), laid out from
+  `puckCountShadow` (an invocation's shadow slot march steps, which the
+  shadow stage calls for each slot it marches), and `puckCountShadowDecision`
+  (one secondary lit pixel plus its march and slot steps in its rejection or
+  reprojection row), laid out from
   `GpuKernelCounters`' constants. Every other generated include, a document
   pass's among them, declares the same functions empty, so a kernel counts unguarded and a package's kernel compiles
   as a document pass naming its source; never guard a count with a macro.
@@ -1186,7 +1188,7 @@ These are one-line cautions; the owning pages hold the derivations.
   slot to its ledger (`GpuWorkLedger.ReadOnCompletion`), which adds each row to
   its pass as the kinds in `GpuWork.KernelKinds`: march steps, texels written,
   sky evaluations, hashes and texture loads, and the six `gpu.shadow.slot0.steps`
-  through `gpu.shadow.slot5.steps` columns, once the submission
+  through `gpu.shadow.slot5.steps` columns, then `gpu.shadow.pixels`, once the submission
   completes. A package pass that skips the frame is counted skipped
   (`GpuWorkLedger.SkipPass`), never executed with zeros. A
   recording gets its row in `RenderGraphPackageRecording.WorkCounters`; a
@@ -1194,7 +1196,11 @@ These are one-line cautions; the owning pages hold the derivations.
   binds the buffer at `workCounters` and writes the row into the pass
   block (`workCounterRow`, and `workCounterRowDetail` for named rows), and SDF compute kernels end with
   `puckCountWork(sdfWorkSteps, sdfWorkTexels)` (`frame/sdf-work.hlsli`), after
-  every lane that did work. A shadow uses `puckCountDetail` for its slot, and sky
+  every lane that did work. A shadow uses `puckCountShadow` for plain slot work or
+  `puckCountShadowDecision` for its secondary outcome, excluding that outcome's
+  steps from the plain pass accumulator so the ledger counts them once. Slot
+  counting uses per-invocation atomics because a divergent march does not
+  guarantee subgroup reconvergence on Vulkan. Sky
   layers count evaluations, hashes and field-run loads at their own operations.
   A new march, query or volume sample adds to
   `sdfWorkSteps` beside the evaluation, never inside the interpreter; a texel
@@ -1467,7 +1473,28 @@ light's occlusion deficit scales by `1 - progress` and its incoming light's by
 `progress`; radiance never crossfades and two visibilities are never blended
 together.
 
-`incomingVisibility` is policy-sized transient-aliased graph storage: R8 at
+`world.shadow-amortize` enables secondary K history only in a temporal view.
+Slot zero and incoming slots march fully. Other stable slots march the parity
+class selected by the jitter index and reuse the remaining pixels only after
+owner, light-motion, gathered-occluder and receiver validation. Exact owner
+names travel with `SdfShadowSlots`; `SdfShadowHistory` commits names and retained
+penumbra anchors only after the shadow writer submits. A name-only change also
+changes the cadence signature. Fading slots reject through their first
+nonfading rebuild; light directions stay within one eighth of their anchor's
+penumbra angle, bounding any retained pair to one quarter. Gather motion checks
+all three dynamic rows and both the current and previous bounds; flat fallbacks
+and unmasked world segments conservatively scan the whole table.
+`SdfWorldPackage.TemporalFragment` owns the writer-ordered render-grid history:
+five words per pixel, packed K, identity, depth, writer sample and rejection
+reactivity. The sample stamp rejects skipped or stale writers, and receiver
+validation shares color history's five-percent depth rule. Rejection raises
+color reactivity. History writes count all five words; off writes none. The
+`interleaved`, `ownership`, `light-motion`, `occluder-motion`, `receiver` and
+`reprojected` detail rows partition secondary lit pixels and their march steps.
+Run `temporal-shadows` on both backends and qualify its receiver-only red leg
+and floor-device ceilings before claiming its images or savings verified.
+
+`incomingVisibility` is policy-sized retained graph storage: R8 at
 F = 1, R8G8 at F = 2, absent with zero bytes and no read binding at F = 0.
 Its allocation belongs to the graph's policy variant, never a handoff crossing.
 Recorders select the fade kernel and bind ports from the planned resource
@@ -1521,11 +1548,30 @@ as `SdfSky.MinCloudSoftness` for both cloud bands and
 clamp target the GPU may flush, so the kernel names no bound of its own. Plain-float ranges live
 in `WorldDefinitionValidator`. A new render field needs its domain or validator
 bound, its field on the record that carries it (a
-light's on `SdfLight`, the sky's on `SdfSkyBlock`, a kind's parameter record or `SdfSoftbox`,
+light's on `SdfLight`, the sky's on `SdfSkyBlock`, or a kind's parameter record,
 whose declarations `puck shaders generate` writes into `sdf-world.interface.hlsli`
 from the C# type) or else its pass-block value (`SdfWorldPackage.Values`, written
 by `SdfFrameBlock`), and its shader consumer in the same change. What a document field means belongs to
 `puck-world`.
+
+Clock auditions live in `WorldStateMirror`, never in simulation rows.
+`WorldClockReads` invalidates cached sky and theme values by the preview's
+phase, and by its unwrapped tick for integrated rates. A held state clock
+must not invalidate on later authoritative deliveries. Shadow ownership and
+handoff history follow delivered readings; previews change resolved light
+values without scrubbing that history.
+`WorldRenderSettings.SkyLayers` reaches the environment resolver in boot,
+routed and session-screen presentations through the existing lever sink;
+solo and mute never fold into source. `WorldSkyAudition` filters authored
+rows before the open stack is emitted; solo removes the fallback gradient,
+and muting an authored gradient does not restore it. Atmosphere is separate
+from the sky rows and stays authored during audition. `DebugViewModes` and
+`frame/sdf-debug-modes.hlsli` share the sky-cost mode index. Sky field-run
+base RGB carries evaluation, hash and texture-load attribution in that debug
+view alone, leaving the packed upper-run images intact; the completed
+ledger still counts work only at the site that runs it. `world.cost sky`
+filters that ledger through `GpuWorkReport`, including skipped rows.
+The artist-facing syntax belongs to the [World reference](../../../src/Puck.World/README.md).
 
 Every state read reaches a program, a decal or a pass through the state
 mirror, never through the document. A color a build bakes (a palette's surface,

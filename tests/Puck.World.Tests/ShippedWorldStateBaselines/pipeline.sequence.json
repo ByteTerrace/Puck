@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.state-baseline-sequence.v1",
-  "world": "pipeline.world.json",
+  "world": "pipeline.puck",
   "host": {
     "kind": "document"
   },

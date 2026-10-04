@@ -107,33 +107,6 @@ public static class WorldRenderKeys {
                         ),
                     };
                 }
-            case WorldRenderLight.Hemisphere hemisphere: {
-                    var parts = Parts(
-                        keys: stated,
-                        select: static part => (part as WorldRenderLight.Hemisphere)
-                    );
-
-                    return hemisphere with {
-                        Base = Scalar(
-                            authored: hemisphere.Base,
-                            clock: clock,
-                            field: static part => part.Base,
-                            parts: parts
-                        ),
-                        Color = Color(
-                            authored: hemisphere.Color,
-                            clock: clock,
-                            field: static part => part.Color,
-                            parts: parts
-                        ),
-                        Gradient = Scalar(
-                            authored: hemisphere.Gradient,
-                            clock: clock,
-                            field: static part => part.Gradient,
-                            parts: parts
-                        ),
-                    };
-                }
             case WorldRenderLight.Rim rim: {
                     var parts = Parts(
                         keys: stated,
@@ -344,21 +317,6 @@ public static class WorldRenderKeys {
 
                     return gradient with { Stops = expanded };
                 }
-            case WorldRenderSkyLayer.Fog fog: {
-                    var parts = Parts(
-                        keys: stated,
-                        select: static part => (part as WorldRenderSkyLayer.Fog)
-                    );
-
-                    return fog with {
-                        Density = Scalar(
-                            authored: fog.Density,
-                            clock: clock,
-                            field: static part => part.Density,
-                            parts: parts
-                        ),
-                    };
-                }
             case WorldRenderSkyLayer.Stars stars: {
                     var parts = Parts(
                         keys: stated,
@@ -509,6 +467,14 @@ public static class WorldRenderKeys {
                     }
 
                     return pattern with { Colors = expanded };
+                }
+            case WorldRenderSkyLayer.Panel panel: {
+                    var parts = Parts(keys: stated, select: static part => (part as WorldRenderSkyLayer.Panel));
+                    return panel with {
+                        Color = Color(authored: panel.Color, clock: clock, field: static part => part.Color, parts: parts),
+                        Intensity = Scalar(authored: panel.Intensity, clock: clock, field: static part => part.Intensity, parts: parts),
+                        Blur = Scalar(authored: panel.Blur, clock: clock, field: static part => part.Blur, parts: parts),
+                    };
                 }
             case WorldRenderSkyLayer.Panorama panorama: {
                     var parts = Parts(keys: stated, select: static part => (part as WorldRenderSkyLayer.Panorama));

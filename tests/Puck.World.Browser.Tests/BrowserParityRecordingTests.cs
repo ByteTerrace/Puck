@@ -13,7 +13,7 @@ namespace Puck.World.Browser.Tests;
 /// <c>Fixtures/browser-parity/expected.json</c> — the same file the Node harness (<c>engine-wasm.test.cjs</c>) reads to
 /// prove the wasm build folds the identical bytes and prices the identical presentation. The test writes the freshly computed baseline beside its assembly (<see cref="TestRecords"/>) before comparing,
 /// and <c>puck baselines browser-parity</c> promotes that copy over the committed one.</summary>
-/// <remarks>Only <c>games/tictactoe.world.json</c> composes standalone under <c>standard.world.json</c> among the
+/// <remarks>Only <c>games/tictactoe.world.json</c> composes standalone under <c>standard.puck</c> among the
 /// fragments this suite sampled (bowling, billiards, poker, chess, dominoes, freecell, hexlines, klondike, mancala
 /// all refuse — each names a host register, a look, or a body motion program the island's own body supplies, never
 /// the bare basis alone); the two fixtures below are two independent scripted-write cases over that one document
@@ -22,7 +22,7 @@ namespace Puck.World.Browser.Tests;
 /// <see cref="Puck.World.Browser.Engine.BrowserExtensionVocabulary"/>).</remarks>
 public sealed class BrowserParityRecordingTests {
     private static byte[] ComposedTicTacToeBytes() {
-        var basisBytes = ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.world.json"));
+        var basisBytes = ShippedWorldDocuments.Composed(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/standard.puck"));
         var fragmentBytes = ShippedWorldDocuments.Read(path: RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/worlds/games/tictactoe.puck"));
 
         Assert.True(

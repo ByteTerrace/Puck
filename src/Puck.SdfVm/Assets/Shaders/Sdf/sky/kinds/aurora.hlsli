@@ -15,7 +15,7 @@ float4 sdfSkyAuroraLayer(SdfSkyAurora aurora, SdfSkyLayer layer, SdfSkySample sa
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 0u);
 
     float2 around = direction.xz;
     float horizontal = length(around);
@@ -28,7 +28,7 @@ float4 sdfSkyAuroraLayer(SdfSkyAurora aurora, SdfSkyLayer layer, SdfSkySample sa
     float wave = sdfPeriodicFbm2(((around * (aurora.Waves * 0.15915494)) + float2(drift, 0.0)), aurora.Seed, waveOctaves);
     float rays = sdfPeriodicFbm2(((around * (aurora.Rays * 0.15915494)) + float2(0.0, drift)), (aurora.Seed ^ 0x85EBCA77u), rayOctaves);
 
-    puckCountDetail(layer.Detail, 0u, 0u, 0u, (4u * (waveOctaves + rayOctaves)), 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 0u, (4u * (waveOctaves + rayOctaves)), 0u);
 
     float base = (aurora.Base + (aurora.Fold * ((2.0 * wave) - 1.0)));
     float rise = ((direction.y - base) / aurora.Height);

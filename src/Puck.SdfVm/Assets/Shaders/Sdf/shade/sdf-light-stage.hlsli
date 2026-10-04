@@ -193,7 +193,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             shadeSurface.shadowVisibility = shadowVisibility;
             shadeSurface.incomingVisibility = incoming;
 
-            float3 radiance = float3(0.0, 0.0, 0.0);
+            float3 radiance = worldSkyIrradiance(normal) * ambientOcclusion;
             float3 rim = float3(0.0, 0.0, 0.0);
             float3 specular = float3(0.0, 0.0, 0.0);
             float attenuation = 1.0;
@@ -221,9 +221,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
             // not reach. Black, the default, adds nothing.
             color += ((shadeMaterial.albedo * shadeMaterial.bounce) * ((1.0 - max(dot(normal, keyDirection), 0.0)) * ambientOcclusion));
 
-            // render.environment's studio reflections: the horizon gradient plus every authored softbox, sampled about the
-            // mirror direction and weighted by the surface's Fresnel response and ambient occlusion. An unauthored section
-            // adds exactly zero.
+            // The lighting-visible sky in the mirror direction, under Fresnel and local occlusion.
             {
                 float3 f0 = lerp(float3(shadeMaterial.specular, shadeMaterial.specular, shadeMaterial.specular), shadeMaterial.albedo, shadeMaterial.metal);
                 float3 viewDirection = -p.rayDirection;
@@ -231,7 +229,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, out float coverage, out flo
                 float3 fresnel = (f0 + ((max(float3(1.0, 1.0, 1.0) - shadeMaterial.roughness, f0) - f0) * pow((1.0 - nDotV), 5.0)));
                 float3 reflectDirection = reflect(p.rayDirection, normal);
 
-                color += ((worldStudioReflection(reflectDirection, shadeMaterial.roughness) * fresnel) * ambientOcclusion);
+                color += ((worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness) * fresnel) * ambientOcclusion);
             }
 
             // The rim brightens and the point lights' lobes join after the shade: a rim is a look rather than a light the

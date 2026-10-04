@@ -24,7 +24,7 @@ internal static class BaselinesCommand {
             CheckedFiles: null,
             CommittedDirectory: "tests/Puck.World.Browser.Tests/Fixtures/browser-parity",
             Description: "The browser determinism canary's native state hashes, which the wasm harness also reads.",
-            Inputs: ["src/Puck.World/Assets/worlds/standard.world.json", "src/Puck.World/Assets/worlds/quality.puck", "src/Puck.World/Assets/worlds/games/tictactoe.puck"],
+            Inputs: ["src/Puck.World/Assets/worlds/standard.puck", "src/Puck.World/Assets/worlds/quality.puck", "src/Puck.World/Assets/worlds/games/tictactoe.puck"],
             Name: "browser-parity",
             Project: "Puck.World.Browser.Tests",
             RunArguments: CliTestRun.Class(fullName: "Puck.World.Browser.Tests.BrowserParityRecordingTests"),

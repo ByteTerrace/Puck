@@ -125,10 +125,17 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var stampPool = $"stamp pool {WorldPlacementPolicy.MaxShapesPerStamp} shape(s)/stamp x {WorldPlacementPolicy.MaxStampRegistrations} registration(s) = {stampPoolWorstCase} worst-case instance(s) of {Puck.SignedDistance.SdfProgramBuilder.MaxInstances} ceiling ({(Puck.SignedDistance.SdfProgramBuilder.MaxInstances - stampPoolWorstCase)} headroom for statics/screens/avatars)";
         var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
         // A keyed fog is judged at its thinnest key, where the most of the far plane shows through.
-        var fogDensity = (server.Definition.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density?.AuthoredValues().DefaultIfEmpty(defaultValue: Puck.SignedDistance.SdfSky.DefaultFogDensity).Min() ?? Puck.SignedDistance.SdfSky.DefaultFogDensity);
+        var atmosphere = server.Definition.Render.Atmosphere;
+        var fogDensity = ((atmosphere is null)
+            ? Puck.SignedDistance.SdfSky.DefaultFogDensity
+            : (atmosphere.Fog?.Density?.AuthoredValues().DefaultIfEmpty(defaultValue: Puck.SignedDistance.SdfSky.DefaultFogDensity).Min() ?? ((atmosphere.Fog is null) ? 0f : Puck.SignedDistance.SdfSky.DefaultFogDensity)));
+        // The atmosphere kinds the composite may evaluate at a pixel, each counted in its atmosphere detail row.
+        var atmosphereKinds = ((atmosphere is null)
+            ? 1
+            : ((((atmosphere.Fog is null) ? 0 : 1) + ((atmosphere.Haze is null) ? 0 : 1)) + ((atmosphere.Medium is null) ? 0 : 1)));
         var far = string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldTables.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
+            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldTables.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###}; atmosphere {atmosphereKinds} kind(s), each at most one composite evaluation a pixel)"
         );
         var lattice = ((population.Fields is { } fields)
             ? fields.DescribeCost(

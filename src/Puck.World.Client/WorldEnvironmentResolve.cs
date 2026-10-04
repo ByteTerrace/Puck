@@ -6,8 +6,9 @@ using Puck.SdfVm;
 namespace Puck.World.Client;
 
 /// <summary>
-/// Resolves a definition's environment for a frame: <c>render.lighting</c>, <c>render.sky</c> and
-/// <c>render.environment</c> written into the frame's <see cref="SdfLights"/> and <see cref="SdfSky"/>, every value read
+/// Resolves a definition's environment for a frame: <c>render.lighting</c>, <c>render.sky</c>, <c>render.atmosphere</c>
+/// and <c>render.environment</c> written into the frame's <see cref="SdfLights"/> and <see cref="SdfSky"/> (the atmosphere
+/// as <see cref="SdfSky.Atmosphere"/>), every value read
 /// through the client's
 /// <see cref="WorldStateMirror"/>, the one binding path: a literal as authored, a binding as its slot presents it, and
 /// keys at their clock's presented phase (<see cref="WorldKeyResolver"/>). A keyed section is expanded once per
@@ -23,11 +24,12 @@ namespace Puck.World.Client;
 /// </para>
 /// </summary>
 public sealed partial class WorldEnvironmentResolve : IDisposable {
-    // An unauthored lighting section seeds from the pinned sun and hemisphere; an authored list seeds from nothing.
+    // An unauthored lighting section seeds from the pinned sun; an authored list seeds from nothing.
     private static readonly SdfLights Pinned = SdfLights.Default();
     private static readonly SdfLights Empty = new();
     private static readonly SdfSky Unauthored = new();
     private readonly List<(int Slot, double Value)> m_bound = [];
+    private readonly WorldClockReads m_clocks = new();
 
     private readonly WorldValueDomainGuard m_domains;
 
@@ -48,6 +50,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     private int m_revision = -1;
 
     private WorldRenderSky? m_sky;
+    private WorldSkyAudition? m_layers;
+    private int m_layersRevision;
 
     // Each expanded layer's label (WorldSkyLayers.LabelsOf), and where the last resolution wrote it in the stack.
     private string?[] m_skyLabels = [];
@@ -74,10 +78,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     /// <param name="shadowSelection">A session's complete delivered selection, or this resolver's own subscription.</param>
     /// <param name="skyQuality">The sky's quality tier (<c>world.sky-quality</c>), or <see langword="null"/> for the
     /// definition's boot tier (<c>render.skyQuality</c>).</param>
+    /// <param name="layers">Session-only solo and mute controls for the authored sky rows. Atmosphere remains separate.</param>
     /// <returns>The lights and the sky.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> or <paramref name="mirror"/> is
     /// <see langword="null"/>.</exception>
-    public WorldResolvedEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null, WorldShadowSettings? shadows = null, WorldShadowSelection? shadowSelection = null, SdfSkyTier? skyQuality = null) {
+    public WorldResolvedEnvironment Resolve(WorldDefinition definition, int revision, WorldStateMirror mirror, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null, WorldShadowSettings? shadows = null, WorldShadowSelection? shadowSelection = null, SdfSkyTier? skyQuality = null, WorldSkyAudition? layers = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
@@ -96,19 +101,24 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         if (
-            moved ||
+            moved || !ReferenceEquals(layers, m_layers) || (layers?.Revision ?? 0) != m_layersRevision ||
             !ReferenceEquals(
             objA: mirror,
             objB: m_mirror
         ) ||
             (mirror.Generation != m_generation) ||
+            m_clocks.Moved(mirror: mirror) ||
             (m_readsTick && (mirror.Presented != m_tick)) ||
             BoundSlotMoved(mirror: mirror)
         ) {
             m_mirror = mirror;
+            m_layers = layers;
+            m_layersRevision = layers?.Revision ?? 0;
             m_bound.Clear();
+            m_clocks.Clear();
             m_readsTick = false;
             Write(
+                atmosphere: definition.Render.Atmosphere,
                 environment: definition.Render.Environment,
                 lighting: m_lighting,
                 mirror: mirror,
@@ -198,14 +208,6 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             Param: SdfLights.DefaultPenumbraSlope,
             Shadows: false
         ),
-        WorldRenderLight.Hemisphere => new SdfLight(
-            Kind: SdfLightKind.Hemisphere,
-            Direction: Vector3.Zero,
-            Color: Vector3.One,
-            Weight: SdfLights.DefaultAmbientBase,
-            Param: SdfLights.DefaultAmbientHemisphere,
-            Shadows: false
-        ),
         WorldRenderLight.Occluder => new SdfLight(
             Kind: SdfLightKind.Occluder,
             Direction: Vector3.Zero,
@@ -242,20 +244,13 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         return false;
     }
-    // Notes what a keyed value reads besides its keys: a state clock's slot, the presented tick a tick clock or a moving
-    // anchor moves with, or nothing for an anchor held still, which moves only with the definition.
+    // A keyed value follows its named clock's presented phase, including a held or scrubbed preview.
     private void NoteKeys(WorldStateMirror mirror, IWorldKeyTrack? keys) {
         if (keys is null) {
             return;
         }
 
-        var slot = mirror.ClockSlotOf(name: keys.Clock);
-
-        if (slot >= 0) {
-            NoteSlot(mirror: mirror, slot: slot);
-        } else if (!mirror.ClockHoldsStill(name: keys.Clock)) {
-            m_readsTick = true;
-        }
+        m_clocks.Note(mirror, keys.Clock);
     }
     private void NoteBinding(WorldStateMirror mirror, StateBinding? binding, WorldStateConversion conversion) {
         if (binding is { } bound) {
@@ -393,7 +388,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             return 0d;
         }
 
-        if ((value.Keys is not null) || ((value.Literal is { } literal) && (literal != 0f))) {
+        if (value.Keys is { } keys) { m_clocks.Note(mirror, keys.Clock, integrated: true); } else if ((value.Literal is { } literal) && (literal != 0f)) {
             m_readsTick = true;
         }
 
@@ -407,7 +402,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             return Vector2.Zero;
         }
 
-        if ((value.Keys is not null) || ((value.Literal is { } literal) && (literal != Vector2.Zero))) {
+        if (value.Keys is { } keys) { m_clocks.Note(mirror, keys.Clock, integrated: true); } else if ((value.Literal is { } literal) && (literal != Vector2.Zero)) {
             m_readsTick = true;
         }
 
@@ -417,9 +412,10 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         );
     }
     // The one document-to-records writer. The lights seed from the pinned ones when the world authors no light list (the
-    // pinned sun and hemisphere) and from nothing when it does, the sky from the unauthored one, and an absent field
+    // pinned sun) and from nothing when it does, the sky from the unauthored one, and an absent field
     // takes its kind's default.
-    private void Write(WorldStateMirror mirror, WorldRenderLighting? lighting, WorldRenderSky? sky, WorldRenderEnvironment? environment) {
+    // An absent atmosphere is the default look's (SdfAtmosphere.Default); an authored one is exactly the kinds it states.
+    private void Write(WorldStateMirror mirror, WorldRenderLighting? lighting, WorldRenderSky? sky, WorldRenderAtmosphere? atmosphere, WorldRenderEnvironment? environment) {
         var into = m_resolvedLights;
 
         into.CopyFrom(source: ((lighting?.Lights is null)
@@ -470,27 +466,6 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                                 mirror: mirror,
                                 scalar: directional.Weight,
                                 field: WorldValueFields.DirectionalWeight,
-                                site: lightSite
-                            ),
-                        },
-                        WorldRenderLight.Hemisphere hemisphere => pinned with {
-                            Color = Rgb(
-                                color: hemisphere.Color,
-                                fallback: pinned.Color,
-                                mirror: mirror
-                            ),
-                            Param = Scalar(
-                                fallback: pinned.Param,
-                                mirror: mirror,
-                                scalar: hemisphere.Gradient,
-                                field: WorldValueFields.HemisphereGradient,
-                                site: lightSite
-                            ),
-                            Weight = Scalar(
-                                fallback: pinned.Weight,
-                                mirror: mirror,
-                                scalar: hemisphere.Base,
-                                field: WorldValueFields.HemisphereBase,
                                 site: lightSite
                             ),
                         },
@@ -619,6 +594,9 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         var layers = (sky?.Layers ?? []);
+        if (m_layers is { Solo: >= 0 }) {
+            m_resolvedSky.ClearLayers();
+        }
 
         // An authored gradient replaces the default look's; a stack with none draws over it.
         for (var index = 0; (index < layers.Count); index++) {
@@ -636,6 +614,10 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         for (var index = 0; (index < layers.Count); index++) {
+            if ((m_layers is { } audition) && !audition.Includes(index)) {
+                m_skyLayerIndex[index] = -1;
+                continue;
+            }
             m_skyLayerIndex[index] = WriteLayer(
                 into: m_resolvedSky,
                 label: m_skyLabels[index],
@@ -654,23 +636,56 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             into: m_resolvedSky,
             mirror: mirror
         );
+        WriteAtmosphere(
+            atmosphere: atmosphere,
+            into: ref m_resolvedSky.Atmosphere,
+            mirror: mirror
+        );
     }
-    // Writes one document layer into the stack, returning its index there: −1 for fog, which is the air rather than a
-    // layer, and for a layer past the stack's capacity, which the validator refuses.
-    private int WriteLayer(WorldStateMirror mirror, WorldRenderSkyLayer layer, string? label, SdfLights lights, SdfSky into, WorldValueSite site) {
-        ref var block = ref into.Block;
+    private void WriteAtmosphere(WorldStateMirror mirror, WorldRenderAtmosphere? atmosphere, ref SdfAtmosphere into) {
+        if (atmosphere is null) {
+            into = SdfAtmosphere.Default;
 
-        if (layer is WorldRenderSkyLayer.Fog fog) {
-            block.FogDensity = Scalar(
-                fallback: block.FogDensity,
-                mirror: mirror,
-                scalar: fog.Density,
-                field: WorldValueFields.FogDensity,
-                site: site
-            );
-
-            return -1;
+            return;
         }
+
+        var site = new WorldValueSite(Section: "render.atmosphere");
+
+        into = SdfAtmosphere.None;
+        if (atmosphere.Fog is { } fog) {
+            var fogSite = site with { Inner = "fog" };
+
+            into.FogDensity = Scalar(fallback: SdfSky.DefaultFogDensity, field: WorldValueFields.FogDensity, mirror: mirror, scalar: fog.Density, site: fogSite);
+            into.FogColorAuthored = (fog.Color is not null);
+            into.FogColor = Rgb(color: fog.Color, fallback: Vector3.Zero, mirror: mirror);
+            (into.FogBase, into.FogFalloff) = Height(height: fog.Height, mirror: mirror, site: (fogSite with { Inner = "fog.height" }));
+        }
+        if (atmosphere.Haze is { } haze) {
+            var hazeSite = site with { Inner = "haze" };
+
+            into.HazeAmount = Scalar(fallback: 0f, field: WorldValueFields.HazeAmount, mirror: mirror, scalar: haze.Amount, site: hazeSite);
+            into.HazeAnisotropy = Scalar(fallback: SdfAtmosphere.DefaultHazeAnisotropy, field: WorldValueFields.HazeAnisotropy, mirror: mirror, scalar: haze.Anisotropy, site: hazeSite);
+            (into.HazeBase, into.HazeFalloff) = Height(height: haze.Height, mirror: mirror, site: (hazeSite with { Inner = "haze.height" }));
+        }
+        if (atmosphere.Medium is { } medium) {
+            var mediumSite = site with { Inner = "medium" };
+
+            into.MediumSurface = Scalar(fallback: 0f, field: WorldValueFields.MediumSurface, mirror: mirror, scalar: medium.Surface, site: mediumSite);
+            into.MediumExtinction = Scalar(fallback: SdfAtmosphere.DefaultMediumExtinction, field: WorldValueFields.MediumExtinction, mirror: mirror, scalar: medium.Extinction, site: mediumSite);
+            into.MediumColor = Rgb(color: medium.Color, fallback: SdfAtmosphere.DefaultMediumColor, mirror: mirror);
+        }
+
+        // An absent profile is a level kind, falloff zero; an authored one takes the default falloff unless it states one.
+        (float Base, float Falloff) Height(WorldRenderAirHeight? height, WorldStateMirror mirror, in WorldValueSite site) => ((height is null)
+            ? (0f, 0f)
+            : (
+                Scalar(fallback: 0f, field: WorldValueFields.AirBase, mirror: mirror, scalar: height.Base, site: in site),
+                Scalar(fallback: SdfAtmosphere.DefaultFalloff, field: WorldValueFields.AirFalloff, mirror: mirror, scalar: height.Falloff, site: in site)
+            ));
+    }
+    // Writes one document layer into the stack, returning its index there: −1 for a layer past the stack's capacity,
+    // which the validator refuses.
+    private int WriteLayer(WorldStateMirror mirror, WorldRenderSkyLayer layer, string? label, SdfLights lights, SdfSky into, WorldValueSite site) {
         if ((label is null) || (into.LayerCount >= SdfSky.MaxLayers)) {
             return -1;
         }
@@ -687,6 +702,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             WorldRenderSkyLayer.Aurora aurora => into.Add(blend: blend, label: label, opacity: opacity, parameters: AuroraOf(aurora: aurora, mirror: mirror, site: site), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Noise noise => into.Add(blend: blend, label: label, opacity: opacity, parameters: NoiseOf(mirror: mirror, noise: noise, site: site), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Pattern pattern => into.Add(blend: blend, label: label, opacity: opacity, parameters: PatternOf(mirror: mirror, pattern: pattern), tier: tier, visibility: visibility),
+            WorldRenderSkyLayer.Panel panel => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanelOf(mirror: mirror, panel: panel, site: site), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Panorama panorama => into.Add(blend: blend, label: label, opacity: opacity, parameters: PanoramaOf(mirror: mirror, panorama: panorama, site: site), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.View view => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: false, fallback: view.Fallback, mirror: mirror), tier: tier, visibility: visibility),
             WorldRenderSkyLayer.Far far => into.Add(blend: blend, label: label, opacity: opacity, parameters: ViewOf(coverage: true, fallback: far.Fallback, mirror: mirror), tier: tier, visibility: visibility),
@@ -730,20 +746,13 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             record.MaskSoftness = ((float)(Math.Cos(d: spread) - Math.Cos(d: Math.Min(val1: (spread + feather), val2: Math.PI))));
         }
     }
-    // A layer clock's phase at the presented tick, in cycles in [0, 1), noting what it reads: a state clock's slot, or the
-    // tick for a tick clock.
+    // A layer clock's phase follows the same preview and dependency path as a keyed value.
     private float ClockPhase(WorldStateMirror mirror, string? clock) {
         if (clock is null) {
             return 0f;
         }
 
-        var slot = mirror.ClockSlotOf(name: clock);
-
-        if (slot >= 0) {
-            NoteSlot(mirror: mirror, slot: slot);
-        } else if (!mirror.ClockHoldsStill(name: clock)) {
-            m_readsTick = true;
-        }
+        m_clocks.Note(mirror, clock);
 
         return (mirror.TryPhase(clock: out _, name: clock, phase: out var phase) ? ((float)phase) : 0f);
     }
@@ -982,49 +991,23 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         Projection = ((panorama.Projection == WorldSkyProjection.Octahedral) ? SdfSkyProjection.Octahedral : SdfSkyProjection.Equirectangular),
         Screen = (panorama.Screen ?? -1),
     };
-    // An infinity view layer's static parameters: its fallback colour and whether its image alpha is coverage. The viewer's
-    // basis, the rectangle and the screen the instance's image arrives on belong to a frame, which the view's fit supplies
-    // (InfinityViewSampling.Describe); until then the layer's empty rectangle draws nothing.
+
+    private SdfSkyPanel PanelOf(WorldStateMirror mirror, WorldRenderSkyLayer.Panel panel, in WorldValueSite site) => new() {
+        Direction = panel.Direction ?? Vector3.UnitY,
+        Size = panel.Size ?? new Vector2(0.3f),
+        Color = Rgb(color: panel.Color, fallback: Vector3.One, mirror: mirror),
+        Intensity = Scalar(fallback: 1f, field: WorldValueFields.PanelIntensity, mirror: mirror, scalar: panel.Intensity, site: site),
+        Blur = Scalar(fallback: 0f, field: WorldValueFields.PanelBlur, mirror: mirror, scalar: panel.Blur, site: site),
+    };
+    // The view fit supplies the camera basis, rectangle and image for this static layer each frame.
     private SdfSkyView ViewOf(WorldStateMirror mirror, BindableColor? fallback, bool coverage) => new() {
         Coverage = (coverage ? 1u : 0u),
         Fallback = Rgb(color: fallback, fallback: Vector3.Zero, mirror: mirror),
     };
     private void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfSky into) {
-        var count = Math.Min(
-            val1: (environment?.Softboxes?.Count ?? 0),
-            val2: SdfSky.MaxSoftboxes
-        );
-
-        for (var index = 0; (index < count); index++) {
-            var authored = environment!.Softboxes![index];
-
-            into.SetSoftbox(
-                index: index,
-                softbox: new SdfSoftbox(
-                    Blur: (authored.Blur ?? 0f),
-                    Color: Rgb(
-                        color: authored.Color,
-                        fallback: Vector3.One,
-                        mirror: mirror
-                    ),
-                    Direction: authored.Direction,
-                    Size: authored.Size,
-                    Weight: (authored.Weight ?? 1f)
-                )
-            );
-        }
-
-        into.SoftboxCount = count;
-        into.Block.HorizonLow = Rgb(
-            color: environment?.Horizon?.Low,
-            fallback: Vector3.Zero,
-            mirror: mirror
-        );
-        into.Block.HorizonHigh = Rgb(
-            color: environment?.Horizon?.High,
-            fallback: Vector3.Zero,
-            mirror: mirror
-        );
+        var site = new WorldValueSite("render.environment");
+        into.Block.Ambient = Scalar(fallback: 1f, field: WorldValueFields.EnvironmentAmbient, mirror: mirror, scalar: environment?.Ambient, site: site);
+        into.Block.Reflection = Scalar(fallback: 1f, field: WorldValueFields.EnvironmentReflection, mirror: mirror, scalar: environment?.Reflection, site: site);
     }
 }
 /// <summary>A frame's resolved lights and sky (<see cref="WorldEnvironmentResolve.Resolve"/>), which the frame carries as

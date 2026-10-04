@@ -40,6 +40,16 @@ monolithic reference omits the filter because it has no completed neighbor
 records. Check silhouettes, ground-backed grass, changing cameras, multiple
 views and reduced render scales when changing this path.
 
+## Sky lighting
+
+The shared sky environment supplies second-order spherical-harmonic ambient
+irradiance and map reflections with analytic panel highlights. Ambient and
+reflection gains live in `render.environment`, default to one and skip their
+respective work at zero. Lighting visibility decides which layers contribute;
+camera visibility independently decides which layers appear behind geometry.
+The [environment map](../handbook/frame-rendering.md#the-environment-map)
+describes projection, refresh thresholds and counted work.
+
 ## Ambient occlusion
 
 The default ambient path samples three points along the hit normal. Each probe

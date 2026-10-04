@@ -385,30 +385,6 @@ public static partial class WorldDefinitionValidator {
 
                     break;
                 }
-            case WorldRenderLight.Hemisphere hemisphere: {
-                    var own = ((WorldRenderLight.Hemisphere)target);
-
-                    RequireKeyColor(
-                        errors: errors,
-                        own: own.Color,
-                        path: $"{path}.color",
-                        value: hemisphere.Color
-                    );
-                    RequireKeyScalar(
-                        errors: errors,
-                        own: own.Base,
-                        path: $"{path}.base",
-                        value: hemisphere.Base
-                    );
-                    RequireKeyScalar(
-                        errors: errors,
-                        own: own.Gradient,
-                        path: $"{path}.gradient",
-                        value: hemisphere.Gradient
-                    );
-
-                    break;
-                }
             case WorldRenderLight.Rim rim: {
                     var own = ((WorldRenderLight.Rim)target);
 
@@ -549,16 +525,6 @@ public static partial class WorldDefinitionValidator {
                             value: stops[index]?.Color
                         );
                     }
-
-                    break;
-                }
-            case WorldRenderSkyLayer.Fog fog: {
-                    RequireKeyScalar(
-                        errors: errors,
-                        own: ((WorldRenderSkyLayer.Fog)target).Density,
-                        path: $"{path}.density",
-                        value: fog.Density
-                    );
 
                     break;
                 }
@@ -737,6 +703,16 @@ public static partial class WorldDefinitionValidator {
                         }
                     }
 
+                    break;
+                }
+            case WorldRenderSkyLayer.Panel panel: {
+                    var own = ((WorldRenderSkyLayer.Panel)target);
+                    RequireKeyColor(errors: errors, own: own.Color, path: $"{path}.color", value: panel.Color);
+                    RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: panel.Intensity);
+                    RequireKeyScalar(errors: errors, own: own.Blur, path: $"{path}.blur", value: panel.Blur);
+                    if ((panel.Direction is not null) || (panel.Size is not null)) {
+                        errors.Add(item: $"{path} states panel direction or size, which are structure rather than keyed values.");
+                    }
                     break;
                 }
             case WorldRenderSkyLayer.Panorama panorama: {

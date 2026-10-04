@@ -1265,12 +1265,12 @@ internal static partial class CanaryCommand {
                 );
             }
 
-            var relaunchWorld = ((relaunch.WorldFileName is { } relaunchFile)
+            var relaunchWorld = (relaunch.WorldSourcePath ?? ((relaunch.WorldFileName is { } relaunchFile)
                 ? Path.Combine(
                     path1: runDirectory,
                     path2: relaunchFile
                 )
-                : executionWorld);
+                : executionWorld));
             var relaunchInput = File.ReadAllText(path: relaunch.ScriptPath)
                 .Replace(
                 oldValue: "{fixtures}",
@@ -1304,6 +1304,7 @@ internal static partial class CanaryCommand {
                         artifact,
                         "--world", relaunchWorld,
                         "--state-dir", stateDirectory,
+                        .. (leg.RunSchedule ? new[] { "--schedule-dir", Path.Combine(path1: runDirectory, path2: "schedule-relaunch") } : []),
                         "--exit-after-seconds", manifest.TimeoutSeconds.ToString(provider: CultureInfo.InvariantCulture),
                         .. BootShapeArguments(
                         backend: backend,

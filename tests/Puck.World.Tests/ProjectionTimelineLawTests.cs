@@ -17,16 +17,16 @@ public sealed class ProjectionTimelineLawTests {
             new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
             new WorldKey<float>(At: 0.5d, Ease: WorldEase.Smooth, Value: 0.1f),
         ]);
-        var sky = (section
-            ? new WorldRenderSky(
+        var render = (section
+            ? new WorldRenderDefaults(Sky: new WorldRenderSky(
                 Clock: clock,
-                Keys: [new WorldRenderSkyKey(At: 0d, Layers: new Dictionary<string, WorldRenderSkyLayer> { ["haze"] = new WorldRenderSkyLayer.Fog(Density: 0.02f) })],
-                Layers: [new WorldRenderSkyLayer.Fog(Density: 0.01f, Name: "haze")]
-            )
-            : new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: new BindableScalar(keys: track))]));
+                Keys: [new WorldRenderSkyKey(At: 0d, Layers: new Dictionary<string, WorldRenderSkyLayer> { ["haze"] = new WorldRenderSkyLayer.SunDisc(Intensity: 0.02f) })],
+                Layers: [new WorldRenderSkyLayer.SunDisc(Intensity: 0.01f, Name: "haze")]
+            ))
+            : new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: new BindableScalar(keys: track)))));
 
         return (Fixtures.BuildDocument() with {
-            RenderRaw = new WorldRenderDefaults(Sky: sky),
+            RenderRaw = render,
             TimelineRaw = new WorldTimelineSection(Clocks: [Day, Mode]),
         }).WithWorldState(rows: [new WorldStateRow(
             Name: CellName.Parse(candidate: "phase"),
@@ -49,8 +49,8 @@ public sealed class ProjectionTimelineLawTests {
         Assert.Equal(expected: [Day], actual: projection.Timeline!.Clocks!);
         Assert.True(condition: WorldProjection.TryToDefinition(definition: out var hydrated, projection: projection, reason: out var reason), userMessage: reason);
 
-        var authored = Assert.IsType<WorldRenderSkyLayer.Fog>(@object: definition.Render.Sky!.Layers![0]).Density!.Value.Keys!;
-        var delivered = Assert.IsType<WorldRenderSkyLayer.Fog>(@object: hydrated!.Render.Sky!.Layers![0]).Density!.Value.Keys!;
+        var authored = definition.Render.Atmosphere!.Fog!.Density!.Value.Keys!;
+        var delivered = hydrated!.Render.Atmosphere!.Fog!.Density!.Value.Keys!;
 
         Assert.True(condition: WorldKeyResolver.TryClock(clock: out var clock, name: "day", timeline: hydrated.Timeline));
 
@@ -106,6 +106,6 @@ public sealed class ProjectionTimelineLawTests {
         var uncarried = projection with { Timeline = new WorldTimelineSection(Clocks: [Day]) };
 
         Assert.False(condition: WorldProjection.TryToDefinition(definition: out _, projection: uncarried, reason: out var uncarriedReason));
-        Assert.Equal(actual: uncarriedReason, expected: "projection keys render.sky.layers[0].density on clock 'mode', which it does not carry.");
+        Assert.Equal(actual: uncarriedReason, expected: "projection keys render.atmosphere.fog.density on clock 'mode', which it does not carry.");
     }
 }

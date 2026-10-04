@@ -7,6 +7,13 @@
 #include "sdf-visibility.hlsli"
 #include "../field/sdf-quaternion.hlsli"
 
+static const float SdfHistoryDepthTolerance = 0.05;
+// Both temporal color and the K history validate the same receiver with the same relative depth tolerance.
+bool sdfHistoryReceiverMatches(uint identity, uint previousIdentity, float previousT, float historyT) {
+    return ((identity == previousIdentity) &&
+        (abs(historyT - previousT) <= (SdfHistoryDepthTolerance * previousT)));
+}
+
 // Returns the point carried by the same rigid shape or mesh triangle in the preceding consumed frame.
 bool sdfPreviousPoint(uint record, SdfVisibility visibility, float3 currentPoint, out float3 previousPoint) {
     previousPoint = currentPoint;

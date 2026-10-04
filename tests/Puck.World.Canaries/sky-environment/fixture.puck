@@ -17,6 +17,9 @@ host {
 }
 
 render {
+  atmosphere {
+    fog { density: 1 }
+  }
   sky {
     layers [
       gradient(stops: [
@@ -30,7 +33,6 @@ render {
         }
       ]
       )
-      fog(density: 1)
       sunDisc(light: 0, radius: 0.3, intensity: 16)
     ]
   }

@@ -68,6 +68,7 @@ public sealed partial class WorldEnvironmentResolve {
 
                 m_shadowSlots[index] = held with { Candidate = candidate };
                 gpuSlots.SetSlot(slot: held.Slot, light: candidate.LightIndex);
+                gpuSlots.SetOwner(slot: held.Slot, owner: candidate.Name);
                 if (candidate.LightIndex >= 0) { selected[candidate.LightIndex] = true; }
             }
             for (var index = 0; (index < readout.FadeCount); index++) {

@@ -1643,6 +1643,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             mirror: m_client.StateMirror,
             resolveLightAnchor: ResolveLightAnchor,
             shadows: m_settings.ShadowSlots,
+            layers: m_settings.SkyLayers,
             shadowSelection: m_deliveredShadows,
             skyQuality: WorldSkyLayers.TierOf(tier: m_settings.SkyQuality)
         );

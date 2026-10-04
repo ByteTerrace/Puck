@@ -1,10 +1,11 @@
 using Puck.Commands;
+using Puck.Abstractions.Gpu;
 using Puck.World.Client;
 
 namespace Puck.World;
 
 /// <summary>The editor's presentation-only inspector and observational timestamp toggles.</summary>
-internal sealed partial class WorldInspectionCommandModule(WorldEditorSeats seats, WorldGpuTiming timing, WorldRenderProbe? probe = null, WorldInspector? inspector = null, WorldCursorFeed? cursor = null) : ICommandModule {
+internal sealed partial class WorldInspectionCommandModule(WorldEditorSeats seats, WorldGpuTiming timing, WorldRenderProbe? probe = null, WorldInspector? inspector = null, WorldCursorFeed? cursor = null, IGpuWorkRegistry? gpu = null) : ICommandModule {
     private CommandResult Inspect(CommandContext context, WireArgs args) {
         if (inspector is null) { return CommandResult.Error(output: "[world.inspect: requires GPU presentation]"); }
         if (args.Count != 0) {
@@ -27,7 +28,7 @@ internal sealed partial class WorldInspectionCommandModule(WorldEditorSeats seat
     }
 
     public IEnumerable<CommandDefinition> GetCommands() {
-        yield return CommandDefinition.WithWireArgs(name: "world.cost", description: "Reads live placement cost: world.cost [<placement>]; world.cost top [<n>]. Prints exclusive words and separate shared program overhead.",
+        yield return CommandDefinition.WithWireArgs(name: "world.cost", description: "Reads live placement cost: world.cost [<placement>]; world.cost top [<n>]. Prints exclusive words and separate shared program overhead. world.cost sky reads the sky, composite and environment passes and their layer rows from each node's latest completed submission.",
             handler: Cost, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);
         yield return CommandDefinition.WithWireArgs(name: "world.inspect", description: "Shows the acting seat's pointer, camera, counts and reload diagnostics: world.inspect on|off; bare prints the same text as its panel.",
             handler: Inspect, routing: CommandRouting.Immediate, bindability: CommandBindability.Bindable);

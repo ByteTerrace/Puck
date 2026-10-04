@@ -110,24 +110,6 @@ public static partial class WorldDefinitionValidator {
 
                             break;
                         }
-                    case WorldRenderLight.Hemisphere hemisphere: {
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.HemisphereBase,
-                                path: $"{lightPath}.base",
-                                scalar: hemisphere.Base
-                            );
-                            JudgeScalar(
-                                definition: definition,
-                                errors: errors,
-                                field: WorldValueFields.HemisphereGradient,
-                                path: $"{lightPath}.gradient",
-                                scalar: hemisphere.Gradient
-                            );
-
-                            break;
-                        }
                     case WorldRenderLight.Rim rim: {
                             JudgeScalar(
                                 definition: definition,
@@ -270,7 +252,6 @@ public static partial class WorldDefinitionValidator {
     }
     private static BindableColor? LightColor(WorldRenderLight light) => (light switch {
         WorldRenderLight.Directional directional => directional.Color,
-        WorldRenderLight.Hemisphere hemisphere => hemisphere.Color,
         WorldRenderLight.Rim rim => rim.Color,
         WorldRenderLight.Point point => point.Color,
         _ => null,
@@ -282,7 +263,6 @@ public static partial class WorldDefinitionValidator {
         }
 
         var drawn = 0;
-        var fogs = 0;
         var runs = new SdfSkyRunCount();
 
         ValidateInfinityViewCount(errors: errors, layers: layers, path: path);
@@ -296,29 +276,22 @@ public static partial class WorldDefinitionValidator {
 
                 continue;
             }
+            if (++drawn == (SdfSky.MaxLayers + 1)) {
+                errors.Add(item: $"{layerPath} is layer {drawn} of the stack; a sky draws at most {SdfSky.MaxLayers} layers.");
+            }
+            if ((layer.LayerName is { } name) && SdfSkyDetails.IsFixed(label: name)) {
+                errors.Add(item: $"{layerPath}.name '{name}' is a fixed work-counter row's label (a field run's or the atmosphere's); name the layer otherwise.");
+            }
 
-            if (layer is WorldRenderSkyLayer.Fog) {
-                if (++fogs == 2) {
-                    errors.Add(item: $"{layerPath} is a second fog; the sky's air is one fog.");
-                }
-                if ((layer.Blend is not null) || (layer.Opacity is not null) || (layer.Mask is not null) || (layer.Transform is not null) || (layer.Clock is not null) || (layer.Visibility is not null) || (layer.Tier is not null)) {
-                    errors.Add(item: $"{layerPath} is fog, the air rather than a layer of the stack; it takes no blend, opacity, mask, transform, clock, visibility or tier.");
-                }
-            } else {
-                if (++drawn == (SdfSky.MaxLayers + 1)) {
-                    errors.Add(item: $"{layerPath} is layer {drawn} of the stack; a sky draws at most {SdfSky.MaxLayers} layers, fog aside.");
-                }
+            ValidateSkyLayerCommon(definition: definition, errors: errors, layer: layer, path: layerPath);
 
-                ValidateSkyLayerCommon(definition: definition, errors: errors, layer: layer, path: layerPath);
+            var visibility = WorldSkyLayers.VisibilityOf(layer: layer);
 
-                var visibility = WorldSkyLayers.VisibilityOf(layer: layer);
-
-                if (
-                    ((visibility & SdfSkyVisibility.Camera) != 0) &&
-                    !runs.TryAdd(layerClass: WorldSkyLayers.ClassOf(layer: layer))
-                ) {
-                    errors.Add(item: $"{layerPath} opens a field run past the {SdfSky.MaxUpperFieldRuns} the sky composes above its lowest run; move it beside another field layer, or put fewer point layers between field layers.");
-                }
+            if (
+                ((visibility & SdfSkyVisibility.Camera) != 0) &&
+                !runs.TryAdd(layerClass: WorldSkyLayers.ClassOf(layer: layer))
+            ) {
+                errors.Add(item: $"{layerPath} opens a field run past the {SdfSky.MaxUpperFieldRuns} the sky composes above its lowest run; move it beside another field layer, or put fewer point layers between field layers.");
             }
 
             switch (layer) {
@@ -328,17 +301,6 @@ public static partial class WorldDefinitionValidator {
                             errors: errors,
                             gradient: gradient,
                             path: layerPath
-                        );
-
-                        break;
-                    }
-                case WorldRenderSkyLayer.Fog fog: {
-                        JudgeScalar(
-                            definition: definition,
-                            errors: errors,
-                            field: WorldValueFields.FogDensity,
-                            path: $"{layerPath}.density",
-                            scalar: fog.Density
                         );
 
                         break;
@@ -480,6 +442,18 @@ public static partial class WorldDefinitionValidator {
                             errors.Add(item: $"{layerPath}.softness {patternSoftness} lies outside [0, 0.5].");
                         }
 
+                        break;
+                    }
+                case WorldRenderSkyLayer.Panel panel: {
+                        JudgeColor(color: panel.Color, definition: definition, errors: errors, path: $"{layerPath}.color");
+                        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.PanelIntensity, path: $"{layerPath}.intensity", scalar: panel.Intensity);
+                        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.PanelBlur, path: $"{layerPath}.blur", scalar: panel.Blur);
+                        if (panel.Direction is { } direction && (!float.IsFinite(direction.X) || !float.IsFinite(direction.Y) || !float.IsFinite(direction.Z) || ((direction.X == 0f) && (direction.Y == 0f) && (direction.Z == 0f)))) {
+                            errors.Add(item: $"{layerPath}.direction must be finite and nonzero.");
+                        }
+                        if (panel.Size is { } size && (!float.IsFinite(size.X) || !float.IsFinite(size.Y) || !(size.X > 0f) || !(size.Y > 0f))) {
+                            errors.Add(item: $"{layerPath}.size must be finite and positive on both axes.");
+                        }
                         break;
                     }
                 case WorldRenderSkyLayer.View view: {
@@ -913,91 +887,50 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} is a rate the tick integrates and may key only on a tick clock; clock '{clock.Name}' reads state row '{clock.State}', whose history the integral would depend on.");
         }
     }
+    // Every value the atmosphere carries within its field's domain, and every colour in its grammar. The kinds are
+    // structure, so the section carries no keys of its own; each value keys on a clock alone.
+    private static void ValidateRenderAtmosphere(WorldDefinition definition, WorldRenderAtmosphere? atmosphere, List<string> errors, string path = "render.atmosphere") {
+        if (atmosphere is null) {
+            return;
+        }
+
+        if (atmosphere.Fog is { } fog) {
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.FogDensity, path: $"{path}.fog.density", scalar: fog.Density);
+            JudgeColor(color: fog.Color, definition: definition, errors: errors, path: $"{path}.fog.color");
+            JudgeHeight(definition: definition, errors: errors, height: fog.Height, path: $"{path}.fog.height");
+        }
+        if (atmosphere.Haze is { } haze) {
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.HazeAmount, path: $"{path}.haze.amount", scalar: haze.Amount);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.HazeAnisotropy, path: $"{path}.haze.anisotropy", scalar: haze.Anisotropy);
+            JudgeHeight(definition: definition, errors: errors, height: haze.Height, path: $"{path}.haze.height");
+        }
+        if (atmosphere.Medium is { } medium) {
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.MediumSurface, path: $"{path}.medium.surface", scalar: medium.Surface);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.MediumExtinction, path: $"{path}.medium.extinction", scalar: medium.Extinction);
+            JudgeColor(color: medium.Color, definition: definition, errors: errors, path: $"{path}.medium.color");
+        }
+
+        static void JudgeHeight(WorldRenderAirHeight? height, WorldDefinition definition, string path, List<string> errors) {
+            if (height is null) {
+                return;
+            }
+
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.AirBase, path: $"{path}.base", scalar: height.Base);
+            JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.AirFalloff, path: $"{path}.falloff", scalar: height.Falloff);
+        }
+        static void JudgeColor(BindableColor? color, WorldDefinition definition, string path, List<string> errors) {
+            if ((color is { } authored) && !authored.IsAuthorable(definition: definition)) {
+                errors.Add(item: $"{path} '{authored}' {BindableColor.Grammar}.");
+            }
+        }
+    }
     private static void ValidateRenderEnvironment(WorldDefinition definition, WorldRenderEnvironment? environment, List<string> errors, string path = "render.environment") {
         if (environment is null) {
             return;
         }
 
-        if (environment.Softboxes is { } softboxes) {
-            if (softboxes.Count > SdfSky.MaxSoftboxes) {
-                errors.Add(item: $"{path}.softboxes carries {softboxes.Count} softboxes; at most {SdfSky.MaxSoftboxes} fit the softbox table.");
-            }
 
-            for (var index = 0; (index < softboxes.Count); index++) {
-                var softbox = softboxes[index];
-                var softboxPath = $"{path}.softboxes[{index}]";
-
-                if (softbox is null) {
-                    errors.Add(item: $"{softboxPath} must be a softbox.");
-
-                    continue;
-                }
-
-                var direction = softbox.Direction;
-
-                if (
-                    !float.IsFinite(f: direction.X) ||
-                    !float.IsFinite(f: direction.Y) ||
-                    !float.IsFinite(f: direction.Z)
-                ) {
-                    errors.Add(item: $"{softboxPath}.direction must contain finite coordinates.");
-                } else if ((((direction.X * direction.X) + (direction.Y * direction.Y)) + (direction.Z * direction.Z)) <= 0f) {
-                    errors.Add(item: $"{softboxPath}.direction must be nonzero.");
-                }
-
-                var size = softbox.Size;
-
-                if (
-                    !float.IsFinite(f: size.X) ||
-                    !float.IsFinite(f: size.Y)
-                ) {
-                    errors.Add(item: $"{softboxPath}.size must contain finite coordinates.");
-                } else if (
-                    (size.X <= 0f) ||
-                    (size.Y <= 0f)
-                ) {
-                    errors.Add(item: $"{softboxPath}.size must be strictly positive on both axes.");
-                }
-
-                if (softbox.Weight is { } weight) {
-                    RequireNonNegative(
-                        errors: errors,
-                        name: $"{softboxPath}.weight",
-                        value: weight
-                    );
-                }
-
-                if (softbox.Blur is { } blur) {
-                    RequireNonNegative(
-                        errors: errors,
-                        name: $"{softboxPath}.blur",
-                        value: blur
-                    );
-                }
-
-                if (
-                    (softbox.Color is { } color) &&
-                    !color.IsAuthorable(definition: definition)
-                ) {
-                    errors.Add(item: $"{softboxPath}.color '{color}' {BindableColor.Grammar}.");
-                }
-            }
-        }
-
-        if (environment.Horizon is { } horizon) {
-            if (
-                (horizon.Low is { } low) &&
-                !low.IsAuthorable(definition: definition)
-            ) {
-                errors.Add(item: $"{path}.horizon.low '{low}' {BindableColor.Grammar}.");
-            }
-
-            if (
-                (horizon.High is { } high) &&
-                !high.IsAuthorable(definition: definition)
-            ) {
-                errors.Add(item: $"{path}.horizon.high '{high}' {BindableColor.Grammar}.");
-            }
-        }
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.EnvironmentAmbient, path: $"{path}.ambient", scalar: environment.Ambient);
+        JudgeScalar(definition: definition, errors: errors, field: WorldValueFields.EnvironmentReflection, path: $"{path}.reflection", scalar: environment.Reflection);
     }
 }

@@ -29,7 +29,7 @@ public enum SdfKernel {
     /// <summary>The composite: the sky's runs, the lit image over them by its coverage, the fog and the bounded media.</summary>
     Composite,
     /// <summary>The sky's environment map, the gradient in every texel's direction, dispatched by the residency's upload
-    /// when the sky's gradient changes.</summary>
+    /// when lighting-visible irradiance crosses one display code.</summary>
     SkyEnvironment,
     /// <summary>The environment map's reduction to its spherical-harmonic coefficients, dispatched after the map.</summary>
     SkyEnvironmentReduce,

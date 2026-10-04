@@ -31,7 +31,7 @@ before the field existed; an authored value must lie in
 [`WorldRenderDefaults.MinFarDistance` 1, `MaxFarDistance` 8192], refused by
 `ValidateRenderFarDistance` as `render.farDistance <v> must be finite and
 within [1, 8192].` Geometry past it is never marched, so an infinite plane
-ends on a horizon curve at that depth unless `sky.fogDensity` has absorbed it
+ends on a horizon curve at that depth unless `render.atmosphere.fog.density` has absorbed it
 first. Read back with `world.row.set render` (the section's read arm) and
 `world.budget`, which quotes the far distance with its derived costs: the
 reach multiplier over the default, the horizon-ray step count per unit of
@@ -43,19 +43,21 @@ remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
 (`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE
 definition every frame, alongside `lighting`/`sky`; a `tonemap` change
 recomposes the synthesized root graph. `environment`
-carries `softboxes[]` (≤ `SdfSky.MaxSoftboxes` 4 of `direction`,
-`size` [w, h], `color`?, `weight`?, `blur`?) and `horizon` ({`low`?, `high`?})
-— analytic studio reflections a GGX specular lobe catches; absent (or an
-all-default section) contributes exactly 0, byte-identical to a world that
-never authored it. `tonemap` absent is `none` — the stylized shaded color,
+carries nonnegative bindable `ambient` and `reflection` gains, each defaulting
+to one. Zero skips the corresponding shading work. Ambient is the sky's
+second-order harmonic irradiance, multiplied by the existing AO; reflections
+read the shared map with analytic `panel` highlights. A panel is a repeatable
+sky layer with `direction`, `size` (angular half-width and half-height in
+radians), `color`, `intensity` and `blur`; its defaults are lighting
+visibility and add blending. Its colour, intensity and blur can be keyed;
+direction and size are structure. `tonemap` absent is `none` — the stylized shaded color,
 unchanged; `filmic` puts each view through an ACES-fit filmic curve (no gamma
 encode — the shading is already display-referred) as the root graph's place pass
 reconstructs it, so the letterbox color, a pane (display-referred, its shader's
 own tonemap included) and the HUD are never tonemapped, and nothing is
 tonemapped while a debug view is on.
 Read back with `world.lighting`.
-Renderer contract: `rendering` skill sync pairs, the sky block and its
-softbox table; the tonemap is the root graph's view place passes, not a sky
+Renderer contract: `rendering` skill sync pairs, the sky block and layer table; the tonemap is the root graph's view place passes, not a sky
 record.
 
 `lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most
@@ -114,7 +116,6 @@ Each light's `$type` union:
 | `$type` | Carries |
 |---|---|
 | `directional` | `direction`, `color`, `weight`, `angularRadius`, `shadow` (`always`, `auto`, or `never`); `always` and `auto` require a unique `name` |
-| `hemisphere` | `color`, `base`, `gradient` |
 | `rim` | `color`, `weight`, `power` — a view-dependent silhouette brighten added after the material shade |
 | `point` | `position`, `radius`, `color`, `weight`, optional `anchor` — inverse-square falloff with a soft core (`intensity = weight / (1 + (distance / radius)^2)`); lambert diffuse plus the material's GGX specular from the light's own direction, both scaled by ambient occlusion like every non-shadow light; no shadow march |
 
@@ -319,7 +320,7 @@ through the same closed mutation vocabulary as `pipeline.load`. The host
 (`WorldViewGraphHost`) reconciles only accepted document state into the render
 graph runtime's instance set. The runtime owns resources, history, background
 compilation and frame-boundary installation; none belongs in the schema. Use
-[the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.world.json)
+[the pipeline world](../../../../src/Puck.World/Assets/worlds/pipeline.puck)
 for the live three-pass editing workflow. The
 [shader reference](../../../../docs/reference/shaders.md#shader-pipelines-and-live-development)
 owns the `puck.render.graph.v1` document contract a row's source is written in.

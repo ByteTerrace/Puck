@@ -94,7 +94,6 @@ public sealed class WorldTemporalCaptureLawTests {
         var block = new byte[SdfFrameBlock.SizeBytes];
         var lights = new Puck.SignedDistance.SdfLight[Puck.SignedDistance.SdfLights.MaxLights];
         var layers = new Puck.SignedDistance.SdfSkyLayer[Puck.SignedDistance.SdfSky.MaxLayers];
-        var softboxes = new Puck.SignedDistance.SdfSoftbox[Puck.SignedDistance.SdfSky.MaxSoftboxes];
 
         SdfFrameBlock.Write(
             block: block,
@@ -102,14 +101,13 @@ public sealed class WorldTemporalCaptureLawTests {
             frame: frame, view: 0, width: 64, height: 64
         );
         frame.Lights.Pack(records: lights);
-        frame.Sky.Pack(block: out var sky, details: new Puck.SignedDistance.SdfSkyDetails(), layers: layers, lights: frame.Lights, softboxes: softboxes);
+        frame.Sky.Pack(block: out var sky, details: new Puck.SignedDistance.SdfSkyDetails(), farDistance: frame.FarDistance, layers: layers, lights: frame.Lights);
 
         return [
             .. block,
             .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: lights.AsSpan()),
             .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: new ReadOnlySpan<Puck.SignedDistance.SdfSkyBlock>(reference: in sky)),
             .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: layers.AsSpan()),
-            .. System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: softboxes.AsSpan()),
         ];
     }
 }

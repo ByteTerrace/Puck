@@ -34,6 +34,7 @@ public sealed class SdfFrameBlockLawTests {
         DisableAmbientOcclusion = true,
         DisableFarBound = true,
         DisableSoftShadows = true,
+        ShadowAmortize = true,
         ShadowDistanceScale = 0.5f,
         UseCameraTileShadowMask = true,
         UseFastAmbientOcclusion = true,
@@ -46,6 +47,7 @@ public sealed class SdfFrameBlockLawTests {
         (SdfWorldPackage.DisableSoftShadows, new() { DisableSoftShadows = true }, 1u),
         (SdfWorldPackage.FastAmbientOcclusion, new() { UseFastAmbientOcclusion = true }, 1u),
         (SdfWorldPackage.FastSoftShadowMarch, new() { UseFastSoftShadowMarch = true }, 1u),
+        (SdfWorldPackage.ShadowAmortize, new() { ShadowAmortize = true }, 1u),
         (SdfWorldPackage.ShadowDistanceScale, new() { ShadowDistanceScale = 0.5f }, BitConverter.SingleToUInt32Bits(value: 0.5f)),
     ];
 
@@ -154,6 +156,8 @@ public sealed class SdfFrameBlockLawTests {
         );
 
         SdfFrameBlock.WriteTemporal(block: block, jitter: new Vector2(x: 0.25f, y: -0.125f), historyFrames: 3, temporal: true);
+        // The rejection masks are the shadow recorder's, written from its history after the view's writer.
+        SdfFrameBlock.WriteShadowHistory(block: block, enabled: true, lightMotion: 0b0100u, ownership: 0b0010u);
         var parameters = SdfWorldInterfaces.WorldParameters;
 
         // The row names the pass, so the view's writer leaves it to the recorder.
@@ -210,7 +214,7 @@ public sealed class SdfFrameBlockLawTests {
         );
         Assert.Equal(
             actual: (BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightCount))), BitConverter.ToInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlots)))),
-            expected: (2u, 1)
+            expected: (1u, 1)
         );
     }
     // Each shading lever, on the frame or in a view's quality, lands in its own pass-block member and nowhere else: from

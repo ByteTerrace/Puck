@@ -67,7 +67,12 @@ public sealed partial class SdfWorldPassesLawTests {
                 Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: pass), collection: sample.Details.ToArray());
             }
         }
-        Assert.DoesNotContain(collection: sample.Details.ToArray(), filter: detail => (detail.Pass == sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.Shadow}")));
+        // The shadow pass reports its decision rows, into which it counts each secondary pixel (P18-13).
+        var shadowPass = sample.PassLabels.IndexOf(value: $"{RenderGraphPackageCatalog.SdfWorld}${SdfWorldPackage.Parts.Shadow}");
+
+        foreach (var label in SdfShadowDecisions.Labels) {
+            Assert.Contains(expected: new GpuWorkDetail(Detail: label, Pass: shadowPass), collection: sample.Details.ToArray());
+        }
 
         var binds = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.PipelineBinds);
 
@@ -147,14 +152,14 @@ public sealed partial class SdfWorldPassesLawTests {
     // A pass block's words that change every frame form one run each; the run list is bounded (GpuRegion.HostRunCapacity),
     // and a past-the-bound range merges neighbours across the words between them, re-sending them. The work counter row
     // and the first detail row sit side by side in the block, so a hit pass writing its row adds no run and no
-    // coalescing: its bytes are the mask pass's plus the four of its row word.
+    // coalescing: its bytes are the mask pass's plus the row word, and the detail word for views.
     [Fact]
     public void ADetailRowBesideTheCounterRowAddsNoRunToAHitPassesBlock() {
         var bytes = HostBytesOf(frame: Frame());
         var mask = bytes["sdf.world$mask"];
 
         foreach (var part in new[] { SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views }) {
-            Assert.Equal(expected: (mask + 4L), actual: bytes[$"sdf.world${part}"]);
+            Assert.Equal(expected: (mask + (part == SdfWorldPackage.Parts.Views ? 8L : 4L)), actual: bytes[$"sdf.world${part}"]);
         }
     }
     [Fact]

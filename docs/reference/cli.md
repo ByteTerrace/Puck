@@ -1265,7 +1265,10 @@ walk the same crossing a second time with reconstruction off.
 A single-process leg can set `runSchedule: true` to arm the world document's
 existing command schedule. The runner passes `--schedule-dir {run}/schedule`,
 which retains the submission manifest and state exports with the capture
-evidence. This is opt-in and takes no companion authority, relaunch or stub
+evidence. A relaunch arms its document's schedule under `{run}/schedule-relaunch`.
+It may name a
+repository-relative `sourceWorld` fixture instead of a saved `world`; the two
+are mutually exclusive. This is opt-in and takes no companion authority or stub
 boot. Scheduled mutations submitted at tick N apply during N+1; a capture
 authored at N+1 is armed after that step and before its first render.
 
@@ -1943,7 +1946,8 @@ The `sky-still`, `sky-drift`, `sky-twinkle`, and `sky-cycle` worlds under
 `tests/Puck.Counters`, each run with `sky.script.txt`, hold the camera still
 and enable cadence. They isolate an unchanging sky, cloud drift, star twinkle,
 and a changing cycle value so their pass counts show which work each change
-requires. Each has its own ceilings beside it, with a record for each device
+requires. The cycle also carries a lighting-only panel, counting its projection
+and analytic reflection work. Each has its own ceilings beside it, with a record for each device
 that ran it (`sky-still.ceilings.json` and so on); pass it with `--ceilings`, because the
 default ceilings cover only the default workload. A cadence-omitted node has no completed sample
 in the report, so missing rows must not be read as measured zeros.

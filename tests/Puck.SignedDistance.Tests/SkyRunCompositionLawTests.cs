@@ -90,17 +90,18 @@ public sealed class SkyRunCompositionLawTests {
             (SdfSkyPattern.Kind, SdfSkyPattern.Class),
             (SdfSkyPanorama.Kind, SdfSkyPanorama.Class),
             (SdfSkyDisc.Kind, SdfSkyDisc.Class),
+            (SdfSkyPanel.Kind, SdfSkyPanel.Class),
             (SdfSkyView.Kind, SdfSkyView.Class),
         };
 
         Assert.Equal(actual: kinds.Select(selector: static kind => kind.Kind).Order(), expected: Enum.GetValues<SdfSkyLayerKind>().Order());
         Assert.Equal(
             actual: kinds.Where(predicate: static kind => (kind.Class == SdfSkyLayerClass.Point)).Select(selector: static kind => kind.Kind).Order(),
-            expected: new[] { SdfSkyLayerKind.Stars, SdfSkyLayerKind.Disc, SdfSkyLayerKind.View }.Order()
+            expected: new[] { SdfSkyLayerKind.Stars, SdfSkyLayerKind.Disc, SdfSkyLayerKind.Panel, SdfSkyLayerKind.View }.Order()
         );
 
-        // Every kind in a stack, each blend in turn: a gradient, stars, clouds, aurora, noise, a pattern, a panorama, a disc
-        // and a view, which cut into four runs.
+        // Every kind in a stack, each blend in turn: a gradient, stars, clouds, aurora, noise, a pattern, a panorama, a disc,
+        // a panel and a view, which cut into four runs.
         var random = new Random(Seed: 818);
         var stack = kinds.Select(selector: (kind, index) => new SdfSkyLayerSample(
             Alpha: (0.25f + (0.5f * random.NextSingle())),
@@ -176,7 +177,7 @@ public sealed class SkyRunCompositionLawTests {
 
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-        sky.Pack(block: out var block, details: new SdfSkyDetails(), layers: layers, lights: SdfLights.Default(), softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]);
+        sky.Pack(block: out var block, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: SdfLights.Default());
         Assert.Equal(actual: block.LayerCount, expected: 6u);
         Assert.Equal(actual: block.BaseRun, expected: 1u);
         Assert.Equal(actual: block.UpperRuns, expected: ((uint)SdfSky.MaxUpperFieldRuns));

@@ -3,9 +3,8 @@ using System.Text.Json;
 namespace Puck.Cli.Canary;
 
 internal static partial class CanaryManifestLoader {
-    // A relaunch names the document by its file name inside the leg's run directory, which the first boot writes
-    // (world.save {run}/<name>), so the manifest can name it before any run directory exists. A relaunch that names
-    // none boots the leg's own world again.
+    // A relaunch names either a saved file inside the leg's run directory (world.save {run}/<name>) or a source fixture
+    // inside the repository. Naming neither boots the leg's own world again.
     private static CanaryRelaunch ReadRelaunch(JsonElement element, string context, string repositoryRoot, string canaryDirectory) {
         var row = CliStrictJson.RequireObject(
             context: context,
@@ -20,6 +19,7 @@ internal static partial class CanaryManifestLoader {
             refusal: Refusal,
             "commands",
             "script",
+            "sourceWorld",
             "world"
         );
 
@@ -53,6 +53,15 @@ internal static partial class CanaryManifestLoader {
             )
         );
 
+        var sourceWorld = (row.TryGetProperty(propertyName: "sourceWorld", value: out _)
+            ? ResolveFile(basePath: repositoryRoot, containmentRoot: repositoryRoot, context: $"{context} sourceWorld",
+                rawPath: CliStrictJson.ReadRequiredString(context: context, element: row, member: "sourceWorld", refusal: Refusal))
+            : null);
+
+        if ((world is not null) && (sourceWorld is not null)) {
+            throw new CanaryManifestRefusal(message: $"{context} names both a saved world and a sourceWorld; choose one.");
+        }
+
         return new CanaryRelaunch(
             Commands: ReadCommands(
                 context: context,
@@ -60,6 +69,7 @@ internal static partial class CanaryManifestLoader {
                 scriptPath: scriptPath
             ),
             ScriptPath: scriptPath,
+            WorldSourcePath: sourceWorld,
             WorldFileName: world
         );
     }

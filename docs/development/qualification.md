@@ -108,7 +108,7 @@ from readiness rather than from boot.
 | Workload | World | What a cell does |
 |---|---|---|
 | `flagship` | `Assets/worlds/puck.world.json` | Warms up 300 ticks, soaks 1800, reloads the world twice with a 300-tick warm-up after each, and soaks 1800 again. |
-| `ink-pipeline` | `Assets/worlds/pipeline.world.json` | Waits for the `ink` pipeline to install, warms up 120 ticks, soaks 900, then reloads the pipeline three times, resizes its slot to half and back three times, and unloads and loads it three times, settling four counted submissions after each step. |
+| `ink-pipeline` | `Assets/worlds/pipeline.puck` | Waits for the `ink` pipeline to install, warms up 120 ticks, soaks 900, then reloads the pipeline three times, resizes its slot to half and back three times, and unloads and loads it three times, settling four counted submissions after each step. |
 
 The `flagship` workload boots the flagship world the package ships. The
 [forcing world](../plans/state-and-language.md#the-forcing-world) is not

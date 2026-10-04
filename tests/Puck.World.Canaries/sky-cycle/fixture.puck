@@ -17,6 +17,14 @@ host {
 }
 
 render {
+  atmosphere {
+    fog {
+      density {
+        clock: skyMode
+        keys [{ at: 0, value: 0 }, { at: 0.5, value: 0.004 }]
+      }
+    }
+  }
   farDistance: 100
   sky {
     clock: skyMode
@@ -43,7 +51,6 @@ render {
             }
           ]
           )
-          haze: fog(density: 0)
           sun: sunDisc(intensity: 0)
         }
       }
@@ -69,7 +76,6 @@ render {
             }
           ]
           )
-          haze: fog(density: 0.004)
           sun: sunDisc(intensity: 1.5)
         }
       }
@@ -94,7 +100,6 @@ render {
         }
       ]
       )
-      fog(density: 0.004, name: "haze")
       sunDisc(intensity: 1.5, light: 0, name: "sun", radius: 0.018)
     ]
   }

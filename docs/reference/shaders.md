@@ -717,9 +717,10 @@ pass to record submits the residency's one upload ahead of the view's
 submission, and every pass of the view reads the tables that upload wrote. The
 upload also renders the sky's environment map and its coefficients, one pair
 for the residency however many views read it (its `environment` pass,
-`SdfWorldTables.SkyEnvironment.cs`), only when the sky draws another gradient
-than the map holds and the fog reads the map; the composite's fog reads the map
-instead of evaluating the sky. At
+`SdfWorldTables.SkyEnvironment.cs`), only when the sky draws other lit layers
+than the map holds and the atmosphere reads the map (a fog in-scattering the
+sky, or a haze); the composite's atmosphere reads the map instead of evaluating
+the sky. At
 the start of each frame the factory starts and prepares every residency it
 holds (`IRenderGraphPackageFactory.BeginFrame`); it answers `IsUnchanged` from
 the residency's record of what each view last rendered, and sizes a view's
@@ -730,8 +731,11 @@ tables, so a view renders nothing before then.
 A capture armed on the runtime reads the root instance's output, and one armed
 through `RenderGraphRuntime.CaptureTarget` reads the instance it names. A graph
 instance's node serves it on a frame the instance renders with every image
-input it shows bound to a completed output, never a stand-in, and an external
-producer serves it from the next frame it produces. Until then
+input it shows bound to an output current for the scheduled frame, never a stand-in
+or a held image from an input still rebuilding. Deliberately standing inputs, such
+as a paused view, remain current. A permanently refused input fails the pending
+capture with its reason. An external producer serves a capture from the next frame
+it produces, under the same requirement for its inputs. Until then
 `UnservedCaptureReasonOf` names why. The root may be the world's own instance,
 when nothing is drawn over its output. Each instance counts its own passes.
 

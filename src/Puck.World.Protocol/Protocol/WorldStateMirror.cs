@@ -171,7 +171,10 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
     /// <summary>Marks that the world this mirror reads has been replaced by another, so nothing a holder learned about the
     /// previous world's values carries over: its next <see cref="Install"/> installs a different world's document, not the
     /// next document of the same one.</summary>
-    public void BeginLifetime() => m_lifetime++;
+    public void BeginLifetime() {
+        m_lifetime++;
+        m_clockPreviews.Clear();
+    }
     /// <summary>Finds the registered slot a binding reads through with a conversion: one the installed document's
     /// presentation manifest or an owner's registered set records. It registers nothing, reads nothing and allocates
     /// nothing, so a binding nothing registered reads no cell.</summary>
@@ -573,6 +576,8 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
         phase = 0d;
         m_keyed.Increment();
 
+        if (!delivered) { return TryReadPhase(clock: out clock, name: name, phase: out phase); }
+
         return (
             m_view.Manifest.TryClock(
             clock: out clock,
@@ -585,31 +590,6 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
         )
         );
     }
-    /// <summary>Returns the state slot a state clock reads through, or -1 for a tick clock or a clock the installed
-    /// document does not name: what a consumer that caches a keyed value notes, beside the presented tick a tick clock
-    /// moves with.</summary>
-    /// <param name="name">The clock's name.</param>
-    /// <returns>The slot, or -1.</returns>
-    public int ClockSlotOf(string name) => ((m_view.Manifest.TryClock(
-        clock: out var clock,
-        name: name
-    ) && clock.IsStateClock)
-        ? SlotOf(
-            binding: WorldPresentationManifest.ClockBinding(clock: clock),
-            conversion: WorldStateConversion.Number
-        )
-        : -1
-    );
-    /// <summary>Returns whether a clock's phase holds still between deliveries: an anchored clock whose anchor carries
-    /// no rate, or none, moves only when a delivery hands the mirror a new anchor, which arrives in a new definition. A
-    /// consumer that caches a keyed value on it re-resolves on that definition, not on every presented tick.</summary>
-    /// <param name="name">The clock's name.</param>
-    /// <returns><see langword="true"/> for an anchored clock that holds still; <see langword="false"/> for any other
-    /// clock or a name the installed document does not declare.</returns>
-    public bool ClockHoldsStill(string name) => (m_view.Manifest.TryClock(
-        clock: out var clock,
-        name: name
-    ) && clock.IsAnchored && (clock.Anchor is not { Rate: not 0L }));
     /// <summary>Resolves a bindable scalar: its literal, its registered binding's presented number, or its keys at
     /// their clock's presented phase.</summary>
     /// <param name="scalar">The authored scalar.</param>
@@ -809,7 +789,7 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
                 ? WorldKeyResolver.Integrate(
                     clock: clock,
                     modulus: modulus,
-                    tick: Presented,
+                    tick: ClockTick(name: keys.Clock),
                     track: keys
                 )
                 : 0d
@@ -840,7 +820,7 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
                 return Vector2.Zero;
             }
 
-            var tick = Presented;
+            var tick = ClockTick(name: keys.Clock);
 
             return new Vector2(
                 x: ((float)WorldKeyResolver.Integrate(

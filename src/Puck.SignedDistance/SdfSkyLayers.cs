@@ -24,9 +24,10 @@ public enum SdfSkyLayerKind : uint {
     Panorama = 6,
     /// <summary>A disc about a light's direction, glowing or textured (<see cref="SdfSkyDisc"/>), a point kind.</summary>
     Disc = 7,
-    /// <summary>The image of an infinity view (<see cref="SdfSkyView"/>): another world, or far geometry, rendered as a second
-    /// <c>sdf.world</c> instance and sampled by the viewer's pixel, a point kind.</summary>
-    View = 8,
+    /// <summary>A rectangular emitter at infinity (<see cref="SdfSkyPanel"/>), a point kind.</summary>
+    Panel = 8,
+    /// <summary>The image of an infinity view (<see cref="SdfSkyView"/>), a point kind.</summary>
+    View = 9,
 }
 /// <summary>Where a sky layer draws: everywhere, in an elevation band of the sky frame, or in a cone about a direction.
 /// The mask's weight scales the layer's alpha, its edge widened by <see cref="SdfSkyLayer.MaskSoftness"/>.</summary>

@@ -44,6 +44,8 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
             ? "on"
             : "off")} temporal={(settings.Temporal
             ? "on"
+            : "off")} shadow-amortize={(settings.ShadowAmortize
+            ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
             : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)}]";
@@ -354,6 +356,23 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.sky-layer",
+            description: "Auditions the sky rows printed by world.lighting: world.sky-layer [solo <index>|solo off|mute <index> on|off]. Session-only; mute takes precedence over solo.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.sky-layer: solo={(settings.SkyLayers.Solo < 0 ? "off" : settings.SkyLayers.Solo.ToString(CultureInfo.InvariantCulture))} | {string.Join(" | ", Enumerable.Range(0, server.Definition.Render.Sky?.Layers?.Count ?? 0).Select(index => $"sky[{index}] muted={settings.SkyLayers.Muted(index)} included={settings.SkyLayers.Includes(index)}"))}]");
+                if (args.Count == 0) { return Echo(); }
+                var solo = args.Is(0, "solo");
+                var index = -1;
+                var off = solo && args.Count == 2 && args.Is(1, "off");
+                var mute = args.Count == 3 ? ParseOnOff(args[2]) : null;
+                if ((!solo && !args.Is(0, "mute")) || args.Count != (solo ? 2 : 3) || (!solo && mute is null) ||
+                    (!off && (!int.TryParse(args[1], CultureInfo.InvariantCulture, out index) || index < 0 || index >= (server.Definition.Render.Sky?.Layers?.Count ?? 0)))) {
+                    return CommandResult.Usage("world.sky-layer", "solo <index>|solo off|mute <index> on|off");
+                }
+                return SubmitLever(link, context.Principal, solo ? WorldSessionLevers.SkySolo : WorldSessionLevers.SkyMute, index, Echo, mute == true ? 1d : 0d);
+            });
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.shadows",
@@ -718,6 +737,20 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.shadow-amortize",
+            description: "Reuses secondary shadow history with temporal reconstruction: world.shadow-amortize [on|off]. Slot zero and fading slots march fully. Other slots march one quarter-grid selected by the jitter index, rejecting history on light ownership, light motion, occluder motion, or receiver identity and depth changes.",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.shadow-amortize: {(settings.ShadowAmortize ? "on" : "off")}]");
+                if (args.Count == 0) { return Echo(); }
+                if (ParseOnOff(token: args[0]) is not { } on) {
+                    return CommandResult.Error(output: $"[world.shadow-amortize: unknown state '{args[0]}' — on|off]");
+                }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadowAmortize,
+                    a: (on ? 1.0 : 0.0), formatEcho: Echo);
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.sky-quality",
             description: "Sets the sky's quality tier, live: world.sky-quality [low|medium|high] — no argument echoes the current tier. A sky layer whose tier lies above it writes no entry and counts no work; below high each kind draws its reduced form (clouds take one thickness tap and three octaves at low, shaded flat, and three octaves at medium; stars stop twinkling at low; an aurora and a noise field take fewer octaves). The world's quality presets set it through their sky row.",
             handler: (context, args) => {
@@ -788,6 +821,8 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                     ? 1.0
                     : 0.0)
                 );
+                SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.ShadowAmortize,
+                    a: (preset.ShadowAmortize ? 1.0 : 0.0));
                 SubmitLever(
                     link: link,
                     principal: context.Principal,

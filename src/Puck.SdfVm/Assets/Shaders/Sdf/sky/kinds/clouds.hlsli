@@ -20,7 +20,7 @@ float sdfSkyCloudThickness(SdfSkyClouds clouds, SdfSkyLayer layer, float2 p, flo
     float warp = sdfPeriodicFbm2((p + clouds.ShearOffset), (clouds.Seed ^ 0x9E3779B9u), octaves);
     float density = sdfPeriodicFbm2((p + (clouds.Warp * (warp - 0.5))), clouds.Seed, octaves);
 
-    puckCountDetail(layer.Detail, 0u, 0u, 0u, (8u * octaves), 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 0u, (8u * octaves), 0u);
 
     return smoothstep(threshold, (threshold + clouds.Softness), density);
 }
@@ -31,7 +31,7 @@ float4 sdfSkyCloudsLayer(SdfSkyClouds clouds, SdfSkyLayer layer, SdfSkySample sa
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 0u);
 
     uint octaves = ((sample.tier >= SDF_SKY_TIER_HIGH) ? clamp(clouds.Octaves, 1u, 8u) : 3u);
     float b = (clouds.DomeRadius * direction.y);

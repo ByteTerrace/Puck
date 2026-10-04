@@ -15,6 +15,7 @@ render {
     shadowOverflow: instant
     ambientOcclusion: false
     temporal: false
+    shadowAmortize: false
     dynamicResolution: false
     renderScaleFloor: Quarter
     renderScale: 0.70980394
@@ -28,6 +29,7 @@ render {
     shadowOverflow: instant
     ambientOcclusion: true
     temporal: true
+    shadowAmortize: true
     dynamicResolution: false
     renderScaleFloor: Quarter
     renderScale: 0.8666667
@@ -41,6 +43,7 @@ render {
     shadowOverflow: instant
     ambientOcclusion: true
     temporal: true
+    shadowAmortize: true
     dynamicResolution: false
     renderScaleFloor: Quarter
     renderScale: 1

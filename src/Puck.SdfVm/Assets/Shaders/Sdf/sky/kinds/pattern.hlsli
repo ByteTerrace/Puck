@@ -14,7 +14,7 @@ float sdfSkyPatternLine(float coordinate, float width, float soft) {
     return (1.0 - sdfSkyRise(((0.5 * width) + soft), soft, distance));
 }
 float4 sdfSkyPatternLayer(SdfSkyPattern pattern, SdfSkyLayer layer, SdfSkySample sample) {
-    puckCountDetail(layer.Detail, 0u, 0u, 1u, 0u, 0u);
+    sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 0u);
 
     float3 direction = sample.local;
     float cells = max(round(pattern.Cells), 1.0);

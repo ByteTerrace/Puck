@@ -9,16 +9,40 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldPassesLawTests {
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void CadenceOwnerNameAloneRunsShadowAndItsConsumers(bool temporal) {
+        var lights = SdfLights.Default();
+
+        lights.ShadowSlots.SetOwner(owner: "original", slot: 0);
+        using var rig = new TemporalRig(views: 1, cadence: true, temporal: temporal, amortize: true, lights: lights);
+
+        for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
+        Assert.True(condition: rig.Stood());
+        rig.Lights.ShadowSlots.SetOwner(owner: "replacement", slot: 0);
+        rig.Produce();
+        Assert.Equal(expected: ((string[])[SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views,
+            .. (temporal ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite]),
+            actual: Executed(work: CadenceWork(rig: rig)));
+        Assert.Empty(collection: rig.StateConflicts);
+        for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
+        Assert.True(condition: rig.Stood());
+    }
     [InlineData("drift", false)]
     [InlineData("twinkle", false)]
     [InlineData("fog-color", false)]
     [InlineData("volume", false)]
     [InlineData("fog-density", false)]
+    [InlineData("haze", false)]
+    [InlineData("medium", false)]
     [InlineData("light-color", false)]
     [InlineData("shadow-direction", false)]
     [InlineData("camera", false)]
     [InlineData("drift", true)]
     [InlineData("fog-density", true)]
+    [InlineData("haze", true)]
+    [InlineData("medium", true)]
     [InlineData("light-color", true)]
     [InlineData("shadow-direction", true)]
     [InlineData("camera", true)]
@@ -40,7 +64,9 @@ public sealed partial class SdfWorldPassesLawTests {
                 Ramp: [new SdfDensityStop(Density: 0f, Color: Vector3.Zero), new SdfDensityStop(Density: 1f, Color: Vector3.One)],
                 Intensity: 1f, Extinction: 0.5f)],
                 }; break;
-            case "fog-density": frame.Sky.Block.FogDensity = 0.08f; goto case "lighting";
+            case "fog-density": frame.Sky.Atmosphere.FogDensity = 0.08f; goto case "lighting";
+            case "haze": frame.Sky.Atmosphere.HazeAmount = 0.2f; goto case "lighting";
+            case "medium": frame.Sky.Atmosphere.MediumExtinction = 0.2f; goto case "lighting";
             case "light-color": frame.Lights.Set(index: 0, light: frame.Lights[0] with { Color = new Vector3(x: 0.2f, y: 0.4f, z: 0.6f) }); goto case "lighting";
             case "lighting": executed = [SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed]; break;
             case "shadow-direction":
@@ -152,9 +178,60 @@ public sealed partial class SdfWorldPassesLawTests {
         rig.Produce();
         Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
     }
+    [InlineData("ambient", false)]
+    [InlineData("reflection", false)]
+    [InlineData("gradient", false)]
+    [InlineData("sub-code-gradient", false)]
+    [InlineData("panel", false)]
+    [InlineData("panel-frame", false)]
+    [InlineData("camera-panel", false)]
+    [InlineData("ambient", true)]
+    [InlineData("reflection", true)]
+    [InlineData("gradient", true)]
+    [InlineData("sub-code-gradient", true)]
+    [InlineData("panel", true)]
+    [InlineData("panel-frame", true)]
+    [InlineData("camera-panel", true)]
+    [Theory]
+    public void CadenceTracksSkyLightingAtItsReaders(string change, bool reduced) {
+        using var rig = new TemporalRig(views: 1, cadence: true, renderScale: (reduced ? 0.25f : 1f), sky: sky => {
+            sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: 0.25f), elevation: -1f, index: 0);
+            sky.First<SdfSkyGradient>().SetStop(color: new Vector3(value: 0.25f), elevation: 1f, index: 1);
+            _ = sky.Add(label: "panel", blend: SdfSkyBlend.Add,
+                visibility: ((change == "camera-panel") ? SdfSkyVisibility.Camera : SdfSkyVisibility.Lighting),
+                parameters: new SdfSkyPanel { Direction = Vector3.UnitZ, Size = new Vector2(value: 0.2f), Color = Vector3.One, Intensity = 1f });
+        });
+        var sky = rig.SourceFrame.Sky;
+        var renders = rig.Selected.Tables!.SkyEnvironmentRenders;
+
+        switch (change) {
+            case "ambient": sky.Block.Ambient = 0.5f; break;
+            case "reflection": sky.Block.Reflection = 0.5f; break;
+            case "gradient":
+            case "sub-code-gradient":
+                var color = new Vector3(value: ((change == "gradient") ? 0.5f : 0.25001f));
+                sky.First<SdfSkyGradient>().SetStop(color: color, elevation: -1f, index: 0);
+                sky.First<SdfSkyGradient>().SetStop(color: color, elevation: 1f, index: 1);
+                break;
+            case "panel-frame": sky.FrameUp = Vector3.Normalize(value: new Vector3(x: 0.00001f, y: 1f, z: 0f)); break;
+            default: sky.First<SdfSkyPanel>().Intensity += 0.00001f; break;
+        }
+        rig.SourceFrame = rig.SourceFrame with { };
+        rig.Produce();
+        Assert.Equal(expected: (renders + ((change == "gradient") ? 1 : 0)), actual: rig.Selected.Tables.SkyEnvironmentRenders);
+        var lit = (change is not ("sub-code-gradient" or "camera-panel"));
+        string[] expected = [.. (lit ? new[] { SdfWorldPackage.Parts.Views } : []),
+            .. ((lit && reduced) ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite];
+
+        Assert.Equal(expected: expected, actual: Executed(work: CadenceWork(rig: rig)));
+        Assert.Empty(collection: rig.StateConflicts);
+        rig.Produce();
+        Assert.True(condition: rig.Stood());
+    }
 
     // A sky whose stack drifts and twinkles over the default gradient: a point run of stars and a field run of clouds.
     private static void Layered(SdfSky sky) {
+        sky.LayerAt(index: 0).Visibility = SdfSkyVisibility.Camera;
         _ = sky.Add(blend: SdfSkyBlend.Add, label: "stars", parameters: new SdfSkyStars { Brightness = 1f });
         _ = sky.Add(label: "clouds", parameters: new SdfSkyClouds { Coverage = 0.5f });
     }

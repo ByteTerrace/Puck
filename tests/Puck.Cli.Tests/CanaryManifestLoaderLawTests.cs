@@ -181,6 +181,22 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
         }
     }
     [Fact]
+    public void AScheduledRelaunchCanReadARepositoryFixture() {
+        var directory = Path.Combine(path1: m_directory.RootPath, path2: "tests/Puck.World.Canaries/good-one");
+
+        File.WriteAllText(path: Path.Combine(path1: directory, path2: "canary.json"), contents: LegManifest(
+            id: "good-one", worldPrefix: "tests/Puck.World.Canaries/good-one/", relaunch: """
+            "runSchedule": true,
+            "relaunch": { "sourceWorld": "tests/Puck.World.Canaries/good-one/discriminating-world.json", "script": "positive.script.txt", "commands": [ { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" } ] },
+            """));
+        Assert.True(condition: CanaryManifestLoader.TryLoadAll(error: out var error, manifests: out var manifests,
+            refused: out _, repositoryRoot: m_directory.RootPath, strict: false), userMessage: error);
+        Assert.True(condition: manifests[0].Positive.RunSchedule);
+        Assert.Equal(expected: Path.GetFullPath(path: Path.Combine(path1: directory, path2: "discriminating-world.json")).Replace(newChar: '/', oldChar: '\\'),
+            actual: manifests[0].Positive.Relaunch!.WorldSourcePath!.Replace(newChar: '/', oldChar: '\\'));
+        Assert.Null(@object: manifests[0].Positive.Relaunch!.WorldFileName);
+    }
+    [Fact]
     public void ASkippedManifestFailsAWholeSuiteRunAndLeavesANamedSelectionAlone() {
         // Skipping keeps the other proofs running; it must not also make the suite report green with one of its
         // proofs unread. A selection that named its proofs is answered on those alone.
@@ -241,8 +257,10 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
     [InlineData(null, true)]
     [InlineData("../saved.world.json", false)]
     [InlineData("nested/saved.world.json", false)]
+    [InlineData("saved.world.json", true, true)]
+    [InlineData(null, true, true)]
     [Theory]
-    public void ARelaunchBootsABareNamedSavedDocumentOrItsOwnWorld(string? world, bool loads) {
+    public void ARelaunchBootsABareNamedSavedDocumentOrItsOwnWorld(string? world, bool loads, bool scheduled = false) {
         var goodDirectory = Path.Combine(
             path1: m_directory.RootPath,
             path2: "tests",
@@ -263,6 +281,7 @@ public sealed class CanaryManifestLoaderLawTests : IDisposable {
                 id: "good-one",
                 relaunch: $$"""
 
+                "runSchedule": {{(scheduled ? "true" : "false")}},
                 "relaunch": { {{((world is null) ? string.Empty : $"\"world\": \"{world}\", ")}}"script": "positive.script.txt", "commands": [ { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" } ] },
                 """,
                 worldPrefix: "tests/Puck.World.Canaries/good-one/"

@@ -519,12 +519,19 @@ prototypes {
 }
 
 render {
+  atmosphere {
+    fog {
+      density {
+        clock: skyMode
+        keys [{ at: 0, value: 0.012 }, { at: 0.5, value: 0.035 }]
+      }
+    }
+  }
   ambientOcclusion: true
   temporal: false
   lighting {
     lights [
       directional(name: "key", shadow: always)
-      hemisphere()
       point(color: "#29C8FF", position: [0, 2.6, 19.4], radius: 1.4, weight: 1.6)
     ]
   }
@@ -547,7 +554,6 @@ render {
         }
       ], name: "air"
       )
-      fog(density: 0.012, name: "haze")
       sunDisc(light: 0, radius: 0.045, intensity: 2, name: "sun")
       stars(density: 32, brightness: 4, seed: 3, twinkle: {
         share: 1
@@ -556,6 +562,8 @@ render {
       }, name: "stars"
       )
       clouds(coverage: 0.4, softness: 0.2, scale: 0.5, seed: 5, color: "#91A5C8", drift: [0.2, 0.07], shear: [0.05, -0.03], spin: 0.2, curl: 0.3, name: "clouds")
+      panel(name: "studio-key", direction: [0.2, 1, 0.3], size: [0.2, 0.5], color: "#FFF4E8", intensity: 2, blur: 0.02, visibility: lighting)
+      panel(name: "studio-fill", direction: [-1, 0.3, 0.5], size: [0.4, 0.12], color: "#BBCDFF", intensity: 0.6, blur: 0.02, visibility: lighting)
     ]
     clock: skyMode
     keys [
@@ -574,7 +582,6 @@ render {
             }
           ]
           )
-          haze: fog(density: 0.012)
           sun: sunDisc(intensity: 2)
           stars: stars(brightness: 4)
           clouds: clouds(coverage: 0.4)
@@ -595,7 +602,6 @@ render {
             }
           ]
           )
-          haze: fog(density: 0.035)
           sun: sunDisc(intensity: 3)
           stars: stars(brightness: 0.2)
           clouds: clouds(coverage: 0.65)

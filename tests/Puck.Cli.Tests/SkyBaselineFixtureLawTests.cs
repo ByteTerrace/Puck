@@ -33,7 +33,8 @@ public sealed class SkyBaselineFixtureLawTests {
         Assert.Equal(expected: 0f, actual: clouds.Spin?.Literal);
 
         using var document = JsonDocument.Parse(utf8Json: ShippedWorldDocuments.Read(path: PathOf(path: $"tests/Puck.Counters/sky-{name}.puck")));
-        var layer = document.RootElement.GetProperty(propertyName: "render").GetProperty(propertyName: "sky").GetProperty(propertyName: "layers")[4];
+        var layer = document.RootElement.GetProperty(propertyName: "render").GetProperty(propertyName: "sky").GetProperty(propertyName: "layers")
+            .EnumerateArray().Single(predicate: static candidate => (candidate.GetProperty(propertyName: "$type").GetString() == "clouds"));
 
         Assert.Equal(expected: (name == "drift"), actual: (layer.GetProperty(propertyName: "drift")[0].GetSingle() > 0f));
         Assert.Equal(expected: 0f, actual: layer.GetProperty(propertyName: "shear")[0].GetSingle());

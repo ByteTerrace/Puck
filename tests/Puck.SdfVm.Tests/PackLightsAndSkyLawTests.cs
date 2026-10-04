@@ -30,9 +30,9 @@ public sealed class PackLightsAndSkyLawTests {
         sky.Pack(
             block: out block,
             details: new SdfSkyDetails(),
+            farDistance: 40f,
             layers: layers,
-            lights: lights,
-            softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]
+            lights: lights
         );
 
         return layers;
@@ -44,7 +44,7 @@ public sealed class PackLightsAndSkyLawTests {
 
         lights.Set(index: 0, light: Light(direction: Vector3.UnitY, kind: SdfLightKind.Directional, shadows: true, weight: 0.1f));
         lights.Set(index: 1, light: Light(direction: Vector3.UnitX, kind: SdfLightKind.Directional, weight: 0.2f));
-        lights.Set(index: 2, light: Light(direction: Vector3.Zero, kind: SdfLightKind.Hemisphere, weight: 0.3f));
+        lights.Set(index: 2, light: Light(direction: Vector3.Zero, kind: SdfLightKind.Point, weight: 0.3f));
         lights.Set(index: 3, light: Light(direction: Vector3.Zero, kind: SdfLightKind.Rim, weight: 0.4f));
         lights.Set(index: 4, light: Light(direction: new Vector3(x: 0f, y: 0f, z: 2f), kind: SdfLightKind.Directional, weight: 0.9f));
         lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 1);

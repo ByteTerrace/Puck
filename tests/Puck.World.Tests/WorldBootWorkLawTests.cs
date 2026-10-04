@@ -206,7 +206,7 @@ public sealed class WorldBootWorkLawTests {
         WorldDefinitionFileSource.ForgetComposedDocuments();
 
         // Twenty-five documents — the island, its basis, its games and modules, the shared quality presets, and the
-        // four shards its borders name — are read and merged once each. Each of the nineteen .puck sources is asked
+        // four shards its borders name — are read and merged once each. Each of the twenty .puck sources is asked
         // once to read it and once to capture the composition's input facts. Reuse checks those facts directly rather
         // than asking for every compile again. The island and four shards are each parsed once, though admission and
         // its completion each prove all four borders.
@@ -216,8 +216,8 @@ public sealed class WorldBootWorkLawTests {
         Console.WriteLine(value: $"island first allocation={firstBytes}: {string.Join(separator: ", ", values: first.Select(selector: pair => $"{pair.Key}={pair.Value}"))}");
 
         AssertPinned(
-            asks: 38L,
-            compileCeiling: 19L,
+            asks: 40L,
+            compileCeiling: 20L,
             counts: first,
             exact: [
                 ("world.boot.loads", 1L),

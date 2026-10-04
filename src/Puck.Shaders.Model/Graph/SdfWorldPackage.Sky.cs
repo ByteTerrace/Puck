@@ -47,7 +47,7 @@ public static partial class SdfWorldPackage {
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: LitImage, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),
             Read(element: ShaderValueType.Uint, name: CullBounds),
-            Read(element: ShaderValueType.Uint, name: TransportRead),
+            Read(element: ShaderValueType.Uint2, name: TransportRead),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyBaseImage, type: ShaderValueType.Float4),
             .. SkyUpperImages.Select(selector: static name => ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: name, type: ShaderValueType.Float4)),
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: SkyBaseWritten, type: ShaderValueType.Float4),

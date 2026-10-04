@@ -354,9 +354,11 @@ refuses it, and a `world.wait <ticks>` after it has the capture behind it.
 Arming a second capture while one is still pending is REFUSED by name
 (`RenderGraphRuntimeNode.PendingCapturePath`) and counts in `wire.errors`:
 the render graph admits one pending request at a time.
-`world.screenshot <path.png> crossing [player]` instead waits for the first frame
-that seat presents after its route moves, kept apart from an ordinary capture so
-another may be armed and land meanwhile. A mutation barrier orders command
+`world.screenshot <path.png> crossing [player]` instead waits for the first completed
+frame that seat presents after its route moves, kept apart from an ordinary capture so
+another may be armed and land before the crossing. A destination still rebuilding keeps
+the request pending; a refusal, a hidden seat or another route change fails it instead
+of capturing the departed image or a later arrival. A mutation barrier orders command
 application, but does not itself prove the capture has completed; use the
 capture outcome before reusing a path or claiming its bytes exist.
 

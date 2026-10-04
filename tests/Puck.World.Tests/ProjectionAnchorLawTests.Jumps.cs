@@ -21,7 +21,7 @@ public sealed partial class ProjectionAnchorLawTests {
     public async Task Every_state_jump_reaches_a_federation_observer_whose_step_sends_anchors_alone(string jump) {
         var density = new BindableScalar(binding: $"state.{Clock}");
         var definition = Document(row: Row(advance: PerTick(raw: 37L), raw: 0L)) with {
-            RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: density, Name: "haze")])),
+            RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: density))),
             TimelineRaw = null,
         };
         using var directory = new TemporaryDirectory(prefix: "proj-jump-");

@@ -35,6 +35,47 @@ groupshared float4 sdfShadowGatherCone; // xyz = the hit points' apex, w = the e
 groupshared uint sdfShadowGatherLitCount;
 groupshared float3 sdfAmbientGatherLow;
 groupshared float3 sdfAmbientGatherHigh;
+#ifdef SDF_SHADOW_PASS
+groupshared uint sdfShadowGatherMoved;
+static bool sdfShadowMotionActive = false;
+
+bool sdfShadowTransformMoved(uint slot) {
+    uint row = (3u * slot);
+    return (any(asuint(sdfDynamicTransforms[row]) != asuint(sdfPreviousDynamicTransforms[row])) ||
+        any(asuint(sdfDynamicTransforms[row + 1u]) != asuint(sdfPreviousDynamicTransforms[row + 1u])) ||
+        any(asuint(sdfDynamicTransforms[row + 2u]) != asuint(sdfPreviousDynamicTransforms[row + 2u])));
+}
+
+// Flat and camera-mask fallbacks have no complete shadow gather. Their conservative candidate set is the whole
+// table. World segments also run outside every instance mask, so their dynamic rows cannot be excluded by a gather.
+void sdfShadowMovedFlat(uint lane) {
+    uint rows, stride;
+    sdfDynamicTransforms.GetDimensions(rows, stride);
+    [loop] for (uint slot = lane; (3u * slot + 2u) < rows; slot += SDF_GROUP_SHADOW_LANES) {
+        if (sdfShadowTransformMoved(slot)) { InterlockedOr(sdfShadowGatherMoved, 1u); }
+    }
+}
+
+// Test both placements of a moved dynamic occluder. A body leaving this group's cone still invalidates the shadow
+// it left on the receiver; neither participation suppression nor the current mask can hide its preceding bound.
+void sdfShadowMovedCandidate(uint instanceOffset, uint index, float3 origin, float3 direction, float chord,
+    float inverseAperture, float inflate) {
+    uint entry = sdfInstanceEntryOffset(instanceOffset, index);
+    uint4 meta = sdfWords[entry + 1u];
+    if ((meta.x == SDF_BOUND_DYNAMIC) && sdfShadowTransformMoved(meta.y)) {
+        float4 bound = asfloat(sdfWords[entry]);
+        if (bound.w < 0.0) { return; }
+        bound.w += inflate;
+        float4 previous = bound;
+        bound.xyz += sdfDynamicTransforms[3u * meta.y].xyz;
+        previous.xyz += sdfPreviousDynamicTransforms[3u * meta.y].xyz;
+        if (sdfInstancePassesTileCone(bound, origin, direction, chord, inverseAperture) ||
+            sdfInstancePassesTileCone(previous, origin, direction, chord, inverseAperture)) {
+            InterlockedOr(sdfShadowGatherMoved, 1u);
+        }
+    }
+}
+#endif
 
 uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float reach, int lightIndex, uint lane) {
     // Phase 0 — clear the group mask and publish this lane's hitPoint.
@@ -90,6 +131,12 @@ uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float rea
     SdfInstanceGridHeader grid = sdfLoadInstanceGridHeader(instanceOffset, packedInstanceCount);
 
     if (!grid.enabled) {
+#ifdef SDF_SHADOW_PASS
+        if (sdfShadowMotionActive) {
+            sdfShadowMovedFlat(lane);
+            GroupMemoryBarrierWithGroupSync();
+        }
+#endif
         return 0u; // no grid — flat fallback (cheap for few instances; matches a would-be gather so the grid toggle is invariant)
     }
 
@@ -109,6 +156,11 @@ uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float rea
     // IS the candidate set the march reads, so a skipped carve is simply never composed, and a Subtraction only ever
     // removes material, so the shadow is conservatively darker, never light-leaked. Default OFF.
     bool shadowProxy = worldShadowProxyEnabled();
+#ifdef SDF_SHADOW_PASS
+    if (sdfShadowMotionActive && (SDF_WORLD_SEGMENT_COUNT(sdfWords[sdfProgramLayout.worldSegmentOffset]) != 0u)) {
+        sdfShadowMovedFlat(lane);
+    }
+#endif
 
     // Phase 2 — the cooperative walk. (1) The ALWAYS-tested list — dynamic + unmaskable instances the frozen grid cannot
     // bin — strided across the lanes, each bound inflated by R against the penumbra cone.
@@ -116,6 +168,11 @@ uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float rea
     for (uint a = lane; (a < grid.alwaysCount); a += SDF_GROUP_SHADOW_LANES) {
         uint index = sdfGridWordAt(grid, grid.alwaysWord + a);
         float4 bound = sdfInstanceBoundAt(instanceOffset, index);
+#ifdef SDF_SHADOW_PASS
+        if (sdfShadowMotionActive) {
+            sdfShadowMovedCandidate(instanceOffset, index, origin, direction, chord, inverseAperture, inflate);
+        }
+#endif
 
         if (bound.w >= 0.0) {
             bound.w += inflate;

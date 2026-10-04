@@ -6,19 +6,20 @@ namespace Puck.SignedDistance;
 
 /// <summary>
 /// The sky block the sky, composite, views and environment passes read (<c>sdfSky</c>, a World-group structured buffer of
-/// one record): the fog, the sky frame, the layer table's count and run structure, the sky's quality tier and the studio
-/// reflection's horizon. Its public fields are the record's layout, whose HLSL declaration <c>puck shaders generate</c>
+/// one record): the atmosphere, sky frame, layer count and run structure, quality tier and environment lighting gains.
+/// Its public fields are the record's layout, whose HLSL declaration <c>puck shaders generate</c>
 /// writes from this type. <see cref="SdfSky"/> holds the authored values and packs this record (<see cref="SdfSky.Pack"/>):
 /// the fields documented as baked are written there and nowhere else.
 /// </summary>
-[StructLayout(LayoutKind.Explicit, Size = 96)]
+[StructLayout(LayoutKind.Explicit, Size = 256)]
 public record struct SdfSkyBlock {
-    /// <summary>The exponential distance-fog density.</summary>
-    [FieldOffset(0)] public float FogDensity;
+    /// <summary>The atmosphere's flags: <see cref="SdfAir.FogColorAuthored"/> when the fog in-scatters
+    /// <see cref="FogColor"/> rather than the sky.</summary>
+    [FieldOffset(0)] public uint AirFlags;
     /// <summary>Baked: the layers the layer table holds, at most <see cref="SdfSky.MaxLayers"/>.</summary>
     [FieldOffset(4)] public uint LayerCount;
-    /// <summary>The studio-reflection softboxes the softbox table holds, at most <see cref="SdfSky.MaxSoftboxes"/>.</summary>
-    [FieldOffset(8)] public uint SoftboxCount;
+    /// <summary>The gain on the sky's diffuse irradiance. Zero disables harmonic lighting.</summary>
+    [FieldOffset(8)] public float Ambient;
     /// <summary>Baked: the sky's quality tier (<see cref="SdfSkyTier"/>), below <see cref="SdfSkyTier.High"/> of which each
     /// kind takes its reduced form.</summary>
     [FieldOffset(12)] public SdfSkyTier Quality;
@@ -34,37 +35,53 @@ public record struct SdfSkyBlock {
     [FieldOffset(44)] public uint UpperRuns;
     /// <summary>Baked: the sky frame's forward axis in world space.</summary>
     [FieldOffset(48)] public Vector3 FrameForward;
-    /// <summary>The studio-reflection horizon's low (ground-ward) color.</summary>
-    [FieldOffset(64)] public Vector3 HorizonLow;
-    /// <summary>The studio-reflection horizon's high (sky-ward) color.</summary>
-    [FieldOffset(80)] public Vector3 HorizonHigh;
-}
-/// <summary>One analytic studio-reflection softbox (see <c>worldStudioReflection</c> in
-/// <c>shade/sdf-lighting.hlsli</c>), a record of the softbox table the views pass reads (<c>sdfSoftboxes</c>,
-/// <see cref="SdfSky.MaxSoftboxes"/> records), whose HLSL declaration is generated from this type.</summary>
-/// <param name="Direction">The direction from a lit surface toward the softbox, any nonzero length (normalized on
-/// upload).</param>
-/// <param name="Color">The linear RGB color.</param>
-/// <param name="Weight">The strength.</param>
-/// <param name="Size">The angular half-extent proxy (width, height) the falloff widens by.</param>
-/// <param name="Blur">The additional falloff softening, in the same units as <paramref name="Size"/>; 0 = none.</param>
-[StructLayout(LayoutKind.Explicit, Size = 48)]
-public record struct SdfSoftbox(Vector3 Direction, Vector3 Color, float Weight, Vector2 Size, float Blur) {
-    /// <summary>The direction from a lit surface toward the softbox.</summary>
-    [FieldOffset(0)] public Vector3 Direction = Direction;
-    /// <summary>The strength.</summary>
-    [FieldOffset(12)] public float Weight = Weight;
-    /// <summary>The linear RGB color.</summary>
-    [FieldOffset(16)] public Vector3 Color = Color;
-    /// <summary>The angular half-extent proxy (width, height) the falloff widens by.</summary>
-    [FieldOffset(32)] public Vector2 Size = Size;
-    /// <summary>The additional falloff softening; 0 = none.</summary>
-    [FieldOffset(40)] public float Blur = Blur;
+    /// <summary>The gain on environment reflections. Zero disables reflection lookups.</summary>
+    [FieldOffset(60)] public float Reflection;
+    /// <summary>Baked: the directional air lights the haze and bounded media scatter, at most <see cref="SdfAir.MaxLights"/>.</summary>
+    [FieldOffset(64)] public uint AirLightCount;
+    /// <summary>The fog's extinction per world unit at its base; zero is no fog.</summary>
+    [FieldOffset(68)] public float FogExtinction;
+    /// <summary>The fog's base height.</summary>
+    [FieldOffset(72)] public float FogBase;
+    /// <summary>The fog's falloff rise; zero is a level fog.</summary>
+    [FieldOffset(76)] public float FogFalloff;
+    /// <summary>The colour the fog in-scatters when its colour is authored.</summary>
+    [FieldOffset(80)] public Vector3 FogColor;
+    /// <summary>The medium's extinction per world unit; zero is no medium.</summary>
+    [FieldOffset(92)] public float MediumExtinction;
+    /// <summary>The colour the medium in-scatters.</summary>
+    [FieldOffset(96)] public Vector3 MediumColor;
+    /// <summary>The height of the medium's surface.</summary>
+    [FieldOffset(108)] public float MediumSurface;
+    /// <summary>Baked: the haze's extinction per world unit at its base.</summary>
+    [FieldOffset(112)] public float HazeExtinction;
+    /// <summary>The haze's base height.</summary>
+    [FieldOffset(116)] public float HazeBase;
+    /// <summary>The haze's falloff rise; zero is a level haze.</summary>
+    [FieldOffset(120)] public float HazeFalloff;
+    /// <summary>The haze's Henyey-Greenstein anisotropy.</summary>
+    [FieldOffset(124)] public float HazeAnisotropy;
+    /// <summary>Baked: the unit direction toward the first air light.</summary>
+    [FieldOffset(128)] public Vector3 AirLight0Direction;
+    /// <summary>Baked: the first air light's radiance.</summary>
+    [FieldOffset(144)] public Vector3 AirLight0Radiance;
+    /// <summary>Baked: the unit direction toward the second air light.</summary>
+    [FieldOffset(160)] public Vector3 AirLight1Direction;
+    /// <summary>Baked: the second air light's radiance.</summary>
+    [FieldOffset(176)] public Vector3 AirLight1Radiance;
+    /// <summary>Baked: the unit direction toward the third air light.</summary>
+    [FieldOffset(192)] public Vector3 AirLight2Direction;
+    /// <summary>Baked: the third air light's radiance.</summary>
+    [FieldOffset(208)] public Vector3 AirLight2Radiance;
+    /// <summary>Baked: the unit direction toward the fourth air light.</summary>
+    [FieldOffset(224)] public Vector3 AirLight3Direction;
+    /// <summary>Baked: the fourth air light's radiance.</summary>
+    [FieldOffset(240)] public Vector3 AirLight3Radiance;
 }
 /// <summary>
 /// A frame's sky: the block's authored values (<see cref="Block"/>), the sky frame, the quality tier, an ordered stack
-/// of up to <see cref="MaxLayers"/> layers of any kinds, each kind as often as authored, and the studio reflection's
-/// softboxes, packed by <see cref="Pack"/> into the block and the two tables the kernels read, with the host bakes the
+/// of up to <see cref="MaxLayers"/> layers of any kinds, each kind as often as authored,
+/// packed by <see cref="Pack"/> into the block and the layer table the kernels read, with the host bakes the
 /// shader must not pay per pixel.
 /// </summary>
 public sealed class SdfSky {
@@ -76,7 +93,8 @@ public sealed class SdfSky {
     /// apart at every threshold; <c>1e-6</c> is about eight ULPs of 1.0, past what any rounding of the threshold or the
     /// edges can close, and it is a normal float no device flushes to zero.</summary>
     public const float MinCloudSoftness = 1e-6f;
-    /// <summary>The default look's fog density.</summary>
+    /// <summary>The default look's fog density, which a world authoring no atmosphere renders
+    /// (<see cref="SdfAtmosphere.Default"/>).</summary>
     public const float DefaultFogDensity = 0.015f;
     /// <summary>The default scintillation rate in hertz.</summary>
     public const float DefaultTwinkleRate = 1f;
@@ -90,8 +108,6 @@ public sealed class SdfSky {
     public const int MaxInfinityViews = 8;
     /// <summary>The most field runs above a stack's lowest run: the runs the sky pass's upper images hold.</summary>
     public const int MaxUpperFieldRuns = 2;
-    /// <summary>The most studio-reflection softboxes a frame carries: the records of the softbox table.</summary>
-    public const int MaxSoftboxes = 4;
     /// <summary>The default look's one layer's detail label.</summary>
     public const string DefaultGradientLabel = "gradient";
 
@@ -99,9 +115,11 @@ public sealed class SdfSky {
     private readonly SdfSkyLayerClass[] m_classes = new SdfSkyLayerClass[MaxLayers];
     private readonly SdfSkyTier[] m_tiers = new SdfSkyTier[MaxLayers];
     private readonly string[] m_labels = new string[MaxLayers];
-    private readonly SdfSoftbox[] m_softboxes = new SdfSoftbox[MaxSoftboxes];
 
     private SdfSkyBlock m_block;
+
+    private SdfAtmosphere m_atmosphere = SdfAtmosphere.Default;
+
     private int m_layerCount;
 
     /// <summary>Gets the zenith color of the default look's two-stop gradient, which an unauthored world renders.</summary>
@@ -132,9 +150,10 @@ public sealed class SdfSky {
 
     /// <summary>Initializes a new instance of the <see cref="SdfSky"/> class with the default look an unauthored world
     /// renders, as data the kernels read like any authored sky: one gradient layer, seen by the camera and the lighting,
-    /// from <see cref="DefaultGroundColor"/> below to <see cref="DefaultZenithColor"/> above, and the default fog.</summary>
+    /// from <see cref="DefaultGroundColor"/> below to <see cref="DefaultZenithColor"/> above, and the default atmosphere's
+    /// fog (<see cref="SdfAtmosphere.Default"/>).</summary>
     public SdfSky() {
-        m_block = new SdfSkyBlock { FogDensity = DefaultFogDensity };
+        m_block = new SdfSkyBlock { Ambient = 1f, Reflection = 1f };
         _ = Add(
             label: DefaultGradientLabel,
             parameters: DefaultGradient,
@@ -142,8 +161,10 @@ public sealed class SdfSky {
         );
     }
 
-    /// <summary>Gets the block's authored values, by reference: the fog density and the horizon. Its baked fields are
-    /// written by <see cref="Pack"/> alone, and its softbox count through <see cref="SoftboxCount"/>.</summary>
+    /// <summary>Gets the atmosphere's authored values, which packing bakes into the sky block.</summary>
+    public ref SdfAtmosphere Atmosphere => ref m_atmosphere;
+    /// <summary>Gets the block's authored values, by reference: the environment gains. Its baked fields are
+    /// written by <see cref="Pack"/> alone.</summary>
     public ref SdfSkyBlock Block => ref m_block;
     /// <summary>Gets the layers the stack carries, in authored order.</summary>
     public int LayerCount => m_layerCount;
@@ -157,18 +178,6 @@ public sealed class SdfSky {
     /// <summary>Gets or sets the sky frame's up direction in world space, any nonzero length; the sky's elevation, the
     /// layers' masks and transforms are measured from it. The default is world +y.</summary>
     public Vector3 FrameUp { get; set; } = Vector3.UnitY;
-
-    /// <summary>Gets or sets the number of studio-reflection softboxes, clamped to [0, <see cref="MaxSoftboxes"/>].</summary>
-    public int SoftboxCount {
-        get => ((int)m_block.SoftboxCount);
-        set => m_block.SoftboxCount = ((uint)Math.Clamp(
-            max: MaxSoftboxes,
-            min: 0,
-            value: value
-        ));
-    }
-    /// <summary>Gets every record of the softbox table, <see cref="MaxSoftboxes"/> of them.</summary>
-    public ReadOnlySpan<SdfSoftbox> Softboxes => m_softboxes;
 
     /// <summary>Appends a layer to the stack.</summary>
     /// <typeparam name="T">The layer's kind parameters.</typeparam>
@@ -280,53 +289,50 @@ public sealed class SdfSky {
         Array.Clear(array: m_labels);
         m_layerCount = 0;
     }
-    /// <summary>Copies the block, every layer, softbox, the frame and the quality tier from another sky.</summary>
+    /// <summary>Copies the block, atmosphere, every layer, frame and quality tier from another sky.</summary>
     /// <param name="source">The sky to copy.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
     public void CopyFrom(SdfSky source) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         m_block = source.m_block;
+        m_atmosphere = source.m_atmosphere;
         source.m_layers.CopyTo(array: m_layers, index: 0);
         source.m_classes.CopyTo(array: m_classes, index: 0);
         source.m_tiers.CopyTo(array: m_tiers, index: 0);
         source.m_labels.CopyTo(array: m_labels, index: 0);
-        source.m_softboxes.CopyTo(array: m_softboxes, index: 0);
         m_layerCount = source.m_layerCount;
         Quality = source.Quality;
         FrameUp = source.FrameUp;
     }
-    /// <summary>Packs the sky block and its two tables, with the host bakes: the sky frame's axes, each layer's detail row
+    /// <summary>Packs the sky block and its layer table, with the host bakes: the sky frame's axes, each layer's detail row
     /// and unit rotation, a cone mask's unit axis, a disc's direction (its light's packed direction,
-    /// <see cref="SdfLights.Pack"/>) and exponent, the light a cloud layer is lit by, the stack's run structure, and each
-    /// softbox's direction normalized in double and rounded once (a zero one, an unauthored slot, left zero). A layer
+    /// <see cref="SdfLights.Pack"/>) and exponent, the light a cloud layer is lit by, the stack's run structure and atmosphere. A layer
     /// below the quality tier, at zero opacity, a disc about no light, or one the camera sees that would open a field run
     /// past <see cref="MaxUpperFieldRuns"/> writes no entry (the run structure counts the layers the camera sees alone),
     /// and the table's unused records are zero. The rates arrive integrated to the frame's presented tick, so the records
     /// carry phases and offsets, never a rate.</summary>
-    /// <param name="lights">The frame's lights, which discs and clouds are lit by.</param>
+    /// <param name="lights">The frame's lights, which discs, clouds and the air are lit by.</param>
+    /// <param name="farDistance">The frame's far distance in world units, over which the haze takes its amount.</param>
     /// <param name="details">The detail rows each layer's label counts in.</param>
     /// <param name="block">Receives the sky block.</param>
     /// <param name="layers">Receives the layer table, at least <see cref="MaxLayers"/> records.</param>
-    /// <param name="softboxes">Receives the softbox table, at least <see cref="MaxSoftboxes"/> records.</param>
     /// <exception cref="ArgumentNullException"><paramref name="lights"/> or <paramref name="details"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="layers"/> or <paramref name="softboxes"/> is shorter than its
+    /// <exception cref="ArgumentException"><paramref name="layers"/> is shorter than its
     /// table.</exception>
-    public void Pack(SdfLights lights, SdfSkyDetails details, out SdfSkyBlock block, Span<SdfSkyLayer> layers, Span<SdfSoftbox> softboxes) {
+    public void Pack(SdfLights lights, float farDistance, SdfSkyDetails details, out SdfSkyBlock block, Span<SdfSkyLayer> layers) {
         ArgumentNullException.ThrowIfNull(argument: lights);
         ArgumentNullException.ThrowIfNull(argument: details);
 
-        if (
-            (layers.Length < MaxLayers) ||
-            (softboxes.Length < MaxSoftboxes)
-        ) {
-            throw new ArgumentException(message: $"The sky's tables hold {MaxLayers} layers and {MaxSoftboxes} softboxes; the spans hold {layers.Length} and {softboxes.Length}.");
+        if (layers.Length < MaxLayers) {
+            throw new ArgumentException(message: $"The sky table holds {MaxLayers} layers; the span holds {layers.Length}.", paramName: nameof(layers));
         }
 
         block = m_block;
         block.Quality = Quality;
         (block.FrameRight, block.FrameUp, block.FrameForward) = FrameOf(up: FrameUp);
+        PackAtmosphere(atmosphere: in m_atmosphere, block: ref block, farDistance: farDistance, lights: lights);
 
         var count = 0;
         var runs = new SdfSkyRunCount();
@@ -361,15 +367,63 @@ public sealed class SdfSky {
         block.BaseRun = (runs.BaseRun ? 1u : 0u);
         block.UpperRuns = ((uint)runs.UpperRuns);
 
-        for (var index = 0; (index < MaxSoftboxes); index++) {
-            var softbox = m_softboxes[index];
+    }
+    /// <summary>Writes an atmosphere's lanes into a sky block with their host bakes: the haze's extinction, which takes
+    /// its amount along a level ray the far distance long (<c>−ln(1 − amount) / far</c>), and the air lights, the first
+    /// <see cref="SdfAir.MaxLights"/> directional lights with any radiance in table order, each its unit direction and its
+    /// colour times its weight. A directional light is what a light-casting body binds, so the haze and the bounded media
+    /// scatter the bodies' light through it.</summary>
+    /// <param name="atmosphere">The authored atmosphere.</param>
+    /// <param name="lights">The frame's lights.</param>
+    /// <param name="farDistance">The frame's far distance in world units.</param>
+    /// <param name="block">The block whose atmosphere lanes are written.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="lights"/> is <see langword="null"/>.</exception>
+    public static void PackAtmosphere(in SdfAtmosphere atmosphere, SdfLights lights, float farDistance, ref SdfSkyBlock block) {
+        ArgumentNullException.ThrowIfNull(argument: lights);
 
-            if (softbox.Direction != Vector3.Zero) {
-                softbox.Direction = UnitOr(fallback: Vector3.Zero, vector: softbox.Direction);
+        block.AirFlags = (atmosphere.FogColorAuthored ? SdfAir.FogColorAuthored : 0u);
+        block.FogExtinction = MathF.Max(x: atmosphere.FogDensity, y: 0f);
+        block.FogBase = atmosphere.FogBase;
+        block.FogFalloff = MathF.Max(x: atmosphere.FogFalloff, y: 0f);
+        block.FogColor = atmosphere.FogColor;
+        block.HazeExtinction = (((atmosphere.HazeAmount > 0f) && (farDistance > 0f))
+            ? ((float)(-Math.Log(d: (1d - Math.Min(val1: atmosphere.HazeAmount, val2: SdfAtmosphere.MaxHazeAmount))) / farDistance))
+            : 0f);
+        block.HazeBase = atmosphere.HazeBase;
+        block.HazeFalloff = MathF.Max(x: atmosphere.HazeFalloff, y: 0f);
+        block.HazeAnisotropy = Math.Clamp(max: SdfAtmosphere.MaxHazeAnisotropy, min: 0f, value: atmosphere.HazeAnisotropy);
+        block.MediumExtinction = MathF.Max(x: atmosphere.MediumExtinction, y: 0f);
+        block.MediumSurface = atmosphere.MediumSurface;
+        block.MediumColor = atmosphere.MediumColor;
+        block.AirLight0Direction = block.AirLight1Direction = block.AirLight2Direction = block.AirLight3Direction = Vector3.Zero;
+        block.AirLight0Radiance = block.AirLight1Radiance = block.AirLight2Radiance = block.AirLight3Radiance = Vector3.Zero;
+
+        var count = 0;
+
+        for (var index = 0; ((index < lights.Count) && (count < SdfAir.MaxLights)); index++) {
+            var light = lights[index];
+            var radiance = (light.Color * light.Weight);
+
+            if (
+                (light.Kind != SdfLightKind.Directional) ||
+                !((radiance.X > 0f) || (radiance.Y > 0f) || (radiance.Z > 0f))
+            ) {
+                continue;
             }
 
-            softboxes[index] = softbox;
+            var direction = SdfLights.UnitDirection(direction: light.Direction);
+
+            switch (count) {
+                case 0: block.AirLight0Direction = direction; block.AirLight0Radiance = radiance; break;
+                case 1: block.AirLight1Direction = direction; block.AirLight1Radiance = radiance; break;
+                case 2: block.AirLight2Direction = direction; block.AirLight2Radiance = radiance; break;
+                default: block.AirLight3Direction = direction; block.AirLight3Radiance = radiance; break;
+            }
+
+            count++;
         }
+
+        block.AirLightCount = ((uint)count);
     }
     /// <summary>Returns the sky frame's axes for an up direction: up normalized, and right and forward completing a
     /// right-handed basis that is the identity for world +y. Computed in double and rounded once.</summary>
@@ -404,22 +458,18 @@ public sealed class SdfSky {
             new Vector3(x: ((float)forwardX), y: ((float)forwardY), z: ((float)forwardZ))
         );
     }
-    /// <summary>Sets one studio-reflection softbox.</summary>
-    /// <param name="index">The softbox's index in the table.</param>
-    /// <param name="softbox">The softbox.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the table.</exception>
-    public void SetSoftbox(int index, SdfSoftbox softbox) {
-        ArgumentOutOfRangeException.ThrowIfNegative(value: index);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: MaxSoftboxes, value: index);
 
-        m_softboxes[index] = softbox;
-    }
 
     // Writes a layer's kind bakes, and whether it writes an entry at all: a gradient's unused stops are zero, and one with
     // no stop draws nothing; a disc is drawn about its light's direction with the exponent its radius gives, and never about
     // no light; clouds are lit by the first shadow slot's light, or the pinned sun and white when no light shadows.
     private static bool Bake(ref SdfSkyLayer layer, SdfLights lights) {
         switch (layer.Kind) {
+            case SdfSkyLayerKind.Panel: {
+                ref var panel = ref PayloadOf<SdfSkyPanel>(layer: ref layer);
+                panel.Direction = UnitOr(fallback: Vector3.UnitY, vector: panel.Direction);
+                return panel.Intensity > 0f;
+            }
             case SdfSkyLayerKind.Disc: {
                     ref var disc = ref PayloadOf<SdfSkyDisc>(layer: ref layer);
 

@@ -1020,11 +1020,11 @@ also rebuilds the view's scratch.
 
 `world.screenshot <path.png> crossing [player]` waits for a later route of the selected seat
 (player 1 by default) on a frame that includes its viewport, then requests that frame's composed
-image. It captures what the crossing presents, including a held image while incompatible passes
-rebuild. An ordinary capture can run while it waits; if one is still pending at the crossing, the
-crossing capture reports a refusal. If the root cannot serve that frame, the request is withdrawn
-before the next frame instead of capturing a later route. A request still waiting when presentation
-ends also reports a refusal.
+image. If the destination's passes are still rebuilding, the request waits for their first completed
+frame; the departed world's held image cannot serve it. An ordinary capture can run while it waits
+for the route to move; if one is still pending at the crossing, the crossing capture reports a refusal.
+A refused frame, a seat no longer visible, or another route change refuses the request. A completed
+frame that did not serve it also refuses it before the next attempt, as does presentation ending.
 
 Every body that can travel crosses a portal face and a seam alike: a local seat, an admitted peer's
 traveller, or a body the world's own census authors. A party door entered by a traveller that is not

@@ -14,6 +14,15 @@ stream). Its static creations draw their bakes, and the world ships them:
 own CLI and boots the compiled world, whose bake pack holds every bake, so no
 capture depends on a bake made on the device.
 
+The shared sky's second-order harmonic irradiance supplies ambient light, and
+its map supplies reflections beneath two lighting-only rectangular panels.
+The panels exercise analytic reflections across the stations' roughness values.
+The lit stations (`materials`, `lattice`,
+`noise`, `vocabulary` and `converge`) therefore change with sky lighting;
+`sky` also covers the keyed environment. Their pixel comparisons and census
+floors need device qualification when this lighting changes. The `binding`
+and `bound` integer reference images remain independent of SDF lighting.
+
 The world boots with soft shadows at `High` and ambient occlusion on
 (`render.shadows`, `render.ambientOcclusion`), so every SDF station passes
 through the shadow and ambient stages under the cross-backend pixel gate. It

@@ -8,6 +8,7 @@ public sealed class SdfShadowSlots {
     public const int MaxFadeSlots = 2;
 
     private readonly int[] m_slots = [-1, -1, -1, -1];
+    private readonly string?[] m_owners = new string?[MaxSlots];
     private readonly SdfShadowHandoff[] m_handoffs = new SdfShadowHandoff[MaxFadeSlots];
 
     /// <summary>Gets the configured stable-slot capacity K.</summary>
@@ -24,6 +25,18 @@ public sealed class SdfShadowSlots {
     /// <returns>The light index.</returns>
     public int this[int slot] => m_slots[slot];
 
+    /// <summary>Returns the stable light name carried by a slot, or null for an unnamed frame light.</summary>
+    /// <param name="slot">The stable slot.</param>
+    /// <returns>The owner name. Unnamed slots cannot reuse shadow history.</returns>
+    public string? Owner(int slot) => m_owners[slot];
+    /// <summary>Sets the stable name independently of its current light-table index.</summary>
+    /// <param name="slot">The configured stable slot.</param>
+    /// <param name="owner">The exact light name, or null for an unnamed frame light.</param>
+    public void SetOwner(int slot, string? owner) {
+        ArgumentOutOfRangeException.ThrowIfNegative(slot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(slot, SlotCount);
+        m_owners[slot] = owner;
+    }
     /// <summary>Sets the policy and clears the preceding frame's owners and active handoffs.</summary>
     /// <param name="slots">The stable capacity K.</param>
     /// <param name="fadeCapacity">The incoming capacity F.</param>
@@ -37,6 +50,7 @@ public sealed class SdfShadowSlots {
         FadeCapacity = fadeCapacity;
         FadeCount = 0;
         Array.Fill(array: m_slots, value: -1);
+        Array.Clear(array: m_owners);
         Array.Clear(array: m_handoffs);
     }
     /// <summary>Assigns the light that owns a stable slot without compacting vacant slots.</summary>
@@ -73,6 +87,7 @@ public sealed class SdfShadowSlots {
     public void CopyFrom(SdfShadowSlots source) {
         ArgumentNullException.ThrowIfNull(argument: source);
         source.m_slots.CopyTo(array: m_slots, index: 0);
+        source.m_owners.CopyTo(array: m_owners, index: 0);
         source.m_handoffs.CopyTo(array: m_handoffs, index: 0);
         SlotCount = source.SlotCount;
         FadeCapacity = source.FadeCapacity;

@@ -308,6 +308,9 @@ public static partial class SdfWorldPackage {
         Value(name: FrustumOffset, type: ShaderValueType.Float2),
         Value(name: Jitter, type: ShaderValueType.Float2),
         Value(name: HistoryFrames, type: ShaderValueType.Uint),
+        Value(name: ShadowAmortize, type: ShaderValueType.Uint),
+        Value(name: ShadowOwnershipReject, type: ShaderValueType.Uint),
+        Value(name: ShadowLightReject, type: ShaderValueType.Uint),
         Value(name: Temporal, type: ShaderValueType.Uint),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: 6, name: PreviousView, type: ShaderValueType.Float4),
         Value(name: NearDistance, type: ShaderValueType.Float),
@@ -399,6 +402,8 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: VisibilityRecords),
         Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
         Written(element: ShaderValueType.Float, name: ReactivityWritten),
+        Read(element: ShaderValueType.Uint, name: ShadowHistory),
+        Written(element: ShaderValueType.Uint, name: ShadowHistoryWritten),
         ShaderInterfaceMember.StorageImage(
             format: RenderGraphPackageCatalog.WorkingFormat,
             group: ShaderInterfaceGroup.Pass,
@@ -601,11 +606,12 @@ public static partial class SdfWorldPackage {
         /// one.</summary>
         public const string Lit = "lit";
         /// <summary>Each output pixel's surface transport, which the resolve writes for the composite in a reduced or
-        /// temporal view, reconstructed from the render samples with the lit image's weights: one word a pixel
-        /// (<c>shade/sdf-transport.hlsli</c>). With its top bit clear, two half floats, the low the fog's in-scatter weight
-        /// (coverage times one minus transmittance), the high the coverage over the ray distance, scaled; with it set, a
-        /// pixel the resolve copied whole from one render sample, carrying that sample's ray distance's float bits, from
-        /// which the composite derives the transport as a native view's composite does.</summary>
+        /// temporal view, reconstructed from the render samples with the lit image's weights: two words a pixel
+        /// (<c>shade/sdf-transport.hlsli</c>). With the first word's top bit clear, four half floats: the fog's in-scatter
+        /// weight and the coverage over the ray distance, scaled, in the first word, the haze's and the medium's
+        /// in-scatter weights in the second; with it set, a pixel the resolve copied whole from one render sample, carrying
+        /// that sample's ray distance's float bits, from which the composite derives the transport as a native view's
+        /// composite does.</summary>
         public const string Transport = "transport";
         /// <summary>The sky's lowest field run, which composes over nothing, so its offset alone, with whether the sky
         /// evaluated the texel in its alpha.</summary>

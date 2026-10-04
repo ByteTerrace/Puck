@@ -390,7 +390,7 @@ public static partial class WorldDefinitionValidator {
 
         return false;
     }
-    // The lights a sun disc's slot indexes: the authored list, or the pinned sun and hemisphere when the section
+    // The lights a sun disc's slot indexes: the authored list, or the pinned sun when the section
     // authors no list (a curvature-only section keeps the pinned lights).
     private static WorldRenderLighting ResolvedLightingShape(WorldRenderLighting? lighting) => (lighting switch {
         { Lights: not null } authored => authored,
@@ -868,6 +868,11 @@ public static partial class WorldDefinitionValidator {
         ValidateRenderEnvironment(
             definition: definition,
             environment: definition.Render.Environment,
+            errors: errors
+        );
+        ValidateRenderAtmosphere(
+            atmosphere: definition.Render.Atmosphere,
+            definition: definition,
             errors: errors
         );
 
@@ -1457,7 +1462,7 @@ public static partial class WorldDefinitionValidator {
         // bodyless document may author none and reads the inert WorldCollision.Absent.
         if (definition.CollisionRaw is null) {
             if (definition.Population.Capacity > 0) {
-                errors.Add(item: "collision is required when the census implies a body (bodies.capacity > 0) — author it, or inherit a basis (e.g. standard.world.json) that does.");
+                errors.Add(item: "collision is required when the census implies a body (bodies.capacity > 0) — author it, or inherit a basis that does.");
             }
         } else {
             ValidateCollision(

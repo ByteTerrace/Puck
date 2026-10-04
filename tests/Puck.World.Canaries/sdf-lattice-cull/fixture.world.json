@@ -29,12 +29,13 @@
               "color": "#000000"
             }
           ]
-        },
-        {
-          "$type": "fog",
-          "density": 0
         }
       ]
+    },
+    "atmosphere": {
+      "fog": {
+        "density": 0
+      }
     },
     "lighting": {
       "lights": [

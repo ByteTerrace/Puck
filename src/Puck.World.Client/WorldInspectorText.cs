@@ -34,6 +34,9 @@ public sealed partial class WorldInspectorText {
     private string? m_reloadRoot;
 
     private string m_reloadLine = "reload=none";
+    private WorldRenderSky? m_sky;
+    private WorldRenderAtmosphere? m_atmosphere;
+    private string? m_skyText;
 
     /// <summary>Gets whether this snapshot's fixed lines exceeded the editor writer's declared line reservation.</summary>
     public bool Refused { get; private set; }
@@ -96,6 +99,31 @@ public sealed partial class WorldInspectorText {
         _ = (scratch.TryWrite(provider: CultureInfo.InvariantCulture, charsWritten: out written,
             handler: $"instances={snapshot.Instances}/{SdfProgramBuilder.MaxInstances} headroom={(SdfProgramBuilder.MaxInstances - snapshot.Instances)}") && Line(text: scratch[..written]));
         _ = Line(text: m_reloadLine, lines: ReloadLines);
+        Environment(snapshot);
+    }
+
+    private void Environment(in WorldInspectorSnapshot snapshot) {
+        if (snapshot.Definition is not { } definition) { return; }
+        if (m_skyText is null || !ReferenceEquals(m_sky, definition.Render.Sky) || !ReferenceEquals(m_atmosphere, definition.Render.Atmosphere)) {
+            m_sky = definition.Render.Sky;
+            m_atmosphere = definition.Render.Atmosphere;
+            m_skyText = WorldLightingText.DescribeSky(m_sky, m_atmosphere);
+        }
+        _ = Line(m_skyText, lines: 4, optional: true);
+        var scratch = m_scratch.AsSpan();
+        _ = (scratch.TryWrite(CultureInfo.InvariantCulture, $"timeline clocks={definition.Timeline.Clocks?.Count ?? 0}", out var written) && Line(scratch[..written], optional: true));
+        var clocks = definition.Timeline.Clocks;
+        for (var index = 0; index < (clocks?.Count ?? 0); index++) {
+            var clock = clocks![index];
+            var mirror = snapshot.Mirror;
+            var rate = 1d;
+            var held = mirror?.ClockHeld(clock.Name, out rate) ?? false;
+            var tick = mirror?.ClockTick(clock.Name) ?? default;
+            var phase = 0d;
+            var available = mirror?.TryReadPhase(clock.Name, out _, out phase) ?? false;
+            _ = (scratch.TryWrite(CultureInfo.InvariantCulture,
+                $"clock={clock.Name} source={clock.State ?? (clock.IsTickClock ? "tick" : "anchor")} held={held} rate={rate:0.######} tick={tick.Whole}+{tick.Fraction:0.######} phase={(available ? phase : double.NaN):0.######}", out written) && Line(scratch[..written], lines: NameLines, optional: true));
+        }
     }
     /// <summary>Appends the observational frame-rate readout while timing is enabled.</summary>
     /// <param name="mean">The mean frames per second over the monitor's window.</param>
@@ -223,6 +251,10 @@ public sealed partial class WorldInspectorText {
 }
 /// <summary>The captured presentation facts a formatter displays; no field changes simulation state.</summary>
 public readonly record struct WorldInspectorSnapshot {
+    /// <summary>The inspected world's authored environment and timeline.</summary>
+    public WorldDefinition? Definition { get; init; }
+    /// <summary>That world's presented clock readings and session previews.</summary>
+    public WorldStateMirror? Mirror { get; init; }
     /// <summary>The zero-based local seat.</summary>
     public int Slot { get; init; }
     /// <summary>The completed pixel and its captured lookup.</summary>

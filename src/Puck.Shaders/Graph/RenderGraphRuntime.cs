@@ -1016,10 +1016,10 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             return $"the instance '{name}' has rendered only over a stand-in for '{producerName}', which has produced no output";
         }
 
-        return TaintReasonOf(
+        return (TaintReasonOf(
             index: index,
             name: name
-        );
+        ) ?? m_stale[index]);
     }
     // Arms a capture of one instance on the runtime's one slot.
     private void Arm(int index, FrameCaptureRequest request, bool followsRoot = false) {
@@ -1217,7 +1217,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
 
                 if (
                     (index == m_captureInstance) &&
-                    (m_taintedReads[index] is null)
+                    (m_capture.PendingPath is not null) &&
+                    (m_taintedReads[index] is null) &&
+                    !MarkReadStale(index: index, schedule: schedule)
                 ) {
                     m_capture.Forward(target: producer);
                 }
@@ -1324,11 +1326,13 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             // which a shown one does this frame (WithRerenders).
             if (
                 (index == m_captureInstance) &&
+                (m_capture.PendingPath is not null) &&
                 CanServeConvergence &&
                 node.IsReady &&
                 (m_standInReads[index] is null) &&
                 (m_taintedReads[index] is null) &&
-                (m_current[index].StandsFor.IsOwn || (LatestOf(index: index).Frame >= 0))
+                (m_current[index].StandsFor.IsOwn || (LatestOf(index: index).Frame >= 0)) &&
+                !MarkReadStale(index: index, schedule: schedule)
             ) {
                 m_capture.Forward(target: node);
             }

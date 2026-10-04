@@ -10,6 +10,10 @@ namespace Puck.World.Client;
 /// <remarks>The tokens are the verb names without their <c>world.</c> prefix, so a reader who knows the verb knows the
 /// wire name. A verb submits <see cref="WorldSessionLever"/> carrying one of these; nothing else may.</remarks>
 public static partial class WorldSessionLevers {
+    /// <summary>Sky solo row, -1 to restore all rows.</summary>
+    public const string SkySolo = "sky-layer.solo";
+    /// <summary>Sky mute row in A and on/off in B.</summary>
+    public const string SkyMute = "sky-layer.mute";
     /// <summary>The ambient-occlusion toggle (<c>world.ao</c>), folding into <c>render</c>.</summary>
     public const string AmbientOcclusion = "ao";
     /// <summary>The ambient-occlusion quality tier ordinal (<c>world.ao-quality</c>).</summary>
@@ -46,6 +50,8 @@ public static partial class WorldSessionLevers {
     public const string TargetHertz = "target";
     /// <summary>Temporal reconstruction of the world's own views (<c>world.temporal</c>).</summary>
     public const string Temporal = "temporal";
+    /// <summary>Secondary shadow history reuse (<c>world.shadow-amortize</c>).</summary>
+    public const string ShadowAmortize = "shadow-amortize";
     /// <summary>The upscale sharpness (<c>world.upscale-sharpness</c>).</summary>
     public const string UpscaleSharpness = "upscale-sharpness";
 
@@ -72,6 +78,8 @@ public static partial class WorldSessionLevers {
         ArgumentNullException.ThrowIfNull(bindingBar);
 
         var sink = new WorldSessionLeverSink();
+        sink.Register(name: SkySolo, setter: lever => settings.SkyLayers.SetSolo((int)lever.A));
+        sink.Register(name: SkyMute, setter: lever => settings.SkyLayers.SetMuted((int)lever.A, lever.B != 0d));
 
         sink.Register(
             name: MasterVolume,
@@ -124,6 +132,7 @@ public static partial class WorldSessionLevers {
             name: Temporal,
             setter: lever => settings.Temporal = Flag(lever: lever)
         );
+        sink.Register(name: ShadowAmortize, setter: lever => settings.ShadowAmortize = Flag(lever: lever));
         sink.Register(
             name: SkyQuality,
             setter: lever => settings.SkyQuality = (((int)lever.A) switch {

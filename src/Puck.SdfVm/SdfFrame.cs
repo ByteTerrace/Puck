@@ -86,6 +86,9 @@ public readonly record struct SdfViewQuality {
     /// output, at native or reduced render scale. Its costs are the resolve's dispatch and the history's bytes and
     /// barriers. The default asks for none.</summary>
     public bool Temporal { get; init; }
+    /// <summary>Gets whether secondary stable shadow slots reuse valid history between quarter-grid marches.
+    /// Requires temporal reconstruction; slot zero and handoffs always march.</summary>
+    public bool ShadowAmortize { get; init; }
 
     /// <summary>Returns this quality with another's restrictions added: a term either skips stays skipped, an
     /// approximation either takes stays taken, the shorter shadow reach holds, and the view reconstructs over time only
@@ -104,6 +107,7 @@ public readonly record struct SdfViewQuality {
         UseFastAmbientOcclusion = (UseFastAmbientOcclusion || other.UseFastAmbientOcclusion),
         UseFastSoftShadowMarch = (UseFastSoftShadowMarch || other.UseFastSoftShadowMarch),
         Temporal = (Temporal && other.Temporal),
+        ShadowAmortize = (ShadowAmortize && other.ShadowAmortize),
     };
 }
 /// <summary>Contains the scene program and presentation state consumed by one SDF render frame.</summary>
@@ -153,14 +157,14 @@ public sealed record SdfFrame(
     public long MeshDrawsRevision { get; init; }
 
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
-    /// and hemisphere ambient an unauthored world renders.</summary>
+    /// an unauthored world renders.</summary>
     public SdfLights Lights { get; init; } = SdfLights.Default();
 
     /// <summary>Gets the fade capacities reachable through authored policy rows. A residency also requests the live
     /// <see cref="SdfShadowSlots.FadeCapacity"/> on first demand, including capacities introduced by session levers.</summary>
     public SdfShadowFadeVariants ShadowFadeVariants { get; init; }
 
-    /// <summary>The sky: its gradient, fog, sun disc, stars, clouds and the studio reflection's softboxes and horizon.
+    /// <summary>The sky: its open layer stack, fog and environment gains.
     /// The default is the default look an unauthored world renders: the two-stop gradient and the default fog, as
     /// data.</summary>
     public SdfSky Sky { get; init; } = new();

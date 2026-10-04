@@ -46,10 +46,10 @@
         "The edited fixtures/flat-plastic.puck compiles clean (`puck compile --validate`) and fits the budget; `creation stats` on the compiled output also succeeds",
         "The armor palette entry gains metal, coat, and a roughness in a plausible painted-metal band",
         "The eye material uses palette inset with a radial paint ramp of ordered stops, rather than a flat dark color",
-        "Mentions render.environment softboxes or an equivalent, since a coat has nothing to reflect without them",
+        "Mentions lighting-visible sky panels or an equivalent, since a coat has nothing to reflect without them",
         "Every unit-range field stays within [0, 1] — roughness, sheen, metal, coat, wrap, soften are refused by name outside it"
       ],
-      "expected_output": "A palette rewrite: painted-metal armor via specular/roughness/metal/coat, eyes via an inset layer with pupil, iris, and limbus stops under a refracting cornea, and a note that softboxes are what make the coat read.",
+      "expected_output": "A palette rewrite: painted-metal armor via specular/roughness/metal/coat, eyes via an inset layer with pupil, iris, and limbus stops under a refracting cornea, and a note that sky panels are what make the coat read.",
       "files": [
         "fixtures/flat-plastic.puck"
       ],

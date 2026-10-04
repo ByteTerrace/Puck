@@ -29,6 +29,8 @@ public enum AmbientOcclusionMode {
 /// identity: per-player preferences belong on the profile.
 /// </summary>
 public sealed partial class WorldRenderSettings {
+    /// <summary>The sky layer audition, never folded into a saved definition.</summary>
+    public Client.WorldSkyAudition SkyLayers { get; } = new();
     private bool m_ambientOcclusion;
     private AmbientOcclusionMode m_ambientOcclusionQuality;
     private volatile int m_bakes;
@@ -43,6 +45,7 @@ public sealed partial class WorldRenderSettings {
     private float m_shadowReach;
     private Client.WorldShadowSettings m_shadowSlots;
     private bool m_temporal;
+    private bool m_shadowAmortize;
     private float m_upscaleSharpness;
     private WorldSkyTier m_skyQuality;
 
@@ -64,6 +67,7 @@ public sealed partial class WorldRenderSettings {
         RenderScale = defaults.RenderScale;
         UpscaleSharpness = defaults.UpscaleSharpness;
         Temporal = defaults.Temporal;
+        ShadowAmortize = defaults.ShadowAmortize;
         SkyQuality = defaults.SkyQuality;
         DynamicResolution = defaults.DynamicResolution;
         FarBound = true;
@@ -128,7 +132,7 @@ public sealed partial class WorldRenderSettings {
     public float RenderScale { get => m_renderScale; set { m_renderScale = value; m_revision++; } }
     /// <summary>A monotonic counter advanced by every lever write — the cheap watch the editor HUD keys its
     /// live-session-act tag and drift refresh on (no per-frame drift recompute).</summary>
-    public int Revision => m_revision;
+    public int Revision => unchecked(m_revision + SkyLayers.Revision);
     /// <summary>The soft-shadow crowd radius (world units): an avatar within this distance of any joined local seat casts
     /// soft shadows; beyond it, it is suppressed from the soft-shadow march only (still rendered, still self-lit). Boots
     /// at the definition's default; the <c>world.shadows</c> verb's optional second arg moves it live (it rides the
@@ -154,6 +158,9 @@ public sealed partial class WorldRenderSettings {
     /// <see cref="Puck.SdfVm.SdfViewQuality.Temporal"/> lane. A change rebuilds each view's graph beside the installed
     /// one. Camera and session views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
+    /// <summary>Whether secondary stable shadow slots reuse valid history when reconstruction is on. The
+    /// <c>world.shadow-amortize</c> session lever changes it without rebuilding the graph.</summary>
+    public bool ShadowAmortize { get => m_shadowAmortize; set { m_shadowAmortize = value; m_revision++; } }
     /// <summary>The sky's quality tier (<c>world.sky-quality</c>): a layer below it writes no entry and counts no work,
     /// and below <see cref="WorldSkyTier.High"/> each kind draws its reduced form. Boots at the definition's
     /// <c>render.skyQuality</c>; a quality preset's <c>sky</c> row sets it.</summary>

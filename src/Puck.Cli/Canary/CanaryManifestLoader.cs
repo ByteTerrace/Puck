@@ -1422,6 +1422,9 @@ internal static partial class CanaryManifestLoader {
         foreach (var relaunch in new[] { positive.Relaunch, discriminating.Relaunch }) {
             if (relaunch is not null) {
                 expected.Add(item: relaunch.ScriptPath);
+                if ((relaunch.WorldSourcePath is { } sourceWorld) && IsWithin(path: sourceWorld, root: canaryDirectory)) {
+                    expected.Add(item: sourceWorld);
+                }
             }
         }
         foreach (var fixture in fixtures) {

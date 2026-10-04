@@ -21,15 +21,15 @@ public static partial class SdfWorldPackage {
     public const string HistoryColorWritten = "historyColorRW";
     /// <summary>The preceding frame's history surface: per output pixel <see cref="HistorySurfaceWords"/> words, the
     /// visibility identity of the nearest render-extent sample the resolve read, then its ray distance and the sample
-    /// weight the pixel has gathered as two half floats, the distance low, then the accumulated surface transport as
-    /// <see cref="Parts.Transport"/> packs it.</summary>
+    /// weight the pixel has gathered as two half floats, the distance low, then the accumulated surface transport's two
+    /// words as <see cref="Parts.Transport"/> packs them.</summary>
     public const string HistorySurface = "historySurface";
     /// <summary>The history surface the resolve writes for the next frame.</summary>
     public const string HistorySurfaceWritten = "historySurfaceRW";
     /// <summary>The words one output pixel holds in the history surface: its identity, its ray distance with its gathered
-    /// weight, and its transport. KEEP IN SYNC with <c>SdfHistorySurfaceWords</c> in
+    /// weight, and its transport's two words. KEEP IN SYNC with <c>SdfHistorySurfaceWords</c> in
     /// <c>passes/sdf-resolve.comp.hlsl</c>.</summary>
-    public const uint HistorySurfaceWords = 3;
+    public const uint HistorySurfaceWords = 4;
 
     /// <summary>The resolve interface: the common frame values, the render-grid color, the resolved lit image and surface
     /// transport it writes, the visibility records and the dispatch box it reads the render grid through, and what the
@@ -46,7 +46,7 @@ public static partial class SdfWorldPackage {
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: Output, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),
             Read(element: ShaderValueType.Uint, name: CullBounds),
-            Written(element: ShaderValueType.Uint, name: TransportWritten),
+            Written(element: ShaderValueType.Uint2, name: TransportWritten),
             Read(element: ShaderValueType.Float, name: Reactivity),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: HistoryColor, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: HistorySurface),
@@ -99,7 +99,7 @@ public static partial class SdfWorldPackage {
                     }),
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: CurrentColor, retained: true) with { Dimensions = ShaderPipelineDimensions.Render() },
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, retained: true),
-                Buffer(count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)], name: Parts.Transport, sizeBytes: null, strideBytes: sizeof(uint)),
+                Buffer(count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)], name: Parts.Transport, sizeBytes: null, strideBytes: (2 * sizeof(uint))),
                 .. SkyResources.Select(selector: static resource => resource with { Dimensions = ShaderPipelineDimensions.Render() }),
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, retained: false),
             ],
@@ -127,6 +127,14 @@ public static partial class SdfWorldPackage {
                 .. ResolveFragment.Value.Resources,
                 Buffer(count: ReactivityCount, name: Parts.Reactivity, sizeBytes: null, strideBytes: sizeof(float)),
                 new ShaderPipelineResource(
+                    Count: [Term(ShadowHistoryWords, ShaderPipelineCountBasis.RenderExtent, ShaderPipelineCountBasis.Viewports)],
+                    History: true,
+                    Initialization: ShaderPipelineInitialization.Zero,
+                    Kind: ShaderPipelineResourceKind.Buffer,
+                    Name: ShadowHistory,
+                    StrideBytes: sizeof(uint)
+                ),
+                new ShaderPipelineResource(
                     Dimensions: ShaderPipelineDimensions.Relative(),
                     Format: RenderGraphPackageCatalog.WorkingFormat.ToString(),
                     History: true,
@@ -144,7 +152,15 @@ public static partial class SdfWorldPackage {
             ],
             Passes: [
                 .. ResolveFragment.Value.Passes.Select(selector: static pass => pass.Name switch {
+                    Parts.Shadow => pass with {
+                        Inputs = [.. pass.Inputs, new ResourceReference(Name: ShadowHistory, PreviousFrame: true)],
+                        InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
+                        Outputs = [.. pass.Outputs, new ResourceReference(Name: ShadowHistory)],
+                        OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
+                    },
                     Parts.Views => pass with {
+                        Inputs = [.. pass.Inputs, new ResourceReference(Name: ShadowHistory)],
+                        InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead],
                         OutputAccesses = [RenderGraphPortAccess.ComputeWrite, RenderGraphPortAccess.ComputeWrite],
                         Outputs = [new ResourceReference(Name: CurrentColor), new ResourceReference(Name: Parts.Reactivity)],
                     },

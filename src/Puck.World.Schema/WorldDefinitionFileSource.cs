@@ -1403,7 +1403,7 @@ public static partial class WorldDefinitionFileSource {
     /// carrying one refuses by name through the same <see cref="TryComposeLayers"/> path a directory load runs.
     /// </summary>
     /// <param name="hostBytes">The host document's raw bytes (the basis the fragment composes under — e.g. an
-    /// official <c>standard.world.json</c> fetched by the caller).</param>
+    /// official <c>standard.puck</c> fetched by the caller).</param>
     /// <param name="fragmentBytes">The fragment's raw bytes (a district or game document carrying <c>exports</c>).</param>
     /// <param name="alias">The alias the fragment composes under — every row it declares appears in the result as
     /// <c>&lt;alias&gt;_&lt;name&gt;</c>.</param>

@@ -67,9 +67,8 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The sky's layer table: <see cref="SdfSky.MaxLayers"/> <see cref="SdfSkyLayer"/> records, read by the sky
     /// and composite passes and the environment map's kernel.</summary>
     public const string SkyLayers = "sdfSkyLayers";
-    /// <summary>The studio reflection's softboxes: <see cref="SdfSky.MaxSoftboxes"/> <see cref="SdfSoftbox"/> records, read
-    /// by the views pass.</summary>
-    public const string Softboxes = "sdfSoftboxes";
+    /// <summary>The sky's nine radiance coefficients read by the views pass.</summary>
+    public const string SkyCoefficients = "sdfSkyCoefficients";
 
     /// <summary>Initializes a new instance of the <see cref="SdfKernelInterfaces"/> class.</summary>
     /// <param name="stamp">The instruction set's stamp (<see cref="SdfIsaHlsl.StampOf"/>).</param>
@@ -165,7 +164,7 @@ public sealed class SdfKernelInterfaces {
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Lights, structure: ShaderInterfaceStructure.From<SdfLight>()),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: SkyLayers, structure: ShaderInterfaceStructure.From<SdfSkyLayer>()),
-        ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Softboxes, structure: ShaderInterfaceStructure.From<SdfSoftbox>()),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Float4, group: ShaderInterfaceGroup.World, name: SkyCoefficients),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: ShadowHandoffs, structure: ShaderInterfaceStructure.From<SdfShadowHandoff>()),
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint2, group: ShaderInterfaceGroup.World, name: SkyEnvironment),
     ];

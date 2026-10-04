@@ -37,7 +37,7 @@ public sealed class AbsentDerivationLawTests {
     [Fact]
     public void Channels_Absent_ResolvesToNone() {
         // The engine declares no channel of its own: the standard movement set is authored, in
-        // src/Puck.World/Assets/worlds/standard.world.json, and a world inherits it by naming that basis.
+        // src/Puck.World/Assets/worlds/standard.puck, and a world inherits it by naming that basis.
         var definition = Parse(json: """{"schema": "puck.world.definition.v1", "documentId": "channels-derive"}""");
 
         Assert.Empty(collection: definition.Channels);
@@ -231,7 +231,7 @@ public sealed class AbsentDerivationLawTests {
     public void NullSeatWorld_DeserializesAndValidates() {
         // src/Puck.World/Assets/worlds/null-seat.world.json's census, motion program and kit, plus the movement
         // channels and seat rig a nonzero census owes now that the engine declares neither (both are authored, in
-        // standard.world.json) — the smallest document that puts one body in a world and lets a seat see it.
+        // standard.puck) — the smallest document that puts one body in a world and lets a seat see it.
         var definition = Parse(json: $$"""
             {
               "schema": "puck.world.definition.v1",
@@ -335,7 +335,7 @@ public sealed class AbsentDerivationLawTests {
     }
     [Fact]
     public void Views_Absent_RequiredOnlyWhenPopulationImpliesABody() {
-        // The engine ships no seat rig either (standard.world.json authors it), so a seatless document may author no
+        // The engine ships no seat rig either (standard.puck authors it), so a seatless document may author no
         // views and a census implying a body may not.
         var seatless = Parse(json: """{"schema": "puck.world.definition.v1", "documentId": "views-absent-ok"}""");
 

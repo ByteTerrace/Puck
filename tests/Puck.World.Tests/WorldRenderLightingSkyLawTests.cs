@@ -33,25 +33,11 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             revision: revision
         );
     }
-    private static WorldRenderSoftbox Softbox(float x = 1f, float y = 1f, float z = 1f, float width = 0.3f, float height = 0.4f) => new(
-        Direction: new Vector3(
-            x: x,
-            y: y,
-            z: z
-        ),
-        Size: new Vector2(
-            x: width,
-            y: height
-        ),
-        Color: new BindableColor(Raw: "#FFFFFF"),
-        Weight: 0.5f
-    );
     private static WorldRenderLighting SunAndSky(BindableColor? sunColor = null) => new(Lights: [
         new WorldRenderLight.Directional(
             Color: sunColor,
             Shadow: WorldShadowMode.Always, Name: "sun"
         ),
-        new WorldRenderLight.Hemisphere(),
     ]);
     private static WorldRenderSky ThreeStopSky() => new(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [
         new WorldRenderSkyStop(
@@ -86,21 +72,10 @@ public sealed partial class WorldRenderLightingSkyLawTests {
     ]);
 
     [Fact]
-    public void AbsentEnvironment_ResolvesToNoSoftboxesAndABlackHorizon() {
+    public void AbsentEnvironmentResolvesToUnitGains() {
         var resolved = Resolve(defaults: BaseDefaults());
-
-        Assert.Equal(
-            expected: 0,
-            actual: resolved.Sky.SoftboxCount
-        );
-        Assert.Equal(
-            expected: Vector3.Zero,
-            actual: resolved.Sky.Block.HorizonLow
-        );
-        Assert.Equal(
-            expected: Vector3.Zero,
-            actual: resolved.Sky.Block.HorizonHigh
-        );
+        Assert.Equal(1f, resolved.Sky.Block.Ambient);
+        Assert.Equal(1f, resolved.Sky.Block.Reflection);
     }
     [Fact]
     public void AbsentLightingAndSky_ResolveToThePinnedEnvironmentBitExact() {
@@ -112,7 +87,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         Assert.Equal(expected: unauthored.Block, actual: resolved.Sky.Block);
         Assert.True(condition: unauthored.Layers.SequenceEqual(other: resolved.Sky.Layers));
         Assert.Equal(
-            expected: 2,
+            expected: 1,
             actual: resolved.Lights.Count
         );
         Assert.Equal(
@@ -128,13 +103,13 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             actual: resolved.Lights[0].Param
         );
         Assert.Equal(
-            expected: SdfLights.DefaultAmbientBase,
-            actual: resolved.Lights[1].Weight
+            expected: 1f,
+            actual: resolved.Sky.Block.Ambient
         );
         Assert.Equal(expected: 2u, actual: resolved.Sky.First<SdfSkyGradient>().Count);
         Assert.Equal(
             expected: SdfSky.DefaultFogDensity,
-            actual: resolved.Sky.Block.FogDensity
+            actual: resolved.Sky.Atmosphere.FogDensity
         );
     }
     [Fact]
@@ -160,113 +135,14 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void AuthoredEnvironment_SoftboxesAndHorizonThreadThroughAndUnsetFieldsTakeTheirDefaults() {
-        var resolved = Resolve(defaults: BaseDefaults() with {
-            Environment = new WorldRenderEnvironment(
-            Softboxes: [
-                    new WorldRenderSoftbox(
-                    Direction: new Vector3(
-                        x: 0f,
-                        y: 1f,
-                        z: 0f
-                    ),
-                    Size: new Vector2(
-                        x: 0.32f,
-                        y: 0.48f
-                    ),
-                    Color: new BindableColor(Raw: "#FFD9A6"),
-                    Weight: 0.8f,
-                    Blur: 0.1f
-                ),
-                    new WorldRenderSoftbox(
-                    Direction: new Vector3(
-                        x: 1f,
-                        y: 0f,
-                        z: 0f
-                    ),
-                    Size: new Vector2(
-                        x: 0.19f,
-                        y: 0.52f
-                    )
-                ),
-                ],
-            Horizon: new WorldRenderHorizon(
-                Low: new BindableColor(Raw: "#0B0D14"),
-                High: new BindableColor(Raw: "#1B2350")
-            )
-        ),
-        });
-
-        Assert.Equal(
-            expected: 2,
-            actual: resolved.Sky.SoftboxCount
-        );
-
-        var first = resolved.Sky.Softboxes[0];
-        var second = resolved.Sky.Softboxes[1];
-
-        Assert.Equal(
-            expected: new Vector3(
-                x: 0f,
-                y: 1f,
-                z: 0f
-            ),
-            actual: first.Direction
-        );
-        Assert.Equal(
-            expected: new Vector3(
-                x: (0xFF / 255f),
-                y: (0xD9 / 255f),
-                z: (0xA6 / 255f)
-            ),
-            actual: first.Color
-        );
-        Assert.Equal(
-            actual: first.Weight,
-            expected: 0.8f
-        );
-        Assert.Equal(
-            expected: new Vector2(
-                x: 0.32f,
-                y: 0.48f
-            ),
-            actual: first.Size
-        );
-        Assert.Equal(
-            actual: first.Blur,
-            expected: 0.1f
-        );
-
-        // Unset weight/blur/color take their engine defaults (white, weight 1, blur 0), not the previous softbox's.
-        Assert.Equal(
-            expected: Vector3.One,
-            actual: second.Color
-        );
-        Assert.Equal(
-            actual: second.Weight,
-            expected: 1f
-        );
-        Assert.Equal(
-            actual: second.Blur,
-            expected: 0f
-        );
-
-        Assert.Equal(
-            expected: new Vector3(
-                x: (0x0B / 255f),
-                y: (0x0D / 255f),
-                z: (0x14 / 255f)
-            ),
-            actual: resolved.Sky.Block.HorizonLow
-        );
-        Assert.Equal(
-            expected: new Vector3(
-                x: (0x1B / 255f),
-                y: (0x23 / 255f),
-                z: (0x50 / 255f)
-            ),
-            actual: resolved.Sky.Block.HorizonHigh
-        );
+    public void EnvironmentGainsResolveAndAbsentGainsResetToDefaults() {
+        var track = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
+        var first = Resolve(BaseDefaults() with { Environment = new WorldRenderEnvironment(Ambient: .4f, Reflection: 0f) }, track: track);
+        Assert.Equal(.4f, first.Sky.Block.Ambient);
+        Assert.Equal(0f, first.Sky.Block.Reflection);
+        var second = Resolve(BaseDefaults(), track: track, revision: 1);
+        Assert.Equal(1f, second.Sky.Block.Ambient);
+        Assert.Equal(1f, second.Sky.Block.Reflection);
     }
     [Fact]
     public void AuthoredLights_AreExactlyTheListAuthored_UnsetFieldsTakeTheirKindsDefaults() {
@@ -380,7 +256,6 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                     Color: new BindableColor(Raw: "#1B2350")
                 ),
             ]),
-            new WorldRenderSkyLayer.Fog(Density: 0.02f),
             new WorldRenderSkyLayer.SunDisc(
                 Radius: 0.045f,
                 Intensity: 6f
@@ -391,7 +266,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                 Seed: 1337u
             ),
         ]);
-        var resolved = Resolve(defaults: BaseDefaults() with { Lighting = SunAndSky(), Sky = sky });
+        var resolved = Resolve(defaults: BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.02f)), Lighting = SunAndSky(), Sky = sky });
 
         Assert.Equal(
             expected: 3u,
@@ -407,7 +282,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
         Assert.Equal(
             expected: 0.02f,
-            actual: resolved.Sky.Block.FogDensity
+            actual: resolved.Sky.Atmosphere.FogDensity
         );
         Assert.Equal(
             expected: 0,
@@ -435,13 +310,13 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void AuthoredSky_FogAlone_KeepsTheDefaultGradient() {
-        var resolved = Resolve(defaults: BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.05f)]) });
+    public void AuthoredAtmosphere_FogAlone_KeepsTheDefaultGradient() {
+        var resolved = Resolve(defaults: BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.05f)) });
 
         Assert.Equal(expected: 2u, actual: resolved.Sky.First<SdfSkyGradient>().Count);
         Assert.Equal(
             expected: 0.05f,
-            actual: resolved.Sky.Block.FogDensity
+            actual: resolved.Sky.Atmosphere.FogDensity
         );
     }
     [Fact]
@@ -566,48 +441,6 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void Environment_MoreThanFourSoftboxes_RefusesByName_ControlFourClean() {
-        Laws.RefusalWithControl(
-            lawId: "render.environment.softbox-count",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox(), Softbox(), Softbox(), Softbox(), Softbox()]) },
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox(), Softbox(), Softbox(), Softbox()]) },
-            }))
-        );
-    }
-    [Fact]
-    public void Environment_NonPositiveSoftboxSize_RefusesByName_ControlPositiveClean() {
-        Laws.RefusalWithControl(
-            lawId: "render.environment.softbox-size",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox(width: 0f)]) },
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox(width: 0.1f)]) },
-            }))
-        );
-    }
-    [Fact]
-    public void Environment_ZeroSoftboxDirection_RefusesByName_ControlNonzeroClean() {
-        Laws.RefusalWithControl(
-            lawId: "render.environment.softbox-direction",
-            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with {
-                    Environment = new WorldRenderEnvironment(Softboxes: [Softbox(
-                    x: 0f,
-                    y: 0f,
-                    z: 0f
-                )]),
-                },
-            })),
-            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox()]) },
-            }))
-        );
-    }
-    [Fact]
     public void FiveAuthoredLights_AllFiveReachThePackedLanes_IncludingPastTheFourthSlot() {
         var resolved = Resolve(defaults: BaseDefaults() with {
             Lighting = new WorldRenderLighting(Lights: [
@@ -628,7 +461,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                 ),
                 Weight: 0.2f
             ),
-                new WorldRenderLight.Hemisphere(Base: 0.3f),
+                new WorldRenderLight.Point(Weight: 0.3f),
                 new WorldRenderLight.Rim(
                 Weight: 0.4f,
                 Power: 2f
@@ -875,28 +708,68 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void SkyFogDensity_Negative_RefusesByName_ControlNonNegativeClean() {
+    public void AtmosphereFogDensity_Negative_RefusesByName_ControlNonNegativeClean() {
         Laws.RefusalWithControl(
-            lawId: "render.sky.fog-density-negative",
+            lawId: "render.atmosphere.fog-density-negative",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: -0.01f)]) },
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: -0.01f)) },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.01f)]) },
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: 0.01f)) },
             }))
         );
     }
     [Fact]
-    public void SkyFog_Repeated_RefusesByName_ControlOnceClean() {
+    public void AtmosphereHazeAmount_TakingAllTheLight_RefusesByName_ControlBelowCeilingClean() {
         Laws.RefusalWithControl(
-            lawId: "render.sky.fog-once",
+            lawId: "render.atmosphere.haze-amount-ceiling",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.01f), new WorldRenderSkyLayer.Fog(Density: 0.02f)]) },
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Amount: 1f)) },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.01f)]) },
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Amount: SdfAtmosphere.MaxHazeAmount)) },
             }))
         );
+    }
+    [Fact]
+    public void AtmosphereHeightFalloff_ThinnerThanTheFloor_RefusesByName_ControlAtTheFloorClean() {
+        Laws.RefusalWithControl(
+            lawId: "render.atmosphere.falloff-floor",
+            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Height: new WorldRenderAirHeight(Falloff: 0f))) },
+            })),
+            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Fog: new WorldRenderFog(Height: new WorldRenderAirHeight(Falloff: SdfAtmosphere.MinFalloff))) },
+            }))
+        );
+    }
+    [Fact]
+    public void AtmosphereMediumColor_OutsideItsGrammar_RefusesByName_ControlHexClean() {
+        Laws.RefusalWithControl(
+            lawId: "render.atmosphere.medium-color",
+            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Medium: new WorldRenderMedium(Color: new BindableColor(Raw: "teal"))) },
+            })),
+            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
+                RenderRaw = BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Medium: new WorldRenderMedium(Color: new BindableColor(Raw: "#1F6F78"))) },
+            }))
+        );
+    }
+    [Fact]
+    public void AnAuthoredAtmosphereIsExactlyTheKindsItStates() {
+        // An absent section renders the default look's fog; an authored one carries no kind it leaves out.
+        var unauthored = Resolve(defaults: BaseDefaults());
+        var hazeOnly = Resolve(defaults: BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Amount: 0.3f)) });
+        var water = Resolve(defaults: BaseDefaults() with { Atmosphere = new WorldRenderAtmosphere(Medium: new WorldRenderMedium(Surface: -2f)) });
+
+        Assert.Equal(expected: SdfAtmosphere.Default, actual: unauthored.Sky.Atmosphere);
+        Assert.Equal(expected: 0f, actual: hazeOnly.Sky.Atmosphere.FogDensity);
+        Assert.Equal(expected: 0.3f, actual: hazeOnly.Sky.Atmosphere.HazeAmount);
+        Assert.Equal(expected: SdfAtmosphere.DefaultHazeAnisotropy, actual: hazeOnly.Sky.Atmosphere.HazeAnisotropy);
+        Assert.Equal(expected: 0f, actual: water.Sky.Atmosphere.FogDensity);
+        Assert.Equal(expected: -2f, actual: water.Sky.Atmosphere.MediumSurface);
+        Assert.Equal(expected: SdfAtmosphere.DefaultMediumExtinction, actual: water.Sky.Atmosphere.MediumExtinction);
+        Assert.Equal(expected: SdfAtmosphere.DefaultMediumColor, actual: water.Sky.Atmosphere.MediumColor);
     }
     // The stack is open: a kind may appear as often as authored, each layer counting under its own label.
     [Fact]
@@ -1083,7 +956,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
         // Curvature alone leaves the pinned lights in place.
         Assert.Equal(
-            expected: 2,
+            expected: 1,
             actual: resolved.Lights.Count
         );
     }

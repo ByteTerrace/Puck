@@ -8,12 +8,13 @@ namespace Puck.World;
 public static class WorldSkyLayers {
     /// <summary>Returns a layer's engine kind.</summary>
     /// <param name="layer">The layer.</param>
-    /// <returns>The kind, or <see langword="null"/> for fog, which is not a layer of the stack.</returns>
+    /// <returns>The kind, or <see langword="null"/> for a layer of no kind the engine draws.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
     public static SdfSkyLayerKind? KindOf(WorldRenderSkyLayer layer) {
         ArgumentNullException.ThrowIfNull(argument: layer);
 
         return layer switch {
+            WorldRenderSkyLayer.Panel => SdfSkyPanel.Kind,
             WorldRenderSkyLayer.Gradient => SdfSkyGradient.Kind,
             WorldRenderSkyLayer.SunDisc => SdfSkyDisc.Kind,
             WorldRenderSkyLayer.Stars => SdfSkyStars.Kind,
@@ -28,9 +29,10 @@ public static class WorldSkyLayers {
     }
     /// <summary>Returns a layer's class, its kind's.</summary>
     /// <param name="layer">The layer.</param>
-    /// <returns>The class; fog's is <see cref="SdfSkyLayerClass.Field"/>, which nothing reads.</returns>
+    /// <returns>The class.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
     public static SdfSkyLayerClass ClassOf(WorldRenderSkyLayer layer) => KindOf(layer: layer) switch {
+        SdfSkyLayerKind.Panel => SdfSkyPanel.Class,
         SdfSkyLayerKind.Stars => SdfSkyStars.Class,
         SdfSkyLayerKind.Disc => SdfSkyDisc.Class,
         SdfSkyLayerKind.View => SdfSkyView.Class,
@@ -49,11 +51,11 @@ public static class WorldSkyLayers {
             WorldSkyBlend.Add => SdfSkyBlend.Add,
             WorldSkyBlend.Multiply => SdfSkyBlend.Multiply,
             WorldSkyBlend.Screen => SdfSkyBlend.Screen,
-            _ => ((layer is WorldRenderSkyLayer.Stars or WorldRenderSkyLayer.SunDisc or WorldRenderSkyLayer.Aurora) ? SdfSkyBlend.Add : SdfSkyBlend.Over),
+            _ => ((layer is WorldRenderSkyLayer.Panel or WorldRenderSkyLayer.Stars or WorldRenderSkyLayer.SunDisc or WorldRenderSkyLayer.Aurora) ? SdfSkyBlend.Add : SdfSkyBlend.Over),
         };
     }
     /// <summary>Returns who sees a layer: its authored visibility, or its kind's, the camera and the lighting for a
-    /// gradient and the camera alone for every other kind.</summary>
+    /// gradient, the lighting alone for a panel, and the camera alone for every other kind.</summary>
     /// <param name="layer">The layer.</param>
     /// <returns>The visibility.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
@@ -64,7 +66,7 @@ public static class WorldSkyLayers {
             WorldSkyVisibility.Camera => SdfSkyVisibility.Camera,
             WorldSkyVisibility.Lighting => SdfSkyVisibility.Lighting,
             WorldSkyVisibility.Both => SdfSkyVisibility.Both,
-            _ => ((layer is WorldRenderSkyLayer.Gradient) ? SdfSkyVisibility.Both : SdfSkyVisibility.Camera),
+            _ => (layer is WorldRenderSkyLayer.Panel ? SdfSkyVisibility.Lighting : ((layer is WorldRenderSkyLayer.Gradient) ? SdfSkyVisibility.Both : SdfSkyVisibility.Camera)),
         };
     }
     /// <summary>Returns the lowest quality tier a layer draws at: its authored tier, or <see cref="SdfSkyTier.Low"/>.</summary>
@@ -85,11 +87,12 @@ public static class WorldSkyLayers {
         _ => SdfSkyTier.Low,
     };
     /// <summary>Returns the kind name a layer's rows are labelled with when it has no name: <c>gradient</c>, <c>disc</c>,
-    /// <c>stars</c>, <c>clouds</c>, <c>aurora</c>, <c>noise</c>, <c>pattern</c>, <c>panorama</c>, <c>view</c> or <c>far</c>.</summary>
+    /// <c>stars</c>, <c>clouds</c>, <c>aurora</c>, <c>noise</c>, <c>pattern</c>, <c>panorama</c>, <c>panel</c>, <c>view</c> or <c>far</c>.</summary>
     /// <param name="layer">The layer.</param>
-    /// <returns>The name, or <see langword="null"/> for fog.</returns>
+    /// <returns>The name, or <see langword="null"/> for a layer of no kind the engine draws.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
     public static string? KindNameOf(WorldRenderSkyLayer layer) => ((layer is WorldRenderSkyLayer.Far) ? "far" : KindOf(layer: layer) switch {
+        SdfSkyLayerKind.Panel => SdfSkyPanel.Name,
         SdfSkyLayerKind.Gradient => SdfSkyGradient.Name,
         SdfSkyLayerKind.Disc => SdfSkyDisc.Name,
         SdfSkyLayerKind.Stars => SdfSkyStars.Name,
@@ -104,7 +107,7 @@ public static class WorldSkyLayers {
     /// <summary>Returns the labels each layer of a stack counts its work under: its name, or its kind's name, with
     /// <c>#2</c>, <c>#3</c> and so on after the second and later unnamed layers of one kind.</summary>
     /// <param name="layers">The stack, lowest first.</param>
-    /// <returns>One label a layer, <see langword="null"/> for fog and a missing layer.</returns>
+    /// <returns>One label a layer, <see langword="null"/> for a missing layer.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layers"/> is <see langword="null"/>.</exception>
     public static string?[] LabelsOf(IReadOnlyList<WorldRenderSkyLayer?> layers) {
         ArgumentNullException.ThrowIfNull(argument: layers);

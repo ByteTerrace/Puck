@@ -233,7 +233,7 @@ public enum WorldHostPresentation : byte {
 /// the value the session wakes on; <c>world.save</c> folds a moved lever back into an authored <c>host</c> section
 /// (<c>WorldSessionLevers.Fold</c>).</description></item>
 /// </list>
-/// The standard windowed boot is authored in <c>Assets/worlds/standard.world.json</c>; absence reads
+/// A world authors its windowed boot (the island does) or inherits its basis's; absence reads
 /// <see cref="Absent"/> (no presentation).
 /// </summary>
 /// <param name="Presentation">Which boot shape the world composes — see <see cref="WorldHostPresentation"/>. Defaults
@@ -328,9 +328,8 @@ public sealed record WorldHostDefaults(
     public const int MaxDisplayExtent = 16384;
 
     /// <summary>Gets the inert absence — no presentation (<see cref="WorldHostPresentation.None"/>: no window, no
-    /// GPU device), zero extent, no pacing, no listener. The engine holds no boot shape of its own: the standard
-    /// windowed boot is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming
-    /// that document as its basis.</summary>
+    /// GPU device), zero extent, no pacing, no listener. The engine holds no boot shape of its own: a world
+    /// AUTHORS its windowed boot or inherits it from its basis.</summary>
     public static WorldHostDefaults Absent { get; } = new WorldHostDefaults(
         Presentation: WorldHostPresentation.None,
         Backend: WorldBackendPreference.Auto,

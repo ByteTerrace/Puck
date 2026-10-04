@@ -20,8 +20,8 @@ namespace Puck.SdfVm;
 //   - the pass block      : the view's camera basis, fov/aspect, off-axis offset, far distance and debug view mode, every
 //                          lever, the light count, the shadow slots and the curvature shading (SdfFrameBlock), less the
 //                          render extent, which the scheduler renders a view again for when it moves.
-//   - m_lightRegion, m_skyRegion, m_skyLayerRegion, m_softboxRegion : the lights and the sky with their presented-tick
-//                          bakes (the twinkle phase, the cloud offsets).
+//   - m_lightRegion, m_skyRegion, m_skyLayerRegion : the lights, sky gains, layer stack and its clock bakes.
+//   - shadow owner names : exact names invalidate shadow history even when replacement lights pack identical values.
 //   - m_volumeRegion     : the bounded media, whose advection and pulse are baked from the presented tick, so a view
 //                          showing one renders again exactly when the presented tick moves it.
 //   - m_dynamicTransformRevision : bumped whenever a frame packs an owed dynamic-transform row, so the table is never
@@ -41,6 +41,8 @@ namespace Puck.SdfVm;
 // The pass block's temporal values (jitter, previous view) and the previous transform tables belong to each instance's
 // history, not the tables: SdfWorldPasses.IsUnchanged holds them through SdfTemporalHistory.Stands.
 public sealed partial class SdfWorldTables {
+    // The atmosphere occupies the packed tail; its flags precede the sky header and are hashed separately.
+    private static readonly int AtmosphereOffset = Marshal.OffsetOf<SdfSkyBlock>(fieldName: nameof(SdfSkyBlock.AirLightCount)).ToInt32();
     private readonly byte[] m_signatureBlock = new byte[SdfFrameBlock.SizeBytes];
 
     private ulong m_tablesSignature;
@@ -77,11 +79,14 @@ public sealed partial class SdfWorldTables {
         var lighting = Fnv1aHash.Create();
 
         lighting.Add(value: m_lightingSignature);
+        // Submit records the environment before signatures are read; a sub-code candidate keeps this revision.
+        lighting.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
         lighting.Add(value: m_shadowSignature);
         lighting.Add(values: block);
         var shadow = Fnv1aHash.Create();
 
         shadow.Add(value: m_shadowSignature);
+        AddShadowOwners(hash: ref shadow, slots: frame.Lights.ShadowSlots);
         AddMembers(block: block, hash: ref shadow, members: ShadowValues);
         ClearMembers(block: block, members: ShadowValues);
         ClearMembers(block: block, members: LightingValues);
@@ -200,10 +205,27 @@ public sealed partial class SdfWorldTables {
             value: in m_tablesSignature
         );
         hash.Add(values: tables);
+        hash.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
         hash.Add(values: block);
+        AddShadowOwners(hash: ref hash, slots: frame.Lights.ShadowSlots);
 
         return hash.Value;
     }
+
+    private static void AddShadowOwners(ref Fnv1aHash hash, SdfShadowSlots slots) {
+        Span<int> ownerLength = stackalloc int[1];
+
+        for (var slot = 0; (slot < SdfShadowSlots.MaxSlots); slot++) {
+            var owner = slots.Owner(slot: slot);
+
+            ownerLength[0] = (owner?.Length ?? -1);
+            hash.Add(values: MemoryMarshal.AsBytes(span: ownerLength));
+            if (owner is not null) {
+                hash.Add(values: MemoryMarshal.AsBytes(span: owner.AsSpan()));
+            }
+        }
+    }
+
     /// <summary>Folds everything every view reads of the tables besides its pass block into the tables' signature, once
     /// the frame is packed and its screens are bound.</summary>
     public void UpdateTablesSignature() {
@@ -223,7 +245,6 @@ public sealed partial class SdfWorldTables {
         hash.Add(values: m_lightRegion.Contents);
         hash.Add(values: m_skyRegion.Contents);
         hash.Add(values: m_skyLayerRegion.Contents);
-        hash.Add(values: m_softboxRegion.Contents);
         hash.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
         hash.Add(values: m_screenSurfaceRegion.Contents);
         hash.Add(values: m_screenMappingRegion.Contents);
@@ -243,13 +264,26 @@ public sealed partial class SdfWorldTables {
         lighting.Add(value: m_decalRevision);
         lighting.Add(values: m_lightRegion.Contents);
         lighting.Add(values: m_screenLightScratch);
-        lighting.Add(values: m_softboxRegion.Contents);
         lighting.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
         ref var sky = ref m_skyRecord[0];
-        Span<float> hitSky = [sky.FogDensity, sky.HorizonLow.X, sky.HorizonLow.Y, sky.HorizonLow.Z, sky.HorizonHigh.X, sky.HorizonHigh.Y, sky.HorizonHigh.Z];
+        Span<float> hitSky = [sky.Ambient, sky.Reflection];
 
         lighting.Add(values: MemoryMarshal.AsBytes(span: hitSky));
-        lighting.Add(value: sky.SoftboxCount);
+        lighting.Add(value: sky.AirFlags);
+        lighting.Add(values: MemoryMarshal.AsBytes(span: MemoryMarshal.CreateReadOnlySpan(length: 1, reference: in sky))[AtmosphereOffset..]);
+        // Reflections evaluate panels directly, even when their change is below the map's refresh threshold.
+        var panels = false;
+
+        foreach (ref readonly var layer in m_skyLayerRecords.AsSpan(length: ((int)sky.LayerCount), start: 0)) {
+            if ((layer.Kind != SdfSkyLayerKind.Panel) || ((layer.Visibility & SdfSkyVisibility.Lighting) == 0)) { continue; }
+            lighting.Add(values: MemoryMarshal.AsBytes(span: MemoryMarshal.CreateReadOnlySpan(length: 1, reference: in layer)));
+            panels = true;
+        }
+        if (panels) {
+            Span<float> axes = [sky.FrameRight.X, sky.FrameRight.Y, sky.FrameRight.Z, sky.FrameUp.X, sky.FrameUp.Y, sky.FrameUp.Z, sky.FrameForward.X, sky.FrameForward.Y, sky.FrameForward.Z];
+
+            lighting.Add(values: MemoryMarshal.AsBytes(span: axes));
+        }
         m_lightingSignature = lighting.Value;
 
         var shadow = Fnv1aHash.Create();

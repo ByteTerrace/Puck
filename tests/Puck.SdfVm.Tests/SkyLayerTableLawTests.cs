@@ -83,6 +83,7 @@ public sealed partial class SkyLayerTableLawTests {
         Check<SdfSkyPattern>,
         Check<SdfSkyPanorama>,
         Check<SdfSkyDisc>,
+        Check<SdfSkyPanel>,
         Check<SdfSkyView>,
     ];
 

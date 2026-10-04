@@ -761,30 +761,30 @@ render {
     lights [
       directional(name: "key", direction: [3, 5, 4], color: "#FFF0D8", weight: 0.72, shadow: always, angularRadius: 0.2)
       directional(direction: [-0.7, 0.35, -0.6], color: "#C3D2F0", weight: 0.16)
-      hemisphere(color: "#C8D6E2", base: 0.16, gradient: 0.1)
     ]
   }
   sky {
     layers [
-      gradient(stops: [
+      gradient(visibility: camera, stops: [
         { elevation: -1, color: "#8FA3B2" }
         { elevation: -0.05, color: "#CBD8E0" }
         { elevation: 0.35, color: "#77A6C8" }
         { elevation: 1, color: "#375F88" }
       ]
       )
-      fog(density: 0.0015)
+      gradient(name: "studio", visibility: lighting, stops: [{ elevation: -1, color: "#1B1F24" }, { elevation: 1, color: "#6B7A88" }])
+      panel(name: "panel1", direction: [0.6, 1, 0.5], size: [0.25, 0.5], color: "#FFEFD8", intensity: 0.8, blur: 0.15, visibility: lighting)
+      panel(name: "panel2", direction: [-0.6, 0.75, -0.6], size: [0.24, 0.6], color: "#D4DEF2", intensity: 0.35, blur: 0.18, visibility: lighting)
       sunDisc(light: 0, radius: 0.02, intensity: 1.4)
     ]
   }
-  environment {
-    softboxes [
-      { direction [0.6, 1, 0.5], size [0.25, 0.5], color: "#FFEFD8", weight: 0.8, blur: 0.15 }
-      { direction [-0.6, 0.75, -0.6], size [0.24, 0.6], color: "#D4DEF2", weight: 0.35, blur: 0.18 }
-    ]
-    horizon {
-      low: "#1B1F24"
-      high: "#6B7A88"
+  atmosphere {
+    fog {
+      density: 0.0015
     }
+  }
+  environment {
+    ambient: 0.3
+    reflection: 1
   }
 }
