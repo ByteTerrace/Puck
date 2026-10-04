@@ -68,6 +68,18 @@ or re-record owed in a commit body into a tracked item: the commit records a
 debt, but assigns it to no lane. Carry each item into the lane's own GPU run and
 close it only with that run's evidence.
 
+## Follow the owner's qualification scope
+
+An owner taking over a prepared campaign may require one combined qualification
+on one machine. In that case, integrate the named branches serially in a local
+candidate, keep the integration target at its last green head, and use focused
+checks while resolving source overlaps. Run the full CPU gate and the owner's
+single GPU qualification on the stable combined head before fast-forwarding the
+target. One heavy build or gate owns the machine at a time. A failure is fixed
+and rechecked with the smallest affected selection; repeating the full
+qualification requires a concrete reason. The per-lane route below applies
+when the owner has not supplied that combined scope.
+
 ## Land each lane on its own
 
 A lane lands as soon as its own head passes: the lead merges the integration

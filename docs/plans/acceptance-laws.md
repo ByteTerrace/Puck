@@ -13,7 +13,7 @@ This page specifies the six laws: the claim, the exact scenario, the observable
 that decides it, the systems it crosses, what it adds over the laws that already
 exist, where it lives, and whether it needs a GPU. It also names the gaps found
 while designing them. The projection, time-travel and portal-unification lanes
-have landed, so every entry point named here exists, and five of the seven gaps
+have landed, so every entry point named here exists, and all seven gaps
 are fixed with laws of their own.
 
 ## Implementation status
@@ -29,7 +29,7 @@ legs in `tests/Puck.World.Tests/DisplayedSourceLawTests.cs`; law 5 in
 `tests/Puck.World.Tests/UnsupportedOperationLawTests.cs`, over the refusals
 classified so far. The design was read against the integration branch, and a
 review checked that no law can pass while its claim is false. Designing the laws
-found seven gaps. Five of them (G1 to G5) are fixed in code, each held by laws of
+found seven gaps. All are fixed in code, each held by laws of
 its own, so the six laws are written against the fixed contracts:
 
 - G1 and G2 decide law 1: a seek delivers once
@@ -43,9 +43,7 @@ its own, so the six laws are written against the fixed contracts:
   (`MachineBindingCheckpointLawTests`).
 
 Each law, once written, also confirms its gap's fix on the integration head.
-The other two land with their laws: G6 is part of law 6, which enumerates a
-classification the refusals declare in code rather than a list it carries, and
-G7 is the return seam law 4 needs.
+G6 is held by law 6, which enumerates the classification the refusals declare in code. G7 is the return seam held by law 4: releasing a displayed source rebinds the existing view to the root. The law variants still unstarted remain in the plan checklist.
 
 The open items are in [the plan checklist](open-items.md#cross-plan-maintenance).
 
