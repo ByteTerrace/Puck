@@ -36,22 +36,19 @@ float sdfIndirectDiffuseVisibility(int light, float3 surfacePoint, float3 normal
 SdfIndirectSources sdfIndirectDiffuse(SdfShadeSurface surface, out float attenuation) {
     SdfIndirectSources result = (SdfIndirectSources)0;
     float3 direct = 0.0;
-    float3 screens = 0.0;
     attenuation = 1.0;
     [loop] for (uint lightIndex = 0u; lightIndex < sdfLightCount(); lightIndex++) {
         SdfLightSource light;
         if (!sdfLightAt(lightIndex, light)) { continue; }
+        // An indirect ray sees the emitting face itself. Analytic screen glow belongs only to the primary view hit.
+        if (light.kind == SdfLightScreen) { continue; }
         SdfLightResponse response = sdfLightResponse(light, surface);
-        if (light.kind == SdfLightScreen) { screens += response.diffuse * light.bounce; }
-        else { direct += response.diffuse * light.bounce; }
+        direct += response.diffuse * light.bounce;
         attenuation *= response.attenuation;
     }
     float3 reflected = surface.material.albedo * (1.0 - surface.material.metal) * surface.material.bleed;
     if ((passGroup.indirectSources & SdfIndirectSourcesDirect) != 0u) {
         result.values[SdfIndirectSourceDirect] = reflected * direct * attenuation;
-    }
-    if ((passGroup.indirectSources & SdfIndirectSourcesScreens) != 0u) {
-        result.values[SdfIndirectSourceScreens] = reflected * screens * attenuation;
     }
     if ((passGroup.indirectSources & SdfIndirectSourcesEmission) != 0u) {
         result.values[SdfIndirectSourceEmission] = surface.material.albedo * surface.material.emissive * surface.material.bleed;

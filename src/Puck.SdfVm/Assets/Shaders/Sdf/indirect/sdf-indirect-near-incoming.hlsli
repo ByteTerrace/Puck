@@ -4,6 +4,7 @@
 #include "sdf-indirect-march.hlsli"
 #include "sdf-indirect-continuation.hlsli"
 #include "sdf-indirect-diffuse.hlsli"
+#include "sdf-indirect-screen.hlsli"
 
 bool sdfIndirectNearIncoming(float3 launched, float3 direction, out SdfIndirectSources result,
     out bool hitSurface, out uint evaluations) {
@@ -24,6 +25,12 @@ bool sdfIndirectNearIncoming(float3 launched, float3 direction, out SdfIndirectS
         uint terminal = SdfIndirectKindContinuation | (mask << SdfIndirectProofMaskShift);
         return sdfIndirectReadContinuation(endpoint, direction, terminal, passGroup.indirectReadGeneration,
             passGroup.indirectReadPublication, result);
+    }
+    float3 screenEmission;
+    if (sdfIndirectScreenEmission((int)ray.material, endpoint, direction, screenEmission)) {
+        result.values[SdfIndirectSourceScreens] = screenEmission;
+        hitSurface = true;
+        return true;
     }
     if (ray.material >= SDF_SCREEN_MATERIAL || dot(ray.normal, -direction) <= 0.0) { return false; }
     SdfIndirectSources previous = (SdfIndirectSources)0;

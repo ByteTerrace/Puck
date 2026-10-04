@@ -5,13 +5,14 @@ using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-/// <summary>One submitted environment projection. Its map and coefficients belong to the tables and may be replaced
-/// by a later submission; a consumer pins them through the graph dependency before that next write.</summary>
-/// <param name="Owner">The tables that own both buffers.</param>
-/// <param name="Sequence">Their monotonically increasing projection sequence.</param>
-/// <param name="Fence">The actual projection submission's fence, valid until its recording slot is reused.</param>
-public readonly record struct SdfSkyEnvironmentSubmission(SdfWorldTables Owner, long Sequence, IGpuSubmissionFence Fence) {
-    /// <summary>Gets the projection's publication identity.</summary>
+/// <summary>One submitted lighting-source publication. A consumer pins its buffers through declared graph dependencies
+/// before the next write; sky projection and screen reduction have distinct publication owners.</summary>
+/// <param name="Owner">The actual producer of this source, never a displayed view.</param>
+/// <param name="Sequence">Its monotonically increasing submission sequence.</param>
+/// <param name="Fence">The actual submission's fence, valid until its recording slot is reused.</param>
+/// <param name="Tainted">Whether an acquired contributing source contains unfilled external content.</param>
+public readonly record struct SdfEnvironmentSubmission(object Owner, long Sequence, IGpuSubmissionFence Fence, bool Tainted) {
+    /// <summary>Gets the actual source publication identity.</summary>
     public GpuImagePublication Publication => new(Owner: Owner, Sequence: Sequence);
 }
 
@@ -30,7 +31,7 @@ public sealed partial class SdfWorldTables {
     public IGpuBuffer SkyEnvironmentCoefficients => m_skyEnvironment.Coefficients;
     /// <summary>Gets the latest submitted projection, or null before any projection. A pending newer submission means
     /// the buffers no longer describe an older completed publication.</summary>
-    public SdfSkyEnvironmentSubmission? SubmittedSkyEnvironment => m_skyEnvironment.Submitted;
+    public SdfEnvironmentSubmission? SubmittedSkyEnvironment => m_skyEnvironment.Submitted;
     /// <summary>Gets the latest projection whose actual fence was observed complete. Completion is latched before its
     /// recorder reuses that fence; it is not inferred from a displayed view.</summary>
     public GpuImagePublication CompletedSkyEnvironment { get { m_skyEnvironment.Poll(); return m_skyEnvironment.Completed; } }
@@ -69,6 +70,7 @@ public sealed partial class SdfWorldTables {
         WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.SkyEnvironment, buffer: m_skyEnvironment.Map, bindings: bindings);
         WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.SkyEnvironmentWritten, buffer: m_skyEnvironment.Map, bindings: bindings);
         WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.SkyCoefficientsWritten, buffer: m_skyEnvironment.Coefficients, bindings: bindings);
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.ScreenEmissionWritten, buffer: ScreenEmission, bindings: bindings);
         var binding = SdfKernelInterfaces.BindingOf(layout: layout, member: SdfWorldPackage.Samplers);
         for (var index = 0; index < m_samplers.Length; index++) {
             bindings.WriteSampler(arrayElement: (uint)index, binding: binding, descriptorSetHandle: set, samplerHandle: m_samplers[index]);
@@ -82,6 +84,7 @@ public sealed partial class SdfWorldTables {
         private readonly GpuImagePublication[] m_renderedSources = new GpuImagePublication[MaxScreenSurfaces];
         private readonly byte[] m_renderedMappings = new byte[MaxScreenSurfaces * ScreenMappingByteLength];
         private bool m_physical;
+        private bool m_tainted;
 
         public SkyEnvironmentPass(SdfWorldTables tables, GpuDeviceServices gpu, GpuCreationScope scope) {
             m_tables = tables;
@@ -99,7 +102,7 @@ public sealed partial class SdfWorldTables {
         public bool Projected { get; set; }
         public bool Skipped { get; private set; }
         public long Renders { get; private set; }
-        public SdfSkyEnvironmentSubmission? Submitted { get; private set; }
+        public SdfEnvironmentSubmission? Submitted { get; private set; }
         public GpuImagePublication Completed { get; private set; }
 
         public void Prepare(bool physical) {
@@ -113,6 +116,7 @@ public sealed partial class SdfWorldTables {
         public bool ObserveSources(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
             Array.Clear(array: Screens);
             Array.Clear(array: m_sources);
+            m_tainted = false;
             var known = true;
             var changed = false;
             var layers = m_tables.m_skyLayerRecords;
@@ -130,6 +134,7 @@ public sealed partial class SdfWorldTables {
                     sources.ReadOf(view: view, screen: screen) is { } producer && reads is not null &&
                     reads.IndexOf(producer: producer) is var read and >= 0) {
                     var input = reads[read];
+                    m_tainted |= input.Tainted;
                     m_sources[screen] = input.Publication;
                     if (input.Lease.ImageViewHandle != 0 && !input.Publication.IsKnown) { known = false; }
                 }
@@ -147,7 +152,7 @@ public sealed partial class SdfWorldTables {
             m_sources.CopyTo(array: m_renderedSources, index: 0);
             m_tables.m_screenMappingRegion.Contents[..m_renderedMappings.Length].CopyTo(m_renderedMappings);
             Owes = false;
-            Submitted = new SdfSkyEnvironmentSubmission(Owner: m_tables, Sequence: ++Renders, Fence: fence);
+            Submitted = new SdfEnvironmentSubmission(Owner: m_tables, Sequence: ++Renders, Fence: fence, Tainted: m_tainted);
             return Renders;
         }
         public void Poll() {

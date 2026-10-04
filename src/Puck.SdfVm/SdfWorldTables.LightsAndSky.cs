@@ -9,10 +9,10 @@ namespace Puck.SdfVm;
 // region and upload whole records. The World set binds each generated record table, and a kernel references only
 // the tables its pass reads.
 public sealed partial class SdfWorldTables {
-    private const int LightRegionIndex = 9;
-    private const int SkyRegionIndex = 10;
-    private const int SkyLayerRegionIndex = 11;
-    private const int ShadowHandoffRegionIndex = 12;
+    private const int LightRegionIndex = 8;
+    private const int SkyRegionIndex = 9;
+    private const int SkyLayerRegionIndex = 10;
+    private const int ShadowHandoffRegionIndex = 11;
 
     private readonly SdfLight[] m_lightRecords = new SdfLight[SdfLights.MaxLights];
     private readonly SdfSkyBlock[] m_skyRecord = new SdfSkyBlock[1];

@@ -4,7 +4,7 @@ using Xunit;
 namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldTablesWorkLawTests {
-    // Environment and reduction add two base pipelines; the four F=1 variants remain demand-only.
+    // Sky projection and image reduction add three base pipelines; the four F=1 variants remain demand-only.
     [Fact]
     public async Task ReloadedInactiveFadeVariantsStayUncreatedUntilDemand() {
         using var rig = new Rig();
@@ -17,11 +17,11 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         await reload.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(expected: 0, actual: reload.ChangedPipelines);
         Assert.Equal(expected: 0, actual: rig.Engine.InstallReload(reload: reload));
-        Assert.Equal(expected: 15, actual: rig.Cache.SharedPipelines);
+        Assert.Equal(expected: 16, actual: rig.Cache.SharedPipelines);
         rig.Pipelines.RequestShadowFadeVariants(cache: rig.Cache, device: rig.Gpu, variants: SdfShadowFadeVariants.One);
         await rig.Pipelines.WaitAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.True(condition: rig.Pipelines.IsBuilt(kernel: SdfKernel.ViewsFade1));
-        Assert.Equal(expected: 19, actual: rig.Cache.SharedPipelines);
+        Assert.Equal(expected: 20, actual: rig.Cache.SharedPipelines);
         Assert.Equal(expected: changed[SdfKernel.ViewsFade1].ToArray(), actual: rig.Pipelines.Kernels[SdfKernel.ViewsFade1].ToArray());
     }
     [Fact]
@@ -42,6 +42,6 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             Assert.Same(expected: initial, actual: rig.Pipelines.Kernels);
         }
         Assert.Equal(expected: 1, actual: rig.Reload(kernels: changed));
-        Assert.Equal(expected: 19, actual: rig.Cache.SharedPipelines);
+        Assert.Equal(expected: 20, actual: rig.Cache.SharedPipelines);
     }
 }

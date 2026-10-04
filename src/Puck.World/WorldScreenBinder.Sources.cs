@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.SdfVm;
@@ -32,26 +31,11 @@ internal sealed partial class WorldScreenBinder : ISdfScreenSources {
         opening: opening
     );
     /// <inheritdoc/>
-    /// <remarks>A screen reading a source instance lights the room with its source's light, resolved through the capture
-    /// gate; a view films an already-lit world and lights nothing.</remarks>
-    public Vector3 Light(int screen) {
-        if (
-            !m_slots.ContainsKey(key: screen) ||
-            (Mappings.InstanceOf(screen: screen) is not { } instance)
-        ) {
-            return Vector3.Zero;
-        }
-
-        return ShownOf(screen: screen) switch {
-            WorldScreenSource.Machine machine => (m_machines.VideoOutput(
-                instance: machine.Instance,
-                output: machine.Output
-            )?.EmittedLight ?? Vector3.Zero),
-            _ => ((FeedOf(instance: instance) is { } source)
-                ? ResolveLight(feed: source)
-                : Vector3.Zero),
-        };
-    }
+    public bool Emits(int screen) => m_slots.TryGetValue(screen, out var slot) && (ShownOf(screen) switch {
+        WorldScreenSource.Machine or WorldScreenSource.Producer or WorldScreenSource.Probe => true,
+        WorldScreenSource.Session => slot.Session is { } feed && feed.InstanceName != WorldInstanceHost.BootInstanceName,
+        _ => false,
+    });
     /// <inheritdoc/>
     /// <remarks>A screen is drawn from the mapping <see cref="Mappings"/> last published for it.</remarks>
     public SourceMapping? MappingOf(int screen) => (Mappings.TryGet(

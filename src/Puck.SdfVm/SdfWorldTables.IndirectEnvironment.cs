@@ -8,9 +8,11 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     internal sealed partial class PinnedIndirectLighting {
         private GpuImagePublication m_environment;
+        private GpuImagePublication m_screens;
 
         public IGpuBuffer? EnvironmentMap { get; private set; }
         public IGpuBuffer? EnvironmentCoefficients { get; private set; }
+        public IGpuBuffer? ScreenEmission { get; private set; }
         public bool AwaitingEnvironment { get; private set; }
 
         // These are the existing source snapshot's GPU-written regions. They need no CPU shadow or readback, and
@@ -25,21 +27,29 @@ public sealed partial class SdfWorldTables {
             var coefficients = scope.Own(m_tables.m_gpu.BufferFactory.CreateDeviceLocal(
                 name: NameOf(part: "indirect-source", detail: SdfKernelInterfaces.SkyCoefficients),
                 sizeBytes: SdfSkyEnvironment.CoefficientBytes, usage: GpuBufferUsage.Storage));
+            var screens = scope.Own(m_tables.m_gpu.BufferFactory.CreateDeviceLocal(
+                name: NameOf(part: "indirect-source", detail: SdfWorldPackage.ScreenLights),
+                sizeBytes: SdfScreenEmission.Bytes, usage: GpuBufferUsage.Storage));
             EnvironmentMap = map;
             EnvironmentCoefficients = coefficients;
+            ScreenEmission = screens;
             m_bindingRevision = -1;
             scope.Complete();
         }
 
-        private bool MatchesEnvironment(SdfFrame frame) => (frame.IndirectSources & SdfIndirectSources.Sky) == 0 ||
+        private bool MatchesEnvironment(SdfFrame frame) => ((frame.IndirectSources & SdfIndirectSources.Sky) == 0 ||
             (!m_tables.SkyEnvironmentOwes && m_tables.SubmittedSkyEnvironment is { } submitted &&
-                submitted.Publication == m_environment && m_environment.IsKnown);
+                submitted.Publication == m_environment && m_environment.IsKnown)) &&
+            ((frame.IndirectSources & SdfIndirectSources.Screens) == 0 ||
+                (!m_tables.ScreenEmissionOwes && m_tables.SubmittedScreenEmission is { } screens &&
+                    screens.Publication == m_screens && m_screens.IsKnown));
 
-        public bool CanRecordEnvironment => AwaitingEnvironment && !m_tables.SkyEnvironmentOwes &&
-            m_tables.SubmittedSkyEnvironment is not null;
+        public bool CanRecordEnvironment => AwaitingEnvironment &&
+            ((Frame.IndirectSources & SdfIndirectSources.Sky) == 0 || (!m_tables.SkyEnvironmentOwes && m_tables.SubmittedSkyEnvironment is not null)) &&
+            ((Frame.IndirectSources & SdfIndirectSources.Screens) == 0 || (!m_tables.ScreenEmissionOwes && m_tables.SubmittedScreenEmission is not null));
 
         public void RecordEnvironment(in RenderGraphPackageRecording recording, SdfFrame frame, string prefix) {
-            if (!CanRecordEnvironment || m_tables.SubmittedSkyEnvironment is not { } submitted || !MatchesScene(frame)) {
+            if (!CanRecordEnvironment || !MatchesScene(frame)) {
                 throw new InvalidOperationException("The indirect environment copy requires the current prepared scene and its submitted projection.");
             }
             var coefficients = Input(recording.Inputs, SdfSkyEnvironmentGraph.Input, prefix);
@@ -47,19 +57,33 @@ public sealed partial class SdfWorldTables {
             if (!ReferenceEquals(coefficients, m_tables.SkyEnvironmentCoefficients) || !ReferenceEquals(map, m_tables.SkyEnvironmentMap)) {
                 throw new InvalidOperationException("Both indirect environment inputs must belong to the projection's actual tables.");
             }
-            Copy(recording, coefficients, Input(recording.Outputs, SdfSkyEnvironmentGraph.PinnedCoefficients, prefix), SdfSkyEnvironment.CoefficientBytes);
-            Copy(recording, map, Input(recording.Outputs, SdfSkyEnvironmentGraph.PinnedMap, prefix), SdfSkyEnvironment.MapBytes);
+            if ((Frame.IndirectSources & SdfIndirectSources.Sky) != 0) {
+                Copy(recording, coefficients, Input(recording.Outputs, SdfSkyEnvironmentGraph.PinnedCoefficients, prefix), SdfSkyEnvironment.CoefficientBytes);
+                Copy(recording, map, Input(recording.Outputs, SdfSkyEnvironmentGraph.PinnedMap, prefix), SdfSkyEnvironment.MapBytes);
+                m_environment = m_tables.SubmittedSkyEnvironment!.Value.Publication;
+            }
+            if ((Frame.IndirectSources & SdfIndirectSources.Screens) != 0) {
+                var screens = Input(recording.Inputs, SdfSkyEnvironmentGraph.ScreensInput, prefix);
+                if (!ReferenceEquals(screens, m_tables.ScreenEmission)) {
+                    throw new InvalidOperationException("The indirect screen input must be the submitted reduction's actual buffer.");
+                }
+                Copy(recording, screens, Input(recording.Outputs, SdfSkyEnvironmentGraph.PinnedScreens, prefix), SdfScreenEmission.Bytes);
+                m_screens = m_tables.SubmittedScreenEmission!.Value.Publication;
+            }
             // A pending graph may take several frames to install. Its host source regions were restaged before this
             // frame's upload, and the projection used this frame's sky. Freeze that sky alongside the actual pair.
             var sky = new SdfSky();
             sky.CopyFrom(frame.Sky);
             m_frame = Frame with { Sky = sky };
-            m_environment = submitted.Publication;
-            Snapshot = new SdfIndirectLightingSnapshot(m_frame, m_geometry, m_sequence, m_environment);
+            var tainted = ((Frame.IndirectSources & SdfIndirectSources.Sky) != 0 && m_tables.SubmittedSkyEnvironment!.Value.Tainted) ||
+                ((Frame.IndirectSources & SdfIndirectSources.Screens) != 0 && m_tables.SubmittedScreenEmission!.Value.Tainted);
+            Snapshot = new SdfIndirectLightingSnapshot(m_frame, m_geometry, m_sequence, m_environment, m_screens, tainted);
         }
 
         public void EnvironmentSubmitted(SdfIndirectCache cache) {
-            if (!AwaitingEnvironment || !m_environment.IsKnown) { return; }
+            if (!AwaitingEnvironment ||
+                ((Frame.IndirectSources & SdfIndirectSources.Sky) != 0 && !m_environment.IsKnown) ||
+                ((Frame.IndirectSources & SdfIndirectSources.Screens) != 0 && !m_screens.IsKnown)) { return; }
             AwaitingEnvironment = false;
             cache.BeginLighting();
             cache.PlanLighting();

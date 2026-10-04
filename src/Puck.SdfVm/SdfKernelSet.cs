@@ -96,6 +96,7 @@ public sealed class SdfKernelSet {
         SdfKernel.Composite => "sdf-composite",
         SdfKernel.SkyEnvironment => "sdf-sky-environment",
         SdfKernel.SkyEnvironmentReduce => "sdf-sky-environment-reduce",
+        SdfKernel.ScreenEmission => "sdf-screen-emission",
         SdfKernel.BrickBake => "sdf-brick-bake",
         SdfKernel.Resolve => "sdf-resolve",
         SdfKernel.ShadowFade1 => "sdf-world-shadow-fade1",
@@ -124,7 +125,7 @@ public sealed class SdfKernelSet {
             SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,
             SdfKernel.ShadowFade1 or SdfKernel.ViewsFade1 or SdfKernel.ViewsCoreFade1 or SdfKernel.ViewsFoldsFade1 => SdfWorldInterfaces.WorldFadeParameters[1].Layout,
             SdfKernel.ShadowFade2 or SdfKernel.ViewsFade2 or SdfKernel.ViewsCoreFade2 or SdfKernel.ViewsFoldsFade2 => SdfWorldInterfaces.WorldFadeParameters[2].Layout,
-            SdfKernel.SkyEnvironment or SdfKernel.SkyEnvironmentReduce => SdfWorldInterfaces.EnvironmentParameters.Layout,
+            SdfKernel.SkyEnvironment or SdfKernel.SkyEnvironmentReduce or SdfKernel.ScreenEmission => SdfWorldInterfaces.EnvironmentParameters.Layout,
             _ => SdfWorldInterfaces.WorldLayout,
         };
     /// <summary>Returns why a kernel's compiled bytecode reads something other than this host's interface, or

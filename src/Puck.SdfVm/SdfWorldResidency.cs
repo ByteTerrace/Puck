@@ -805,7 +805,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             SkyDetails: m_skyDetails,
             WorkLedger: m_work
         );
-    // Binds every screen's mapping, light and bound flag: a screen shows a source while it names an instance some view of
+    // Binds every screen's mapping, emission policy and bound flag: a screen shows a source while it names an instance some view of
     // the frame reads, whose image each view's pass binds from the images its render graph hands it (ScreenImage).
     private void BindScreens(SdfWorldTables tables, SdfFrame frame) {
         if (m_screenSources is not { } sources) {
@@ -833,8 +833,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 mapping: sources.MappingOf(screen: screen),
                 screenIndex: screen
             );
-            tables.SetScreenLight(
-                color: sources.Light(screen: screen),
+            tables.SetScreenEmission(
+                emits: sources.Emits(screen: screen),
                 screenIndex: screen
             );
         }

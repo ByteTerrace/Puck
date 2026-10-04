@@ -10,11 +10,11 @@ namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldPassesLawTests {
     [Fact]
-    public void AFiniteSolvePinsBothEnvironmentBuffersAndKeepsTheirPublicationThroughLiveRefresh() {
+    public void AFiniteSolvePinsEnvironmentBuffersAndKeepsTheirPublicationsThroughLiveRefresh() {
         var gpu = new FakeGpuDevice(holdFences: true, trackObjects: true);
         var pipelines = SdfTestPipelines.Cache();
         var source = Frame() with { FarDistance = 12f, IndirectTier = SdfIndirectTier.Medium,
-            IndirectSources = SdfIndirectSources.Direct | SdfIndirectSources.Sky, EnableCadenceGate = true };
+            IndirectSources = SdfIndirectSources.Direct | SdfIndirectSources.Sky | SdfIndirectSources.Screens, EnableCadenceGate = true };
         using var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0,
             frameSource: new CapturingFrameSource(() => source), height: Extent, kernels: SdfTestPipelines.Kernels(),
             name: "world", pipelines: pipelines, width: Extent);
@@ -38,7 +38,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 Output: ShaderPipelineResourceKind.Buffer, Passes: 5,
                 Reads: [new("environment", Kind: ShaderPipelineResourceKind.Buffer)], Refresh: RenderGraphRefresh.EveryFrame),
             new(Name: "environment", ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment,
-                Output: ShaderPipelineResourceKind.Buffer, Passes: 2, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
+                Output: ShaderPipelineResourceKind.Buffer, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count, Reads: [], Refresh: RenderGraphRefresh.EveryFrame),
         ], out var set, out var setRefusal), setRefusal?.Message);
         Assert.True(RenderGraphRuntime.TryCreate(set, new RenderGraphRuntimeGraph?[3], "world", packages,
             pipelines.Pipelines, gpu, false, out var runtime, out var refusal), refusal?.Message);
@@ -65,8 +65,14 @@ public sealed partial class SdfWorldPassesLawTests {
         var publication = tables.SubmittedSkyEnvironment!.Value.Publication;
         Assert.Same(tables, first.Environment.Owner);
         Assert.Equal(publication, first.Environment);
+        var screenPublication = tables.SubmittedScreenEmission!.Value.Publication;
+        Assert.True(screenPublication.IsKnown);
+        Assert.NotSame(publication.Owner, screenPublication.Owner);
+        Assert.Equal(screenPublication, first.Screens);
+        Assert.False(first.Tainted);
         Assert.Single(copies, bytes => bytes == (ulong)SdfSkyEnvironment.MapBytes);
         Assert.Contains((ulong)SdfSkyEnvironment.CoefficientBytes, copies);
+        Assert.Single(copies, bytes => bytes == (ulong)SdfScreenEmission.Bytes);
         var heldBytes = tables.IndirectBytes;
 
         // The frame's transport and authored lights do not change. The live environment alone refreshes during a
@@ -75,19 +81,23 @@ public sealed partial class SdfWorldPassesLawTests {
         source = source with { };
         Produce(complete: false);
         Assert.NotEqual(publication, tables.SubmittedSkyEnvironment!.Value.Publication);
+        Assert.Equal(screenPublication, tables.SubmittedScreenEmission!.Value.Publication);
         Assert.Same(first, cache.LightingSource);
         Assert.False(residency.IsIndirectReady);
         Assert.Single(copies, bytes => bytes == (ulong)SdfSkyEnvironment.MapBytes);
         Until(() => cache.LightingComplete);
         Assert.Same(first, cache.PublishedLightingSource);
         Assert.Equal(publication, cache.PublishedLightingSource!.Environment);
+        Assert.Equal(screenPublication, cache.PublishedLightingSource.Screens);
 
         Until(() => cache.LightingSource is { } current && !ReferenceEquals(first, current));
         var second = cache.LightingSource!;
         Assert.Equal(tables.SubmittedSkyEnvironment!.Value.Publication, second.Environment);
+        Assert.Equal(screenPublication, second.Screens);
         Assert.Same(first, cache.PublishedLightingSource);
         Assert.False(residency.IsIndirectReady);
         Assert.Equal(2, copies.Count(bytes => bytes == (ulong)SdfSkyEnvironment.MapBytes));
+        Assert.Equal(2, copies.Count(bytes => bytes == (ulong)SdfScreenEmission.Bytes));
         Assert.Equal(heldBytes, tables.IndirectBytes);
         Until(() => residency.IsIndirectReady, complete: true);
         Assert.Same(second, cache.PublishedLightingSource);

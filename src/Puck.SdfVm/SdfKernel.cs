@@ -45,6 +45,8 @@ public enum SdfKernel {
     SkyEnvironment,
     /// <summary>The environment map's reduction to its spherical-harmonic coefficients, dispatched after the map.</summary>
     SkyEnvironmentReduce,
+    /// <summary>One acquired-image reduction per bound screen, shared by direct lighting and indirect face emission.</summary>
+    ScreenEmission,
     /// <summary>The carve-union brick baker, dispatched only when the engine keeps a brick pool.</summary>
     BrickBake,
     /// <summary>Full-output reconstruction, whose pipeline is acquired only by reduced or variable views.</summary>

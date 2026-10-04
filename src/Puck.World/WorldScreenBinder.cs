@@ -27,8 +27,8 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>
 /// This type is a pure reader of <see cref="Server.WorldMachineHost"/>'s outputs: a machine source instance's upload
-/// (<see cref="MachineSource"/>) writes an output's frames into its region, and <see cref="Server.WorldMachineHost.Light"/>
-/// lights the room. It also facades several read-only <see cref="WorldMachineHost"/> members (<c>HasMachine</c>,
+/// (<see cref="MachineSource"/>) writes an output's frames into its region, and the residency reduces the acquired GPU
+/// image for lighting. It also facades several read-only <see cref="WorldMachineHost"/> members (<c>HasMachine</c>,
 /// <c>HasEngine</c>, <c>TryReadMachineInsert</c>, <c>TryMagazine</c>, <c>AudioMachine</c>, <c>TryPeek</c>,
 /// <c>LinkOf</c>, <c>DescribeLinks</c>, <c>TryReadLinkMembers</c>) so presentation-side
 /// callers (<c>PlayerCommandModule</c>, <c>WorldAudioDirector</c>,

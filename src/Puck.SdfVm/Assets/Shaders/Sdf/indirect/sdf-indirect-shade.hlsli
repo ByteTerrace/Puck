@@ -5,6 +5,7 @@
 #include "sdf-indirect-diffuse.hlsli"
 #include "sdf-indirect-continuation.hlsli"
 #include "sdf-indirect-sky.hlsli"
+#include "sdf-indirect-screen.hlsli"
 
 // 256 rays * (five float3 sources, one direction and one terminal) = 19,456 bytes, beside the VM's gather mask.
 groupshared SdfIndirectSources sdfIndirectShaded[SdfIndirectMaximumRaysPerProbe];
@@ -13,6 +14,12 @@ groupshared uint sdfIndirectShadedKinds[SdfIndirectMaximumRaysPerProbe];
 
 SdfIndirectSources sdfIndirectShadeHit(float3 surfacePoint, float3 direction, uint4 hit, uint readGeneration,
     uint readPublication, float feedbackGain) {
+    float3 screenEmission;
+    if (sdfIndirectScreenEmission((int)hit.z, surfacePoint, direction, screenEmission)) {
+        SdfIndirectSources screen = (SdfIndirectSources)0;
+        screen.values[SdfIndirectSourceScreens] = screenEmission;
+        return screen;
+    }
     SdfShadeSurface surface = (SdfShadeSurface)0;
     surface.position = surfacePoint;
     surface.normal = sdfIndirectUnpackNormal(hit.y);

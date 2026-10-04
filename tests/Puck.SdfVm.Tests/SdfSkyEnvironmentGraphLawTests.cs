@@ -24,7 +24,7 @@ public sealed class SdfSkyEnvironmentGraphLawTests {
         var instances = set.Instances.Select(static instance => instance.ExternalPackage == RenderGraphPackageCatalog.SdfWorld
             ? instance with { Reads = [.. instance.Reads, new(Producer: "environment", Kind: ShaderPipelineResourceKind.Buffer)] }
             : instance).ToList();
-        instances.Add(new(Name: "environment", Refresh: RenderGraphRefresh.EveryFrame, Passes: 2, Reads: reads,
+        instances.Add(new(Name: "environment", Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count, Reads: reads,
             Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment));
         Assert.True(condition: RenderGraphInstanceSet.TryCreate(instances: instances, set: out _, refusal: out refusal), userMessage: refusal?.Message);
     }

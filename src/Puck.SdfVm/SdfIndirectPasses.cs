@@ -81,6 +81,7 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
         if (views.EnvironmentName(residency) is { } environment) {
             inputs.Add(new(Producer: environment, Version: SdfSkyEnvironmentGraph.Input, Output: SdfSkyEnvironmentGraph.Coefficients));
             inputs.Add(new(Producer: environment, Version: SdfSkyEnvironmentGraph.MapInput, Output: SdfSkyEnvironmentGraph.Map));
+            inputs.Add(new(Producer: environment, Version: SdfSkyEnvironmentGraph.ScreensInput, Output: SdfSkyEnvironmentGraph.Screens));
         }
         return inputs;
     }
@@ -112,10 +113,14 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
         var owner = (Built)built!;
         var prefix = context.Pass[..^context.Part!.Length];
         var name = resource.Name.StartsWith(prefix, StringComparison.Ordinal) ? resource.Name[prefix.Length..] : resource.Name;
-        if (name is SdfSkyEnvironmentGraph.PinnedCoefficients or SdfSkyEnvironmentGraph.PinnedMap) {
+        if (name is SdfSkyEnvironmentGraph.PinnedCoefficients or SdfSkyEnvironmentGraph.PinnedMap or SdfSkyEnvironmentGraph.PinnedScreens) {
             var lighting = owner.Tables.EnsureIndirectLighting(owner.Cache);
             lighting.EnsureEnvironmentBuffers();
-            return name == SdfSkyEnvironmentGraph.PinnedMap ? lighting.EnvironmentMap : lighting.EnvironmentCoefficients;
+            return name switch {
+                SdfSkyEnvironmentGraph.PinnedMap => lighting.EnvironmentMap,
+                SdfSkyEnvironmentGraph.PinnedScreens => lighting.ScreenEmission,
+                _ => lighting.EnvironmentCoefficients,
+            };
         }
         return owner.Cache.Buffer;
     }

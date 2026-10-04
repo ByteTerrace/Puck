@@ -11,7 +11,7 @@ struct ScreenMappingData {
     float4 imageV;      // xyz = the source v's coefficients of the warped u, v and 1; w = 1 when the fit letterboxes
     float4 crop;        // the crop: left, top, right, bottom
     float4 sampleClamp; // the crop inset by half a source pixel: left, top, right, bottom
-    float4 state;       // x = 1 while a source is bound this frame, y = the sampler (an SDF_FILTER_* value), zw = 0
+    float4 state;       // x = bound source, y = sampler (SDF_FILTER_*), z = emits light, w = 0
 };
 static const uint WorldScreenMappingRows = 7u;
 ScreenMappingData worldScreenMapping(uint screenIndex) {

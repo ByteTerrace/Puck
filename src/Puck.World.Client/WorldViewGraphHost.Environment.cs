@@ -58,7 +58,7 @@ public sealed partial class WorldViewGraphHost {
         foreach (var pair in desired.OrderBy(static pair => pair.Key, comparer: StringComparer.Ordinal)) {
             var source = sourceViews[pair.Key].Instance;
             var reads = SdfSkyEnvironmentGraph.ReadsOf(set: set, view: source.Name);
-            instances.Add(item: new RenderGraphInstance(Name: pair.Key, Refresh: RenderGraphRefresh.EveryFrame, Passes: 2,
+            instances.Add(item: new RenderGraphInstance(Name: pair.Key, Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count,
                 Reads: reads, Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment) {
                 OutputExtent = new RenderGraphPixelExtent(Width: SdfSkyEnvironment.Size, Height: SdfSkyEnvironment.Size),
             });

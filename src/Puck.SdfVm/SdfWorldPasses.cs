@@ -344,6 +344,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
                 ? new RenderGraphRuntimeInput[] {
                     new(Version: SdfSkyEnvironmentGraph.Input, Producer: environment, Output: SdfSkyEnvironmentGraph.Coefficients),
                     new(Version: SdfSkyEnvironmentGraph.MapInput, Producer: environment, Output: SdfSkyEnvironmentGraph.Map),
+                    new(Version: SdfSkyEnvironmentGraph.ScreensInput, Producer: environment, Output: SdfSkyEnvironmentGraph.Screens),
                 } : []),
         ];
     }

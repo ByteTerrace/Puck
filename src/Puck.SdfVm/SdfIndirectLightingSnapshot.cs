@@ -3,16 +3,18 @@ using Puck.Hosting;
 
 namespace Puck.SdfVm;
 
-/// <summary>The actual CPU source held by one finite indirect solve. Mutable lighting and pose tables are copied on capture;
-/// a later live light or transform cannot relabel a result rendered from this snapshot.</summary>
+/// <summary>The actual source held by one finite indirect solve. Mutable CPU tables and declared GPU environment
+/// buffers are copied on capture; later live lighting, images or transforms cannot relabel this result.</summary>
 public sealed class SdfIndirectLightingSnapshot {
     private readonly SdfFrame m_frame;
 
-    internal SdfIndirectLightingSnapshot(SdfFrame frame, SdfLightGeometry geometry, ulong sequence, GpuImagePublication environment) {
+    internal SdfIndirectLightingSnapshot(SdfFrame frame, SdfLightGeometry geometry, ulong sequence, GpuImagePublication environment, GpuImagePublication screens, bool tainted) {
         m_frame = frame;
         Geometry = geometry;
         Sequence = sequence;
         Environment = environment;
+        Screens = screens;
+        Tainted = tainted;
         var lights = new SdfLight[SdfLights.MaxLights];
         frame.Lights.Pack(lights);
         Lights = Array.AsReadOnly(lights);
@@ -33,6 +35,12 @@ public sealed class SdfIndirectLightingSnapshot {
     /// <summary>Gets the exact submitted environment whose map and coefficients were copied together. Unknown means
     /// the solve has no sky source; it never names a later live projection or an earlier completed buffer.</summary>
     public GpuImagePublication Environment { get; }
+    /// <summary>Gets the actual acquired-image reduction held by this solve. It never denotes a CPU host color or a
+    /// newer live image; unknown means the screen source category is disabled.</summary>
+    public GpuImagePublication Screens { get; }
+    /// <summary>Gets whether the immutable source includes unfilled external pixels. Feedback derived from this
+    /// source keeps that taint until a complete solve from capture-filled inputs replaces it.</summary>
+    public bool Tainted { get; }
 
     /// <summary>Returns a private frame for CPU reference evaluation, with independent mutable light and sky tables.
     /// Read-only program and transform data are shared with this immutable capture.</summary>

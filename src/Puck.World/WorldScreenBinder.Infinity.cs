@@ -185,7 +185,7 @@ internal sealed partial class WorldScreenBinder {
             instanceCapacity: source.WorstCaseInstanceCapacity,
             programWordCapacity: source.WorstCaseProgramWordCapacity,
             kernels: ViewKernels(), name: entry.Name, pipelines: m_viewPipelines,
-            screenSources: new InfinityScreenSources(this, entry));
+            screenSources: new InfinityScreenSources(entry));
         entry.Residency = residency;
         RegisterViewWork(lifetime: residency.WorkLifetime, name: entry.Name, transforms: source.MovedTransforms, work: residency.Work);
         return residency;
@@ -284,9 +284,9 @@ internal sealed partial class WorldScreenBinder {
         WorldSessionObservation? Observation, bool Available);
     private readonly record struct InfinityOutput(InfinityEntry Entry, int Index);
 
-    private sealed class InfinityScreenSources(WorldScreenBinder binder, InfinityEntry entry) : ISdfScreenSources {
+    private sealed class InfinityScreenSources(InfinityEntry entry) : ISdfScreenSources {
         public IReadOnlyList<int> Screens => AllScreens;
-        public Vector3 Light(int screen) => binder.LightOf(entry.Screens, screen);
+        public bool Emits(int screen) => WorldScreenBinder.Emits(entry.Screens, screen);
         public SourceMapping? MappingOf(int screen) => (((entry.Screens is { } screens) && screens.Mappings.TryGet(screen, out var mapping)) ? mapping : null);
         public string? ReadOf(int view, int screen) => entry.Screens?.InstanceOf(screen);
     }

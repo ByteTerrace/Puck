@@ -39,10 +39,8 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     private const GpuPixelFormat GlyphAtlasFormat = GpuPixelFormat.R8G8B8A8Unorm;
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
-    private const int ScreenLightByteLength = ((sizeof(float) * 4) * MaxScreenSurfaces); // float4 rgb+intensity per screen slot (KEEP IN SYNC with frame/sdf-environment.hlsli sdfScreenLights)
-    private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     private const int ScreenMappingByteLength = ((sizeof(float) * 4) * 7);
-    // The seventh ScreenMappingData row: the bound flag at its first float, the sampler at its second.
+    // The seventh ScreenMappingData row: bound, sampler and emission flags in its first three floats.
     private const int ScreenBoundOffset = ((sizeof(float) * 4) * 6);
     private const int ScreenSamplerOffset = (ScreenBoundOffset + sizeof(float));
     private const int ScreenStateFloats = 4;
@@ -160,10 +158,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
     // while its handle and extent hold, so an unchanged screen packs nothing.
     private readonly SourceMapping?[] m_screenMappings = new SourceMapping?[MaxScreenSurfaces];
     private readonly bool[] m_screenBound = new bool[MaxScreenSurfaces];
-    // The screen-light table (each screen's glow color and gain) and the bounded-volume table (views and sky), each packed
-    // here every frame and written into its region.
-    private readonly byte[] m_screenLightScratch = new byte[ScreenLightByteLength];
-    private readonly Vector3[] m_screenLightColors = new Vector3[MaxScreenSurfaces];
+    // The bounded-volume table (views and sky), packed here every frame and written into its region.
     private readonly byte[] m_volumeScratch = new byte[(MaxVolumes * VolumeByteLength)];
     private readonly IGpuStorageBuffer[] m_brickRequestBuffers = new IGpuStorageBuffer[SdfBrickPoolLayout.MaxBricks];
     private readonly nint[] m_brickBakeSets = new nint[SdfBrickPoolLayout.MaxBricks];
@@ -338,10 +333,6 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
         m_screenMappingRegion = scope.Own(created: CreateRegion(
             byteCount: (MaxScreenSurfaces * ScreenMappingByteLength),
             region: ScreenMappingRegionIndex
-        ));
-        m_screenLightRegion = scope.Own(created: CreateRegion(
-            byteCount: m_screenLightScratch.Length,
-            region: ScreenLightRegionIndex
         ));
         m_volumeRegion = scope.Own(created: CreateRegion(
             byteCount: m_volumeScratch.Length,
@@ -536,6 +527,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
             scope: scope,
             tables: this
         );
+        m_screenEmission = new ScreenEmissionPass(this, gpu, scope);
 
         // The "uploaded once" seam: the program (and its screen-surface table) is uploaded here and normally never
         // again — frames move entities by rewriting only the small dynamic-transform buffer. UploadProgram is the
@@ -590,6 +582,7 @@ public sealed partial class SdfWorldTables : IDisposable, ISdfBrickBakeService {
 
         m_brickPoolBuffer.Dispose();
         m_skyEnvironment.Dispose();
+        m_screenEmission.Dispose();
 
         foreach (var sampler in m_samplers) {
             m_bindings.DestroySampler(samplerHandle: sampler);

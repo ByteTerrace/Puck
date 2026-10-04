@@ -60,11 +60,6 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
-    private Vector3 ResolveLight(IWorldImageFeed feed) => (m_captureGate.Fills(content: feed.Descriptor.Content)
-        ? WorldImageLight.OfFill(rgba: feed.Descriptor.CaptureFill)
-        : feed.Light
-    );
-
     // The camera producer: a screen names a seat and a sensor, and the binder's shared per-device feeds serve it; the
     // feed a slot holds is only that (seat, sensor) reference, resolved every frame since the seat's device can change.
     private sealed class CameraProducer(WorldScreenBinder binder) : IWorldImageProducer {

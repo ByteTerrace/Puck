@@ -199,9 +199,10 @@ public static partial class SdfWorldPackage {
     public const string ScreenSurfaces = "screenSurfaces";
     /// <summary>The screen-mapping table, seven float4 rows per screen slot: the draw form of the mapping each screen
     /// publishes (<c>SourceMapping.Draw</c>), which the screen shading draws its face from, and the screen's state,
-    /// whether its source is bound and the sampler it reads through.</summary>
+    /// whether its source is bound, the sampler it reads through, and whether it emits into the consuming world.</summary>
     public const string ScreenMappings = "screenMappings";
-    /// <summary>The screen-light table: each screen slot's emitted color and gain, one float4 row per slot.</summary>
+    /// <summary>The acquired-image reduction: sixteen float4 cell means followed by the pixel-weighted whole-image
+    /// mean and direct-light gain for each screen slot. Finite solves read an immutable copy of these records.</summary>
     public const string ScreenLights = "sdfScreenLights";
     /// <summary>The glyph decal table.</summary>
     public const string DecalCells = "sdfDecalCells";

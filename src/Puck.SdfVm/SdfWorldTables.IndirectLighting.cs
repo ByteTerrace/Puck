@@ -25,7 +25,7 @@ public sealed partial class SdfWorldTables {
     internal sealed partial class PinnedIndirectLighting : IDisposable {
         private static readonly string[] Members = [SdfWorldPackage.ProgramWords, SdfWorldPackage.DynamicTransforms,
             SdfWorldPackage.FrameInstanceGrid, SdfWorldPackage.ScreenSurfaces, SdfWorldPackage.ScreenMappings,
-            SdfWorldPackage.ScreenLights, SdfKernelInterfaces.Lights, SdfKernelInterfaces.ShadowHandoffs];
+            SdfKernelInterfaces.Lights, SdfKernelInterfaces.ShadowHandoffs];
         private readonly SdfWorldTables m_tables;
         private readonly GpuRegionCopyPool m_copies;
         private readonly nint m_pool;
@@ -65,7 +65,7 @@ public sealed partial class SdfWorldTables {
         public SdfIndirectLightingSnapshot? Snapshot { get; private set; }
         public IEnumerable<GpuRegion> Regions => m_regions.OfType<GpuRegion>();
         public GpuMemoryBytes Bytes => Regions.Aggregate(new GpuMemoryBytes(DeviceLocal:
-            (EnvironmentMap?.SizeBytes ?? 0) + (EnvironmentCoefficients?.SizeBytes ?? 0), HostVisible: 0), (bytes, region) => bytes + region.OwnedBytes);
+            (EnvironmentMap?.SizeBytes ?? 0) + (EnvironmentCoefficients?.SizeBytes ?? 0) + (ScreenEmission?.SizeBytes ?? 0), HostVisible: 0), (bytes, region) => bytes + region.OwnedBytes);
 
         public bool Matches(SdfFrame frame) {
             if (AwaitingEnvironment || !MatchesEnvironment(frame)) { return false; }
@@ -125,9 +125,10 @@ public sealed partial class SdfWorldTables {
                 Views = Array.AsReadOnly(frame.Views.ToArray()), MovedTransforms = null };
             m_values = m_tables.PassValues;
             m_geometry = m_tables.LightGeometry;
-            AwaitingEnvironment = (frame.IndirectSources & SdfIndirectSources.Sky) != 0;
+            AwaitingEnvironment = (frame.IndirectSources & (SdfIndirectSources.Sky | SdfIndirectSources.Screens)) != 0;
             m_environment = default;
-            Snapshot = new SdfIndirectLightingSnapshot(m_frame, m_geometry, ++m_sequence, environment: default);
+            m_screens = default;
+            Snapshot = new SdfIndirectLightingSnapshot(m_frame, m_geometry, ++m_sequence, environment: default, screens: default, tainted: false);
             if (grow) { m_bindingRevision = -1; }
         }
 
@@ -143,6 +144,9 @@ public sealed partial class SdfWorldTables {
                         m_tables.WriteWorldBuffer(set: m_sets[ring], member: SdfKernelInterfaces.SkyEnvironment, buffer: map);
                         m_tables.WriteWorldBuffer(set: m_sets[ring], member: SdfKernelInterfaces.SkyCoefficients, buffer: coefficients);
                     }
+                    if (ScreenEmission is { } screens) {
+                        m_tables.WriteWorldBuffer(set: m_sets[ring], member: SdfWorldPackage.ScreenLights, buffer: screens);
+                    }
                 }
                 m_bindingRevision = m_tables.m_bindingRevision;
             }
@@ -153,6 +157,7 @@ public sealed partial class SdfWorldTables {
             foreach (var region in Regions) { region.Dispose(); }
             EnvironmentMap?.Dispose();
             EnvironmentCoefficients?.Dispose();
+            ScreenEmission?.Dispose();
             m_copies.Dispose();
             m_tables.m_bindings.DestroyPool(m_pool);
         }
@@ -163,8 +168,7 @@ public sealed partial class SdfWorldTables {
             2 => m_tables.m_instanceGridRegion.Contents,
             3 => m_tables.m_screenSurfaceRegion.Contents,
             4 => m_tables.m_screenMappingRegion.Contents,
-            5 => m_tables.m_screenLightRegion.Contents,
-            6 => MemoryMarshal.AsBytes(m_tables.m_lightRecords.AsSpan()),
+            5 => MemoryMarshal.AsBytes(m_tables.m_lightRecords.AsSpan()),
             _ => MemoryMarshal.AsBytes(m_tables.m_shadowHandoffs.AsSpan()),
         };
     }

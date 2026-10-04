@@ -42,6 +42,7 @@ public sealed class SdfPipelineBuildOrderLawTests {
                 SdfKernel.Composite,
                 SdfKernel.SkyEnvironment,
                 SdfKernel.SkyEnvironmentReduce,
+                SdfKernel.ScreenEmission,
             ]
         );
     }

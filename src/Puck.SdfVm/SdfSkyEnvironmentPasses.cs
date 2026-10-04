@@ -4,8 +4,8 @@ using Puck.Shaders;
 
 namespace Puck.SdfVm;
 
-/// <summary>The single environment producer for each residency. Its acquired panorama inputs precede its map and
-/// coefficient dispatches, and every lighting consumer reads the same exported dependency.</summary>
+/// <summary>The single environment producer for each residency. Its acquired images precede its sky projection and
+/// screen reduction, and every lighting consumer reads the same exported dependencies.</summary>
 /// <param name="views">The existing view factory that starts each shared residency once per frame.</param>
 public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraphPackageFactory, IDisposable {
     private readonly Dictionary<string, Registration> m_instances = new(comparer: StringComparer.Ordinal);
@@ -79,7 +79,8 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
         var tables = residency.Tables!;
         tables.PollSkyEnvironment();
         // Image cadence is decided only after the runtime acquires the same reads that recording would sample.
-        return !tables.SkyEnvironmentHasImages && !tables.SkyEnvironmentOwes;
+        return !tables.SkyEnvironmentHasImages && !tables.SkyEnvironmentOwes &&
+            !tables.ScreenEmissionHasImages && !tables.ScreenEmissionOwes;
     }
     /// <inheritdoc/>
     public async ValueTask<IDisposable?> BuildAsync(RenderGraphPackageRecorderContext context, CancellationToken cancellationToken) {
@@ -92,8 +93,11 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
         } catch { residency.Release(); throw; }
     }
     /// <inheritdoc/>
-    public IGpuBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource) =>
-        context.Part == SdfSkyEnvironmentGraph.Map ? ((Built)built!).Tables.SkyEnvironmentMap : ((Built)built!).Tables.SkyEnvironmentCoefficients;
+    public IGpuBuffer? BorrowedBuffer(RenderGraphPackageRecorderContext context, IDisposable? built, ShaderPipelineResource resource) => context.Part switch {
+        SdfSkyEnvironmentGraph.Map => ((Built)built!).Tables.SkyEnvironmentMap,
+        SdfSkyEnvironmentGraph.Screens => ((Built)built!).Tables.ScreenEmission,
+        _ => ((Built)built!).Tables.SkyEnvironmentCoefficients,
+    };
     /// <inheritdoc/>
     public IRenderGraphPackageRecorder Create(RenderGraphPackageRecorderContext context, IDisposable? built, RenderGraphPackageGroups groups) {
         try { return new SdfSkyEnvironmentRecorder(context: context, groups: groups, built: (Built)built!, views: views); }

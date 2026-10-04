@@ -14,7 +14,7 @@ public sealed class WorldIndirectGraphLawTests {
     [Fact]
     public void TheSharedEnvironmentRunsBeforeTheFiniteSolvesPinPass() {
         Assert.True(RenderGraphInstanceSet.TryCreate([
-            new(Name: "environment", Refresh: RenderGraphRefresh.EveryFrame, Passes: 2, Reads: [],
+            new(Name: "environment", Refresh: RenderGraphRefresh.EveryFrame, Passes: SdfSkyEnvironmentGraph.Fragment.Passes.Count, Reads: [],
                 Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SkyEnvironment),
             new(Name: "world", Refresh: RenderGraphRefresh.EveryFrame, Passes: 1,
                 Reads: [new("environment", Kind: ShaderPipelineResourceKind.Buffer)], ExternalPackage: RenderGraphPackageCatalog.SdfWorld),

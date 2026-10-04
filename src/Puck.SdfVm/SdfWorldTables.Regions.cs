@@ -5,7 +5,7 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 // The host-written tables: program words, dynamic transforms, the frame instance grid, screen surfaces, screen mappings,
-// screen lights, volumes, glyph decals, mesh draws, the lights and the sky's block and layers, plus the staged
+// volumes, glyph decals, mesh draws, the lights and the sky's block and layers, plus the staged
 // shadow handoff controls. Each table uses a GpuRegion under the policy GpuResidency.Select chooses for
 // its size with the upload ring's readers in flight, a ring's buffers in the memory GpuResidency.RingMemory chooses. A
 // frame writes each table into its region, which owes only the words that differ; the upload flushes its ring slot's
@@ -18,22 +18,20 @@ public sealed partial class SdfWorldTables {
     private const int DynamicTransformWordCount = (DynamicTransformByteLength / sizeof(uint));
     // The brick staging's index in the reserved copy pool, past the per-frame regions.
     private const int BrickStagingRegionIndex = RegionCount;
-    private const int DecalRegionIndex = 6;
+    private const int DecalRegionIndex = 5;
     private const int DynamicTransformRegionIndex = 1;
     private const int InstanceGridRegionIndex = 2;
-    private const int MeshRegionIndex = 8;
+    private const int MeshRegionIndex = 7;
     private const int ProgramRegionIndex = 0;
     // The per-frame regions RegionAt names.
-    private const int RegionCount = 13;
-    private const int ScreenLightRegionIndex = 4;
-    private const int ScreenMappingRegionIndex = 7;
+    private const int RegionCount = 12;
+    private const int ScreenMappingRegionIndex = 6;
     private const int ScreenSurfaceRegionIndex = 3;
-    private const int VolumeRegionIndex = 5;
+    private const int VolumeRegionIndex = 4;
 
     private readonly GpuRegion m_dynamicTransformRegion;
     private readonly GpuRegion m_screenSurfaceRegion;
     private readonly GpuRegion m_screenMappingRegion;
-    private readonly GpuRegion m_screenLightRegion;
     private readonly GpuRegion m_volumeRegion;
     // The glyph decal table (Stage 1 only): the leading per-screen descriptor band, then the shared cell region. All
     // zero (every descriptor's gridCols 0) is inert, so a program that declares no decal renders byte-identically.
@@ -153,7 +151,7 @@ public sealed partial class SdfWorldTables {
     /// pool. Read at the time asked, since a region grows by being replaced.</summary>
     public GpuMemoryBytes TableBytes {
         get {
-            var bytes = (new GpuMemoryBytes(DeviceLocal: ((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes), HostVisible: 0) + IndirectBytes);
+            var bytes = (new GpuMemoryBytes(DeviceLocal: ((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes + ScreenEmission.SizeBytes), HostVisible: 0) + IndirectBytes);
 
             for (var index = 0; (index < RegionCount); index++) {
                 if (RegionAt(index: index) is { } region) {
@@ -173,7 +171,6 @@ public sealed partial class SdfWorldTables {
         DynamicTransformRegionIndex => m_dynamicTransformRegion,
         InstanceGridRegionIndex => m_instanceGridRegion,
         ScreenSurfaceRegionIndex => m_screenSurfaceRegion,
-        ScreenLightRegionIndex => m_screenLightRegion,
         VolumeRegionIndex => m_volumeRegion,
         DecalRegionIndex => m_decalRegion,
         ScreenMappingRegionIndex => m_screenMappingRegion,
@@ -189,7 +186,6 @@ public sealed partial class SdfWorldTables {
         DynamicTransformRegionIndex => "dynamic-transforms",
         InstanceGridRegionIndex => "instance-grid",
         ScreenSurfaceRegionIndex => "screen-surfaces",
-        ScreenLightRegionIndex => "screen-lights",
         VolumeRegionIndex => "volumes",
         DecalRegionIndex => "decals",
         ScreenMappingRegionIndex => "screen-mappings",

@@ -601,23 +601,13 @@ internal sealed partial class WorldScreenBinder {
         }
     }
 
-    // The light a screen of a level casts into the room: its machine output's, from the level's world's own host, or its
-    // source instance's, resolved through the capture gate; none for a view, a session or text.
-    private Vector3 LightOf(WorldNestedScreens<SessionFeed>? screens, int screen) {
-        if (screens is null) {
-            return Vector3.Zero;
-        }
-
-        if (screens.RowOf(screen: screen) is { Source: WorldScreenSource.Machine machine }) {
-            return (MachinesOf(world: screens.World)?.VideoOutput(
-                instance: machine.Instance,
-                output: machine.Output
-            )?.EmittedLight ?? Vector3.Zero);
-        }
-
-        return (((screens.Mappings.InstanceOf(screen: screen) is { } instance) && (FeedOf(instance: instance) is { } source))
-            ? ResolveLight(feed: source)
-            : Vector3.Zero);
+    private static bool Emits(WorldNestedScreens<SessionFeed>? screens, int screen) {
+        if (screens is null) { return false; }
+        return screens.RowOf(screen)?.Source switch {
+            WorldScreenSource.Machine or WorldScreenSource.Producer or WorldScreenSource.Probe => true,
+            WorldScreenSource.Session => screens.Children.TryGetValue(screen, out var child) && child.InstanceName != screens.World,
+            _ => false,
+        };
     }
     // Publishes every level's mappings for this frame at the extents their images now have.
     private void PublishNestedMappings() {
@@ -711,12 +701,12 @@ internal sealed partial class WorldScreenBinder {
     }
     // What each screen of a session feed's own residency shows, in every view of it, the session's and its destination's
     // cameras' alike: its destination's screens as the feed shows them.
-    private sealed class FeedScreenSources(WorldScreenBinder binder, SessionFeed feed) : ISdfScreenSources {
+    private sealed class FeedScreenSources(SessionFeed feed) : ISdfScreenSources {
         /// <inheritdoc/>
         public IReadOnlyList<int> Screens => AllScreens;
 
         /// <inheritdoc/>
-        public Vector3 Light(int screen) => binder.LightOf(
+        public bool Emits(int screen) => WorldScreenBinder.Emits(
             screen: screen,
             screens: feed.Nested
         );
@@ -739,7 +729,7 @@ internal sealed partial class WorldScreenBinder {
         public IReadOnlyList<int> Screens => AllScreens;
 
         /// <inheritdoc/>
-        public Vector3 Light(int screen) => binder.LightOf(
+        public bool Emits(int screen) => WorldScreenBinder.Emits(
             screen: screen,
             screens: binder.m_routedScreens.GetValueOrDefault(key: scene)
         );

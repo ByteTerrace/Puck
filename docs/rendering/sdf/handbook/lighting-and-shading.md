@@ -292,10 +292,10 @@ regions, their rings and the separate shade-update region; resizing a pinned
 region waits for its previous readers before replacing it.
 
 When an environment producer is registered, the same source owner holds a
-65,536-byte map and 144-byte coefficient snapshot in device-local memory.
-Sky transport enables their copies. The indirect
-producer's `environment-pin` pass declares both current environment exports
-as transfer inputs and both snapshots as transfer outputs. CPU sources stage
+65,536-byte map, 144-byte coefficient snapshot and 8,704-byte screen reduction
+snapshot in device-local memory. Each enabled source category admits its copies.
+The indirect producer's `environment-pin` pass declares all three current exports
+as transfer inputs and their snapshots as transfer outputs. CPU sources stage
 before the residency upload; the pair copies after projection, and successful
 copy submission admits the first shade batch. A newer environment publication
 does not alter an active solve. Its exact owner and sequence participate in
@@ -311,7 +311,7 @@ the map lookup and its four loads.
 
 `LightingSource` describes the active solve, while `PublishedLightingSource`
 describes the complete generation readers still see during a later solve.
-Each is an immutable CPU capture; `CopyFrame()` supplies independent mutable
+Each retains immutable CPU tables and exact GPU source publications; `CopyFrame()` supplies independent mutable
 light and sky tables for a CPU reference without consulting a newer live frame.
 The cache snapshot reports admitted shade probes and submitted whole sweeps.
 The independent CPU reference uses the same captured program and its immutable
@@ -330,7 +330,7 @@ uses the existing quantized environment reference without artistic gain.
 bank and retains its previous depth until a whole new sweep replaces it.
 The shared `sdfIndirectDiffuse` fold evaluates explicit lights in their table
 order and applies the hit material's albedo, metallic exclusion and `bleed` once.
-It returns direct, emission and screen contributions plus reflected-light
+It returns direct and emission contributions plus reflected-light
 attenuation; feedback and sky sampling remain the caller's separate operations.
 
 High views may replace one incoming cosine sample per four render pixels with a
@@ -380,10 +380,25 @@ The `indirect` debug view shows the incident sum before those material factors.
 `SdfFrame.IndirectSources` carries one shared category mask into both the solve
 and receiver algorithms. Its bits follow the five stored categories: direct 1,
 feedback 2, emission 4, sky 8 and screens 16. The current default enables the
-first three; sky and screen transport still require their captured publication
-paths. A source-mask edit is lighting-visible and does not retrace geometry.
+first four; screen transport requires its captured publication path and explicit
+enablement. A source-mask edit is lighting-visible and does not retrace geometry.
 Disabled categories are zero in newly solved records and receiver results,
 including an earlier complete bank retained while the new solve runs.
+
+Screen radiance comes from the acquired GPU image. The residency's existing
+environment producer reduces each admitted image into sixteen cell means and
+one pixel-weighted whole-image mean. The 4×4 grid supplies bilinear physical
+emission at an indirect screen-face hit; the whole mean supplies analytic room
+glow only at the view's own surface. The indirect diffuse fold excludes that
+analytic light, so the same screen never contributes through both paths.
+Same-world camera feeds emit zero; independent sources and other-world views
+can emit. Missing and excluded images write zero records. Every actual image
+load and every written record is counted. The 8,704-byte residency buffer is
+shared by all views, with one further immutable copy per finite solve.
+Source owner, sequence and taint travel with that copy. The CPU explanation
+continues to refuse screen transport because it has no captured GPU pixels.
+Finite portal-closure iterations and capture reset ordering remain implementation
+work; previous-frame image dependencies alone do not provide that policy.
 
 An existing surface-picker request also copies a 272-byte receiver record and
 the allocated probe-state range under the visibility copy's fence. The answer

@@ -23,8 +23,8 @@ public sealed class SdfKernelSetLawTests {
         "sdf-world-shadow-fade1", "sdf-world-shadow-fade2",
         "sdf-world-views-fade1", "sdf-world-views-core-fade1", "sdf-world-views-folds-fade1",
         "sdf-world-views-fade2", "sdf-world-views-core-fade2", "sdf-world-views-folds-fade2",
-        "sdf-sky-environment", "sdf-sky-environment-reduce",
-        "sdf-indirect-classify", "sdf-indirect-trace",
+        "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission",
+        "sdf-indirect-classify", "sdf-indirect-trace", "sdf-indirect-shade", "sdf-light-primary", "sdf-light-depth",
     ];
 
     private static WorkCounterSet Work() =>

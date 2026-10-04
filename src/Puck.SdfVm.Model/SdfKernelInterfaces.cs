@@ -64,6 +64,10 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The environment map's coefficients as its reduction writes them: <see cref="SdfSkyEnvironment.CoefficientCount"/>
     /// records of four floats, the three channels and a zero.</summary>
     public const string SkyCoefficientsWritten = "sdfSkyCoefficientsRW";
+    /// <summary>The acquired screen images' cell and whole-image means, written by the shared environment producer.</summary>
+    public const string ScreenEmissionWritten = "sdfScreenEmissionRW";
+    /// <summary>The screen slots whose images were actually acquired for the reduction.</summary>
+    public const string ScreenEmissionMask = "screenEmissionMask";
     /// <summary>The sky's layer table: <see cref="SdfSky.MaxLayers"/> <see cref="SdfSkyLayer"/> records, read by the sky
     /// and composite passes and the environment map's kernel.</summary>
     public const string SkyLayers = "sdfSkyLayers";
@@ -157,7 +161,7 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Gets the World-group tables <see cref="World"/> adds to the <c>sdf.world</c> package's members: the lights
     /// table and the sky's block and tables, each a structured buffer of a record whose declaration is generated from
     /// its C# type (<see cref="ShaderInterfaceStructure.From{T}"/>), which the residency writes as a region of its
-    /// tables, and the sky's environment map, which its upload renders. A kernel binds one only when it reads it.</summary>
+    /// tables, and the sky's environment map, which its graph producer renders. A kernel binds one only when it reads it.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> LightAndSkyTables { get; } = [
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Lights, structure: ShaderInterfaceStructure.From<SdfLight>()),
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.World, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
@@ -167,8 +171,10 @@ public sealed class SdfKernelInterfaces {
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint2, group: ShaderInterfaceGroup.World, name: SkyEnvironment),
     ];
     /// <summary>Gets the shared environment producer's typed interface. The map writes through its UAV; the reduction
-    /// reads the same allocation through a read-only descriptor, matching its declared graph input access.</summary>
+    /// reads the same allocation through a read-only descriptor, matching its declared graph input access. The screen
+    /// reduction reads acquired image descriptors and writes its separate cell and whole-image means.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> EnvironmentMembers { get; } = [
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ScreenEmissionMask, type: ShaderValueType.Uint),
         ShaderWorkCounters.RowMember,
         ShaderWorkCounters.DetailRowMember,
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
@@ -179,6 +185,7 @@ public sealed class SdfKernelInterfaces {
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: SkyEnvironment, element: ShaderValueType.Uint2),
         Written(element: ShaderValueType.Uint2, name: SkyEnvironmentWritten),
         Written(element: ShaderValueType.Float4, name: SkyCoefficientsWritten),
+        Written(element: ShaderValueType.Float4, name: ScreenEmissionWritten),
         ShaderWorkCounters.BufferMember,
     ];
     /// <summary>Gets the instruction set's stamp the interfaces carry.</summary>

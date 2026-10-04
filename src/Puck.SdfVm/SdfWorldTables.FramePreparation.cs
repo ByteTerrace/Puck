@@ -135,18 +135,6 @@ public sealed partial class SdfWorldTables {
         floats[8] = transform.Lanes.X; floats[9] = transform.Lanes.Y; floats[10] = transform.Lanes.Z; floats[11] = transform.Lanes.W;
     }
 
-    // Packs the screen-light table: each screen slot's emitted color (the framebuffer average set through SetScreenLight)
-    // with the room-glow intensity gain in w. KEEP IN SYNC with frame/sdf-environment.hlsli's sdfScreenLights.
-    private void PackScreenLights() {
-        var floats = MemoryMarshal.Cast<byte, float>(span: m_screenLightScratch.AsSpan());
-
-        for (var index = 0; (index < MaxScreenSurfaces); index++) {
-            var color = m_screenLightColors[index];
-            var b = (index * 4);
-
-            floats[(b + 0)] = color.X; floats[(b + 1)] = color.Y; floats[(b + 2)] = color.Z; floats[(b + 3)] = ScreenLightIntensity;
-        }
-    }
     // Eleven float4 rows, paired with shade-volumes.hlsli. Unused trailing slots carry zero bounds.
     private void PackVolumes(SdfFrame frame) {
         Array.Clear(array: m_volumeScratch);
@@ -272,14 +260,9 @@ public sealed partial class SdfWorldTables {
             m_instanceGridRebuildOwed = false;
         }
 
-        // The screen-light and volume tables are packed every frame; UploadProgram seeds the screen-surface table and
+        // The volume table is packed every frame; UploadProgram seeds the screen-surface table and
         // SetScreenSurface patches it, and SetScreenDecal/ClearScreenDecal patch the decal table.
-        PackScreenLights();
         PackLightsAndSky(frame: frame);
-        _ = m_screenLightRegion.Write(
-            bytes: m_screenLightScratch,
-            offset: 0
-        );
         PackVolumes(frame: frame);
         _ = m_volumeRegion.Write(
             bytes: m_volumeScratch,

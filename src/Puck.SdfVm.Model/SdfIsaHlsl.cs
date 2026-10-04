@@ -259,6 +259,10 @@ public static class SdfIsaHlsl {
             name: "SDF_MAX_SCREEN_SURFACES",
             value: SdfProgramBuilder.MaxScreenSurfaces
         );
+        declarations.Count(name: "SDF_SCREEN_EMISSION_EDGE", value: SdfScreenEmission.Edge);
+        declarations.Count(name: "SDF_SCREEN_EMISSION_MEAN", value: SdfScreenEmission.Mean);
+        declarations.Count(name: "SDF_SCREEN_EMISSION_RECORDS", value: SdfScreenEmission.Records);
+        declarations.Real(name: "SDF_SCREEN_EMISSION_DIRECT_GAIN", value: SdfScreenEmission.DirectGain);
         declarations.Real(
             name: "SDF_MINIMUM_NEAR",
             value: SdfWorldPackage.MinimumNear

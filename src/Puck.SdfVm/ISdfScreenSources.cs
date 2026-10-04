@@ -1,4 +1,3 @@
-using System.Numerics;
 using Puck.Commands;
 using Puck.Hosting;
 
@@ -18,11 +17,11 @@ public interface ISdfScreenSources {
     /// <summary>Gets the program-declared screen indices the node binds each frame, fixed for the node's lifetime.</summary>
     IReadOnlyList<int> Screens { get; }
 
-    /// <summary>Returns the light a screen casts into the room this frame: its image's average emitted color, normalized
-    /// to 0–1, or zero for a screen showing nothing.</summary>
+    /// <summary>Returns whether this screen's acquired image can emit light. A camera viewing its own world does not
+    /// emit; independent sources and views of other worlds do. The GPU reduces the acquired image itself.</summary>
     /// <param name="screen">The program-declared screen index.</param>
-    /// <returns>The light.</returns>
-    Vector3 Light(int screen);
+    /// <returns>Whether the bound image participates in the shared emission reduction.</returns>
+    bool Emits(int screen);
     /// <summary>Returns the mapping a screen publishes, which the screen shading draws its face from.</summary>
     /// <param name="screen">The program-declared screen index.</param>
     /// <returns>The screen's surface mapping, or <see langword="null"/> when it publishes none: it then shades as unbound

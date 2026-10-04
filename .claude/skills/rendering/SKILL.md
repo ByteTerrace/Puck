@@ -83,7 +83,13 @@ sources stage before the residency upload, both projected buffers copy afterward
 and successful copy submission admits shading. Pin the actual submitted
 environment owner/sequence, and include it in desired-source readiness; never
 relabel old buffers with a newer live projection. Count the pinned regions,
-their rings and the one 65,680-byte device-local environment pair beside the cache.
+their rings, the 65,680-byte device-local sky pair and the 8,704-byte screen
+reduction beside the cache. The same residency producer reduces acquired images
+into a 4×4 radiance grid and pixel-weighted whole mean; never substitute a CPU
+host color. Direct screen glow uses the mean only at the view's own surface;
+indirect screen-face hits use the pinned grid and exclude analytic screen lights.
+Preserve exact source publication and taint, same-world camera exclusion, and the
+CPU reference's explicit refusal until it can consume actual captured pixels.
 The default source mask includes physical Sky. Only certified world exits read
 its pinned full map, through the shared four-load radiance helper; never add
 unoccluded SH at a hit or apply artistic Ambient/Reflection gains to transport.
@@ -1095,7 +1101,7 @@ These are one-line cautions; the owning pages hold the derivations.
   [Vulkan](../../../docs/rendering/vulkan.md#pipeline-cache).
 - **Host uploads go through regions.** Every table the SDF kernels read from
   the host that a residency writes (program words, dynamic transforms, the frame
-  instance grid, screen surfaces, screen mappings, screen lights, volumes, glyph
+  instance grid, screen surfaces, screen mappings, volumes, glyph
   decals, mesh draws, the lights table and the sky's block and layers)
   is a `GpuRegion` of its `SdfWorldTables`
   (`SdfWorldTables.Regions.cs`, created by `CreateRegion` under

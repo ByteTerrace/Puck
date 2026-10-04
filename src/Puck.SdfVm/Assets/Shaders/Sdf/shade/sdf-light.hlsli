@@ -121,8 +121,9 @@ bool sdfLightAt(uint index, out SdfLightSource light) {
     ScreenSurfaceData surface = worldScreenSurface(screenIndex);
 
     light.kind = SdfLightScreen;
-    light.color = sdfScreenLights[screenIndex].rgb;
-    light.weight = sdfScreenLights[screenIndex].a;
+    float4 emission = sdfScreenLights[screenIndex * SDF_SCREEN_EMISSION_RECORDS + SDF_SCREEN_EMISSION_MEAN];
+    light.color = emission.rgb;
+    light.weight = emission.a;
     light.bounce = 1.0;
     light.position = surface.origin.xyz;
     light.facing = normalize(cross(surface.right.xyz, surface.up.xyz));

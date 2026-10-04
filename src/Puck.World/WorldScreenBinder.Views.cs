@@ -158,7 +158,6 @@ internal sealed partial class WorldScreenBinder {
         var residency = new SdfWorldResidency(
             brickPoolVoxelCapacity: 0,
             screenSources: new FeedScreenSources(
-                binder: this,
                 feed: feed
             ),
             dynamicTransformCapacity: source.WorstCaseDynamicTransformCapacity,

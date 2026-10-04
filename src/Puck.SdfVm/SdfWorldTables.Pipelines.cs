@@ -164,6 +164,7 @@ public sealed partial class SdfWorldTables {
         m_pipelines.Commit(reload: reload);
         // The environment map's kernels may be among them: its graph producer renders again when a consumer needs it.
         m_skyEnvironment.Forget();
+        m_screenEmission.Forget();
         // New kernels render new pixels: every view renders again.
         m_programRevision++;
         ReconfigureWork();

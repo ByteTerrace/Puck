@@ -30,7 +30,6 @@ namespace Puck.SdfVm;
 //   - m_meshRevision     : the mesh draws the mesh pass rasterizes and primary bounds its march by.
 //   - m_screenSurfaceRegion, m_screenMappingRegion : the screen-surface sampling table and the mapping and bound flag
 //                          each screen is drawn from.
-//   - m_screenLightScratch : the per-screen glow colors.
 //   - m_decalRevision    : the glyph-decal buffer — revision-tracked (it is 820 KB, not re-hashed each frame).
 // Not covered by any packed span — handled conservatively by forcing a render:
 //   - a sky layer sampling a screen (a panorama, a textured disc): the screen's image updates in place like a slab's, so
@@ -87,6 +86,7 @@ public sealed partial class SdfWorldTables {
         lighting.Add(value: m_lightingSignature);
         // Submit records the environment before signatures are read; a sub-code candidate keeps this revision.
         lighting.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
+        lighting.Add(value: unchecked((ulong)m_screenEmission.Renders));
         lighting.Add(value: m_shadowSignature);
         lighting.Add(values: block);
         var shadow = Fnv1aHash.Create();
@@ -213,6 +213,7 @@ public sealed partial class SdfWorldTables {
         );
         hash.Add(values: tables);
         hash.Add(value: unchecked((ulong)m_skyEnvironment.Renders));
+        hash.Add(value: unchecked((ulong)m_screenEmission.Renders));
         hash.Add(values: block);
         AddShadowOwners(hash: ref hash, slots: frame.Lights.ShadowSlots);
 
@@ -255,7 +256,6 @@ public sealed partial class SdfWorldTables {
         hash.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
         hash.Add(values: m_screenSurfaceRegion.Contents);
         hash.Add(values: m_screenMappingRegion.Contents);
-        hash.Add(values: m_screenLightScratch);
         m_tablesSignature = hash.Value;
 
         var geometry = Fnv1aHash.Create();
@@ -270,7 +270,6 @@ public sealed partial class SdfWorldTables {
 
         lighting.Add(value: m_decalRevision);
         lighting.Add(values: m_lightRegion.Contents);
-        lighting.Add(values: m_screenLightScratch);
         lighting.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
         ref var sky = ref m_skyRecord[0];
         Span<float> hitSky = [sky.Ambient, sky.Reflection];
