@@ -24,8 +24,12 @@ public sealed class SdfSkyDetails {
     public const int IndirectRow = (AtmosphereRow + 1);
     /// <summary>The label of <see cref="IndirectRow"/>.</summary>
     public const string Indirect = "indirect";
-    /// <summary>The rows every set holds ahead of the layers': the runs', atmosphere's and indirect diagnostics'.</summary>
-    public const int Fixed = (IndirectRow + 1);
+    /// <summary>The rows every set holds ahead of the layers': the runs', atmosphere's, indirect diagnostics' and incoming Near work's.</summary>
+    public const int Fixed = (IndirectNearRow + 1);
+    /// <summary>The row counting High's bounded incoming Near sample.</summary>
+    public const int IndirectNearRow = (IndirectRow + 1);
+    /// <summary>The reserved label of the incoming Near row.</summary>
+    public const string IndirectNear = "indirect-near";
     /// <summary>The initial fixed and layer row allocation for standalone sky counter buffers. A composition may retain
     /// more identities; its completed buffer slots grow to hold them.</summary>
     public const int InitialCapacity = 32;
@@ -38,7 +42,7 @@ public sealed class SdfSkyDetails {
     /// <summary>Initializes a new instance of the <see cref="SdfSkyDetails"/> class holding the fixed rows alone: the
     /// runs', atmosphere's and indirect diagnostics'.</summary>
     public SdfSkyDetails() {
-        m_labels = [.. Enumerable.Range(count: Runs, start: 0).Select(selector: static run => RunLabel(run: run)), Atmosphere, Indirect];
+        m_labels = [.. Enumerable.Range(count: Runs, start: 0).Select(selector: static run => RunLabel(run: run)), Atmosphere, Indirect, IndirectNear];
 
         for (var row = 0; (row < Fixed); row++) {
             m_rows.Add(key: m_labels[row], value: ((uint)row));
@@ -52,13 +56,14 @@ public sealed class SdfSkyDetails {
     /// <param name="run">The run's row: zero for the lowest field run, then the upper runs.</param>
     /// <returns>The label, <c>run</c> and the row.</returns>
     public static string RunLabel(int run) => $"run{run}";
-    /// <summary>Returns whether a label names a fixed row: a field run, atmosphere or indirect diagnostics,
+    /// <summary>Returns whether a label names a fixed row: a field run, atmosphere, indirect diagnostics or incoming Near work,
     /// which no layer may take.</summary>
     /// <param name="label">The label.</param>
     /// <returns>Whether it is a fixed row's label.</returns>
     public static bool IsFixed(string label) {
         if (string.Equals(a: label, b: Atmosphere, comparisonType: StringComparison.Ordinal)
-            || string.Equals(a: label, b: Indirect, comparisonType: StringComparison.Ordinal)) {
+            || string.Equals(a: label, b: Indirect, comparisonType: StringComparison.Ordinal)
+            || string.Equals(a: label, b: IndirectNear, comparisonType: StringComparison.Ordinal)) {
             return true;
         }
 
@@ -80,7 +85,7 @@ public sealed class SdfSkyDetails {
         lock (m_gate) {
             if (m_rows.TryGetValue(key: label, value: out var row)) {
                 if (row < Fixed) {
-                    throw new ArgumentException(message: $"The sky's detail label '{label}' names a fixed row: a field run's, the atmosphere's or indirect diagnostics'.", paramName: nameof(label));
+                    throw new ArgumentException(message: $"The sky's detail label '{label}' names a fixed row: a field run's, the atmosphere's, indirect diagnostics' or incoming Near work's.", paramName: nameof(label));
                 }
 
                 return row;

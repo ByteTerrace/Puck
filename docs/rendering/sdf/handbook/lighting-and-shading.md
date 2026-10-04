@@ -332,6 +332,23 @@ The shared `sdfIndirectDiffuse` fold evaluates explicit lights in their table
 order and applies the hit material's albedo, metallic exclusion and `bleed` once.
 It returns direct, emission and screen contributions plus reflected-light
 attenuation; feedback and sky sampling remain the caller's separate operations.
+
+High views may replace one incoming cosine sample per four render pixels with a
+local field ray of at most 0.5 m and 12 shared field queries. The same allowance
+covers transport, gradients, secondary launch and connectivity proof; exhausted
+or unsupported rays keep the whole cache fallback. A local clear endpoint reads
+direction-matched radiance from the existing finest-level bank and never becomes
+a world sky exit. A local hit uses explicit diffuse shading, excluding specular,
+rim and fog. Its feedback reads only the exact preceding complete bank of the
+same source. Near is off below high, for alternative comparison methods, while
+frozen, and until the exact current source's complete solve is fenced. It reads
+no temporal colour history; the resulting diffuse contribution joins the normal
+P15 history and reactivity path. The reserved `indirect-near` row owns Near's
+actual field queries, hashes, loads and outcomes; separately bounded directional
+shadow queries remain in the ordinary indirect row. Fenced inspection reports
+the actual Near outcome. The cache CPU estimate names a Near replacement as
+unsupported instead of reporting a misleading cache divergence.
+
 Primary traversal publishes a receiver approach in the existing visibility
 record. It keeps a positive complete-field sample whose clear ball joins the
 accepted sample, at most half the finest spacing away. The packed retreat and

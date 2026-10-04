@@ -45,6 +45,10 @@ public static partial class SdfWorldPackage {
     public const string IndirectFeedback = "indirectFeedback";
     /// <summary>The maximum new receiver proofs admitted by all views this frame; zero freezes proof writes.</summary>
     public const string IndirectReceiverProofs = "indirectReceiverProofs";
+    /// <summary>Whether this view has fenced the exact current source and may replace a High cache sample.</summary>
+    public const string IndirectNearEnabled = "indirectNearEnabled";
+    /// <summary>The preceding whole lighting bank's exact stamp for the same source; zero disables Near feedback.</summary>
+    public const string IndirectPreviousPublication = "indirectPreviousPublication";
     /// <summary>The selected receiver diagnostic pixel and enabled flag.</summary>
     public const string IndirectPickPixel = "indirectPickPixel";
     /// <summary>The view-owned selected receiver diagnostic record.</summary>
@@ -84,6 +88,8 @@ public static partial class SdfWorldPackage {
             Value(name: IndirectReadGeneration, type: ShaderValueType.Uint),
             Value(name: IndirectReadPublication, type: ShaderValueType.Uint),
             Value(name: IndirectReceiverProofs, type: ShaderValueType.Uint),
+            Value(name: IndirectNearEnabled, type: ShaderValueType.Uint),
+            Value(name: IndirectPreviousPublication, type: ShaderValueType.Uint),
             Value(name: IndirectPickPixel, type: ShaderValueType.Uint4),
         ];
     }

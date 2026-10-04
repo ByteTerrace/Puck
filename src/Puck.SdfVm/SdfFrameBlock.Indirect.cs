@@ -19,7 +19,22 @@ public static partial class SdfFrameBlock {
         WriteUInt32(block, Offset(SdfWorldPackage.IndirectReadGeneration), (uint)Math.Max(0, cache?.PublishedGeneration ?? 0));
         WriteUInt32(block, Offset(SdfWorldPackage.IndirectReadPublication), cache?.PublishedStamp ?? 0u);
         WriteUInt32(block, Offset(SdfWorldPackage.IndirectReceiverProofs), cache is { Frozen: false } ? (uint)cache.Layout.ReceiverProofBudget : 0u);
+        WriteUInt32(block, Offset(SdfWorldPackage.IndirectNearEnabled), 0u);
+        WriteUInt32(block, Offset(SdfWorldPackage.IndirectPreviousPublication), 0u);
         WriteIndirectPick(block, false, 0u, 0u);
+    }
+    /// <summary>Admits Near only after the current source's whole finite solve has completed under its view fence.</summary>
+    /// <param name="block">The world pass block.</param>
+    /// <param name="cache">The exact cache allocation bound by this view.</param>
+    /// <param name="frame">The rendered frame whose lighting source must still match.</param>
+    /// <param name="ready">Whether the residency has fenced that exact current publication.</param>
+    public static void WriteIndirectNear(Span<byte> block, SdfIndirectCache? cache, SdfFrame frame, bool ready) {
+        var enabled = ready && cache is { Frozen: false, LightingComplete: true, PublishedStamp: > 0 }
+            && cache.Layout.Tier == SdfIndirectTier.High
+            && cache.LightingSource is { } source && ReferenceEquals(source, cache.PublishedLightingSource)
+            && cache.Lighting?.Matches(frame) == true;
+        WriteUInt32(block, Offset(SdfWorldPackage.IndirectNearEnabled), enabled ? 1u : 0u);
+        WriteUInt32(block, Offset(SdfWorldPackage.IndirectPreviousPublication), enabled ? cache!.PreviousPublishedStamp : 0u);
     }
     /// <summary>Arms one selected receiver record, without changing ordinary identity picking.</summary>
     /// <param name="block">The world pass block.</param>

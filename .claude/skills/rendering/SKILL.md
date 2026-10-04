@@ -1346,7 +1346,17 @@ These are one-line cautions; the owning pages hold the derivations.
   world-derived image reads use previous-frame feedback. Consumers declare both
   named map and coefficient dependencies, and a finite solve pins both through
   declared transfer reads. The tables publish the actual reduction submission's
-  owner, sequence and fence; completion is never inferred from display. Vulkan devices are created with
+  owner, sequence and fence; completion is never inferred from display.
+  High's `sdf-indirect-near.hlsli` replaces an incoming cosine sample on one in
+  four render pixels, bounded to 0.5 m and 12 shared field queries. Its resource-only
+  `sdf-indirect-near-incoming.hlsli` shares transport, launch and proof allowance;
+  exhaustion preserves every fallback source. A clear local end continues
+  directionally into the existing finest bank, never directly into sky. The
+  frame block admits it only when the exact current source's finite solve is
+  complete and fenced, nonfrozen and High; feedback uses that same source's
+  exact preceding whole stamp. `indirect-near` is a fixed counted row and the
+  actual outcome is carried in the selected receiver record. No resolved colour
+  or P15 history supplies its incoming radiance. Vulkan devices are created with
   `fragmentStoresAndAtomics` for the fragment stages' counts,
   `shaderDemoteToHelperInvocation` for a fragment `discard`, and
   `shaderStorageImageExtendedFormats` for the R8/R8G8 incoming-visibility

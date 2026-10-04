@@ -3,6 +3,7 @@
 #ifndef SDF_INDIRECT_SHADE_HLSLI
 #define SDF_INDIRECT_SHADE_HLSLI
 #include "sdf-indirect-diffuse.hlsli"
+#include "sdf-indirect-continuation.hlsli"
 #include "sdf-indirect-sky.hlsli"
 
 // 256 rays * (five float3 sources, one direction and one terminal) = 19,456 bytes, beside the VM's gather mask.
@@ -44,32 +45,8 @@ SdfIndirectSources sdfIndirectShadeHit(float3 surfacePoint, float3 direction, ui
 
 SdfIndirectSources sdfIndirectShadeContinuation(float3 position, float3 direction, uint terminal,
     uint generation, uint publication) {
-    SdfIndirectSources result = (SdfIndirectSources)0;
-    uint level = (terminal >> SdfIndirectProofLevelShift) & 3u;
-    uint mask = (terminal >> SdfIndirectProofMaskShift) & 255u;
-    float3 scaled = position / sdfIndirectSpacing(passGroup.indirectTier, level);
-    int3 cell = int3(floor(scaled));
-    float total = 0.0;
-    [unroll] for (uint corner = 0u; corner < 8u; corner++) {
-        if ((mask & (1u << corner)) == 0u) { continue; }
-        int3 lattice = cell + sdfIndirectCorner(corner);
-        int index = sdfIndirectProbeIndex(lattice, level);
-        if (index < 0 || !sdfIndirectPublished((uint)index, generation, publication)) { continue; }
-        SdfIndirectPlacement probe = sdfIndirectReadProbe(index);
-        if (probe.classification != SdfIndirectClassActive && probe.classification != SdfIndirectClassRelocated) { continue; }
-        int ray = sdfIndirectContinuationRay(position, direction, lattice, level, (uint)index, probe.position);
-        if (ray < 0) { continue; }
-        // IrradianceCacheModel keeps a reachable face corner in the sum even at a zero trilinear coordinate.
-        float weight = max(sdfIndirectCornerWeight(frac(scaled), corner), 1.0e-6);
-        uint address = sdfIndirectRadianceAddress((uint)index, (uint)ray, generation);
-        [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
-            result.values[source] += sdfIndirectUnpackRadiance(sdfIndirectLoad(address + source)) * weight;
-        }
-        total += weight;
-    }
-    [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
-        result.values[source] = total > 0.0 ? result.values[source] / total : 0.0;
-    }
+    SdfIndirectSources result;
+    sdfIndirectReadContinuation(position, direction, terminal, generation, publication, result);
     return result;
 }
 

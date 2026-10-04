@@ -25,7 +25,7 @@ public static class WorldIndirectDiagnosticText {
                 .Select(residency => Describe(residency, probe)));
         if (captured is null || capturedResidency is null) { return inventory; }
         return inventory + " | " + string.Create(CultureInfo.InvariantCulture,
-            $"retained-pixel residency={capturedResidency.Name} allocation={captured.Cache?.Allocation ?? 0} epoch={captured.Cache?.Epoch ?? 0} generation={captured.Generation} stamp={captured.Publication} source={captured.LightingSource?.Sequence ?? 0} sources=0x{(uint)captured.SourcesEnabled:x2} ")
+            $"retained-pixel residency={capturedResidency.Name} allocation={captured.Cache?.Allocation ?? 0} epoch={captured.Cache?.Epoch ?? 0} generation={captured.Generation} stamp={captured.Publication} source={captured.LightingSource?.Sequence ?? 0} sources=0x{(uint)captured.SourcesEnabled:x2} near={captured.Near.ToString().ToLowerInvariant()} ")
             + WorldIndirectPickText.DescribeCensus(captured);
     }
 

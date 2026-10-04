@@ -152,7 +152,7 @@ bool sdfIndirectReuseProof(uint proof, uint key, uint frame, float3 position, fl
     return true;
 }
 
-#ifdef SDF_INDIRECT_PASS
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
 float3 sdfIndirectDirection(int3 lattice, uint level, uint ray) {
     float3 direction = indirectDirections[ray].xyz;
     uint symmetry = sdfIndirectHash(lattice, level) % 48u;
@@ -263,7 +263,7 @@ uint sdfIndirectProve(float3 position, uint level, inout uint budget, float cert
     return mask;
 }
 
-#ifdef SDF_INDIRECT_PASS
+#if defined(SDF_INDIRECT_PASS) || defined(SDF_VIEWS_PASS)
 bool sdfIndirectEndpointSupports(float3 handoff, float3 direction, float3 endpoint) {
     return dot(endpoint - handoff, direction) > 0.0;
 }

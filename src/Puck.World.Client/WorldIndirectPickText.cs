@@ -31,7 +31,7 @@ public sealed class WorldIndirectPickText {
         if (pick is null) { return "indirect unavailable: no fenced pixel"; }
         var text = new StringBuilder();
         text.Append(CultureInfo.InvariantCulture,
-            $"indirect method={pick.Method.ToString().ToLowerInvariant()} status={pick.Status.ToString().ToLowerInvariant()} tier={pick.Tier.ToString().ToLowerInvariant()} level={pick.Level} component=0x{pick.ProofMask:x2}\n");
+            $"indirect method={pick.Method.ToString().ToLowerInvariant()} status={pick.Status.ToString().ToLowerInvariant()} near={pick.Near.ToString().ToLowerInvariant()} tier={pick.Tier.ToString().ToLowerInvariant()} level={pick.Level} component=0x{pick.ProofMask:x2}\n");
         text.Append(CultureInfo.InvariantCulture,
             $"receiver={Vector(pick.Position)} normal={Vector(pick.Normal)}\nlaunch={Vector(pick.Launched)} clearance={pick.Clearance:0.######}\n");
         text.Append(CultureInfo.InvariantCulture,
@@ -55,7 +55,7 @@ public sealed class WorldIndirectPickText {
         text.Append(CultureInfo.InvariantCulture,
             $"sources direct={Vector(sources.Direct)} emission={Vector(sources.Emission)}\nsources sky={Vector(sources.Sky)} screens={Vector(sources.Screens)}\nsources feedback={Vector(sources.Feedback)}\n");
         text.Append(CultureInfo.InvariantCulture,
-            $"source-sequence={(pick.LightingSource?.Sequence ?? 0)} source-role={(pick.Method == SdfIndirectMethod.Cache ? "visible-cache-publication" : "cache-fallback-not-alternative-reference")}\n");
+            $"source-sequence={(pick.LightingSource?.Sequence ?? 0)} source-role={(pick.Near is SdfIndirectNearOutcome.Hit or SdfIndirectNearOutcome.Continuation ? "cache-fallback-not-near-reference" : pick.Method == SdfIndirectMethod.Cache ? "visible-cache-publication" : "cache-fallback-not-alternative-reference")}\n");
         if (reference is null) {
             text.Append("cpu-reference unavailable: run world.explain for this fenced pixel\n");
         } else {

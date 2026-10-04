@@ -31,6 +31,15 @@ public static class SdfIndirectHlsl {
                 text.Append(CultureInfo.InvariantCulture, $"static const uint SdfIndirectAlternative{field.Name} = {value}u;\n");
             }
         }
+        foreach (var field in typeof(SdfIndirectNearLayout).GetFields(bindingAttr: BindingFlags.Public | BindingFlags.Static).Where(predicate: static field => field.IsLiteral)) {
+            var value = field.GetRawConstantValue();
+            if (field.FieldType == typeof(float)) {
+                text.Append(CultureInfo.InvariantCulture, $"static const float SdfIndirectNear{field.Name} = {(float)value!:R};\n");
+            } else {
+                text.Append(CultureInfo.InvariantCulture, $"static const uint SdfIndirectNear{field.Name} = {value}u;\n");
+            }
+        }
+        Enum<SdfIndirectNearOutcome>(prefix: "SdfIndirectNearOutcome");
         Enum<SdfIndirectTier>(prefix: "SdfIndirectTier");
         Enum<SdfIndirectSources>(prefix: "SdfIndirectSources");
         Enum<SdfIndirectMethod>(prefix: "SdfIndirectMethod");

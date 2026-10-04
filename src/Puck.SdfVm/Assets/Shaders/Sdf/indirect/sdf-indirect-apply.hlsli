@@ -4,7 +4,7 @@
 #include "sdf-indirect-irradiance.hlsli"
 #include "sdf-indirect-approach.hlsli"
 #include "../isa/sdf-sky-kinds.hlsli"
-#include "sdf-indirect-alternatives.hlsli"
+#include "sdf-indirect-near.hlsli"
 
 static SdfIndirectSources sdfIndirectReceiverSources = (SdfIndirectSources)0;
 static uint sdfIndirectReceiverStatus = 0u;
@@ -18,6 +18,7 @@ static float3 sdfIndirectReceiverNormal = 0.0;
 #include "sdf-indirect-receiver-certificate.hlsli"
 
 void sdfIndirectPickBegin(SdfPixel p) {
+    sdfIndirectNearOutcome = SdfIndirectNearOutcomeNotAttempted;
     sdfIndirectReceiverStatus = passGroup.indirectTier == SdfIndirectTierOff ? 0u : 5u;
     sdfIndirectPickActive = p.active && passGroup.indirectPickPixel.z != 0u && all(p.pixel == passGroup.indirectPickPixel.xy);
     if (sdfIndirectPickActive) { sdfIndirectPickClearCorners(); }
@@ -44,6 +45,7 @@ void sdfIndirectPickFinish() {
     }
     sdfIndirectPickStore(51u, passGroup.indirectMethod);
     sdfIndirectPickStore(55u, passGroup.indirectSources);
+    sdfIndirectPickStore(59u, sdfIndirectNearOutcome);
     puckCountDetail(SDF_SKY_DETAIL_INDIRECT, 0u, sdfIndirectPickStores, 0u, 0u, 0u);
     if (passGroup.workCounterRowDetail == 0u) {
         puckAddWork(passGroup.workCounterRow * PuckWorkRowWords + PuckWorkTexelsWord, sdfIndirectPickStores);
@@ -133,6 +135,9 @@ SdfIndirectSources sdfIndirectApply(SdfPixel p, SdfSurfaceSample receiver, float
     SdfIndirectSources selectedSources = cacheSources;
     if (sdfIndirectReceiverStatus == 3u) {
         selectedSources = sdfIndirectAlternative(p, receiver, sdfIndirectReceiverLaunch, cacheSources);
+        uint nearLoads;
+        selectedSources = sdfIndirectNear(p, receiver, sdfIndirectReceiverLaunch, selectedSources, nearLoads);
+        beforeLoads += nearLoads;
     }
     [unroll] for (uint source = 0u; source < SdfIndirectSourceCount; source++) {
         if ((passGroup.indirectSources & (1u << source)) == 0u) { selectedSources.values[source] = 0.0; }

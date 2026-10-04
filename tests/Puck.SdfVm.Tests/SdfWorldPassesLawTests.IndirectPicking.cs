@@ -3,6 +3,7 @@ using System.Numerics;
 using Puck.Hosting;
 using Puck.Shaders;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Illumination;
 using Puck.Testing;
 using Xunit;
 
@@ -80,6 +81,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 BinaryPrimitives.WriteSingleLittleEndian(bytes[232..], 0.5f);
                 BinaryPrimitives.WriteSingleLittleEndian(bytes[240..], 1f);
                 BinaryPrimitives.WriteSingleLittleEndian(bytes[260..], 2f);
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes[236..], 3u);
                 BinaryPrimitives.WriteUInt32LittleEndian(bytes[204..], 2u);
                 BinaryPrimitives.WriteUInt32LittleEndian(bytes[220..], (uint)(SdfIndirectSources.Direct | SdfIndirectSources.Sky));
             } else if (bytes.Length == 262144) {
@@ -104,6 +106,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Same(lighting, result.LightingSource);
         Assert.Equal(SdfIndirectPickStatus.Resolved, result.Status);
         Assert.Equal(SdfIndirectMethod.Cone, result.Method);
+        Assert.Equal(SdfIndirectNearOutcome.Continuation, result.Near);
         Assert.Equal(SdfIndirectSources.Direct | SdfIndirectSources.Sky, result.SourcesEnabled);
         Assert.Equal(new Vector3(7, 0, 0), result.Position);
         Assert.Equal(0.125f, result.Clearance);

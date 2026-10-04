@@ -17,6 +17,29 @@ public sealed class WorldIndirectPickTextLawTests {
         new SdfIndirectCacheSnapshot(3, SdfIndirectTier.High, 9, 10, 64, true, 0, 0, 0, 0, 8, false, 1, 7, 2, false, default, [], []),
         new SdfIndirectCensus(11, 12, 13, 14, 15), null) { SourcesEnabled = SdfIndirectSources.Direct | SdfIndirectSources.Sky };
 
+    [Theory]
+    [InlineData(SdfIndirectNearOutcome.NotAttempted, false)]
+    [InlineData(SdfIndirectNearOutcome.Unresolved, false)]
+    [InlineData(SdfIndirectNearOutcome.Hit, true)]
+    [InlineData(SdfIndirectNearOutcome.Continuation, true)]
+    public void NearReplacementNamesItsActualIncomingAnswerInsteadOfACacheReference(SdfIndirectNearOutcome outcome, bool replacement) {
+        var pick = Pick() with { Near = outcome };
+        var reference = WorldIndirectReference.Evaluate(pick);
+        Assert.Null(reference.Difference);
+        Assert.Null(reference.Estimate);
+        Assert.Equal(0, reference.FieldQueries);
+        Assert.Equal(0, reference.Casts);
+        var text = new WorldIndirectPickText().Read(pick, reference);
+        Assert.Contains($"near={outcome.ToString().ToLowerInvariant()}", text);
+        if (replacement) {
+            Assert.Contains($"Near {outcome} reference needs its sampled direction", reference.Refusal);
+            Assert.Contains("source-role=cache-fallback-not-near-reference", text);
+        } else {
+            Assert.DoesNotContain("Near ", reference.Refusal);
+            Assert.Contains("source-role=visible-cache-publication", text);
+        }
+        Assert.Contains("gpu-minus-reference unavailable", text);
+    }
     [Fact]
     public void InspectorAndEchoShareCapturedWeightsSourcesDepthAndReferenceWithoutSteadyAllocation() {
         var pick = Pick();

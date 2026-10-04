@@ -8,7 +8,7 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>The sky's detail rows (<see cref="SdfSkyDetails"/>) and the packed row address agree with the counted sky kernel
 /// sites, and the shadow pass counts its slots as kinds of its own row. The field runs own the first rows and the
-/// composite's atmosphere and indirect diagnostics the next. Each layer label takes the next row the first time it is
+/// composite's atmosphere, indirect diagnostics and incoming Near work the next. Each layer label takes the next row the first time it is
 /// packed and keeps it throughout the composition's lifetime.</summary>
 public sealed class SdfWorkDetailLawTests {
     [Fact]
@@ -17,26 +17,29 @@ public sealed class SdfWorkDetailLawTests {
 
         // The runs' rows, then the composite's atmosphere row, which the composite counts each atmosphere kind it evaluates
         // in (SDF_SKY_DETAIL_ATMOSPHERE), the view's indirect diagnostics, then the layers' labels.
-        Assert.Equal(expected: new[] { "run0", "run1", "run2", "atmosphere", "indirect" }, actual: details.Labels);
+        Assert.Equal(expected: new[] { "run0", "run1", "run2", "atmosphere", "indirect", "indirect-near" }, actual: details.Labels);
         Assert.Equal(actual: 3u, expected: ((uint)SdfSkyDetails.AtmosphereRow));
         Assert.Contains(expectedSubstring: "sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, ", actualString: Source(path: "passes/sdf-composite.comp.hlsl"));
         Assert.Contains(expectedSubstring: "#define SDF_SKY_DETAIL_ATMOSPHERE 3u", actualString: Source(path: "isa/sdf-sky-kinds.hlsli"));
-        Assert.Equal(expected: 5u, actual: details.RowOf(label: "gradient"));
-        Assert.Equal(expected: 6u, actual: details.RowOf(label: "clouds"));
-        Assert.Equal(expected: 5u, actual: details.RowOf(label: "gradient"));
+        Assert.Equal(expected: 6u, actual: details.RowOf(label: "gradient"));
+        Assert.Equal(expected: 7u, actual: details.RowOf(label: "clouds"));
+        Assert.Equal(expected: 6u, actual: details.RowOf(label: "gradient"));
         Assert.Throws<ArgumentException>(testCode: () => details.RowOf(label: "run1"));
         Assert.Throws<ArgumentException>(testCode: () => details.RowOf(label: SdfSkyDetails.Atmosphere));
         Assert.Throws<ArgumentException>(testCode: () => details.RowOf(label: SdfSkyDetails.Indirect));
         Assert.True(condition: (SdfSkyDetails.IsFixed(label: "run2") && SdfSkyDetails.IsFixed(label: "atmosphere")
             && SdfSkyDetails.IsFixed(label: "indirect") && !SdfSkyDetails.IsFixed(label: "gradient")));
+        Assert.Throws<ArgumentException>(testCode: () => details.RowOf(label: SdfSkyDetails.IndirectNear));
+        Assert.True(condition: SdfSkyDetails.IsFixed(label: "indirect-near"));
+        Assert.Contains(expectedSubstring: "#define SDF_SKY_DETAIL_INDIRECT_NEAR 5u", actualString: SdfSkyKindsHlsl.Generate());
         var retained = details.Labels;
         for (var index = 0; (index < SdfSkyDetails.InitialCapacity); index++) {
-            Assert.Equal(expected: (uint)(7 + index), actual: details.RowOf(label: $"layer{index}"));
+            Assert.Equal(expected: (uint)(8 + index), actual: details.RowOf(label: $"layer{index}"));
         }
-        Assert.Equal(expected: 7 + SdfSkyDetails.InitialCapacity, actual: details.Labels.Count);
-        Assert.Equal(expected: 7, actual: retained.Count);
+        Assert.Equal(expected: 8 + SdfSkyDetails.InitialCapacity, actual: details.Labels.Count);
+        Assert.Equal(expected: 8, actual: retained.Count);
         Assert.Equal(expected: retained, actual: details.Labels.Take(retained.Count));
-        Assert.Equal(expected: 5u, actual: details.RowOf(label: "gradient"));
+        Assert.Equal(expected: 6u, actual: details.RowOf(label: "gradient"));
         Assert.Equal(expected: (uint)details.Labels.Count, actual: details.RowOf(label: "another"));
         Assert.Equal(expected: "another", actual: details.Labels[^1]);
 

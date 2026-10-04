@@ -63,6 +63,7 @@ internal sealed partial class SdfWorldPickReadback {
             new SdfIndirectPickSources(Vector(48), Vector(52), Vector(56), Vector(60), Vector(64)), cache, census, slot.Lighting) {
             Method = (SdfIndirectMethod)Word(51),
             SourcesEnabled = (SdfIndirectSources)Word(55),
+            Near = (SdfIndirectNearOutcome)Word(59),
         };
     }
 

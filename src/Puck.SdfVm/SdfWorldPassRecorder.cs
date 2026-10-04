@@ -341,6 +341,9 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             views: ((residency.IndirectTier == SdfIndirectTier.Off) ? null : residency.IndirectLightViews), depthCamera: m_view.LightView);
         SdfFrameBlock.WriteIndirect(recording.PassBlock, !m_view.LightView && m_part == SdfWorldPackage.Parts.Primary
             ? tables.Indirect : BoundIndirect(recording, tables));
+        if (!m_view.LightView && m_part == SdfWorldPackage.Parts.Views) {
+            SdfFrameBlock.WriteIndirectNear(recording.PassBlock, BoundIndirect(recording, tables), frame, residency.IsIndirectReady);
+        }
         if (m_view.LightView) {
             SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: default, historyFrames: 0, temporal: false);
             SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: default, valid: false);
@@ -725,6 +728,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
 
         tables.WriteWorldBuffer(buffer: (tables.Indirect?.Regions[0].Buffer(slot: tables.CurrentSlot) ?? tables.DummyBuffer),
             member: SdfWorldPackage.IndirectBricks, set: set);
+        tables.WriteWorldBuffer(buffer: (tables.Indirect?.Regions[2].Buffer(slot: tables.CurrentSlot) ?? tables.DummyBuffer),
+            member: SdfWorldPackage.IndirectDirections, set: set);
+        tables.WriteWorldBuffer(buffer: (tables.Indirect?.Regions[3].Buffer(slot: tables.CurrentSlot) ?? tables.DummyBuffer),
+            member: SdfWorldPackage.IndirectTraceStates, set: set);
 
         if (ReferenceEquals(
             objA: m_portTables[slot],

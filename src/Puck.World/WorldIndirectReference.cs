@@ -24,6 +24,9 @@ public static class WorldIndirectReference {
         IrradianceField? field = null;
         WorldIndirectReferenceResult Refused(string reason) => new(null, reason, field?.Samples ?? 0,
             field?.Casts ?? 0, depth, sequence, null);
+        if (pick.Near is SdfIndirectNearOutcome.Hit or SdfIndirectNearOutcome.Continuation) {
+            return Refused($"Near {pick.Near} reference needs its sampled direction and incoming source; the cache estimate cannot supply it.");
+        }
         if (pick.Method != SdfIndirectMethod.Cache) { return Refused($"{pick.Method} reference needs its rendered-frame source; the cache publication cannot supply it."); }
         if (pick.Status != SdfIndirectPickStatus.Resolved || pick.LightingSource is not { } source ||
             pick.Cache is not { PublishedSweeps: > 0 }) { return Refused($"Receiver is {pick.Status}; no complete captured lighting answer is available."); }
