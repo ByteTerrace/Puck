@@ -93,7 +93,9 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     public void TheAtmosphereOwesTheEnvironmentOnlyWhileItInScattersTheSky() {
         using var rig = new Rig();
 
-        // A fog in-scattering its own colour reads no sky, so it renders no map.
+        // Isolate atmosphere from the two surface-lighting consumers. A fog in-scattering its own colour reads no sky.
+        rig.Frame.Sky.Block.Ambient = 0f;
+        rig.Frame.Sky.Block.Reflection = 0f;
         rig.Frame.Sky.Atmosphere = (SdfAtmosphere.Default with { FogColor = Vector3.One, FogColorAuthored = true });
         rig.Render();
         rig.Render();

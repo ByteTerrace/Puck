@@ -9,6 +9,7 @@ using Xunit;
 
 namespace Puck.World.Tests;
 
+[Collection(AllocationCollection.Name)]
 public sealed class WorldShadowAmortizeLawTests {
     private sealed class AudioLever : IWorldAudioLever {
         public float? SessionMasterVolume { get; private set; }

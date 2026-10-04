@@ -54,9 +54,11 @@ public sealed partial class SdfSkySamplingLawTests {
         // evaluating no sky layer: the fog and the haze read the sky from the environment map.
         Assert.Equal(expected: 3, actual: kinds.Count);
         foreach (Match kind in kinds) {
-            Assert.Contains(expectedSubstring: "puckCountDetail(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);", actualString: kind.Value);
+            Assert.Contains(expectedSubstring: "sdfCountSky(SDF_SKY_DETAIL_ATMOSPHERE, 0u, 0u, 1u, 0u, 0u);", actualString: kind.Value);
             Assert.DoesNotMatch(expectedRegexPattern: EvaluatorPattern, actualString: kind.Value);
         }
+        Assert.Single(collection: Regex.Matches(input: CodeOf(path: "sky/sdf-sky.hlsli"),
+            pattern: @"\bpuckCountDetail\(detail, steps, texels, evaluations, hashes, loads\);"));
         Assert.Contains(expectedSubstring: $"#define SDF_SKY_DETAIL_ATMOSPHERE {SdfSkyDetails.AtmosphereRow}u", actualString: CodeOf(path: "isa/sdf-sky-kinds.hlsli"));
 
         // The lookup filters the map's texels and evaluates no layer.
@@ -105,7 +107,7 @@ public sealed partial class SdfSkySamplingLawTests {
         LineCommentPattern().Replace(input: File.ReadAllText(path: Path.Combine(path1: Root, path2: path)), replacement: string.Empty);
     [GeneratedRegex(pattern: @"//[^\n]*")]
     private static partial Regex LineCommentPattern();
-    [GeneratedRegex(pattern: @"float4 runBase = skyBase.Load\(tap\);\s*puckCountDetail\(0u, 0u, 0u, 0u, 0u, 1u\);\s*if \(runBase.a <= 0.0\) \{\s*continue;\s*\}\s*weight \*= runBase.a;")]
+    [GeneratedRegex(pattern: @"float4 runBase = skyBase.Load\(tap\);\s*sdfCountSky\(0u, 0u, 0u, 0u, 0u, 1u\);\s*if \(runBase.a <= 0.0\) \{\s*continue;\s*\}\s*weight \*= runBase.a;")]
     private static partial Regex ValidTapPattern();
     [GeneratedRegex(pattern: @"\bsdf(SkyFieldRuns|SkyCompose|SkyEnvironmentColor)\(")]
     private static partial Regex WalkCallPattern();

@@ -75,7 +75,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 break;
             case "camera":
                 frame = frame with { Views = [frame.Views[0] with { Camera = CameraSnapshot.LookAt(position: new Vector3(x: 1f, y: 0f, z: -5f), target: Vector3.Zero, fieldOfViewRadians: 1f, viewportWidth: Extent, viewportHeight: Extent) }] };
-                executed = [SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs,
+                executed = [SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.Tape, SdfWorldPackage.Parts.CullArgs,
                     SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Ambient,
                     SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
                 break;
@@ -154,7 +154,10 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: 2, actual: Executed(work: CadenceWork(rig: rig)).Length);
         rig.SourceFrame = rig.SourceFrame with { EnableCadenceGate = false };
         rig.Produce();
-        Assert.Equal(expected: 10, actual: Executed(work: CadenceWork(rig: rig)).Length);
+        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.Tape,
+            SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface,
+            SdfWorldPackage.Parts.Ambient, SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views,
+            SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
     }
     [Fact]
     public void CadenceRunsTheSkyEveryFrameWhileALayerSamplesAScreen() {
@@ -172,7 +175,10 @@ public sealed partial class SdfWorldPassesLawTests {
 
         rig.SourceFrame = rig.SourceFrame with { Views = [rig.SourceFrame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true, DisableSoftShadows = true } }] };
         rig.Produce();
-        Assert.Equal(expected: 9, actual: Executed(work: CadenceWork(rig: rig)).Length);
+        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.Tape,
+            SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface,
+            SdfWorldPackage.Parts.Views, SdfWorldPackage.Resolve, SdfWorldPackage.Parts.Sky,
+            SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
         rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.15f, y: 0f);
         rig.SourceFrame = rig.SourceFrame with { };
         rig.Produce();
