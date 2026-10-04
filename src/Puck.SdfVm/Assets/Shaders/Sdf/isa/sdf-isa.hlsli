@@ -144,9 +144,22 @@
 #define SDF_SEGMENT_COUNT(v)             ((v).x)
 #define SDF_SEGMENT_STEP_SCALE(v)        ((v).y)
 #define SDF_SEGMENT_RIGID_PLAN_OFFSET(v) ((v).z)
+#define SDF_SEGMENT_TAPE_OFFSET(v)       ((v).w)
+#define SDF_TAPE_INSTRUCTION_THRESHOLD   30u
+#define SDF_TAPE_SLAB_COUNT              8u
+#define SDF_TAPE_HEADER_WORDS            33u
+#define SDF_TAPE_CERTIFIED               0x00000001u
+#define SDF_TAPE_OMISSIBLE               0x00000002u
+#define SDF_TAPE_DYNAMIC_FRAME           0x00000004u
+#define SDF_TAPE_CENTERED_NORM_ENVELOPE  0x00000008u
+#define SDF_TAPE_TOKEN_SHIFT             8u
+#define SDF_TAPE_COORDINATE_LIMIT        65536.0
+#define SDF_TAPE_INTERMEDIATE_LIMIT      1E+12
+#define SDF_TAPE_BLEND_ROUNDOFF_MARGIN   3.8146973E-06
 #define SDF_INSTANCE_COUNT(v)            ((v).x)
 #define SDF_INSTANCE_PART_PROGRAMS(v)    ((v).y)
 #define SDF_INSTANCE_FLAGS(v)            ((v).z)
+#define SDF_INSTANCE_TAPE_TOKENS(v)      ((v).w)
 #define SDF_WORLD_SEGMENT_COUNT(v)       ((v).x)
 
 // Shape-lane flags and the type mask on a ShapeBlend instruction's header.

@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'overlay-perturbed' (sha256/5c742cfe0a575819dccc93604c84c9d0f92d9eb51748abc99b6d7328b1a58aff), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'overlay-perturbed' (sha256/5c742cfe0a575819dccc93604c84c9d0f92d9eb51748abc99b6d7328b1a58aff), generated with its last member's first word expecting the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "overlay-perturbed.interface.hlsli"
 

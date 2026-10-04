@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'tint-perturbed' (sha256/d3ed1272115e33b3ac1de4872444c5a1d8317b7a66a923923b928bbe3f3a06e3), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'tint-perturbed' (sha256/d3ed1272115e33b3ac1de4872444c5a1d8317b7a66a923923b928bbe3f3a06e3), generated with its last member's first word expecting the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "tint-perturbed.interface.hlsli"
 

@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'ink-finish-perturbed' (sha256/beda98390b6c10abcf0dd791e9b7dc8fa75709681b09cbfb2312bbeb733fe156), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'ink-finish-perturbed' (sha256/beda98390b6c10abcf0dd791e9b7dc8fa75709681b09cbfb2312bbeb733fe156), generated with its last member's first word expecting the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "ink-finish-perturbed.interface.hlsli"
 

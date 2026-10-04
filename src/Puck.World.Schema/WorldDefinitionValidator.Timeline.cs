@@ -707,6 +707,7 @@ public static partial class WorldDefinitionValidator {
                 }
             case WorldRenderSkyLayer.Panel panel: {
                     var own = ((WorldRenderSkyLayer.Panel)target);
+
                     RequireKeyColor(errors: errors, own: own.Color, path: $"{path}.color", value: panel.Color);
                     RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: panel.Intensity);
                     RequireKeyScalar(errors: errors, own: own.Blur, path: $"{path}.blur", value: panel.Blur);

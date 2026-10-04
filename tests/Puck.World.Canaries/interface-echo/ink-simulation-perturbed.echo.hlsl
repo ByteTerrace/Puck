@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'ink-simulation-perturbed' (sha256/137ddd725643da0718282d4c9bf6d4dae49e9ed42aa0d6aac828c2730d7c9922), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'ink-simulation-perturbed' (sha256/137ddd725643da0718282d4c9bf6d4dae49e9ed42aa0d6aac828c2730d7c9922), generated with its last member's first word expecting the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "ink-simulation-perturbed.interface.hlsli"
 

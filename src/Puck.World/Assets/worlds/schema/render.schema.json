@@ -149,7 +149,7 @@
       "title": "WorldRenderLighting"
     },
     "sky": {
-      "description": "The repeatable sky-layer stack and distance fog. Optional; an absent section renders the default look, the two-stop gradient and fog SdfSky starts from, as data the kernels read like any authored sky.",
+      "description": "The repeatable sky-layer stack. Optional; an absent section renders the default look, the two-stop gradient SdfSky starts from, as data the kernels read like any authored sky.",
       "type": [
         "object",
         "null"
@@ -260,6 +260,99 @@
       "default": null,
       "title": "WorldRenderEnvironment"
     },
+    "atmosphere": {
+      "description": "Fog, height fog, haze and a medium between the camera and what it sees. An absent section renders the default fog; an authored section contains exactly the kinds it states.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "fog": {
+          "description": "The fog: an exponential medium, level or thinning with height. Absent is no fog.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "density": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The density per world unit, at the base when Height is authored. Absent is the default look\u0027s density.",
+              "default": null
+            },
+            "color": {
+              "$ref": "./common.schema.json#/$defs/BindableColor",
+              "description": "BindableColor\u0027s grammar: the colour the fog in-scatters. Absent is the sky in the pixel\u0027s direction, so a distant surface fades into the horizon behind it.",
+              "default": null
+            },
+            "height": {
+              "$ref": "./common.schema.json#/$defs/WorldRenderAirHeight",
+              "description": "The height fog\u0027s profile. Absent is a fog alike at every height.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderFog"
+        },
+        "haze": {
+          "description": "The haze: aerial perspective that scatters the sky and the light of the bodies that cast light, brightest toward them. Absent is no haze.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The share of the light the haze takes over the far distance, in [0, 0.99]. Absent is zero, which draws none.",
+              "default": null
+            },
+            "anisotropy": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The Henyey-Greenstein anisotropy of its scattering toward the bodies, in [0, 0.9]: zero scatters alike in every direction. Absent is SdfAtmosphere.DefaultHazeAnisotropy.",
+              "default": null
+            },
+            "height": {
+              "$ref": "./common.schema.json#/$defs/WorldRenderAirHeight",
+              "description": "The haze\u0027s height profile, the amount taken at its base. Absent is a haze alike at every height.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderHaze"
+        },
+        "medium": {
+          "description": "The medium: water below a level surface, with its own extinction and colour. Absent is no medium.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "surface": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The surface\u0027s height. Absent is zero.",
+              "default": null
+            },
+            "extinction": {
+              "$ref": "./common.schema.json#/$defs/BindableScalar",
+              "description": "The extinction per world unit below the surface. Absent is SdfAtmosphere.DefaultMediumExtinction.",
+              "default": null
+            },
+            "color": {
+              "$ref": "./common.schema.json#/$defs/BindableColor",
+              "description": "BindableColor\u0027s grammar: the colour the medium in-scatters, which a deep view through it reaches. Absent is SdfAtmosphere.DefaultMediumColor.",
+              "default": null
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderMedium"
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderAtmosphere"
+    },
     "tonemap": {
       "description": "The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs it. The letterbox color, every pane (display-referred) and the HUD are never tonemapped. Optional; absent is None \u2014 the stylized shaded color, unchanged.",
       "enum": [
@@ -271,7 +364,7 @@
       "title": "WorldTonemap"
     },
     "farDistance": {
-      "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (a fog record in render.sky.layers). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
+      "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the atmosphere absorbs it (render.atmosphere). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
       "type": [
         "number",
         "null"

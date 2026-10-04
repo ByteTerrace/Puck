@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'sdf-film-grain-perturbed' (sha256/7a77e36bec41d515290e0ac9d9585e4062e292d74a159b36c96d09032d65285b), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'sdf-film-grain-perturbed' (sha256/7a77e36bec41d515290e0ac9d9585e4062e292d74a159b36c96d09032d65285b), generated with its last member's first word expecting the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "sdf-film-grain-perturbed.interface.hlsli"
 

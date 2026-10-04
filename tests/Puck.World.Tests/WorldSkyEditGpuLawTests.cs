@@ -20,13 +20,16 @@ public sealed class WorldSkyEditGpuLawTests {
     [Fact]
     public void VulkanReloadedSkyChangesTheHeldImageAndSavesToSource() {
         using var device = HeadlessVulkanDevice.Create(nameof(WorldSkyEditGpuLawTests));
+
         Verify(device, ".spv");
     }
     [Fact]
     public void DirectXReloadedSkyChangesTheHeldImageAndSavesToSource() {
         using var device = DirectXTestDevices.Hardware();
+
         Verify(device, ".dxil");
     }
+
     private static void Verify(IGpuDeviceContext device, string extension) {
         using var files = new TemporaryDirectory();
         using var session = new WorldSkyEditLawTests.Session();
@@ -36,9 +39,11 @@ public sealed class WorldSkyEditGpuLawTests {
         var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
             Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = device }),
             StepTicks: 0, TargetHeight: 32, TargetWidth: 32);
+
         TestLiveness.Until(step: () => view.Produce(in context), reason: () => view.NotReadyReason, wait: view.Residency.WaitPipelineBuilds);
         PngImage Capture(string name) {
             var request = new FrameCaptureRequest(files.PathOf(name));
+
             view.CaptureTarget.RequestCapture(request);
             TestLiveness.Until(step: () => {
                 _ = view.Produce(in context);
@@ -49,19 +54,24 @@ public sealed class WorldSkyEditGpuLawTests {
             return PngDecoder.Decode(File.ReadAllBytes(request.Path));
         }
         var seat = new WorldSeatView(Present: true, Region: new NormalizedRect(0, 0, 1, 1), Camera: default, Width: 32, Height: 32);
+
         session.Comparison.Hold(0, Capture("p18-12-before.png"), seat, session.Server.CompletedEngineTicks);
         session.EditAndReload();
         var difference = session.Comparison.Measure(0, Capture("p18-12-after.png"), seat);
-        Assert.True(difference.ChangedPixels > 0, "Reloading the blue sky must change the held red sky image.");
+
+        Assert.True((difference.ChangedPixels > 0), "Reloading the blue sky must change the held red sky image.");
         session.SaveAndAssert();
     }
+
     private sealed class Source(WorldSkyEditLawTests.Session session) : ISdfFrameSource {
         private readonly SdfProgram m_program = new SdfProgramBuilder().Build();
+
         public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
             var environment = session.Resolve();
+
             return new SdfFrame(Program: m_program, ProgramChanged: false, Time: 0f, Views: [new SdfViewSnapshot(
                 Camera: CameraSnapshot.LookAt(new Vector3(0, 0, -5), Vector3.Zero, 1f, width, height),
-                Region: new NormalizedRect(0, 0, 1, 1))]) { Sky = environment.Sky, Lights = environment.Lights };
+                Region: new NormalizedRect(0, 0, 1, 1))]) { Lights = environment.Lights, Sky = environment.Sky };
         }
     }
 }

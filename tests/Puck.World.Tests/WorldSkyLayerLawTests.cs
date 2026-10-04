@@ -20,11 +20,13 @@ public sealed class WorldSkyLayerLawTests {
             "tests/Puck.World.Canaries/editor-grid/fixture.world.json", definition => definition with {
                 RenderRaw = definition.Render with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Noise(Coverage: 0.125f)]) },
             }).Build());
+
         Assert.True(WorldPostBuildWiring.Install(host.Services));
         var registry = host.Services.GetRequiredService<CommandRegistry>();
         var server = host.Services.GetRequiredService<WorldServer>();
         var settings = host.Services.GetRequiredService<WorldRenderSettings>();
         var before = WorldDefinitionSerialization.Serialize(server.Definition);
+
         Assert.False(registry.Submit("world.sky-layer solo 0").IsError);
         Assert.Equal(0, settings.SkyLayers.Solo);
         Assert.False(registry.Submit("world.sky-layer mute 0 on").IsError);
@@ -36,10 +38,13 @@ public sealed class WorldSkyLayerLawTests {
         Assert.True(registry.Submit("world.sky-layer mute -1 on").IsError);
         Assert.Equal(before, WorldDefinitionSerialization.Serialize(server.Definition));
     }
+
     private sealed class Audio : IWorldAudioLever {
         public float? SessionMasterVolume => null;
+
         public void SetMasterVolume(float value) { }
     }
+
     [Fact]
     public void SoloAndMuteResolveThroughTheLeverSinkAndNeverSave() {
         var definition = Fixtures.BuildDocument() with {
@@ -56,20 +61,24 @@ public sealed class WorldSkyLayerLawTests {
         var sink = WorldSessionLevers.Compose(settings, pacing, audio, bar);
         var mirror = ClientFixtures.StateMirror(definition);
         using var resolver = new WorldEnvironmentResolve(new WorldValueDomainGuard());
+
         WorldResolvedEnvironment Resolve() => resolver.Resolve(definition, 0, mirror, layers: settings.SkyLayers);
         void Apply(string name, double a, double b = 0d) {
             var lever = new WorldSessionLever(Section: WorldSection.Render, Name: name, A: a, B: b);
+
             Assert.True(WorldSubmissionCodec.TryEncodeLever(lever, out var bytes, out _));
             Assert.True(WorldSubmissionCodec.TryDecodeLever(bytes, out var decoded, out _));
             Assert.True(sink.TryApply(decoded));
         }
         var full = Resolve().Sky;
+
         Assert.Equal(0.125f, full.Atmosphere.FogDensity);
         Assert.Equal(4, full.LayerCount);
         Assert.Equal(0.25f, full.Parameters<SdfSkyStars>(1).Brightness);
         Assert.Equal(2f, full.Parameters<SdfSkyStars>(2).Brightness);
         Apply(WorldSessionLevers.SkySolo, 1);
         var solo = Resolve().Sky;
+
         Assert.Equal(1, solo.LayerCount);
         Assert.Equal("bright", solo.LabelAt(0));
         Assert.Equal(2f, solo.First<SdfSkyStars>().Brightness);
@@ -78,6 +87,7 @@ public sealed class WorldSkyLayerLawTests {
         Assert.Equal(0, Resolve().Sky.LayerCount);
         Apply(WorldSessionLevers.SkySolo, -1);
         var muted = Resolve().Sky;
+
         Assert.Equal(3, muted.LayerCount);
         Assert.Equal("faint", muted.LabelAt(1));
         Assert.Equal(0.25f, muted.First<SdfSkyStars>().Brightness);
@@ -86,9 +96,11 @@ public sealed class WorldSkyLayerLawTests {
         Apply(WorldSessionLevers.SkyMute, 1);
         Assert.Equal(2f, Resolve().Sky.Parameters<SdfSkyStars>(2).Brightness);
         var resolutions = resolver.Resolutions;
+
         _ = Resolve();
         Assert.Equal(resolutions, resolver.Resolutions);
         var saved = WorldSessionLevers.Fold(definition, settings, pacing, audio, bar, new WorldEditorSeats());
+
         Assert.Same(definition.Render.Sky, saved.Render.Sky);
         Assert.Equal(-1, new WorldRenderSettings(saved.Render).SkyLayers.Solo);
     }
@@ -100,12 +112,13 @@ public sealed class WorldSkyLayerLawTests {
         var mirror = ClientFixtures.StateMirror(definition);
         var layers = new WorldSkyAudition();
         using var resolver = new WorldEnvironmentResolve(new WorldValueDomainGuard());
-        Assert.True(resolver.Resolve(definition, 0, mirror, layers: layers).Sky.First<SdfSkyDisc>().Light >= 0);
+
+        Assert.True((resolver.Resolve(definition, 0, mirror, layers: layers).Sky.First<SdfSkyDisc>().Light >= 0));
         layers.SetMuted(0, true);
-        Assert.True(resolver.Resolve(definition, 0, mirror, layers: layers).Sky.IndexOf(SdfSkyLayerKind.Disc) == -1,
+        Assert.True((resolver.Resolve(definition, 0, mirror, layers: layers).Sky.IndexOf(SdfSkyLayerKind.Disc) == -1),
             "Automatic light selection must not re-enable a muted sun disc.");
         layers.SetMuted(0, false);
-        Assert.True(resolver.Resolve(definition, 0, mirror, layers: layers).Sky.First<SdfSkyDisc>().Light >= 0);
+        Assert.True((resolver.Resolve(definition, 0, mirror, layers: layers).Sky.First<SdfSkyDisc>().Light >= 0));
     }
     [Fact]
     public void SkyCostIsAnAddressableDebugView() {

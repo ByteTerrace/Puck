@@ -22,7 +22,6 @@ public sealed class ShaderWorkCountersLawTests {
         Assert.Contains(actualString: shadow, expectedSubstring: "if (slot < PuckWorkShadowSlots)");
         Assert.Contains(actualString: shadow, expectedSubstring: "PuckWorkShadowWord + (slot * 2u)), steps);");
     }
-
     [Fact]
     public void IndirectCountersUseGeneratedColumnsAndCountEachDetailOnce() {
         var generated = ShaderInterfaceHlsl.Generate(shaderInterface: Interface([.. ShaderWorkCounters.Members]));

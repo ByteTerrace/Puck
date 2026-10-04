@@ -102,6 +102,7 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
     // including a residency whose tables are recreated, while each installed recorder retains its previous cache.
     private sealed class CacheCounter(SdfIndirectPasses owner, string instance) : IShaderPipelineStorageCounter {
         private readonly Lock m_gate = new();
+
         private SdfIndirectCache? m_cache;
         private long m_revision;
 
@@ -118,6 +119,7 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
                 }
             }
         }
+
         public ShaderPipelineStorageCounts CountsAt(uint width, uint height) => new(Width: width, Height: height);
     }
 

@@ -73,7 +73,6 @@ public sealed partial class SdfWorldPassesLawTests {
         }, building: Building, reason: () => $"Replacement cache submission {replacement.Frame}; {graph.Render.Reason}");
         Assert.Equal(expected: originalFrame, actual: original.Frame);
     }
-
     [Fact]
     public void TierChangesRetainOnlyCachesWhoseReadersStillHoldThemWithoutBudgetReads() {
         var gpu = new FakeGpuDevice();

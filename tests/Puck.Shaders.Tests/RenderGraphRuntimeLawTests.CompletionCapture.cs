@@ -8,6 +8,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
     [Theory]
     public void ACaptureWaitsForItsCurrentInputAndRefusesAPermanentFailure(bool refuses) {
         var gpu = new FakePipelineGpu { ReadbackSupported = true };
+
         var (runtime, frames, producers) = WorldScene(gpu: gpu);
 
         using (runtime) {
@@ -46,9 +47,11 @@ public sealed partial class RenderGraphRuntimeLawTests {
 
         AssertStandingCaptureCompletes();
     }
+
     // The completion guard must distinguish a held rebuild from an image deliberately standing for this frame.
     private void AssertStandingCaptureCompletes() {
         var gpu = new FakePipelineGpu { ReadbackSupported = true };
+
         var (runtime, frames) = CompletionScene(gpu: gpu);
 
         using (runtime) {

@@ -101,7 +101,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         if (
-            moved || !ReferenceEquals(layers, m_layers) || (layers?.Revision ?? 0) != m_layersRevision ||
+            moved || !ReferenceEquals(layers, m_layers) || ((layers?.Revision ?? 0) != m_layersRevision) ||
             !ReferenceEquals(
             objA: mirror,
             objB: m_mirror
@@ -113,7 +113,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         ) {
             m_mirror = mirror;
             m_layers = layers;
-            m_layersRevision = layers?.Revision ?? 0;
+            m_layersRevision = (layers?.Revision ?? 0);
             m_bound.Clear();
             m_clocks.Clear();
             m_readsTick = false;
@@ -594,6 +594,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         }
 
         var layers = (sky?.Layers ?? []);
+
         if (m_layers is { Solo: >= 0 }) {
             m_resolvedSky.ClearLayers();
         }
@@ -991,10 +992,9 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         Projection = ((panorama.Projection == WorldSkyProjection.Octahedral) ? SdfSkyProjection.Octahedral : SdfSkyProjection.Equirectangular),
         Screen = (panorama.Screen ?? -1),
     };
-
     private SdfSkyPanel PanelOf(WorldStateMirror mirror, WorldRenderSkyLayer.Panel panel, in WorldValueSite site) => new() {
-        Direction = panel.Direction ?? Vector3.UnitY,
-        Size = panel.Size ?? new Vector2(0.3f),
+        Direction = (panel.Direction ?? Vector3.UnitY),
+        Size = (panel.Size ?? new Vector2(0.3f)),
         Color = Rgb(color: panel.Color, fallback: Vector3.One, mirror: mirror),
         Intensity = Scalar(fallback: 1f, field: WorldValueFields.PanelIntensity, mirror: mirror, scalar: panel.Intensity, site: site),
         Blur = Scalar(fallback: 0f, field: WorldValueFields.PanelBlur, mirror: mirror, scalar: panel.Blur, site: site),
@@ -1006,6 +1006,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     };
     private void WriteEnvironment(WorldStateMirror mirror, WorldRenderEnvironment? environment, SdfSky into) {
         var site = new WorldValueSite("render.environment");
+
         into.Block.Ambient = Scalar(fallback: 1f, field: WorldValueFields.EnvironmentAmbient, mirror: mirror, scalar: environment?.Ambient, site: site);
         into.Block.Reflection = Scalar(fallback: 1f, field: WorldValueFields.EnvironmentReflection, mirror: mirror, scalar: environment?.Reflection, site: site);
     }

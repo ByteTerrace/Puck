@@ -17,19 +17,21 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                 ]),
             },
         };
+
         Assert.True(TryValidateLocal(definition));
         var mirror = ClientFixtures.StateMirror(definition: definition, engineTick: 12600UL);
         var resolved = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard()).Resolve(definition: definition, mirror: mirror, revision: 0);
         var panel = resolved.Sky.First<SdfSkyPanel>();
+
         Assert.Equal(2f, panel.Intensity);
         Assert.Equal(.1f, panel.Blur);
-        var halfLinear = 1.055f * MathF.Pow(.5f, 1f / 2.4f) - .055f;
+        var halfLinear = ((1.055f * MathF.Pow(.5f, (1f / 2.4f))) - .055f);
+
         Assert.InRange(Vector3.Distance(new Vector3(halfLinear, 0f, halfLinear), panel.Color), 0f, 1e-6f);
         Assert.True(TryValidateLocal(AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Canaries/ambient-from-sky/fixture.world.json")));
         Assert.True(TryValidateLocal(AuthoredGameFixtures.Load(relativePath: "tests/Puck.Parity/parity.world.json")));
         Assert.True(TryValidateLocal(AuthoredGameFixtures.Load(relativePath: "tests/Puck.Counters/sky-cycle.world.json")));
     }
-
     [Fact]
     public void KeyedSkyColourRefreshesOnlyAfterCrossingOneDisplayCode() {
         WorldRenderSkyLayer.Gradient Gradient(string color) => new(Stops: [
@@ -45,13 +47,16 @@ public sealed partial class WorldRenderLightingSkyLawTests {
                 ]),
             },
         };
+
         Assert.True(TryValidateLocal(definition));
         var resolver = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
         var refresh = new SdfSkyEnvironmentRefresh();
+
         bool Owes(ulong tick) {
             var mirror = ClientFixtures.StateMirror(definition: definition, engineTick: tick);
             var resolved = resolver.Resolve(definition: definition, mirror: mirror, revision: 0);
             var layers = new SdfSkyLayer[SdfSky.MaxLayers];
+
             resolved.Sky.Pack(resolved.Lights, new SdfSkyDetails(), out var block, layers);
             return refresh.Owes(block, layers);
         }
@@ -63,29 +68,29 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         Assert.True(Owes(20160UL));
         Assert.False(refresh.Skipped);
     }
-
     [Fact]
     public void RepeatedPanelsResolveTheirFieldsAndLayerControls() {
         var resolved = Resolve(BaseDefaults() with {
             Sky = new WorldRenderSky(Layers: [
                 new WorldRenderSkyLayer.Panel(Direction: Vector3.UnitZ, Size: new Vector2(.2f, .4f), Color: new BindableColor(Raw: "#4080FF"), Intensity: 2f, Blur: .1f, Name: "key"),
-                new WorldRenderSkyLayer.Panel(Name: "fill") { Visibility = WorldSkyVisibility.Camera, Opacity = .5f, Tier = WorldSkyTier.Low },
+                new WorldRenderSkyLayer.Panel(Name: "fill") { Opacity = .5f, Tier = WorldSkyTier.Low, Visibility = WorldSkyVisibility.Camera },
             ]),
         });
+
         Assert.Equal(3, resolved.Sky.LayerCount);
         Assert.Equal(SdfSkyLayerKind.Panel, resolved.Sky.LayerAt(1).Kind);
         Assert.Equal(SdfSkyVisibility.Lighting, resolved.Sky.LayerAt(1).Visibility);
         Assert.Equal(SdfSkyBlend.Add, resolved.Sky.LayerAt(1).Blend);
         var panel = resolved.Sky.Parameters<SdfSkyPanel>(1);
+
         Assert.Equal(Vector3.UnitZ, panel.Direction);
         Assert.Equal(new Vector2(.2f, .4f), panel.Size);
-        Assert.Equal(new Vector3(64f / 255f, 128f / 255f, 1f), panel.Color);
+        Assert.Equal(new Vector3((64f / 255f), (128f / 255f), 1f), panel.Color);
         Assert.Equal(2f, panel.Intensity);
         Assert.Equal(.1f, panel.Blur);
         Assert.Equal(SdfSkyVisibility.Camera, resolved.Sky.LayerAt(2).Visibility);
         Assert.Equal(.5f, resolved.Sky.LayerAt(2).Opacity);
     }
-
     [Fact]
     public void PanelGeometryAndEnvironmentGainsRefuseInvalidValues() {
         bool Valid(WorldRenderSkyLayer.Panel panel) => TryValidateLocal(Fixtures.BuildDocument() with {

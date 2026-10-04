@@ -470,6 +470,7 @@ public static class WorldRenderKeys {
                 }
             case WorldRenderSkyLayer.Panel panel: {
                     var parts = Parts(keys: stated, select: static part => (part as WorldRenderSkyLayer.Panel));
+
                     return panel with {
                         Color = Color(authored: panel.Color, clock: clock, field: static part => part.Color, parts: parts),
                         Intensity = Scalar(authored: panel.Intensity, clock: clock, field: static part => part.Intensity, parts: parts),

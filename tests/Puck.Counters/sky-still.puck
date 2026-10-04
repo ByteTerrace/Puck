@@ -91,7 +91,9 @@ prototypes {
 
 render {
   atmosphere {
-    fog { density: 0.012 }
+    fog {
+      density: 0.012
+    }
   }
   sky {
     layers [

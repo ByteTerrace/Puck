@@ -24,7 +24,7 @@ public sealed class WorldTimelineLeverLawTests {
             Fog: new WorldRenderFog(Density: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "tide", keys: [
                 new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
                 new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.1f),
-            ]))),
+            ])))
         )),
     }).WithWorldState([new WorldStateRow(
         Name: CellName.Parse(candidate: "phase"), Kind: CellKind.Fixed,

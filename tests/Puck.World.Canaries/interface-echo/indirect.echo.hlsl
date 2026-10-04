@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'indirect' (sha256/bf3c6e14e4e450e61036cc9a017ea6c167f408b4c5df026ed1f215be30824f93), generated from the interface; never edit it.
+// The echo pass of shader interface 'indirect' (sha256/b4e3e91b6526462b509e3d45e2942aeed241cfe5ed5e2b49b045ff486c8c18cc), generated from the interface; never edit it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "indirect.interface.hlsli"
 
@@ -69,19 +69,22 @@ void main(uint3 id : SV_DispatchThreadID) {
     echo[uint2(59, 0)] = ((asuint(passGroup.nearDistance) == 0x400473A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(60, 0)] = ((asuint(passGroup.previousView[0].x) == 0x400493A5u) && (asuint(passGroup.previousView[0].y) == 0x4004A3A5u) && (asuint(passGroup.previousView[0].z) == 0x4004B3A5u) && (asuint(passGroup.previousView[0].w) == 0x4004C3A5u) && (asuint(passGroup.previousView[1].x) == 0x4004D3A5u) && (asuint(passGroup.previousView[1].y) == 0x4004E3A5u) && (asuint(passGroup.previousView[1].z) == 0x4004F3A5u) && (asuint(passGroup.previousView[1].w) == 0x400503A5u) && (asuint(passGroup.previousView[2].x) == 0x400513A5u) && (asuint(passGroup.previousView[2].y) == 0x400523A5u) && (asuint(passGroup.previousView[2].z) == 0x400533A5u) && (asuint(passGroup.previousView[2].w) == 0x400543A5u) && (asuint(passGroup.previousView[3].x) == 0x400553A5u) && (asuint(passGroup.previousView[3].y) == 0x400563A5u) && (asuint(passGroup.previousView[3].z) == 0x400573A5u) && (asuint(passGroup.previousView[3].w) == 0x400583A5u) && (asuint(passGroup.previousView[4].x) == 0x400593A5u) && (asuint(passGroup.previousView[4].y) == 0x4005A3A5u) && (asuint(passGroup.previousView[4].z) == 0x4005B3A5u) && (asuint(passGroup.previousView[4].w) == 0x4005C3A5u) && (asuint(passGroup.previousView[5].x) == 0x4005D3A5u) && (asuint(passGroup.previousView[5].y) == 0x4005E3A5u) && (asuint(passGroup.previousView[5].z) == 0x4005F3A5u) && (asuint(passGroup.previousView[5].w) == 0x400603A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
     echo[uint2(61, 0)] = ((asuint(passGroup.screenCount) == 0x400613A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(62, 0)] = ((asuint(passGroup.shadowDistanceScale) == 0x400623A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(63, 0)] = ((asuint(passGroup.shadowFadeCount) == 0x400633A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(64, 0)] = ((asuint(passGroup.shadowSlotCount) == 0x400643A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(65, 0)] = ((asuint(passGroup.shadowSlots.x) == 0x400653A5u) && (asuint(passGroup.shadowSlots.y) == 0x400663A5u) && (asuint(passGroup.shadowSlots.z) == 0x400673A5u) && (asuint(passGroup.shadowSlots.w) == 0x400683A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(66, 0)] = ((asuint(passGroup.tanHalfFieldOfView) == 0x400693A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(67, 0)] = ((asuint(passGroup.temporal) == 0x4006A3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(68, 0)] = ((asuint(passGroup.tileGrid.x) == 0x4006B3A5u) && (asuint(passGroup.tileGrid.y) == 0x4006C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(69, 0)] = ((asuint(passGroup.viewBase) == 0x4006D3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(70, 0)] = ((asuint(passGroup.viewForward.x) == 0x400713A5u) && (asuint(passGroup.viewForward.y) == 0x400723A5u) && (asuint(passGroup.viewForward.z) == 0x400733A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(71, 0)] = ((asuint(passGroup.viewPosition.x) == 0x400753A5u) && (asuint(passGroup.viewPosition.y) == 0x400763A5u) && (asuint(passGroup.viewPosition.z) == 0x400773A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(72, 0)] = ((asuint(passGroup.viewRight.x) == 0x400793A5u) && (asuint(passGroup.viewRight.y) == 0x4007A3A5u) && (asuint(passGroup.viewRight.z) == 0x4007B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(73, 0)] = ((asuint(passGroup.viewUp.x) == 0x4007D3A5u) && (asuint(passGroup.viewUp.y) == 0x4007E3A5u) && (asuint(passGroup.viewUp.z) == 0x4007F3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(74, 0)] = ((asuint(passGroup.viewportCount) == 0x400803A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(75, 0)] = ((asuint(passGroup.workCounterRow) == 0x400813A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
-    echo[uint2(76, 0)] = ((asuint(passGroup.workCounterRowDetail) == 0x400823A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(62, 0)] = ((asuint(passGroup.shadowAmortize) == 0x400623A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(63, 0)] = ((asuint(passGroup.shadowDistanceScale) == 0x400633A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(64, 0)] = ((asuint(passGroup.shadowFadeCount) == 0x400643A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(65, 0)] = ((asuint(passGroup.shadowLightReject) == 0x400653A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(66, 0)] = ((asuint(passGroup.shadowOwnershipReject) == 0x400663A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(67, 0)] = ((asuint(passGroup.shadowSlotCount) == 0x400673A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(68, 0)] = ((asuint(passGroup.shadowSlots.x) == 0x400693A5u) && (asuint(passGroup.shadowSlots.y) == 0x4006A3A5u) && (asuint(passGroup.shadowSlots.z) == 0x4006B3A5u) && (asuint(passGroup.shadowSlots.w) == 0x4006C3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(69, 0)] = ((asuint(passGroup.tanHalfFieldOfView) == 0x4006D3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(70, 0)] = ((asuint(passGroup.temporal) == 0x4006E3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(71, 0)] = ((asuint(passGroup.tileGrid.x) == 0x4006F3A5u) && (asuint(passGroup.tileGrid.y) == 0x400703A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(72, 0)] = ((asuint(passGroup.viewBase) == 0x400713A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(73, 0)] = ((asuint(passGroup.viewForward.x) == 0x400753A5u) && (asuint(passGroup.viewForward.y) == 0x400763A5u) && (asuint(passGroup.viewForward.z) == 0x400773A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(74, 0)] = ((asuint(passGroup.viewPosition.x) == 0x400793A5u) && (asuint(passGroup.viewPosition.y) == 0x4007A3A5u) && (asuint(passGroup.viewPosition.z) == 0x4007B3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(75, 0)] = ((asuint(passGroup.viewRight.x) == 0x4007D3A5u) && (asuint(passGroup.viewRight.y) == 0x4007E3A5u) && (asuint(passGroup.viewRight.z) == 0x4007F3A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(76, 0)] = ((asuint(passGroup.viewUp.x) == 0x400813A5u) && (asuint(passGroup.viewUp.y) == 0x400823A5u) && (asuint(passGroup.viewUp.z) == 0x400833A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(77, 0)] = ((asuint(passGroup.viewportCount) == 0x400843A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(78, 0)] = ((asuint(passGroup.workCounterRow) == 0x400853A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
+    echo[uint2(79, 0)] = ((asuint(passGroup.workCounterRowDetail) == 0x400863A5u)) ? float4(0.0, 1.0, 0.0, 1.0) : float4(1.0, 0.0, 0.0, 1.0);
 }

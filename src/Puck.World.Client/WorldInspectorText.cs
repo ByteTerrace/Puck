@@ -34,6 +34,7 @@ public sealed partial class WorldInspectorText {
     private string? m_reloadRoot;
 
     private string m_reloadLine = "reload=none";
+
     private WorldRenderSky? m_sky;
     private WorldRenderAtmosphere? m_atmosphere;
     private string? m_skyText;
@@ -104,27 +105,31 @@ public sealed partial class WorldInspectorText {
 
     private void Environment(in WorldInspectorSnapshot snapshot) {
         if (snapshot.Definition is not { } definition) { return; }
-        if (m_skyText is null || !ReferenceEquals(m_sky, definition.Render.Sky) || !ReferenceEquals(m_atmosphere, definition.Render.Atmosphere)) {
+        if ((m_skyText is null) || !ReferenceEquals(m_sky, definition.Render.Sky) || !ReferenceEquals(m_atmosphere, definition.Render.Atmosphere)) {
             m_sky = definition.Render.Sky;
             m_atmosphere = definition.Render.Atmosphere;
             m_skyText = WorldLightingText.DescribeSky(m_sky, m_atmosphere);
         }
         _ = Line(m_skyText, lines: 4, optional: true);
         var scratch = m_scratch.AsSpan();
-        _ = (scratch.TryWrite(CultureInfo.InvariantCulture, $"timeline clocks={definition.Timeline.Clocks?.Count ?? 0}", out var written) && Line(scratch[..written], optional: true));
+
+        _ = (scratch.TryWrite(CultureInfo.InvariantCulture, $"timeline clocks={(definition.Timeline.Clocks?.Count ?? 0)}", out var written) && Line(scratch[..written], optional: true));
         var clocks = definition.Timeline.Clocks;
-        for (var index = 0; index < (clocks?.Count ?? 0); index++) {
+
+        for (var index = 0; (index < (clocks?.Count ?? 0)); index++) {
             var clock = clocks![index];
             var mirror = snapshot.Mirror;
             var rate = 1d;
-            var held = mirror?.ClockHeld(clock.Name, out rate) ?? false;
-            var tick = mirror?.ClockTick(clock.Name) ?? default;
+            var held = (mirror?.ClockHeld(clock.Name, out rate) ?? false);
+            var tick = (mirror?.ClockTick(clock.Name) ?? default);
             var phase = 0d;
-            var available = mirror?.TryReadPhase(clock.Name, out _, out phase) ?? false;
+            var available = (mirror?.TryReadPhase(clock.Name, out _, out phase) ?? false);
+
             _ = (scratch.TryWrite(CultureInfo.InvariantCulture,
-                $"clock={clock.Name} source={clock.State ?? (clock.IsTickClock ? "tick" : "anchor")} held={held} rate={rate:0.######} tick={tick.Whole}+{tick.Fraction:0.######} phase={(available ? phase : double.NaN):0.######}", out written) && Line(scratch[..written], lines: NameLines, optional: true));
+                $"clock={clock.Name} source={(clock.State ?? (clock.IsTickClock ? "tick" : "anchor"))} held={held} rate={rate:0.######} tick={tick.Whole}+{tick.Fraction:0.######} phase={(available ? phase : double.NaN):0.######}", out written) && Line(scratch[..written], lines: NameLines, optional: true));
         }
     }
+
     /// <summary>Appends the observational frame-rate readout while timing is enabled.</summary>
     /// <param name="mean">The mean frames per second over the monitor's window.</param>
     /// <param name="slowest">The slowest frame's rate over the same window.</param>

@@ -192,7 +192,7 @@ public static class GpuWorkReport {
         var kinds = GpuWork.SubmissionKinds;
 
         for (var pass = 0; (pass < sample.PassCount); pass++) {
-            if (includePass is not null && !includePass(labels[pass])) { continue; }
+            if ((includePass is not null) && !includePass(labels[pass])) { continue; }
             var state = sample.GetPassState(pass: pass);
 
             _ = builder.Append(value: "work ").Append(value: labels[pass]).Append(value: ' ').Append(value: EnumWireName<GpuPassState>.Of(value: state));

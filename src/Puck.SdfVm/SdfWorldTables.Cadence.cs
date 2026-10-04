@@ -43,6 +43,7 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     // The atmosphere occupies the packed tail; its flags precede the sky header and are hashed separately.
     private static readonly int AtmosphereOffset = Marshal.OffsetOf<SdfSkyBlock>(fieldName: nameof(SdfSkyBlock.AirLightCount)).ToInt32();
+
     private readonly byte[] m_signatureBlock = new byte[SdfFrameBlock.SizeBytes];
 
     private ulong m_tablesSignature;

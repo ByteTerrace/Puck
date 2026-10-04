@@ -74,6 +74,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
     [Fact]
     public void AbsentEnvironmentResolvesToUnitGains() {
         var resolved = Resolve(defaults: BaseDefaults());
+
         Assert.Equal(1f, resolved.Sky.Block.Ambient);
         Assert.Equal(1f, resolved.Sky.Block.Reflection);
     }
@@ -138,9 +139,11 @@ public sealed partial class WorldRenderLightingSkyLawTests {
     public void EnvironmentGainsResolveAndAbsentGainsResetToDefaults() {
         var track = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());
         var first = Resolve(BaseDefaults() with { Environment = new WorldRenderEnvironment(Ambient: .4f, Reflection: 0f) }, track: track);
+
         Assert.Equal(.4f, first.Sky.Block.Ambient);
         Assert.Equal(0f, first.Sky.Block.Reflection);
         var second = Resolve(BaseDefaults(), track: track, revision: 1);
+
         Assert.Equal(1f, second.Sky.Block.Ambient);
         Assert.Equal(1f, second.Sky.Block.Reflection);
     }

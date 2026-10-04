@@ -459,17 +459,17 @@ public sealed class SdfSky {
         );
     }
 
-
     // Writes a layer's kind bakes, and whether it writes an entry at all: a gradient's unused stops are zero, and one with
     // no stop draws nothing; a disc is drawn about its light's direction with the exponent its radius gives, and never about
     // no light; clouds are lit by the first shadow slot's light, or the pinned sun and white when no light shadows.
     private static bool Bake(ref SdfSkyLayer layer, SdfLights lights) {
         switch (layer.Kind) {
             case SdfSkyLayerKind.Panel: {
-                ref var panel = ref PayloadOf<SdfSkyPanel>(layer: ref layer);
-                panel.Direction = UnitOr(fallback: Vector3.UnitY, vector: panel.Direction);
-                return panel.Intensity > 0f;
-            }
+                    ref var panel = ref PayloadOf<SdfSkyPanel>(layer: ref layer);
+
+                    panel.Direction = UnitOr(fallback: Vector3.UnitY, vector: panel.Direction);
+                    return (panel.Intensity > 0f);
+                }
             case SdfSkyLayerKind.Disc: {
                     ref var disc = ref PayloadOf<SdfSkyDisc>(layer: ref layer);
 

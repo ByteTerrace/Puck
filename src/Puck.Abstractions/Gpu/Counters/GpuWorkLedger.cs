@@ -338,6 +338,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
             }
         }
     }
+
     /// <summary>Counts the CPU projection that decides whether the environment pass renders.</summary>
     /// <param name="texels">The number of projected texels.</param>
     /// <param name="skipped">Whether the changed candidate stayed below a display code.</param>
@@ -346,6 +347,7 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
         Count(GpuWork.EnvironmentProjectionTexelsColumn, texels);
         if (skipped) { Count(GpuWork.EnvironmentSkippedColumn, 1); }
     }
+
     internal void Count(int column, long amount) {
         var record = OpenRecord();
 

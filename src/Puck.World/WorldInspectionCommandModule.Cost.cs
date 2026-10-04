@@ -9,8 +9,8 @@ namespace Puck.World;
 
 internal sealed partial class WorldInspectionCommandModule {
     private CommandResult Cost(CommandContext context, WireArgs args) {
-        if (args.Count > 0 && args.Is(0, "sky")) {
-            return args.Count == 1 ? SkyCost() : CommandResult.Usage("world.cost", "sky");
+        if ((args.Count > 0) && args.Is(0, "sky")) {
+            return ((args.Count == 1) ? SkyCost() : CommandResult.Usage("world.cost", "sky"));
         }
         var residency = ((inspector is null) ? probe?.Residency : inspector.ResidencyOf(slot: context.Slot));
 
@@ -50,13 +50,15 @@ internal sealed partial class WorldInspectionCommandModule {
     }
     private CommandResult SkyCost() {
         var nodes = new List<GpuWorkNode>();
+
         (gpu ?? probe)?.CopyNodes(nodes);
         var text = new StringBuilder("[world.cost: sky\n");
         var sample = new GpuWorkSample();
         var found = false;
-        static bool IsSky(string pass) => pass == "environment" ||
-            pass == (RenderGraphPackageCatalog.SdfWorld + "$" + SdfWorldPackage.Parts.Sky) ||
-            pass == (RenderGraphPackageCatalog.SdfWorld + "$" + SdfWorldPackage.Parts.Composite);
+
+        static bool IsSky(string pass) => ((pass == "environment") ||
+            (pass == ((RenderGraphPackageCatalog.SdfWorld + "$") + SdfWorldPackage.Parts.Sky)) ||
+            (pass == ((RenderGraphPackageCatalog.SdfWorld + "$") + SdfWorldPackage.Parts.Composite)));
         foreach (var node in nodes) {
             if (!node.Work.TryReadCompleted(sample)) { continue; }
             if (!sample.PassLabels.ToArray().Any(IsSky)) { continue; }

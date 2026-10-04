@@ -8,7 +8,7 @@
       "format": "R8G8B8A8Unorm",
       "dimensions": {
         "mode": "Absolute",
-        "width": 73,
+        "width": 74,
         "height": 1
       }
     }
@@ -25,67 +25,411 @@
         }
       ],
       "config": {
-        "aspectRatio": { "type": "float", "default": 0, "description": "The sdf.world pass's aspect ratio." },
-        "cameraTileShadowMask": { "type": "uint", "default": 0, "description": "The sdf.world pass's camera tile shadow mask." },
-        "curvatureCavity": { "type": "float", "default": 0, "description": "The sdf.world pass's curvature cavity gain." },
-        "curvatureInk": { "type": "float", "default": 0, "description": "The sdf.world pass's curvature ink gain." },
-        "curvatureInkColor": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's curvature ink color." },
-        "curvatureInkHigh": { "type": "float", "default": 0, "description": "The sdf.world pass's curvature ink band high." },
-        "curvatureInkLow": { "type": "float", "default": 0, "description": "The sdf.world pass's curvature ink band low." },
-        "curvatureRim": { "type": "float", "default": 0, "description": "The sdf.world pass's curvature rim gain." },
-        "debugMode": { "type": "uint", "default": 0, "description": "The sdf.world pass's debug mode." },
-        "debugSliceAxis": { "type": "float", "default": 0, "description": "The sdf.world pass's debug slice axis." },
-        "debugSliceOffset": { "type": "float", "default": 0, "description": "The sdf.world pass's debug slice offset." },
-        "disableAmbientOcclusion": { "type": "uint", "default": 0, "description": "The sdf.world pass's disable ambient occlusion." },
-        "disableFarBound": { "type": "uint", "default": 0, "description": "The sdf.world pass's disable far bound." },
-        "disableScreenLights": { "type": "uint", "default": 0, "description": "The sdf.world pass's disable screen lights." },
-        "disableShadowCull": { "type": "uint", "default": 0, "description": "The sdf.world pass's disable shadow cull." },
-        "disableSoftShadows": { "type": "uint", "default": 0, "description": "The sdf.world pass's disable soft shadows." },
-        "enableShadowProxy": { "type": "uint", "default": 0, "description": "The sdf.world pass's enable shadow proxy." },
-        "farDistance": { "type": "float", "default": 0, "description": "The sdf.world pass's far distance." },
-        "fastAmbientOcclusion": { "type": "uint", "default": 0, "description": "The sdf.world pass's fast ambient occlusion." },
-        "fastSoftShadowMarch": { "type": "uint", "default": 0, "description": "The sdf.world pass's fast soft shadow march." },
-        "finiteDifferenceNormals": { "type": "uint", "default": 0, "description": "The sdf.world pass's finite difference normals." },
-        "frustumOffset": { "type": "float2", "default": [0, 0], "description": "The sdf.world pass's frustum offset." },
-        "gridFlags": { "type": "uint", "default": 0, "description": "The sdf.world pass's grid flags." },
-        "gridLineWidth": { "type": "float", "default": 0, "description": "The sdf.world pass's grid line width." },
-        "gridObjectFrame": { "type": "float4", "default": [0, 0, 0, 0], "description": "The sdf.world pass's grid object frame." },
-        "gridObjectOrigin": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's grid object origin." },
-        "gridObjectPatchRadius": { "type": "float", "default": 0, "description": "The sdf.world pass's grid object patch radius." },
-        "gridObjectPitch": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's grid object pitch." },
-        "gridPlaneY": { "type": "float", "default": 0, "description": "The sdf.world pass's grid plane y." },
-        "gridWorldFrame": { "type": "float4", "default": [0, 0, 0, 0], "description": "The sdf.world pass's grid world frame." },
-        "gridWorldOrigin": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's grid world origin." },
-        "gridWorldPitch": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's grid world pitch." },
-        "historyFrames": { "type": "uint", "default": 0, "description": "The sdf.world pass's contributed history frames." },
-        "imageExtent": { "type": "uint2", "default": [0, 0], "description": "The sdf.world pass's render extent, in pixels." },
-        "instanceMaskWordCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's per-tile instance-mask width." },
-        "jitter": { "type": "float2", "default": [0, 0], "description": "The sdf.world pass's pixel jitter." },
-        "lightCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's light count." },
-        "meshDraws": { "type": "uint", "default": 0, "description": "The sdf.world pass's mesh draw count." },
-        "nearDistance": { "type": "float", "default": 0, "description": "The sdf.world pass's near distance." },
-        "previousView": { "type": "float4", "length": 6, "default": [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], "description": "The sdf.world pass's previous camera rows." },
-        "screenCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's screen-light bound." },
-        "shadowAmortize": { "type": "uint", "default": 0, "description": "The sdf.world pass's secondary shadow amortization switch." },
-        "shadowDistanceScale": { "type": "float", "default": 0, "description": "The sdf.world pass's shadow distance scale." },
-        "shadowFadeCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's active shadow handoff count." },
-        "shadowLightReject": { "type": "uint", "default": 0, "description": "The sdf.world pass's shadow slots rejected by light motion." },
-        "shadowOwnershipReject": { "type": "uint", "default": 0, "description": "The sdf.world pass's shadow slots rejected by ownership." },
-        "shadowSlotCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's configured stable shadow slot count." },
-        "shadowSlots": { "type": "int4", "default": [-1, -1, -1, -1], "description": "The sdf.world pass's stable shadow light indices." },
-        "tanHalfFieldOfView": { "type": "float", "default": 0, "description": "The sdf.world pass's tan half field of view." },
-        "temporal": { "type": "uint", "default": 0, "description": "The sdf.world pass's temporal fragment switch." },
-        "tileGrid": { "type": "uint2", "default": [0, 0], "description": "The sdf.world pass's tiles per viewport." },
-        "viewBase": { "type": "uint", "default": 0, "description": "The sdf.world pass's view." },
-        "viewForward": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's view forward." },
-        "viewPosition": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's view position." },
-        "viewRight": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's view right." },
-        "viewUp": { "type": "float3", "default": [0, 0, 0], "description": "The sdf.world pass's view up." },
-        "viewportCount": { "type": "uint", "default": 0, "description": "The sdf.world pass's view count." },
-        "workCounterRow": { "type": "uint", "default": 0, "description": "The sdf.world pass's row of the work counters." },
-        "workCounterRowDetail": { "type": "uint", "default": 0, "description": "The sdf.world pass's first named detail row of the work counters." }
+        "aspectRatio": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s aspectRatio sentinel."
+        },
+        "cameraTileShadowMask": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s cameraTileShadowMask sentinel."
+        },
+        "curvatureCavity": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s curvatureCavity sentinel."
+        },
+        "curvatureInk": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s curvatureInk sentinel."
+        },
+        "curvatureInkColor": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s curvatureInkColor sentinel."
+        },
+        "curvatureInkHigh": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s curvatureInkHigh sentinel."
+        },
+        "curvatureInkLow": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s curvatureInkLow sentinel."
+        },
+        "curvatureRim": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s curvatureRim sentinel."
+        },
+        "debugMode": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s debugMode sentinel."
+        },
+        "debugSliceAxis": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s debugSliceAxis sentinel."
+        },
+        "debugSliceOffset": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s debugSliceOffset sentinel."
+        },
+        "disableAmbientOcclusion": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s disableAmbientOcclusion sentinel."
+        },
+        "disableFarBound": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s disableFarBound sentinel."
+        },
+        "disableScreenLights": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s disableScreenLights sentinel."
+        },
+        "disableShadowCull": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s disableShadowCull sentinel."
+        },
+        "disableSoftShadows": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s disableSoftShadows sentinel."
+        },
+        "enableShadowProxy": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s enableShadowProxy sentinel."
+        },
+        "farDistance": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s farDistance sentinel."
+        },
+        "fastAmbientOcclusion": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s fastAmbientOcclusion sentinel."
+        },
+        "fastSoftShadowMarch": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s fastSoftShadowMarch sentinel."
+        },
+        "finiteDifferenceNormals": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s finiteDifferenceNormals sentinel."
+        },
+        "frustumOffset": {
+          "type": "float2",
+          "default": [
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s frustumOffset sentinel."
+        },
+        "gridFlags": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s gridFlags sentinel."
+        },
+        "gridLineWidth": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s gridLineWidth sentinel."
+        },
+        "gridObjectFrame": {
+          "type": "float4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s gridObjectFrame sentinel."
+        },
+        "gridObjectOrigin": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s gridObjectOrigin sentinel."
+        },
+        "gridObjectPatchRadius": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s gridObjectPatchRadius sentinel."
+        },
+        "gridObjectPitch": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s gridObjectPitch sentinel."
+        },
+        "gridPlaneY": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s gridPlaneY sentinel."
+        },
+        "gridWorldFrame": {
+          "type": "float4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s gridWorldFrame sentinel."
+        },
+        "gridWorldOrigin": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s gridWorldOrigin sentinel."
+        },
+        "gridWorldPitch": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s gridWorldPitch sentinel."
+        },
+        "historyFrames": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s historyFrames sentinel."
+        },
+        "imageExtent": {
+          "type": "uint2",
+          "default": [
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s imageExtent sentinel."
+        },
+        "indirectTier": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s indirectTier sentinel."
+        },
+        "instanceMaskWordCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s instanceMaskWordCount sentinel."
+        },
+        "jitter": {
+          "type": "float2",
+          "default": [
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s jitter sentinel."
+        },
+        "lightCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s lightCount sentinel."
+        },
+        "meshDraws": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s meshDraws sentinel."
+        },
+        "nearDistance": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s nearDistance sentinel."
+        },
+        "previousView": {
+          "type": "float4",
+          "length": 6,
+          "default": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "description": "The sdf-world pass\u0027s previousView sentinel."
+        },
+        "screenCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s screenCount sentinel."
+        },
+        "shadowAmortize": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s shadowAmortize sentinel."
+        },
+        "shadowDistanceScale": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s shadowDistanceScale sentinel."
+        },
+        "shadowFadeCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s shadowFadeCount sentinel."
+        },
+        "shadowLightReject": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s shadowLightReject sentinel."
+        },
+        "shadowOwnershipReject": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s shadowOwnershipReject sentinel."
+        },
+        "shadowSlotCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s shadowSlotCount sentinel."
+        },
+        "shadowSlots": {
+          "type": "int4",
+          "default": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s shadowSlots sentinel."
+        },
+        "tanHalfFieldOfView": {
+          "type": "float",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s tanHalfFieldOfView sentinel."
+        },
+        "temporal": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s temporal sentinel."
+        },
+        "tileGrid": {
+          "type": "uint2",
+          "default": [
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s tileGrid sentinel."
+        },
+        "viewBase": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s viewBase sentinel."
+        },
+        "viewForward": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s viewForward sentinel."
+        },
+        "viewPosition": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s viewPosition sentinel."
+        },
+        "viewRight": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s viewRight sentinel."
+        },
+        "viewUp": {
+          "type": "float3",
+          "default": [
+            0,
+            0,
+            0
+          ],
+          "description": "The sdf-world pass\u0027s viewUp sentinel."
+        },
+        "viewportCount": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s viewportCount sentinel."
+        },
+        "workCounterRow": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s workCounterRow sentinel."
+        },
+        "workCounterRowDetail": {
+          "type": "uint",
+          "default": 0,
+          "description": "The sdf-world pass\u0027s workCounterRowDetail sentinel."
+        }
       }
     }
   ],
-  "outputs": ["echo"]
+  "outputs": [
+    "echo"
+  ]
 }

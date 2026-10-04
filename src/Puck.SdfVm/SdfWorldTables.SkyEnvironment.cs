@@ -42,6 +42,7 @@ public sealed partial class SdfWorldTables {
     // Counts the candidate projection even when it is too small to owe a device refresh.
     private void RecordSkyEnvironment(nint commandBuffer, int slot) {
         var owes = m_skyEnvironment.Owes(block: in m_skyRecord[0], layers: m_skyLayerRecords);
+
         if (m_skyEnvironment.Projected) {
             m_work.EnterPass(pass: EnvironmentPass);
             m_work.CountEnvironmentProjection(texels: SdfSkyEnvironment.Texels, skipped: m_skyEnvironment.Skipped);
@@ -145,8 +146,10 @@ public sealed partial class SdfWorldTables {
 
         // Whether an upload owes a lighting refresh.
         public bool Owes(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers) => m_refresh.Owes(block, layers);
+
         public bool Projected => m_refresh.Projected;
         public bool Skipped => m_refresh.Skipped;
+
         public void Rendered() {
             m_refresh.Rendered();
             Renders++;

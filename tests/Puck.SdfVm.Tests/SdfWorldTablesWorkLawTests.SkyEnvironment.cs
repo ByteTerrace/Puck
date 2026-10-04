@@ -63,7 +63,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Equal(expected: 3L, actual: rig.Engine.SkyEnvironmentRenders);
 
         // A layer the lighting sees joins the map; the sky frame turns it.
-        _ = sky.Add(label: "haze", parameters: new SdfSkyNoise { Coverage = 1f, ColorLow = Vector3.Zero, ColorHigh = Vector3.One, Scale = 4f, Gain = 0.5f, Octaves = 4u }, visibility: SdfSkyVisibility.Lighting);
+        _ = sky.Add(label: "haze", parameters: new SdfSkyNoise { ColorHigh = Vector3.One, ColorLow = Vector3.Zero, Coverage = 1f, Gain = 0.5f, Octaves = 4u, Scale = 4f }, visibility: SdfSkyVisibility.Lighting);
         rig.Render();
         Assert.Equal(expected: 4L, actual: rig.Engine.SkyEnvironmentRenders);
         sky.FrameUp = new Vector3(x: 0.2f, y: 1f, z: 0f);

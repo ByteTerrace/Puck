@@ -38,10 +38,11 @@ struct SourceScrgbPass {
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-// sky texture loads, then six shadow-slot step counts, as a
+// sky texture loads, then six shadow-slot step counts, secondary-shadow pixels, indirect hits, samples and unresolved work,
+// followed by shape evaluations and shape gradients, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 24u;
+static const uint PuckWorkRowWords = 34u;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
 static const uint PuckWorkSkyWord = 4u;
@@ -50,6 +51,9 @@ static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShadowWord = 10u;
 static const uint PuckWorkShadowSlots = 6u;
 static const uint PuckWorkShadowPixelsWord = 22u;
+static const uint PuckWorkIndirectWord = 24u;
+static const uint PuckWorkShapesWord = 30u;
+static const uint PuckWorkGradientsWord = 32u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -89,6 +93,24 @@ void puckCountDetail(uint detail, uint steps, uint texels, uint evaluations, uin
     puckAddWork((row + PuckWorkSkyWord), evaluations);
     puckAddWork((row + PuckWorkSkyHashesWord), hashes);
     puckAddWork((row + PuckWorkSkyTextureLoadsWord), loads);
+}
+void puckCountShapes(uint shapes, uint gradients) {
+    uint waveShapes = WaveActiveSum(shapes);
+    uint waveGradients = WaveActiveSum(gradients);
+    if (WaveIsFirstLane()) {
+        uint row = passGroup.workCounterRow * PuckWorkRowWords;
+        puckAddWork(row + PuckWorkShapesWord, waveShapes);
+        puckAddWork(row + PuckWorkGradientsWord, waveGradients);
+    }
+}
+// Each invocation names its level or proof detail; those rows sum into the pass once at readback.
+void puckCountIndirect(uint detail, uint hits, uint samples, uint unresolved) {
+    uint row = ((passGroup.workCounterRowDetail == 0u)
+        ? passGroup.workCounterRow
+        : (passGroup.workCounterRowDetail + detail)) * PuckWorkRowWords;
+    puckAddWork((row + PuckWorkIndirectWord), hits);
+    puckAddWork((row + PuckWorkIndirectWord + 2u), samples);
+    puckAddWork((row + PuckWorkIndirectWord + 4u), unresolved);
 }
 // Each invocation owns its slot delta. A divergent march need not reconverge its subgroup before a
 // reduction and a separate election on Vulkan (SPIR-V Uniform Control Flow).

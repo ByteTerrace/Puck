@@ -8,6 +8,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
     [Fact]
     public void TheDocumentCorpusIncludesOnlyTrackedUnpairedWorlds() {
         using var directory = new TemporaryDirectory(prefix: "puck-world-roundtrip-corpus-");
+
         directory.WriteText(name: ".gitignore", text: "artifacts/\n");
         directory.WriteText(name: "world.world.json", text: "{}");
         directory.WriteText(name: "paired.world.json", text: "{}");
@@ -26,6 +27,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
                 input: string.Empty,
                 timeout: TestLiveness.Bound
             ).GetAwaiter().GetResult();
+
             Assert.True(condition: (result.ExitCode == 0), userMessage: result.Stderr);
         }
 

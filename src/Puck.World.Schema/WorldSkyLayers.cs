@@ -66,7 +66,7 @@ public static class WorldSkyLayers {
             WorldSkyVisibility.Camera => SdfSkyVisibility.Camera,
             WorldSkyVisibility.Lighting => SdfSkyVisibility.Lighting,
             WorldSkyVisibility.Both => SdfSkyVisibility.Both,
-            _ => (layer is WorldRenderSkyLayer.Panel ? SdfSkyVisibility.Lighting : ((layer is WorldRenderSkyLayer.Gradient) ? SdfSkyVisibility.Both : SdfSkyVisibility.Camera)),
+            _ => ((layer is WorldRenderSkyLayer.Panel) ? SdfSkyVisibility.Lighting : ((layer is WorldRenderSkyLayer.Gradient) ? SdfSkyVisibility.Both : SdfSkyVisibility.Camera)),
         };
     }
     /// <summary>Returns the lowest quality tier a layer draws at: its authored tier, or <see cref="SdfSkyTier.Low"/>.</summary>

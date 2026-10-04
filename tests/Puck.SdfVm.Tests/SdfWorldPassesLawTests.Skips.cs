@@ -160,7 +160,7 @@ public sealed partial class SdfWorldPassesLawTests {
         var mask = bytes["sdf.world$mask"];
 
         foreach (var part in new[] { SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs, SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views }) {
-            Assert.Equal(expected: (mask + (part == SdfWorldPackage.Parts.Views ? 8L : 4L)), actual: bytes[$"sdf.world${part}"]);
+            Assert.Equal(expected: (mask + ((part == SdfWorldPackage.Parts.Views) ? 8L : 4L)), actual: bytes[$"sdf.world${part}"]);
         }
     }
     [Fact]

@@ -408,6 +408,7 @@ public static class WorldLightingText {
         WorldAnchor.Placement placement => $"placement:{placement.PlacementId}/{placement.ShapeId}",
         _ => "none",
     };
+
     /// <summary>Returns the authored lighting, sky, atmosphere and environment echo.</summary>
     /// <param name="definition">The live document.</param>
     /// <returns>The complete lighting echo.</returns>
@@ -498,7 +499,6 @@ public static class WorldLightingText {
 
         return echo.Close();
     }
-
     /// <summary>Returns exactly the sky and atmosphere segments of the lighting echo, before inspector wrapping.</summary>
     /// <param name="sky">The authored sky, or null for the engine defaults.</param>
     /// <param name="atmosphere">The authored atmosphere, or null for its defaults.</param>
@@ -507,9 +507,9 @@ public static class WorldLightingText {
         AppendSky(CommandEcho.Open("world.lighting"), sky, atmosphere).Close()["[world.lighting: ".Length..^1];
 
     private static CommandEcho AppendSky(CommandEcho echo, WorldRenderSky? sky, WorldRenderAtmosphere? atmosphere) {
-        echo = echo.Head("sky").Field("layers", sky?.Layers?.Count.ToString(CultureInfo.InvariantCulture) ?? "default");
+        echo = echo.Head("sky").Field("layers", (sky?.Layers?.Count.ToString(CultureInfo.InvariantCulture) ?? "default"));
         if (WorldRenderKeys.Expand(sky: sky)?.Layers is { } layers) {
-            for (var index = 0; index < layers.Count; index++) {
+            for (var index = 0; (index < layers.Count); index++) {
                 echo = DescribeLayer(echo.Segment(), index, layers[index]);
             }
         }

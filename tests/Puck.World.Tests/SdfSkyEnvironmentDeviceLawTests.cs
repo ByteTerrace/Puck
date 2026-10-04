@@ -60,12 +60,14 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
 
             SdfSkyEnvironment.Render(block: in block, layers: layers, map: expected);
             var reflectionLayers = layers.ToArray();
-            for (var index = 0; index < reflectionLayers.Length; index++) {
+
+            for (var index = 0; (index < reflectionLayers.Length); index++) {
                 if (reflectionLayers[index].Kind == SdfSkyLayerKind.Panel) {
                     reflectionLayers[index].Visibility = SdfSkyVisibility.Camera;
                 }
             }
             var expectedReflection = new Vector3[SdfSkyEnvironment.Texels];
+
             SdfSkyEnvironment.Render(block: in block, layers: reflectionLayers, map: expectedReflection);
 
             var first = Run(block: block, extension: extension, layers: layers, services: services);
@@ -91,11 +93,13 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
                 foreach (var (actual, reference) in new[] { (map[texel].X, expected[texel].X), (map[texel].Y, expected[texel].Y), (map[texel].Z, expected[texel].Z) }) {
                     Assert.True(condition: (MathF.Abs(x: (actual - reference)) <= HalfStep(value: reference)), userMessage: $"Texel {texel} holds {map[texel]}; the reference holds {expected[texel]}.");
                 }
-                var reflectionOffset = (SdfSkyEnvironment.Texels + texel) * SdfSkyEnvironment.TexelBytes;
-                for (var channel = 0; channel < 3; channel++) {
-                    var actual = (float)BitConverter.UInt16BitsToHalf(BinaryPrimitives.ReadUInt16LittleEndian(first.Map.AsSpan(reflectionOffset + channel * 2)));
+                var reflectionOffset = ((SdfSkyEnvironment.Texels + texel) * SdfSkyEnvironment.TexelBytes);
+
+                for (var channel = 0; (channel < 3); channel++) {
+                    var actual = ((float)BitConverter.UInt16BitsToHalf(BinaryPrimitives.ReadUInt16LittleEndian(first.Map.AsSpan((reflectionOffset + (channel * 2))))));
                     var reference = expectedReflection[texel][channel];
-                    Assert.True(MathF.Abs(actual - reference) <= HalfStep(reference), $"Reflection texel {texel}, channel {channel}: {actual}, reference {reference}.");
+
+                    Assert.True((MathF.Abs((actual - reference)) <= HalfStep(reference)), $"Reflection texel {texel}, channel {channel}: {actual}, reference {reference}.");
                 }
             }
 
@@ -120,12 +124,14 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
     }
     private static SdfSky Lit<T>(T parameters) where T : unmanaged, ISdfSkyKind {
         var sky = new SdfSky();
+
         sky.ClearLayers();
         sky.Add(parameters, "lit", visibility: SdfSkyVisibility.Lighting);
         return sky;
     }
     private static SdfSky Panels() {
         var sky = new SdfSky();
+
         sky.Add(new SdfSkyPanel { Direction = Vector3.UnitY, Size = new Vector2(.2f, .6f), Color = new Vector3(1f, .5f, .2f), Intensity = 2f, Blur = .1f }, "key", blend: SdfSkyBlend.Add, visibility: SdfSkyVisibility.Lighting);
         sky.Add(new SdfSkyPanel { Direction = Vector3.UnitZ, Size = new Vector2(.4f, .1f), Color = Vector3.One, Intensity = .5f, Blur = .05f }, "fill", blend: SdfSkyBlend.Add, visibility: SdfSkyVisibility.Lighting);
         return sky;

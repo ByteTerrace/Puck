@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'source-perturbed' (sha256/b311ef108d4c931cd8c1f7be66424b9714de7edf7b3609d26df82f07f0c40b6d), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'source-perturbed' (sha256/b311ef108d4c931cd8c1f7be66424b9714de7edf7b3609d26df82f07f0c40b6d), generated with its last member's first word expecting the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "source-perturbed.interface.hlsli"
 

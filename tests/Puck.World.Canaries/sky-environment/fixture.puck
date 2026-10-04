@@ -18,7 +18,9 @@ host {
 
 render {
   atmosphere {
-    fog { density: 1 }
+    fog {
+      density: 1
+    }
   }
   sky {
     layers [

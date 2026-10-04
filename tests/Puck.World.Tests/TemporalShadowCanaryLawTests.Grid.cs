@@ -23,11 +23,11 @@ public sealed partial class TemporalShadowCanaryLawTests {
         Assert.True(condition: program.RequiresFrameInstanceGridRebuild);
         // Unowned world segments select the conservative flat motion check, which would hide this defect.
         var words = program.Words;
-        var segments = checked((int)(words[SdfProgram.ProgramMaterialOffsetLane]
-            + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[SdfProgram.ProgramMaterialCountLane])
+        var segments = checked((int)((words[SdfProgram.ProgramMaterialOffsetLane]
+            + (((uint)SdfProgram.MaterialVectorsPerEntry) * words[SdfProgram.ProgramMaterialCountLane]))
             + (((uint)SdfProgram.BoundRecordVectors) * words[SdfProgram.ProgramInstructionCountLane])));
-        var instances = (segments + 1 + (SdfProgram.BoundRecordVectors * program.SkipSegmentCount));
-        var world = (instances + 1 + (SdfProgram.BoundRecordVectors * program.Instances.Count));
+        var instances = ((segments + 1) + (SdfProgram.BoundRecordVectors * program.SkipSegmentCount));
+        var world = ((instances + 1) + (SdfProgram.BoundRecordVectors * program.Instances.Count));
 
         Assert.Equal(expected: 0u, actual: words[((4 * world) + SdfProgram.WorldSegmentCountLane)]);
         transforms[slot] = transforms[slot] with { Position = Vector3.Zero };
@@ -56,9 +56,10 @@ public sealed partial class TemporalShadowCanaryLawTests {
         // and pillar. At High's nine-unit reach, this overestimates every slab's z padding (direction.z is zero).
         // Check the actual CSR cell containing the body, rather than inferring exclusion from instance count.
         const float inflate = 16f;
+
         Assert.Equal(expected: ShadowTier.High, actual: definition.Render.Shadows);
         var pad = BitConverter.UInt32BitsToSingle(value: grid[9]);
-        var queryHighZ = (5f + (chord * (9f + inflate + pad)) + pad + inflate);
+        var queryHighZ = (((5f + (chord * ((9f + inflate) + pad))) + pad) + inflate);
         var originZ = BitConverter.UInt32BitsToSingle(value: grid[6]);
         var inverseCell = BitConverter.UInt32BitsToSingle(value: grid[7]);
         var lastQueryZ = ((int)MathF.Floor(x: ((queryHighZ - originZ) * inverseCell)));
@@ -66,7 +67,7 @@ public sealed partial class TemporalShadowCanaryLawTests {
 
         for (var cell = 0; (cell < grid[14]); cell++) {
             var start = grid[(((int)grid[10]) + cell)];
-            var end = grid[(((int)grid[10]) + cell + 1)];
+            var end = grid[((((int)grid[10]) + cell) + 1)];
 
             if (grid.AsSpan(start: checked((int)(grid[11] + start)), length: checked((int)(end - start))).Contains(value: ((uint)instance))) {
                 bodyCells.Add(item: cell);

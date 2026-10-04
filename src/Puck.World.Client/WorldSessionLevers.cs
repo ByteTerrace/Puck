@@ -81,8 +81,9 @@ public static partial class WorldSessionLevers {
         ArgumentNullException.ThrowIfNull(bindingBar);
 
         var sink = new WorldSessionLeverSink();
-        sink.Register(name: SkySolo, setter: lever => settings.SkyLayers.SetSolo((int)lever.A));
-        sink.Register(name: SkyMute, setter: lever => settings.SkyLayers.SetMuted((int)lever.A, lever.B != 0d));
+
+        sink.Register(name: SkySolo, setter: lever => settings.SkyLayers.SetSolo(((int)lever.A)));
+        sink.Register(name: SkyMute, setter: lever => settings.SkyLayers.SetMuted(((int)lever.A), (lever.B != 0d)));
 
         sink.Register(
             name: MasterVolume,

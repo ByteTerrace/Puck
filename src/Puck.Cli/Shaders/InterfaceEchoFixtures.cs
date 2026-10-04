@@ -22,7 +22,6 @@ internal static class InterfaceEchoFixtures {
             path: Path.Combine(path1: directory, path2: $"{name}.graph.json"),
             text: text
         )).Passes.Single().Parameters.Interface;
-
     // The graph language supplies the common frame block and extent. Package pass values become config;
     // the layout comparison below refuses a package whose blocks this representation cannot reproduce.
     private static JsonObject Graph(string name, ShaderInterface target) {
@@ -68,12 +67,10 @@ internal static class InterfaceEchoFixtures {
             ["outputs"] = new JsonArray(items: [JsonValue.Create(value: ShaderInterfaceEcho.OutputName)]),
         };
     }
-
     private static JsonNode Zero(ShaderValueType type) => ((type.ComponentCount() == 1)
         ? JsonValue.Create(value: 0)!
         : new JsonArray(items: [.. Enumerable.Range(start: 0, count: ((int)type.ComponentCount()))
             .Select(selector: static _ => JsonValue.Create(value: 0))]));
-
     private static void RequireSameBlocks(string name, ShaderInterface expected, ShaderInterface actual) {
         static IEnumerable<(ShaderInterfaceGroup Group, uint Set, uint Size, string Name, uint Offset, ShaderValueType Type, uint Length)> Members(ShaderInterface value) =>
             value.Layout().Groups.SelectMany(selector: static group => group.BlockMembers.Select(selector: member =>
@@ -83,12 +80,11 @@ internal static class InterfaceEchoFixtures {
             throw new InvalidDataException(message: $"{name}: the echo graph does not reproduce its target's block layout.");
         }
     }
-
     private static Dictionary<string, string> Plan(string directory) {
         var manifest = Read(path: Path.Combine(path1: directory, path2: "canary.json"));
         var fixtures = manifest["fixtures"]!.AsArray().Select(selector: static item => item!.GetValue<string>()).ToHashSet(comparer: StringComparer.Ordinal);
-        var echoes = fixtures.Where(predicate: static file => file.EndsWith(value: ".echo.hlsl", comparisonType: StringComparison.Ordinal)
-            && !file.EndsWith(value: "-perturbed.echo.hlsl", comparisonType: StringComparison.Ordinal))
+        var echoes = fixtures.Where(predicate: static file => (file.EndsWith(value: ".echo.hlsl", comparisonType: StringComparison.Ordinal)
+            && !file.EndsWith(value: "-perturbed.echo.hlsl", comparisonType: StringComparison.Ordinal)))
             .Select(selector: static file => file[..^".echo.hlsl".Length]).Order(comparer: StringComparer.Ordinal).ToArray();
         var files = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
@@ -112,7 +108,7 @@ internal static class InterfaceEchoFixtures {
                     package: package.Id, pushesIndex: package.PushesIndex).Interface;
             }
             ShaderInterface? positive = null;
-            uint width = 0;
+            var width = 0U;
 
             foreach (var name in ((string[])[echo, $"{echo}-perturbed"])) {
                 var graphPath = $"{name}.graph.json";
@@ -136,7 +132,7 @@ internal static class InterfaceEchoFixtures {
                 }
                 var dimensions = graph["resources"]!.AsArray().Single(predicate: resource =>
                     (resource!["name"]!.GetValue<string>() == ShaderInterfaceEcho.OutputName))!["dimensions"]!.AsObject();
-                var changed = (dimensions["width"]!.GetValue<uint>() != width) || (dimensions["height"]!.GetValue<uint>() != 1u);
+                var changed = ((dimensions["width"]!.GetValue<uint>() != width) || (dimensions["height"]!.GetValue<uint>() != 1u));
 
                 dimensions["width"] = width;
                 dimensions["height"] = 1u;
@@ -150,7 +146,6 @@ internal static class InterfaceEchoFixtures {
 
         return files;
     }
-
     private static void UpdateCapture(JsonObject manifest, string echo, uint width) {
         var count = 0;
 
@@ -184,7 +179,7 @@ internal static class InterfaceEchoFixtures {
             }
 
             return (matched ? CliExit.Success : CliExit.Failed);
-        } catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException or ArgumentException or ShaderPipelineCompilationException) {
+        } catch (Exception exception) when ((exception is IOException or JsonException or InvalidOperationException or ArgumentException or ShaderPipelineCompilationException)) {
             return CliExit.Refuse(verb: "shaders interface", what: CliPaths.ToDisplay(fullPath: directory), why: exception.Message.ReplaceLineEndings(replacementText: " "));
         }
     }

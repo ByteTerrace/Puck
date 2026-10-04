@@ -29,7 +29,7 @@ public static partial class SdfSkyEnvironment {
     /// <summary>The bytes one texel takes: four half floats, the colour and a zero.</summary>
     public const int TexelBytes = 8;
     /// <summary>The bytes of the full and panel-free map planes.</summary>
-    public const int MapBytes = (2 * Texels * TexelBytes);
+    public const int MapBytes = ((2 * Texels) * TexelBytes);
     /// <summary>The coefficients per colour channel: the real spherical harmonics of bands zero to two.</summary>
     public const int CoefficientCount = 9;
     /// <summary>The bytes the coefficients take: one four-float record each, the three channels and a zero.</summary>
@@ -110,7 +110,7 @@ public static partial class SdfSkyEnvironment {
         for (var y = 0; (y < Size); y++) {
             for (var x = 0; (x < Size); x++) {
                 var weight = SolidAngle(x: x, y: y);
-                var color = map[((y * Size) + x)] - map[0];
+                var color = (map[((y * Size) + x)] - map[0]);
 
                 Basis(basis: basis, direction: Direction(x: x, y: y));
                 total += weight;
@@ -133,7 +133,7 @@ public static partial class SdfSkyEnvironment {
                 z: ((float)(sums[((index * 3) + 2)] * normalization))
             );
         }
-        coefficients[0] += map[0] * (float)Math.Sqrt(4d * Math.PI);
+        coefficients[0] += (map[0] * ((float)Math.Sqrt((4d * Math.PI))));
     }
     /// <summary>Returns the map's colour in a direction: the bilinear filter of the four texels about its point, a tap one
     /// texel past an edge read where the octahedral fold puts it.</summary>
@@ -222,14 +222,17 @@ public static partial class SdfSkyEnvironment {
 
             var local = Rotate(direction: sky, rotation: layer.Rotation);
             Vector3 radiance;
+
             if (layer.Kind == SdfSkyLayerKind.Panel) {
                 var value = Panel(panel: SdfSky.PayloadOf<SdfSkyPanel>(layer: ref layer), direction: local);
+
                 radiance = new Vector3(value.X, value.Y, value.Z);
                 weight *= value.W;
             } else if (layer.Kind == SdfSkyLayerKind.Gradient) {
                 radiance = Gradient(direction: local, gradient: SdfSky.PayloadOf<SdfSkyGradient>(layer: ref layer));
             } else {
                 var value = Procedural(ref layer, block, local);
+
                 radiance = new Vector3(value.X, value.Y, value.Z);
                 weight *= value.W;
             }

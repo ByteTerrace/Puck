@@ -1,4 +1,4 @@
-// The echo pass of shader interface 'place-perturbed' (sha256/e3c859f3925c3109b709a9173883355bdbe8ea6c6bb5045baddf17e8bb504a2f), generated from the interface and perturbed by hand: its last member's first word expects the sentinel of the word after it.
+// The echo pass of shader interface 'place-perturbed' (sha256/e3c859f3925c3109b709a9173883355bdbe8ea6c6bb5045baddf17e8bb504a2f), generated with its last member's first word expecting the sentinel of the word after it.
 // Pixel i of 'echo' is green when every word of the ith block member, in set order, reads back as the sentinel the host wrote there.
 #include "place-perturbed.interface.hlsli"
 

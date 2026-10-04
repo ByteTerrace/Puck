@@ -74,8 +74,8 @@ internal static class GatePlan {
             var stem = ((DirectoryName + "/") + name);
             var ceilings = (stem + CeilingsSuffix);
             using var document = JsonDocument.Parse(File.ReadAllText(path: ledger));
-            var world = document.RootElement.GetProperty(propertyName: "workload").GetString()
-                ?? throw new InvalidDataException(message: $"Recorded counters ledger '{ceilings}' has no workload path.");
+            var world = (document.RootElement.GetProperty(propertyName: "workload").GetString()
+                ?? throw new InvalidDataException(message: $"Recorded counters ledger '{ceilings}' has no workload path."));
             var script = (stem + ".script.txt");
             // Some recorded workloads share a script; the ceilings own that script identity.
             if (!File.Exists(path: Path.Combine(path1: repositoryRoot, path2: script))) {

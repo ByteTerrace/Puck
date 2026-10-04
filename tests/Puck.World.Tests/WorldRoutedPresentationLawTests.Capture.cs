@@ -89,7 +89,6 @@ public sealed partial class WorldRoutedPresentationLawTests {
         Assert.IsType<ObjectDisposedException>(@object: (await pending.Completion).Error);
         Assert.False(condition: capture.TryArm(reason: out _, request: new FrameCaptureRequest(path: "closed.png"), slot: 0));
     }
-
     [InlineData(FrameCompletion.Rendered, false)]
     [InlineData(FrameCompletion.Refused, false)]
     [InlineData(FrameCompletion.NotYetRenderable, true)]

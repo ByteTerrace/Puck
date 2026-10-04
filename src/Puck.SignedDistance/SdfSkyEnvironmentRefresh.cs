@@ -9,6 +9,7 @@ public sealed class SdfSkyEnvironmentRefresh {
     private readonly Vector3[] m_map = new Vector3[SdfSkyEnvironment.Texels];
     private readonly Vector3[] m_candidate = new Vector3[SdfSkyEnvironment.CoefficientCount];
     private readonly Vector3[] m_rendered = new Vector3[SdfSkyEnvironment.CoefficientCount];
+
     private SdfSkyBlock m_candidateBlock;
     private bool m_hasCandidate;
     private bool m_hasRendered;
@@ -25,7 +26,7 @@ public sealed class SdfSkyEnvironmentRefresh {
     public bool Owes(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers) {
         Projected = false;
         Skipped = false;
-        if (!(block.Ambient > 0f || block.Reflection > 0f ||
+        if (!((block.Ambient > 0f) || (block.Reflection > 0f) ||
             ((block.FogExtinction > 0f) && ((block.AirFlags & SdfAir.FogColorAuthored) == 0u)) ||
             (block.HazeExtinction > 0f))) {
             return false;
@@ -41,17 +42,16 @@ public sealed class SdfSkyEnvironmentRefresh {
         if (!m_hasRendered) {
             return true;
         }
-        var changed = SdfSkyEnvironment.IrradianceDifference(m_candidate, m_rendered) >= SdfSkyEnvironment.DisplayCode;
-        Skipped = Projected && !changed;
+        var changed = (SdfSkyEnvironment.IrradianceDifference(m_candidate, m_rendered) >= SdfSkyEnvironment.DisplayCode);
+
+        Skipped = (Projected && !changed);
         return changed;
     }
-
     /// <summary>Records that the last candidate's map and coefficients have been submitted for rendering.</summary>
     public void Rendered() {
         m_candidate.CopyTo(m_rendered, 0);
         m_hasRendered = true;
     }
-
     /// <summary>Invalidates the held projection and rendered sky after a kernel reload.</summary>
     public void Forget() {
         m_hasCandidate = false;

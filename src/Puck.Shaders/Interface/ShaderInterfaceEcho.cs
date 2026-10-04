@@ -168,7 +168,6 @@ public static partial class ShaderInterfaceEcho {
 
         return text.ToString();
     }
-
     /// <summary>Generates a block echo whose last member's first word deliberately expects the next word's
     /// sentinel. Every preceding member retains its ordinary check, giving a one-pixel discriminator.</summary>
     /// <param name="shaderInterface">The perturbed pass's interface, including its echo output.</param>

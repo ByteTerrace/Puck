@@ -25,7 +25,9 @@ public sealed class ShadersInterfaceEchoLawTests {
                 fixtures.Add(item: $"{name}.echo.hlsl");
             }
             JsonObject Observation(bool holds, double right) => new() {
-                ["type"] = "imageRegion", ["capture"] = $"{echo}.png", ["holds"] = holds,
+                ["type"] = "imageRegion",
+                ["capture"] = $"{echo}.png",
+                ["holds"] = holds,
                 ["extent"] = new JsonArray(items: [JsonValue.Create(value: 1), JsonValue.Create(value: 1)]),
                 ["region"] = new JsonArray(items: [JsonValue.Create(value: 0), JsonValue.Create(value: 0), JsonValue.Create(value: right), JsonValue.Create(value: 1)]),
             };
@@ -40,7 +42,6 @@ public sealed class ShadersInterfaceEchoLawTests {
             ["discriminating"] = new JsonObject { ["commands"] = "keep the discriminating commands", ["expect"] = discriminating },
         };
     }
-
     private static (int ExitCode, string Error) Run(string directory, bool check) {
         var (exitCode, _, error) = ConsoleCapture.RunSplit(run: () => InterfaceEchoFixtures.Run(directory: directory, check: check));
 
@@ -83,7 +84,7 @@ public sealed class ShadersInterfaceEchoLawTests {
                 Assert.Equal(expected: (((uint)width), 1u), actual: Assert.Single(collection: definition.Resources).Dimensions!.Resolve(frameWidth: 256, frameHeight: 256));
                 var source = File.ReadAllText(path: Path.Combine(path1: root.RootPath, path2: $"{name}.echo.hlsl"));
 
-                Assert.Equal(expected: (name == echo ? ShaderInterfaceEcho.Generate(shaderInterface: pass.Parameters.Interface)
+                Assert.Equal(expected: ((name == echo) ? ShaderInterfaceEcho.Generate(shaderInterface: pass.Parameters.Interface)
                     : ShaderInterfaceEcho.GeneratePerturbed(shaderInterface: pass.Parameters.Interface)), actual: source);
             }
             foreach (var leg in ((string[])["positive", "discriminating"])) {
@@ -103,7 +104,6 @@ public sealed class ShadersInterfaceEchoLawTests {
         }
         Assert.Equal(expected: (0, ""), actual: Run(directory: root.RootPath, check: true));
     }
-
     [Fact]
     public void Check_reports_drift_without_writing_and_record_repairs_the_family() {
         using var root = new TemporaryDirectory(prefix: "puck-echo-fixtures-");

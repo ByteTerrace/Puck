@@ -46,6 +46,7 @@ namespace Puck.World;
 /// </remarks>
 internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresenter, IWorldViewHost {
     public WorldSkyAudition? SkyLayers { get; init; }
+
     // The quiet zone a live screen.source <index> qr uses when the verb names none.
     private const int QrDefaultQuietZoneModules = 4;
     // The seat a screen row, a probe export, or a console bind resolves a seat-relative camera against: none of
