@@ -8087,10 +8087,15 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       reach cone tests, and the scan performs no field evaluations. This adds
       linear metadata work per group and eligible slot. Flat and camera-mask fallbacks conservatively test
       the whole dynamic table, as do unmasked world segments. First and incoming slots
-      skip these motion checks. Rejected shadows
-      raise the existing color-history reactivity so reconstruction cannot
-      keep the old shadow. With the lever off, K history writes and decision
-      pixels are zero; low has no shadow history allocation or work.
+      skip these motion checks. Temporal secondary shadows check ownership,
+      light and occluder motion even when K reuse is off. Rejected shadows raise
+      the existing color-history reactivity so reconstruction cannot keep an old
+      shadow behind freshly marched K. With the lever off, every pixel marches,
+      the four K-history words are neither read nor written, and amortization
+      decision pixels are zero. Only the current reactivity word is written and
+      read by views; a still frame writes zero reactivity, allowing color history
+      to converge. Receiver validation remains the color resolve's when K is not
+      reused. Low has no shadow history allocation or work.
     - Touches: `surface/sdf-shadow.hlsli`, `surface/sdf-shadow-gather.hlsli`
       (the moved-occluder test), `SdfWorldPackage.TemporalFragment` (the K
       history), `SdfShadowHistory` (its owners), `frame/sdf-reprojection.hlsli`,
@@ -8125,8 +8130,10 @@ the read-back of what it decides (`world.lighting` for the sky, air and lights;
       `ownership`, `light-motion`, `occluder-motion`, `receiver` and
       `reprojected` detail rows. Each row carries its march steps and slot-step
       columns too; their sums and the plain remainder reconcile to the pass.
-      K history writes count five stored words per active pixel, only with
-      amortization on and more than one stable slot. There is no new dispatch.
+      Temporal shadows with more than one stable slot count five stored words
+      per active pixel with amortization on, or one current reactivity word with
+      it off. Off-switch fresh marches remain in the plain shadow row. There is
+      no new dispatch.
     - The temporal rejection, history ownership, allocation, preset and
       decision-row CPU laws have withheld-fix evidence. The later per-invocation
       shadow-slot atomic change remains unqualified: its

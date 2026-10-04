@@ -12,10 +12,10 @@ public sealed class SdfShadowAmortizationLawTests {
     public void OnlySecondaryStableSlotsInterleaveByTheJitterIndexWithAnOffSwitch() {
         var shadow = Source(path: "surface/sdf-shadow.hlsli");
 
-        Assert.Contains(actualString: shadow, expectedSubstring: "(passGroup.temporal != 0u) && (passGroup.shadowAmortize != 0u)");
+        Assert.Contains(actualString: shadow, expectedSubstring: "temporalShadows && (passGroup.shadowAmortize != 0u)");
         Assert.Contains(actualString: shadow, expectedSubstring: "(shadowSlot > 0u) && (shadowSlot < passGroup.shadowSlotCount)");
-        Assert.Contains(actualString: shadow, expectedSubstring: "sdfShadowMotionActive = secondary");
-        Assert.Contains(actualString: shadow, expectedSubstring: "else if (secondary && hasLight)");
+        Assert.Contains(actualString: shadow, expectedSubstring: "sdfShadowMotionActive = reactiveSecondary");
+        Assert.Contains(actualString: shadow, expectedSubstring: "else if (reactiveSecondary && hasLight)");
         Assert.Contains(actualString: Source(path: "surface/sdf-shadow-gather.hlsli"), expectedSubstring: "if (sdfShadowMotionActive)");
         Assert.Contains(actualString: shadow, expectedSubstring: "((p.pixel.x & 1u) | ((p.pixel.y & 1u) << 1u)) != (passGroup.historyFrames & 3u)");
         Assert.Contains(actualString: shadow, expectedSubstring: "lit && (decision != SDF_SHADOW_DECISION_REPROJECTED)");
