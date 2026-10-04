@@ -344,6 +344,10 @@
             "string",
             "null"
           ]
+        },
+        "bounce": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the finite nonnegative gain of this light\u0027s diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain."
         }
       },
       "additionalProperties": false,
@@ -383,6 +387,10 @@
             "string",
             "null"
           ]
+        },
+        "bounce": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the finite nonnegative gain of this light\u0027s diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain."
         }
       },
       "additionalProperties": false,
@@ -615,6 +623,10 @@
             "string",
             "null"
           ]
+        },
+        "bounce": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the finite nonnegative gain of this light\u0027s diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain."
         }
       },
       "additionalProperties": false,
@@ -659,6 +671,10 @@
             "string",
             "null"
           ]
+        },
+        "bounce": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the finite nonnegative gain of this light\u0027s diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain."
         }
       },
       "additionalProperties": false,

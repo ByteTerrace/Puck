@@ -1,4 +1,4 @@
-// Generated from shader interface 'indirect' (sha256/32a6a94f14ccfafc6e6f8ff7a7e2ac0ebf4a03743255f04ac723ab1f78a80fb4). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'indirect' (sha256/d19faa4a00446b92533ea9c15d2d6fc2414bf931c7dfd35fe25c0d318fa07528). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_INDIRECT
 #define PUCK_SHADER_INTERFACE_INDIRECT
 
@@ -10,7 +10,7 @@ struct SdfLight {
     [[vk::offset(32)]] float Param;
     [[vk::offset(36)]] uint Shadows;
     [[vk::offset(40)]] int DynamicSlot;
-    [[vk::offset(44)]] uint _pad44;
+    [[vk::offset(44)]] float Bounce;
 };
 
 struct SdfSkyBlock {
@@ -129,8 +129,8 @@ struct IndirectFrame {
 [[vk::binding(22, 1)]] Texture2D<float4> sdfImpostorDepth : register(t22, space1);
 [[vk::binding(23, 1)]] Texture2D<float4> sdfImpostorMaterials : register(t23, space1);
 [[vk::binding(24, 1)]] Texture2D<float4> sdfImpostorEmission : register(t24, space1);
-[[vk::binding(25, 1)]] StructuredBuffer<SdfLight> sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2 : register(t25, space1);
-#define sdfLights sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2
+[[vk::binding(25, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout1e038717dee1c3e1f05c178136b7d59290218483a92b3534280bf2f001fc985b : register(t25, space1);
+#define sdfLights sdfLightsLayout1e038717dee1c3e1f05c178136b7d59290218483a92b3534280bf2f001fc985b
 [[vk::binding(26, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t26, space1);
 #define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
 [[vk::binding(27, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t27, space1);
@@ -183,49 +183,57 @@ struct IndirectPass {
     [[vk::offset(224)]] uint2 imageExtent;
     [[vk::offset(232)]] uint indirectClassifyCount;
     [[vk::offset(236)]] uint indirectEpoch;
-    [[vk::offset(240)]] uint indirectFrame;
-    [[vk::offset(244)]] uint indirectPhase;
-    [[vk::offset(248)]] uint indirectPlaceCount;
-    [[vk::offset(252)]] uint indirectTier;
-    [[vk::offset(256)]] uint indirectTraceCount;
-    [[vk::offset(260)]] uint instanceMaskWordCount;
-    [[vk::offset(264)]] float2 jitter;
-    [[vk::offset(272)]] uint lightCount;
-    [[vk::offset(276)]] uint lightMap;
-    [[vk::offset(280)]] uint lightMapCount;
-    [[vk::offset(284)]] uint _pad284;
-    [[vk::offset(288)]] float4 lightMaps[84];
-    [[vk::offset(1632)]] float lightSweepRadius;
-    [[vk::offset(1636)]] uint meshDraws;
-    [[vk::offset(1640)]] float nearDistance;
-    [[vk::offset(1644)]] uint _pad1644;
-    [[vk::offset(1648)]] float4 previousView[6];
-    [[vk::offset(1744)]] uint screenCount;
-    [[vk::offset(1748)]] uint shadowAmortize;
-    [[vk::offset(1752)]] float shadowDistanceScale;
-    [[vk::offset(1756)]] uint shadowFadeCount;
-    [[vk::offset(1760)]] uint shadowLightReject;
-    [[vk::offset(1764)]] uint shadowOwnershipReject;
-    [[vk::offset(1768)]] uint shadowSlotCount;
-    [[vk::offset(1772)]] uint _pad1772;
-    [[vk::offset(1776)]] int4 shadowSlots;
-    [[vk::offset(1792)]] float tanHalfFieldOfView;
-    [[vk::offset(1796)]] uint temporal;
-    [[vk::offset(1800)]] uint2 tileGrid;
-    [[vk::offset(1808)]] uint viewBase;
-    [[vk::offset(1812)]] uint _pad1812;
-    [[vk::offset(1816)]] uint _pad1816;
-    [[vk::offset(1820)]] uint _pad1820;
-    [[vk::offset(1824)]] float3 viewForward;
-    [[vk::offset(1836)]] uint _pad1836;
-    [[vk::offset(1840)]] float3 viewPosition;
+    [[vk::offset(240)]] float indirectFeedback;
+    [[vk::offset(244)]] uint indirectFrame;
+    [[vk::offset(248)]] uint indirectPhase;
+    [[vk::offset(252)]] uint indirectPlaceCount;
+    [[vk::offset(256)]] uint indirectReadGeneration;
+    [[vk::offset(260)]] uint indirectReadPublication;
+    [[vk::offset(264)]] uint indirectShadeCount;
+    [[vk::offset(268)]] uint indirectTier;
+    [[vk::offset(272)]] uint indirectTraceCount;
+    [[vk::offset(276)]] uint indirectWriteGeneration;
+    [[vk::offset(280)]] uint indirectWritePublication;
+    [[vk::offset(284)]] uint instanceMaskWordCount;
+    [[vk::offset(288)]] float2 jitter;
+    [[vk::offset(296)]] uint lightCount;
+    [[vk::offset(300)]] uint lightMap;
+    [[vk::offset(304)]] uint lightMapCount;
+    [[vk::offset(308)]] uint _pad308;
+    [[vk::offset(312)]] uint _pad312;
+    [[vk::offset(316)]] uint _pad316;
+    [[vk::offset(320)]] float4 lightMaps[84];
+    [[vk::offset(1664)]] float lightSweepRadius;
+    [[vk::offset(1668)]] uint meshDraws;
+    [[vk::offset(1672)]] float nearDistance;
+    [[vk::offset(1676)]] uint _pad1676;
+    [[vk::offset(1680)]] float4 previousView[6];
+    [[vk::offset(1776)]] uint screenCount;
+    [[vk::offset(1780)]] uint shadowAmortize;
+    [[vk::offset(1784)]] float shadowDistanceScale;
+    [[vk::offset(1788)]] uint shadowFadeCount;
+    [[vk::offset(1792)]] uint shadowLightReject;
+    [[vk::offset(1796)]] uint shadowOwnershipReject;
+    [[vk::offset(1800)]] uint shadowSlotCount;
+    [[vk::offset(1804)]] uint _pad1804;
+    [[vk::offset(1808)]] int4 shadowSlots;
+    [[vk::offset(1824)]] float tanHalfFieldOfView;
+    [[vk::offset(1828)]] uint temporal;
+    [[vk::offset(1832)]] uint2 tileGrid;
+    [[vk::offset(1840)]] uint viewBase;
+    [[vk::offset(1844)]] uint _pad1844;
+    [[vk::offset(1848)]] uint _pad1848;
     [[vk::offset(1852)]] uint _pad1852;
-    [[vk::offset(1856)]] float3 viewRight;
+    [[vk::offset(1856)]] float3 viewForward;
     [[vk::offset(1868)]] uint _pad1868;
-    [[vk::offset(1872)]] float3 viewUp;
-    [[vk::offset(1884)]] uint viewportCount;
-    [[vk::offset(1888)]] uint workCounterRow;
-    [[vk::offset(1892)]] uint workCounterRowDetail;
+    [[vk::offset(1872)]] float3 viewPosition;
+    [[vk::offset(1884)]] uint _pad1884;
+    [[vk::offset(1888)]] float3 viewRight;
+    [[vk::offset(1900)]] uint _pad1900;
+    [[vk::offset(1904)]] float3 viewUp;
+    [[vk::offset(1916)]] uint viewportCount;
+    [[vk::offset(1920)]] uint workCounterRow;
+    [[vk::offset(1924)]] uint workCounterRowDetail;
 };
 [[vk::binding(0, 3)]] ConstantBuffer<IndirectPass> passGroupIsa61A351B3 : register(b0, space3);
 #define passGroup passGroupIsa61A351B3
@@ -235,6 +243,7 @@ struct IndirectPass {
 [[vk::binding(4, 3)]] StructuredBuffer<uint> indirectTraceStates : register(t4, space3);
 [[vk::binding(5, 3)]] RWStructuredBuffer<uint> indirectCacheRW : register(u5, space3);
 [[vk::binding(6, 3)]] RWStructuredBuffer<uint> workCounters : register(u6, space3);
+[[vk::binding(7, 3)]] StructuredBuffer<float> indirectLightDepth : register(t7, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

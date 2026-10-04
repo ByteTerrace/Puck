@@ -7865,9 +7865,9 @@ export type WorldPrototype = {
        */
       soften?: number | null;
       /**
-       * The bounce tint as #RRGGBB or a state binding (null = black — no bounce) — see Bounce.
+       * The fill tint as #RRGGBB or a state binding (null = black — no fill) — see Fill.
        */
-      bounce?: string | null;
+      fill?: string | null;
       /**
        * Optional refractive paint layer.
        */
@@ -7887,6 +7887,14 @@ export type WorldPrototype = {
           seed?: number;
         };
       } | null;
+      /**
+       * The color multiplying outgoing indirect reflectance and emission, as #RRGGBB or a state binding; null means white.
+       */
+      bleed?: string | null;
+      /**
+       * The finite nonnegative gain on received indirect light; null means one.
+       */
+      receive?: number | null;
     } | null)[] | null;
     /**
      * The authored shapes (null = empty).
@@ -9152,6 +9160,10 @@ export type WorldRenderLightDirectional = {
    */
   name?: string | null;
   lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
 };
 
 /**
@@ -9180,6 +9192,10 @@ export type WorldRenderLightOccluder = {
    */
   name?: string | null;
   lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
 };
 
 /**
@@ -9212,6 +9228,10 @@ export type WorldRenderLightPoint = {
    */
   name?: string | null;
   lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
 };
 
 /**
@@ -9236,6 +9256,10 @@ export type WorldRenderLightRim = {
    */
   name?: string | null;
   lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the indirect solve while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
 };
 
 export type WorldRenderLighting = {

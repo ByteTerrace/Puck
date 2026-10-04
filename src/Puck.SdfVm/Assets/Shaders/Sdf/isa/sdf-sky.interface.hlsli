@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-sky' (sha256/be71ac9850071ee3155a16607e113ae3edaba27a12e7f440e748385becef9478). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-sky' (sha256/5b56fbdb6c9c057063860a7d79ec571cb41698f5b028d81db694c853cc219d0a). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_SKY
 #define PUCK_SHADER_INTERFACE_SDF_SKY
 
@@ -10,7 +10,7 @@ struct SdfLight {
     [[vk::offset(32)]] float Param;
     [[vk::offset(36)]] uint Shadows;
     [[vk::offset(40)]] int DynamicSlot;
-    [[vk::offset(44)]] uint _pad44;
+    [[vk::offset(44)]] float Bounce;
 };
 
 struct SdfSkyBlock {
@@ -129,8 +129,8 @@ struct SdfSkyFrame {
 [[vk::binding(22, 1)]] Texture2D<float4> sdfImpostorDepth : register(t22, space1);
 [[vk::binding(23, 1)]] Texture2D<float4> sdfImpostorMaterials : register(t23, space1);
 [[vk::binding(24, 1)]] Texture2D<float4> sdfImpostorEmission : register(t24, space1);
-[[vk::binding(25, 1)]] StructuredBuffer<SdfLight> sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2 : register(t25, space1);
-#define sdfLights sdfLightsLayoutf91ddf69c59767c161ac0442f7efd9e65f6d70617851d0196da811011d56f2e2
+[[vk::binding(25, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout1e038717dee1c3e1f05c178136b7d59290218483a92b3534280bf2f001fc985b : register(t25, space1);
+#define sdfLights sdfLightsLayout1e038717dee1c3e1f05c178136b7d59290218483a92b3534280bf2f001fc985b
 [[vk::binding(26, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t26, space1);
 #define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
 [[vk::binding(27, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t27, space1);

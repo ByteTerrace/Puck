@@ -221,13 +221,13 @@
                   "default": null,
                   "description": "The shading-normal broadening in [0, 1] (null = 0 \u2014 no broadening) \u2014 see Soften."
                 },
-                "bounce": {
+                "fill": {
                   "type": [
                     "string",
                     "null"
                   ],
                   "default": null,
-                  "description": "The bounce tint as #RRGGBB or a state binding (null = black \u2014 no bounce) \u2014 see Bounce."
+                  "description": "The fill tint as #RRGGBB or a state binding (null = black \u2014 no fill) \u2014 see Fill."
                 },
                 "inset": {
                   "type": [
@@ -306,6 +306,22 @@
                   "additionalProperties": false,
                   "default": null,
                   "description": "Optional refractive paint layer."
+                },
+                "bleed": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "The color multiplying outgoing indirect reflectance and emission, as #RRGGBB or a state binding; null means white."
+                },
+                "receive": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "The finite nonnegative gain on received indirect light; null means one."
                 }
               },
               "required": [
