@@ -447,7 +447,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             Reads = [
                 .. instance.Reads,
                 .. sources.Select(selector: static source => new RenderGraphRead(Producer: source.Name)),
-                .. rendered.Views.Where(predicate: static view => (WorldViewInstances.IsShownDirectly(view: in view) || WorldViewInstances.IsShownBySky(view: in view))).Select(selector: static view => new RenderGraphRead(Producer: view.Name)),
+                .. rendered.Views.Where(predicate: view => (WorldViewInstances.IsShownDirectly(view: in view) || WorldViewInstances.IsShownBySky(view: in view, consumer: instance.Name))).Select(selector: static view => new RenderGraphRead(Producer: view.Name)),
             ],
         }));
     // A camera the display shows directly that films the world reads every view the world's screens show at its previous

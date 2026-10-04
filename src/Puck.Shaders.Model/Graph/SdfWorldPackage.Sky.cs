@@ -1,6 +1,17 @@
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
+    /// <summary>The fitted infinity records in one consumer's pass block: one per sky-layer slot, matching
+    /// <c>Puck.SignedDistance.SdfSky.MaxLayers</c>.</summary>
+    public const int SkyViewCount = 8;
+    /// <summary>The float4 rows of one fitted record, matching the 80-byte <c>SdfSkyView</c> parameter record.</summary>
+    public const int SkyViewRows = 5;
+    /// <summary>The bytes the fitted records add to each sky pass block: forty float4 values.</summary>
+    public const int SkyViewBytes = (SkyViewCount * SkyViewRows * 16);
+    /// <summary>The fitted infinity records for the consumer this pass renders (<c>float4[40]</c>).</summary>
+    public const string SkyViews = "skyViews";
+    /// <summary>The infinity images read under this consumer's existing graph-read leases, one per sky-layer slot.</summary>
+    public const string SkyViewImages = "skyViewImages";
     /// <summary>The pass-block value the sky and composite passes read, one when the lit image and the surface transport
     /// the composite reads are the resolve's at the output extent (<see cref="Fragment"/>, <see cref="TemporalFragment"/>),
     /// zero when they are views' at the render extent with the visibility records, current only inside the dispatch box:
@@ -44,6 +55,8 @@ public static partial class SdfWorldPackage {
         internal static readonly IReadOnlyList<ShaderInterfaceMember> Members = [
             .. Values,
             Value(name: ResolvedSurface, type: ShaderValueType.Uint),
+            ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: SkyViews, type: ShaderValueType.Float4, length: (SkyViewCount * SkyViewRows)),
+            ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: SkyViewCount, name: SkyViewImages, type: ShaderValueType.Float4),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: LitImage, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),
             Read(element: ShaderValueType.Uint, name: CullBounds),

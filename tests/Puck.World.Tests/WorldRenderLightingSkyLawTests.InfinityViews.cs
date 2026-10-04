@@ -70,7 +70,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
 
         Assert.Equal(actual: view.Coverage, expected: 0u);
         Assert.Equal(actual: far.Coverage, expected: 1u);
-        Assert.Equal(actual: view.Screen, expected: -1);
+        Assert.Equal(actual: view.ImageSlot, expected: -1);
         Assert.Equal(actual: view.Fallback.X, expected: (0x33 / 255f), precision: 3);
         Assert.Equal(actual: view.Fallback.Y, expected: (0x66 / 255f), precision: 3);
         Assert.Equal(actual: view.Fallback.Z, expected: (0x99 / 255f), precision: 3);

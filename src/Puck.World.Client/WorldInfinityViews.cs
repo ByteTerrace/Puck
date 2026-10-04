@@ -1,6 +1,7 @@
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.SdfVm;
 using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
@@ -26,7 +27,25 @@ public sealed class WorldInfinityViews {
     private readonly Dictionary<string, RenderGraphPixelExtent> m_extents = new(comparer: StringComparer.Ordinal);
     // Each view's reads, kept as one list while the plan stands: a view whose list is replaced is a changed view.
     private readonly Dictionary<string, IReadOnlyList<string>> m_reads = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, List<SdfSkyViewBinding>> m_bindings = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, string> m_producers = new(comparer: StringComparer.Ordinal);
     private WorldInfinityViewPlan m_plan = WorldInfinityViewPlan.Empty;
+
+    /// <summary>Initializes the fit set for one consuming camera. Planned layer identities stay shared across
+    /// cameras, while their graph outputs and demand histories belong to this consumer.</summary>
+    /// <param name="consumer">The consuming render-graph instance; the first world view by default.</param>
+    public WorldInfinityViews(string consumer = WorldViewGraphs.WorldInstance) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: consumer);
+        Consumer = consumer;
+    }
+
+    /// <summary>Gets the instance whose camera this set fits.</summary>
+    public string Consumer { get; }
+
+    /// <summary>Returns the graph output of a planned layer for this consumer.</summary>
+    /// <param name="name">The complete planned layer path.</param>
+    /// <returns>The layer path for the first world view, or that path under the consuming instance.</returns>
+    public string ProducerOf(string name) => m_producers[name];
 
     /// <summary>Gets what schedules the views.</summary>
     public InfinityViewDemand Demand { get; } = new();
@@ -59,9 +78,16 @@ public sealed class WorldInfinityViews {
 
         m_plan = plan;
         m_reads.Clear();
+        m_bindings.Clear();
+        m_producers.Clear();
+        foreach (var view in plan.Views) {
+            m_producers[view.Name] = ((Consumer == WorldViewGraphs.WorldInstance)
+                ? view.Name
+                : (Consumer + Puck.State.GeneratedName.Joiner + view.Name));
+        }
 
         foreach (var view in plan.Views) {
-            m_reads[view.Name] = [.. plan.Views.Where(predicate: child => string.Equals(a: child.Parent, b: view.Name, comparisonType: StringComparison.Ordinal)).Select(selector: static child => child.Name)];
+            m_reads[view.Name] = [.. plan.Views.Where(predicate: child => string.Equals(a: child.Parent, b: view.Name, comparisonType: StringComparison.Ordinal)).Select(selector: child => ProducerOf(name: child.Name))];
         }
     }
     /// <summary>Returns the frame a view last rendered with, for the dresser of its instance to take its camera from.</summary>
@@ -70,6 +96,39 @@ public sealed class WorldInfinityViews {
     public InfinityViewFrame FrameOf(string name) => (m_frames.TryGetValue(key: name, value: out var frame)
         ? frame
         : default);
+
+    /// <summary>Fits the sky sampling records of the root viewer or one nested viewer. Layers beyond the nesting
+    /// or residency cap still carry their fitted fallback, while inactive cones carry no binding.</summary>
+    /// <param name="parent">The planned parent view, or null for the root consumer.</param>
+    /// <param name="viewer">The camera whose sky samples the bindings.</param>
+    /// <param name="viewerWidth">The viewer's pixel width.</param>
+    /// <param name="viewerHeight">The viewer's pixel height.</param>
+    /// <param name="tier">The viewer's sky tier.</param>
+    /// <returns>A retained list updated by the next call for this parent.</returns>
+    public IReadOnlyList<SdfSkyViewBinding> BindingsOf(string? parent, CameraSnapshot viewer, uint viewerWidth, uint viewerHeight, QualityTier tier) {
+        var key = (parent ?? string.Empty);
+        if (!m_bindings.TryGetValue(key: key, value: out var bindings)) {
+            bindings = [];
+            m_bindings.Add(key: key, value: bindings);
+        }
+        bindings.Clear();
+        foreach (var view in m_plan.Views) {
+            if (!string.Equals(a: view.Parent, b: parent, comparisonType: StringComparison.Ordinal)) { continue; }
+            Add(spec: view.Spec, frame: FrameOf(name: view.Name), producer: ProducerOf(name: view.Name));
+        }
+        foreach (var fallback in m_plan.Fallbacks) {
+            if (!string.Equals(a: fallback.Parent, b: parent, comparisonType: StringComparison.Ordinal)) { continue; }
+            Add(spec: fallback.Spec, frame: InfinityViewFit.Fit(spec: fallback.Spec, tier: tier, viewer: viewer,
+                viewerWidth: viewerWidth, viewerHeight: viewerHeight), producer: null);
+        }
+        return bindings;
+
+        void Add(InfinityViewSpec spec, InfinityViewFrame frame, string? producer) {
+            if (!frame.Visible) { return; }
+            bindings.Add(item: new SdfSkyViewBinding(Layer: spec.Name, Producer: producer,
+                Parameters: InfinityViewSampling.Describe(spec: spec, viewer: viewer, frame: frame, imageSlot: -1)));
+        }
+    }
     /// <summary>Fits and publishes every planned view for a frame.</summary>
     /// <param name="viewer">The viewer's camera.</param>
     /// <param name="viewerWidth">The pixels across the viewer renders.</param>
@@ -126,13 +185,14 @@ public sealed class WorldInfinityViews {
                 Demand: (demanded ? WorldViewDemand.Sky | WorldViewDemand.SkySeen : WorldViewDemand.Sky),
                 FilmsWorld: false,
                 Height: Quantize(fraction: (((double)extent.Height) / Math.Max(val1: 1u, val2: consumerHeight))),
-                Name: view.Name,
+                Name: ProducerOf(name: view.Name),
                 Refresh: RenderGraphRefresh.Every(divisor: view.Spec.Refresh),
                 Width: Quantize(fraction: (((double)extent.Width) / Math.Max(val1: 1u, val2: consumerWidth)))
             ) {
                 OutputExtent = extent,
-                Parent = view.Parent,
+                Parent = ((view.Parent is null) ? null : ProducerOf(name: view.Parent)),
                 Reads = m_reads[view.Name],
+                SkyConsumer = ((view.Parent is null) ? Consumer : ProducerOf(name: view.Parent)),
             });
         }
     }

@@ -17,6 +17,7 @@ public sealed partial class SdfWorldTables {
     private readonly SdfLight[] m_lightRecords = new SdfLight[SdfLights.MaxLights];
     private readonly SdfSkyBlock[] m_skyRecord = new SdfSkyBlock[1];
     private readonly SdfSkyLayer[] m_skyLayerRecords = new SdfSkyLayer[SdfSky.MaxLayers];
+    private readonly int[] m_skyAuthoredIndices = new int[SdfSky.MaxLayers];
 
     private readonly GpuRegion m_lightRegion;
     private readonly GpuRegion m_skyRegion;
@@ -36,6 +37,10 @@ public sealed partial class SdfWorldTables {
     /// order.</summary>
     public SdfSkyDetails SkyDetails => m_skyDetails;
 
+    /// <summary>Gets each packed sky layer's authored index, followed by −1 for unused rows. Muted and
+    /// tier-excluded layers consume no packed row; counter detail identities are composition-wide, not packed ordinals.</summary>
+    public ReadOnlySpan<int> SkyAuthoredIndices => m_skyAuthoredIndices;
+
     // Packs a frame's lights and sky and retains its active controls until the counted upload.
     private void PackLightsAndSky(SdfFrame frame) {
         m_shadowHandoffCount = frame.Lights.ShadowSlots.FadeCount;
@@ -43,6 +48,7 @@ public sealed partial class SdfWorldTables {
         frame.Lights.ShadowSlots.Handoffs.CopyTo(destination: m_shadowHandoffs);
         frame.Lights.Pack(records: m_lightRecords);
         frame.Sky.Pack(
+            authoredIndices: m_skyAuthoredIndices,
             block: out m_skyRecord[0],
             details: m_skyDetails,
             farDistance: frame.FarDistance,

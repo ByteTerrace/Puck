@@ -16,10 +16,10 @@ public static class InfinityViewSampling {
     /// <param name="spec">The view.</param>
     /// <param name="viewer">The camera the view was fitted to; the sampling reads its basis.</param>
     /// <param name="frame">The frame the view renders (<see cref="InfinityViewFit.Fit"/>), which must be visible.</param>
-    /// <param name="screen">The binder-routed screen index the instance's image arrives on, or −1 for none.</param>
-    /// <returns>The packed record: the viewer's basis, the rectangle, the screen, the fallback colour, and image alpha
+    /// <param name="imageSlot">The consuming view's infinity-image binding slot, or −1 for none.</param>
+    /// <returns>The packed record: the viewer's basis, the rectangle, the image slot, the fallback colour, and image alpha
     /// as coverage for far geometry.</returns>
-    public static SdfSkyView Describe(InfinityViewSpec spec, CameraSnapshot viewer, InfinityViewFrame frame, int screen) {
+    public static SdfSkyView Describe(InfinityViewSpec spec, CameraSnapshot viewer, InfinityViewFrame frame, int imageSlot) {
         ArgumentNullException.ThrowIfNull(argument: spec);
 
         return new SdfSkyView {
@@ -29,7 +29,7 @@ public static class InfinityViewSampling {
             Intensity = 1f,
             Rect = frame.Rect,
             Right = viewer.Right,
-            Screen = screen,
+            ImageSlot = imageSlot,
             Up = viewer.Up,
         };
     }

@@ -11,6 +11,11 @@ namespace Puck.SdfVm;
 /// <param name="Region">The view's normalized display region, which sizes its output when no host asks for an
 /// extent (the render graph's scheduled extent).</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
+    /// <summary>The infinity layers fitted to this consumer's camera, identified by their authored names.
+    /// Their producer names identify existing render-graph outputs; the sky recorder binds them under the frame's
+    /// graph-read leases. Empty means no fitted infinity image. The residency's authored sky remains shared.</summary>
+    public IReadOnlyList<SdfSkyViewBinding> SkyViews { get; init; } = [];
+
     /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
     public long CutRevision { get; init; }
 
@@ -50,6 +55,12 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// one residency, render the same scene at different cost. The default is full quality.</summary>
     public SdfViewQuality Quality { get; init; }
 }
+/// <summary>One infinity layer's fitted sampling parameters and the render-graph image this consumer reads.</summary>
+/// <param name="Layer">The infinity layer's unique authored name.</param>
+/// <param name="Parameters">The sampling basis and rectangle fitted to this consumer. The sky retains the
+/// authored fallback, intensity and coverage.</param>
+/// <param name="Producer">The instance whose completed output supplies the image, or null while the layer draws its fallback.</param>
+public readonly record struct SdfSkyViewBinding(string Layer, SdfSkyView Parameters, string? Producer);
 /// <summary>The quality levers one view renders with: each trades a shading term's cost against its fidelity. The
 /// default is full quality, every term on at full reach with its exact path, and no temporal reconstruction. The pass
 /// block carries each shading lever under its own name (<see cref="SdfFrameBlock"/>), and the view's cadence signature

@@ -3,11 +3,12 @@
 #include "../isa/sdf-sky-kinds.hlsli"
 // Where a layer is evaluated: the world direction (a disc sits where its light shines from), the layer-frame direction
 // (the sky frame, then the layer's rotation), and the sky's quality tier, below SDF_SKY_TIER_HIGH of which a kind takes
-// its reduced form.
+// its reduced form, and the packed layer ordinal indexing this consumer's fitted infinity data.
 struct SdfSkySample {
     float3 world;
     float3 local;
     uint tier;
+    uint layer;
 };
 
 // A world direction in the sky frame: its components along the frame's axes (SdfSkyEnvironment.FrameDirection).

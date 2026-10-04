@@ -317,17 +317,23 @@ public sealed class SdfSky {
     /// <param name="details">The detail rows each layer's label counts in.</param>
     /// <param name="block">Receives the sky block.</param>
     /// <param name="layers">Receives the layer table, at least <see cref="MaxLayers"/> records.</param>
+    /// <param name="authoredIndices">When supplied, receives the authored index of each packed layer and −1 for
+    /// unused rows. Empty omits the map; otherwise it holds at least <see cref="MaxLayers"/> entries.</param>
     /// <exception cref="ArgumentNullException"><paramref name="lights"/> or <paramref name="details"/> is
     /// <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="layers"/> is shorter than its
-    /// table.</exception>
-    public void Pack(SdfLights lights, float farDistance, SdfSkyDetails details, out SdfSkyBlock block, Span<SdfSkyLayer> layers) {
+    /// <exception cref="ArgumentException"><paramref name="layers"/> is shorter than its table, or a supplied
+    /// <paramref name="authoredIndices"/> span is shorter than <see cref="MaxLayers"/>.</exception>
+    public void Pack(SdfLights lights, float farDistance, SdfSkyDetails details, out SdfSkyBlock block, Span<SdfSkyLayer> layers, Span<int> authoredIndices = default) {
         ArgumentNullException.ThrowIfNull(argument: lights);
         ArgumentNullException.ThrowIfNull(argument: details);
 
         if (layers.Length < MaxLayers) {
             throw new ArgumentException(message: $"The sky table holds {MaxLayers} layers; the span holds {layers.Length}.", paramName: nameof(layers));
         }
+        if (!authoredIndices.IsEmpty && (authoredIndices.Length < MaxLayers)) {
+            throw new ArgumentException(message: $"The sky index map holds {MaxLayers} entries; the span holds {authoredIndices.Length}.", paramName: nameof(authoredIndices));
+        }
+        authoredIndices.Fill(value: -1);
 
         block = m_block;
         block.Quality = Quality;
@@ -359,6 +365,7 @@ public sealed class SdfSky {
                 record.MaskBand = new Vector4(value: axis, w: record.MaskBand.W);
             }
 
+            if (!authoredIndices.IsEmpty) { authoredIndices[count] = index; }
             layers[count++] = record;
         }
 

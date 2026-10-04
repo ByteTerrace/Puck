@@ -108,6 +108,7 @@ public static class SdfSkyKindsHlsl {
         Line();
         Line(line: "// The sky's capacities.");
         Define(name: "SDF_SKY_MAX_LAYERS", value: SdfSky.MaxLayers);
+        Define(name: "SDF_SKY_VIEW_ROWS", value: SdfWorldPackage.SkyViewRows);
         Define(name: "SDF_SKY_MAX_STOPS", value: SdfSky.MaxStops);
         Define(name: "SDF_SKY_MAX_UPPER_FIELD_RUNS", value: SdfSky.MaxUpperFieldRuns);
         Define(name: "SDF_SKY_DETAIL_RUNS", value: SdfSkyDetails.Runs);

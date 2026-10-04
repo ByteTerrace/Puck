@@ -1,18 +1,28 @@
 // The view kind: an infinity view's image. The instance (another world, or far geometry, as a second sdf.world instance)
 // renders exactly the rectangle of the viewer's camera plane its layer's mask covers, so the pixel's world direction, as
 // the tangent it has on the viewer's basis the instance was fitted to, indexes the image directly: no sky frame, and no
-// layer rotation. A direction behind the camera plane or outside the rectangle draws nothing. The image is the screen the
-// binder routed the instance to, read through that screen's mapping and sampler (frame/sdf-environment.hlsli's mapping),
-// clamped half a source pixel inside the crop; a screen with no image this frame (the instance has not rendered yet, or
-// is retired) draws the layer's fallback colour instead. Either way the evaluation counts one shown texel, which is what
-// the host reads back to demand the instance's next frame; a pass that binds no screens (the environment map's) draws
+// layer rotation. A direction behind the camera plane or outside the rectangle draws nothing. Each consumer supplies its
+// own fitted records and image bindings, indexed by the packed layer ordinal; no authored screen index is allocated.
+// The image is clamped half a source pixel inside its extent; an instance with no completed image draws the layer's
+// fallback colour instead. Either way the evaluation counts one shown texel, which is what
+// the host reads back to demand the instance's next frame; a pass that binds no infinity images (the environment map's) draws
 // nothing and counts nothing. Opaque unless the layer is far geometry, whose image alpha is its coverage. One evaluation
 // and one texel a sample.
 #ifndef SKY_KINDS_VIEW_HLSLI
 #define SKY_KINDS_VIEW_HLSLI
 
 float4 sdfSkyViewLayer(SdfSkyView view, SdfSkyLayer layer, SdfSkySample sample) {
-#ifdef SDF_SKY_SCREENS
+#ifdef SDF_SKY_VIEWS
+    // Reuse the generated parameter decoder over the per-consumer payload, preserving the authored header/detail row.
+    uint row = (sample.layer * SDF_SKY_VIEW_ROWS);
+    SdfSkyLayer fitted = layer;
+
+    fitted.P0 = passGroup.skyViews[row];
+    fitted.P1 = passGroup.skyViews[row + 1u];
+    fitted.P2 = passGroup.skyViews[row + 2u];
+    fitted.P3 = passGroup.skyViews[row + 3u];
+    fitted.P4 = passGroup.skyViews[row + 4u];
+    view = sdfSkyViewOf(fitted);
     if (view.Intensity <= 0.0) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
@@ -39,23 +49,19 @@ float4 sdfSkyViewLayer(SdfSkyView view, SdfSkyLayer layer, SdfSkySample sample) 
     // The image's rows run down, the rectangle's tangent runs up.
     uv.y = (1.0 - uv.y);
 
-    bool shown = false;
-    ScreenMappingData mapping = (ScreenMappingData)0;
-
-    if ((view.Screen >= 0) && (view.Screen < (int)SDF_MAX_SCREEN_SURFACES)) {
-        mapping = worldScreenMapping((uint)view.Screen);
-        shown = (mapping.state.x != 0.0);
-    }
-
     sdfCountSky(layer.Detail, 0u, 0u, 1u, 0u, 1u);
 
-    if (!shown) {
+    if ((view.ImageSlot < 0) || (view.ImageSlot >= (int)SDF_SKY_MAX_LAYERS)) {
         return float4((view.Fallback * view.Intensity), 1.0);
     }
 
-    uint screen = (uint)view.Screen;
-    float2 source = clamp(lerp(mapping.crop.xy, mapping.crop.zw, uv), mapping.sampleClamp.xy, mapping.sampleClamp.zw);
-    float4 sampled = screenSources[screen].SampleLevel(samplers[(uint)mapping.state.y], source, 0.0);
+    uint image = (uint)view.ImageSlot;
+    uint width, height;
+
+    skyViewImages[image].GetDimensions(width, height);
+    float2 inset = (0.5 / float2(width, height));
+    float2 source = clamp(uv, inset, (1.0 - inset));
+    float4 sampled = skyViewImages[image].SampleLevel(samplers[SDF_FILTER_LINEAR], source, 0.0);
 
     return float4((sampled.rgb * view.Intensity), ((view.Coverage != 0u) ? sampled.a : 1.0));
 #else

@@ -1,6 +1,8 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.Shaders;
 using Puck.SignedDistance;
 
@@ -23,6 +25,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         Destination: ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: member.Name)),
         Length: checked((int)(member.Type!.Value.SizeBytes() * (member.Length ?? 1)))))];
     private static readonly int ResolvedSurfaceOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.ResolvedSurface));
+    private static readonly int SkyViewsOffset = ((int)SdfWorldInterfaces.SkyParameters.BlockOffsetOf(member: SdfWorldPackage.SkyViews));
     // The interface's image members a port reads through, and those a port writes through.
     private static readonly string[] SampledMembers = [SdfWorldPackage.LitImage, SdfWorldPackage.SkyBaseImage, .. SdfWorldPackage.SkyUpperImages];
     private static readonly string[] StorageMembers = [SdfWorldPackage.SkyBaseWritten, .. SdfWorldPackage.SkyUpperWritten, SdfWorldPackage.Output];
@@ -83,7 +86,25 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
     }
     // The sky's detail rows: its runs', then every layer label the composition's skies have packed, which only grow.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_view.Residency.SkyDetails.Labels;
-    public ulong? Signature(in FrameContext context) => m_owner.SignatureOf(instance: m_context.Instance, part: m_context.Part!, temporal: m_temporal, context: in context);
+    public ulong? Signature(in FrameContext context) {
+        var signature = m_owner.SignatureOf(instance: m_context.Instance, part: m_context.Part!, temporal: m_temporal, context: in context);
+
+        if (signature is not { } value) { return null; }
+        var view = (m_owner.ViewOf(instance: m_context.Instance) ?? m_view);
+        var frame = view.Residency.Frame!;
+        var index = Math.Min(val1: view.View, val2: (frame.Views.Count - 1));
+        var hash = Fnv1aHash.Create();
+
+        hash.Add(value: value);
+        foreach (var binding in frame.Views[index].SkyViews ?? []) {
+            var parameters = binding.Parameters;
+
+            hash.Add(value: binding.Layer);
+            hash.Add(value: binding.Producer);
+            hash.Add(values: MemoryMarshal.AsBytes(span: MemoryMarshal.CreateReadOnlySpan(reference: in parameters, length: 1)));
+        }
+        return hash.Value;
+    }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         if ((m_owner.ViewOf(instance: m_context.Instance) is { } current) && (current != m_view)) {
             if (!ReferenceEquals(objA: current.Residency, objB: m_view.Residency)) {
@@ -118,6 +139,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
         m_work.Write(passSet: set, recording: recording);
         BindPorts(recording: in recording, set: set, tables: tables);
         BindScreens(frame: frame, recording: in recording, set: set, tables: tables);
+        BindInfinityViews(sky: frame.Sky, view: frame.Views[index], recording: in recording, set: set, tables: tables);
         var pipeline = tables.Pipeline(kernel: m_kernel);
 
         recording.Recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: recording.CommandBuffer, pipelineHandle: pipeline.Handle);
@@ -200,7 +222,6 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
             var screen = sky.LayerAt(index: layer).Kind switch {
                 SdfSkyLayerKind.Panorama => sky.Parameters<SdfSkyPanorama>(index: layer).Screen,
                 SdfSkyLayerKind.Disc => sky.Parameters<SdfSkyDisc>(index: layer).Screen,
-                SdfSkyLayerKind.View => sky.Parameters<SdfSkyView>(index: layer).Screen,
                 _ => -1,
             };
 
@@ -233,6 +254,67 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder {
                 imageViewHandle: image
             );
             bound[screen] = image;
+        }
+    }
+    // Each consumer carries its own fit. Images come from the same completed graph reads and submission-held leases
+    // as physical screens, without allocating a screen index or changing the residency's authored sky table.
+    private void BindInfinityViews(SdfSky sky, SdfViewSnapshot view, in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
+        var block = recording.PassBlock.Slice(start: SkyViewsOffset, length: SdfWorldPackage.SkyViewBytes);
+        Span<nint> images = stackalloc nint[SdfWorldPackage.SkyViewCount];
+        uint occupied = 0;
+
+        block.Clear();
+        images.Fill(value: tables.SampledFiller.ImageViewHandle);
+        foreach (var binding in view.SkyViews ?? []) {
+            var packed = -1;
+            var authored = -1;
+            var indices = tables.SkyAuthoredIndices;
+
+            for (var index = 0; index < indices.Length; index++) {
+                var source = indices[index];
+
+                if ((source >= 0) && (sky.LayerAt(index: source).Kind == SdfSkyLayerKind.View) &&
+                    string.Equals(a: sky.LabelAt(index: source), b: binding.Layer, comparisonType: StringComparison.Ordinal)) {
+                    (packed, authored) = (index, source);
+                    break;
+                }
+            }
+            // An audition, tier or live edit may omit an authored layer before this pass records.
+            if (packed < 0) { continue; }
+            var bit = (1u << packed);
+
+            if ((occupied & bit) != 0u) {
+                throw new InvalidOperationException(message: $"Sky layer {binding.Layer} has two fitted infinity images.");
+            }
+            occupied |= bit;
+            nint image = 0;
+            if ((binding.Producer is { } producer) && (recording.Reads is { } reads) && (reads.IndexOf(producer: producer) is var read and >= 0)) {
+                if (!reads.IsTaken(index: read)) {
+                    var lease = reads.Take(index: read);
+
+                    recording.Leases.Hold(lease: in lease);
+                }
+                image = reads[read].Lease.ImageViewHandle;
+            }
+            var parameters = binding.Parameters;
+            var declared = sky.Parameters<SdfSkyView>(index: authored);
+
+            parameters.Coverage = declared.Coverage;
+            parameters.Fallback = declared.Fallback;
+            parameters.Intensity = declared.Intensity;
+            parameters.ImageSlot = ((image != 0) ? packed : -1);
+            MemoryMarshal.Write(destination: block.Slice(start: (packed * SdfWorldPackage.SkyViewRows * 16)), value: in parameters);
+            if (image != 0) {
+                images[packed] = image;
+            }
+        }
+        for (var layer = 0; layer < images.Length; layer++) {
+            m_context.Services.Bindings.WriteSampledImage(
+                arrayElement: ((uint)layer),
+                binding: m_sets.BindingOf(member: SdfWorldPackage.SkyViewImages),
+                descriptorSetHandle: set,
+                imageViewHandle: images[layer]
+            );
         }
     }
     // The member a pass reads a fragment version through.

@@ -12,9 +12,9 @@ namespace Puck.World.Tests;
 /// <summary>
 /// CONTRACT UNDER TEST: the scene an infinity view renders (<see cref="WorldInfinityViewScene"/>) is the destination's
 /// world drawn as a session screen draws it, or only the named prototypes of a world for far geometry
-/// (<c>WorldSessionSceneEmitter</c>'s <c>onlyPrototypes</c>); its one view takes the camera the presentation fitted this
-/// frame, at a quality that leaves soft shadows and ambient occlusion off unless the view's levers turn them on, and its
-/// own far distance.
+/// (<c>WorldSessionSceneEmitter</c>'s <c>onlyPrototypes</c>); its consuming views share one scene and each takes the camera
+/// the presentation fitted this frame, at a quality that leaves soft shadows and ambient occlusion off unless the
+/// layer's levers turn them on, and its own far distance.
 /// </summary>
 [Collection(AllocationCollection.Name)]
 public sealed class WorldInfinityViewSceneLawTests {
@@ -40,7 +40,11 @@ public sealed class WorldInfinityViewSceneLawTests {
             mirror: new WorldSessionMirror(placeholder: definition),
             onlyPrototypes: only
         );
-        var scene = new WorldInfinityViewScene(frame: fitted, inner: emitter, spec: spec);
+        var scene = new WorldInfinityViewScene(inner: emitter, spec: spec, views: () => {
+            var frame = fitted();
+
+            return (frame.Visible ? [new SdfViewSnapshot(Camera: frame.Camera, Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))] : []);
+        });
 
         return new SdfCompositionFrameSource(dresser: scene, emitters: [emitter]).CaptureFrame(
             deltaSeconds: 0f,
@@ -67,6 +71,28 @@ public sealed class WorldInfinityViewSceneLawTests {
         Assert.Equal(expected: fitted.Camera, actual: view.Camera);
         Assert.Equal(expected: spec.Anchor, actual: view.Camera.Position);
         Assert.Equal(expected: 777f, actual: frame.FarDistance);
+    }
+    [Fact]
+    public void TwoFittedConsumersShareOneSceneAndKeepTheirNestedSkyBindings() {
+        var spec = Spec();
+        var first = Fitted(spec: spec).Camera;
+        var second = new CameraSnapshot(Position: new Vector3(x: -11f, y: 7f, z: 3f), Right: first.Right,
+            Up: first.Up, Forward: first.Forward, TanHalfFieldOfView: first.TanHalfFieldOfView, AspectRatio: first.AspectRatio);
+        var nested = new SdfSkyViewBinding(Layer: "nested", Producer: "camera$sky$nested", Parameters: default);
+        SdfViewSnapshot[] views = [
+            new(Camera: first, Region: new NormalizedRect(X: 0, Y: 0, Width: 1, Height: 1)),
+            new(Camera: second, Region: new NormalizedRect(X: 0, Y: 0, Width: 1, Height: 1)) { SkyViews = [nested] },
+        ];
+        using var emitter = new WorldSessionSceneEmitter(
+            domains: new WorldValueDomainGuard(), effectiveCameraName: null,
+            mirror: new WorldSessionMirror(placeholder: AuthoredGameFixtures.Load(relativePath: Destination)));
+        var scene = new WorldInfinityViewScene(inner: emitter, views: () => views, spec: spec);
+        var frame = new SdfCompositionFrameSource(dresser: scene, emitters: [emitter]).CaptureFrame(
+            deltaSeconds: 0, interpolationAlpha: 0, width: 160, height: 144);
+
+        Assert.Equal(expected: new[] { first, second }, actual: frame.Views.Select(selector: static view => view.Camera));
+        Assert.Equal(expected: nested, actual: Assert.Single(collection: frame.Views[1].SkyViews));
+        Assert.All(collection: frame.Views, action: static view => Assert.True(condition: view.Quality.DisableSoftShadows));
     }
     [Fact]
     public void ShadowsAndAmbientOcclusionStayOffUnlessTheViewsLeversTurnThemOn() {

@@ -11,6 +11,7 @@
 // The screens a panorama layer or a textured disc samples (sky/kinds/panorama.hlsli, sky/kinds/disc.hlsli).
 #define SDF_SCREEN_SOURCES
 #define SDF_SKY_SCREENS
+#define SDF_SKY_VIEWS
 #include "../isa/sdf-sky.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
 #include "../frame/sdf-visibility.hlsli"

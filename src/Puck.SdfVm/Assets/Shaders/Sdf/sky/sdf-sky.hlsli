@@ -31,7 +31,7 @@ void sdfCountSky(uint detail, uint steps, uint texels, uint evaluations, uint ha
 
 // A layer's colour and weight at a world direction: its kind's value, its alpha scaled by its opacity and its mask. A
 // direction the mask leaves out evaluates nothing.
-float4 sdfSkyLayerValue(SdfSkyLayer layer, float3 world) {
+float4 sdfSkyLayerValue(SdfSkyLayer layer, uint index, float3 world) {
     float3 sky = sdfSkyFrameDirection(world);
     float mask = (layer.Opacity * sdfSkyMaskWeight(layer, sky));
 
@@ -44,14 +44,15 @@ float4 sdfSkyLayerValue(SdfSkyLayer layer, float3 world) {
     sample.world = world;
     sample.local = sdfSkyRotate(sky, layer.Rotation);
     sample.tier = sdfSky[0].Quality;
+    sample.layer = index;
 
     float4 value = sdfSkyKindEvaluate(layer, sample);
 
     return float4(value.rgb, (value.a * mask));
 }
 // Applies one layer at a world direction to the colour beneath it.
-float3 sdfSkyApplyLayer(SdfSkyLayer layer, float3 world, float3 beneath) {
-    float4 value = sdfSkyLayerValue(layer, world);
+float3 sdfSkyApplyLayer(SdfSkyLayer layer, uint index, float3 world, float3 beneath) {
+    float4 value = sdfSkyLayerValue(layer, index, world);
     float3 scale;
     float3 offset;
 
@@ -103,7 +104,7 @@ void sdfSkyFieldRuns(float3 world, out float3 base, out float3 scales[SDF_SKY_MA
         }
         started = true;
 
-        float4 value = sdfSkyLayerValue(layer, world);
+        float4 value = sdfSkyLayerValue(layer, index, world);
 
         if (value.a <= 0.0) {
             continue;
@@ -142,13 +143,13 @@ float3 sdfSkyCompose(float3 world, bool summarized, float3 base, float3 scales[S
         if (!sdfSkyKindIsField(layer.Kind)) {
             inField = false;
             started = true;
-            color = sdfSkyApplyLayer(layer, world, color);
+            color = sdfSkyApplyLayer(layer, index, world, color);
 
             continue;
         }
         if (!summarized) {
             started = true;
-            color = sdfSkyApplyLayer(layer, world, color);
+            color = sdfSkyApplyLayer(layer, index, world, color);
 
             continue;
         }
@@ -180,7 +181,7 @@ float3 sdfSkyEnvironmentColor(float3 world, out float3 reflection) {
             continue;
         }
 
-        float4 value = sdfSkyLayerValue(layer, world);
+        float4 value = sdfSkyLayerValue(layer, index, world);
         float3 scale, offset;
         sdfSkyAffine(layer.Blend, value.rgb, value.a, scale, offset);
         color = scale * color + offset;

@@ -38,6 +38,9 @@ public enum WorldViewDemand : byte {
 /// <param name="Height">The fraction of the display's height its declared extent covers.</param>
 /// <param name="Refresh">How often it refreshes.</param>
 public readonly record struct WorldView(string Name, bool FilmsWorld, WorldViewDemand Demand, double Width, double Height, RenderGraphRefresh Refresh) {
+    /// <summary>The instance whose fitted sky samples this view. Each consuming camera owns its fitted image;
+    /// a view with no sky demand does not read this value.</summary>
+    public string SkyConsumer { get; init; } = WorldViewGraphs.WorldInstance;
     /// <summary>The camera or session's authored pixel dimensions, retained independently of its visible footprint.</summary>
     public RenderGraphPixelExtent? OutputExtent { get; init; }
     /// <summary>The session view whose world's screen shows this one, or <see langword="null"/> for a view a screen of a
@@ -165,14 +168,13 @@ public sealed class WorldViewInstances {
         view.Demand.HasFlag(flag: WorldViewDemand.Screen) &&
         (view.Parent is null)
     );
-    /// <summary>Returns whether a view is shown by the sky of a world the display shows directly: an infinity view
-    /// (<see cref="WorldViewDemand.Sky"/>) no session's own world shows (<see cref="WorldView.Parent"/>). Every view
-    /// filming such a world reads it within the frame.</summary>
+    /// <summary>Returns whether a view is the fitted infinity image of a particular consuming instance.</summary>
     /// <param name="view">The view.</param>
-    /// <returns><see langword="true"/> when every view of the worlds the display shows reads it.</returns>
-    public static bool IsShownBySky(in WorldView view) => (
+    /// <param name="consumer">The instance whose camera the image was fitted to.</param>
+    /// <returns><see langword="true"/> when the consumer reads the view within the frame.</returns>
+    public static bool IsShownBySky(in WorldView view, string consumer) => (
         view.Demand.HasFlag(flag: WorldViewDemand.Sky) &&
-        (view.Parent is null)
+        string.Equals(a: view.SkyConsumer, b: consumer, comparisonType: StringComparison.Ordinal)
     );
     /// <summary>Returns the instances the views render as, priced at the SDF engine's passes, after the source instances
     /// only sessions' screens show (<see cref="NestedSources"/>): each camera reading every source within the frame and
@@ -211,10 +213,12 @@ public sealed class WorldViewInstances {
                             PreviousFrame: true,
                             Producer: read.Name
                         )),
-                        .. Views.Where(predicate: static read => IsShownBySky(view: in read)).Select(selector: static read => new RenderGraphRead(Producer: read.Name)),
+                        .. Views.Where(predicate: read => IsShownBySky(view: in read, consumer: view.Name)).Select(selector: static read => new RenderGraphRead(Producer: read.Name)),
                     ]
                     : [
-                        .. (view.Reads ?? []).Select(selector: static read => new RenderGraphRead(Producer: read)),
+                        .. (view.Reads ?? []).Concat(second: Views.Where(predicate: read => IsShownBySky(view: in read, consumer: view.Name))
+                            .Select(selector: static read => read.Name)).Distinct(comparer: StringComparer.Ordinal)
+                            .Select(selector: static read => new RenderGraphRead(Producer: read)),
                         .. (view.PreviousReads ?? []).Select(selector: static read => new RenderGraphRead(
                             PreviousFrame: true,
                             Producer: read

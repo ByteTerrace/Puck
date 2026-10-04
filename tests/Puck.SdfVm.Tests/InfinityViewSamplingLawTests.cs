@@ -19,6 +19,28 @@ public sealed class InfinityViewSamplingLawTests {
     private const uint ViewerHeight = 900u;
     private const uint ViewerWidth = 1600u;
 
+    [Fact]
+    public void PackedInfinityBindingsFollowAuthoredLayersAcrossMuteAndTierChanges() {
+        var sky = new SdfSky { Quality = SdfSkyTier.Low };
+        var muted = sky.Add(parameters: new SdfSkyView(), label: "muted", opacity: 0);
+        var high = sky.Add(parameters: new SdfSkyView(), label: "high", tier: SdfSkyTier.High);
+        var visible = sky.Add(parameters: new SdfSkyView(), label: "visible");
+        var details = new SdfSkyDetails();
+        for (var index = 0; index < 40; index++) { _ = details.RowOf($"earlier-{index}"); }
+        var layers = new SdfSkyLayer[SdfSky.MaxLayers];
+        var authored = new int[SdfSky.MaxLayers];
+
+        sky.Pack(lights: new SdfLights(), farDistance: 100, details: details, block: out _, layers: layers, authoredIndices: authored);
+        Assert.Equal(new[] { 0, visible, -1, -1, -1, -1, -1, -1 }, authored);
+        Assert.Equal(details.RowOf("visible"), layers[1].Detail);
+
+        sky.Quality = SdfSkyTier.High;
+        sky.LayerAt(muted).Opacity = 1;
+        sky.Pack(lights: new SdfLights(), farDistance: 100, details: details, block: out _, layers: layers, authoredIndices: authored);
+        Assert.Equal(new[] { 0, muted, high, visible, -1, -1, -1, -1 }, authored);
+        Assert.Equal(details.RowOf("visible"), layers[3].Detail);
+    }
+
     private static InfinityViewSpec Spec(CameraSnapshot viewer, InfinityViewKind kind = InfinityViewKind.World) => new(
         Anchor: new Vector3(x: 40f, y: -3f, z: 7f),
         Fallback: new Vector3(x: 0.1f, y: 0.2f, z: 0.3f),
@@ -51,7 +73,7 @@ public sealed class InfinityViewSamplingLawTests {
 
         Assert.True(condition: frame.Visible);
 
-        var view = InfinityViewSampling.Describe(frame: frame, screen: 3, spec: spec, viewer: viewer);
+        var view = InfinityViewSampling.Describe(frame: frame, imageSlot: 3, spec: spec, viewer: viewer);
 
         foreach (var ndc in new[] { new Vector2(x: -0.9f, y: 0.9f), new Vector2(x: 0f, y: 0f), new Vector2(x: 0.6f, y: -0.3f), new Vector2(x: 0.98f, y: -0.98f) }) {
             // The tangent the instance pixel casts on the rectangle, and the viewer's ray through it.
@@ -71,7 +93,7 @@ public sealed class InfinityViewSamplingLawTests {
         var viewer = Viewer(yaw: 0f);
         var spec = Spec(viewer: viewer);
         var frame = InfinityViewFit.Fit(spec: spec, tier: QualityTier.High, viewer: viewer, viewerHeight: ViewerHeight, viewerWidth: ViewerWidth);
-        var view = InfinityViewSampling.Describe(frame: frame, screen: 0, spec: spec, viewer: viewer);
+        var view = InfinityViewSampling.Describe(frame: frame, imageSlot: 0, spec: spec, viewer: viewer);
         var past = (frame.Rect.Z + 0.05f);
 
         Assert.False(condition: InfinityViewSampling.TryUv(direction: -viewer.Forward, uv: out _, view: in view));
@@ -85,14 +107,14 @@ public sealed class InfinityViewSamplingLawTests {
         var viewer = Viewer(yaw: 0.3f);
         var spec = Spec(kind: kind, viewer: viewer);
         var frame = InfinityViewFit.Fit(spec: spec, tier: QualityTier.High, viewer: viewer, viewerHeight: ViewerHeight, viewerWidth: ViewerWidth);
-        var view = InfinityViewSampling.Describe(frame: frame, screen: 5, spec: spec, viewer: viewer);
+        var view = InfinityViewSampling.Describe(frame: frame, imageSlot: 5, spec: spec, viewer: viewer);
 
         Assert.Equal(expected: viewer.Right, actual: view.Right);
         Assert.Equal(expected: viewer.Up, actual: view.Up);
         Assert.Equal(expected: viewer.Forward, actual: view.Forward);
         Assert.Equal(expected: frame.Rect, actual: view.Rect);
         Assert.Equal(expected: spec.Fallback, actual: view.Fallback);
-        Assert.Equal(actual: view.Screen, expected: 5);
+        Assert.Equal(actual: view.ImageSlot, expected: 5);
         Assert.Equal(actual: view.Coverage, expected: coverage);
         Assert.Equal(expected: SdfSkyLayerKind.View, actual: SdfSkyView.Kind);
     }

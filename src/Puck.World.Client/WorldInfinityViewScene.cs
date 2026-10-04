@@ -8,27 +8,29 @@ namespace Puck.World.Client;
 /// The scene one infinity view renders: the destination world a <see cref="InfinityViewKind.World"/> view shows, drawn by
 /// a <see cref="WorldSessionSceneEmitter"/> over its endpoint's mirror as a session screen draws it, or the named
 /// prototypes of the viewer's own world (<see cref="InfinityViewKind.Far"/>), drawn by an emitter that holds only those. The
-/// frame the emitter dresses is rewritten to the view's: its one view takes the camera the presentation fitted this frame
-/// (<see cref="WorldInfinityViews.FrameOf"/>, at the view's anchor, turned with the viewer) at a quality that leaves
+/// frame the emitter dresses is rewritten to the layer's consuming cameras: each takes the fit the presentation
+/// supplied this frame, at the layer's anchor, turned with that viewer, at a quality that leaves
 /// soft shadows and ambient occlusion off unless the view's levers turn them on, and its far distance is the view's own.
 /// A frame the view is not visible in keeps the emitter's own view, which the graph does not render.
 /// </summary>
 public sealed class WorldInfinityViewScene : ISdfFrameDresser {
     private readonly ISdfFrameDresser m_inner;
-    private readonly Func<InfinityViewFrame> m_frame;
+    private readonly Func<IReadOnlyList<SdfViewSnapshot>> m_views;
     private readonly InfinityViewSpec m_spec;
+    private readonly List<SdfViewSnapshot> m_fittedViews = [];
 
     /// <summary>Initializes the scene of one view.</summary>
     /// <param name="inner">The emitter that dresses the world or the prototypes.</param>
-    /// <param name="frame">Answers the frame the presentation fitted this frame.</param>
+    /// <param name="views">Answers the consuming cameras the presentation fitted this frame. They share one scene
+    /// and its residency; an empty list keeps the emitter's undemanded frame.</param>
     /// <param name="spec">The view.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldInfinityViewScene(ISdfFrameDresser inner, Func<InfinityViewFrame> frame, InfinityViewSpec spec) {
-        ArgumentNullException.ThrowIfNull(argument: frame);
+    public WorldInfinityViewScene(ISdfFrameDresser inner, Func<IReadOnlyList<SdfViewSnapshot>> views, InfinityViewSpec spec) {
+        ArgumentNullException.ThrowIfNull(argument: views);
         ArgumentNullException.ThrowIfNull(argument: inner);
         ArgumentNullException.ThrowIfNull(argument: spec);
 
-        m_frame = frame;
+        m_views = views;
         m_inner = inner;
         m_spec = spec;
     }
@@ -61,20 +63,20 @@ public sealed class WorldInfinityViewScene : ISdfFrameDresser {
             transforms: transforms,
             width: width
         );
-        var frame = m_frame();
+        var views = m_views();
 
-        if (!frame.Visible) {
+        if (views.Count == 0) {
             return dressed;
+        }
+
+        m_fittedViews.Clear();
+        foreach (var view in views) {
+            m_fittedViews.Add(item: view with { Quality = QualityOf(levers: m_spec.Levers) });
         }
 
         return dressed with {
             FarDistance = m_spec.FarDistance,
-            Views = [new SdfViewSnapshot(
-                Camera: frame.Camera,
-                Region: dressed.Views[0].Region
-            ) {
-                Quality = QualityOf(levers: m_spec.Levers),
-            }],
+            Views = m_fittedViews,
         };
     }
 }

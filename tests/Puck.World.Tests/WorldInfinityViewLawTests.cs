@@ -178,9 +178,9 @@ public sealed class WorldInfinityViewLawTests {
         views.Update(tier: QualityTier.High, viewer: Viewer(), viewerHeight: 720u, viewerWidth: 1280u, views: set);
         _ = set.TryPublish(instances: out var published);
 
-        var camera = new WorldView(Demand: WorldViewDemand.Root, FilmsWorld: true, Height: 1.0, Name: "camera", Refresh: RenderGraphRefresh.EveryFrame, Width: 1.0);
+        var camera = new WorldView(Demand: WorldViewDemand.Root, FilmsWorld: true, Height: 1.0, Name: WorldViewGraphs.WorldInstance, Refresh: RenderGraphRefresh.EveryFrame, Width: 1.0);
         var instances = WorldViewInstances.Of(views: [camera, .. published!.Views]).Instances(sources: []);
-        var viewer = instances.Single(predicate: static instance => (instance.Name == "camera"));
+        var viewer = instances.Single(predicate: static instance => (instance.Name == WorldViewGraphs.WorldInstance));
         var parent = instances.Single(predicate: static instance => (instance.Name == "sky$lobby"));
         var child = instances.Single(predicate: static instance => (instance.Name == "sky$lobby$sky$moon"));
 
@@ -189,6 +189,41 @@ public sealed class WorldInfinityViewLawTests {
         Assert.Equal(expected: ["sky$lobby$sky$moon"], actual: parent.Reads.Select(selector: static read => read.Producer));
         Assert.Empty(collection: child.Reads);
         Assert.All(collection: parent.Reads, action: static read => Assert.False(condition: read.PreviousFrame));
+    }
+    [Fact]
+    public void TwoConsumersKeepTheirOwnFittedCameraBindingsAndDemand() {
+        var plan = WorldInfinityViewPlan.Resolve(childrenOf: NoChildren, nestingDepth: 3, roots: [Spec(name: "lobby")]);
+        var first = new WorldInfinityViews();
+        var second = new WorldInfinityViews(consumer: "camera");
+        var set = new WorldViewSet();
+        var left = Viewer();
+        var right = Viewer(yaw: 0.4f);
+
+        first.Apply(plan: plan);
+        second.Apply(plan: plan);
+        first.Demand.Report(view: "sky$lobby", texels: 12);
+        set.Begin();
+        first.Update(viewer: left, viewerWidth: 1280, viewerHeight: 720, tier: QualityTier.High, views: set);
+        second.Update(viewer: right, viewerWidth: 640, viewerHeight: 360, tier: QualityTier.High, views: set);
+        _ = set.TryPublish(instances: out var published);
+        var a = Assert.Single(collection: first.BindingsOf(parent: null, viewer: left, viewerWidth: 1280, viewerHeight: 720, tier: QualityTier.High));
+        var b = Assert.Single(collection: second.BindingsOf(parent: null, viewer: right, viewerWidth: 640, viewerHeight: 360, tier: QualityTier.High));
+
+        Assert.Equal(expected: "lobby", actual: a.Layer);
+        Assert.Equal(expected: a.Layer, actual: b.Layer);
+        Assert.NotEqual(expected: a.Producer, actual: b.Producer);
+        Assert.Equal(expected: left.Forward, actual: a.Parameters.Forward);
+        Assert.Equal(expected: right.Forward, actual: b.Parameters.Forward);
+        Assert.NotEqual(expected: a.Parameters.Forward, actual: b.Parameters.Forward);
+        Assert.True(condition: published!.Views.Single(predicate: view => view.Name == a.Producer).Demand.HasFlag(flag: WorldViewDemand.SkySeen));
+        Assert.False(condition: published.Views.Single(predicate: view => view.Name == b.Producer).Demand.HasFlag(flag: WorldViewDemand.SkySeen));
+
+        var consumers = new[] { WorldViewGraphs.WorldInstance, "camera" }.Select(selector: static name =>
+            new WorldView(Name: name, FilmsWorld: false, Demand: WorldViewDemand.Root, Width: 1, Height: 1, Refresh: RenderGraphRefresh.EveryFrame));
+        var instances = WorldViewInstances.Of(views: [.. consumers, .. published.Views]).Instances(sources: []);
+
+        Assert.Equal(expected: a.Producer, actual: Assert.Single(collection: instances.Single(predicate: static view => view.Name == WorldViewGraphs.WorldInstance).Reads).Producer);
+        Assert.Equal(expected: b.Producer, actual: Assert.Single(collection: instances.Single(predicate: static view => view.Name == "camera").Reads).Producer);
     }
     [Fact]
     public void ANestedViewFitsTheCameraOfTheViewThatRendersItsWorldAndNeverTheViewers() {
