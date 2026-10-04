@@ -382,6 +382,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
             document.Save(fileName: project);
         }
         var batched = CompileClosure.EvaluateAll(
+            cancellationToken: TestContext.Current.CancellationToken,
             configuration: "Release",
             projects: [sample, library]
         );
@@ -391,6 +392,7 @@ public sealed class FormatNamedArgsClosureTests(BuiltSampleProject sample) : ICl
 
             Assert.Equal(expected: "1|false", actual: File.ReadAllText(path: execution).Trim());
             var alone = CompileClosure.Evaluate(
+                cancellationToken: TestContext.Current.CancellationToken,
                 configuration: "Release",
                 project: project
             );
