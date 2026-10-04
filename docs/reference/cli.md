@@ -943,8 +943,8 @@ against the merge base of `HEAD` and `--merge-base` (default
 24. `Puck.DirectX.Tests`: device suite, only with `--gpu`.
 25. `Puck.Vulkan.Tests`: device suite, only with `--gpu`.
 26. `Puck.Platform.Windows.Tests`: device suite, only with `--gpu`.
-27. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.world.json`
-    with matching `<name>.ceilings.json`, in ordinal order. Each runs
+27. `counters`: only with `--gpu`, every `tests/Puck.Counters/<name>.ceilings.json`
+    in ordinal order, using its recorded `workload` path. Each runs
     `puck counters --check --world <world> --ceilings <ceilings>`. A sibling
     `<name>.script.txt` supplies `--script` when present; otherwise the script
     recorded in the ceilings supplies it, or the verb's default when absent.

@@ -65,28 +65,27 @@ internal static class GatePlan {
     /// <summary>Expands every recorded workload in ordinal order; unrecorded worlds are not qualification steps.</summary>
     public static IEnumerable<GateStep> CounterWorkloads(string repositoryRoot, GateStep step) {
         const string DirectoryName = "tests/Puck.Counters";
-        const string WorldSuffix = ".world.json";
+        const string CeilingsSuffix = ".ceilings.json";
         var directory = Path.Combine(path1: repositoryRoot, path2: DirectoryName);
 
         if (!Directory.Exists(path: directory)) { yield break; }
-        foreach (var world in Directory.EnumerateFiles(path: directory, searchPattern: ("*" + WorldSuffix)).Order(comparer: StringComparer.Ordinal)) {
-            var name = Path.GetFileName(path: world)[..^WorldSuffix.Length];
+        foreach (var ledger in Directory.EnumerateFiles(path: directory, searchPattern: ("*" + CeilingsSuffix)).Order(comparer: StringComparer.Ordinal)) {
+            var name = Path.GetFileName(path: ledger)[..^CeilingsSuffix.Length];
             var stem = ((DirectoryName + "/") + name);
-            var ceilings = (stem + ".ceilings.json");
-
-            if (!File.Exists(path: Path.Combine(path1: repositoryRoot, path2: ceilings))) { continue; }
+            var ceilings = (stem + CeilingsSuffix);
+            using var document = JsonDocument.Parse(File.ReadAllText(path: ledger));
+            var world = document.RootElement.GetProperty(propertyName: "workload").GetString()
+                ?? throw new InvalidDataException(message: $"Recorded counters ledger '{ceilings}' has no workload path.");
             var script = (stem + ".script.txt");
             // Some recorded workloads share a script; the ceilings own that script identity.
             if (!File.Exists(path: Path.Combine(path1: repositoryRoot, path2: script))) {
-                using var document = JsonDocument.Parse(File.ReadAllText(path: Path.Combine(path1: repositoryRoot, path2: ceilings)));
-
                 script = (document.RootElement.TryGetProperty(propertyName: "script", value: out var recorded) ? recorded.GetString() : null);
             }
             yield return step with {
                 Name = ((step.Name + " ") + name),
                 Kind = GateStepKind.Puck,
                 Arguments = [.. step.Arguments.Select(selector: argument => argument switch {
-                    "<world>" => (stem + WorldSuffix),
+                    "<world>" => world,
                     "<ceilings>" => ceilings,
                     _ => argument,
                 }), .. ((script is null) ? (string[])[] : ["--script", script])],
