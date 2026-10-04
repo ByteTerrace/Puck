@@ -25,7 +25,7 @@ public sealed class WorldCompileBootWorkLawTests {
             Assert.True(condition: cache.TryCompile(compiled: out var compiled, failure: out var failure, path: path),
                 userMessage: failure?.Diagnostics.FormatReport(filePath: path));
             Assert.True(condition: WorldSourceLoader.TryLoadForAdmission(admission: out _, catalog: catalog,
-                catalogFingerprint: catalog.CompositionFingerprint, document: compiled!.Document!, path: path, reason: out var reason),
+                catalogFingerprint: catalog.CompositionFingerprint, document: compiled!.Document!, path: path, reason: out var reason, sourceCompilation: compiled),
                 userMessage: reason);
             return work;
         }
@@ -65,7 +65,7 @@ public sealed class WorldCompileBootWorkLawTests {
             Assert.Equal(expected: 1L, actual: work.Read(kind: kind));
         }
         foreach (var kind in new[] { WorldBootWork.DocumentsRead, WorldBootWork.Compositions, WorldBootWork.CompositionsShared }) {
-            Assert.Equal(expected: WorkClass.Deterministic, actual: kind.Class);
+            Assert.Equal(expected: WorkClass.Pacing, actual: kind.Class);
             Assert.Equal(expected: 1L, actual: work.Read(kind: kind));
         }
     }
