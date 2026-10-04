@@ -129,14 +129,16 @@ public sealed class SdfResolveDeviceLawTests {
         using var historyOutput = (temporal ? services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width) : null);
         using var historySurface = (temporal ? services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)(SdfWorldPackage.HistorySurfaceWords * sizeof(uint))) * width) * height), usage: GpuBufferUsage.Storage) : null);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)GpuKernelCounters.RowBytes), usage: GpuBufferUsage.Storage);
-        // The dispatch box, in 8x8 groups, over the whole render grid; every record a miss; one transport word an output pixel.
+        // The dispatch box, in 8x8 groups, over the whole render grid; every record a miss. Each output pixel's
+        // transport occupies the structured element declared by the resolve interface, including both packed words.
         var box = new byte[16];
 
         BinaryPrimitives.WriteUInt32LittleEndian(destination: box.AsSpan(start: 8), value: ((RenderWidth + 7) / 8));
         BinaryPrimitives.WriteUInt32LittleEndian(destination: box.AsSpan(start: 12), value: ((RenderHeight + 7) / 8));
         using var cullBounds = services.BufferFactory.CreateHostVisible(data: box, name: default, usage: GpuBufferUsage.Storage);
         using var visibility = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)RenderWidth) * RenderHeight) * SdfWorldPackage.VisibilityRecordByteLength), usage: GpuBufferUsage.Storage);
-        using var transport = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)width) * height) * sizeof(uint)), usage: GpuBufferUsage.Storage);
+        var transportStride = parameters.Layout.Bindings.Single(predicate: binding => (binding.Name == SdfWorldPackage.TransportWritten)).ElementStride;
+        using var transport = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((((ulong)width) * height) * transportStride), usage: GpuBufferUsage.Storage);
         using var output = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: height, name: default, usage: GpuImageUsage.Storage, width: width);
         using var upload = services.SurfaceTransferFactory.CreateUpload();
         var sourceFormat = GpuPixelFormat.R8G8B8A8Unorm;
