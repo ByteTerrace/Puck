@@ -58,12 +58,13 @@ has run, or the verdict settles on that first tick and can never pass. A gate
 that never becomes decidable leaves its verdict at "never evaluated", which
 fails.
 
-`puck test` over this whole directory exits **1**, by construction:
-`phase-advance.puck` carries a verdict that is meant to fail so the
-failure path is exercised on every run. The green form is
+Run the fixtures by path to select the outcome being checked.
+`puck test tests/Puck.World.Verdicts/phase-advance.puck` exits **1** because
+its unproven verdict exercises the failure path. The green form is
 `puck test tests/Puck.World.Verdicts/refused-command.puck`, which exits 0.
-`TestCommandLawTests` pins both, which is what makes the failing half an
-assertion rather than a nuisance.
+`TestCommandLawTests` pins both. A sweep of this directory also includes
+the deliberate failures under `proofs/` and the stopped fixture, whose
+unreached schedule is checked by its direct truncation law.
 
 `phase-advance.puck` keeps its meaningful verdict names and its deliberately
 unfired gate as explicit rows and rules. A `test { given when expect }` block

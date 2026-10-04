@@ -2,9 +2,9 @@
 
 One pair per repaired way a test world could pass when it should fail: a world
 that reproduces the hole, and a control that differs only in the thing the
-repair made authorable. They are not curated test worlds — `puck test` over
-[the parent directory](../README.md) does not glob this one, and a law runs each
-of these by path instead.
+repair made authorable. A `puck test` directory sweep includes these worlds
+because it recurses into subdirectories. Run each fixture by path to choose
+the expected passing or failing outcome; the owning laws do the same.
 
 | World | Reproduces | After the repair |
 |---|---|---|
