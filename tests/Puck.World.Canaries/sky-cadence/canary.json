@@ -8,7 +8,7 @@
   "timeoutSeconds": 60,
   "fixtures": [],
   "positive": {
-    "world": "tests/Puck.Counters/sky-drift.world.json",
+    "world": "tests/Puck.Counters/sky-drift.puck",
     "script": "positive.script.txt",
     "commands": [
       { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
@@ -34,7 +34,7 @@
     ]
   },
   "discriminating": {
-    "world": "tests/Puck.Counters/sky-drift.world.json",
+    "world": "tests/Puck.Counters/sky-drift.puck",
     "script": "discriminating.script.txt",
     "commands": [
       { "verb": "world.cadence", "occurrence": 1, "outcome": "accepted" },
