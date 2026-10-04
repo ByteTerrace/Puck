@@ -30,7 +30,7 @@ public sealed class CreationBakeLawTests {
         ],
         """;
     // The bake pack of this file's world. Regenerating DerivationFingerprint.Bake re-records this pin.
-    private const string PinnedProduct = "sha256-64/0c66df3df5d7417e";
+    private const string PinnedProduct = "sha256-64/90bf5738991d8f88";
 
     private static readonly TimeSpan Patience = TimeSpan.FromMinutes(minutes: 2);
 
@@ -579,9 +579,7 @@ public sealed class CreationBakeLawTests {
         var path = WriteWorld(directory: directory);
         var chunk = new WorldBakeChunk(store: null);
         var pack = CompileWithPack(path: path);
-        // The pack opens with the magic, the version byte and the shape fingerprint of its format; the pin covers every
-        // other byte, so it moves with the bakes and never with the fingerprint.
-        var product = AssetContentHash.Compute(content: [.. pack.AsSpan(length: (ChunkContainer.MagicLength + 1), start: 0), .. pack.AsSpan(start: ((ChunkContainer.MagicLength + 1) + 16))]);
+        var product = AssetContentHash.Compute(content: pack);
 
         Assert.Equal(expected: DerivationFingerprint.BakeChunkVersion, actual: chunk.Version);
         Assert.False(condition: chunk.DerivesOnBoot);

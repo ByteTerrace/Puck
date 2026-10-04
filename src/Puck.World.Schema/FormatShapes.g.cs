@@ -16,24 +16,24 @@ namespace Puck.World {
         /// <summary>The shape fingerprint of <c>DefinitionChunk.Version</c>, declared in <c>src/Puck.World.Schema/CompiledWorldChunks.cs</c>.</summary>
         public const string DefinitionChunkVersion = "962bda5aad6c3435";
         /// <summary>The shape fingerprint of <c>WorldBakePack.FormatVersion</c>, declared in <c>src/Puck.World.Schema/WorldBakePack.cs</c>.</summary>
-        public const string WorldBakePackFormatVersion = "5bccfc2d11c0bf18";
+        public const string WorldBakePackFormatVersion = "5cd2790544d8c34a";
         /// <summary>The shape fingerprint of <c>WorldBakePack.Magic</c>, declared in <c>src/Puck.World.Schema/WorldBakePack.cs</c>.</summary>
-        public const string WorldBakePackMagic = "5bccfc2d11c0bf18";
+        public const string WorldBakePackMagic = "5cd2790544d8c34a";
         /// <summary>The shape fingerprint of <c>WorldCameraProgram.CurrentVersion</c>, declared in <c>src/Puck.World.Schema/WorldCameraProgram.cs</c>.</summary>
-        public const string WorldCameraProgramCurrentVersion = "c36fae949a4ac196";
+        public const string WorldCameraProgramCurrentVersion = "374fb89d72506360";
         /// <summary>The shape fingerprint of <c>WorldCounterpartAttestation.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCounterpartAttestation.cs</c>.</summary>
         public const string WorldCounterpartAttestationSchemaVersion = "a53b237e2074c2f6";
         /// <summary>The shape fingerprint of <c>WorldCountersCeilings.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCountersCeilings.cs</c>.</summary>
-        public const string WorldCountersCeilingsSchemaVersion = "97910f486cfdf9aa";
+        public const string WorldCountersCeilingsSchemaVersion = "5c4eae917988f348";
         /// <summary>The shape fingerprint of <c>WorldCountersReport.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldCountersReport.cs</c>.</summary>
-        public const string WorldCountersReportSchemaVersion = "eb5b7cf8c2a41e8a";
+        public const string WorldCountersReportSchemaVersion = "8db78510326fba16";
         /// <summary>The shape fingerprint of <c>WorldDefinition.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldDefinition.cs</c>.</summary>
-        public const string WorldDefinitionSchemaVersion = "91d4fb8186caf875";
+        public const string WorldDefinitionSchemaVersion = "52afd826d24df18d";
         /// <summary>The shape fingerprint of <c>WorldProjectionDocument.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldProjection.cs</c>.</summary>
-        public const string WorldProjectionDocumentSchemaVersion = "a85bafbcd5eb9b80";
+        public const string WorldProjectionDocumentSchemaVersion = "dd2ff573834b76df";
         /// <summary>The shape fingerprint of <c>WorldScheduleSection.ManifestSchemaId</c>, declared in <c>src/Puck.World.Schema/WorldSchedule.cs</c>.</summary>
         public const string WorldScheduleSectionManifestSchemaId = "71c50cc4cc1e463f";
         /// <summary>The shape fingerprint of <c>WorldSiloDefinition.SchemaVersion</c>, declared in <c>src/Puck.World.Schema/WorldSiloDefinition.cs</c>.</summary>
-        public const string WorldSiloDefinitionSchemaVersion = "25cae6d3c03277a0";
+        public const string WorldSiloDefinitionSchemaVersion = "5857161394eda7c9";
     }
 }

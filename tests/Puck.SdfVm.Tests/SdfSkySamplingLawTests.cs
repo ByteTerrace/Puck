@@ -5,10 +5,10 @@ using Xunit;
 
 namespace Puck.SdfVm.Tests;
 
-/// <summary>The sky's validity alpha guards unwritten run images; every field evaluation reaches its pass's counters, a
-/// composite's in-place fallback and the environment map's texels included; the composite's fog reads the residency's
-/// environment map and evaluates no sky; and the environment map evaluates the gradient alone, never a body, star or cloud.
-/// These laws inspect the shipped shader sources.</summary>
+/// <summary>The sky's validity alpha guards unwritten run images; every layer evaluation goes through the one evaluator
+/// whose kinds' modules count it, which the sky's runs, a composite's in-place fallback and the environment map's texels
+/// all reach; the composite's fog reads the residency's environment map and evaluates no sky; and the environment map
+/// evaluates the layers the lighting sees alone, never a body. These laws inspect the shipped shader sources.</summary>
 public sealed partial class SdfSkySamplingLawTests {
     private static string Root => RepositoryPaths.Resolve(relativePath: SdfKernelInterfaces.KernelDirectory);
 
@@ -20,8 +20,8 @@ public sealed partial class SdfSkySamplingLawTests {
         // The scale and offset there have no current value; even a zero weight cannot mask a NaN left in storage.
         var guard = ValidTapPattern().Match(input: source);
 
-        Assert.True(condition: guard.Success, userMessage: "Reject a zero validity alpha before reading either upper run.");
-        foreach (var image in new[] { "skyScale", "skyOffset" }) {
+        Assert.True(condition: guard.Success, userMessage: "Reject a zero validity alpha before reading any upper run.");
+        foreach (var image in new[] { "skyUpper0", "skyUpper1", "skyUpper2" }) {
             var load = Assert.Single(collection: Regex.Matches(input: source, pattern: $@"\b{image}\.Load\(tap\)"));
 
             Assert.True(condition: (load.Index >= (guard.Index + guard.Length)));
@@ -32,14 +32,17 @@ public sealed partial class SdfSkySamplingLawTests {
         var sources = Directory.EnumerateFiles(path: Root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
             .Select(selector: path => (Path: path, Code: CodeOf(path: path)))
             .Where(predicate: static source => !source.Path.EndsWith(comparisonType: StringComparison.Ordinal, value: "sdf-sky.hlsli"))
-            .Where(predicate: static source => GradientCallPattern().IsMatch(input: source.Code))
+            .Where(predicate: static source => WalkCallPattern().IsMatch(input: source.Code))
             .ToArray();
 
-        // The composite's fallback, the sky runs' base and the environment map's texel.
+        // The sky runs' fields, the composite's stack (its in-place fallback among them) and the environment map's texel.
         Assert.Equal(expected: 3, actual: sources.Length);
-        // Counting at the callee records every evaluation, whichever pass reaches it, once each.
-        Assert.Matches(expectedRegexPattern: @"float3 sdfSkyGradient\(float3 direction\) \{\s*puckCountDetail\(0u, 0u, 0u, 1u, 0u, 0u\);",
-            actualString: CodeOf(path: "shade/sdf-sky.hlsli"));
+        // Every walk evaluates a layer through the one evaluator, whose kinds' modules each count the evaluation, so every
+        // evaluation is counted once, whichever pass reaches it.
+        var sky = CodeOf(path: "sky/sdf-sky.hlsli");
+
+        Assert.Single(collection: Regex.Matches(input: sky, pattern: @"\bsdfSkyKindEvaluate\("));
+        Assert.Matches(actualString: sky, expectedRegexPattern: @"float4 sdfSkyLayerValue\(SdfSkyLayer layer, float3 world\) \{[^}]*\}[^}]*sdfSkyKindEvaluate\(layer, sample\)");
     }
     [Fact]
     public void TheCompositesFogReadsTheEnvironmentMapAndEvaluatesNoSky() {
@@ -58,13 +61,17 @@ public sealed partial class SdfSkySamplingLawTests {
         Assert.DoesNotMatch(expectedRegexPattern: EvaluatorPattern, actualString: lookup.Value);
     }
     [Fact]
-    public void TheEnvironmentMapEvaluatesTheGradientAloneAndNoBody() {
+    public void TheEnvironmentMapEvaluatesTheLitLayersAloneAndNoBody() {
         var map = CodeOf(path: "passes/sdf-sky-environment.comp.hlsl");
 
-        // One gradient evaluation an invocation (counted by the law above); no point run or cloud, so a bright disc never
-        // enters the map.
-        Assert.Single(collection: GradientCallPattern().Matches(input: map));
-        Assert.DoesNotMatch(actualString: map, expectedRegexPattern: @"\bsdf(SkyPoints|StarField|SkyCloudRun|CloudLayer)\(");
+        // One walk of the layers the lighting sees an invocation (its evaluations counted by the law above); a disc and a
+        // layer only the camera sees are passed over, so a bright body never enters the map.
+        Assert.Single(collection: Regex.Matches(input: map, pattern: @"\bsdfSkyEnvironmentColor\("));
+        Assert.DoesNotMatch(actualString: map, expectedRegexPattern: @"\bsdf(SkyCompose|SkyFieldRuns|SkyKindEvaluate)\(");
+        Assert.Matches(
+            actualString: CodeOf(path: "sky/sdf-sky.hlsli"),
+            expectedRegexPattern: @"float3 sdfSkyEnvironmentColor\(float3 world\) \{[^}]*if \(\(\(layer.Visibility & SDF_SKY_VISIBILITY_LIGHTING\) == 0u\) \|\| \(layer.Kind == SDF_SKY_KIND_DISC\)\) \{\s*continue;"
+        );
 
         // The reduction reads the map and evaluates nothing.
         var reduce = CodeOf(path: "passes/sdf-sky-environment-reduce.comp.hlsl");
@@ -82,7 +89,7 @@ public sealed partial class SdfSkySamplingLawTests {
     }
 
     // A call of any sky layer's evaluator.
-    private const string EvaluatorPattern = @"\bsdf(SkyGradient|SkyCloudRun|SkyPoints|CloudLayer|StarField)\(";
+    private const string EvaluatorPattern = @"\bsdf(SkyKindEvaluate|SkyLayerValue|SkyApplyLayer|SkyCompose|SkyFieldRuns|SkyEnvironmentColor)\(";
 
     private static string CodeOf(string path) =>
         LineCommentPattern().Replace(input: File.ReadAllText(path: Path.Combine(path1: Root, path2: path)), replacement: string.Empty);
@@ -90,8 +97,8 @@ public sealed partial class SdfSkySamplingLawTests {
     private static partial Regex LineCommentPattern();
     [GeneratedRegex(pattern: @"float4 runBase = skyBase.Load\(tap\);\s*puckCountDetail\(0u, 0u, 0u, 0u, 0u, 1u\);\s*if \(runBase.a <= 0.0\) \{\s*continue;\s*\}\s*weight \*= runBase.a;")]
     private static partial Regex ValidTapPattern();
-    [GeneratedRegex(pattern: @"\bsdfSkyGradient\(")]
-    private static partial Regex GradientCallPattern();
+    [GeneratedRegex(pattern: @"\bsdf(SkyFieldRuns|SkyCompose|SkyEnvironmentColor)\(")]
+    private static partial Regex WalkCallPattern();
     [GeneratedRegex(pattern: @"if \(fog > 0\.0\) \{[^{}]*\}")]
     private static partial Regex FogBlockPattern();
     [GeneratedRegex(pattern: @"float3 sdfSkyPassEnvironment\(float3 direction\) \{.*?\n\}", options: RegexOptions.Singleline)]

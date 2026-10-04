@@ -121,10 +121,10 @@ internal static class FormatFileProject {
             document.Root!.Add(content: items);
             document.Root.Add(content: new XElement(
                 name: "PropertyGroup",
-                content: new XElement(
-                    content: "false",
-                    name: "PublishAot"
-                )
+                content: new object[] {
+                    new XElement(content: "false", name: "PublishAot"),
+                    new XElement(content: "false", name: "NuGetAudit"),
+                }
             ));
             document.Root.Add(content: new XElement(
                 name: "Target",

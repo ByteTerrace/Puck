@@ -566,6 +566,51 @@ public sealed class DerivationLawTests {
 
         Assert.NotEqual(actual: edited.Fingerprint, expected: original.Fingerprint);
     }
+    [InlineData("public object Value = null!;")]
+    [InlineData("public object Value { get; set; } = null!;")]
+    [Theory]
+    public void AnOverrideOnAReceiverHeldByACallerSuppliedValueIsReached(string member) {
+        var source = $$"""
+            namespace Fixture;
+            public sealed class Sample {
+                public override int GetHashCode() => 7;
+            }
+            public sealed class Holder { {{member}} }
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static int Bake(Holder holder) => holder.Value.GetHashCode();
+            }
+            """;
+        var original = SingleSource(source: source);
+        var edited = SingleSource(source: source.Replace(comparisonType: StringComparison.Ordinal, newValue: "GetHashCode() => 8", oldValue: "GetHashCode() => 7"));
+
+        Assert.NotEqual(actual: edited.Fingerprint, expected: original.Fingerprint);
+        Assert.Contains(collection: original.Symbols, filter: static symbol => (!symbol.External && (symbol.Id == "M:Fixture.Sample.GetHashCode")));
+    }
+    [Fact]
+    public void AnOverrideOnAReceiverReturnedByAnExternalCallIsReached() {
+        const string Types = """
+            namespace Fixture;
+            public interface ICalculator { int Evaluate(); }
+            public sealed class Sample : ICalculator { public int Evaluate() => 7; }
+            """;
+        var types = Compile(assemblyName: "Fixture.Types", sources: [Types]);
+        var factory = Compile(assemblyName: "Foreign.Factory", sources: ["public static class Factory { public static Fixture.ICalculator Make() => new Fixture.Sample(); }"], references: [Emit(compilation: types)]);
+        const string Producer = """
+            public static class Producer {
+                [Puck.Derivation("bake")]
+                public static int Bake() => Factory.Make().Evaluate();
+            }
+            """;
+
+        DerivationResult Reach(CSharpCompilation model) => Derive(compilations: [model, Compile(assemblyName: "Fixture.Producer", sources: [Producer], references: [Emit(compilation: model), Emit(compilation: factory)])]);
+
+        var original = Reach(model: types);
+        var edited = Reach(model: Compile(assemblyName: "Fixture.Types", sources: [Types.Replace(comparisonType: StringComparison.Ordinal, newValue: "Evaluate() => 8", oldValue: "Evaluate() => 7")]));
+
+        Assert.NotEqual(actual: edited.Fingerprint, expected: original.Fingerprint);
+        Assert.Contains(collection: original.Symbols, filter: static symbol => (!symbol.External && (symbol.Id == "M:Fixture.Sample.Evaluate")));
+    }
     [Fact]
     public void AnImplementationOfAnInterfaceAParameterIsTypedAsIsReached() {
         const string Source = """

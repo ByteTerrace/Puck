@@ -323,7 +323,7 @@ cannot change another host's machine catalog.
 **Verified consequence**: `Parse()` on the composed flagship
 island (`puck.world.json` over `standard.world.json`) succeeds, its `deferred[]`
 naming every one of the three real GamingBrick console screens
-`modules/arcade.world.json` (one of the island's fifteen imports) authors—
+`modules/arcade.puck` (one of the island's fifteen imports) authors—
 `machines[0] (arcade$cgb-screen).configuration: validation is deferred because
 no machine catalog was supplied for 'gaming-brick'.` (and two more, for
 `advanced-gaming-brick` and a second `gaming-brick` screen), beside three

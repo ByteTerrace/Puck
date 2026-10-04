@@ -21,7 +21,7 @@ public sealed class CanaryPlanLawTests {
         ScriptPath: $"{name}.script.txt",
         WorldPath: "world.json"
     );
-    private static CanaryManifest Manifest(string id, CanaryBootShape shape, int timeoutSeconds = 10, CanaryLeg? positive = null, CanaryLeg? discriminating = null, params string[] requirements) => new(
+    private static CanaryManifest Manifest(string id, CanaryBootShape shape, int timeoutSeconds = 10, CanaryLeg? positive = null, CanaryLeg? discriminating = null, bool exclusive = false, params string[] requirements) => new(
         Backends: ((shape == CanaryBootShape.Offscreen)
             ? ["vulkan", "directx"]
             : []),
@@ -29,6 +29,7 @@ public sealed class CanaryPlanLawTests {
         BootShape: shape,
         DirectoryPath: id,
         Discriminating: (discriminating ?? Leg(name: "discriminating")),
+        Exclusive: exclusive,
         Fixtures: [],
         Id: id,
         Positive: (positive ?? Leg(name: "positive")),
@@ -71,7 +72,7 @@ public sealed class CanaryPlanLawTests {
                 Manifest(id: "lone", shape: CanaryBootShape.Headless),
                 Manifest(id: "relaunch", shape: CanaryBootShape.Headless, positive: (Leg(name: "positive") with { Relaunch = relaunch })),
                 Manifest(id: "companion", shape: CanaryBootShape.Headless, positive: (Leg(name: "positive") with { AuthorityWorldPath = "authority.world.json" }), discriminating: (Leg(name: "discriminating") with { AuthorityWorldPath = "authority.world.json" })),
-                Manifest(id: "mesh", shape: CanaryBootShape.Headless, timeoutSeconds: 100, positive: (Leg(name: "positive") with { Authorities = mesh }), discriminating: (Leg(name: "discriminating") with { Authorities = mesh })),
+                Manifest(id: "mesh", shape: CanaryBootShape.Headless, timeoutSeconds: 100, positive: (Leg(name: "positive") with { Authorities = mesh }), discriminating: (Leg(name: "discriminating") with { Authorities = mesh }), exclusive: true),
                 Manifest(id: "stub", shape: CanaryBootShape.Stub),
                 Manifest(id: "offscreen", shape: CanaryBootShape.Offscreen, positive: (Leg(name: "positive") with { Package = package }), discriminating: (Leg(name: "discriminating") with { Package = (package with { Alter = "tint.hlsl" }) }), requirements: "gpu"),
             ],
@@ -104,9 +105,14 @@ public sealed class CanaryPlanLawTests {
             expected: 14,
             actual: plan.Legs
         );
+        // The declared mesh runs alone; the offscreen proof's legs, one per backend, each hold a GPU slot.
+        Assert.Equal(
+            expected: 2,
+            actual: plan.ExclusiveLegs
+        );
         Assert.Equal(
             expected: 4,
-            actual: plan.ExclusiveLegs
+            actual: plan.GpuLegs
         );
         Assert.Equal(
             expected: 22,
@@ -277,30 +283,27 @@ public sealed class CanaryPlanLawTests {
         Assert.Equal(expected: (3, 1), actual: (seed.Seeded, seed.Unchanged));
     }
     [Fact]
-    public void ALegNeedingAMachineWideDeviceHoldsEverySlotAndNoOtherLegDoes() {
-        const int Jobs = 6;
-
-        foreach (var (manifest, exclusive) in (((CanaryManifest Manifest, bool Exclusive)[])[
-            (Manifest(id: "headless", shape: CanaryBootShape.Headless), false),
-            (Manifest(id: "stub", shape: CanaryBootShape.Stub), false),
-            (Manifest(id: "windowed", shape: CanaryBootShape.Windowed), true),
-            (Manifest(id: "offscreen", shape: CanaryBootShape.Offscreen, requirements: "gpu"), true),
-            (Manifest(id: "headless-pad", shape: CanaryBootShape.Headless, requirements: "input:dualsense"), true),
-            (Manifest(id: "headless-audio", shape: CanaryBootShape.Headless, requirements: "audio-output"), true),
+    public void OnlyAManifestThatDeclaresItRunsAloneAndEveryGraphicsDeviceLegHoldsAGpuSlot() {
+        foreach (var (manifest, exclusive, gpu) in (((CanaryManifest Manifest, bool Exclusive, bool Gpu)[])[
+            (Manifest(id: "headless", shape: CanaryBootShape.Headless), false, false),
+            (Manifest(id: "stub", shape: CanaryBootShape.Stub), false, false),
+            (Manifest(id: "windowed", shape: CanaryBootShape.Windowed), false, true),
+            (Manifest(id: "offscreen", shape: CanaryBootShape.Offscreen, requirements: "gpu"), false, true),
+            (Manifest(id: "headless-gpu", shape: CanaryBootShape.Headless, requirements: "gpu"), false, true),
+            (Manifest(id: "headless-pad", shape: CanaryBootShape.Headless, requirements: "input:dualsense"), false, false),
+            (Manifest(id: "headless-audio", shape: CanaryBootShape.Headless, requirements: "audio-output"), false, false),
+            (Manifest(id: "declared", shape: CanaryBootShape.Headless, exclusive: true), true, false),
+            (Manifest(id: "declared-offscreen", shape: CanaryBootShape.Offscreen, exclusive: true, requirements: "gpu"), true, true),
         ])) {
+            var proof = Assert.Single(collection: CanaryCommand.Plan(
+                backends: ["vulkan"],
+                manifests: [manifest],
+                namedWorldArtifact: true
+            ).Proofs);
+
             Assert.Equal(
-                expected: exclusive,
-                actual: CanaryCommand.IsExclusive(manifest: manifest)
-            );
-            Assert.Equal(
-                expected: (exclusive
-                    ? Jobs
-                    : 1),
-                actual: CanaryCommand.LegWeight(
-                    jobs: Jobs,
-                    leg: manifest.Positive,
-                    manifest: manifest
-                )
+                expected: (manifest.Id, exclusive, gpu),
+                actual: (manifest.Id, proof.Exclusive, proof.Gpu)
             );
         }
     }

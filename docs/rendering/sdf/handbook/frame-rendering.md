@@ -89,7 +89,7 @@ misses included. **surface** adds the geometric normal and curvature to it.
 **shadow** gathers and marches each selected light from each lit surface,
 packing four 8-bit stable visibilities into the record's K word. Each active
 handoff adds one incoming march, bounded by K + F; its visibility uses a
-policy-sized transient texture, one byte per pixel at F = 1 and two at F = 2,
+policy-sized retained texture, one byte per pixel at F = 1 and two at F = 2,
 absent at F = 0. **views** reads those visibilities and computes materials, lighting and
 volumes. A view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or
 soft shadows off skips that pass; quality is each view's, so views of one frame
@@ -101,6 +101,31 @@ to its output extent. Reduced views reconstruct their current color in `resolve`
 before the render graph's `place` pass puts that output in its seat rect. In split screen each view is an instance of its own (`world`,
 `world$2`, and so on) over the one residency, so the graph schedules and places
 the seats the same way it places panes.
+
+## A cadence per pass
+
+Each pass has a signature for the inputs it reads. Private fragment resources
+retain their last queued writes across frame slots. A pass stands only while
+its signature, extent and retained inputs and outputs remain valid. A standing
+pass records no dispatch or barrier and its counter row reads `standing`;
+the next executing reader follows the last actual access through the existing
+resource tracker. A disabled optional pass reads `skipped` instead.
+
+Cloud drift, twinkle, gradient colour and moving bounded media change only
+`sky` and `composite`. Fog density and light colour also change `views` and
+`resolve` when present. A selected shadow direction adds `shadow`; geometry
+or camera changes render every active pass. Any edit to the sky's layer table,
+its quality tier included, changes only `sky` and `composite`. A sky layer that
+samples a screen (a panorama, a textured disc) runs `sky` and `composite` every
+frame, since the screen's image changes in place where no signature sees it;
+the march passes still stand. The shared environment map keeps
+its own layer refresh, so a gradient change with enabled fog also refreshes
+that map. `world.lighting` reports each keyed value's change class, including
+fields keyed through a section.
+
+Temporal sampling renders the geometry again while a sample is owed. Once
+lit history converges, visual edits leave its sample count and ring standing.
+`world.cadence off` forces active passes to render for measurement.
 
 ## What each pass costs
 
@@ -172,7 +197,7 @@ allocation (`SdfViewSnapshot.ResolvedRenderScale`, bounded by the ceiling). A
 smaller current grid changes dispatch dimensions and the visibility stride and
 nothing else: no target is reallocated and no graph is rebuilt, so the grid can
 move every frame. A layout transition's dip moves only this grid. The shaded
-color at the render grid is one transient allocation that every frame slot
+color at the render grid is one retained allocation that every frame slot
 shares. The final `resolve` pass writes full-output color with the same
 bilinear and clamped Catmull-Rom filter as `place`; coverage remains the
 color's alpha. A spatial resolve writes nothing beside the color; the temporal
@@ -275,32 +300,43 @@ read it as uncovered; in a reduced or temporal view the resolve reconstructs the
 lit image, coverage with color, and each pixel's surface transport at the output
 extent.
 
-The sky's layers compose in their authored order, and the sky is cut into
-**runs** without reordering it: the gradient is a field run, the sun disc and the
-stars a point run, and the clouds a field run over them. Every blend is affine in
-the color beneath it, so a field run is summarized exactly as one per-channel
-scale and offset, and the runs compose as the stack does
-(`SdfSkyRuns`, held by `SkyRunCompositionLawTests`).
+The sky is an open stack of up to eight layers that compose in their authored
+order, each by its blend (`over`, `add`, `multiply`, `screen`), a kind as often
+as authored. A kind is a parameter record and one module under `Sdf/sky/kinds/`,
+registered in the generated kind table the kernels switch on, so adding one
+touches no pass. The stack is cut into **runs** without reordering it: a maximal
+sequence of consecutive **field** layers (gradient, clouds, aurora, noise,
+pattern, panorama) is one field run, and the **point** layers between them
+(stars, a body's disc) are evaluated one by one. Every blend is affine in the
+color beneath it, so a field run is summarized exactly as one per-channel scale
+and offset, and the runs compose as the stack does (`SdfSkyRuns`, held by
+`SkyRunCompositionLawTests`). Each layer carries its own opacity, mask (an
+elevation band or a cone), transform, clock, visibility (the camera, the lighting
+or both) and the lowest quality tier it draws at; the sky frame turns every layer
+but a disc.
 
 - The `sky` pass (`passes/sdf-sky-runs.comp.hlsl`) evaluates the field runs on
   the render grid, and only where the pixel or one of its eight neighbours is not
-  wholly covered by the color views wrote: the gradient's offset, then the clouds'
-  scale and offset, each a half-float image, the base's alpha marking the texels
-  it evaluated. A pixel covered with all its neighbours evaluates no field runs,
-  and each pixel evaluated counts one `gpu.sky.evaluations`. A reduced view's sky therefore costs its render
-  grid's uncovered pixels, not its output's.
+  wholly covered by the color views wrote: the lowest field run's offset, then at
+  most two upper field runs' scales and offsets packed six half floats a run,
+  the base's alpha marking the texels it evaluated. A pixel covered with all its
+  neighbours evaluates no field runs, and each layer evaluated counts one
+  `gpu.sky.evaluations` in its own detail row. A reduced view's sky therefore
+  costs its render grid's uncovered pixels, not its output's.
 - The `composite` pass (`passes/sdf-composite.comp.hlsl`) writes the view's
-  color. It adds the fog's glow, the gradient scaled by the surface transport's
-  in-scatter weight, reading the gradient from the residency's
+  color. It adds the fog's glow, the sky the lighting sees scaled by the surface
+  transport's in-scatter weight, reading it from the residency's
   [environment map](#the-environment-map) rather than evaluating it, so its fog
   counts no `gpu.sky.evaluations`; zero fog density gives a zero weight and
-  reads no map. Where the coverage is below one it composes the runs beneath the
-  lit image, filtered from the texels the sky evaluated (or evaluated in place,
-  and counted, where it evaluated none beside the pixel), the disc and the stars evaluated at the pixel so they stay sharp, and
-  puts the lit image over them by its coverage, so a silhouette blends toward
-  the full sky at its pixel. The bounded media integrate last, over each share
-  of the pixel separately: the surface share up to the surface transport's
-  distance, and the sky share up to the far distance.
+  reads no map. Where the coverage is below one it composes the stack beneath
+  the lit image in its authored order: each field run's summary filtered from
+  the texels the sky evaluated (or every field layer evaluated in place, and
+  counted, where it evaluated none beside the pixel), and each point layer
+  evaluated at the pixel so it stays sharp, then puts the lit image over them by
+  its coverage, so a silhouette blends toward the full sky at its pixel. The
+  bounded media integrate last, over each share of the pixel separately: the
+  surface share up to the surface transport's distance, and the sky share up to
+  the far distance.
 
 An unauthored world renders the default look: the two-stop gradient and fog
 `SdfSky` starts from, read like any authored sky. A debug view's lit image is
@@ -312,9 +348,10 @@ composite passes it through.
 A residency keeps one environment map and its coefficients for its sky, however
 many views read it (`SdfWorldTables.SkyEnvironment.cs`, CPU reference
 `SdfSkyEnvironment`). The map is 64 by 64 texels over the octahedral projection
-the radiance cache uses, the pole at +y, each texel the gradient at its centre's
-direction as four half floats: the layer the fog in-scatters. No body enters it,
-so a bright sun disc never smears into the fog in front of it. The coefficients
+the radiance cache uses, the pole at +y, each texel the layers the lighting sees
+(a gradient's by default) composed at its centre's direction as four half floats:
+the sky the fog in-scatters. No body enters it, so a bright sun disc never smears
+into the fog in front of it. The coefficients
 are the map's nine second-order spherical harmonics per colour channel, each
 texel weighted by its solid angle and the sums scaled so the weights total 4π.
 
@@ -322,11 +359,12 @@ The residency's upload, the one submission a frame that every view of the
 residency follows, renders both in its `environment` pass
 (`passes/sdf-sky-environment.comp.hlsl`, one invocation a texel, then
 `passes/sdf-sky-environment-reduce.comp.hlsl`, one group summing in a fixed
-order), and only when the frame's gradient differs from the one the map holds
-while the fog reads it. A still sky renders the map once; every later upload
-records the pass as skipped, with no evaluation and no dispatch. A body, the
-stars, the twinkle, the clouds and the fog's density leave the map as it is. A
-refresh counts 4,096 `gpu.sky.evaluations` under the residency's
+order), and only when the frame's lit layers, sky frame or tier differ from
+the ones the map holds while the fog reads it. A still sky renders the map once;
+every later upload records the pass as skipped, with no evaluation and no
+dispatch. A body, every layer only the camera sees (the stars, the twinkle and
+the clouds by default) and the fog's density leave the map as it is. A
+refresh counts 4,096 `gpu.sky.evaluations` a lit layer under the residency's
 `environment` pass. One copy serves every frame in flight, because the views
 that read it are queued before the upload that rewrites it, and that upload's
 first barrier orders their reads before its writes.
@@ -598,7 +636,7 @@ view's passes are submitted and the fences do the pacing. A capture reads a
 view back through the render graph, which serves it from a frame it renders.
 
 A view's device-local scratch (tile buffers, instance masks, indirect
-arguments, visibility records, the mesh target) is *transient*: one allocation
+arguments, visibility records, the mesh target) is *retained*: one allocation
 per instance, shared by every frame slot rather than duplicated. The planner
 orders each scratch resource's first use in a frame after the previous frame's
 last use of it, which serializes that view's GPU frames against each other

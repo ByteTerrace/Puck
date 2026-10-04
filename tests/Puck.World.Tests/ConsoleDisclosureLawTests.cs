@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 /// reaches answers through <see cref="WorldStateReadView"/>, so the seat a row's visibility admits reads it, another
 /// seat is refused or shown only what its disclosure carries, and the operator reads the live document whole. The
 /// evaluation diagnostics are operator verbs, refused for every seat.</summary>
-public sealed class ConsoleDisclosureLawTests {
+public sealed partial class ConsoleDisclosureLawTests {
     // Distinct values no fixture row or echo carries by accident, so their absence from an output is a real absence.
     private const long Vault = 918273645L;
     private const long Occupied = 736451829L;

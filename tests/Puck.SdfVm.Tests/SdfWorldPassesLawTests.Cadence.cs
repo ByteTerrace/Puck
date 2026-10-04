@@ -1,0 +1,171 @@
+using System.Numerics;
+using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
+using Puck.Shaders;
+using Puck.SignedDistance;
+using Xunit;
+
+namespace Puck.SdfVm.Tests;
+
+public sealed partial class SdfWorldPassesLawTests {
+    [InlineData("drift", false)]
+    [InlineData("twinkle", false)]
+    [InlineData("fog-color", false)]
+    [InlineData("volume", false)]
+    [InlineData("fog-density", false)]
+    [InlineData("light-color", false)]
+    [InlineData("shadow-direction", false)]
+    [InlineData("camera", false)]
+    [InlineData("drift", true)]
+    [InlineData("fog-density", true)]
+    [InlineData("light-color", true)]
+    [InlineData("shadow-direction", true)]
+    [InlineData("camera", true)]
+    [Theory]
+    public void CadenceRunsExactlyTheChangedClass(string change, bool reduced) {
+        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, renderScale: (reduced ? 0.25f : 1f));
+        var frame = rig.SourceFrame;
+        string[] executed = [SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite];
+
+        switch (change) {
+            case "drift": frame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.125f, y: 0.25f); break;
+            case "twinkle": frame.Sky.First<SdfSkyStars>().TwinklePhase = 0.37f; break;
+            case "fog-color": frame.Sky.First<SdfSkyGradient>().SetStop(color: new Vector3(x: 0.2f, y: 0.1f, z: 0.3f), elevation: -1f, index: 0); break;
+            case "volume":
+                frame = frame with {
+                    Volumes = [new SdfVolume(Kind: SdfVolumeKind.Cloud, Position: Vector3.Zero,
+                Rotation: Quaternion.Identity, HalfExtent: Vector3.One, DynamicSlot: SdfProgram.NoDynamicTransformSlot,
+                Axis: 1f, Width: 1f, Speed: 0.5f, Seed: 123u, Steps: 8,
+                Ramp: [new SdfDensityStop(Density: 0f, Color: Vector3.Zero), new SdfDensityStop(Density: 1f, Color: Vector3.One)],
+                Intensity: 1f, Extinction: 0.5f)],
+                }; break;
+            case "fog-density": frame.Sky.Block.FogDensity = 0.08f; goto case "lighting";
+            case "light-color": frame.Lights.Set(index: 0, light: frame.Lights[0] with { Color = new Vector3(x: 0.2f, y: 0.4f, z: 0.6f) }); goto case "lighting";
+            case "lighting": executed = [SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed]; break;
+            case "shadow-direction":
+                frame.Lights.Set(index: 0, light: frame.Lights[0] with { Direction = new Vector3(x: 0.8f, y: 0.2f, z: 0.1f) });
+                executed = [SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
+                break;
+            case "camera":
+                frame = frame with { Views = [frame.Views[0] with { Camera = CameraSnapshot.LookAt(position: new Vector3(x: 1f, y: 0f, z: -5f), target: Vector3.Zero, fieldOfViewRadians: 1f, viewportWidth: Extent, viewportHeight: Extent) }] };
+                executed = [SdfWorldPackage.Parts.Mask, SdfWorldPackage.Parts.Beam, SdfWorldPackage.Parts.CullArgs,
+                    SdfWorldPackage.Parts.Primary, SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Ambient,
+                    SdfWorldPackage.Parts.Shadow, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
+                break;
+        }
+        rig.SourceFrame = frame with { };
+        rig.Produce();
+        var work = CadenceWork(rig: rig);
+
+        Assert.Equal(expected: executed, actual: Executed(work: work));
+        var dispatches = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.Dispatches);
+        var indirect = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.IndirectDispatches);
+        var barriers = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.BufferBarriers);
+
+        for (var pass = 0; (pass < work.PassLabels.Length); pass++) {
+            if (work.GetPassState(pass: pass) == GpuPassState.Executed) {
+                _ = work.TryGetPassCount(column: dispatches, pass: pass, value: out var directCount);
+                _ = work.TryGetPassCount(column: indirect, pass: pass, value: out var indirectCount);
+                Assert.Equal(actual: (directCount + indirectCount), expected: 1L);
+                if (work.PassLabels[pass].EndsWith(comparisonType: StringComparison.Ordinal, value: "$views")) {
+                    var transition = (work.TryGetPassCount(column: barriers, pass: pass, value: out var count) && (count > 0));
+
+                    Assert.Equal(actual: transition, expected: (change is "camera" or "shadow-direction"));
+                }
+            } else {
+                Assert.False(condition: work.TryGetPassCount(column: barriers, pass: pass, value: out _));
+                Assert.False(condition: work.TryGetPassCount(column: dispatches, pass: pass, value: out _));
+            }
+        }
+        Assert.Empty(collection: rig.StateConflicts);
+        rig.Produce();
+        Assert.True(condition: rig.Stood());
+    }
+    [Fact]
+    public void CadenceVisualChangesLeaveConvergedHistoryAndItsRingStanding() {
+        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, temporal: true);
+
+        for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
+        Assert.True(condition: rig.Stood());
+        var frames = rig.HistoryFrames();
+
+        for (var frame = 0; (frame < 12); frame++) {
+            rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: (frame + 0.1f), y: 0f);
+            rig.SourceFrame = rig.SourceFrame with { };
+            rig.Produce();
+            Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
+            // The last resolve block precedes its completed sample; a sky-only block sees that completed count.
+            Assert.Equal(expected: (frames + 1u), actual: rig.HistoryFrames());
+        }
+        Assert.Empty(collection: rig.StateConflicts);
+    }
+    [Fact]
+    public void CadenceLightingChangesOweAFullTemporalSettlingPeriod() {
+        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, temporal: true);
+
+        for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
+        Assert.True(condition: rig.Stood());
+        rig.SourceFrame.Lights.Set(index: 0, light: rig.SourceFrame.Lights[0] with { Color = new Vector3(x: 0.3f, y: 0.5f, z: 0.7f) });
+        rig.SourceFrame = rig.SourceFrame with { };
+        for (var sample = 0; (sample < SdfTemporalHistory.Period); sample++) {
+            rig.Produce();
+            Assert.False(condition: rig.Stood(), userMessage: $"lighting sample {sample}");
+            Assert.Contains(SdfWorldPackage.Resolve, Executed(work: CadenceWork(rig: rig)));
+        }
+        rig.Produce();
+        Assert.True(condition: rig.Stood());
+    }
+    [Fact]
+    public void CadenceCanBeDisabledAndDoesNotAllocateOnAStillView() {
+        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true);
+
+        for (var frame = 0; (frame < 8); frame++) { rig.Produce(); }
+        Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: () => rig.Produce()));
+        rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.1f, y: 0f);
+        rig.SourceFrame = rig.SourceFrame with { };
+        rig.Produce();
+        Assert.Equal(expected: 2, actual: Executed(work: CadenceWork(rig: rig)).Length);
+        rig.SourceFrame = rig.SourceFrame with { EnableCadenceGate = false };
+        rig.Produce();
+        Assert.Equal(expected: 10, actual: Executed(work: CadenceWork(rig: rig)).Length);
+    }
+    [Fact]
+    public void CadenceRunsTheSkyEveryFrameWhileALayerSamplesAScreen() {
+        using var rig = new TemporalRig(sky: static sky => { _ = sky.Add(label: "panorama", parameters: new SdfSkyPanorama { Intensity = 1f, Screen = 0 }); }, views: 1, cadence: true);
+
+        for (var frame = 0; (frame < 3); frame++) {
+            rig.Produce();
+            Assert.False(condition: rig.Stood(), userMessage: $"frame {frame}");
+            Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
+        }
+    }
+    [Fact]
+    public void CadenceAtTheFloorLeavesMarchAndShadowStandingOnDrift() {
+        using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, renderScale: 0.25f);
+
+        rig.SourceFrame = rig.SourceFrame with { Views = [rig.SourceFrame.Views[0] with { Quality = new SdfViewQuality { DisableAmbientOcclusion = true, DisableSoftShadows = true } }] };
+        rig.Produce();
+        Assert.Equal(expected: 9, actual: Executed(work: CadenceWork(rig: rig)).Length);
+        rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.15f, y: 0f);
+        rig.SourceFrame = rig.SourceFrame with { };
+        rig.Produce();
+        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
+    }
+
+    // A sky whose stack drifts and twinkles over the default gradient: a point run of stars and a field run of clouds.
+    private static void Layered(SdfSky sky) {
+        _ = sky.Add(blend: SdfSkyBlend.Add, label: "stars", parameters: new SdfSkyStars { Brightness = 1f });
+        _ = sky.Add(label: "clouds", parameters: new SdfSkyClouds { Coverage = 0.5f });
+    }
+    private static GpuWorkSample CadenceWork(TemporalRig rig) {
+        var sample = new GpuWorkSample();
+
+        rig.World.PollReadbacks();
+        Assert.True(condition: rig.World.TryReadCompleted(sample: sample));
+        return sample;
+    }
+    private static string[] Executed(GpuWorkSample work) => [.. Enumerable.Range(start: 0, count: work.PassLabels.Length)
+        .Where(predicate: pass => (work.GetPassState(pass: pass) == GpuPassState.Executed))
+        .Select(selector: pass => work.PassLabels[pass].Split('$')[^1])];
+}

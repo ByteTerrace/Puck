@@ -88,7 +88,7 @@ instance's render grid. Native views use `SdfWorldPackage.NativeFragment`, whose
 the lit image and the visibility records views left. Views whose render-scale
 ceiling is below native use `SdfWorldPackage.Fragment`: its `sdf-resolve.comp`
 reconstructs the lit image and each pixel's surface transport at the output extent
-from the render-grid color, which is one transient allocation, and the sky and
+from the render-grid color, which is one retained allocation, and the sky and
 composite follow it, so the sky is never resampled or kept in history. A view
 whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment`
 at any render scale: the views kernel also writes a reactivity buffer, and the
@@ -120,7 +120,7 @@ data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
 the geometric normal, gradient magnitude and curvature; ambient adds AO and
 shadow four 8-bit stable visibilities in the one K word, each adding its queries
 to the combined count. Active handoffs add incoming marches, bounded by K + F,
-and write policy-sized transient visibility storage: R8 at F = 1, R8G8 at
+and write policy-sized retained visibility storage: R8 at F = 1, R8G8 at
 F = 2, absent at F = 0. Each light shades from its own visibility and each
 handoff scales that light's own occlusion deficit. The planner's barriers order each producer's
 record writes before its consumer. Views binds the record read-only, and every hit pass binds the
@@ -130,7 +130,7 @@ dimensions. Primary, surface and ambient retain the full ISA.
 Material `Soften` changes the later lighting normal; AO uses the geometric normal.
 The buffer reserves `renderWidth × renderHeight × 64` bytes at the view's render ceiling, and the
 view's instance allocates it again beside its installed graph when that extent
-changes. It is transient: one allocation shared by every frame slot, whose
+changes. It is retained: one allocation shared by every frame slot, whose
 first use in a frame the planner orders after the frame before.
 The render ceiling (`SdfViewSnapshot.RenderScale`) and the temporal ask choose the
 fragment, and the ceiling allocates scratch once; a smaller current grid (`ResolvedRenderScale`, which dynamic

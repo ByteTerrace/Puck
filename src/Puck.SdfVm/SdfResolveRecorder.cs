@@ -113,6 +113,8 @@ internal sealed class SdfResolveRecorder : IRenderGraphPackageRecorder {
         recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: ((recording.Width + 7) / 8), groupCountY: ((recording.Height + 7) / 8), groupCountZ: 1);
         return RenderGraphPackageOutcome.Drew;
     }
+    public ulong? Signature(in Puck.Hosting.FrameContext context) => m_owner.SignatureOf(instance: m_context.Instance, part: SdfWorldPackage.Resolve, temporal: m_temporal, context: in context);
+    public void Submitted() => m_owner.MarkSampleRendered(instance: m_context.Instance);
 
     // Ordinary ports follow the slot. History follows its writer, so refresh cached bindings whenever the resolved
     // history handles change, even on a slot whose tables stay the same.

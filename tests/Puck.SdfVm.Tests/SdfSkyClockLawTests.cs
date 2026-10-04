@@ -7,32 +7,36 @@ namespace Puck.SdfVm.Tests;
 
 /// <summary>The sky and the bounded media animate on the frame's presented tick, reduced on the host: the sky arrives
 /// with the twinkle's phase and the cloud layer's drift, shear and spin already integrated by the World's environment
-/// resolver, which the sky block packs as given (<see cref="SdfSky.Pack"/>), and the volume table carries each medium's integrated
+/// resolver, which the layer table packs as given (<see cref="SdfSky.Pack"/>), and the volume table carries each medium's integrated
 /// advection and pulse gain, so its values move by one tick's worth of their rate between consecutive ticks wherever
 /// the tick or the reduction wraps.</summary>
 public sealed class SdfSkyClockLawTests {
     [Fact]
-    public void The_block_carries_the_hosts_twinkle_phase_and_cloud_offsets() {
+    public void The_layers_carry_the_hosts_twinkle_phase_and_cloud_offsets() {
         var sky = new SdfSky();
 
-        sky.Block.TwinklePhase = 0.25f;
-        sky.Block.CloudDriftOffset = new Vector2(x: 0.5f, y: -0.25f);
-        sky.Block.CloudShearOffset = new Vector2(x: 0.125f, y: 0.0625f);
-        sky.Block.CloudSpinAngle = 1.5f;
+        _ = sky.Add(blend: SdfSkyBlend.Add, label: "stars", parameters: new SdfSkyStars { Brightness = 1f, TwinklePhase = 0.25f });
+        _ = sky.Add(label: "clouds", parameters: new SdfSkyClouds { Coverage = 0.5f, DriftOffset = new Vector2(x: 0.5f, y: -0.25f), ShearOffset = new Vector2(x: 0.125f, y: 0.0625f), SpinAngle = 1.5f });
 
-        // The host integrates every rate to the presented tick (the World's environment resolver), so the sky block packs
-        // the phase and offsets the sky holds, which no tick reaches.
+        // The host integrates every rate to the presented tick (the World's environment resolver), so the layer table
+        // packs the phase and offsets the sky holds, which no tick reaches.
+        var layers = new SdfSkyLayer[SdfSky.MaxLayers];
+
         sky.Pack(
-            block: out var block,
+            block: out _,
+            details: new SdfSkyDetails(),
+            layers: layers,
             lights: SdfLights.Default(),
-            softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes],
-            stops: new SdfSkyStop[SdfSky.MaxStops]
+            softboxes: new SdfSoftbox[SdfSky.MaxSoftboxes]
         );
 
-        Assert.Equal(actual: block.TwinklePhase, expected: 0.25f);
-        Assert.Equal(expected: new Vector2(x: 0.5f, y: -0.25f), actual: block.CloudDriftOffset);
-        Assert.Equal(expected: new Vector2(x: 0.125f, y: 0.0625f), actual: block.CloudShearOffset);
-        Assert.Equal(actual: block.CloudSpinAngle, expected: 1.5f);
+        var stars = SdfSky.PayloadOf<SdfSkyStars>(layer: ref layers[1]);
+        var clouds = SdfSky.PayloadOf<SdfSkyClouds>(layer: ref layers[2]);
+
+        Assert.Equal(actual: stars.TwinklePhase, expected: 0.25f);
+        Assert.Equal(expected: new Vector2(x: 0.5f, y: -0.25f), actual: clouds.DriftOffset);
+        Assert.Equal(expected: new Vector2(x: 0.125f, y: 0.0625f), actual: clouds.ShearOffset);
+        Assert.Equal(actual: clouds.SpinAngle, expected: 1.5f);
     }
     [Fact]
     public void A_mediums_advection_and_pulse_are_its_rates_integrated_to_the_tick() {

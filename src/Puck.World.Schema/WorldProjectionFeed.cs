@@ -1,3 +1,4 @@
+using Puck.Assets;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
@@ -48,7 +49,8 @@ public readonly record struct WorldProjectionDelivery(WorldProjectionDeliveryKin
 /// <param name="recipient">The authenticated recipient, or <see langword="null"/> for the public observer.</param>
 /// <param name="seeds">The phases a late view seeds a clock from while its row holds no number
 /// (<see cref="WorldClockAnchors.Seeds"/>), or <see langword="null"/> for none.</param>
-public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionary<string, ulong>? seeds = null) {
+/// <param name="content">The store receiving disclosed prototype bodies, or the shared store.</param>
+public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionary<string, ulong>? seeds = null, ContentAddressedStore? content = null) {
     private readonly WorldClockAnchorLedger m_anchors = new(seeds: seeds);
 
     private WorldProjectionDocument? m_held;
@@ -72,6 +74,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     /// <exception cref="InvalidOperationException">The composed projection does not round-trip or flatten.</exception>
     public WorldProjectionDelivery Compose(WorldDefinition definition, string authority, int revision, StateArena arena, in ArenaTime time) {
         var projection = WorldProjection.Compose(
+            content: content,
             anchors: m_anchors,
             arena: arena,
             authority: authority,
@@ -229,7 +232,9 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
 }
 /// <summary>A recipient's side of a <see cref="WorldProjectionFeed"/>: the projection it holds, which a whole
 /// delivery replaces and a delta merges into, and the definition hydrated from it.</summary>
-public sealed class WorldProjectionHold {
+/// <param name="content">The recipient content cache, or the shared store.</param>
+/// <param name="fetch">The authorized fetch door for objects absent from the cache.</param>
+public sealed class WorldProjectionHold(ContentAddressedStore? content = null, Func<ContentPin, byte[]?>? fetch = null) {
     private JsonObject? m_tree;
 
     /// <summary>Gets the definition hydrated from the projection held, or <see langword="null"/> before the first
@@ -251,7 +256,9 @@ public sealed class WorldProjectionHold {
             utf8Json: utf8Json
         ) ||
             !WorldProjection.TryToDefinition(
+            content: content,
             definition: out definition,
+            fetch: fetch,
             projection: projection!,
             reason: out reason
         )
@@ -348,7 +355,9 @@ public sealed class WorldProjectionHold {
                 reason: out reason,
                 utf8Json: CanonicalJsonDocument.SerializeCompact(node: whole)
             ) || !WorldProjection.TryToDefinition(
-                definition: out definition,
+            content: content,
+            definition: out definition,
+                fetch: fetch,
                 projection: projection!,
                 reason: out reason
             )) {

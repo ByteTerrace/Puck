@@ -17,30 +17,27 @@ public static partial class SdfWorldPackage {
     public const string SkyBaseImage = "skyBase";
     /// <summary>The sky's lowest field run, written by the sky.</summary>
     public const string SkyBaseWritten = "skyBaseRW";
-    /// <summary>The scale of the sky's upper field run, read by the composite.</summary>
-    public const string SkyScaleImage = "skyScale";
-    /// <summary>The scale of the sky's upper field run, written by the sky.</summary>
-    public const string SkyScaleWritten = "skyScaleRW";
-    /// <summary>The offset of the sky's upper field run, read by the composite.</summary>
-    public const string SkyOffsetImage = "skyOffset";
-    /// <summary>The offset of the sky's upper field run, written by the sky.</summary>
-    public const string SkyOffsetWritten = "skyOffsetRW";
 
+    /// <summary>Gets the sky's upper field runs' images, six half floats a run, as the composite reads them, in order. A
+    /// property, so a declaration in any partial file reads it whatever order they initialize in.</summary>
+    public static IReadOnlyList<string> SkyUpperImages => ["skyUpper0", "skyUpper1", "skyUpper2"];
+    /// <summary>Gets the sky's upper field runs' images as the sky writes them, in order.</summary>
+    public static IReadOnlyList<string> SkyUpperWritten => ["skyUpper0RW", "skyUpper1RW", "skyUpper2RW"];
     /// <summary>The sky and composite interface: the common frame values and <see cref="ResolvedSurface"/>, the lit image,
     /// the visibility records and the dispatch box a native view's lit image is read through, the surface transport a
-    /// reduced view's is, the sky's field runs as the sky writes them and as the composite reads them, the output, the
-    /// work counters, and the World group's tables. Each pass binds a filler at every member it does not read or
-    /// write.</summary>
+    /// reduced view's is, the sky's field runs as the sky writes them and as the composite reads them, the screens a
+    /// panorama layer or a textured disc samples, the output, the work counters, and the World group's tables. Each pass
+    /// binds a filler at every member it does not read or write.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> SkyMembers => SkyDeclaration.Members;
 
-    // The sky's field runs, one image each, in the order the sky writes them: the base run, then the upper run's scale and
-    // offset. A property, so the fragments that name them read them whatever order the partial files initialize in.
-    private static string[] SkyRuns => [Parts.SkyBase, Parts.SkyScale, Parts.SkyOffset];
+    // The sky's field-run images, in the order the sky writes them: the base run, then the upper runs' packed images. A
+    // property, so the fragments that name them read them whatever order the partial files initialize in.
+    private static string[] SkyRuns => [Parts.SkyBase, Parts.SkyUpper0, Parts.SkyUpper1, Parts.SkyUpper2];
     // The images the sky's field runs are held in, at the render extent (the output extent in a native view): half
     // floats, one allocation every frame slot shares, since the composite reads them in the frame the sky writes them.
     // Each texel's base alpha says whether the sky evaluated it.
     private static ShaderPipelineResource[] SkyResources => [
-        .. SkyRuns.Select(selector: static run => Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: run, transient: true)),
+        .. SkyRuns.Select(selector: static run => Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: run, retained: true)),
     ];
 
     private static class SkyDeclaration {
@@ -52,12 +49,11 @@ public static partial class SdfWorldPackage {
             Read(element: ShaderValueType.Uint, name: CullBounds),
             Read(element: ShaderValueType.Uint, name: TransportRead),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyBaseImage, type: ShaderValueType.Float4),
-            ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyScaleImage, type: ShaderValueType.Float4),
-            ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SkyOffsetImage, type: ShaderValueType.Float4),
+            .. SkyUpperImages.Select(selector: static name => ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: name, type: ShaderValueType.Float4)),
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: SkyBaseWritten, type: ShaderValueType.Float4),
-            ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: SkyScaleWritten, type: ShaderValueType.Float4),
-            ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: SkyOffsetWritten, type: ShaderValueType.Float4),
+            .. SkyUpperWritten.Select(selector: static name => ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: name, type: ShaderValueType.Float4)),
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: Output, type: ShaderValueType.Float4),
+            ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: ScreenSourceCount, name: ScreenSources, type: ShaderValueType.Float4),
             ShaderWorkCounters.BufferMember,
             .. Tables,
         ];

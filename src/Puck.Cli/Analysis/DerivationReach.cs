@@ -42,11 +42,13 @@ public static class DerivationReach {
         ], comparer: StringComparer.Ordinal);
 
         private readonly Queue<ISymbol> m_pending = new();
+        private readonly Queue<(ISymbol Member, INamedTypeSymbol Receiver)> m_pendingDispatch = new();
         private readonly Dictionary<string, DerivationSymbol> m_reach = new(comparer: StringComparer.Ordinal);
         private readonly Dictionary<string, IReadOnlyList<SyntaxNode>> m_declarations = new(comparer: StringComparer.Ordinal);
         private readonly Dictionary<SyntaxNode, IReadOnlyList<string>> m_bindings = [];
         private readonly Dictionary<SyntaxTree, SemanticModel> m_models = [];
         private readonly HashSet<ITypeSymbol> m_genericArguments = new(comparer: SymbolEqualityComparer.Default);
+        private readonly HashSet<ITypeSymbol> m_incomingTypes = new(comparer: SymbolEqualityComparer.Default);
         private readonly HashSet<string> m_constructed = new(comparer: StringComparer.Ordinal);
         private readonly List<INamedTypeSymbol> m_constructedTypes = [];
         private readonly List<ISymbol> m_dispatched = [];
@@ -80,7 +82,13 @@ public static class DerivationReach {
                 }
             }
             foreach (var root in entries) { Add(symbol: root); }
-            while (m_pending.TryDequeue(result: out var symbol)) {
+            while ((m_pending.Count > 0) || (m_pendingDispatch.Count > 0)) {
+                if (m_pendingDispatch.TryDequeue(result: out var dispatch)) {
+                    Dispatch(symbol: dispatch.Member, type: dispatch.Receiver);
+                    continue;
+                }
+                var symbol = m_pending.Dequeue();
+
                 try { Visit(symbol: symbol); } catch (InvalidOperationException exception) { throw new InvalidOperationException(message: $"{exception.Message}; reached from {Key(symbol: symbol)}", innerException: exception); }
             }
             return new DerivationResult(Name: name, Fingerprint: TokenFingerprint.ComputeDeclarations(declarations: m_declarations, bindings: m_bindings),
@@ -101,6 +109,8 @@ public static class DerivationReach {
             if (symbol is IMethodSymbol method) {
                 foreach (var type in method.TypeArguments.Where(predicate: type => (type is not ITypeParameterSymbol))) { AddGenericArgument(type: type); }
                 if (method.MethodKind is MethodKind.LocalFunction or MethodKind.AnonymousFunction) { Add(symbol: method.ContainingSymbol); return; }
+                // A metadata-only callee can return an implementation constructed outside the producer's reach.
+                if (!sources.ContainsKey(key: method.ContainingAssembly.Name)) { ConstructSubtypes(type: method.ReturnType); }
                 if (method.AssociatedSymbol is { } associated) { Add(symbol: associated); return; }
                 if (IsReflective(method: method)) { ConstructReflectively(method: method); }
                 symbol = (method.ReducedFrom ?? method);
@@ -114,9 +124,9 @@ public static class DerivationReach {
                 if (named.IsValueType) { Construct(type: named); }
             }
             if ((symbol.ContainingType?.ToDisplayString() == FingerprintType) || (symbol is INamespaceSymbol)) { return; }
-            // A static a caller can assign (a registry filled at start-up, a service locator) holds what the reach never constructed.
-            if (symbol is IFieldSymbol { IsStatic: true, IsReadOnly: false, IsConst: false } mutable) { ConstructSubtypes(type: mutable.Type); }
-            if (symbol is IPropertySymbol { IsStatic: true, SetMethod: not null } settable) { ConstructSubtypes(type: settable.Type); }
+            // Storage can hold values supplied through an enclosing instance, a registry or an external factory.
+            if (symbol is IFieldSymbol { IsConst: false } fieldValue) { ConstructSubtypes(type: fieldValue.Type); }
+            if (symbol is IPropertySymbol propertyValue) { ConstructSubtypes(type: propertyValue.Type); }
             Add(symbol: symbol.ContainingType);
             symbol = symbol.OriginalDefinition;
             var assembly = symbol.ContainingAssembly;
@@ -319,17 +329,20 @@ public static class DerivationReach {
         // Rapid type analysis: a virtual or interface member's overrides and implementations join the reach only in types the
         // reach constructs, so a call through a System.Object member does not pull in every override in the repository. A type is
         // constructed when one of its constructors is reached, when it is a value type, or when it is the argument of a type
-        // parameter that a new() constraint lets generic code instantiate. Dispatch is re-resolved whenever a type is added.
+        // parameter that a new() constraint lets generic code instantiate. Incoming parameters, storage members and external
+        // returns admit every possible subtype. Dispatch is re-resolved whenever a type is added.
         private void AddDispatch(ISymbol symbol) {
             if (!symbol.IsVirtual && !symbol.IsAbstract && (symbol.ContainingType.TypeKind != TypeKind.Interface)) { return; }
             if (!m_dispatchedKeys.Add(item: Key(symbol: symbol))) { return; }
 
             m_dispatched.Add(item: symbol);
 
-            for (var index = 0; (index < m_constructedTypes.Count); index++) { Dispatch(symbol: symbol, type: m_constructedTypes[index]); }
+            foreach (var receiver in m_constructedTypes) { m_pendingDispatch.Enqueue(item: (symbol, receiver)); }
         }
         // Every type of the reach's assemblies that is, or derives from or implements, the given one is treated as constructed.
         private void ConstructSubtypes(ITypeSymbol? type) {
+            if ((type is null) || !m_incomingTypes.Add(item: type)) { return; }
+
             switch (type) {
                 case IArrayTypeSymbol array:
                     ConstructSubtypes(type: array.ElementType);
@@ -353,10 +366,10 @@ public static class DerivationReach {
             if (target.SpecialType is SpecialType.System_Object) { return true; }
 
             for (var current = candidate; (current is not null); current = current.BaseType) {
-                if (SymbolEqualityComparer.Default.Equals(x: current.OriginalDefinition, y: target)) { return true; }
+                if (Key(symbol: current.OriginalDefinition) == Key(symbol: target)) { return true; }
             }
 
-            return candidate.AllInterfaces.Any(predicate: contract => SymbolEqualityComparer.Default.Equals(x: contract.OriginalDefinition, y: target));
+            return candidate.AllInterfaces.Any(predicate: contract => (Key(symbol: contract.OriginalDefinition) == Key(symbol: target)));
         }
         private void ConstructAll() {
             foreach (var candidate in m_universe) { Construct(type: candidate); }
@@ -465,7 +478,7 @@ public static class DerivationReach {
 
             m_constructedTypes.Add(item: type);
 
-            for (var index = 0; (index < m_dispatched.Count); index++) { Dispatch(symbol: m_dispatched[index], type: type); }
+            foreach (var member in m_dispatched) { m_pendingDispatch.Enqueue(item: (member, type)); }
         }
         private void Dispatch(ISymbol symbol, INamedTypeSymbol type) {
             if (!m_dispatchAssemblies.Contains(item: (type.ContainingAssembly?.Name ?? string.Empty))) { return; }

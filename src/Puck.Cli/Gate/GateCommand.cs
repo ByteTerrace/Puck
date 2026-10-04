@@ -8,7 +8,7 @@ namespace Puck.Cli.Gate;
 internal static class GateCommand {
     private const string Verb = "gate";
 
-    private static int Run(string target, bool gpu, bool record, TimeProvider clock, CancellationToken cancellationToken) {
+    private static int Run(string target, bool gpu, bool record, int suiteJobs, int gpuJobs, TimeProvider clock, CancellationToken cancellationToken) {
         if (record && !gpu) {
             return CliExit.Refuse(verb: Verb, what: "--record", why: "requires --gpu and an all-green qualification.");
         }
@@ -28,8 +28,10 @@ internal static class GateCommand {
         return GateRun.Run(
             directory: directory,
             gpu: gpu,
+            gpuJobs: gpuJobs,
             repositoryRoot: repositoryRoot,
             record: record,
+            suiteJobs: suiteJobs,
             clock: clock,
             runner: new ProcessGateRunner(cancellationToken: cancellationToken, clock: clock),
             target: target
@@ -40,21 +42,30 @@ internal static class GateCommand {
         var mergeBaseOption = AffectedCommand.MergeBase(description: "The branch the change lands on; the change is read against its merge base with HEAD.");
         var gpuOption = AffectedCommand.Gpu();
 
-        gpuOption.Description = "Add affected canaries and parity, device suites, every recorded counters workload and docs citations, serially.";
+        gpuOption.Description = "Add affected canaries (side by side, up to --gpu-jobs legs on the GPU) and parity, then device suites, every recorded counters workload and docs citations, one step after another.";
         var recordOption = new Option<bool>("--record") { Description = "Requires --gpu; refresh canary coverage only after every qualification step passes." };
+        var gpuJobsOption = Canary.CanaryCommand.GpuJobs();
+        var suiteJobsOption = AffectedSuites.Jobs();
         var command = new Command(
             description: "Build the solution and run the checks a branch's change needs, against its merge base.",
             name: Verb
-        ) { mergeBaseOption, gpuOption, recordOption };
+        ) { mergeBaseOption, gpuOption, gpuJobsOption, recordOption, suiteJobsOption };
 
         mergeBaseOption.DefaultValueFactory = static _ => GateRun.DefaultTarget;
         command.Detail(detail: (GatePlan.Detail() + $"""
 
-            The affected step adds --gpu for the chosen canaries, then parity. Counters expands every
+            Baseline steps run only when affected reaches their owning project or declared data inputs.
+            The affected step runs its suites side by side up to --suite-jobs. The chosen canaries, side by
+            side up to --gpu-jobs legs on the GPU, and parity follow the baseline checks, only with --gpu.
+            Counters expands every
             tests/Puck.Counters/*.world.json with matching ceilings, using its sibling script when
             present or the script recorded in its ceilings. Checks write nothing; --record writes coverage.
-            Before each heavy step, admission uses host load's default classification in-process.
-            It waits at most {HostAdmission.Timeout.TotalMinutes:0} minutes, reporting when waiting starts and capacity returns.
+            Before each heavy step, admission waits for memory and disk headroom by host load's default thresholds.
+            CPU load is advisory: a step runs whatever the CPU, and the gate prints a load over the threshold.
+            A step that opens a device (the --gpu steps) also waits for an idle GPU, and a heavy suite
+            (Puck.World.Tests, also inside affected --run) waits while another process runs one, never its own.
+            A step waits at most {HostAdmission.Timeout.TotalMinutes:0} minutes and a heavy suite {HostAdmission.HeavyTimeout.TotalHours:0} hours, reporting when waiting
+            starts, each new holder, a still-waiting line every {HostAdmission.Heartbeat.TotalMinutes:0} minutes, and when capacity returns.
             A failed build or CLI copy stops the run. Other failures allow later checks, but skip recording.
             gate.log holds full output; gate.steps records each start and exit with UTC time and whole seconds.
             Both files are kept and named in the summary. Run from a CLI copy outside the checkout.
@@ -64,6 +75,8 @@ internal static class GateCommand {
             """));
         command.SetAction(action: (parseResult, cancellationToken) => Task.FromResult(result: Run(
             gpu: parseResult.GetValue(option: gpuOption),
+            gpuJobs: parseResult.GetValue(option: gpuJobsOption),
+            suiteJobs: parseResult.GetValue(option: suiteJobsOption),
             record: parseResult.GetValue(option: recordOption),
             clock: clock,
             cancellationToken: cancellationToken,

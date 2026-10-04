@@ -66,7 +66,8 @@ public sealed class AffectedDeletedReachLawTests {
                 : new HashSet<string>()),
             recordedStandInsFor: static _ => [],
             standInsFor: static _ => throw new InvalidOperationException(message: "A deleted file stands for what the base said, never the working tree."),
-            worldClosure: new HashSet<string>(collection: ["Shaders"], comparer: StringComparer.OrdinalIgnoreCase)
+            worldClosure: new HashSet<string>(collection: ["Shaders"], comparer: StringComparer.OrdinalIgnoreCase),
+            worldInput: static _ => false
         );
     }
 

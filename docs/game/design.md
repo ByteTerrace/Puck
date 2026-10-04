@@ -40,7 +40,7 @@ granary court renders the deployment's storage inventory today, and every furthe
 platform (traffic, queues, compute, gateways, caches) enters the same way, as observation rows a
 module's placements, bodies, and rules read — the engine learns no cloud noun and no game noun for it.
 The roster of retired prototypes (`play`, `nexus`, `dive`, `kart`, `jump`, `studio`, the quilt corners,
-the frozen diorama, the two scenario documents, `granaries.world.json`) is realized inside the one world
+the frozen diorama, the two scenario documents, `granaries.puck`) is realized inside the one world
 and deleted as each is realized, never repaired beside it. The 51-game tabletop roster
 (chess through billiards, Riichi Mahjong, Chinese Checkers) is a real target the market district is
 built toward, and every capability it needs lands as a game-agnostic primitive — chance and
@@ -158,9 +158,9 @@ count) — a
 decision's price stays legible instead of a silent frame tax. In the document vocabulary,
 `kits`/`looks`/`placements` are dealt-row sections (`{rows, assignment}`/`{rows, policy}`, with
 authoring defaults in placements' own policy block), and creations are `prototypes` rows that other
-rows reference by `prototypeId`. The dive district (`modules/dive.world.json`) is the worked example of the
+rows reference by `prototypeId`. The dive district (`modules/dive.puck`) is the worked example of the
 field spelling (a medium pool lattice a diver kit settles in) and the arena district
-(`modules/arena.world.json`) carries the hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`StateCycle`, exclusive with `advance`, `dynamics` and `draw`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
+(`modules/arena.puck`) carries the hp/targeting/attack, elemental-status, and state-driven-look suites. A value that turns with the tick is a `cycle` trait on a state row (`StateCycle`, exclusive with `advance`, `dynamics` and `draw`), driven by a generator of the symmetry lattice's reflection group (`Puck.Maths.SymmetryWord`: an authored word of mirrors whose derived order is the period, or the lattice's own thirty-step `Puck.Maths.CyclicRotation` cycle) and, for its lattice outputs, `Puck.Maths.SymmetryLattice` — a looping animation, a twelve-position dial, a phase or a ring-slot address enters the game as a row every draw, rule, binding and HUD element already reads, never as a shader-side clock; rules read the lattice's own pairing through `$symmetry:innerProduct`, and a `symmetryOrbit` generator source deals a ring or a word's orbit as a shuffle bag.
 
 **Gravity authoring names acceleration independently of geometry.** A world may
 author a uniform acceleration directly, retain explicit placement-plus-mass
