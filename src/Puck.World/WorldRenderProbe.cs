@@ -26,6 +26,7 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     private readonly Lock m_gate = new();
     private readonly List<WorkEntry> m_views = [];
     private readonly Dictionary<string, string> m_residencyNames = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<SdfWorldResidency, bool> m_indirectResidencies = new(comparer: ReferenceEqualityComparer.Instance);
 
     /// <summary>The <c>sdf.transforms</c> counters as <c>world.counters</c> reads them: registered with the probe before
     /// the frame presenter exists, and pointed at the presenter's moved set when the presenter is built, so reading the
@@ -39,7 +40,26 @@ internal sealed class WorldRenderProbe : IGpuWorkRegistry, IWorldEngineReadiness
     /// <summary>The host's scheduled indirect work, summed once per active residency and retained after retirement.</summary>
     public ForwardingWorkCounterSource Indirect { get; } = new(name: SdfIndirectWork.SourceName, kinds: SdfIndirectWork.Kinds);
     /// <summary>The residencies currently demanding an indirect cache, once each.</summary>
-    public HashSet<SdfWorldResidency> IndirectResidencies { get; } = [];
+    public IReadOnlyList<SdfWorldResidency> IndirectResidencies => m_indirectResidencies.Where(entry => entry.Value)
+        .Select(entry => entry.Key).ToArray();
+    /// <summary>The active and retiring indirect allocations, once each. Read only on the console/frame owner
+    /// thread; inactive entries leave the inventory when their tables have released every cache byte.</summary>
+    public IReadOnlyList<SdfWorldResidency> IndirectAllocationResidencies {
+        get {
+            foreach (var entry in m_indirectResidencies.Where(entry => !entry.Value &&
+                ((entry.Key.Tables?.IndirectBytes ?? default) == default)).ToArray()) {
+                m_indirectResidencies.Remove(entry.Key);
+            }
+            return m_indirectResidencies.Keys.ToArray();
+        }
+    }
+    /// <summary>Records the existing graph host's demand transition without losing an allocation still retiring.</summary>
+    /// <param name="residency">The unique residency registered by the host.</param>
+    /// <param name="active">Whether the host currently demands its cache.</param>
+    public void RegisterIndirectResidency(SdfWorldResidency residency, bool active) {
+        ArgumentNullException.ThrowIfNull(residency);
+        m_indirectResidencies[residency] = active;
+    }
 
     /// <summary>The device the render nodes run on, or <see langword="null"/> until the render factory has run.</summary>
     public IGpuDeviceContext? Device { get; set; }

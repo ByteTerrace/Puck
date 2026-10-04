@@ -88,19 +88,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         return (visibility, mesh);
     }
     private string DescribeIndirectBudget() {
-        if ((renderProbe is null) || (renderProbe.IndirectResidencies.Count == 0)) { return "indirect off, 0 byte(s)"; }
-        return string.Join(separator: " | ", values: renderProbe.IndirectResidencies.OrderBy(residency => residency.Name, StringComparer.Ordinal).Select(selector: residency => {
-            if (residency.Tables?.IndirectLayout is not { } layout) { return $"indirect {residency.Name} pending"; }
-            var bytes = residency.Tables.IndirectBytes;
-            var probes = ((ulong)layout.ProbeCapacity);
-            var hitBytes = (((probes * ((ulong)layout.RaysPerProbe)) * ((ulong)Puck.SignedDistance.SdfIndirectLayout.HitWords)) * sizeof(uint));
-            var stateBytes = ((probes * ((ulong)Puck.SignedDistance.SdfIndirectLayout.ProbeWords)) * sizeof(uint));
-            var cellBytes = ((probes * ((ulong)Puck.SignedDistance.SdfIndirectLayout.CellWords)) * sizeof(uint));
-            var proofBytes = ((((ulong)layout.ProofCapacity) * ((ulong)Puck.SignedDistance.SdfIndirectLayout.ProofWords)) * sizeof(uint));
-
-            return string.Create(CultureInfo.InvariantCulture,
-                $"indirect {residency.Name} tier={layout.Tier.ToString().ToLowerInvariant()} hits={hitBytes} cells={cellBytes} state={stateBytes} proofs={proofBytes} irradiance=0 radiance=0 light-view=0 light-fragment=0 regions-device={(bytes.DeviceLocal - layout.ByteLength)} regions-host={bytes.HostVisible} device={bytes.DeviceLocal} host={bytes.HostVisible} byte(s)");
-        }));
+        return WorldIndirectDiagnosticText.Describe(renderProbe);
     }
     private string DescribeBudget() {
         var (visibilityBytes, meshAttachmentBytes) = WorldViewBytes();

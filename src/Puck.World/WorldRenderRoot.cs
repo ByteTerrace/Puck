@@ -161,11 +161,10 @@ internal static class WorldRenderRoot {
 
             if (added) {
                 indirectProbe.Indirect.Attach(instance: cacheResidency.IndirectWork);
-                indirectProbe.IndirectResidencies.Add(item: cacheResidency);
             } else {
                 indirectProbe.Indirect.Detach(instance: cacheResidency.IndirectWork);
-                indirectProbe.IndirectResidencies.Remove(item: cacheResidency);
             }
+            indirectProbe.RegisterIndirectResidency(residency: cacheResidency, active: added);
         };
         packages.Register(factory: host.Indirect, package: RenderGraphPackageCatalog.Indirect);
         // The root places each pane where the host's composer shows it this frame.

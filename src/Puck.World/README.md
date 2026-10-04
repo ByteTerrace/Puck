@@ -1973,12 +1973,27 @@ member sets it at boot, and `world.save` folds it back.
 `world.indirect off|medium|high` selects the session's residency-owned traced
 and partitioned cache. It starts off. Enabled views of one residency share one
 cache, and a completed cache schedules no more rays until demand or geometry
-changes. It applies no light yet. `world.debug-view indirect-probes` shows probe
+changes. `world.debug-view indirect-probes` shows probe
 classes across the whole view, including empty sky, with scene hits occluding
 the spheres. `world.debug-view indirect-cells` colours each hit by the stored
 partition component of its nearest cell corner, with no field evaluation.
 `world.counters sdf.indirect` reads its deterministic schedule and `world.budget`
-reports the allocated pools and regions.
+reports the actual cache slices, upload regions, retiring caches and light-view
+fragment allocations. The fragment total already includes its depth bank and
+regions; their breakdowns are not added a second time.
+
+`world.lighting` appends that same host inventory, including exact allocation,
+epoch, submission and lighting-publication identities, each level's allocated
+and placed bricks and submitted strata, pending host work and valid light maps.
+GPU probe classifications and solve results require a fenced readback; the host
+report names them unread rather than deriving them from submission counts.
+`world.indirect-freeze [on|off]` pauses new update admission in every active
+residency while views retain its cache. An already admitted frame may finish.
+`world.indirect-reset` queues their reset for the next renderable frame; while
+frozen it withdraws the old publication without admitting replacement work.
+These two operator-only controls affect presentation objects, change no
+authoritative document or replay state, and refuse when no indirect residency
+is active. Headless `world.lighting` names the absent renderer.
 `world.render-scale [view]` echoes the selected view's ceiling, saved quality
 floor, grid, budget and signal. With no target it echoes the primary view;
 ceiling and floor changes write the defaults that named rows inherit, while

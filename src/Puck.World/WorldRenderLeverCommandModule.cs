@@ -14,8 +14,9 @@ namespace Puck.World;
 /// ambient occlusion and its quality, the far field, the unchanged-frame cadence gate, the shadow mask and march, render
 /// scale, temporal reconstruction, upscale sharpness, and the quality preset — each a live console verb that echoes its current value when
 /// called with no argument. Every write is a session lever submitted through the server's grant check and lands in
-/// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view,
-/// which sets the render node's mode through <see cref="WorldRenderProbe"/>. Nothing here needs a window or a
+/// <see cref="WorldRenderSettings"/>, which the frame source reads each captured frame, except the SDF debug view
+/// and operator-owned indirect freeze/reset, which control presentation objects through <see cref="WorldRenderProbe"/>.
+/// Nothing here needs a window or a
 /// presenter, so both the windowed and the offscreen presentation shapes compose it, and an offscreen collector or
 /// canary can set the same levers a player can. Headless composes no renderer and refuses these as unknown.
 /// </summary>
@@ -543,7 +544,7 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.indirect",
-            description: "Selects the residency's traced and partitioned cache: world.indirect [off|medium|high]. Starts off; the cache does not yet apply lighting.",
+            description: "Selects the residency's indirect cache: world.indirect [off|medium|high]. No argument reads the selected tier; world.lighting reads its live host inventory and world.budget its allocation.",
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.indirect: {settings.IndirectTier.ToString().ToLowerInvariant()}]");
                 if (args.Count == 0) { return Echo(); }
@@ -559,6 +560,38 @@ internal sealed class WorldRenderLeverCommandModule(WorldPopulation population, 
                 }
                 return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.Indirect,
                     a: ((int)selected), formatEcho: Echo);
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.indirect-freeze",
+            description: "Pauses new update admission in every active residency: world.indirect-freeze [on|off]. Reads keep the retained cache; an already admitted frame may finish. Operator presentation control, not authoritative state.",
+            handler: (_, args) => {
+                if (args.Count > 1) { return CommandResult.Usage(form: "on|off", verb: "world.indirect-freeze"); }
+                var freeze = ((args.Count == 1) ? ParseOnOff(args[0]) : null);
+                if ((args.Count == 1) && (freeze is null)) { return CommandResult.Usage(form: "on|off", verb: "world.indirect-freeze"); }
+                if (renderProbe.IndirectResidencies.Count == 0) {
+                    return CommandResult.Error(output: "[world.indirect-freeze: no active indirect residency — select medium or high and wait for the renderer]");
+                }
+                if (freeze is { } selected) {
+                    foreach (var residency in renderProbe.IndirectResidencies) { residency.IndirectFrozen = selected; }
+                }
+                return new CommandResult(Output: $"[world.indirect-freeze: {WorldIndirectDiagnosticText.Describe(renderProbe)}]");
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.indirect-reset",
+            description: "Queues every active residency's presentation cache reset at its next renderable frame. Frozen caches withdraw their old publication and admit no replacement work. Takes no argument; changes no authoritative state.",
+            handler: (_, args) => {
+                if (CommandResult.RequireNoArguments(args, "world.indirect-reset") is { } refusal) { return refusal; }
+                if (renderProbe.IndirectResidencies.Count == 0) {
+                    return CommandResult.Error(output: "[world.indirect-reset: no active indirect residency — select medium or high and wait for the renderer]");
+                }
+                foreach (var residency in renderProbe.IndirectResidencies) { residency.RequestIndirectReset(); }
+                return new CommandResult(Output: $"[world.indirect-reset: {WorldIndirectDiagnosticText.Describe(renderProbe)}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(
