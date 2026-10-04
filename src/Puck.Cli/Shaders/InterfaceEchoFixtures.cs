@@ -54,7 +54,7 @@ internal static class InterfaceEchoFixtures {
                 ["dimensions"] = new JsonObject {
                     ["mode"] = "Absolute",
                     ["width"] = ShaderInterfaceEcho.Width(shaderInterface: ShaderInterfaceEcho.InterfaceOf(shaderInterface: target)),
-                    ["height"] = 1,
+                    ["height"] = 1u,
                 },
             }]),
             ["passes"] = new JsonArray(items: [new JsonObject {
@@ -136,10 +136,10 @@ internal static class InterfaceEchoFixtures {
                 }
                 var dimensions = graph["resources"]!.AsArray().Single(predicate: resource =>
                     (resource!["name"]!.GetValue<string>() == ShaderInterfaceEcho.OutputName))!["dimensions"]!.AsObject();
-                var changed = (dimensions["width"]!.GetValue<uint>() != width) || (dimensions["height"]!.GetValue<uint>() != 1);
+                var changed = (dimensions["width"]!.GetValue<uint>() != width) || (dimensions["height"]!.GetValue<uint>() != 1u);
 
                 dimensions["width"] = width;
-                dimensions["height"] = 1;
+                dimensions["height"] = 1u;
                 files[graphPath] = (((original is not null) && !changed) ? original.ReplaceLineEndings(replacementText: "\n") : Serialize(node: graph));
                 files[hlslPath] = ((name == echo) ? ShaderInterfaceEcho.Generate(shaderInterface: shaderInterface)
                     : ShaderInterfaceEcho.GeneratePerturbed(shaderInterface: shaderInterface));
@@ -160,7 +160,7 @@ internal static class InterfaceEchoFixtures {
                     (observation["capture"]!.GetValue<string>() != $"{echo}.png")) {
                     continue;
                 }
-                observation["extent"] = new JsonArray(items: [JsonValue.Create(value: width), JsonValue.Create(value: 1)]);
+                observation["extent"] = new JsonArray(items: [JsonValue.Create(value: width), JsonValue.Create(value: 1u)]);
                 if (observation["region"]![2]!.GetValue<double>() < 1) {
                     observation["region"]![2] = ((width - 1d) / width);
                 }
