@@ -72,7 +72,6 @@ public sealed class WorldValueDomainLawTests {
             Controls: [-1f, 0f],
             Path: "render.sky.layers[0].stops[0].elevation"
         ),
-        [WorldValueFields.FogDensity] = Sky(author: s => new WorldRenderSkyLayer.Fog(Density: s), present: static e => e.Sky.Block.FogDensity, member: "density"),
         [WorldValueFields.SunDiscRadius] = Sky(author: s => new WorldRenderSkyLayer.SunDisc(Radius: s), present: static e => e.Sky.First<SdfSkyDisc>().Radius, member: "radius"),
         [WorldValueFields.SunDiscIntensity] = Sky(author: s => new WorldRenderSkyLayer.SunDisc(Intensity: s), present: static e => e.Sky.First<SdfSkyDisc>().Intensity, member: "intensity"),
         [WorldValueFields.StarBrightness] = Sky(author: s => new WorldRenderSkyLayer.Stars(Brightness: s), present: static e => e.Sky.First<SdfSkyStars>().Brightness, member: "brightness"),
@@ -91,6 +90,11 @@ public sealed class WorldValueDomainLawTests {
         [WorldValueFields.AuroraFold] = Sky(author: s => new WorldRenderSkyLayer.Aurora(Fold: s), present: null, member: "fold"),
         [WorldValueFields.NoiseCoverage] = Sky(author: s => new WorldRenderSkyLayer.Noise(Coverage: s), present: static e => e.Sky.First<SdfSkyNoise>().Coverage, member: "coverage"),
         [WorldValueFields.PanoramaIntensity] = Sky(author: s => new WorldRenderSkyLayer.Panorama(Intensity: s, Screen: Fixtures.TestPatternScreenIndex), present: static e => e.Sky.First<SdfSkyPanorama>().Intensity, member: "intensity"),
+        [WorldValueFields.FogDensity] = Air(author: s => new WorldRenderAtmosphere(Fog: new WorldRenderFog(Density: s)), present: static e => e.Sky.Atmosphere.FogDensity, member: "fog.density"),
+        [WorldValueFields.AirFalloff] = Air(author: s => new WorldRenderAtmosphere(Fog: new WorldRenderFog(Height: new WorldRenderAirHeight(Falloff: s))), present: static e => e.Sky.Atmosphere.FogFalloff, member: "fog.height.falloff"),
+        [WorldValueFields.HazeAmount] = Air(author: s => new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Amount: s)), present: static e => e.Sky.Atmosphere.HazeAmount, member: "haze.amount"),
+        [WorldValueFields.HazeAnisotropy] = Air(author: s => new WorldRenderAtmosphere(Haze: new WorldRenderHaze(Anisotropy: s)), present: static e => e.Sky.Atmosphere.HazeAnisotropy, member: "haze.anisotropy"),
+        [WorldValueFields.MediumExtinction] = Air(author: s => new WorldRenderAtmosphere(Medium: new WorldRenderMedium(Extinction: s)), present: static e => e.Sky.Atmosphere.MediumExtinction, member: "medium.extinction"),
         [WorldValueFields.ScrimAlpha] = new Case(
             Author: s => Fixtures.BuildDocument() with {
                 ThemeRaw = WorldThemeValidationLawTests.MinimalTheme() with {
@@ -214,6 +218,13 @@ public sealed class WorldValueDomainLawTests {
     private static Case Sky(Func<BindableScalar, WorldRenderSkyLayer> author, Func<WorldResolvedEnvironment, float>? present, string member) => new(
         Author: s => Layer(layer: author(arg: s)),
         Path: $"render.sky.layers[0].{member}",
+        Present: ((present is null)
+            ? null
+            : (definition, mirror, domains) => present(arg: Environment(definition: definition, domains: domains, mirror: mirror)))
+    );
+    private static Case Air(Func<BindableScalar, WorldRenderAtmosphere> author, Func<WorldResolvedEnvironment, float>? present, string member) => new(
+        Author: s => Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Atmosphere = author(arg: s) } },
+        Path: $"render.atmosphere.{member}",
         Present: ((present is null)
             ? null
             : (definition, mirror, domains) => present(arg: Environment(definition: definition, domains: domains, mirror: mirror)))

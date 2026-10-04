@@ -112,9 +112,11 @@ public readonly record struct WorldQualityPreset(
 /// <param name="Lighting">The scene's direct lights and curvature shading. Optional, and every field within it is
 /// optional individually — an absent section, or an absent field within it, resolves to <c>SdfFrame</c>'s pinned
 /// default for that field, so a world renders unchanged until it authors one.</param>
-/// <param name="Sky">The repeatable sky-layer stack and distance fog. Optional; an absent
-/// section renders the default look, the two-stop gradient and fog <c>SdfSky</c> starts from, as data the kernels
+/// <param name="Sky">The repeatable sky-layer stack. Optional; an absent
+/// section renders the default look, the two-stop gradient <c>SdfSky</c> starts from, as data the kernels
 /// read like any authored sky.</param>
+/// <param name="Atmosphere">Fog, height fog, haze and a medium between the camera and what it sees. An absent
+/// section renders the default fog; an authored section contains exactly the kinds it states.</param>
 /// <param name="Environment">The sky's bindable ambient and reflection gains, each defaulting to one.
 /// Zero disables that lighting contribution.</param>
 /// <param name="Tonemap">The tonemap the root graph applies to the SDF scene: each view, as its place pass reconstructs
@@ -123,7 +125,7 @@ public readonly record struct WorldQualityPreset(
 /// <param name="FarDistance">The far distance in world units: the depth at which every camera march ends — the far
 /// plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth
 /// ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon
-/// curve at this depth unless the sky fog has absorbed it (a <c>fog</c> record in <c>render.sky.layers</c>). Optional; absent
+/// curve at this depth unless the atmosphere absorbs it (<c>render.atmosphere</c>). Optional; absent
 /// resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must
 /// lie within [<see cref="MinFarDistance"/>, <see cref="MaxFarDistance"/>]. Re-read on every definition revision
 /// (a <c>world.row.set render</c> lands on the next frame); <c>world.budget</c> echoes it with its derived
@@ -148,6 +150,7 @@ public sealed record WorldRenderDefaults(
     WorldRenderLighting? Lighting = null,
     WorldRenderSky? Sky = null,
     WorldRenderEnvironment? Environment = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderAtmosphere? Atmosphere = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTonemap? Tonemap = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null,
     int ShadowLights = 1,
@@ -341,12 +344,12 @@ public sealed record WorldRenderCurvature(
     BindableColor? InkColor = null
 );
 /// <summary>The procedural sky: a frame and an open, ordered stack of layers. Absent is the default look: the two-stop
-/// gradient and fog density <c>SdfSky</c> starts from, which a layer drawn over an unauthored gradient draws over too.
-/// The layers composite in the order they are authored, each by its blend, and a kind may appear more than once; fog is
-/// read every frame on its own. At most <c>SdfSky.MaxLayers</c> layers draw, and the layers the camera sees cut into at
-/// most <c>SdfSky.MaxUpperFieldRuns</c> field runs above the lowest run. Every value a layer carries may be keyed on a
-/// clock on its own; the section may instead be keyed whole (<paramref name="Clock"/>, <paramref name="Keys"/>), each key
-/// a partial record addressing layers by name.</summary>
+/// gradient <c>SdfSky</c> starts from, which a layer drawn over an unauthored gradient draws over too. The layers
+/// composite in the order they are authored, each by its blend, and a kind may appear more than once. The air before the
+/// sky is <see cref="WorldRenderDefaults.Atmosphere"/>'s. At most <c>SdfSky.MaxLayers</c> layers draw, and the layers the
+/// camera sees cut into at most <c>SdfSky.MaxUpperFieldRuns</c> field runs above the lowest run. Every value a layer
+/// carries may be keyed on a clock on its own; the section may instead be keyed whole (<paramref name="Clock"/>,
+/// <paramref name="Keys"/>), each key a partial record addressing layers by name.</summary>
 /// <param name="Layers">The layers, lowest first.</param>
 /// <param name="Clock">The clock the section's keys read, by name in the <c>timeline</c> section. Required with
 /// <paramref name="Keys"/> and refused without them.</param>
@@ -371,10 +374,9 @@ public sealed record WorldRenderSkyKey(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldEase? Ease = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldRenderSkyLayer>? Layers = null
 );
-/// <summary>One sky layer. The <c>$type</c> string is the JSON discriminator. Every layer but fog also carries what any
-/// layer carries: its blend, opacity, mask, transform, clock, visibility and the lowest quality tier it draws at.</summary>
+/// <summary>One sky layer. The <c>$type</c> string is the JSON discriminator. Every layer also carries what any layer
+/// carries: its blend, opacity, mask, transform, clock, visibility and the lowest quality tier it draws at.</summary>
 [JsonDerivedType(typeof(WorldRenderSkyLayer.Gradient), typeDiscriminator: "gradient")]
-[JsonDerivedType(typeof(WorldRenderSkyLayer.Fog), typeDiscriminator: "fog")]
 [JsonDerivedType(typeof(WorldRenderSkyLayer.SunDisc), typeDiscriminator: "sunDisc")]
 [JsonDerivedType(typeof(WorldRenderSkyLayer.Stars), typeDiscriminator: "stars")]
 [JsonDerivedType(typeof(WorldRenderSkyLayer.Clouds), typeDiscriminator: "clouds")]
@@ -444,17 +446,6 @@ public abstract record WorldRenderSkyLayer {
     /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
     public sealed record Gradient(
         IReadOnlyList<WorldRenderSkyStop>? Stops = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
-    ) : WorldRenderSkyLayer {
-        /// <inheritdoc/>
-        public override string? LayerName => Name;
-    }
-    /// <summary>The exponential distance fog fading toward the sky the lighting sees. Not a layer of the stack: it takes
-    /// none of a layer's blend, opacity, mask, transform, clock, visibility or tier.</summary>
-    /// <param name="Density">The density per world unit. Absent is the pinned density.</param>
-    /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
-    public sealed record Fog(
-        BindableScalar? Density = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
@@ -646,6 +637,68 @@ public sealed record WorldRenderSkyStop(BindableScalar? Elevation = null, Bindab
 /// <param name="Rate">The fundamental scintillation rate in hertz. A rate: it keys only on a tick clock, and binds no
 /// state row.</param>
 public sealed record WorldRenderSkyTwinkle(BindableScalar? Share = null, BindableScalar? Depth = null, BindableScalar? Rate = null);
+/// <summary>The air between the camera and what it sees: each kind it states, and nothing it does not. Every value may
+/// be bound to state or keyed on a clock on its own; the kinds are structure, which no key states. An edit lands on the
+/// next frame. The sky share of a pixel, the sky beyond every surface, passes through the haze and the medium; the fog
+/// ends at the sky, which is its colour at infinity.</summary>
+/// <param name="Fog">The fog: an exponential medium, level or thinning with height. Absent is no fog.</param>
+/// <param name="Haze">The haze: aerial perspective that scatters the sky and the light of the bodies that cast light,
+/// brightest toward them. Absent is no haze.</param>
+/// <param name="Medium">The medium: water below a level surface, with its own extinction and colour. Absent is no
+/// medium.</param>
+public sealed record WorldRenderAtmosphere(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderFog? Fog = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderHaze? Haze = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderMedium? Medium = null
+);
+/// <summary>The fog: <paramref name="Density"/> per world unit, in-scattering the sky or <paramref name="Color"/>.</summary>
+/// <param name="Density">The density per world unit, at the base when <paramref name="Height"/> is authored. Absent is the
+/// default look's density.</param>
+/// <param name="Color"><see cref="BindableColor"/>'s grammar: the colour the fog in-scatters. Absent is the sky in the
+/// pixel's direction, so a distant surface fades into the horizon behind it.</param>
+/// <param name="Height">The height fog's profile. Absent is a fog alike at every height.</param>
+public sealed record WorldRenderFog(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Density = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderAirHeight? Height = null
+);
+/// <summary>An air kind's height profile: its density falls by a factor of e over each <paramref name="Falloff"/> world
+/// units above <paramref name="Base"/>, and rises as much below it, so a ray's optical depth through it has a closed
+/// form.</summary>
+/// <param name="Base">The height at which the kind's density is its authored one. Absent is zero.</param>
+/// <param name="Falloff">The rise over which the density thins by a factor of e, at least
+/// <c>SdfAtmosphere.MinFalloff</c> world units. Absent is <c>SdfAtmosphere.DefaultFalloff</c>.</param>
+public sealed record WorldRenderAirHeight(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Base = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Falloff = null
+);
+/// <summary>The haze: aerial perspective. It takes <paramref name="Amount"/> of the light along a level ray the far
+/// distance (<see cref="WorldRenderDefaults.FarDistance"/>) long, and in-scatters the sky and the light of every
+/// directional light, which is what a light-casting body binds, forward by <paramref name="Anisotropy"/>, so it is
+/// brightest toward a low sun.</summary>
+/// <param name="Amount">The share of the light the haze takes over the far distance, in <c>[0, 0.99]</c>. Absent is
+/// zero, which draws none.</param>
+/// <param name="Anisotropy">The Henyey-Greenstein anisotropy of its scattering toward the bodies, in <c>[0, 0.9]</c>:
+/// zero scatters alike in every direction. Absent is <c>SdfAtmosphere.DefaultHazeAnisotropy</c>.</param>
+/// <param name="Height">The haze's height profile, the amount taken at its base. Absent is a haze alike at every
+/// height.</param>
+public sealed record WorldRenderHaze(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Amount = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Anisotropy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderAirHeight? Height = null
+);
+/// <summary>The medium: water below a level surface, which every ray below it crosses with its own extinction and
+/// in-scatter colour, a camera below it seeing the world and the sky through it.</summary>
+/// <param name="Surface">The surface's height. Absent is zero.</param>
+/// <param name="Extinction">The extinction per world unit below the surface. Absent is
+/// <c>SdfAtmosphere.DefaultMediumExtinction</c>.</param>
+/// <param name="Color"><see cref="BindableColor"/>'s grammar: the colour the medium in-scatters, which a deep view through
+/// it reaches. Absent is <c>SdfAtmosphere.DefaultMediumColor</c>.</param>
+public sealed record WorldRenderMedium(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Surface = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Extinction = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null
+);
 /// <summary>The tonemap the root graph applies to the frame before the HUD — see
 /// <see cref="WorldRenderDefaults.Tonemap"/>.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldTonemap>))]

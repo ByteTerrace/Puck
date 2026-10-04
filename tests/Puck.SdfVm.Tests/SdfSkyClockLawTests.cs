@@ -25,6 +25,7 @@ public sealed class SdfSkyClockLawTests {
         sky.Pack(
             block: out _,
             details: new SdfSkyDetails(),
+            farDistance: 40f,
             layers: layers,
             lights: SdfLights.Default()
         );

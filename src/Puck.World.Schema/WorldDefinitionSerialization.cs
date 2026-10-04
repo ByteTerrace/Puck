@@ -160,7 +160,6 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldRenderLight.Point), TypeInfoPropertyName = "WorldRenderLightPoint")]
 [JsonSerializable(typeof(WorldRenderSkyLayer))]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Gradient), TypeInfoPropertyName = "WorldRenderSkyLayerGradient")]
-[JsonSerializable(typeof(WorldRenderSkyLayer.Fog), TypeInfoPropertyName = "WorldRenderSkyLayerFog")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.SunDisc), TypeInfoPropertyName = "WorldRenderSkyLayerSunDisc")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Stars), TypeInfoPropertyName = "WorldRenderSkyLayerStars")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Clouds), TypeInfoPropertyName = "WorldRenderSkyLayerClouds")]

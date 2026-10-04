@@ -4557,8 +4557,12 @@ render {
       gradient(name: "studio", visibility: lighting, stops: [{ elevation: -1, color: "#151117" }, { elevation: 1, color: "#6E6572" }])
       panel(name: "panel1", direction: [0.6, 1, -0.5], size: [0.25, 0.5], color: "#FFF1E0", intensity: 1.8, blur: 0.15, visibility: lighting)
       panel(name: "panel2", direction: [-0.6, 0.75, 0.6], size: [0.24, 0.6], color: "#EEE4FF", intensity: 1, blur: 0.18, visibility: lighting)
-      fog(density: 0.012)
     ]
+  }
+  atmosphere {
+    fog {
+      density: 0.012
+    }
   }
   upscaleSharpness: 0
   tonemap: Filmic

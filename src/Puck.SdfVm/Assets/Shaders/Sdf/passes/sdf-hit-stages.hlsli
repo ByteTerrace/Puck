@@ -18,9 +18,10 @@
 
 #ifdef SDF_VIEWS_PASS
 // The views stage: the pixel's light stage over its surface sample and the debug view, with the pixel's coverage and
-// reactivity (sdfLightStage). A hit's color leaves through the fog's transmittance over its own ray distance
-// (sdf-transport.hlsli), so the resolve filters it with the coverage as one premultiplied quantity; the fog's in-scatter,
-// the sky and the bounded volumes are the composite's, so a moving medium never enters a temporal view's history. A
+// reactivity (sdfLightStage). A hit's color leaves through the atmosphere's transmittance over its own ray
+// (sdf-transport.hlsli), so the resolve filters it with the coverage as one premultiplied quantity; the atmosphere's
+// in-scatter, the sky and the bounded volumes are the composite's, so a moving medium never enters a temporal view's
+// history. A
 // debug view draws the whole pixel, so it covers it and is not fogged. A lane past the render extent returns black,
 // which the caller never stores.
 float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
@@ -47,7 +48,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
         return sdfDebugView(p, s, color);
     }
 
-    return (sdfDebugView(p, s, color) * (s.hit ? sdfFogTransmittance(s.t) : 1.0));
+    return (sdfDebugView(p, s, color) * (s.hit ? sdfAirTransmittance(p.rayOrigin, p.rayDirection, s.t) : 1.0));
 }
 #endif
 

@@ -15,12 +15,12 @@ public sealed class KeyedDependencyGateLawTests {
         var baseline = Fixtures.BuildDocument();
         var definition = (baseline with {
             TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", State: "phase")]),
-            RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [
-                new WorldRenderSkyLayer.Fog(Density: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "day", keys: [
+            RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(
+                Density: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "day", keys: [
                     new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
                     new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.1f),
-                ]))),
-            ])),
+                ]))
+            ))),
             ThemeRaw = baseline.Theme with {
                 Color = baseline.Theme.Color with {
                     SurfaceBase = new BindableColor(keys: new WorldKeyTrack<BindableColor>(clock: "day", keys: [
@@ -45,7 +45,7 @@ public sealed class KeyedDependencyGateLawTests {
 
         foreach (var fraction in new[] { 0f, 0.25f, 0.75f, 1f, 0.25f }) {
             mirror.Apply(fraction: fraction);
-            Assert.Equal(expected: (0.05f * fraction), actual: environment.Resolve(definition: definition, mirror: mirror, revision: 0).Sky.Block.FogDensity, precision: 6);
+            Assert.Equal(expected: (0.05f * fraction), actual: environment.Resolve(definition: definition, mirror: mirror, revision: 0).Sky.Atmosphere.FogDensity, precision: 6);
             Assert.Equal(
                 expected: ((float)ImageSourceConversion.LinearToSrgb(value: (fraction / 2d))),
                 actual: theme.Resolve(definition: definition, mirror: mirror, revision: 0).Color.SurfaceBase.R,

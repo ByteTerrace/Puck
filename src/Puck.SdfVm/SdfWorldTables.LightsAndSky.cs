@@ -45,6 +45,7 @@ public sealed partial class SdfWorldTables {
         frame.Sky.Pack(
             block: out m_skyRecord[0],
             details: m_skyDetails,
+            farDistance: frame.FarDistance,
             layers: m_skyLayerRecords,
             lights: frame.Lights
         );

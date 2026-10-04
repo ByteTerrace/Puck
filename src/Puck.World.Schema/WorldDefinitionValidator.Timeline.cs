@@ -528,16 +528,6 @@ public static partial class WorldDefinitionValidator {
 
                     break;
                 }
-            case WorldRenderSkyLayer.Fog fog: {
-                    RequireKeyScalar(
-                        errors: errors,
-                        own: ((WorldRenderSkyLayer.Fog)target).Density,
-                        path: $"{path}.density",
-                        value: fog.Density
-                    );
-
-                    break;
-                }
             case WorldRenderSkyLayer.SunDisc disc: {
                     var own = ((WorldRenderSkyLayer.SunDisc)target);
 

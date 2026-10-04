@@ -30,6 +30,7 @@ public sealed class PackLightsAndSkyLawTests {
         sky.Pack(
             block: out block,
             details: new SdfSkyDetails(),
+            farDistance: 40f,
             layers: layers,
             lights: lights
         );

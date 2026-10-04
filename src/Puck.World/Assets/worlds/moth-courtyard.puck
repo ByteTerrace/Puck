@@ -1501,7 +1501,6 @@ render {
   sky {
     layers [
       gradient(name: "air", stops: skyStops)
-      fog(name: "haze", density: 0.004)
       sunDisc(name: "sun", light: 0, radius: 0.018, intensity: 1.5)
     ]
     clock: skyMode
@@ -1515,7 +1514,6 @@ render {
           }
           )
           )
-          haze: fog(density: 0)
           sun: sunDisc(intensity: 0)
         }
       }
@@ -1523,11 +1521,18 @@ render {
         at: 0.5
         layers {
           air: gradient(stops: skyStops)
-          haze: fog(density: 0.004)
           sun: sunDisc(intensity: 1.5)
         }
       }
     ]
+  }
+  atmosphere {
+    fog {
+      density {
+        clock: skyMode
+        keys [{ at: 0, value: 0 }, { at: 0.5, value: 0.004 }]
+      }
+    }
   }
 }
 

@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
 using Puck.SdfVm;
@@ -10,65 +12,99 @@ using Xunit;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: the shipped sky pass (<c>sdf-sky-runs.comp</c>) evaluates the sky once for a pixel the lit image
-/// leaves uncovered and never for one it covers, with the one-pixel dilation that keeps every texel beside an edge
-/// evaluated: a pixel is evaluated when it or one of its eight neighbours has coverage below one. Over the default look,
-/// whose one layer is its gradient, it counts each pixel it evaluates in the gradient's detail row as one
-/// <c>gpu.sky.evaluations</c>. It writes every pixel's texel, an evaluated one's base in the lowest run's detail row and an
-/// unevaluated one's as a zero base the composite filters out in the plain row, counting each as one texel written. On a 16x8 lit image, every pixel covered evaluates nothing,
-/// every pixel uncovered evaluates 128, and the left half covered evaluates the right half and the covered column beside
-/// it, 72; each writes 128 texels. The lit image is read as written for every pixel, and every binding the pass does not
-/// read holds a filler of its kind.
+/// CONTRACT UNDER TEST: the shipped composite (<c>sdf-composite.comp</c>) counts the atmosphere's evaluations in its
+/// <c>atmosphere</c> detail row, one <c>gpu.sky.evaluations</c> for each kind whose in-scatter it evaluates at a pixel, and
+/// none at a covered pixel of an atmosphere that authors no kind: the atmosphere's off-switch costs nothing. Over a 16x8
+/// lit image every pixel of which is covered, its surface twenty units along a camera looking down through the air into
+/// water, the composite counts no atmosphere evaluation with every kind off, 128 with the fog alone and 384 with the fog,
+/// the haze and the medium, and no sky layer evaluation in any of them. Every binding the pass does not read holds a filler
+/// of its kind.
 /// </summary>
 [SupportedOSPlatform("windows10.0.15063")]
 [Trait("Category", "Gpu")]
-public sealed class SdfSkyEvaluationDeviceLawTests {
+public sealed class SdfCompositeAtmosphereDeviceLawTests {
     private const uint Width = 16;
     private const uint Height = 8;
+    // The pass, its plain detail, then gradient, disc, stars, clouds and atmosphere.
+    private const int Rows = 7;
+    private const int AtmosphereRow = 6;
+    private const float SurfaceDistance = 20f;
 
     [Fact]
-    public void VulkanEvaluatesTheSkyOnlyWhereTheLitImageLeavesItUncovered() {
-        using var device = HeadlessVulkanDevice.Create(applicationName: nameof(SdfSkyEvaluationDeviceLawTests));
+    public void VulkanCountsTheAtmosphereOnlyWhereItsKindsAreAuthored() {
+        using var device = HeadlessVulkanDevice.Create(applicationName: nameof(SdfCompositeAtmosphereDeviceLawTests));
 
         Verify(services: device.Services, extension: ".spv");
     }
     [Fact]
-    public void DirectXEvaluatesTheSkyOnlyWhereTheLitImageLeavesItUncovered() {
+    public void DirectXCountsTheAtmosphereOnlyWhereItsKindsAreAuthored() {
         using var device = DirectXTestDevices.Hardware();
 
         Verify(services: device.Services, extension: ".dxil");
     }
 
     private static void Verify(GpuDeviceServices services, string extension) {
-        Assert.Equal(expected: (0L, 128L), actual: Run(covered: static _ => true, extension: extension, services: services));
-        Assert.Equal(expected: (128L, 128L), actual: Run(covered: static _ => false, extension: extension, services: services));
-        // Columns 0 to 7 covered: column 7 sees column 8 beside it, so columns 7 to 15 evaluate, nine of eight pixels.
-        Assert.Equal(expected: (72L, 128L), actual: Run(covered: static x => (x < 8), extension: extension, services: services));
+        var lights = new SdfLights { Count = 1 };
+
+        lights.Set(index: 0, light: new SdfLight(Color: Vector3.One, Direction: new Vector3(x: 0f, y: 0.1f, z: -1f), Kind: SdfLightKind.Directional, Param: 0f, Shadows: false, Weight: 1f));
+        var fog = (SdfAtmosphere.None with { FogDensity = 0.05f });
+        var every = (fog with { HazeAmount = 0.3f, MediumColor = new Vector3(x: 0f, y: 0.2f, z: 0.3f), MediumExtinction = 0.4f, MediumSurface = 0f });
+
+        Assert.Equal(expected: (Atmosphere: 0L, Layers: 0L), actual: Run(atmosphere: SdfAtmosphere.None, extension: extension, lights: lights, services: services));
+        Assert.Equal(expected: (Atmosphere: 128L, Layers: 0L), actual: Run(atmosphere: fog, extension: extension, lights: lights, services: services));
+        Assert.Equal(expected: (Atmosphere: 384L, Layers: 0L), actual: Run(atmosphere: every, extension: extension, lights: lights, services: services));
     }
-    // Runs the sky pass once over a lit image whose column x is covered when covered(x), and returns its counted sky
-    // evaluations and texels written.
-    private static (long Evaluations, long Texels) Run(GpuDeviceServices services, string extension, Func<uint, bool> covered) {
+    // Runs the composite once over a wholly covered lit image whose every pixel's surface lies SurfaceDistance along its
+    // ray, through the atmosphere, and returns its counted atmosphere evaluations and its sky layers' evaluations.
+    private static (long Atmosphere, long Layers) Run(GpuDeviceServices services, string extension, SdfAtmosphere atmosphere, SdfLights lights) {
         var parameters = SdfWorldInterfaces.SkyParameters;
         var block = new byte[parameters.SizeBytes];
 
         parameters.WriteExtent(block: block, height: Height, width: Width);
         void Word(string member, uint value, int lane = 0) => BinaryPrimitives.WriteUInt32LittleEndian(
             destination: block.AsSpan(start: (((int)parameters.BlockOffsetOf(member: member)) + (lane * 4))), value: value);
+        void Float(string member, float value, int lane = 0) => Word(lane: lane, member: member, value: BitConverter.SingleToUInt32Bits(value: value));
+        void Vector(string member, Vector3 value) {
+            Float(lane: 0, member: member, value: value.X);
+            Float(lane: 1, member: member, value: value.Y);
+            Float(lane: 2, member: member, value: value.Z);
+        }
+        // A camera two units above the water's surface, looking down at 45 degrees with a narrow field of view, so every
+        // pixel's ray crosses the surface before its own surface twenty units away.
+        var forward = Vector3.Normalize(value: new Vector3(x: 0f, y: -1f, z: -1f));
+        var up = Vector3.Normalize(value: new Vector3(x: 0f, y: 1f, z: -1f));
+
         Word(member: SdfWorldPackage.ImageExtent, value: Width);
         Word(lane: 1, member: SdfWorldPackage.ImageExtent, value: Height);
         Word(member: SdfWorldPackage.ResolvedSurface, value: 1u);
-        Word(member: ShaderWorkCounters.DetailRow, value: 1u);
+        Word(member: ShaderWorkCounters.DetailRow, value: 2u);
+        Vector(member: SdfWorldPackage.ViewPosition, value: new Vector3(x: 0f, y: 2f, z: 0f));
+        Vector(member: SdfWorldPackage.ViewRight, value: Vector3.UnitX);
+        Vector(member: SdfWorldPackage.ViewUp, value: up);
+        Vector(member: SdfWorldPackage.ViewForward, value: forward);
+        Float(member: SdfWorldPackage.TanHalfFieldOfView, value: 0.1f);
+        Float(member: SdfWorldPackage.AspectRatio, value: (Width / ((float)Height)));
+        Float(member: SdfWorldPackage.FarDistance, value: SdfFrame.DefaultFarDistance);
+
+        var sky = default(SdfSkyBlock);
+
+        SdfSky.PackAtmosphere(atmosphere: in atmosphere, block: ref sky, farDistance: SdfFrame.DefaultFarDistance, lights: lights);
+        var skyBytes = MemoryMarshal.AsBytes(span: new[] { sky }.AsSpan()).ToArray();
+        // Every pixel one render sample copied whole: its surface's ray distance under the sample bit.
+        var transport = new byte[((Width * Height) * 8)];
+
+        for (var pixel = 0; (pixel < (Width * Height)); pixel++) {
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: transport.AsSpan(start: (pixel * 8)), value: SdfSurfaceTransport.SampleWord(distance: SurfaceDistance).Low);
+        }
         var lit = new byte[((Width * Height) * 4)];
 
-        for (var y = 0u; (y < Height); y++) {
-            for (var x = 0u; (x < Width); x++) {
-                lit[((((y * Width) + x) * 4) + 3)] = (covered(arg: x) ? ((byte)255) : ((byte)0));
-            }
+        for (var pixel = 0; (pixel < (Width * Height)); pixel++) {
+            lit[((pixel * 4) + 3)] = 255;
         }
         var layout = parameters.Layout.PipelineLayout(stages: GpuShaderStage.Compute);
-        var description = new GpuComputePipelineDescription(Bindings: [], Layout: layout, Name: "sdf-sky-runs-proof", PushConstantBinding: null);
+        var description = new GpuComputePipelineDescription(Bindings: [], Layout: layout, Name: "sdf-composite-atmosphere-proof", PushConstantBinding: null);
         using var module = services.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
-            bytecode: File.ReadAllBytes(path: Path.Combine(path1: SdfKernelSet.DefaultDirectory, path2: ("sdf-sky-runs.comp" + extension))));
+            bytecode: File.ReadAllBytes(path: Path.Combine(path1: SdfKernelSet.DefaultDirectory, path2: ("sdf-composite.comp" + extension))));
         using var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
         var padded = new byte[((((((ulong)block.Length) + IGpuBindings.ConstantBufferAlignment) - 1UL) / IGpuBindings.ConstantBufferAlignment) * IGpuBindings.ConstantBufferAlignment)];
 
@@ -76,24 +112,12 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         using var constants = services.BufferFactory.CreateHostVisible(data: padded, name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBlock = services.BufferFactory.CreateHostVisible(data: new byte[padded.Length], name: default, usage: GpuBufferUsage.Uniform);
         using var fillerBuffer = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 4096, usage: GpuBufferUsage.Storage);
+        using var skyBuffer = services.BufferFactory.CreateHostVisible(data: skyBytes, name: default, usage: GpuBufferUsage.Storage);
+        using var transportBuffer = services.BufferFactory.CreateHostVisible(data: transport, name: default, usage: GpuBufferUsage.Storage);
         using var fillerStorage = services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: 1, name: default, usage: GpuImageUsage.Storage, width: 1);
-        // The pass's row, then a row each of the sky's detail rows: its runs', then its layers'.
-        const int Rows = (1 + SdfSkyDetails.Capacity);
-        // The default look, packed as its tables are: the sky block and the layer table, bound in the World group.
-        var skyBlocks = new SdfSkyBlock[1];
-        var skyLayers = new SdfSkyLayer[SdfSky.MaxLayers];
-
-        new SdfSky().Pack(block: out skyBlocks[0], details: new SdfSkyDetails(), farDistance: 40f, layers: skyLayers, lights: SdfLights.Default());
-        using var skyBuffer = services.BufferFactory.CreateHostVisible(data: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: skyBlocks.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
-        using var layerBuffer = services.BufferFactory.CreateHostVisible(data: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: skyLayers.AsSpan()), name: default, usage: GpuBufferUsage.Storage);
+        using var output = services.ImageFactory.Create(format: RenderGraphPackageCatalog.WorkingFormat, height: Height, name: default, usage: GpuImageUsage.Storage, width: Width);
         using var counters = services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: ((ulong)(Rows * GpuKernelCounters.RowBytes)), usage: GpuBufferUsage.Storage);
         using var counted = services.BufferFactory.CreateReadback(name: default, sizeBytes: ((ulong)(Rows * GpuKernelCounters.RowBytes)));
-        // The runs the pass writes, at the output extent, so every write lands in an image.
-        IGpuImage RunImage() => services.ImageFactory.Create(format: GpuPixelFormat.R16G16B16A16Float, height: Height, name: default, usage: GpuImageUsage.Storage, width: Width);
-        using var skyBase = RunImage();
-        using var skyUpper0 = RunImage();
-        using var skyUpper1 = RunImage();
-        using var skyUpper2 = RunImage();
         using var upload = services.SurfaceTransferFactory.CreateUpload();
         var litView = upload.Upload(pixels: lit, format: GpuPixelFormat.R8G8B8A8Unorm, width: Width, height: Height);
         using var fillerUpload = services.SurfaceTransferFactory.CreateUpload();
@@ -103,17 +127,26 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
         var pool = services.Bindings.CreatePool(name: default, sizes: GpuDescriptorPoolSizes.ForGroups(groups: layout.Groups));
 
         try {
-            uint Binding(string member) => SdfKernelInterfaces.BindingOf(layout: parameters.Layout, member: member);
-            var images = new Dictionary<uint, nint> {
-                [Binding(member: SdfWorldPackage.LitImage)] = litView,
-                [Binding(member: SdfWorldPackage.SkyBaseWritten)] = skyBase.ImageViewHandle,
-                [Binding(member: SdfWorldPackage.SkyUpperWritten[0])] = skyUpper0.ImageViewHandle,
-                [Binding(member: SdfWorldPackage.SkyUpperWritten[1])] = skyUpper1.ImageViewHandle,
-                [Binding(member: SdfWorldPackage.SkyUpperWritten[2])] = skyUpper2.ImageViewHandle,
+            (uint Set, uint Binding) At(string member) {
+                foreach (var group in parameters.Layout.Groups) {
+                    foreach (var resource in group.Resources) {
+                        if (resource.Member.Name == member) {
+                            return (group.Set, resource.Binding);
+                        }
+                    }
+                }
+
+                throw new InvalidOperationException(message: member);
+            }
+            var images = new Dictionary<(uint, uint), nint> {
+                [At(member: SdfWorldPackage.LitImage)] = litView,
+                [At(member: SdfWorldPackage.Output)] = output.ImageViewHandle,
             };
-            var counterBinding = Binding(member: ShaderWorkCounters.Buffer);
-            var skyBinding = Binding(member: SdfKernelInterfaces.Sky);
-            var layerBinding = Binding(member: SdfKernelInterfaces.SkyLayers);
+            var buffers = new Dictionary<(uint, uint), IGpuBuffer> {
+                [At(member: ShaderWorkCounters.Buffer)] = counters,
+                [At(member: SdfKernelInterfaces.Sky)] = skyBuffer,
+                [At(member: SdfWorldPackage.TransportRead)] = transportBuffer,
+            };
             var sets = new List<(uint Group, nint Set)>();
 
             foreach (var group in parameters.Layout.Groups) {
@@ -122,29 +155,28 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
 
                 sets.Add(item: (group.Set, set));
                 foreach (var binding in group.Bindings.Where(predicate: static binding => !binding.Pushed)) {
+                    var key = (group.Set, binding.Binding);
+
                     for (var element = 0u; (element < binding.Count); element++) {
                         switch (binding.Kind) {
                             case GpuBindingKind.ConstantBuffer:
-                                var buffer = (pass ? constants : fillerBlock);
+                                var constantBuffer = (pass ? constants : fillerBlock);
 
-                                services.Bindings.WriteConstantBuffer(descriptorSetHandle: set, binding: binding.Binding, arrayElement: element, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes);
+                                services.Bindings.WriteConstantBuffer(descriptorSetHandle: set, binding: binding.Binding, arrayElement: element, bufferHandle: constantBuffer.BufferHandle, bufferSize: constantBuffer.SizeBytes);
                                 break;
                             case GpuBindingKind.SampledImage:
                                 services.Bindings.WriteSampledImage(descriptorSetHandle: set, binding: binding.Binding, arrayElement: element,
-                                    imageViewHandle: ((pass && images.TryGetValue(key: binding.Binding, value: out var view)) ? view : fillerSampled));
+                                    imageViewHandle: (images.TryGetValue(key: key, value: out var view) ? view : fillerSampled));
                                 break;
                             case GpuBindingKind.StorageImage:
                                 services.Bindings.WriteStorageImage(descriptorSetHandle: set, binding: binding.Binding, arrayElement: element,
-                                    imageViewHandle: ((pass && images.TryGetValue(key: binding.Binding, value: out var image)) ? image : fillerStorage.ImageViewHandle));
+                                    imageViewHandle: (images.TryGetValue(key: key, value: out var image) ? image : fillerStorage.ImageViewHandle));
                                 break;
                             case GpuBindingKind.Sampler:
                                 services.Bindings.WriteSampler(descriptorSetHandle: set, binding: binding.Binding, arrayElement: element, samplerHandle: sampler);
                                 break;
                             default:
-                                var world = (group.Group == ShaderInterfaceGroup.World);
-                                var storage = ((pass && (binding.Binding == counterBinding))
-                                    ? counters
-                                    : ((world && (binding.Binding == skyBinding)) ? skyBuffer : ((world && (binding.Binding == layerBinding)) ? layerBuffer : fillerBuffer)));
+                                var storage = (buffers.TryGetValue(key: key, value: out var bound) ? bound : fillerBuffer);
 
                                 services.Bindings.WriteBuffer(descriptorSetHandle: set, binding: binding.Binding, bufferHandle: storage.BufferHandle,
                                     bufferSize: storage.SizeBytes, kind: binding.Kind, elementStride: binding.ElementStride);
@@ -157,7 +189,7 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
             var command = commands.CommandBufferHandle;
 
             recorder.BeginCommandBuffer(commandBufferHandle: command);
-            foreach (var image in new[] { skyBase, skyUpper0, skyUpper1, skyUpper2, fillerStorage }) {
+            foreach (var image in new[] { output, fillerStorage }) {
                 recorder.TransitionImageLayout(commandBufferHandle: command, imageHandle: image.ImageHandle,
                     sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe, oldLayout: GpuImageLayout.Undefined,
                     destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader, newLayout: GpuImageLayout.General);
@@ -183,15 +215,11 @@ public sealed class SdfSkyEvaluationDeviceLawTests {
 
             counted.Read(destination: words);
             long Count(int row, int kind) => BinaryPrimitives.ReadInt64LittleEndian(source: words.AsSpan(start: ((row * GpuKernelCounters.RowBytes) + ((kind * GpuKernelCounters.CountWords) * sizeof(uint)))));
-            var evaluations = 0L;
-            var texels = 0L;
+            var layers = Count(kind: 2, row: 0);
 
-            for (var row = 0; (row < Rows); row++) {
-                evaluations += Count(kind: 2, row: row);
-                texels += Count(kind: 1, row: row);
-            }
+            for (var row = 2; (row < AtmosphereRow); row++) { layers += Count(kind: 2, row: row); }
 
-            return (Evaluations: evaluations, Texels: texels);
+            return (Atmosphere: Count(kind: 2, row: AtmosphereRow), Layers: layers);
         } finally {
             services.Bindings.DestroyPool(poolHandle: pool);
             services.Bindings.DestroySampler(samplerHandle: sampler);

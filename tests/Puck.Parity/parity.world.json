@@ -995,11 +995,6 @@
           "name": "air"
         },
         {
-          "$type": "fog",
-          "density": 0.012,
-          "name": "haze"
-        },
-        {
           "$type": "sunDisc",
           "light": 0,
           "radius": 0.045,
@@ -1091,10 +1086,6 @@
                 }
               ]
             },
-            "haze": {
-              "$type": "fog",
-              "density": 0.012
-            },
             "sun": {
               "$type": "sunDisc",
               "intensity": 2
@@ -1126,10 +1117,6 @@
                 }
               ]
             },
-            "haze": {
-              "$type": "fog",
-              "density": 0.035
-            },
             "sun": {
               "$type": "sunDisc",
               "intensity": 3
@@ -1145,6 +1132,23 @@
           }
         }
       ]
+    },
+    "atmosphere": {
+      "fog": {
+        "density": {
+          "clock": "skyMode",
+          "keys": [
+            {
+              "at": 0,
+              "value": 0.012
+            },
+            {
+              "at": 0.5,
+              "value": 0.035
+            }
+          ]
+        }
+      }
     }
   },
   "rules": [

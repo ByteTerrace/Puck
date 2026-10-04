@@ -231,16 +231,18 @@ may be keyed. Author a lighting-only dark gradient and panels for a studio.
 
 `render.sky` is an open stack of at most eight layers composited in their
 authored order, each by its `blend` (`over`, `add`, `multiply`, `screen`), a kind
-as often as authored; fog, the air, is read on its own and at most once. The kinds
+as often as authored; the air before it (fog, haze, a medium) is `render.atmosphere`'s,
+never a layer. The kinds
 are `gradient` (2 to 4 stops with `elevation` in [-1, 1] strictly ascending),
 `stars`, `clouds`, `aurora`, `noise`, `pattern`, `panorama` (a declared screen's
 image by direction) and `sunDisc` (a directional light slot, a glow or a
-`texture { screen }`). Every layer but fog also takes `opacity`, a `mask` (an
+`texture { screen }`). Every layer also takes `opacity`, a `mask` (an
 elevation `band` or a `cone`, with a `feather`), a `transform` (`turn`, `tilt`), a
 `clock`, a `visibility` (`camera`, `lighting`, `both`) and the lowest `tier` it
 draws at; `frame { up }` turns the whole sky. The layers the camera sees cut into
 at most two field runs above their lowest run. `skies.puck` holds preset
-templates (`clearDay`, `starryNight`, `polarNight`, `overcast`).
+templates (`clearDay`, `starryNight`, `polarNight`, `overcast`) and their air
+(`clearDayAir`, `overcastAir`, expanded inside `atmosphere`).
 
 ### Everything else
 

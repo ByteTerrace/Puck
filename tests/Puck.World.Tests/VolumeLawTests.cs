@@ -378,6 +378,18 @@ public sealed class VolumeLawTests {
         );
     }
     [Fact]
+    public void AScatterCarriesToTheVolumeAndOutsideTheUnitRangeIsRefusedByName() {
+        var lit = Flow(kind: VolumeDocument.CloudKind, parent: null) with { IntensityLane = null, Scatter = 0.6f };
+
+        Assert.Empty(collection: CreationCanonicalizer.Validate(document: Document(lit)));
+        Assert.Equal(expected: 0.6f, actual: lit.ToVolume(dynamicSlot: SdfProgram.NoDynamicTransformSlot, origin: Vector3.Zero, rotation: Quaternion.Identity, scale: 2f).Scatter);
+        // Absent scatters none: the medium shows its ramp's emission alone.
+        Assert.Equal(expected: 0f, actual: Flow().ToVolume(dynamicSlot: SdfProgram.NoDynamicTransformSlot, origin: Vector3.Zero, rotation: Quaternion.Identity, scale: 1f).Scatter);
+        AssertRefusesNaming(document: Document(Flow() with { Scatter = 1.5f }), needle: "volumes[0].scatter");
+        AssertRefusesNaming(document: Document(Flow() with { Scatter = -0.1f }), needle: "volumes[0].scatter");
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => (lit.ToVolume(dynamicSlot: SdfProgram.NoDynamicTransformSlot, origin: Vector3.Zero, rotation: Quaternion.Identity, scale: 1f) with { Scatter = 2f }).Validate(dynamicTransformCount: 0));
+    }
+    [Fact]
     public void StepsPastTheCeilingAreRefusedByName() =>
         AssertRefusesNaming(
             document: Document(Flow(steps: (SdfVolume.MaxSteps + 1))),

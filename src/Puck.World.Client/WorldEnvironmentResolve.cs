@@ -6,8 +6,9 @@ using Puck.SdfVm;
 namespace Puck.World.Client;
 
 /// <summary>
-/// Resolves a definition's environment for a frame: <c>render.lighting</c>, <c>render.sky</c> and
-/// <c>render.environment</c> written into the frame's <see cref="SdfLights"/> and <see cref="SdfSky"/>, every value read
+/// Resolves a definition's environment for a frame: <c>render.lighting</c>, <c>render.sky</c>, <c>render.atmosphere</c>
+/// and <c>render.environment</c> written into the frame's <see cref="SdfLights"/> and <see cref="SdfSky"/> (the atmosphere
+/// as <see cref="SdfSky.Atmosphere"/>), every value read
 /// through the client's
 /// <see cref="WorldStateMirror"/>, the one binding path: a literal as authored, a binding as its slot presents it, and
 /// keys at their clock's presented phase (<see cref="WorldKeyResolver"/>). A keyed section is expanded once per
@@ -109,6 +110,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             m_bound.Clear();
             m_readsTick = false;
             Write(
+                atmosphere: definition.Render.Atmosphere,
                 environment: definition.Render.Environment,
                 lighting: m_lighting,
                 mirror: mirror,
@@ -411,7 +413,8 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     // The one document-to-records writer. The lights seed from the pinned ones when the world authors no light list (the
     // pinned sun) and from nothing when it does, the sky from the unauthored one, and an absent field
     // takes its kind's default.
-    private void Write(WorldStateMirror mirror, WorldRenderLighting? lighting, WorldRenderSky? sky, WorldRenderEnvironment? environment) {
+    // An absent atmosphere is the default look's (SdfAtmosphere.Default); an authored one is exactly the kinds it states.
+    private void Write(WorldStateMirror mirror, WorldRenderLighting? lighting, WorldRenderSky? sky, WorldRenderAtmosphere? atmosphere, WorldRenderEnvironment? environment) {
         var into = m_resolvedLights;
 
         into.CopyFrom(source: ((lighting?.Lights is null)
@@ -625,23 +628,56 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             into: m_resolvedSky,
             mirror: mirror
         );
+        WriteAtmosphere(
+            atmosphere: atmosphere,
+            into: ref m_resolvedSky.Atmosphere,
+            mirror: mirror
+        );
     }
-    // Writes one document layer into the stack, returning its index there: −1 for fog, which is the air rather than a
-    // layer, and for a layer past the stack's capacity, which the validator refuses.
-    private int WriteLayer(WorldStateMirror mirror, WorldRenderSkyLayer layer, string? label, SdfLights lights, SdfSky into, WorldValueSite site) {
-        ref var block = ref into.Block;
+    private void WriteAtmosphere(WorldStateMirror mirror, WorldRenderAtmosphere? atmosphere, ref SdfAtmosphere into) {
+        if (atmosphere is null) {
+            into = SdfAtmosphere.Default;
 
-        if (layer is WorldRenderSkyLayer.Fog fog) {
-            block.FogDensity = Scalar(
-                fallback: block.FogDensity,
-                mirror: mirror,
-                scalar: fog.Density,
-                field: WorldValueFields.FogDensity,
-                site: site
-            );
-
-            return -1;
+            return;
         }
+
+        var site = new WorldValueSite(Section: "render.atmosphere");
+
+        into = SdfAtmosphere.None;
+        if (atmosphere.Fog is { } fog) {
+            var fogSite = site with { Inner = "fog" };
+
+            into.FogDensity = Scalar(fallback: SdfSky.DefaultFogDensity, field: WorldValueFields.FogDensity, mirror: mirror, scalar: fog.Density, site: fogSite);
+            into.FogColorAuthored = (fog.Color is not null);
+            into.FogColor = Rgb(color: fog.Color, fallback: Vector3.Zero, mirror: mirror);
+            (into.FogBase, into.FogFalloff) = Height(height: fog.Height, mirror: mirror, site: (fogSite with { Inner = "fog.height" }));
+        }
+        if (atmosphere.Haze is { } haze) {
+            var hazeSite = site with { Inner = "haze" };
+
+            into.HazeAmount = Scalar(fallback: 0f, field: WorldValueFields.HazeAmount, mirror: mirror, scalar: haze.Amount, site: hazeSite);
+            into.HazeAnisotropy = Scalar(fallback: SdfAtmosphere.DefaultHazeAnisotropy, field: WorldValueFields.HazeAnisotropy, mirror: mirror, scalar: haze.Anisotropy, site: hazeSite);
+            (into.HazeBase, into.HazeFalloff) = Height(height: haze.Height, mirror: mirror, site: (hazeSite with { Inner = "haze.height" }));
+        }
+        if (atmosphere.Medium is { } medium) {
+            var mediumSite = site with { Inner = "medium" };
+
+            into.MediumSurface = Scalar(fallback: 0f, field: WorldValueFields.MediumSurface, mirror: mirror, scalar: medium.Surface, site: mediumSite);
+            into.MediumExtinction = Scalar(fallback: SdfAtmosphere.DefaultMediumExtinction, field: WorldValueFields.MediumExtinction, mirror: mirror, scalar: medium.Extinction, site: mediumSite);
+            into.MediumColor = Rgb(color: medium.Color, fallback: SdfAtmosphere.DefaultMediumColor, mirror: mirror);
+        }
+
+        // An absent profile is a level kind, falloff zero; an authored one takes the default falloff unless it states one.
+        (float Base, float Falloff) Height(WorldRenderAirHeight? height, WorldStateMirror mirror, in WorldValueSite site) => ((height is null)
+            ? (0f, 0f)
+            : (
+                Scalar(fallback: 0f, field: WorldValueFields.AirBase, mirror: mirror, scalar: height.Base, site: in site),
+                Scalar(fallback: SdfAtmosphere.DefaultFalloff, field: WorldValueFields.AirFalloff, mirror: mirror, scalar: height.Falloff, site: in site)
+            ));
+    }
+    // Writes one document layer into the stack, returning its index there: −1 for a layer past the stack's capacity,
+    // which the validator refuses.
+    private int WriteLayer(WorldStateMirror mirror, WorldRenderSkyLayer layer, string? label, SdfLights lights, SdfSky into, WorldValueSite site) {
         if ((label is null) || (into.LayerCount >= SdfSky.MaxLayers)) {
             return -1;
         }

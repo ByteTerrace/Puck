@@ -1,13 +1,18 @@
 // Bounded flow/cloud volumes (Puck.SignedDistance.SdfVolume, a participating medium, never a distance-field shape):
 // sdfVolumes, eleven float4 rows a volume, paired with SdfWorldTables.PackVolumes, which bakes each medium's motion from
 // the frame's presented tick, so no pass reads a clock. The composite pass alone integrates them, after the surface and
-// the sky, clipping the pixel's surface share at its surface and its sky share at the far distance.
+// the sky, clipping the pixel's surface share at its surface and its sky share at the far distance. A medium with a
+// scatter scatters the light-casting bodies' light toward the eye, the sky block's air lights by a mildly forward phase
+// (sdf-atmosphere.hlsli), as the haze does.
 #ifndef SDF_SHADE_VOLUMES_HLSLI
 #define SDF_SHADE_VOLUMES_HLSLI
 #include "../field/sdf-noise.hlsli"
 #include "../field/sdf-quaternion.hlsli"
+#include "sdf-atmosphere.hlsli"
 // The table's capacity in volumes. KEEP IN SYNC with SdfWorldTables.PackVolumes / SdfProgramBuilder.MaxVolumes.
 static const uint SdfVolumeCount = 64u;
+// The phase anisotropy a medium scatters the bodies' light by. KEEP IN SYNC with SdfVolume.ScatterAnisotropy.
+static const float SdfVolumeScatterAnisotropy = 0.3;
 struct SdfVolumeData {
     float3 position;
     int dynamicSlot;
@@ -27,6 +32,7 @@ struct SdfVolumeData {
     float advectionZ;   // a cloud's host-baked drift along Z, in noise cells
     float coverage;
     float softness;
+    float scatter;      // the share of each sample's extinction that scatters the bodies' light toward the eye
     float4 ramp[4];
 };
 SdfVolumeData sdfLoadVolume(uint index) {
@@ -43,7 +49,7 @@ SdfVolumeData sdfLoadVolume(uint index) {
     v.intensity = r4.x; v.extinction = r4.y; v.pulse = r4.z;
     float4 r5 = sdfVolumes[b + 5u];
     v.intensityLane = (int)r5.x; v.rampCount = (uint)r5.y; v.kind = (uint)r5.z; v.advectionZ = r5.w;
-    v.coverage = sdfVolumes[b + 10u].x; v.softness = sdfVolumes[b + 10u].y;
+    v.coverage = sdfVolumes[b + 10u].x; v.softness = sdfVolumes[b + 10u].y; v.scatter = sdfVolumes[b + 10u].z;
     [unroll] for (uint i = 0u; i < 4u; i++) v.ramp[i] = sdfVolumes[b + 6u + i];
     return v;
 }
@@ -124,8 +130,10 @@ float sdfCloudDensity(SdfVolumeData v, float3 p) {
         0.15 * sdfPeriodicNoise3(q * 4.0 - 3.7, v.seed + 53u));
     return envelope * smoothstep(1.0 - v.coverage - v.softness, 1.0 - v.coverage + v.softness, noise);
 }
+// `bodies` is the bodies' light the medium scatters toward the eye along the ray, by its phase, times its scatter: each
+// sample adds it by its extinction.
 void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirection, float tBegin, float tEnd,
-    float dither, out float3 radianceOut, out float transmissionOut) {
+    float dither, float3 bodies, out float3 radianceOut, out float transmissionOut) {
     int steps = (int)v.steps;
     float stepLength = (tEnd - tBegin) / (float)steps;
     float3 radiance = 0.0;
@@ -153,6 +161,7 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
             float heightLight = lerp(0.52, 1.0, saturate(0.5 + 0.5 * p.y / v.halfExtent.y));
             emission *= v.extinction * heightLight;
         }
+        emission += (bodies * extinction);
         float segment = exp(-extinction * stepLength);
         // The zero-absorption limit is stepLength, so pure emissive media remain visible.
         float integral = extinction > 1.0e-5 ? (1.0 - segment) / extinction : stepLength;
@@ -212,15 +221,16 @@ float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance
         float skyEnd = min(interval.y, farDistance);
         float surfaceEnd = min(interval.y, surfaceDistance);
         v.intensity *= sdfVolumeIntensityScale(v);
+        float3 bodies = ((v.scatter > 0.0) ? (v.scatter * sdfAirBodies(rayDirection, SdfVolumeScatterAnisotropy)) : float3(0.0, 0.0, 0.0));
         float3 radiance = float3(0.0, 0.0, 0.0);
         float transmission = 1.0;
         if (skyShare) {
-            sdfIntegrateVolume(v, localOrigin, localDirection, begin, skyEnd, dither, radiance, transmission);
+            sdfIntegrateVolume(v, localOrigin, localDirection, begin, skyEnd, dither, bodies, radiance, transmission);
             sky = ((skyCoverage * radiance) + (transmission * sky));
         }
         if (surfaceShare && (surfaceEnd > begin)) {
             if (!skyShare || (surfaceEnd < skyEnd)) {
-                sdfIntegrateVolume(v, localOrigin, localDirection, begin, surfaceEnd, dither, radiance, transmission);
+                sdfIntegrateVolume(v, localOrigin, localDirection, begin, surfaceEnd, dither, bodies, radiance, transmission);
             }
             surface = ((surfaceCoverage * radiance) + (transmission * surface));
         }

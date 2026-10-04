@@ -174,7 +174,7 @@ public sealed partial class SdfWorldTables {
             floats[(b + 18)] = motion.Pulse;
             floats[(b + 20)] = (volume.IntensityLane ?? -1); floats[(b + 21)] = volume.Ramp.Count;
             floats[(b + 22)] = ((float)volume.Kind); floats[(b + 23)] = motion.AdvectionZ;
-            floats[(b + 40)] = volume.Coverage; floats[(b + 41)] = volume.Softness;
+            floats[(b + 40)] = volume.Coverage; floats[(b + 41)] = volume.Softness; floats[(b + 42)] = volume.Scatter;
             for (var stop = 0; (stop < volume.Ramp.Count); stop++) {
                 var row = ((b + 24) + (stop * 4));
                 var value = volume.Ramp[stop];

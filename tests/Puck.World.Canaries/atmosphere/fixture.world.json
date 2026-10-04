@@ -22,25 +22,20 @@
           "stops": [
             {
               "elevation": -1,
-              "color": "#808080"
+              "color": "#000000"
             },
             {
               "elevation": 1,
-              "color": "#808080"
+              "color": "#000000"
             }
           ]
-        },
-        {
-          "$type": "sunDisc",
-          "light": 0,
-          "radius": 0.3,
-          "intensity": 16
         }
       ]
     },
     "atmosphere": {
-      "fog": {
-        "density": 1
+      "haze": {
+        "amount": 0.5,
+        "anisotropy": 0.6
       }
     },
     "lighting": {
@@ -49,11 +44,11 @@
           "$type": "directional",
           "direction": [
             0,
-            0.447,
-            -0.894
+            0.1,
+            -1
           ],
           "color": "#FFFFFF",
-          "weight": 0
+          "weight": 1
         }
       ]
     },
@@ -67,7 +62,7 @@
         "seatCount": 0,
         "slots": [
           {
-            "camera": "fog-cam",
+            "camera": "haze-cam",
             "height": 1,
             "width": 1,
             "x": 0,
@@ -102,11 +97,11 @@
   },
   "cameras": [
     {
-      "name": "fog-cam",
+      "name": "haze-cam",
       "renderWidth": 128,
       "renderHeight": 128,
       "rig": {
-        "name": "fog-cam",
+        "name": "haze-cam",
         "version": "puck.camera.program.v1",
         "operations": [
           {
@@ -126,8 +121,8 @@
               "$type": "worldPoint",
               "point": [
                 0,
-                2.235,
-                -4.47
+                0.4,
+                -4
               ]
             }
           },
@@ -138,61 +133,5 @@
         ]
       }
     }
-  ],
-  "prototypes": [
-    {
-      "id": "body",
-      "document": {
-        "name": "body",
-        "schema": "puck.creation.v1",
-        "palette": [
-          {
-            "roughness": 1,
-            "specular": 0,
-            "color": "#000000",
-            "emissive": 0
-          }
-        ],
-        "shapes": [
-          {
-            "id": 0,
-            "name": "sphere",
-            "type": "Sphere",
-            "material": 0,
-            "position": [
-              0,
-              0,
-              0
-            ],
-            "scale": [
-              1,
-              1,
-              1
-            ],
-            "rotation": [
-              0,
-              0,
-              0,
-              1
-            ]
-          }
-        ]
-      }
-    }
-  ],
-  "placements": {
-    "rows": [
-      {
-        "id": "body",
-        "scale": 1,
-        "yawDegrees": 0,
-        "position": [
-          0,
-          2.235,
-          -4.47
-        ],
-        "prototypeId": "body"
-      }
-    ]
-  }
+  ]
 }

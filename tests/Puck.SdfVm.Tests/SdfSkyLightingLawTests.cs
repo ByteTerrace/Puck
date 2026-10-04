@@ -16,7 +16,7 @@ public sealed class SdfSkyLightingLawTests {
     }
     private static SdfSkyLayer[] Pack(SdfSky sky, out SdfSkyBlock block) {
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
-        sky.Pack(SdfLights.Default(), new SdfSkyDetails(), out block, layers);
+        sky.Pack(SdfLights.Default(), 40f, new SdfSkyDetails(), out block, layers);
         return layers;
     }
     private static Vector3[] Project(SdfSky sky) {
@@ -88,7 +88,7 @@ public sealed class SdfSkyLightingLawTests {
     public void GainsAtZeroAndNoFogAvoidProjectionAndReenableCold() {
         var refresh = new SdfSkyEnvironmentRefresh();
         var sky = Sky(Vector3.One, Vector3.One);
-        sky.Block.Ambient = sky.Block.Reflection = sky.Block.FogDensity = 0f;
+        sky.Block.Ambient = sky.Block.Reflection = sky.Atmosphere.FogDensity = 0f;
         var layers = Pack(sky, out var block);
         Assert.False(refresh.Owes(block, layers));
         Assert.False(refresh.Projected);

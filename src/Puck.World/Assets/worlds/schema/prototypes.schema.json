@@ -2326,6 +2326,13 @@
                   ],
                   "default": null
                 },
+                "scatter": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
                 "isKnownKind": {
                   "type": "boolean",
                   "description": "Whether the family is supported."
@@ -2339,7 +2346,7 @@
                 "ramp"
               ],
               "additionalProperties": false,
-              "description": "A bounded participating medium carried beside a creation\u0027s shapes. Its parent names a shape frame, or null for the creation root. Ramp is evaluated against local density before ray integration. Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size; Coverage and Softness control their density threshold and transition width. Axis is a flow-only control."
+              "description": "A bounded participating medium carried beside a creation\u0027s shapes. Its parent names a shape frame, or null for the creation root. Ramp is evaluated against local density before ray integration. Disabled volumes are omitted by static and animated emission. Cloud volumes use Width as noise-cell size; Coverage and Softness control their density threshold and transition width. Axis is a flow-only control. Scatter, in [0, 1], is the share of the medium\u0027s extinction that scatters the light-casting bodies\u0027 light toward the eye; absent scatters none."
             },
             "default": null,
             "description": "The bounded participating volumes (null = none), at most MaxVolumes \u2014 see VolumeDocument. Each rides the creation root\u0027s or a named shape\u0027s dynamic slot; a static placement bakes its frame in. Presentation-only: no distance field, no collider."

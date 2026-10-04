@@ -170,7 +170,7 @@ public sealed class KeyedValueLawTests {
         );
         Assert.Contains(
             expectedSubstring: "render.sky.keys[0].layers.night must keep the kind of the layer it names",
-            actualString: Validate(definition: Definition(sky: KeyedSky(key: new WorldRenderSkyLayer.Fog(Density: 0.1f))))
+            actualString: Validate(definition: Definition(sky: KeyedSky(key: new WorldRenderSkyLayer.SunDisc(Intensity: 0.1f))))
         );
         var lighting = new WorldRenderLighting(
             Clock: "day",
@@ -191,31 +191,31 @@ public sealed class KeyedValueLawTests {
     }
     [Fact]
     public void A_key_on_an_undeclared_clock_or_out_of_order_is_refused_by_name() {
-        var keyed = new WorldRenderSkyLayer.Fog(Density: new BindableScalar(keys: new WorldKeyTrack<float>(
+        var keyed = new WorldRenderSkyLayer.SunDisc(Intensity: new BindableScalar(keys: new WorldKeyTrack<float>(
             clock: "night",
             keys: [new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f)]
         )));
 
         Assert.Contains(
-            expectedSubstring: "render.sky.layers[0].density keys on clock 'night', which timeline.clocks does not declare",
+            expectedSubstring: "render.sky.layers[0].intensity keys on clock 'night', which timeline.clocks does not declare",
             actualString: Validate(definition: Definition(sky: new WorldRenderSky(Layers: [keyed])))
         );
         Assert.Contains(
-            expectedSubstring: "render.sky.layers[0].density.keys[1].at 2 must exceed the previous key's",
-            actualString: Validate(definition: Definition(sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: new BindableScalar(keys: Track(
+            expectedSubstring: "render.sky.layers[0].intensity.keys[1].at 2 must exceed the previous key's",
+            actualString: Validate(definition: Definition(sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(Intensity: new BindableScalar(keys: Track(
                 (4d, 0f, WorldEase.Linear),
                 (2d, 0.1f, WorldEase.Linear)
             )))])))
         );
         Assert.Contains(
             expectedSubstring: "must be finite and in [0, 24)",
-            actualString: Validate(definition: Definition(sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: new BindableScalar(keys: Track(
+            actualString: Validate(definition: Definition(sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(Intensity: new BindableScalar(keys: Track(
                 (24d, 0f, WorldEase.Linear)
             )))])))
         );
         // Control: ascending keys inside the span on a declared clock.
         Assert.Equal(
-            actual: Validate(definition: Definition(sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: new BindableScalar(keys: Track(
+            actual: Validate(definition: Definition(sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(Intensity: new BindableScalar(keys: Track(
                 (2d, 0f, WorldEase.Linear),
                 (4d, 0.1f, WorldEase.Smooth)
             )))]))),
@@ -224,10 +224,10 @@ public sealed class KeyedValueLawTests {
     }
     [Fact]
     public void A_keyed_value_is_judged_at_each_of_its_keys() {
-        // A negative fog density is refused at the key that states it, not only as a literal.
+        // A negative disc intensity is refused at the key that states it, not only as a literal.
         Assert.Contains(
-            expectedSubstring: "render.sky.layers[0].density.keys[1].value -0.1 must be finite and within [0, inf)",
-            actualString: Validate(definition: Definition(sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: new BindableScalar(keys: Track(
+            expectedSubstring: "render.sky.layers[0].intensity.keys[1].value -0.1 must be finite and within [0, inf)",
+            actualString: Validate(definition: Definition(sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.SunDisc(Intensity: new BindableScalar(keys: Track(
                 (2d, 0f, WorldEase.Linear),
                 (4d, -0.1f, WorldEase.Linear)
             )))])))
@@ -275,23 +275,23 @@ public sealed class KeyedValueLawTests {
         var sky = new WorldRenderSky(
             Clock: "day",
             Keys: [
-                new WorldRenderSkyKey(At: 0d, Layers: new Dictionary<string, WorldRenderSkyLayer> { ["haze"] = new WorldRenderSkyLayer.Fog(Density: 0f) }),
+                new WorldRenderSkyKey(At: 0d, Layers: new Dictionary<string, WorldRenderSkyLayer> { ["haze"] = new WorldRenderSkyLayer.SunDisc(Intensity: 0f) }),
                 new WorldRenderSkyKey(At: 6d, Ease: WorldEase.Smooth, Layers: new Dictionary<string, WorldRenderSkyLayer> { ["night"] = new WorldRenderSkyLayer.Stars(Brightness: 2f) }),
-                new WorldRenderSkyKey(At: 12d, Layers: new Dictionary<string, WorldRenderSkyLayer> { ["haze"] = new WorldRenderSkyLayer.Fog(Density: 0.2f) }),
+                new WorldRenderSkyKey(At: 12d, Layers: new Dictionary<string, WorldRenderSkyLayer> { ["haze"] = new WorldRenderSkyLayer.SunDisc(Intensity: 0.2f) }),
             ],
             Layers: [
-                new WorldRenderSkyLayer.Fog(Density: 0.05f, Name: "haze"),
+                new WorldRenderSkyLayer.SunDisc(Intensity: 0.05f, Name: "haze"),
                 new WorldRenderSkyLayer.Stars(Brightness: 1f, Name: "night"),
                 new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(Elevation: -1f, Color: new BindableColor(Raw: "#000000")), new WorldRenderSkyStop(Elevation: 1f, Color: new BindableColor(Raw: "#FFFFFF"))]),
             ]
         );
         var expanded = WorldRenderKeys.Expand(sky: sky)!;
-        var fog = Assert.IsType<WorldRenderSkyLayer.Fog>(@object: expanded.Layers![0]);
+        var disc = Assert.IsType<WorldRenderSkyLayer.SunDisc>(@object: expanded.Layers![0]);
         var stars = Assert.IsType<WorldRenderSkyLayer.Stars>(@object: expanded.Layers[1]);
 
-        // The fog's keys are the two section keys that state it; the stars' the one that does, so it holds.
-        Assert.Equal(expected: [0d, 12d], actual: fog.Density!.Value.Keys!.Keys.Select(selector: static key => key.At));
-        Assert.Equal(expected: 0.1f, actual: WorldKeyResolver.Scalar(phase: 0.25d, span: 24d, track: fog.Density.Value.Keys), precision: 6);
+        // The disc's keys are the two section keys that state it; the stars' the one that does, so it holds.
+        Assert.Equal(expected: [0d, 12d], actual: disc.Intensity!.Value.Keys!.Keys.Select(selector: static key => key.At));
+        Assert.Equal(expected: 0.1f, actual: WorldKeyResolver.Scalar(phase: 0.25d, span: 24d, track: disc.Intensity.Value.Keys), precision: 6);
         Assert.Equal(expected: 2f, actual: WorldKeyResolver.Scalar(phase: 0.9d, span: 24d, track: stars.Brightness!.Value.Keys!));
         Assert.Equal(expected: WorldEase.Smooth, actual: stars.Brightness.Value.Keys!.Keys[0].Ease);
         // An unnamed layer no key addresses keeps its authored values, and the expanded section carries no keys.

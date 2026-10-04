@@ -1,7 +1,7 @@
 {
   "id": "sky-layers",
   "title": "Every sky layer kind contributes pixels and disappears when removed, under each blend and a tilted frame",
-  "binding": "A still empty scene presents a black gradient. The script adds each layer kind one at a time over the same black base and removes it before the next: a uniform blue gradient, a star field, a directional disc, a static cloud layer, aurora curtains, a noise field, a checker pattern, a panorama of a test-pattern screen and a disc textured with that screen. The upper half of each present capture must contain light; every pixel of that region is black after removal. A gradient lit only above the sky frame's horizon lights the upper half under a level frame and leaves it black under a frame turned upside down. A uniform half-grey gradient over a quarter-grey one composes by each blend's rule: over 0.5, add 0.75, multiply 0.125, screen 0.625. The discriminating leg changes only the star brightness to zero, so the stars presence bound fails while every other bound holds. The camera then turns to a red sphere outside the earlier views: dense cyan distance fog must cover its center, while the same region without fog must fail the cyan bound. Each layer kind adds its label to the sky's detail rows mid-run, growing every view pass's counter buffer, and no device is lost on either leg.",
+  "binding": "A still empty scene presents a black gradient. The script adds each layer kind one at a time over the same black base and removes it before the next: a uniform blue gradient, a star field, a directional disc, a static cloud layer, aurora curtains, a noise field, a checker pattern, a panorama of a test-pattern screen and a disc textured with that screen. The upper half of each present capture must contain light; every pixel of that region is black after removal. A gradient lit only above the sky frame's horizon lights the upper half under a level frame and leaves it black under a frame turned upside down. A uniform half-grey gradient over a quarter-grey one composes by each blend's rule: over 0.5, add 0.75, multiply 0.125, screen 0.625. The discriminating leg changes only the star brightness to zero, so the stars presence bound fails while every other bound holds. The camera then turns to a red sphere outside the earlier views: a dense render.atmosphere fog in-scattering the cyan sky must cover its center, while the same region with the fog at zero density must fail the cyan bound. Each layer kind adds its label to the sky's detail rows mid-run, growing every view pass's counter buffer, and no device is lost on either leg.",
   "bootShape": "offscreen",
   "backends": [
     "vulkan",
@@ -532,8 +532,8 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.screenshot",
-        "occurrence": 26,
+        "verb": "world.row.set",
+        "occurrence": 27,
         "outcome": "accepted"
       },
       {
@@ -542,13 +542,23 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.row.set",
-        "occurrence": 27,
+        "verb": "world.screenshot",
+        "occurrence": 26,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
         "occurrence": 54,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 28,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 55,
         "outcome": "accepted"
       },
       {
@@ -558,7 +568,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 55,
+        "occurrence": 56,
         "outcome": "accepted"
       }
     ],
@@ -1741,8 +1751,8 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.screenshot",
-        "occurrence": 26,
+        "verb": "world.row.set",
+        "occurrence": 27,
         "outcome": "accepted"
       },
       {
@@ -1751,13 +1761,23 @@
         "outcome": "accepted"
       },
       {
-        "verb": "world.row.set",
-        "occurrence": 27,
+        "verb": "world.screenshot",
+        "occurrence": 26,
         "outcome": "accepted"
       },
       {
         "verb": "world.wait",
         "occurrence": 54,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.row.set",
+        "occurrence": 28,
+        "outcome": "accepted"
+      },
+      {
+        "verb": "world.wait",
+        "occurrence": 55,
         "outcome": "accepted"
       },
       {
@@ -1767,7 +1787,7 @@
       },
       {
         "verb": "world.wait",
-        "occurrence": 55,
+        "occurrence": 56,
         "outcome": "accepted"
       }
     ],

@@ -1979,8 +1979,8 @@ monotonic for a large instance field—read both `world.counters gpu` and
 `world.fps` at the intended population and view layout. `world.budget` is the DERIVED cost
 sheet, not a lever: the live render program's packed words/instances against
 their frozen envelopes, the Lipschitz step scale and march multiplier, the far
-distance with its reach multiplier, horizon-ray step tax, and far-plane fog
-remnant, the field lattice program's node/cadence counts and exact
+distance with its reach multiplier, horizon-ray step tax, far-plane fog
+remnant and the atmosphere kinds the composite may evaluate at a pixel, the field lattice program's node/cadence counts and exact
 full-cell/body-slot pass costs, and the state row count—
 how an authored choice's price becomes legible instead of a silent frame tax.
 Navigation adds its compiled cell count, fixed A*/shared-tree workspace bytes,
@@ -2058,9 +2058,9 @@ not a loadable or durable asset format.
 `render.farDistance` is the depth every camera march ends at (default 40 when
 unauthored; 1..8192), re-read on every definition revision like the lighting
 below—geometry beyond it is never marched, so an infinite ground plane shows
-a horizon curve there unless the `render.sky` fog layer absorbs it first.
+a horizon curve there unless the `render.atmosphere` fog absorbs it first.
 
-The lighting, sky and environment sections are re-read on every definition
+The lighting, sky, atmosphere and environment sections are re-read on every definition
 revision. `render.lighting.lights[]` holds at most eight typed lights:
 `directional`, `point`, `occluder` and `rim`. An absent list supplies the
 pinned sun. `render.lighting.curvature` adds cavity darkening, ridge light and
@@ -2069,7 +2069,13 @@ an ink outline through the `inkLow`/`inkHigh` curvature band.
 `render.sky.layers[]` is the authored-order stack of repeatable `gradient`,
 `sunDisc`, `stars`, `clouds`, `aurora`, `noise`, `pattern`, `panorama`
 and `panel` layers, with opacity, blend, visibility, masks, transforms and
-quality tiers. The `fog` record controls distance fog outside that stack.
+quality tiers. `render.atmosphere` controls the air outside that stack: a
+`fog { density, color, height { base, falloff } }` in-scatters the sky or its
+authored colour; a `haze { amount, anisotropy, height }` scatters the sky and
+directional lights; a `medium { surface, extinction, color }` fills the space
+below a level surface. An absent section supplies the default fog, and a
+present section contains exactly its authored kinds. A bounded volume's
+`scatter` is the share of its extinction that scatters directional light.
 Lighting-visible layers supply the shared environment map and second-order
 spherical harmonics. `render.environment.ambient` scales the sky irradiance
 through AO; `reflection` scales map reflections with analytic rectangular
@@ -2156,8 +2162,8 @@ across a whole turn, a direction along the great circle, a scalar or vector
 linearly—and the earlier key's `ease` (`Linear`, `Smooth` or `Step`) shapes
 the time. `render.lighting` and `render.sky` may also be keyed whole: a
 section's `clock` and `keys` hold partial records that address a light or a
-layer by its `name`, of its own kind (`keys [ { at: 0, layers { haze:
-fog(density: 0) } } ]`), each field keyed through the keys that state it. A
+layer by its `name`, of its own kind (`keys [ { at: 0, layers { sun:
+sunDisc(intensity: 0) } } ]`), each field keyed through the keys that state it. A
 key states values only: a count, a seed, a kind, a name, a light's shadowing,
 the sun disc's light slot and a gradient's stop count are structure and
 refused by name, as is a field keyed both by its own keys and by the
@@ -2178,9 +2184,10 @@ clock a key reads moves.
 
 Every scalar or angle a presentation section authors declares one domain
 (`WorldValueFields`): a light's weight, radius, power and angular radius, the
-curvature gains and ink band, a stop's elevation, the fog's density, the sun
-disc's radius and intensity, the stars' brightness and twinkle, the clouds'
-coverage, softness and scale, the theme's bloom and scrim alphas, a marker's
+curvature gains and ink band, a stop's elevation, the sun disc's radius and
+intensity, the stars' brightness and twinkle, the clouds' coverage, softness
+and scale, the atmosphere's fog density, height falloff, haze amount and
+anisotropy and medium extinction, the theme's bloom and scrim alphas, a marker's
 chip and ring alphas, and a camera program's operands (blend weight, path
 fraction, orbit angles, field of view, select key). The validator refuses a literal or a key outside
 its field's domain by name, and a load refuses a field bound to a state row

@@ -69,8 +69,6 @@ public static class WorldValueFields {
         Maximum: 1f,
         Minimum: -1f
     ));
-    /// <summary>The fog's density.</summary>
-    public static WorldValueField FogDensity { get; } = new(typeof(WorldRenderSkyLayer.Fog), nameof(WorldRenderSkyLayer.Fog.Density), WorldValueDomain.NonNegative);
     /// <summary>The sun disc's angular radius, in radians, above zero and up to a quarter turn.</summary>
     public static WorldValueField SunDiscRadius { get; } = new(typeof(WorldRenderSkyLayer.SunDisc), nameof(WorldRenderSkyLayer.SunDisc.Radius), new WorldValueDomain(
         Maximum: (MathF.PI / 2f),
@@ -100,6 +98,29 @@ public static class WorldValueFields {
     public static WorldValueField CloudSpin { get; } = new(typeof(WorldRenderSkyLayer.Clouds), nameof(WorldRenderSkyLayer.Clouds.Spin), WorldValueDomain.Finite);
     /// <summary>The clouds' curl, in radians.</summary>
     public static WorldValueField CloudCurl { get; } = new(typeof(WorldRenderSkyLayer.Clouds), nameof(WorldRenderSkyLayer.Clouds.Curl), WorldValueDomain.Finite);
+    /// <summary>The fog's density per world unit.</summary>
+    public static WorldValueField FogDensity { get; } = new(typeof(WorldRenderFog), nameof(WorldRenderFog.Density), WorldValueDomain.NonNegative);
+    /// <summary>An air kind's base height.</summary>
+    public static WorldValueField AirBase { get; } = new(typeof(WorldRenderAirHeight), nameof(WorldRenderAirHeight.Base), WorldValueDomain.Finite);
+    /// <summary>An air kind's falloff rise, at or above the thinnest layer a height profile admits.</summary>
+    public static WorldValueField AirFalloff { get; } = new(typeof(WorldRenderAirHeight), nameof(WorldRenderAirHeight.Falloff), new WorldValueDomain(
+        Maximum: float.PositiveInfinity,
+        Minimum: SdfAtmosphere.MinFalloff
+    ), Why: "a thinner layer is a level boundary, which the medium's surface spells");
+    /// <summary>The share of the light the haze takes over the far distance.</summary>
+    public static WorldValueField HazeAmount { get; } = new(typeof(WorldRenderHaze), nameof(WorldRenderHaze.Amount), new WorldValueDomain(
+        Maximum: SdfAtmosphere.MaxHazeAmount,
+        Minimum: 0f
+    ), Why: "a haze that takes all the light has no finite extinction");
+    /// <summary>The haze's Henyey-Greenstein anisotropy.</summary>
+    public static WorldValueField HazeAnisotropy { get; } = new(typeof(WorldRenderHaze), nameof(WorldRenderHaze.Anisotropy), new WorldValueDomain(
+        Maximum: SdfAtmosphere.MaxHazeAnisotropy,
+        Minimum: 0f
+    ), Why: "a sharper forward lobe collapses toward a point the composite cannot sample");
+    /// <summary>The medium's surface height.</summary>
+    public static WorldValueField MediumSurface { get; } = new(typeof(WorldRenderMedium), nameof(WorldRenderMedium.Surface), WorldValueDomain.Finite);
+    /// <summary>The medium's extinction per world unit.</summary>
+    public static WorldValueField MediumExtinction { get; } = new(typeof(WorldRenderMedium), nameof(WorldRenderMedium.Extinction), WorldValueDomain.NonNegative);
     /// <summary>A sky layer's opacity.</summary>
     public static WorldValueField SkyLayerOpacity { get; } = new(typeof(WorldRenderSkyLayer), nameof(WorldRenderSkyLayer.Opacity), WorldValueDomain.Unit);
     /// <summary>A sky layer's turn about the sky frame's up, in radians.</summary>
@@ -202,7 +223,6 @@ public static class WorldValueFields {
         CurvatureInkLow,
         CurvatureInkHigh,
         StopElevation,
-        FogDensity,
         SunDiscRadius,
         SunDiscIntensity,
         StarBrightness,
@@ -214,6 +234,13 @@ public static class WorldValueFields {
         CloudScale,
         CloudSpin,
         CloudCurl,
+        FogDensity,
+        AirBase,
+        AirFalloff,
+        HazeAmount,
+        HazeAnisotropy,
+        MediumSurface,
+        MediumExtinction,
         SkyLayerOpacity,
         SkyLayerTurn,
         SkyLayerTilt,

@@ -56,15 +56,15 @@ public sealed partial class SdfPassPlanLawTests {
         Assert.Contains(collection: resolve.Parameters.Interface.Members, filter: static member => (member.Group == ShaderInterfaceGroup.World));
     }
     // Reconstruction over time adds to the spatial graph at the same ceiling only its history, an output-sized color of
-    // eight bytes a pixel and surface of twelve, once a frame slot, and the reactivity, four bytes a render pixel held
-    // once: at 1920x1080 and half scale over three frame slots, 124,416,000 bytes of history and 2,073,600 of reactivity.
+    // eight bytes a pixel and surface of sixteen, once a frame slot, and the reactivity, four bytes a render pixel held
+    // once: at 1920x1080 and half scale over three frame slots, 149,299,200 bytes of history and 2,073,600 of reactivity.
     [Fact]
     public void ATemporalViewAddsOnlyItsHistoryAndReactivityOverTheSpatialGraph() {
         var counts = new ShaderPipelineStorageCounts(Height: 1080, Width: 1920) { InstanceMaskWords = 1, Instances = 5, RenderHeight = 540, RenderWidth = 960, Tiles = 8160, Viewports = 1 };
         const ulong History = ((1920UL * 1080) * (8 + (4 * SdfWorldPackage.HistorySurfaceWords)));
         const ulong Reactivity = ((960UL * 540) * 4);
 
-        Assert.Equal(actual: ((InFlight * History) + Reactivity), expected: 126_489_600UL);
+        Assert.Equal(actual: ((InFlight * History) + Reactivity), expected: 151_372_800UL);
         Assert.Equal(
             expected: ((InFlight * History) + Reactivity),
             actual: (PlannedBytes(plan: TemporalPlan, counts: counts) - PlannedBytes(plan: ResolvedPlan, counts: counts))

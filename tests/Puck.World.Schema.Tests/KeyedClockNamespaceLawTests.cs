@@ -19,8 +19,9 @@ public sealed class KeyedClockNamespaceLawTests {
                   },
                   { "$type": "point", "position": { "clock": "day", "keys": [ { "at": 0, "value": [1, 2, 3] } ] } }
                 ] },
+                "atmosphere": { "fog": { "density": { "clock": "day", "keys": [ { "at": 0, "value": 0.01 } ] } } },
                 "sky": { "layers": [
-                  { "$type": "fog", "density": { "clock": "day", "keys": [ { "at": 0, "value": 0.01 } ] } },
+                  { "$type": "stars", "brightness": { "clock": "day", "keys": [ { "at": 0, "value": 0.5 } ] } },
                   { "$type": "clouds", "drift": { "clock": "day", "keys": [ { "at": 0, "value": [1, 2] } ] },
                     "coverage": { "clock": "host", "keys": [ { "at": 0, "value": 0.5 } ] } }
                 ] }
@@ -40,7 +41,8 @@ public sealed class KeyedClockNamespaceLawTests {
         Assert.Equal(expected: "room$day", actual: lights[1]!["position"]!["clock"]!.GetValue<string>());
         var layers = module["render"]!["sky"]!["layers"]!;
 
-        Assert.Equal(expected: "room$day", actual: layers[0]!["density"]!["clock"]!.GetValue<string>());
+        Assert.Equal(expected: "room$day", actual: layers[0]!["brightness"]!["clock"]!.GetValue<string>());
+        Assert.Equal(expected: "room$day", actual: module["render"]!["atmosphere"]!["fog"]!["density"]!["clock"]!.GetValue<string>());
         Assert.Equal(expected: "room$day", actual: layers[1]!["drift"]!["clock"]!.GetValue<string>());
         Assert.Equal(expected: "host", actual: layers[1]!["coverage"]!["clock"]!.GetValue<string>());
     }

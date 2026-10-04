@@ -514,6 +514,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                 new SdfDensityStop(Color: new Vector3(x: 0.5f, y: 0.5f, z: 0.6f), Density: 0.9f),
             ],
             Rotation: new Quaternion(w: 0.8f, x: 0f, y: 0.6f, z: 0f),
+            Scatter: 0.65f,
             Seed: 11u,
             Softness: 0.3f,
             Speed: 0.5f,
@@ -525,8 +526,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // Each entry's rows at presented tick zero (SdfVolumeMotion bakes the motion, SdfSkyClockLawTests its later
         // ticks): position and dynamic slot; rotation; half extent and axis; width, the advection (none yet), the seed's
         // bits and the steps; intensity, extinction and the pulse's gain (one at phase zero); the intensity lane, the
-        // ramp's length, the kind and a cloud's Z advection; four ramp rows, color and density; then coverage and
-        // softness.
+        // ramp's length, the kind and a cloud's Z advection; four ramp rows, color and density; then coverage, softness
+        // and the share of the bodies' light it scatters.
         float[] flowRows = [
             1f, 2f, 3f, 1f,
             0f, 0f, 0f, 1f,
@@ -551,7 +552,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             0.5f, 0.5f, 0.6f, 0.9f,
             0f, 0f, 0f, 0f,
             0f, 0f, 0f, 0f,
-            0.4f, 0.3f, 0f, 0f,
+            0.4f, 0.3f, 0.65f, 0f,
         ];
 
         byte[] Table() => rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))));

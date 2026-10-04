@@ -25,7 +25,9 @@ public sealed class SdfSkyEnvironmentRefresh {
     public bool Owes(in SdfSkyBlock block, ReadOnlySpan<SdfSkyLayer> layers) {
         Projected = false;
         Skipped = false;
-        if (!(block.FogDensity > 0f || block.Ambient > 0f || block.Reflection > 0f)) {
+        if (!(block.Ambient > 0f || block.Reflection > 0f ||
+            ((block.FogExtinction > 0f) && ((block.AirFlags & SdfAir.FogColorAuthored) == 0u)) ||
+            (block.HazeExtinction > 0f))) {
             return false;
         }
         if (!m_hasCandidate || !SdfSkyEnvironment.SameMap(block, layers, m_candidateBlock, m_candidateLayers)) {

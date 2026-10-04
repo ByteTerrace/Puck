@@ -37,7 +37,7 @@ public class ClockSpellingLawTests {
             }
             sky {
                 layers [
-                    fog(name: "haze", density: { clock: {{clock}}, keys [ { at: 0h, value: 0 } { at: 12h, value: 0.01 } ] })
+                    stars(name: "haze", brightness: { clock: {{clock}}, keys [ { at: 0h, value: 0 } { at: 12h, value: 0.01 } ] })
                     sunDisc(name: "disc", radius: { clock: {{clock}}, keys [ { at: 6h, value: 1deg } ] })
                 ]
                 clock: {{clock}}
@@ -45,7 +45,7 @@ public class ClockSpellingLawTests {
                     {
                         at: 6h
                         layers {
-                            haze: fog(density: 0.02)
+                            haze: stars(brightness: 0.02)
                         }
                     }
                 ]
@@ -59,12 +59,12 @@ public class ClockSpellingLawTests {
         var render = WorldSources.LowerSourceClean(source: (Head + Sky(clock: "day", ease: "Smooth")))["render"]!;
 
         Assert.Equal(expected: "day", actual: render["sky"]!["clock"]!.GetValue<string>());
-        Assert.Equal(expected: "day", actual: render["sky"]!["layers"]![0]!["density"]!["clock"]!.GetValue<string>());
+        Assert.Equal(expected: "day", actual: render["sky"]!["layers"]![0]!["brightness"]!["clock"]!.GetValue<string>());
         Assert.Equal(expected: "day", actual: render["lighting"]!["curvature"]!["ink"]!["clock"]!.GetValue<string>());
         Assert.Equal(expected: "Smooth", actual: render["lighting"]!["curvature"]!["ink"]!["keys"]![1]!["ease"]!.GetValue<string>());
         // A keyed value's value takes its field's unit: one degree of the sun disc's radius, in radians.
         Assert.Equal(expected: 0.017453d, actual: render["sky"]!["layers"]![1]!["radius"]!["keys"]![0]!["value"]!.GetValue<double>(), precision: 6);
-        Assert.Equal(expected: 43200L, actual: render["sky"]!["layers"]![0]!["density"]!["keys"]![1]!["at"]!.GetValue<long>());
+        Assert.Equal(expected: 43200L, actual: render["sky"]!["layers"]![0]!["brightness"]!["keys"]![1]!["at"]!.GetValue<long>());
     }
     [Fact]
     public void AQuotedClockIsRefusedNamingTheBareSpelling() {

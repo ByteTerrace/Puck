@@ -171,7 +171,7 @@ public sealed partial class SdfSkyEnvironmentLawTests {
         var map = new Vector3[SdfSkyEnvironment.Texels];
 
         layers ??= new SdfSkyLayer[SdfSky.MaxLayers];
-        sky.Pack(block: out block, details: new SdfSkyDetails(), layers: layers, lights: SdfLights.Default());
+        sky.Pack(block: out block, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: SdfLights.Default());
         SdfSkyEnvironment.Render(block: in block, layers: layers, map: map);
 
         return map;

@@ -14,11 +14,15 @@ public sealed partial class SdfWorldPassesLawTests {
     [InlineData("fog-color", false)]
     [InlineData("volume", false)]
     [InlineData("fog-density", false)]
+    [InlineData("haze", false)]
+    [InlineData("medium", false)]
     [InlineData("light-color", false)]
     [InlineData("shadow-direction", false)]
     [InlineData("camera", false)]
     [InlineData("drift", true)]
     [InlineData("fog-density", true)]
+    [InlineData("haze", true)]
+    [InlineData("medium", true)]
     [InlineData("light-color", true)]
     [InlineData("shadow-direction", true)]
     [InlineData("camera", true)]
@@ -40,7 +44,9 @@ public sealed partial class SdfWorldPassesLawTests {
                 Ramp: [new SdfDensityStop(Density: 0f, Color: Vector3.Zero), new SdfDensityStop(Density: 1f, Color: Vector3.One)],
                 Intensity: 1f, Extinction: 0.5f)],
                 }; break;
-            case "fog-density": frame.Sky.Block.FogDensity = 0.08f; goto case "lighting";
+            case "fog-density": frame.Sky.Atmosphere.FogDensity = 0.08f; goto case "lighting";
+            case "haze": frame.Sky.Atmosphere.HazeAmount = 0.2f; goto case "lighting";
+            case "medium": frame.Sky.Atmosphere.MediumExtinction = 0.2f; goto case "lighting";
             case "light-color": frame.Lights.Set(index: 0, light: frame.Lights[0] with { Color = new Vector3(x: 0.2f, y: 0.4f, z: 0.6f) }); goto case "lighting";
             case "lighting": executed = [SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed]; break;
             case "shadow-direction":

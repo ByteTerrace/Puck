@@ -2,8 +2,8 @@
 // pixel. It resolves the lit image, color premultiplied by coverage and fog transmittance with coverage in alpha, which
 // only views wrote, and only inside the dispatch box cull-args left: every render sample outside it reads as transparent.
 // Beside it, it resolves each sample's surface transport (shade/sdf-transport.hlsli), computed from the sample's coverage
-// and its own visibility record's ray distance, with exactly the color's weights, so the composite's fog and media see
-// the coverage the color has. Spatial, it reconstructs the active render grid without sampling unrendered ceiling pixels
+// and its own visibility record's ray distance along the output pixel's ray, with exactly the color's weights, so the
+// composite's atmosphere and media see the coverage the color has. Spatial, it reconstructs the active render grid without sampling unrendered ceiling pixels
 // (reconstruction.hlsli), reading both quantities' taps over one footprint. Temporal (passGroup.temporal, with no debug
 // view), the history holds, per output pixel, the weighted mean of every jittered sample the pixel has gathered,
 // coverage with color and transport, and their summed weight:
@@ -21,8 +21,8 @@
 // extent and no jitter, each pixel is its render sample copied whole, and its transport word carries that sample's ray
 // distance, which the composite turns into transport with a native view's own arithmetic. The history surface holds the
 // gathered weight, capped at one jitter period of full-weight samples. Beside the lit image it writes each output
-// pixel's transport word (sdf-transport.hlsli), which the composite scales the fog's in-scatter by and clips the volumes
-// by. The sky never enters the history: the sky and composite passes follow this one.
+// pixel's transport words (sdf-transport.hlsli), which the composite scales each atmosphere kind's in-scatter by and clips
+// the volumes by. The sky never enters the history: the sky and composite passes follow this one.
 #define SDF_DYNAMIC_TRANSFORMS
 #include "../isa/sdf-resolve.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
@@ -33,9 +33,9 @@
 
 // The words an output pixel holds in the history surface: the nearest surface's identity, then its ray distance and the
 // gathered weight as two half floats (the distance low; the far limit 8192 and the weight cap stay normal halves, each
-// within a relative 2^-11, far inside SdfHistoryDepthTolerance), then the accumulated transport (sdfPackTransport).
-// KEEP IN SYNC with SdfWorldPackage.HistorySurfaceWords.
-static const uint SdfHistorySurfaceWords = 3u;
+// within a relative 2^-11, far inside SdfHistoryDepthTolerance), then the accumulated transport's two words
+// (sdfPackTransport). KEEP IN SYNC with SdfWorldPackage.HistorySurfaceWords.
+static const uint SdfHistorySurfaceWords = 4u;
 // The relative ray-distance disagreement a reprojected history sample may carry and still describe the same surface.
 static const float SdfHistoryDepthTolerance = 0.05;
 // The accumulated weight history saturates at: one jitter period of full-weight samples. KEEP IN SYNC with
@@ -73,7 +73,7 @@ float3 sdfClipToBox(float3 color, float3 boxMin, float3 boxMax) {
 // The history at a continuous output position, the first texel's center at zero: Catmull-Rom over the sixteen nearest
 // texels, each clamped to the image, the color from the history color and the transport from the history surface with
 // one set of weights.
-void sdfHistoryAt(float2 position, uint2 dims, out float4 color, out float2 transport) {
+void sdfHistoryAt(float2 position, uint2 dims, out float4 color, out float4 transport) {
     float2 origin = floor(position);
     float2 f = (position - origin);
     float4 wx = puckCatmullRomWeights(f.x);
@@ -81,16 +81,18 @@ void sdfHistoryAt(float2 position, uint2 dims, out float4 color, out float2 tran
     int2 corner = (int2(origin) - 1);
 
     color = float4(0.0, 0.0, 0.0, 0.0);
-    transport = float2(0.0, 0.0);
+    transport = float4(0.0, 0.0, 0.0, 0.0);
     [unroll] for (int y = 0; y < 4; y++) {
         float4 rowColor = float4(0.0, 0.0, 0.0, 0.0);
-        float2 rowTransport = float2(0.0, 0.0);
+        float4 rowTransport = float4(0.0, 0.0, 0.0, 0.0);
 
         [unroll] for (int x = 0; x < 4; x++) {
             uint2 texel = sdfResolveClamp((corner + int2(x, y)), dims);
 
             rowColor += (wx[x] * historyColor.Load(int3(texel, 0)));
-            rowTransport += (wx[x] * sdfUnpackTransport(historySurface[((SdfHistorySurfaceWords * ((texel.y * dims.x) + texel.x)) + 2u)]));
+            uint word = ((SdfHistorySurfaceWords * ((texel.y * dims.x) + texel.x)) + 2u);
+
+            rowTransport += (wx[x] * sdfUnpackTransport(uint2(historySurface[word], historySurface[word + 1u])));
         }
         color += (wy[y] * rowColor);
         transport += (wy[y] * rowTransport);
@@ -105,22 +107,31 @@ void sdfCurrentViewRows(out float4 rows[6]) {
     rows[4] = float4((float2)passGroup.imageExtent, 0.0, 0.0);
     rows[5] = float4(passGroup.nearDistance, passGroup.frustumOffset, 0.0);
 }
+// The output pixel's unjittered ray, which every render sample of its footprint carries its transport along, as the
+// composite's sdfSkyPassDirection takes it.
+float3 sdfResolveAirDirection(uint2 pixel, uint2 extent) {
+    ViewportData view = worldView();
+
+    view.lens.yz = passGroup.frustumOffset;
+
+    return cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(extent)));
+}
 // A render sample's transport beside the color tap read at the same pixel: zero where that tap has no coverage, which
 // every tap outside the dispatch box has, and for a sample with no surface.
-float2 sdfResolveTransportAt(int2 pixel, uint2 render, float coverage) {
+float4 sdfResolveTransportAt(int2 pixel, uint2 render, float coverage, float3 origin, float3 direction) {
     if (coverage <= 0.0) {
-        return float2(0.0, 0.0);
+        return float4(0.0, 0.0, 0.0, 0.0);
     }
 
     SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(sdfResolveClamp(pixel, render), 0u, render));
 
-    return (sdfVisibilityHit(visibility) ? sdfSampleTransport(coverage, visibility.t) : float2(0.0, 0.0));
+    return (sdfVisibilityHit(visibility) ? sdfSampleTransport(coverage, visibility.t, origin, direction) : float4(0.0, 0.0, 0.0, 0.0));
 }
 // The spatial path: the lit color and its transport at a continuous render-grid position, each reconstructed from the
 // same taps with one set of weights, and the transport word the composite reads; or, where the output has the grid's
 // extent and no jitter, the render pixel itself, whose word is its sample's ray distance (sdfTransportSampleWord), read
 // from the record exactly where a native view's composite reads it.
-void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, uint4 current, out float4 color, out float2 transport, out uint word) {
+void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, uint4 current, float3 origin, float3 direction, out float4 color, out float4 transport, out uint2 word) {
     if (exact) {
         float t = 0.0;
 
@@ -130,7 +141,7 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, u
 
             t = (sdfVisibilityHit(visibility) ? visibility.t : 0.0);
         }
-        transport = sdfSampleTransport(color.a, t);
+        transport = sdfSampleTransport(color.a, t, origin, direction);
         word = sdfTransportSampleWord(t);
         return;
     }
@@ -146,11 +157,11 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, u
             int2 at = (footprint.origin + puckReconstructionTapOffset(tap));
 
             colors[tap] = puckReconstructionTapWithin(currentColor, at, render, uint2(0, 0), current);
-            transports[tap].xy = sdfResolveTransportAt(at, render, colors[tap].a);
+            transports[tap] = sdfResolveTransportAt(at, render, colors[tap].a, origin, direction);
         }
     }
     color = puckReconstructionCombine(footprint, colors);
-    transport = puckReconstructionCombine(footprint, transports).xy;
+    transport = puckReconstructionCombine(footprint, transports);
     word = sdfPackTransport(transport);
 }
 
@@ -165,12 +176,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     bool temporal = ((passGroup.temporal != 0u) && (passGroup.debugMode == 0u));
     // The spatial path at this frame's sample grid: the sample of render pixel i lies at i + 0.5 + jitter.
     bool unjittered = (!temporal || all(jitter == 0.0));
+    float3 airOrigin = passGroup.viewPosition;
+    float3 airDirection = sdfResolveAirDirection(id.xy, extent);
     float4 spatial;
-    float2 spatialTransport;
-    uint spatialWord;
+    float4 spatialTransport;
+    uint2 spatialWord;
 
     sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (unjittered ? float2(0.0, 0.0) : jitter)),
-        (unjittered && all(render == extent)), render, current, spatial, spatialTransport, spatialWord);
+        (unjittered && all(render == extent)), render, current, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
     if (!temporal) {
         output[id.xy] = spatial;
         sdfWorkTexels = 1u;
@@ -183,15 +196,15 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float2 center = ((float2(id.xy) + 0.5) / scale);
     int2 nearest = int2(floor(center - jitter));
     float4 sum = float4(0.0, 0.0, 0.0, 0.0);
-    float2 transportSum = float2(0.0, 0.0);
+    float4 transportSum = float4(0.0, 0.0, 0.0, 0.0);
     float weightSum = 0.0;
     float reactive = 0.0;
     float3 boxMin = float3(3.402823e+38, 3.402823e+38, 3.402823e+38);
     float3 boxMax = -boxMin;
     float coverageMin = 1.0;
     float coverageMax = 0.0;
-    float2 transportMin = float2(3.402823e+38, 3.402823e+38);
-    float2 transportMax = float2(0.0, 0.0);
+    float4 transportMin = float4(3.402823e+38, 3.402823e+38, 3.402823e+38, 3.402823e+38);
+    float4 transportMax = float4(0.0, 0.0, 0.0, 0.0);
     bool hit = false;
     float hitT = 0.0;
     uint hitIdentity = 0u;
@@ -206,7 +219,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
             float2 offset = (((float2(pixel) + 0.5 + jitter) - center) * scale);
             float weight = exp(-SdfResolveFilterFalloff * dot(offset, offset));
             float3 ycocg = sdfToYCoCg(color.rgb);
-            float2 transport = float2(0.0, 0.0);
+            float4 transport = float4(0.0, 0.0, 0.0, 0.0);
 
             if (current) {
                 reactive = max(reactive, reactivity[sdfReactivityIndex(pixel, 0u, render)]);
@@ -217,7 +230,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
                 bool surface = sdfVisibilityHit(visibility);
 
                 if (surface) {
-                    transport = sdfSampleTransport(color.a, visibility.t);
+                    transport = sdfSampleTransport(color.a, visibility.t, airOrigin, airDirection);
                 }
                 if (surface && (!hit || (visibility.t < hitT))) {
                     hit = true;
@@ -297,11 +310,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // sample's full weight is gathered, the spatial path shows through.
     float historyWeight = 0.0;
     float4 history = float4(0.0, 0.0, 0.0, 0.0);
-    float2 historyTransport = float2(0.0, 0.0);
+    float4 historyTransport = float4(0.0, 0.0, 0.0, 0.0);
 
     if (accepted) {
         float4 previous;
-        float2 previousTransport;
+        float4 previousTransport;
 
         sdfHistoryAt(historyPosition, extent, previous, previousTransport);
         // Clipping infinity can produce NaN, and even zero history weight cannot remove it (NaN * 0 is NaN).
@@ -318,7 +331,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     float total = (historyWeight + weightSum);
     float4 accumulated = (((history * historyWeight) + sum) / max(total, 1.0e-6));
-    float2 accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
+    float4 accumulatedTransport = (((historyTransport * historyWeight) + transportSum) / max(total, 1.0e-6));
     float4 resolved = (accepted ? lerp(spatial, accumulated, saturate(total)) : spatial);
 
     uint word = (SdfHistorySurfaceWords * ((id.y * extent.x) + id.x));
@@ -333,6 +346,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     historyColorRW[id.xy] = (reusable ? clamp(accumulated, -65504.0, 65504.0) : float4(0.0, 0.0, 0.0, 0.0));
     historySurfaceRW[word] = hitIdentity;
     historySurfaceRW[word + 1u] = (f32tof16(hit ? hitT : 0.0) | (f32tof16(reusable ? min(total, SdfHistoryWeightCap) : 0.0) << 16u));
-    historySurfaceRW[word + 2u] = sdfPackTransport(reusable ? accumulatedTransport : float2(0.0, 0.0));
+    uint2 historyTransportWords = sdfPackTransport(reusable ? accumulatedTransport : float4(0.0, 0.0, 0.0, 0.0));
+
+    historySurfaceRW[word + 2u] = historyTransportWords.x;
+    historySurfaceRW[word + 3u] = historyTransportWords.y;
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
 }

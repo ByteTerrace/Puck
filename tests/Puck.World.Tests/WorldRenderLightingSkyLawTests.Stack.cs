@@ -9,7 +9,8 @@ namespace Puck.World.Tests;
 // with its kind's blend and visibility unless it states its own, its opacity, mask, transform and lowest tier; the sky
 // frame and the sky's quality tier reach the block; and the validator refuses by name a stack its passes cannot draw: a
 // field run past the upper runs, a mask that is neither or both of a band and a cone, a clock the timeline does not
-// declare, a panorama of an undeclared screen or one the lighting would see, and a layer field on fog.
+// declare, a panorama of an undeclared screen or one the lighting would see, and a layer named for a fixed
+// work-counter row (a field run's or the atmosphere's), which its row could not hold apart.
 public sealed partial class WorldRenderLightingSkyLawTests {
     [Fact]
     public void AStackResolvesInItsAuthoredOrderWithItsKindsDefaultsAndItsOwnFields() {
@@ -62,7 +63,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
 
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-        sky.Pack(block: out var block, details: new SdfSkyDetails(), layers: layers, lights: resolved.Lights);
+        sky.Pack(block: out var block, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: resolved.Lights);
         Assert.Equal(expected: Vector3.Normalize(value: new Vector3(x: 0f, y: 1f, z: 1f)), actual: block.FrameUp);
         Assert.Equal(actual: block.LayerCount, expected: 6u);
         Assert.Equal(actual: (block.BaseRun, block.UpperRuns), expected: (1u, 1u));
@@ -83,10 +84,10 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
         Assert.Equal(expected: SdfSkyTier.Low, actual: low.Sky.Quality);
-        low.Sky.Pack(block: out var lowBlock, details: new SdfSkyDetails(), layers: layers, lights: low.Lights);
+        low.Sky.Pack(block: out var lowBlock, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: low.Lights);
         Assert.Equal(actual: lowBlock.LayerCount, expected: 1u);
         Assert.Equal(expected: SdfSkyLayerKind.Gradient, actual: layers[0].Kind);
-        high.Sky.Pack(block: out var highBlock, details: new SdfSkyDetails(), layers: layers, lights: high.Lights);
+        high.Sky.Pack(block: out var highBlock, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: high.Lights);
         Assert.Equal(actual: highBlock.LayerCount, expected: 2u);
         Assert.Equal(expected: SdfSkyLayerKind.Clouds, actual: layers[1].Kind);
     }
@@ -149,14 +150,14 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
     }
     [Fact]
-    public void SkyFog_WithALayerField_RefusesByName_ControlPlainClean() {
+    public void SkyLayerName_AFixedRowsLabel_RefusesByName_ControlOtherNameClean() {
         Laws.RefusalWithControl(
-            lawId: "render.sky.fog-air",
+            lawId: "render.sky.layer-name-not-a-fixed-row",
             deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.01f) { Blend = WorldSkyBlend.Add }]) },
+                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(Brightness: 0.5f, Name: SdfSkyDetails.Atmosphere)]) },
             })),
             controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildDocument() with {
-                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Fog(Density: 0.01f)]) },
+                RenderRaw = BaseDefaults() with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Stars(Brightness: 0.5f, Name: "air")]) },
             }))
         );
     }

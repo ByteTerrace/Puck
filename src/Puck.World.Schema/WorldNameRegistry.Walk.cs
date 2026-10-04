@@ -138,7 +138,7 @@ public static partial class WorldNameRegistry {
     private static WorldNameExclusion[] SectionKeyNames => [
         .. new[] { typeof(WorldRenderLight.Directional), typeof(WorldRenderLight.Rim), typeof(WorldRenderLight.Point), typeof(WorldRenderLight.Occluder) }
             .Select(selector: static owner => new WorldNameExclusion(Member: "Name", Owner: owner, Reason: "a light name a section key addresses")),
-        .. new[] { typeof(WorldRenderSkyLayer.Gradient), typeof(WorldRenderSkyLayer.Fog), typeof(WorldRenderSkyLayer.SunDisc), typeof(WorldRenderSkyLayer.Stars), typeof(WorldRenderSkyLayer.Clouds), typeof(WorldRenderSkyLayer.Aurora), typeof(WorldRenderSkyLayer.Noise), typeof(WorldRenderSkyLayer.Pattern), typeof(WorldRenderSkyLayer.Panorama), typeof(WorldRenderSkyLayer.Panel) }
+        .. new[] { typeof(WorldRenderSkyLayer.Gradient), typeof(WorldRenderSkyLayer.SunDisc), typeof(WorldRenderSkyLayer.Stars), typeof(WorldRenderSkyLayer.Clouds), typeof(WorldRenderSkyLayer.Aurora), typeof(WorldRenderSkyLayer.Noise), typeof(WorldRenderSkyLayer.Pattern), typeof(WorldRenderSkyLayer.Panorama), typeof(WorldRenderSkyLayer.Panel) }
             .Select(selector: static owner => new WorldNameExclusion(Member: "Name", Owner: owner, Reason: "a sky layer name a section key addresses")),
     ];
 

@@ -176,7 +176,7 @@ public sealed class SkyRunCompositionLawTests {
 
         var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-        sky.Pack(block: out var block, details: new SdfSkyDetails(), layers: layers, lights: SdfLights.Default());
+        sky.Pack(block: out var block, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: SdfLights.Default());
         Assert.Equal(actual: block.LayerCount, expected: 6u);
         Assert.Equal(actual: block.BaseRun, expected: 1u);
         Assert.Equal(actual: block.UpperRuns, expected: ((uint)SdfSky.MaxUpperFieldRuns));

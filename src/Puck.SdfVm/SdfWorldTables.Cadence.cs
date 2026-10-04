@@ -40,6 +40,8 @@ namespace Puck.SdfVm;
 // The pass block's temporal values (jitter, previous view) and the previous transform tables belong to each instance's
 // history, not the tables: SdfWorldPasses.IsUnchanged holds them through SdfTemporalHistory.Stands.
 public sealed partial class SdfWorldTables {
+    // The atmosphere occupies the packed tail; its flags precede the sky header and are hashed separately.
+    private static readonly int AtmosphereOffset = Marshal.OffsetOf<SdfSkyBlock>(fieldName: nameof(SdfSkyBlock.AirLightCount)).ToInt32();
     private readonly byte[] m_signatureBlock = new byte[SdfFrameBlock.SizeBytes];
 
     private ulong m_tablesSignature;
@@ -246,9 +248,11 @@ public sealed partial class SdfWorldTables {
         lighting.Add(values: m_screenLightScratch);
         lighting.Add(values: MemoryMarshal.AsBytes(span: m_shadowHandoffs.AsSpan(length: m_shadowHandoffCount, start: 0)));
         ref var sky = ref m_skyRecord[0];
-        Span<float> hitSky = [sky.FogDensity, sky.Ambient, sky.Reflection];
+        Span<float> hitSky = [sky.Ambient, sky.Reflection];
 
         lighting.Add(values: MemoryMarshal.AsBytes(span: hitSky));
+        lighting.Add(value: sky.AirFlags);
+        lighting.Add(values: MemoryMarshal.AsBytes(span: MemoryMarshal.CreateReadOnlySpan(length: 1, reference: in sky))[AtmosphereOffset..]);
         // Reflections evaluate panels directly, even when their change is below the map's refresh threshold.
         var panels = false;
 

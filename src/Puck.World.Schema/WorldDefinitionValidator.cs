@@ -870,6 +870,11 @@ public static partial class WorldDefinitionValidator {
             environment: definition.Render.Environment,
             errors: errors
         );
+        ValidateRenderAtmosphere(
+            atmosphere: definition.Render.Atmosphere,
+            definition: definition,
+            errors: errors
+        );
 
         ValidateUpdate(
             errors: errors,

@@ -110,6 +110,7 @@ public static class SdfSkyKindsHlsl {
         Define(name: "SDF_SKY_MAX_STOPS", value: SdfSky.MaxStops);
         Define(name: "SDF_SKY_MAX_UPPER_FIELD_RUNS", value: SdfSky.MaxUpperFieldRuns);
         Define(name: "SDF_SKY_DETAIL_RUNS", value: SdfSkyDetails.Runs);
+        Define(name: "SDF_SKY_DETAIL_ATMOSPHERE", value: SdfSkyDetails.AtmosphereRow);
         Line();
         Members<SdfSkyBlend>(prefix: "SDF_SKY_BLEND");
         Members<SdfSkyMask>(prefix: "SDF_SKY_MASK");

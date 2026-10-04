@@ -43,10 +43,6 @@
                 }
               ]
             },
-            "haze": {
-              "$type": "fog",
-              "density": 0
-            },
             "sun": {
               "$type": "sunDisc",
               "intensity": 0
@@ -76,10 +72,6 @@
                   "elevation": 1
                 }
               ]
-            },
-            "haze": {
-              "$type": "fog",
-              "density": 0.004
             },
             "sun": {
               "$type": "sunDisc",
@@ -112,11 +104,6 @@
           ]
         },
         {
-          "$type": "fog",
-          "density": 0.004,
-          "name": "haze"
-        },
-        {
           "$type": "sunDisc",
           "intensity": 1.5,
           "light": 0,
@@ -124,6 +111,23 @@
           "radius": 0.018
         }
       ]
+    },
+    "atmosphere": {
+      "fog": {
+        "density": {
+          "clock": "skyMode",
+          "keys": [
+            {
+              "at": 0,
+              "value": 0
+            },
+            {
+              "at": 0.5,
+              "value": 0.004
+            }
+          ]
+        }
+      }
     }
   },
   "schema": "puck.world.definition.v1",

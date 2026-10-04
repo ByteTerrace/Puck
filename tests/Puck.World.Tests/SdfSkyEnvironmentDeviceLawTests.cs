@@ -54,7 +54,7 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
         }) {
             var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
-            sky.Pack(block: out var block, details: new SdfSkyDetails(), layers: layers, lights: SdfLights.Default());
+            sky.Pack(block: out var block, details: new SdfSkyDetails(), farDistance: 40f, layers: layers, lights: SdfLights.Default());
 
             var expected = new Vector3[SdfSkyEnvironment.Texels];
 

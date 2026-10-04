@@ -1,0 +1,13 @@
+# Every frame renders every pass, so each read's newest completed submissions are a whole frame of the view.
+world.cadence off
+# The engine ready first, however long a cold driver cache takes; the leg's own timeout bounds it.
+world.wait ready 180
+world.wait 12
+world.screenshot {run}/toward.png
+world.wait captures 30
+# The same view turned to face away from the low sun.
+world.row.set cameras haze-cam rig.operations[1].subject.point [0,0.4,4]
+world.wait 12
+world.counters gpu
+world.screenshot {run}/away.png
+world.wait captures 30

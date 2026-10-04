@@ -79,8 +79,8 @@ staged region of frame data owes, copied into its device-local buffer; see
 (materials, lighting and diagnostics, shading hits only into the lit image,
 premultiplied by coverage) → `sdf-sky-runs.comp` (the sky's field runs, only where
 coverage is below one) → `sdf-composite.comp` (the sky's runs in their authored
-order, the lit image over them by its coverage, the fog and the bounded media,
-into the output). The ambient and shadow passes skip a
+order, the lit image over them by its coverage, the atmosphere's in-scatter and
+the bounded media, into the output). The ambient and shadow passes skip a
 frame whose levers turn them off. The region copies are the
 residency's one upload a frame (`SdfWorldResidency.Submit`); every pass after
 it runs once per view as a pass of the view's `sdf.world` instance, into that

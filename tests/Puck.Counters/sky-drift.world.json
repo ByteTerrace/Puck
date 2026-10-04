@@ -182,10 +182,6 @@
           ]
         },
         {
-          "$type": "fog",
-          "density": 0.012
-        },
-        {
           "$type": "sunDisc",
           "light": 0,
           "radius": 0.045,
@@ -221,6 +217,11 @@
           "curl": 0.3
         }
       ]
+    },
+    "atmosphere": {
+      "fog": {
+        "density": 0.012
+      }
     },
     "low": {
       "shadows": "Off",

@@ -198,6 +198,12 @@ public static partial class CreationCanonicalizer {
                 }
             }
             ValidateUnitRange(
+                volume.Scatter,
+                "scatter",
+                errors,
+                (path + ".scatter")
+            );
+            ValidateUnitRange(
                 volume.PulseAmplitude,
                 "pulseAmplitude",
                 errors,

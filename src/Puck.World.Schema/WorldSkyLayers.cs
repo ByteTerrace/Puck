@@ -8,7 +8,7 @@ namespace Puck.World;
 public static class WorldSkyLayers {
     /// <summary>Returns a layer's engine kind.</summary>
     /// <param name="layer">The layer.</param>
-    /// <returns>The kind, or <see langword="null"/> for fog, which is not a layer of the stack.</returns>
+    /// <returns>The kind, or <see langword="null"/> for a layer of no kind the engine draws.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
     public static SdfSkyLayerKind? KindOf(WorldRenderSkyLayer layer) {
         ArgumentNullException.ThrowIfNull(argument: layer);
@@ -28,7 +28,7 @@ public static class WorldSkyLayers {
     }
     /// <summary>Returns a layer's class, its kind's.</summary>
     /// <param name="layer">The layer.</param>
-    /// <returns>The class; fog's is <see cref="SdfSkyLayerClass.Field"/>, which nothing reads.</returns>
+    /// <returns>The class.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
     public static SdfSkyLayerClass ClassOf(WorldRenderSkyLayer layer) => KindOf(layer: layer) switch {
         SdfSkyLayerKind.Panel => SdfSkyPanel.Class,
@@ -87,7 +87,7 @@ public static class WorldSkyLayers {
     /// <summary>Returns the kind name a layer's rows are labelled with when it has no name: <c>gradient</c>, <c>disc</c>,
     /// <c>stars</c>, <c>clouds</c>, <c>aurora</c>, <c>noise</c>, <c>pattern</c> or <c>panorama</c>.</summary>
     /// <param name="layer">The layer.</param>
-    /// <returns>The name, or <see langword="null"/> for fog.</returns>
+    /// <returns>The name, or <see langword="null"/> for a layer of no kind the engine draws.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
     public static string? KindNameOf(WorldRenderSkyLayer layer) => KindOf(layer: layer) switch {
         SdfSkyLayerKind.Panel => SdfSkyPanel.Name,
@@ -104,7 +104,7 @@ public static class WorldSkyLayers {
     /// <summary>Returns the labels each layer of a stack counts its work under: its name, or its kind's name, with
     /// <c>#2</c>, <c>#3</c> and so on after the second and later unnamed layers of one kind.</summary>
     /// <param name="layers">The stack, lowest first.</param>
-    /// <returns>One label a layer, <see langword="null"/> for fog and a missing layer.</returns>
+    /// <returns>One label a layer, <see langword="null"/> for a missing layer.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="layers"/> is <see langword="null"/>.</exception>
     public static string?[] LabelsOf(IReadOnlyList<WorldRenderSkyLayer?> layers) {
         ArgumentNullException.ThrowIfNull(argument: layers);
