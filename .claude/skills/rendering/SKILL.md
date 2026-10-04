@@ -98,6 +98,14 @@ is insufficient. This is independent of per-view receiver admission and reuses
 its four-byte readback; do not add a second readiness ring or invalidate
 receiver certificates for a lighting-only edit.
 
+Dynamic transport invalidation follows actual packed transform-row changes.
+`SdfProgram.BuildDynamicTransformBounds` collects the existing segment/instance
+bounds once per upload; the tables queue old and current bounds before overwrite.
+Preserve rotation, participation and lane changes, identical-row standing, and
+the distinction between static unbounded geometry and an unbounded dynamic
+dependency. Reuse `MarkGeometry` and its admitted/frozen queue instead of adding
+another invalidation schedule.
+
 Indirect inspection extends the existing surface picker. Its 272-byte GPU
 record and full probe-state census share the visibility submission's fence and
 retain that request's allocation, epoch, published source and final receiver

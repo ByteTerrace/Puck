@@ -60,6 +60,7 @@ public sealed partial class SdfWorldTables {
         m_instanceGridRebuildOwed = rebuildInstanceGridPerFrame;
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
         m_liveProgram = program;
+        m_indirectDynamicBounds = program.BuildDynamicTransformBounds();
         m_rebuildInstanceGridPerFrame = rebuildInstanceGridPerFrame;
         m_requiredDynamicTransformCapacity = program.RequiredDynamicTransformCapacity;
         // CADENCE GATE: whether ANY declared screen forces every frame to render — see m_programDeclaresScreenSlab.

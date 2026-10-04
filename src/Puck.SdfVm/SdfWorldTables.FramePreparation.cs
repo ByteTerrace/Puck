@@ -110,6 +110,7 @@ public sealed partial class SdfWorldTables {
     }
     // Writes one packed slot into the dynamic-transform region, which owes the words of it that changed.
     private void WriteDynamicTransform(ReadOnlySpan<float> floats, int slot) {
+        MarkIndirectTransform(floats, slot);
         if (m_dynamicTransformRegion.Write(bytes: MemoryMarshal.AsBytes(span: floats), offset: (slot * DynamicTransformByteLength))) {
             m_changedTransforms.Add(length: 1, start: slot);
         }

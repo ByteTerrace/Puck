@@ -243,6 +243,15 @@ replaces it; placement lookup can still find the neighboring probes it needs.
 The change also withdraws the lighting publication and receiver certificates.
 This transport operation does not require replacing the cache allocation.
 
+Program upload collects a conservative influence bound for each dynamic slot
+from the existing packed segment and instance bounds. Static unbounded geometry
+does not taint unrelated dynamic slots; an unsupported dynamic dependency stays
+explicitly unbounded. Before an actual transform-row overwrite, the tables queue
+both the old and new bounds. Every packed component participates, including
+orientation, shadow participation and anonymous lanes, so a rotation in place
+cannot retain stale transport. Identical packed rows queue nothing. The bounds
+are collected once per program upload and reused without a per-motion program scan.
+
 ## Finite indirect lighting sweeps
 
 The residency's `shade` pass follows placement, partition and transport over the

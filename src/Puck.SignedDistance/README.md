@@ -19,6 +19,10 @@ snapshotted palette the packed shader reads, including immutable nested lists.
 live instance. Its count includes instructions and their data/bounds, owned segment
 and rigid-leaf rows, shape side tables and part bindings. Shared tables stay in the
 program-level remainder; inspection never re-emits a prototype.
+`BuildDynamicTransformBounds` collects the existing packed bounds by dynamic
+slot for presentation-cache invalidation. It reuses finite instance certificates
+for unskippable chains and reports an infinite bound for an unsupported dynamic
+dependency; an unrelated static plane affects no dynamic slot.
 
 ## Documentation
 
