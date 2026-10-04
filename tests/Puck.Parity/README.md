@@ -49,6 +49,11 @@ frame, and the `binding` and `bound` rows capture each instance's own output.
 | `bound` | A bound row reaching a pass. The same graph at the reference tier, `high`, which the graph declares and the row names (`tier`), with the grain pass's `seed` bound to the `grainSeed` state row (`parameters`). The row starts at 0 and the world's `toGrainSeed` rule sets it to 13 at tick 1210. The captures sit on both sides of the move: tick 1195 must equal the reference drawn with seed 0, and tick 1215 the reference drawn with seed 13. Any literal in the binding's place fails at least one of them, a binding that does not resolve (which draws the graph's default seed, 7) fails both, and so does a row that never moved at tick 1215. |
 | `converge` | Temporal reconstruction at the `vocabulary` pose: each capture resets the world view's history at its armed tick and serves the eighth frame composed at it (`converge: 8`), over one frozen presentation snapshot, so both backends resolve the same eight jittered samples, reprojected, rectified and accumulated, through the temporal resolve. |
 
+Census material IDs name nearest-color buckets, not renderer material IDs.
+The lattice's top and shaded-face swatches follow their observed colors under
+the shared sky lighting. Recalibrating those swatches preserves the separate
+background bucket and the existing coverage floors.
+
 `parity.contract.json` is the per-station comparison contract (tile size,
 per-tile mean/max delta ceilings, census floors). It is versioned beside the
 world on purpose: thresholds are content facts, re-calibrated in the same
