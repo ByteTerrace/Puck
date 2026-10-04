@@ -45,8 +45,15 @@ public sealed class WorldIndirectParticipationLawTests {
         Assert.Equal("off", wire.RootElement.GetProperty("render").GetProperty("indirect").GetProperty("bodies").GetString());
         var restored = WorldDefinitionSerialization.Deserialize(bytes);
         Assert.Equal(SdfIndirectParticipation.Off, restored.Render.Indirect!.Bodies);
-        Assert.Equal(policy, WorldIndirectParticipation.ForPlacement(restored, "body"));
-        Assert.Equal(SdfIndirectParticipation.Default, WorldIndirectParticipation.ForPlacement(restored, null));
+        Assert.Equal(policy == SdfIndirectParticipation.Default ? SdfIndirectParticipation.Off : policy,
+            WorldIndirectParticipation.ForPlacement(restored, "body"));
+        Assert.Equal(SdfIndirectParticipation.Off, WorldIndirectParticipation.ForPlacement(restored, null));
+        Assert.Equal(SdfIndirectParticipation.Off, SdfIndirectPolicy.Resolve(
+            WorldIndirectParticipation.ForPlacement(restored, null), dynamic: true,
+            tier: SdfIndirectTier.High, bodies: SdfIndirectParticipation.Cast));
+        Assert.Equal(SdfIndirectParticipation.Off, WorldIndirectParticipation.ForPlacement(restored, "missing"));
+        Assert.Equal(SdfIndirectParticipation.Default, WorldIndirectParticipation.ForPlacement(
+            restored with { RenderRaw = restored.Render with { Indirect = null } }, null));
         var builder = new SdfProgramBuilder();
         WorldPlacementStamper.EmitStatic(builder: builder, creations: restored.Creations, placements: restored.Placements, definition: restored);
         Assert.Equal(policy, Assert.Single(builder.Build(buildInstanceGrid: false).Instances).Indirect);

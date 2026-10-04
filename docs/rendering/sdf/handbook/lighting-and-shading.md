@@ -268,8 +268,10 @@ does neither. A placement's explicit policy wins over the frame's body default.
 World authors set that default in `render.indirect.bodies` and the placement
 override in `placements[].indirect`, using `default`, `cast`, `receive` or `off`.
 Local and session bodies read their delivered placement identity; adjacent bodies
-retain it in the same pinned snapshot as their pose. A moving mesh retains a
-dynamic flag so its policy is resolved at the consuming tier, just like its SDF.
+retain it in the same pinned snapshot as their pose. A body without an explicit
+placement override uses its owning world's body default, including across an
+adjacent border; only a remaining `Default` uses the consuming tier. A moving mesh
+retains a dynamic flag so its policy is resolved at the consuming tier, just like its SDF.
 Field queries, paired mesh draws, receiver shading and light views use the same
 policy; direct visibility, collision and direct-shadow policy stay independent.
 Nested indirect distance and gradient queries suspend the caller's ambient and
