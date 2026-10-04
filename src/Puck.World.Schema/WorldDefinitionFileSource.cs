@@ -1495,26 +1495,37 @@ public static partial class WorldDefinitionFileSource {
     /// (basis/imports members excluded), from the deepest basis ancestor through every import to the file's own
     /// body last. A later entry's same key overrides an earlier one's (see <see cref="WorldDocumentBasis"/>'s
     /// remarks).</summary>
-    /// <param name="path">The document file to describe.</param>
+    /// <param name="path">The document or <c>.puck</c> source file to describe.</param>
     /// <param name="layers">Each layer in merge order on success — its resolved path, the alias it composed under
     /// (<see langword="null"/> for a basis link or an unaliased import), its own top-level keys, and the
     /// <c>exports</c> it authors as written (<see langword="null"/> when it authors none); empty on failure.</param>
     /// <param name="reason">The one-line failure reason, or empty on success.</param>
-    /// <param name="content">The document's bytes as the caller read them, or <see langword="null"/> to read the file at
-    /// <paramref name="path"/>.</param>
-    /// <param name="documents">The source every basis and import resolves through, or <see langword="null"/> for
-    /// <see cref="LocalDocuments"/>.</param>
+    /// <param name="content">The JSON document's bytes supplied by the caller, or <see langword="null"/> to read
+    /// <paramref name="path"/> through <see cref="TryReadDocumentFile"/>, lowering a source file to its document.</param>
+    /// <param name="documents">The source a <c>.puck</c> root and every basis and import resolve through, or
+    /// <see langword="null"/> for <see cref="LocalDocuments"/>.</param>
     /// <returns><see langword="true"/> when the file was readable and its graph resolved.</returns>
     public static bool TryDescribeComposition(string path, out IReadOnlyList<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)> layers, out string reason, byte[]? content = null, IWorldDocumentSource? documents = null) {
         var collected = new List<(string Path, string? Alias, IReadOnlyList<string> Keys, WorldExports? Exports)>();
 
         try {
-            var bytes = (content ?? File.ReadAllBytes(path: path));
+            var bytes = content;
+
+            if ((bytes is null) && !TryReadDocumentFile(
+                content: out bytes,
+                documents: documents,
+                path: path,
+                reason: out reason
+            )) {
+                layers = collected;
+
+                return false;
+            }
 
             if (!TryDescribeLayers(
                 alias: null,
                 ancestors: [],
-                bytes: bytes,
+                bytes: bytes!,
                 layers: collected,
                 reason: out reason,
                 resolvedPath: PuckPaths.Normalize(path: path),
