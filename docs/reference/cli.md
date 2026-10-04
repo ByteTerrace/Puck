@@ -2051,12 +2051,14 @@ skips (the shadow and ambient passes, and the mesh pass of a meshless frame)
 hold required zeros.
 
 Each backend's ceilings are in two parts. Its shared ceilings hold every
-deterministic count and every ceiling carrying `requiredZero`: a zero of a
-kernel kind (including march steps, shape evaluations, shape gradients, texels
-written and sky evaluations), a magnitude that follows the device, that its
-pass never counts, so zero is a structural
-contract on every device. Its `devices` hold one record per device, with every
-other per-backend-deterministic ceiling: the kernel kinds' magnitudes, and the
+deterministic count and each `requiredZero` whose count no retained device
+record owns. `requiredZero` marks a zero of a kernel kind (including march
+steps, shape evaluations, shape gradients, texels written and sky evaluations)
+recorded as per-backend-deterministic. It requires zero within its record's
+scope. A fresh required zero that conflicts with another retained device's
+reading belongs to the recording device instead, preserving that older
+reading. Its `devices` hold one record per device, with these scoped zeros and
+every other per-backend-deterministic ceiling: the kernel kinds' magnitudes, and the
 counts of a pass whose work follows the device (the SDF `upload` and `bricks`
 passes), whose zeros are that device's policy rather than required zeros. A
 record is keyed by the backend, the adapter's PCI vendor and device, and the
@@ -2082,14 +2084,17 @@ that device, whichever other devices record it.
 `--record` writes the run's counts into the ceilings instead, each reading its
 own ceiling, and every submission kind of a pass that did not execute as a
 zero. A zero of a per-backend-deterministic kind is written with
-`requiredZero` set. It replaces each backend's shared ceilings, the resolution,
+`requiredZero` set. Nonconflicting required zeros remain shared; a zero whose
+count another retained device record owns goes only into the fresh device
+record. Deterministic counts always remain shared. Recording replaces each
+backend's shared ceilings, the resolution,
 and the record of the device each backend ran on, adds that record after the
 others when the device has none, and leaves every other device's record byte
 for byte as it was. Another device's record then still judges that device, so
 a change that moves its counts is recorded on it too. A record is all or
 nothing: when the backends disagree on a deterministic count or a pass state,
-the existing file holds another workload or script, a ceiling the record would
-share across devices is another device's own reading, or the recorded ceilings
+the existing file holds another workload or script, a deterministic ceiling
+conflicts with another device's own reading, or the recorded ceilings
 would fail their own run, the verb writes no file, leaves an existing one byte
 for byte as it was, prints `not written: …` and exits 1. An existing file that
 is not a ceilings document refuses before the workload runs. The write uses a

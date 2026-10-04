@@ -511,8 +511,9 @@ internal static class CountersCommand {
             per backend, every render node's GPU submission counts that are deterministic or
             per-backend-deterministic, pass by pass and outside every pass, the march steps and texels written the
             SDF kernels count among them: each reads at most its ceiling, and a ceiling of zero is a required zero.
-            Each backend's deterministic ceilings and its requiredZero ceilings (a zero of a kernel kind, which its
-            pass never counts, a structural contract) are shared by every device; its other
+            Each backend's deterministic ceilings and nonconflicting requiredZero ceilings are shared by every
+            device. A requiredZero (a kernel kind's zero) whose count another retained device record owns belongs
+            to its recording device instead and still strictly requires zero. Its other
             per-backend-deterministic ceilings are one record per device, keyed by the adapter's PCI vendor and
             device and the driver implementation (driver.id), and each run is judged against its own device's
             record. A run on a device with no record fails with 'no ceilings recorded for <device>; run puck
@@ -527,8 +528,8 @@ internal static class CountersCommand {
             each backend's shared ceilings and the record of the device each backend ran on, adds that record when
             the device has none, and leaves every other device's record as it was. A record writes nothing, and
             leaves an existing ceilings file as it was, when the backends disagree on a deterministic count or pass
-            state, the existing ceilings hold another workload or script, a ceiling the record shares across
-            devices is another device's own reading, the recorded ceilings fail their own run, or the atomic
+            state, the existing ceilings hold another workload or script, a deterministic shared ceiling
+            conflicts with another device's own reading, the recorded ceilings fail their own run, or the atomic
             replacement fails. It prints 'not written: ...' and exits 1. An existing ceilings file that is not a
             ceilings document refuses before the workload runs. --output must name a different file from the
             ceilings when --check or --record is selected.

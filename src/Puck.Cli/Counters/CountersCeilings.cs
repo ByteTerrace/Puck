@@ -15,9 +15,9 @@ namespace Puck.Cli.Counters;
 /// count of a render node, in a pass or outside every pass, that is deterministic or per-backend-deterministic is held
 /// under a ceiling: <see cref="Record"/> takes each count's reading as its ceiling, so a count that read zero is a required
 /// zero, and <see cref="Check"/> fails a count over its ceiling, a required zero broken and a count no ceiling was recorded
-/// for, naming its backend, kind, pass and node. A backend's deterministic ceilings and its required zeros
-/// (<see cref="WorldCountCeiling.RequiredZero"/>: a zero of a kind whose magnitude follows the device, in a pass that never
-/// does that work, so a structural contract) are shared by every device; its other per-backend-deterministic ceilings are
+/// for, naming its backend, kind, pass and node. A backend's deterministic ceilings are shared by every device. Required
+/// zeros (<see cref="WorldCountCeiling.RequiredZero"/>) are shared unless another retained device record owns that count;
+/// then the newly recorded zero belongs to its recording device. Other per-backend-deterministic ceilings are
 /// one record per device (<see cref="IsSameDevice"/>), and a run is judged against its own device's record. A run on a
 /// device with no record fails by name.
 /// </summary>
@@ -45,23 +45,23 @@ internal static class CountersCeilings {
         SubmissionKindsByName.ContainsKey(key: count.Kind) &&
         (count.Class is WorkClass.Deterministic or WorkClass.PerBackendDeterministic)
     );
-    /// <summary>Indicates whether a recorded zero is a required zero that holds on every device: the ceiling is zero, its
+    /// <summary>Indicates whether a recorded zero is a required zero: the ceiling is zero, its
     /// class is per-backend-deterministic, and the kind itself is one (a magnitude that varies with the device), so the
     /// class is not merely a pass's loosening of a deterministic kind, whose zero is one device's policy.</summary>
     /// <param name="kind">The submission kind.</param>
     /// <param name="recorded">The class the count is recorded as: the kind's, loosened to its pass's.</param>
     /// <param name="ceiling">The ceiling.</param>
-    /// <returns><see langword="true"/> when the zero is a structural contract and judged on every device.</returns>
+    /// <returns><see langword="true"/> when the kernel count must stay zero within its containing record's scope.</returns>
     public static bool IsRequiredZero(WorkKind kind, WorkClass recorded, long ceiling) => (
         (ceiling == 0L) &&
         (recorded == WorkClass.PerBackendDeterministic) &&
         (kind.Class == WorkClass.PerBackendDeterministic)
     );
-    /// <summary>Indicates whether a ceiling is shared by every device of its backend: a deterministic count's, or a
-    /// required zero. Every other ceiling is one device's reading.</summary>
+    /// <summary>Indicates whether a fresh ceiling starts among its backend's shared ceilings: a deterministic count's, or a
+    /// required zero. A merge scopes a required zero to its recording device when another retained device owns the count.</summary>
     /// <param name="recorded">The class the count is recorded as.</param>
     /// <param name="requiredZero">Whether the ceiling is a required zero.</param>
-    /// <returns><see langword="true"/> when the ceiling belongs among the backend's shared ceilings.</returns>
+    /// <returns><see langword="true"/> when the ceiling starts among the backend's shared ceilings before merging.</returns>
     public static bool IsShared(WorkClass recorded, bool requiredZero) =>
         ((recorded == WorkClass.Deterministic) || requiredZero);
     /// <summary>Indicates whether two devices share one ceilings record: the same backend, the same adapter (its PCI vendor
@@ -79,7 +79,8 @@ internal static class CountersCeilings {
     );
     /// <summary>Records a report's counts as ceilings: every ceiled count's reading its ceiling, and for every pass that did
     /// not execute a zero for each submission kind, which the pass reads once it does. Each backend's deterministic
-    /// ceilings and required zeros are its shared ceilings, and the rest are the record of the device its run ran on.</summary>
+    /// ceilings and required zeros start among its shared ceilings, and the rest are the record of the device its run ran on.
+    /// <see cref="TryMerge"/> scopes a required zero when another retained device owns that count.</summary>
     /// <param name="report">The report.</param>
     /// <returns>The ceilings, holding one device per backend.</returns>
     public static WorldCountersCeilings Record(WorldCountersReport report) => new(
@@ -102,14 +103,15 @@ internal static class CountersCeilings {
     );
     /// <summary>Merges a fresh record into the ceilings already recorded: each backend's shared ceilings and the resolution
     /// become the record's, the record's device replaces that device's record in place or joins after the others, and
-    /// every other device's record is kept as it was.</summary>
+    /// every other device's record is kept as it was. A fresh required zero whose count another retained device owns moves
+    /// from the shared ceilings to the fresh device records; deterministic ceilings remain shared.</summary>
     /// <param name="recorded">The fresh record (<see cref="Record"/>).</param>
     /// <param name="existing">The ceilings already recorded.</param>
     /// <param name="merged">The merged ceilings, or <see langword="null"/> when the method returns
     /// <see langword="false"/>.</param>
     /// <param name="reason">Why the two cannot be merged, or empty.</param>
     /// <returns><see langword="true"/> when the record merges: the same workload and script, and no ceiling the record
-    /// shares across devices that another device's record holds as its own reading.</returns>
+    /// must share across devices that another device's record holds as its own reading.</returns>
     public static bool TryMerge(WorldCountersCeilings recorded, WorldCountersCeilings existing, [NotNullWhen(returnValue: true)] out WorldCountersCeilings? merged, out string reason) {
         merged = null;
 
@@ -146,16 +148,38 @@ internal static class CountersCeilings {
             }
 
             var shared = backend.Ceilings.Select(selector: static ceiling => KeyOf(ceiling: ceiling)).ToHashSet();
+            var requiredZeros = backend.Ceilings.Where(predicate: static ceiling => ((ceiling.Class == WorkClass.PerBackendDeterministic) && ceiling.RequiredZero))
+                .Select(selector: static ceiling => KeyOf(ceiling: ceiling)).ToHashSet();
+            var scoped = new HashSet<(string Node, string? Pass, string? Detail, string Kind)>();
 
             foreach (var other in devices.Where(predicate: other => !backend.Devices.Any(predicate: device => IsSameDevice(left: device.Device, right: other.Device)))) {
-                if (other.Ceilings.FirstOrDefault(predicate: ceiling => shared.Contains(item: KeyOf(ceiling: ceiling))) is { } held) {
+                foreach (var held in other.Ceilings.Where(predicate: ceiling => shared.Contains(item: KeyOf(ceiling: ceiling)))) {
+                    if (requiredZeros.Contains(item: KeyOf(ceiling: held))) {
+                        _ = scoped.Add(item: KeyOf(ceiling: held));
+
+                        continue;
+                    }
+
                     reason = $"{backend.Backend}: {Where(ceiling: held)} is a ceiling every device shares in this record and {Describe(device: other.Device)}'s own reading in the ledger; record that device again on it";
 
                     return false;
                 }
             }
 
-            backends[index] = backend with { Devices = devices };
+            if (scoped.Count > 0) {
+                var zeros = backend.Ceilings.Where(predicate: ceiling => scoped.Contains(item: KeyOf(ceiling: ceiling))).ToArray();
+
+                foreach (var device in backend.Devices) {
+                    var at = devices.FindIndex(match: candidate => IsSameDevice(left: candidate.Device, right: device.Device));
+
+                    devices[at] = device with { Ceilings = [.. device.Ceilings, .. zeros] };
+                }
+            }
+
+            backends[index] = backend with {
+                Ceilings = [.. backend.Ceilings.Where(predicate: ceiling => !scoped.Contains(item: KeyOf(ceiling: ceiling)))],
+                Devices = devices,
+            };
         }
 
         merged = recorded with { Backends = backends };
@@ -287,7 +311,7 @@ internal static class CountersCeilings {
     }
     /// <summary>Reads a ceilings document, refusing one that is not a well-formed <c>puck.counters.ceilings.v1</c>
     /// document: every ceiling of a GPU submission kind, marked a required zero exactly when it is one, each shared ceiling
-    /// a deterministic count's or a required zero and each device's ceiling neither, each device of its backend and recorded
+    /// a deterministic count's or a required zero and no device's ceiling deterministic, each device of its backend and recorded
     /// once, and no ceiling both shared and a device's own.</summary>
     /// <param name="path">The document's path.</param>
     /// <param name="ceilings">The ceilings, or <see langword="null"/> when the method returns <see langword="false"/>.</param>
@@ -420,7 +444,7 @@ internal static class CountersCeilings {
                     if (Malformed(backend: backend.Backend, ceiling: ceiling) is { Length: > 0 } malformed) {
                         return malformed;
                     }
-                    if (IsShared(recorded: ceiling.Class, requiredZero: ceiling.RequiredZero)) {
+                    if (ceiling.Class == WorkClass.Deterministic) {
                         return $"a malformed ceiling: {backend.Backend} {Where(ceiling: ceiling)} is a ceiling every device shares, recorded as {Describe(device: device.Device)}'s own";
                     }
                     if (shared.Contains(item: KeyOf(ceiling: ceiling))) {

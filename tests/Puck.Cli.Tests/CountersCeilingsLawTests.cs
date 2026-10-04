@@ -16,9 +16,9 @@ namespace Puck.Cli.Tests;
 /// read zero is a required zero, and every kind of a pass that did not execute at a required zero; and
 /// <c>puck counters --check</c> fails a count raised over its ceiling and a required zero broken, naming the backend,
 /// class, kind, pass and node, fails a recorded expectation the run did not measure or measured as another class, fails a
-/// count no ceiling was recorded for. A backend's deterministic ceilings and its required zeros (a zero of a kernel kind, a
-/// magnitude that follows the device, recorded as such: a structural contract) are shared by every device, and its other
-/// per-backend-deterministic ceilings are the record of the device they were read on, which a run on that device is judged
+/// count no ceiling was recorded for. A backend's deterministic ceilings and nonconflicting required zeros are shared by
+/// every device. A required zero whose count another retained device owns stays with its recording device, alongside other
+/// per-backend-deterministic ceilings, which a run on that device is judged
 /// against; a run on a device with no record fails by name (<see cref="CountersDeviceCeilingsLawTests"/>).
 /// </summary>
 public sealed class CountersCeilingsLawTests {

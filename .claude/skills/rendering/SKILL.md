@@ -1389,10 +1389,13 @@ per-backend-deterministic submission counts, pass by pass and outside every
 pass, to `tests/Puck.Counters/counters.ceilings.json`
 (`puck.counters.ceilings.v1`): a count reads at most its ceiling, and a ceiling
 of zero is a required zero. Each backend's deterministic ceilings and its
-`requiredZero` ceilings (a zero of a kernel kind such as the march steps or sky
-evaluations, which the recorder sets and the reader validates: a structural
-contract) are shared by every device; every other per-backend-deterministic
-ceiling is one device's record (`WorldCountersDeviceCeilings`, keyed by
+nonconflicting `requiredZero` ceilings are shared by every device. The flag
+marks a kernel kind's zero, such as march steps or sky evaluations, recorded
+as per-backend-deterministic; the reader validates its kind, class and value.
+When another retained device record owns that count, the fresh required zero
+belongs to the recording device instead. Its zero stays strict, and the older
+record stays intact. Every other per-backend-deterministic ceiling is also one
+device's record (`WorldCountersDeviceCeilings`, keyed by
 `CountersCeilings.IsSameDevice`: backend, PCI vendor and device, driver
 implementation; the driver version is evidence, and a change of it is a note,
 not a new device). A run is judged against its own device's record, and a
@@ -1401,7 +1404,7 @@ the running device's record and leaves every other device's record byte for
 byte, so a change that moves per-backend counts owes a record on every device
 the ledger holds; it records only in the change that explains the move, and
 writes nothing when the backends disagree on a deterministic count or pass
-state, a shared ceiling would be another device's own reading, or the merged
+state, a deterministic shared ceiling conflicts with another device's reading, or the merged
 ceilings fail their own run. It uses atomic replacement; a write failure leaves
 the existing ceilings unchanged. A refused record prints `not written: …` and
 exits 1. `--output` names a different file from the ceilings with `--check` or

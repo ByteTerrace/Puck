@@ -15,8 +15,9 @@ namespace Puck.Cli.Tests;
 /// --check</c> judges every count of a run against its own device's record and the shared ceilings: a device with no record
 /// fails by name, never as a silent skip, and a count its record lacks fails on that device alone. A driver update keeps the
 /// record and is named in a note. <c>puck counters --record</c> adds or replaces only the current device's record and the
-/// shared ceilings, leaving every other device's record byte for byte as it was, and refuses a record whose shared ceiling
-/// another device holds as its own reading. <c>--report</c> judges a saved report without booting anything.
+/// shared ceilings, leaving every other device's record byte for byte as it was. A required zero stays with the recording
+/// device when another device owns that count; a deterministic shared ceiling conflicting with a device's reading still
+/// refuses. <c>--report</c> judges a saved report without booting anything.
 /// </summary>
 public sealed class CountersDeviceCeilingsLawTests {
     private const string Floor = "Floor GPU";
@@ -167,21 +168,44 @@ public sealed class CountersDeviceCeilingsLawTests {
             expected: "vulkan: the ceilings for Floor GPU (vendor=0x10de device=0x1f08) were recorded under driver 566.36, this run's driver is 580.01"
         );
     }
-    // A record whose shared ceiling another device holds as its own reading would leave a ledger that judges one count twice,
-    // so it refuses naming the count and the device; a record of another workload refuses too, and either leaves the file.
+    // A new zero belongs to the recording device when another retained device owns that count. Both remain strict,
+    // independent ceilings; deterministic conflicts and another workload still refuse without replacing the file.
     [Fact]
-    public void ARecordThatWouldMixSharedAndDeviceCeilingsRefuses() {
-        var floor = CountersCeilings.Record(report: Report(device: FloorDevice, steps: 4096L, texels: 2048L));
+    public void ARequiredZeroKeepsItsDeviceScopeWhenAnotherDeviceOwnsTheCount() {
+        var floorReport = Report(device: FloorDevice, steps: 4096L, texels: 2048L);
+        var leadReport = Report(device: LeadDevice, steps: 3000L, texels: 0L);
+        var floor = CountersCeilings.Record(report: floorReport);
 
-        Assert.False(condition: CountersCeilings.TryMerge(
+        Assert.True(condition: CountersCeilings.TryMerge(
             existing: floor,
-            merged: out _,
+            merged: out var merged,
             reason: out var mixed,
-            recorded: CountersCeilings.Record(report: Report(device: LeadDevice, steps: 3000L, texels: 0L))
-        ));
+            recorded: CountersCeilings.Record(report: leadReport)
+        ), userMessage: mixed);
+        Assert.All(collection: merged.Backends, action: backend => {
+            var prior = Assert.Single(collection: floor.Backends, predicate: candidate => (candidate.Backend == backend.Backend));
+            var retained = Assert.Single(collection: backend.Devices, predicate: static device => (device.Device.AdapterName == Floor));
+            var recorded = Assert.Single(collection: backend.Devices, predicate: static device => (device.Device.AdapterName == Lead));
+
+            var original = Assert.Single(collection: prior.Devices);
+
+            Assert.Equal(actual: retained.Device, expected: original.Device);
+            Assert.Equal(actual: retained.Ceilings.ToArray(), expected: original.Ceilings.ToArray());
+            Assert.DoesNotContain(collection: backend.Ceilings, filter: static ceiling => (ceiling.Kind == GpuWork.TexelsWritten.Name));
+            var zero = Assert.Single(collection: recorded.Ceilings, predicate: static ceiling => (ceiling.Kind == GpuWork.TexelsWritten.Name));
+
+            Assert.Equal(actual: (zero.Class, zero.Ceiling, zero.RequiredZero), expected: (WorkClass.PerBackendDeterministic, 0L, true));
+            Assert.Contains(collection: backend.Ceilings, filter: static ceiling => ((ceiling.Pass == "sdf.world$cull-args") && ceiling.RequiredZero));
+            Assert.Contains(collection: backend.Ceilings, filter: static ceiling => (ceiling.Class == WorkClass.Deterministic));
+        });
+        Assert.Empty(collection: CountersCeilings.Check(ceilings: merged, report: floorReport).Failures);
+        Assert.Empty(collection: CountersCeilings.Check(ceilings: merged, report: leadReport).Failures);
         Assert.Equal(
-            actual: mixed,
-            expected: "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$primary detail=- node=world is a ceiling every device shares in this record and Floor GPU (vendor=0x10de device=0x1f08)'s own reading in the ledger; record that device again on it"
+            actual: CountersCeilings.Check(ceilings: merged, report: Report(device: LeadDevice, steps: 3000L, texels: 1L)).Failures,
+            expected: [
+                "vulkan: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$primary detail=- node=world breaks its required zero: reads 1",
+                "directx: per-backend-deterministic kind=gpu.texels.written pass=sdf.world$primary detail=- node=world breaks its required zero: reads 1",
+            ]
         );
         Assert.False(condition: CountersCeilings.TryMerge(
             existing: floor,
@@ -197,9 +221,37 @@ public sealed class CountersDeviceCeilingsLawTests {
 
         CountersCeilings.Write(ceilings: floor, path: path);
 
+        var floorVulkan = RecordIn(adapter: Floor, backend: "vulkan", path: path);
+        var floorDirectx = RecordIn(adapter: Floor, backend: "directx", path: path);
+
+        Assert.True(condition: CountersCommand.TryRecord(path: path, reason: out var written, report: leadReport), userMessage: written);
+        Assert.Equal(actual: RecordIn(adapter: Floor, backend: "vulkan", path: path), expected: floorVulkan);
+        Assert.Equal(actual: RecordIn(adapter: Floor, backend: "directx", path: path), expected: floorDirectx);
+        Assert.True(condition: CountersCeilings.TryRead(ceilings: out var roundTrip, path: path, reason: out var read), userMessage: read);
+        Assert.Empty(collection: CountersCeilings.Check(ceilings: roundTrip, report: leadReport).Failures);
+
+        var vulkan = roundTrip.Backends[0];
+        var scopedZero = Assert.Single(collection: vulkan.Devices[1].Ceilings, predicate: static ceiling => (ceiling.Kind == GpuWork.TexelsWritten.Name));
+
+        CountersCeilings.Write(ceilings: roundTrip with { Backends = [vulkan with { Ceilings = [.. vulkan.Ceilings, scopedZero] }] }, path: path);
+        Assert.False(condition: CountersCeilings.TryRead(ceilings: out _, path: path, reason: out var duplicate));
+        Assert.Contains(actualString: duplicate, expectedSubstring: "is both a shared ceiling and");
+
+        // A pass may have loosened a deterministic kind when the older device ran. Its fresh deterministic ceiling
+        // still cannot move into a device record to accommodate that older reading.
+        var deviceDispatch = floorReport with {
+            Runs = [.. floorReport.Runs.Select(selector: static run => run with {
+                Counts = [.. run.Counts.Select(selector: static count => ((count.Kind == GpuWork.IndirectDispatches.Name)
+                    ? count with { Class = WorkClass.PerBackendDeterministic }
+                    : count))],
+            })],
+        };
+
+        CountersCeilings.Write(ceilings: CountersCeilings.Record(report: deviceDispatch), path: path);
         var before = File.ReadAllBytes(path: path);
 
-        Assert.False(condition: CountersCommand.TryRecord(path: path, reason: out var refused, report: Report(device: LeadDevice, steps: 3000L, texels: 0L)));
+        Assert.False(condition: CountersCommand.TryRecord(path: path, reason: out var refused, report: leadReport));
+        Assert.Contains(actualString: refused, expectedSubstring: "kind=gpu.dispatches.indirect");
         Assert.EndsWith(actualString: refused, expectedEndString: "record that device again on it, so no ceilings are recorded");
         Assert.Equal(actual: File.ReadAllBytes(path: path), expected: before);
     }
