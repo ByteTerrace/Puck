@@ -454,9 +454,9 @@ float sdfGlyph(float3 p, float4 data0, float4 data1) {
 // ordinary Subtraction-blend instance so the marches stop paying O(carve-count). data0 = (boxMin.xyz, cellSize); data1 =
 // (smooth, packedDims, brickWordOffset, boundaryFloor). Stored values are pre-scaled c/lambda (lambda = sqrt(3) folded in
 // at BAKE time), which makes the trilinear interpolant 1-Lipschitz and march-safe with NO stepScale change and an
-// unchanged zero set. Determinism: manual trilinear (8 explicit loads + a precise lerp chain,
-// fp-contraction pinned OFF) is bit-stable across SPIR-V/DXIL by the same argument as the point evaluator; the baked
-// VALUES carry the familiar +-1-LSB WorldLsbExact class. KEEP IN SYNC with SdfProgramBuilder.SampledRegion.
+// unchanged zero set. Manual trilinear interpolation uses eight explicit loads and ordered, noncontracting arithmetic,
+// so the same voxel values and fractional coordinate interpolate identically across SPIR-V/DXIL; the baked VALUES
+// carry the familiar +-1-LSB WorldLsbExact class. KEEP IN SYNC with SdfProgramBuilder.SampledRegion.
 #ifdef SDF_SAMPLED_REGIONS
 // One brick voxel, clamped to the brick's own [0, dims-1] lattice so the trilinear stencil never reads past the brick's
 // words (clamp-to-edge). Sound because the brick's zero set sits strictly inside the box by the bake margin, so the
@@ -466,6 +466,15 @@ float sdfBrickVoxel(uint baseWord, uint3 dims, int3 coord) {
     int3 c = clamp(coord, int3(0, 0, 0), (int3(dims) - int3(1, 1, 1)));
 
     return sdfBrickPool[(baseWord + (uint)c.x + ((uint)c.y * dims.x) + ((uint)c.z * (dims.x * dims.y)))];
+}
+// A precise result of the lerp intrinsic can still lower to SPIR-V FMix, whose arithmetic need not match DXIL's.
+// Spell every operation and mark each intermediate so both backends retain the same subtraction, product and sum.
+float sdfBrickInterpolate(float left, float right, float weight) {
+    precise float difference = (right - left);
+    precise float weighted = (weight * difference);
+    precise float result = (left + weighted);
+
+    return result;
 }
 #endif
 float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
@@ -521,15 +530,14 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
     float c011 = sdfBrickVoxel(baseWord, dims, (b + int3(0, 1, 1)));
     float c111 = sdfBrickVoxel(baseWord, dims, (b + int3(1, 1, 1)));
 
-    // `precise` pins fp-contraction OFF across the whole interpolation chain, so DXC's SPIR-V and DXIL backends cannot
-    // contract a lerp into a differently-rounded FMA — the manual-bilinear discipline (sdfGlyphSampleField's sibling).
-    precise float c00 = lerp(c000, c100, f.x);
-    precise float c10 = lerp(c010, c110, f.x);
-    precise float c01 = lerp(c001, c101, f.x);
-    precise float c11 = lerp(c011, c111, f.x);
-    precise float c0 = lerp(c00, c10, f.y);
-    precise float c1 = lerp(c01, c11, f.y);
-    precise float result = lerp(c0, c1, f.z);
+    // Interpolate x, then y, then z, with contraction disabled on each operation inside sdfBrickInterpolate.
+    float c00 = sdfBrickInterpolate(c000, c100, f.x);
+    float c10 = sdfBrickInterpolate(c010, c110, f.x);
+    float c01 = sdfBrickInterpolate(c001, c101, f.x);
+    float c11 = sdfBrickInterpolate(c011, c111, f.x);
+    float c0 = sdfBrickInterpolate(c00, c10, f.y);
+    float c1 = sdfBrickInterpolate(c01, c11, f.y);
+    float result = sdfBrickInterpolate(c0, c1, f.z);
 
     return result;
 #else

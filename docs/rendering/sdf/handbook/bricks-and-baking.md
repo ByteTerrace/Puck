@@ -98,9 +98,12 @@ precedent the glyph shape set, and it means a brick program stays honest even
 through a kernel that can't sample it.
 
 Sampling is a plain storage-buffer read with **manual trilinear interpolation** —
-eight explicit loads and lerps with floating-point contraction pinned off—so it
-is bit-stable across both GPU backends by the same argument as the point
-evaluator. (Hardware 3D textures with sampler filtering were evaluated and
+eight explicit loads followed by interpolation along x, y, then z. Each
+interpolation explicitly subtracts, multiplies and adds with floating-point
+contraction disabled on every intermediate, so the same voxel values and
+fractional coordinate produce the same result on both GPU backends. A `precise`
+result alone does not constrain the `lerp` intrinsic's SPIR-V `FMix` arithmetic.
+(Hardware 3D textures with sampler filtering were evaluated and
 rejected for now: their lerp precision is driver-variant, which would break
 cross-backend parity, and they'd need new abstraction seams where buffers already
 flow everywhere.)
