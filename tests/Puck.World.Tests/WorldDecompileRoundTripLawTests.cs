@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Hosting;
+using Puck.Testing;
 using Puck.World.Transpiler;
 using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Decompiler;
@@ -10,7 +12,7 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// THE LAW: a world document survives <c>puck decompile</c> and <c>puck compile</c>. Every <c>.world.json</c> the
-/// repository carries with no <c>.puck</c> source beside it (the documents a migration to source starts from; the
+/// repository tracks with no tracked <c>.puck</c> source beside it (the documents a migration to source starts from; the
 /// sources themselves are held by <c>AuthorExpressionTests</c>) is decompiled to source, the source compiled, and the
 /// result composed exactly as the original is, through the same basis and imports at the same path. The two composed
 /// definitions serialize to the same bytes, and a layer that does not parse as a definition on its own (a module, a
@@ -34,14 +36,6 @@ public sealed partial class WorldDecompileRoundTripLawTests {
         ["tests/Puck.World.Verdicts/proofs/unexpected-outcome.world.json"] = "'passPhaseStillZero' at /state/world/0 is a name Puck generates",
         ["tests/Puck.World.Verdicts/refused-command.world.json"] = "'wrongGuardRefused' at /state/world/0 is a name Puck generates",
     };
-    private static readonly string[] SkippedDirectories = [
-        "/.claude/worktrees/",
-        "/.git/",
-        "/bin/",
-        "/experimental/",
-        "/node_modules/",
-        "/obj/",
-    ];
 
     private static string Excerpt(JsonNode? node) {
         var text = (node?.ToJsonString() ?? "absent");
@@ -121,43 +115,20 @@ public sealed partial class WorldDecompileRoundTripLawTests {
             ? null
             : $"{path}: {Excerpt(node: expected)} became {Excerpt(node: actual)}");
     }
-    // Every JSON world document in the repository with no source beside it, as a full path.
+    // Git defines the corpus, as it does for the source laws: scratch worlds and old published packages are not inputs.
     private static List<string> Documents(string root) {
         var files = new List<string>();
+        var listing = ChildProcess.RunAsync(
+            arguments: ["-C", root, "ls-files", "-z", "--", "*.puck", "*.world.json", ":!:experimental/"],
+            cancellationToken: TestContext.Current.CancellationToken,
+            fileName: "git",
+            input: string.Empty,
+            timeout: TestLiveness.Bound
+        ).GetAwaiter().GetResult();
 
-        foreach (var file in Directory.EnumerateFiles(
-            path: root,
-            searchOption: SearchOption.AllDirectories,
-            searchPattern: "*"
-        )) {
-            var path = file.Replace(
-                newChar: '/',
-                oldChar: '\\'
-            );
-            // Skipped directories are matched below the root, so a checkout that is itself a worktree is still read.
-            var below = ("/" + Path.GetRelativePath(
-                path: file,
-                relativeTo: root
-            ).Replace(
-                newChar: '/',
-                oldChar: '\\'
-            ));
-
-            if (SkippedDirectories.Any(predicate: directory => below.Contains(
-                comparisonType: StringComparison.Ordinal,
-                value: directory
-            ))) {
-                continue;
-            }
-            if (path.EndsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: ".puck"
-            ) || path.EndsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: ".world.json"
-            )) {
-                files.Add(item: path);
-            }
+        Assert.True(condition: (listing.ExitCode == 0), userMessage: $"git ls-files failed: {listing.Stderr}");
+        foreach (var relative in listing.Stdout.Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries)) {
+            files.Add(item: Path.Combine(path1: root, path2: relative).Replace(newChar: '/', oldChar: '\\'));
         }
 
         var sources = new HashSet<string>(
