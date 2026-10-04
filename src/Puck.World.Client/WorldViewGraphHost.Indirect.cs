@@ -98,7 +98,8 @@ public static class WorldIndirectGraph {
                 Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.SdfWorld) {
                 OutputExtent = new RenderGraphPixelExtent(Width: SdfIndirectLightLayout.Resolution, Height: SdfIndirectLightLayout.Resolution),
             });
-            instances.Add(item: new(Name: cache, Refresh: RenderGraphRefresh.EveryFrame, Passes: 3, Reads: [],
+            instances.Add(item: new(Name: cache, Refresh: RenderGraphRefresh.EveryFrame, Passes: 4,
+                Reads: [new(Producer: WorldViewNames.IndirectLight(cache: cache), Kind: ShaderPipelineResourceKind.Buffer)],
                 Output: ShaderPipelineResourceKind.Buffer, ExternalPackage: RenderGraphPackageCatalog.Indirect));
         }
         if (!RenderGraphInstanceSet.TryCreate(instances, out var result, out var refusal, set.NestingDepth)) {

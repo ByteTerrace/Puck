@@ -5,7 +5,7 @@ namespace Puck.Shaders.Tests;
 
 public sealed partial class SdfPassPlanLawTests {
     [Fact]
-    public void TheIndirectProducerPublishesOneForwardedBufferWithPlacementPartitionAndTraceBarriers() {
+    public void TheIndirectProducerPublishesOneForwardedBufferWithPlacementPartitionTraceAndShadeBarriers() {
         const ulong Bytes = 4096;
         var package = RenderGraphPackageCatalog.Engine.Packages.Single(predicate: item => (item.Id == RenderGraphPackageCatalog.Indirect));
         var fragment = SdfWorldPackage.IndirectFragment(bytes: Bytes);
@@ -15,7 +15,7 @@ public sealed partial class SdfPassPlanLawTests {
             Packages: [new RenderGraphPackagePass(Name: "indirect", Package: RenderGraphPackageCatalog.Indirect, Outputs: [SdfWorldPackage.IndirectCache])]
         ));
 
-        Assert.Equal(new[] { "indirect$place", "indirect$classify", "indirect$trace" }, plan.Pipeline.PassOrder);
+        Assert.Equal(new[] { "indirect$place", "indirect$classify", "indirect$trace", "indirect$shade" }, plan.Pipeline.PassOrder);
         var storage = Assert.Single(collection: plan.Pipeline.Storages);
 
         Assert.Equal(Bytes, storage.Declaration.ResolveSizeBytes(counts: new ShaderPipelineStorageCounts(Height: 1, Width: 1)));

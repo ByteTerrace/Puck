@@ -19,7 +19,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
         var set = Set(PackageInstance() with { Reads = [new RenderGraphRead("cache", Kind: ShaderPipelineResourceKind.Buffer)] },
             new RenderGraphInstance(Name: "cache", ExternalPackage: RenderGraphPackageCatalog.Indirect,
-                Output: ShaderPipelineResourceKind.Buffer, Passes: 3, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
+                Output: ShaderPipelineResourceKind.Buffer, Passes: 4, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
 
         using (var runtime = Runtime(gpu, recorders, set, PackageView, new RenderGraphRuntimeGraph[2])) {
             var frame = 0L;
@@ -56,7 +56,7 @@ public sealed partial class RenderGraphRuntimeLawTests {
         recorders.Registry.Register(factory: view, package: RenderGraphPackageCatalog.SdfWorld);
         var set = Set(PackageInstance() with { Reads = [new RenderGraphRead("cache", Kind: ShaderPipelineResourceKind.Buffer)] },
             new RenderGraphInstance(Name: "cache", ExternalPackage: RenderGraphPackageCatalog.Indirect,
-                Output: ShaderPipelineResourceKind.Buffer, Passes: 3, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
+                Output: ShaderPipelineResourceKind.Buffer, Passes: 4, Reads: [], Refresh: RenderGraphRefresh.EveryFrame));
         using var runtime = Runtime(gpu, recorders, set, PackageView, new RenderGraphRuntimeGraph[2]);
         var frame = 0L;
 

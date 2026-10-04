@@ -51,6 +51,15 @@ path, and count traversal scratch and constant rings beside the depth bank in
 `SdfPassPlanLawTests`. The [light-view contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-indirect-caches-depth-only-light-view)
 owns the geometry support limits.
 
+The indirect `shade` pass uses `IrradianceSolveSchedule`, the same finite order as
+the CPU reference. `SdfWorldTables.IndirectLighting` pins its source through
+ordinary World-set regions; do not read later live light records midway through
+a sweep. `SdfIndirectCache` publishes only complete submitted sweeps, separately
+from geometry trace completion, and retains the published source while a newer
+source is solving. Count the pinned regions and their rings beside the cache.
+The [finite-solve contract](../../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
+owns this flow and its remaining receiver work.
+
 ## Changing the instruction set
 
 An op, shape, or blend earns a new switch case only when it cannot be composed

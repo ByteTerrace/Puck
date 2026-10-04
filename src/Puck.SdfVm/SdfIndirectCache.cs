@@ -21,7 +21,6 @@ public sealed partial class SdfIndirectCache : IDisposable {
     private IrradianceSchedule m_schedule;
     private IrradianceFramePlan? m_pending;
     private int m_holds = 1;
-    private bool m_completed;
 
     /// <summary>Creates the fixed tier pool and its region rings.</summary>
     public SdfIndirectCache(SdfIndirectLayout layout, GpuDeviceServices gpu, GpuMemoryProfile profile, IGpuComputePipeline copyPipeline, float farDistance, WorkCounterSet work, uint epoch) {
@@ -39,14 +38,15 @@ public sealed partial class SdfIndirectCache : IDisposable {
         }
         m_bricks = new byte[(layout.BrickCapacity * 16)];
         m_updates = new byte[((layout.TraceBudget + (2 * layout.ClassifyBudget)) * 16)];
+        m_shadeUpdates = new byte[layout.ShadeBudget * 16];
         m_traceStates = new uint[layout.ProbeCapacity];
         using var scope = new GpuCreationScope();
 
         Buffer = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: new GpuObjectName(owner: "sdf-indirect", part: "cache"), sizeBytes: layout.ByteLength, usage: GpuBufferUsage.Storage));
-        var names = new[] { "bricks", "updates", "directions", "trace-states" }.Select(selector: part => new GpuObjectName(owner: "sdf-indirect", part: part)).ToArray();
+        var names = new[] { "bricks", "updates", "directions", "trace-states", "shade-updates" }.Select(selector: part => new GpuObjectName(owner: "sdf-indirect", part: part)).ToArray();
 
         m_copies = scope.Own(created: new GpuRegionCopyPool(bindings: gpu.Bindings, copyPipeline: copyPipeline, name: new GpuObjectName(owner: "sdf-indirect", part: "region-copies"), regions: names, slotCount: SdfWorldTables.FrameRingSize));
-        var lengths = new[] { m_bricks.Length, m_updates.Length, (layout.RaysPerProbe * 16), (m_traceStates.Length * sizeof(uint)) };
+        var lengths = new[] { m_bricks.Length, m_updates.Length, (layout.RaysPerProbe * 16), (m_traceStates.Length * sizeof(uint)), m_shadeUpdates.Length };
         var regions = new GpuRegion[lengths.Length];
 
         Regions = regions;
@@ -73,7 +73,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     public SdfIndirectLayout Layout { get; }
     /// <summary>Gets the residency-owned allocation published by the graph.</summary>
     public IGpuBuffer Buffer { get; }
-    /// <summary>Gets the brick, update, direction and submitted-strata regions.</summary>
+    /// <summary>Gets the brick, transport-update, direction, submitted-strata and shade-update regions.</summary>
     public IReadOnlyList<GpuRegion> Regions { get; }
     /// <summary>Gets the current geometry epoch.</summary>
     public uint Epoch { get; private set; }
@@ -88,9 +88,9 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <summary>Gets the pending trace stratum count.</summary>
     public int TraceCount => (m_pending?.Traces.Count ?? 0);
     /// <summary>Gets whether this schedule has GPU work.</summary>
-    public bool HasWork => (((PlaceCount + ClassifyCount) + TraceCount) != 0);
+    public bool HasWork => (((PlaceCount + ClassifyCount) + TraceCount + ShadeCount) != 0);
     /// <summary>Gets whether publication owes a schedule, including a table-only eviction.</summary>
-    public bool NeedsPublish => (m_pending is not null);
+    public bool NeedsPublish => (m_pending is not null || m_shade is not null);
     /// <summary>Gets or sets whether new update admission is paused. A pending submitted-frame plan remains intact.</summary>
     public bool Frozen { get; set; }
     /// <summary>Gets whether all current demand has completed a successful trace submission.</summary>
@@ -111,7 +111,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
         return result;
     }
     /// <summary>Gets every GPU byte, including region rings and shadows.</summary>
-    public GpuMemoryBytes Bytes => Regions.Aggregate(new GpuMemoryBytes(DeviceLocal: Buffer.SizeBytes, HostVisible: 0), (bytes, region) => (bytes + region.OwnedBytes));
+    public GpuMemoryBytes Bytes => Regions.Aggregate(new GpuMemoryBytes(DeviceLocal: Buffer.SizeBytes, HostVisible: 0), (bytes, region) => (bytes + region.OwnedBytes)) + (Lighting?.Bytes ?? default);
 
     internal bool IsDisposed => (Volatile.Read(location: ref m_holds) <= 0);
 
@@ -130,6 +130,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     /// <inheritdoc/>
     public void Dispose() {
         if (Interlocked.Decrement(location: ref m_holds) != 0) { return; }
+        Lighting?.Dispose();
         foreach (var region in Regions) { region.Dispose(); }
         m_copies.Dispose();
         Buffer.Dispose();
@@ -138,7 +139,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     public void Reset(uint epoch) {
         Epoch = epoch;
         Frame = 1;
-        LightingPublication++;
+        InvalidateLighting();
         m_schedule = NewSchedule();
         m_pending = null;
         m_slots.Clear();
@@ -152,13 +153,13 @@ public sealed partial class SdfIndirectCache : IDisposable {
             m_free[level].UnionWith(other: Enumerable.Range(offset, Layout.Pools[level]));
             offset += Layout.Pools[level];
         }
-        m_completed = false;
         ClearBricks();
     }
     /// <summary>Plans once until a successful submission commits the same list.</summary>
     public void Plan(IrradianceFrameInputs inputs) {
         if ((m_pending is not null) || Frozen) { return; }
         m_pending = m_schedule.Frame(inputs: inputs);
+        if (m_pending.Allocated.Count != 0 || m_pending.Evicted.Count != 0 || m_pending.Traces.Count != 0) { InvalidateLighting(); }
         foreach (var key in m_pending.Evicted) {
             Array.Clear(array: m_traceStates, index: (m_slots[key] * SdfIndirectLayout.ProbesPerBrick), length: SdfIndirectLayout.ProbesPerBrick);
             m_free[key.Level].Add(item: m_slots[key]); m_slots.Remove(key: key); m_placed.Remove(item: key);
@@ -184,7 +185,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
         }
         Regions[1].Write(offset: 0, bytes: m_updates.AsSpan(length: (row * 16), start: 0));
         Regions[3].Write(offset: 0, bytes: MemoryMarshal.AsBytes(span: m_traceStates.AsSpan()));
-        if (!HasWork && (m_pending.Allocated.Count == 0) && (m_pending.Evicted.Count == 0)) { m_pending = null; }
+        if (((PlaceCount + ClassifyCount + TraceCount) == 0) && (m_pending.Allocated.Count == 0) && (m_pending.Evicted.Count == 0)) { m_pending = null; }
     }
     /// <summary>Counts and commits only the schedule actually submitted.</summary>
     public void Submitted() {
@@ -198,8 +199,6 @@ public sealed partial class SdfIndirectCache : IDisposable {
         foreach (var (keys, action) in new[] { (plan.Allocated, "allocated"), (plan.Evicted, "evicted"), (plan.Refused, "refused") }) {
             for (var level = 0; (level < Layout.Levels.Count); level++) { Count($"indirect.bricks.{action}.{Layout.Levels[level].Name}", keys.Count(predicate: key => (key.Level == level))); }
         }
-        if (!m_completed && m_schedule.IsComplete) { Count(amount: 1, name: "indirect.sweeps.completed"); }
-        m_completed = m_schedule.IsComplete;
         m_pending = null;
         Frame++;
     }

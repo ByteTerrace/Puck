@@ -29,9 +29,10 @@ public sealed partial class SdfWorldPasses {
         }
         return fragment;
     }
-    private static int LightMapCount(SdfWorldResidency? residency) {
+    internal static int LightMapCount(SdfWorldResidency? residency) {
         if ((residency is null) || (residency.IndirectTier == Puck.SignedDistance.SdfIndirectTier.Off)) { return 0; }
-        var slots = residency.Frame?.Lights.ShadowSlots;
+        var cache = residency.Tables?.Indirect;
+        var slots = (cache is { HasLightingCycle: true } ? cache.Lighting!.Frame.Lights.ShadowSlots : residency.Frame?.Lights.ShadowSlots);
         return (((slots?.SlotCount ?? 0) + (slots?.FadeCapacity ?? 0)) * SdfIndirectLightLayout.RegionsPerLight);
     }
 }

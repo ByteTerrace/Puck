@@ -36,6 +36,52 @@ public sealed class SdfIndirectCacheLawTests {
         Assert.Equal((traces * 64), rig.Work.Read(kind: SdfIndirectWork.Rays));
     }
     [Fact]
+    public void LightingPublishesWholeSweepsAndFreezeRetainsOnlyTheAdmittedBatch() {
+        using var rig = new Rig();
+        var completed = SdfIndirectWork.Kinds.Single(kind => kind.Name == "indirect.sweeps.completed");
+        for (var frame = 0; frame < 16; frame++) { rig.Cache.Plan(Inputs); rig.Cache.Submitted(); }
+        Assert.True(rig.Cache.IsComplete);
+        Assert.Equal(0, rig.Work.Read(completed));
+        rig.Cache.BeginLighting();
+        rig.Cache.PlanLighting();
+        var retained = rig.Cache.Regions[4].Contents.ToArray();
+        Assert.Equal(64, rig.Cache.ShadeCount);
+        Assert.Equal(12288, BinaryPrimitives.ReadInt32LittleEndian(retained));
+        Assert.Equal(1, BinaryPrimitives.ReadInt32LittleEndian(retained.AsSpan(8)));
+        rig.Cache.PlanLighting();
+        Assert.Equal(retained, rig.Cache.Regions[4].Contents.ToArray());
+        Assert.Equal(-1, rig.Cache.PublishedGeneration);
+        rig.Cache.SubmittedLighting();
+        Assert.Equal(-1, rig.Cache.PublishedGeneration);
+        Assert.Equal(0u, rig.Cache.PublishedStamp);
+        Assert.Equal(0, rig.Work.Read(completed));
+        rig.Cache.PlanLighting();
+        Assert.Equal(0, BinaryPrimitives.ReadInt32LittleEndian(rig.Cache.Regions[4].Contents));
+        Assert.Equal(0, BinaryPrimitives.ReadInt32LittleEndian(rig.Cache.Regions[4].Contents[8..]));
+        rig.Cache.Frozen = true;
+        rig.Cache.SubmittedLighting();
+        var published = rig.Cache.Snapshot();
+        Assert.Equal(0, published.PublishedGeneration);
+        Assert.True(published.PublishedStamp > 0);
+        Assert.Equal(1, published.CompletedSweeps);
+        rig.Cache.PlanLighting();
+        Assert.Equal(0, rig.Cache.ShadeCount);
+        Assert.Equal(1, rig.Work.Read(completed));
+        rig.Cache.Frozen = false;
+        for (var batch = 0; batch < 4; batch++) { rig.Cache.PlanLighting(); rig.Cache.SubmittedLighting(); }
+        Assert.True(rig.Cache.LightingComplete);
+        Assert.Equal(3, rig.Work.Read(completed));
+        Assert.Equal(1, published.CompletedSweeps);
+        Assert.True(rig.Cache.PublishedStamp > published.PublishedStamp);
+        rig.Cache.PlanLighting();
+        Assert.False(rig.Cache.NeedsPublish);
+        Assert.False(rig.Cache.HasWork);
+        rig.Cache.Reset(2);
+        Assert.Equal(-1, rig.Cache.PublishedGeneration);
+        Assert.Equal(0u, rig.Cache.PublishedStamp);
+        Assert.False(rig.Cache.LightingComplete);
+    }
+    [Fact]
     public void CompletedDemandAndAnIdlePanLeaveNoPendingWork() {
         using var rig = new Rig();
 

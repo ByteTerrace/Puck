@@ -23,8 +23,9 @@ public sealed partial class SdfWorldResidency {
         // A baked draw's emitting seam certifies the same SDF remains available to the swept primary traversal.
         var casters = (frame.MeshDraws.Any(predicate: static draw => !draw.FieldBacked) || inputs.Bounds.Any(predicate: static sphere => !double.IsFinite(d: sphere.Radius))
             ? ((SdfLightRegion?)null) : new SdfLightRegion(Min: inputs.WorldMin, Max: inputs.WorldMax));
+        var lights = (cache.HasLightingCycle ? cache.Lighting!.Frame.Lights : frame.Lights);
         IndirectLightViews.Plan(frame: PackageFrame, geometryOwner: Tables, geometry: Tables.LightGeometry,
-            lights: frame.Lights, regions: [cache.AllocatedRegion(level: 0), cache.AllocatedRegion(level: (cache.Layout.Levels.Count - 1))],
+            lights: lights, regions: [cache.AllocatedRegion(level: 0), cache.AllocatedRegion(level: (cache.Layout.Levels.Count - 1))],
             casters: casters, forceGeometry: Tables.LightGeometryMutable);
     }
 

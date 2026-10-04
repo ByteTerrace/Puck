@@ -84,6 +84,9 @@ The indirect residency also owns a depth-only orthographic light-camera fragment
 with retained maps, one region published per frame and no work for unchanged
 regions. Its visibility contract and geometry limits are described in
 [the light-view section](../../docs/rendering/sdf/handbook/lighting-and-shading.md#the-indirect-caches-depth-only-light-view).
+Its finite lighting pass pins the source tables and publishes whole submitted
+sweeps; [the solve contract](../../docs/rendering/sdf/handbook/lighting-and-shading.md#finite-indirect-lighting-sweeps)
+describes the two lighting generations and their actual source snapshots.
 
 A frame runs these kernels: `region-copy.comp` (from `Puck.Shaders`: the words each
 staged region of frame data owes, copied into its device-local buffer; see

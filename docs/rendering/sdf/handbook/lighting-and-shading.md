@@ -221,7 +221,7 @@ fixture, no-false-light condition and two-texel widening bound; the rendering pl
 tracks the outstanding device qualification.
 
 The residency owns the cache's freeze and reset controls. Freeze admits no new
-placement, partition or transport work after the already queued frame, while
+placement, partition, transport or lighting work after the already queued frame, while
 views keep reading the retained cache. Reset waits for a renderable frame,
 withdraws the old cache epoch and light-map validity, and changes no authoritative
 world state. It retains the freeze setting across tier and table replacements.
@@ -233,6 +233,32 @@ accumulated color merely because it passes the color-clipping test.
 and allocation bytes. It does not claim probe classes or proof results from those
 counts: those are GPU records and require a fenced readback of the same
 allocation and epoch.
+
+## Finite indirect lighting sweeps
+
+The residency's `shade` pass follows placement, partition and transport over the
+same cache allocation. Once transport finishes, the shared `IrradianceSolveSchedule`
+visits coarser levels before finer ones, within the tier's probe allowance. The
+direct sweep starts from zero; medium then runs two feedback sweeps and high four.
+A planned batch stays intact until successful submission, and only an entire
+sweep publishes a generation. Transport completion does not count as a lighting
+sweep. A completed unchanged solve schedules no further shade dispatch.
+
+One solve pins its packed program, pose and lighting tables in existing GPU
+regions and binds them through the ordinary World interface. Later source edits
+wait for the finite solve to finish before starting another. The light camera
+uses that same captured light table. Allocation accounting includes the pinned
+regions, their rings and the separate shade-update region; resizing a pinned
+region waits for its previous readers before replacing it.
+
+`LightingSource` describes the active solve, while `PublishedLightingSource`
+describes the complete generation readers still see during a later solve.
+Each is an immutable CPU capture; `CopyFrame()` supplies independent mutable
+light and sky tables for a CPU reference without consulting a newer live frame.
+The cache snapshot reports admitted shade probes and submitted whole sweeps.
+Actual GPU classifications and selected receiver contributions still require
+their fenced readback. Receiver application and its qualification remain part
+of the open cache work in the rendering plan.
 
 ## Ambient occlusion: three taps into the ambient fill
 

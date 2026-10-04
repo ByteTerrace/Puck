@@ -30,12 +30,18 @@ public sealed record SdfIndirectBrickSnapshot(IrradianceBrickKey Key, int Slot, 
 /// <param name="PendingPlacements">The admitted brick placements not yet submitted.</param>
 /// <param name="PendingClassifications">The admitted cell partitions not yet submitted.</param>
 /// <param name="PendingTraces">The admitted probe strata not yet submitted.</param>
+/// <param name="PendingShades">The admitted lighting probes not yet submitted.</param>
+/// <param name="CompletedSweeps">Whole submitted sweeps of the current finite solve.</param>
+/// <param name="LightingComplete">Whether the finite direct and feedback solve finished.</param>
+/// <param name="PublishedGeneration">The visible lighting bank, or minus one before a whole sweep.</param>
+/// <param name="PublishedStamp">The exact per-probe stamp of that visible sweep.</param>
 /// <param name="Frozen">Whether later update admission is paused; an already admitted frame may finish.</param>
 /// <param name="Bytes">Every owned cache and host-region byte, including their rings.</param>
 /// <param name="Levels">The allocation's immutable level descriptions.</param>
 /// <param name="Bricks">The current brick inventory in lattice order.</param>
 public sealed record SdfIndirectCacheSnapshot(long Allocation, SdfIndirectTier Tier, uint Epoch, uint Submission, float FarDistance,
-    bool TraceComplete, int PendingPlacements, int PendingClassifications, int PendingTraces, bool Frozen, GpuMemoryBytes Bytes,
+    bool TraceComplete, int PendingPlacements, int PendingClassifications, int PendingTraces, int PendingShades,
+    int CompletedSweeps, bool LightingComplete, int PublishedGeneration, uint PublishedStamp, bool Frozen, GpuMemoryBytes Bytes,
     IReadOnlyList<IrradianceLevel> Levels, IReadOnlyList<SdfIndirectBrickSnapshot> Bricks);
 
 public sealed partial class SdfIndirectCache {
@@ -59,6 +65,7 @@ public sealed partial class SdfIndirectCache {
             bricks[index++] = new SdfIndirectBrickSnapshot(key, slot, m_placed.Contains(key), Array.AsReadOnly(masks));
         }
         return new SdfIndirectCacheSnapshot(m_allocation, Layout.Tier, Epoch, Frame, FarDistance, IsComplete,
-            PlaceCount, ClassifyCount, TraceCount, Frozen, Bytes, Array.AsReadOnly(Layout.Levels.ToArray()), Array.AsReadOnly(bricks));
+            PlaceCount, ClassifyCount, TraceCount, ShadeCount, CompletedSweeps, LightingComplete, PublishedGeneration, PublishedStamp,
+            Frozen, Bytes, Array.AsReadOnly(Layout.Levels.ToArray()), Array.AsReadOnly(bricks));
     }
 }

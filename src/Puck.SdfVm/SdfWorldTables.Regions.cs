@@ -126,6 +126,9 @@ public sealed partial class SdfWorldTables {
 
         if (m_indirect is { } indirect) {
             foreach (var region in indirect.Regions) { m_regionCopies.Record(handsToReaders: true, region: region, slot: m_currentSlot); }
+            if (indirect.Lighting is { } lighting) {
+                foreach (var region in lighting.Regions) { m_regionCopies.Record(handsToReaders: true, region: region, slot: m_currentSlot); }
+            }
         }
         var commandBuffer = m_regionCopies.Finish();
 

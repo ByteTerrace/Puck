@@ -26,6 +26,10 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         indirectCacheRW[address + 1u] = asuint(placement.position.y);
         indirectCacheRW[address + 2u] = asuint(placement.position.z);
         indirectCacheRW[address + 3u] = placement.classification | (passGroup.indirectEpoch << SdfIndirectEpochShift);
+        [unroll] for (uint generation = 0u; generation < SdfIndirectLightingGenerations; generation++) {
+            indirectCacheRW[sdfIndirectPublicationWordOffset(passGroup.indirectTier)
+                + generation * sdfIndirectProbeCapacity(passGroup.indirectTier) + index] = 0u;
+        }
         SdfIndirectCell empty = (SdfIndirectCell)0;
         empty.components = 0xffffffffu;
         sdfIndirectStoreCell(cell, proof, empty);

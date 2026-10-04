@@ -75,7 +75,7 @@ public static partial class SdfWorldPackage {
         .. Tables,
     ];
 
-    /// <summary>Creates the three ordered dispatches over one residency-owned buffer.</summary>
+    /// <summary>Creates placement, partition, transport and finite lighting dispatches over one residency-owned buffer.</summary>
     /// <param name="bytes">The cache layout's exact allocation.</param>
     /// <returns>The package fragment.</returns>
     public static RenderGraphPackageFragment IndirectFragment(ulong bytes) => new(
@@ -83,12 +83,14 @@ public static partial class SdfWorldPackage {
         Passes: [
             Pass(name: IndirectPlace, outputs: ["placed"]) with { Members = IndirectMembers },
             Pass(name: IndirectClassify, outputs: ["partitioned"]) with { Members = IndirectMembers },
-            Pass(name: IndirectTrace, outputs: [IndirectCache]) with { Members = IndirectMembers },
+            Pass(name: IndirectTrace, outputs: ["traced"]) with { Members = IndirectMembers },
+            Pass(name: IndirectShade, outputs: [IndirectCache]) with { Members = IndirectMembers },
         ],
         Resources: [
             new(Name: "placed", Kind: ShaderPipelineResourceKind.Buffer, SizeBytes: bytes, StrideBytes: sizeof(uint)),
             new(Name: "partitioned", Kind: ShaderPipelineResourceKind.Buffer, From: "placed", SizeBytes: bytes, StrideBytes: sizeof(uint)),
-            new(Name: IndirectCache, Kind: ShaderPipelineResourceKind.Buffer, From: "partitioned", SizeBytes: bytes, StrideBytes: sizeof(uint)),
+            new(Name: "traced", Kind: ShaderPipelineResourceKind.Buffer, From: "partitioned", SizeBytes: bytes, StrideBytes: sizeof(uint)),
+            new(Name: IndirectCache, Kind: ShaderPipelineResourceKind.Buffer, From: "traced", SizeBytes: bytes, StrideBytes: sizeof(uint)),
         ]);
     /// <summary>Adds the cache's buffer edge to a view. Only the primary and debug shading read it.</summary>
     /// <param name="fragment">The view's selected quality fragment.</param>

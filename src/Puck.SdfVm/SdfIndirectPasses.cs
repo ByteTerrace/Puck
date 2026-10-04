@@ -9,7 +9,7 @@ namespace Puck.SdfVm;
 public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackageFactory, IDisposable {
     private readonly Dictionary<string, SdfWorldResidency> m_instances = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, CacheCounter> m_counters = new(comparer: StringComparer.Ordinal);
-    private readonly Dictionary<SdfIndirectTier, RenderGraphPackageFragment> m_fragments = [];
+    private readonly Dictionary<(SdfIndirectTier Tier, int Maps), RenderGraphPackageFragment> m_fragments = [];
     private readonly Lock m_gate = new();
 
     /// <inheritdoc/>
@@ -55,17 +55,24 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
     public string? RefusalOf(string instance) => Resolve(instance: instance)?.Refusal;
     /// <inheritdoc/>
     public RenderGraphPackageFragment? FragmentOf(string instance) {
-        var tier = (Resolve(instance: instance)?.IndirectTier ?? SdfIndirectTier.Medium);
+        var residency = Resolve(instance: instance);
+        var tier = (residency?.IndirectTier ?? SdfIndirectTier.Medium);
+        var maps = LightMaps(residency);
 
         if (tier == SdfIndirectTier.Off) { tier = SdfIndirectTier.Medium; }
         lock (m_gate) {
-            if (!m_fragments.TryGetValue(key: tier, value: out var fragment)) {
+            if (!m_fragments.TryGetValue(key: (tier, maps), value: out var fragment)) {
                 fragment = SdfWorldPackage.IndirectFragment(bytes: new SdfIndirectLayout(tier: tier).ByteLength);
-                m_fragments.Add(key: tier, value: fragment);
+                if (maps >= 0) { fragment = SdfWorldPackage.WithLightViews(fragment, maps); }
+                m_fragments.Add(key: (tier, maps), value: fragment);
             }
             return fragment;
         }
     }
+    /// <inheritdoc/>
+    public IReadOnlyList<RenderGraphRuntimeInput> InputsOf(string instance) =>
+        Resolve(instance) is { } residency && views.LightViewName(residency) is { } light
+            ? [new(Producer: light, Version: SdfWorldPackage.IndirectLightDepth)] : [];
     /// <inheritdoc/>
     public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context) {
         var residency = Resolve(instance: instance);
@@ -97,6 +104,8 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
     }
 
     private SdfWorldResidency? Resolve(string instance) { lock (m_gate) { return m_instances.GetValueOrDefault(key: instance); } }
+    private int LightMaps(SdfWorldResidency? residency) =>
+        (residency is not null && views.LightViewName(residency) is not null) ? SdfWorldPasses.LightMapCount(residency) : -1;
 
     // Byte-identical layouts can name different allocations. The node's existing storage revision owns that rebuild,
     // including a residency whose tables are recreated, while each installed recorder retains its previous cache.
@@ -104,15 +113,19 @@ public sealed class SdfIndirectPasses(SdfWorldPasses views) : IRenderGraphPackag
         private readonly Lock m_gate = new();
 
         private SdfIndirectCache? m_cache;
+        private int m_maps = int.MinValue;
         private long m_revision;
 
         public long Revision {
             get {
-                var cache = owner.Resolve(instance: instance)?.Tables?.Indirect;
+                var residency = owner.Resolve(instance: instance);
+                var cache = residency?.Tables?.Indirect;
+                var maps = owner.LightMaps(residency);
 
                 lock (m_gate) {
-                    if (!ReferenceEquals(objA: cache, objB: m_cache)) {
+                    if (!ReferenceEquals(objA: cache, objB: m_cache) || maps != m_maps) {
                         m_cache = cache;
+                        m_maps = maps;
                         m_revision++;
                     }
                     return m_revision;
