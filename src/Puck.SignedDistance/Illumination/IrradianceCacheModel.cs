@@ -571,7 +571,7 @@ public sealed class IrradianceCacheModel {
             }
         }
 
-        var albedo = m_surfaces.Albedo(arg: record.Material);
+        var albedo = m_surfaces.Reflection(record.Point, record.Normal, record.Material);
         return new IrradianceContributions(
             Direct: Double3.Multiply(albedo, m_surfaces.Direct(record.Point, record.Normal, record.Material)),
             Feedback: Double3.Multiply(albedo, reflected),

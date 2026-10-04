@@ -64,7 +64,7 @@ public sealed class IrradianceReference {
 
     private (IrradianceEstimate Total, IrradianceSourceEstimate Sources) EstimateCore(Double3 point, Double3 normal, int bounces, int paths) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: bounces);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: (2 * (bounces + 1)), other: Primes.Length, paramName: nameof(bounces));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: bounces, other: ((Primes.Length / 2) - 1));
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: paths);
 
         var sum = Double3.Zero;
