@@ -17,6 +17,12 @@ simulation {
   rateHz: 30
 }
 
+state {
+  world {
+    slot cameraYaw = 0.0 bounds(-0.2..0.2)
+  }
+}
+
 cameras [
   {
     name: "standing-cam"
@@ -28,7 +34,7 @@ cameras [
       version: "puck.camera.program.v1"
       operations [
         anchor(subject: placement(placementId: `camera-anchor`))
-        offset(value: [0, 2.5, 7], worldAxes: true)
+        orbit(distance: 7.4330344, pitch: 0.34302394, yaw: "state.cameraYaw")
         lookAt(subject: placement(placementId: `camera-anchor`), targetOffset: [0, 0.8, 0], worldAxes: true)
         fieldOfView(fieldOfViewRadians: 0.9)
       ]

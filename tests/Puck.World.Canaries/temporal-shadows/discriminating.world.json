@@ -429,6 +429,11 @@
   "grants": [
     {
       "grantee": "seat1",
+      "subject": "section:state",
+      "capability": "Mutate"
+    },
+    {
+      "grantee": "seat1",
       "subject": "state:shadowX",
       "capability": "Edit"
     },

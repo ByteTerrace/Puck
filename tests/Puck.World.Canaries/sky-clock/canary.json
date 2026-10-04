@@ -52,7 +52,15 @@
         "name": "the-timeline-echoes-its-tick-clock",
         "stream": "stdout",
         "match": "contains",
-        "text": "second span=1 periodTicks=50400 startTicks=0",
+        "text": "second span=1 held=false rate=1 ",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-timeline-echoes-its-tick-period",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "periodTicks=50400 startTicks=0 ",
         "present": true
       }
     ]
@@ -97,7 +105,15 @@
         "name": "the-timeline-echoes-its-tick-clock",
         "stream": "stdout",
         "match": "contains",
-        "text": "second span=1 periodTicks=50400 startTicks=0",
+        "text": "second span=1 held=false rate=1 ",
+        "present": true
+      },
+      {
+        "type": "line",
+        "name": "the-timeline-echoes-its-tick-period",
+        "stream": "stdout",
+        "match": "contains",
+        "text": "periodTicks=50400 startTicks=0 ",
         "present": true
       }
     ]

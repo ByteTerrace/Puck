@@ -6,8 +6,10 @@ world.upscale-sharpness 0
 world.cadence on
 world.wait ready 45
 world.wait 30
-# Restart the epoch by panning; two reads inside its eight-sample convergence must advance.
-world.row.set placements camera-anchor position [0.5,0,0]
+# Move only the camera's live yaw, preserving its program and graph; wait for completed outputs before sampling work.
+world.state.cell.set cameraYaw $value 0.07
+world.wait ready 45
+# Two reads inside the eight-sample convergence must advance.
 world.wait 1
 world.counters gpu
 world.wait 2
@@ -16,7 +18,8 @@ world.counters gpu
 world.wait 30
 world.counters gpu
 world.wait 30
-# Pan again: this read must see renewed temporal and resolve work, not the standing submission.
-world.row.set placements camera-anchor position [-0.5,0,0]
+# Turn again: the same graph must resume temporal and resolve work.
+world.state.cell.set cameraYaw $value -0.07
+world.wait ready 45
 world.wait 2
 world.counters gpu
