@@ -95,13 +95,17 @@ public sealed class ShaderBuildTargetsLawTests {
 
         // Publisher B compiles meanwhile. Once its compiler output exists it either publishes its whole pair at once or
         // waits for A to finish; either way A is then let go.
-        var second = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(target: "Build"));
+        using var secondWaiting = new ManualResetEventSlim();
+        var second = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(target: "Build", waiting: secondWaiting));
 
         _ = WaitFor(find: () => Directory.EnumerateFiles(path: directory, searchPattern: "a.comp.spv.*.tmp").FirstOrDefault(predicate: static path => !path.Contains(comparisonType: StringComparison.Ordinal, value: ".hash.")));
-        _ = await Task.WhenAny(task1: second, task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TimeSpan.FromSeconds(value: 3)));
-        heldTemporary.Dispose();
-        fixture.RequireSuccess(run: await first);
-        fixture.RequireSuccess(run: await second);
+        try {
+            RequireWaiting(process: second, waiting: secondWaiting);
+        } finally {
+            heldTemporary.Dispose();
+            fixture.RequireSuccess(run: await first);
+            fixture.RequireSuccess(run: await second);
+        }
 
         // The pair on disk is one generation's: the freshness check holds the bytecode to its sidecar.
         fixture.RequireSuccess(run: fixture.Run(target: "CollectShaderBytecode"));
@@ -118,15 +122,17 @@ public sealed class ShaderBuildTargetsLawTests {
             """, dxc: ProcessDxc);
 
         using var heldLock = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: fixture.PathOf(path: "obj/shader-publish.lock"), share: FileShare.None);
-        var first = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["BaseIntermediateOutputPath=obj/first/"], target: "Build"));
-        var second = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["BaseIntermediateOutputPath=obj/second/"], target: "Build"));
+        using var firstWaiting = new ManualResetEventSlim();
+        using var secondWaiting = new ManualResetEventSlim();
+        var first = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["BaseIntermediateOutputPath=obj/first/"], target: "Build", waiting: firstWaiting));
+        var second = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["BaseIntermediateOutputPath=obj/second/"], target: "Build", waiting: secondWaiting));
 
         try {
             // Both compilers finish while publication is held, including on Linux. Moving managed intermediates does
             // not create a second lock for the same source-tree outputs, and the lock is never held during compilation.
             _ = WaitFor(find: () => (((first.IsCompleted || second.IsCompleted) || (Directory.EnumerateFiles(path: fixture.PathOf(path: "Assets/Shaders"), searchPattern: "a.comp.spv.*.tmp").Count() == 2)) ? "publishers reached publication" : null));
-            // A publisher that took a lock of its own would finish within this wait; one sharing the held lock cannot.
-            _ = await Task.WhenAny(task1: Task.WhenAll(first, second), task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TimeSpan.FromSeconds(value: 2)));
+            RequireWaiting(process: first, waiting: firstWaiting);
+            RequireWaiting(process: second, waiting: secondWaiting);
             Assert.False(condition: (first.IsCompleted || second.IsCompleted), userMessage: "A publisher finished while the source tree's publication lock was held.");
             Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv")));
             Assert.False(condition: File.Exists(path: fixture.PathOf(path: "Assets/Shaders/a.comp.spv.hash")));
@@ -158,11 +164,12 @@ public sealed class ShaderBuildTargetsLawTests {
             """);
 
         using var heldLock = new FileStream(access: FileAccess.ReadWrite, mode: FileMode.Open, path: fixture.PathOf(path: "obj/shader-publish.lock"), share: FileShare.None);
-        var pack = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["NoBuild=true"], target: "_GetPackageFiles"));
+        using var waiting = new ManualResetEventSlim();
+        var pack = Task.Run(cancellationToken: TestContext.Current.CancellationToken, function: () => fixture.Run(properties: ["NoBuild=true"], target: "_GetPackageFiles", waiting: waiting));
 
         try {
             _ = WaitFor(find: () => (File.Exists(path: fixture.PathOf(path: "collecting.txt")) ? "collecting" : null));
-            _ = await Task.WhenAny(task1: pack, task2: Task.Delay(cancellationToken: TestContext.Current.CancellationToken, delay: TimeSpan.FromSeconds(value: 1)));
+            RequireWaiting(process: pack, waiting: waiting);
             Assert.False(condition: pack.IsCompleted, userMessage: "Collection inspected missing outputs without waiting for the publisher's lock.");
 
             // This process owns the publication lock. It materializes the first bytecode, then either commits its
@@ -292,10 +299,14 @@ public sealed class ShaderBuildTargetsLawTests {
 
         TestLiveness.Until(
             reason: () => "The publisher never reached the awaited point.",
-            step: () => (found = find()) is not null
+            step: () => ((found = find()) is not null)
         );
 
         return found!;
+    }
+    private static void RequireWaiting(Task<CliProcessResult> process, ManualResetEventSlim waiting) {
+        _ = WaitFor(find: () => ((waiting.IsSet || process.IsCompleted) ? "the lock wait or process exit is observed" : null));
+        Assert.True(condition: waiting.IsSet, userMessage: "The process ended without observing contention on the source tree's publication lock.");
     }
 
     private sealed class Fixture : IDisposable {
@@ -321,11 +332,17 @@ public sealed class ShaderBuildTargetsLawTests {
             project.Add(content: new XElement(name: "Target", content: [new XAttribute(name: "Name", value: "Build"), new XAttribute(name: "DependsOnTargets", value: buildDependencies)]));
             Write(path: "fixture.proj", text: project.ToString());
         }
-        public CliProcessResult Run(string target, string[]? properties = null) => CliProcess.RunCaptured(
-            arguments: ["msbuild", "--disable-build-servers", PathOf(path: "fixture.proj"), "-nologo", "-v:q", $"-t:{target}", .. (properties ?? []).Select(selector: static property => $"-p:{property}")],
+        public CliProcessResult Run(string target, string[]? properties = null, ManualResetEventSlim? waiting = null) => CliProcess.RunCaptured(
+            arguments: ["msbuild", "--disable-build-servers", PathOf(path: "fixture.proj"), "-nologo", "-v:n", "-m:4", "-nodeReuse:false", $"-t:{target}", .. (properties ?? []).Select(selector: static property => $"-p:{property}")],
             cancellationToken: TestContext.Current.CancellationToken,
             fileName: "dotnet",
             input: string.Empty,
+            onOutput: output => {
+                if (output.Line.Contains(comparisonType: StringComparison.Ordinal, value: "Waiting for another build's shader publication to finish") &&
+                    output.Line.Contains(value: Path.GetFullPath(path: PathOf(path: "obj/shader-publish.lock")), comparisonType: StringComparison.Ordinal)) {
+                    waiting?.Set();
+                }
+            },
             timeout: TimeSpan.FromMinutes(value: 2),
             workingDirectory: Root
         );

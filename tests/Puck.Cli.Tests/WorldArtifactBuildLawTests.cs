@@ -111,9 +111,7 @@ public sealed class WorldArtifactBuildLawTests {
                 text: text
             );
     }
-    // A builder that writes a stand-in artifact after a pause long enough for a concurrent resolution to arrive while
-    // it is still building, and counts how many times it ran.
-    private sealed class CountingBuilder(TimeSpan pause) {
+    private sealed class CountingBuilder(Action? entered = null) {
         private int m_builds;
 
         public int Builds => Volatile.Read(location: ref m_builds);
@@ -122,7 +120,7 @@ public sealed class WorldArtifactBuildLawTests {
             var outputDirectory = arguments[^1];
 
             _ = Interlocked.Increment(location: ref m_builds);
-            Thread.Sleep(timeout: pause);
+            entered?.Invoke();
             File.WriteAllText(
                 contents: Guid.NewGuid().ToString(format: "N"),
                 path: Path.Combine(
@@ -134,7 +132,7 @@ public sealed class WorldArtifactBuildLawTests {
         }
     }
 
-    private static WorldArtifact Resolve(Checkout checkout, WorldArtifactStore store, CountingBuilder builder) {
+    private static WorldArtifact Resolve(Checkout checkout, WorldArtifactStore store, CountingBuilder builder, Action? waiting = null) {
         Assert.True(
             condition: WorldArtifactBuild.TryResolve(
             artifact: out var artifact,
@@ -143,8 +141,9 @@ public sealed class WorldArtifactBuildLawTests {
             logDirectory: checkout.LogDirectory,
             repositoryRoot: checkout.Root,
             store: store,
-            timeout: TimeSpan.FromMinutes(value: 2),
-            verb: "law"
+            timeout: TestLiveness.Bound,
+            verb: "law",
+            waiting: waiting
         ),
             userMessage: error
         );
@@ -156,7 +155,7 @@ public sealed class WorldArtifactBuildLawTests {
     public void TwoResolutionsOfAnUnchangedTreeProduceOneBuild() {
         using var checkout = new Checkout();
         var store = checkout.Store;
-        var builder = new CountingBuilder(pause: TimeSpan.Zero);
+        var builder = new CountingBuilder();
 
         using var first = Resolve(
             builder: builder,
@@ -189,7 +188,7 @@ public sealed class WorldArtifactBuildLawTests {
     [Theory]
     public void ACanaryBuildDirectoryExistsOnlyWhenABuildWritesItsLog(string id) {
         using var checkout = new Checkout();
-        var builder = new CountingBuilder(pause: TimeSpan.Zero);
+        var builder = new CountingBuilder();
         var builtLogDirectory = CanaryCommand.BuildRunDirectory(id: id);
         var reusedLogDirectory = CanaryCommand.BuildRunDirectory(id: id);
         var namedLogDirectory = CanaryCommand.BuildRunDirectory(id: id);
@@ -203,7 +202,7 @@ public sealed class WorldArtifactBuildLawTests {
                 logDirectory: builtLogDirectory,
                 repositoryRoot: checkout.Root,
                 store: checkout.Store,
-                timeout: TimeSpan.FromMinutes(value: 2),
+                timeout: TestLiveness.Bound,
                 verb: "law"
             ), userMessage: error);
             using var buildLease = built;
@@ -217,7 +216,7 @@ public sealed class WorldArtifactBuildLawTests {
                 logDirectory: reusedLogDirectory,
                 repositoryRoot: checkout.Root,
                 store: checkout.Store,
-                timeout: TimeSpan.FromMinutes(value: 2),
+                timeout: TestLiveness.Bound,
                 verb: "law"
             ), userMessage: error);
             using var reusedLease = reused;
@@ -232,7 +231,7 @@ public sealed class WorldArtifactBuildLawTests {
                 named: built.Path,
                 path: out var namedPath,
                 repositoryRoot: checkout.Root,
-                timeout: TimeSpan.FromMinutes(value: 2),
+                timeout: TestLiveness.Bound,
                 verb: "law"
             ), userMessage: error);
             Assert.Null(@object: namedLease);
@@ -327,34 +326,30 @@ public sealed class WorldArtifactBuildLawTests {
         );
     }
     [Fact]
-    public void ConcurrentResolutionsOfOneSourceStateShareOneBuild() {
+    public async Task ConcurrentResolutionsOfOneSourceStateShareOneBuild() {
         using var checkout = new Checkout();
         var store = checkout.Store;
-        var builder = new CountingBuilder(pause: TimeSpan.FromMilliseconds(value: 500));
         const int Resolvers = 6;
+        using var waiting = new CountdownEvent(initialCount: (Resolvers - 1));
+        var builder = new CountingBuilder(entered: () => Assert.True(condition: waiting.Wait(timeout: TestLiveness.Bound), userMessage: "The other resolvers never contended on the in-flight build."));
         var artifacts = new WorldArtifact[Resolvers];
         using var start = new Barrier(participantCount: Resolvers);
 
-        var threads = Enumerable.Range(
+        var tasks = Enumerable.Range(
             count: Resolvers,
             start: 0
-        ).Select(selector: index => new Thread(start: () => {
+        ).Select(selector: index => Task.Factory.StartNew(action: () => {
             start.SignalAndWait();
             artifacts[index] = Resolve(
                 builder: builder,
                 checkout: checkout,
-                store: store
+                store: store,
+                waiting: () => waiting.Signal()
             );
-        })).ToArray();
-
-        foreach (var thread in threads) {
-            thread.Start();
-        }
-        foreach (var thread in threads) {
-            thread.Join();
-        }
+        }, cancellationToken: CancellationToken.None, creationOptions: TaskCreationOptions.LongRunning, scheduler: TaskScheduler.Default)).ToArray();
 
         try {
+            await Task.WhenAll(tasks: tasks);
             Assert.Equal(
                 actual: builder.Builds,
                 expected: 1
@@ -422,7 +417,7 @@ public sealed class WorldArtifactBuildLawTests {
     public void PruningKeepsTheMostRecentlyUsedBuildsAndEveryLeasedOne() {
         using var checkout = new Checkout();
         var store = checkout.Store;
-        var builder = new CountingBuilder(pause: TimeSpan.Zero);
+        var builder = new CountingBuilder();
         var edits = (WorldArtifactStore.KeepCount + 2);
         WorldArtifact? held = null;
 
@@ -514,7 +509,7 @@ public sealed class WorldArtifactBuildLawTests {
             share: FileShare.None
         )) {
             using var artifact = Resolve(
-                builder: new CountingBuilder(pause: TimeSpan.Zero),
+                builder: new CountingBuilder(),
                 checkout: checkout,
                 store: store
             );
@@ -583,7 +578,7 @@ public sealed class WorldArtifactBuildLawTests {
             logDirectory: checkout.LogDirectory,
             repositoryRoot: checkout.Root,
             store: checkout.Store,
-            timeout: TimeSpan.FromMinutes(value: 2),
+            timeout: TestLiveness.Bound,
             verb: "law"
         ));
 
@@ -660,7 +655,7 @@ public sealed class WorldArtifactBuildLawTests {
             logDirectory: checkout.LogDirectory,
             repositoryRoot: checkout.Root,
             store: checkout.Store,
-            timeout: TimeSpan.FromMinutes(value: 2),
+            timeout: TestLiveness.Bound,
             verb: "law"
         ));
 

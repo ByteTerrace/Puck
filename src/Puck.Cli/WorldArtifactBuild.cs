@@ -114,7 +114,8 @@ internal static class WorldArtifactBuild {
     /// <param name="artifact">The leased build, or <see langword="null"/> on failure.</param>
     /// <param name="error">Why the artifact is unavailable, or empty on success.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
-    public static bool TryResolve(string verb, string repositoryRoot, WorldArtifactStore store, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? builder, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error) {
+    /// <param name="waiting">Called once when another resolver holds the build lock, before this resolver waits.</param>
+    public static bool TryResolve(string verb, string repositoryRoot, WorldArtifactStore store, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? builder, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, Action? waiting = null) {
         var clock = Stopwatch.StartNew();
 
         artifact = null;
@@ -152,7 +153,8 @@ internal static class WorldArtifactBuild {
                 budget: timeout,
                 clock: clock,
                 key: key,
-                waited: out var waited
+                waited: out var waited,
+                waiting: waiting
             );
 
             if (waited) {

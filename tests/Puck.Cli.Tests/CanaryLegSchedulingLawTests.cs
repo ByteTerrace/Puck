@@ -224,39 +224,28 @@ public sealed class CanaryLegSchedulingLawTests {
     [Fact]
     public void TheRunnerKeepsAtMostTheGpuBoundOfLegsOnTheGpuAtOnce() {
         using var cancellation = new CancellationTokenSource();
-        var gate = new object();
-
-        var (inside, peak) = (0, 0);
-        var work = Enumerable.Range(count: 8, start: 0).Select(selector: index => Leg(
+        using var cohorts = new SchedulingCohorts(bound: 3, cohorts: 3);
+        var work = Enumerable.Range(count: 9, start: 0).Select(selector: index => Leg(
             gpu: true,
             index: index,
-            run: () => {
-                lock (gate) {
-                    inside++;
-                    peak = Math.Max(val1: peak, val2: inside);
-                }
-
-                Thread.Sleep(millisecondsTimeout: 50);
-
-                lock (gate) {
-                    inside--;
-                }
-            }
+            run: cohorts.Run
         )).ToArray();
         var ended = 0;
 
         CanaryCommand.RunLegsConcurrently(
             cancellation: cancellation,
             completed: (_, elapsed) => {
-                Assert.True(condition: (elapsed > TimeSpan.Zero));
+                cohorts.Completed();
                 ended++;
             },
             capacity: new CanaryCommand.CanaryCapacity(GpuLegs: 3, Processes: 16),
-            work: work
+            work: work,
+            started: _ => cohorts.Started()
         );
 
-        Assert.Equal(actual: ended, expected: 8);
-        Assert.Equal(actual: peak, expected: 3);
+        Assert.Equal(actual: ended, expected: 9);
+        Assert.Equal(actual: cohorts.Peak, expected: 3);
+        Assert.Equal(actual: cohorts.AdmissionPeak, expected: 3);
     }
     [Fact]
     public void NoTwoLegsAreHandedTheSameLoopbackPortEvenWhenTheProbeRepeatsOne() {

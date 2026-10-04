@@ -99,9 +99,10 @@ internal sealed class WorldArtifactStore(string root) {
     /// <param name="clock">The run's clock.</param>
     /// <param name="budget">How long the run may wait in total, measured on <paramref name="clock"/>.</param>
     /// <param name="waited">Whether another run held the right when this one first asked.</param>
+    /// <param name="waiting">Called once after the first attempt finds another holder, before waiting.</param>
     /// <returns>The held lock, which the caller disposes once the build is published or abandoned; or
     /// <see langword="null"/> when the budget ran out first.</returns>
-    public FileStream? AcquireBuild(string key, Stopwatch clock, TimeSpan budget, out bool waited) {
+    public FileStream? AcquireBuild(string key, Stopwatch clock, TimeSpan budget, out bool waited, Action? waiting = null) {
         _ = Directory.CreateDirectory(path: Root);
 
         var path = Sibling(
@@ -114,6 +115,9 @@ internal sealed class WorldArtifactStore(string root) {
         );
 
         waited = (first is null);
+        if (waited) {
+            waiting?.Invoke();
+        }
 
         return (first ?? Acquire(
             budget: budget,

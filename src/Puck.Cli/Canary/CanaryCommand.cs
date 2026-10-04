@@ -808,7 +808,7 @@ internal static partial class CanaryCommand {
     // finishes afterwards is reported. Nothing leaves this method while a leg still runs: a leg that throws, or a
     // completed callback that throws, cancels the rest, which kills their children, and the first failure is rethrown
     // only after every leg has ended.
-    internal static void RunLegsConcurrently(IReadOnlyList<CanaryLegWork> work, CanaryCapacity capacity, Action<CanaryLegWork, TimeSpan> completed, CancellationTokenSource cancellation) {
+    internal static void RunLegsConcurrently(IReadOnlyList<CanaryLegWork> work, CanaryCapacity capacity, Action<CanaryLegWork, TimeSpan> completed, CancellationTokenSource cancellation, Action<CanaryLegWork>? started = null) {
         var slots = new CanaryLegSlots(capacity: capacity);
         var waiting = StartOrder(work: work);
         var running = new List<(Task<TimeSpan> Task, CanaryLegWork Item)>(capacity: work.Count);
@@ -836,6 +836,7 @@ internal static partial class CanaryCommand {
                         },
                         scheduler: TaskScheduler.Default
                     ), item));
+                    started?.Invoke(obj: item);
                 }
 
                 if (running.Count == 0) {
