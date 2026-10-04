@@ -18,8 +18,11 @@ namespace Puck.World.Tests;
 /// (<see cref="SdfSkyEnvironment.Project"/>) within 1e-4 of the first coefficient's largest channel, for the default look's
 /// gradient, a four-stop sky with a bright disc and a covering cloud layer, neither of which the map holds, and a tilted
 /// sky frame under a second, turned gradient the lighting alone sees, masked to a cone and multiplied over the first,
-/// two analytic panels, and every lighting-capable procedural kind. The
-/// map counts one sky evaluation per lit layer inside its mask and the kind's directional domain, plus two plane texels
+/// two analytic panels, and every lighting-capable procedural kind. The noise keeps partial coverage over a constant
+/// midrange backdrop, and the pattern uses a midrange palette: their
+/// threshold and angular edges amplify input rounding, so one output half step is not a bound on arbitrary near-zero
+/// procedural radiance. The half-step comparison holds these authored fixtures' reference agreement.
+/// The map counts one sky evaluation per lit layer inside its mask and the kind's directional domain, plus two plane texels
 /// written per direction, and the reduction nine texels and no evaluation; two runs on one device write the same bytes.
 /// Every binding the kernels do not read holds a filler of its kind.
 /// </summary>
@@ -62,8 +65,8 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
             ("stars", Lit(parameters: new SdfSkyStars { Brightness = 2f, Density = 16f }), upperHemisphere),
             ("clouds", Lit(parameters: new SdfSkyClouds { Coverage = .6f }), upperHemisphere),
             ("aurora", Lit(parameters: aurora), auroraDirections),
-            ("noise", Lit(parameters: new SdfSkyNoise { Coverage = .5f }), SdfSkyEnvironment.Texels),
-            ("pattern", Lit(parameters: new SdfSkyPattern()), SdfSkyEnvironment.Texels),
+            ("noise", Lit(parameters: new SdfSkyNoise { Coverage = .5f }, withBackdrop: true), (2L * SdfSkyEnvironment.Texels)),
+            ("pattern", Lit(parameters: new SdfSkyPattern { ColorA = new Vector3(value: .25f), ColorB = new Vector3(value: .75f) }), SdfSkyEnvironment.Texels),
         }) {
             var layers = new SdfSkyLayer[SdfSky.MaxLayers];
 
@@ -147,10 +150,16 @@ public sealed class SdfSkyEnvironmentDeviceLawTests {
 
         return count;
     }
-    private static SdfSky Lit<T>(T parameters) where T : unmanaged, ISdfSkyKind {
+    private static SdfSky Lit<T>(T parameters, bool withBackdrop = false) where T : unmanaged, ISdfSkyKind {
         var sky = new SdfSky();
 
         sky.ClearLayers();
+        if (withBackdrop) {
+            // Keep the noise's threshold and partial opacity observable while avoiding a near-zero output-ULP oracle.
+            var backdrop = SdfSky.DefaultGradient with { Color0 = new Vector3(value: .25f), Color1 = new Vector3(value: .25f) };
+
+            sky.Add(label: "backdrop", parameters: backdrop, visibility: SdfSkyVisibility.Lighting);
+        }
         sky.Add(parameters, "lit", visibility: SdfSkyVisibility.Lighting);
         return sky;
     }
