@@ -80,10 +80,11 @@ public sealed class WorldSkyEditLawTests {
             Assert.EndsWith(actualString: saved, expectedEndString: "\n// Retain this unrelated constant.\nlet retained = 3\n");
             var compiled = WorldCompiler.Compile(saved, sourcePath: SavedPath);
             var sky = compiled.RequireJson()["render"]!["sky"];
+            var savedDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: compiled.RequireJson().ToJsonString()));
             var live = JsonNode.Parse(WorldDefinitionSerialization.Serialize(definition: Server.Definition))!["render"]!["sky"];
 
             Assert.True(condition: JsonNode.DeepEquals(node1: live, node2: sky), userMessage: "The saved .puck sky rows must reproduce the edited live sky.");
-            Assert.Equal(0.03f, compiled.RequireJson()["render"]!["atmosphere"]!["fog"]!["density"]!.GetValue<float>());
+            Assert.Equal(expected: new BindableScalar(literal: 0.03f), actual: savedDefinition.Render.Atmosphere!.Fog!.Density);
             Assert.DoesNotContain(actualString: saved, expectedSubstring: "#FF0000");
             Assert.Contains(actualString: saved, expectedSubstring: "#0000FF");
         }

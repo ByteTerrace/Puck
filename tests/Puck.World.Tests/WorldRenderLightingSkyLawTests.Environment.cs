@@ -29,8 +29,8 @@ public sealed partial class WorldRenderLightingSkyLawTests {
 
         Assert.InRange(Vector3.Distance(value1: new Vector3(x: halfLinear, y: 0f, z: halfLinear), value2: panel.Color), 0f, 1e-6f);
         Assert.True(condition: TryValidateLocal(definition: AuthoredGameFixtures.Load(relativePath: "tests/Puck.World.Canaries/ambient-from-sky/fixture.world.json")));
-        Assert.True(condition: TryValidateLocal(definition: AuthoredGameFixtures.Load(relativePath: "tests/Puck.Parity/parity.world.json")));
-        Assert.True(condition: TryValidateLocal(definition: AuthoredGameFixtures.Load(relativePath: "tests/Puck.Counters/sky-cycle.world.json")));
+        Assert.True(condition: TryValidateLocal(definition: AuthoredGameFixtures.Load(relativePath: "tests/Puck.Parity/parity.puck")));
+        Assert.True(condition: TryValidateLocal(definition: AuthoredGameFixtures.Load(relativePath: "tests/Puck.Counters/sky-cycle.puck")));
     }
     [Fact]
     public void KeyedSkyColourRefreshesOnlyAfterCrossingOneDisplayCode() {
