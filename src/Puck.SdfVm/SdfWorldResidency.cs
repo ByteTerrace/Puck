@@ -495,6 +495,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             return false;
         }
 
+        ApplyIndirectReset(tables);
         _ = Volatile.Read(location: ref m_ready).TrySetResult();
 
         return true;

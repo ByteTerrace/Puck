@@ -49,6 +49,31 @@ public sealed class SdfIndirectCacheLawTests {
         Assert.Equal(rays, rig.Work.Read(kind: SdfIndirectWork.Rays));
     }
     [Fact]
+    public void FreezeFinishesOnlyTheAdmittedFrameAndResetWithdrawsItUntilThawed() {
+        using var rig = new Rig();
+        rig.Cache.Plan(Inputs);
+        var pending = rig.Cache.TraceCount;
+        rig.Cache.Frozen = true;
+        rig.Cache.Submitted();
+        var history = rig.Cache.History;
+        Assert.Equal(pending * 64, rig.Work.Read(SdfIndirectWork.Rays));
+        rig.Cache.Plan(Inputs);
+        Assert.False(rig.Cache.NeedsPublish);
+        Assert.False(rig.Cache.HasWork);
+        Assert.True(rig.Cache.Snapshot().Frozen);
+        rig.Cache.Reset(epoch: 7);
+        Assert.Equal(history.Allocation, rig.Cache.History.Allocation);
+        Assert.Equal(7u, rig.Cache.History.Epoch);
+        Assert.True(rig.Cache.History.Publication > history.Publication);
+        rig.Cache.Plan(Inputs);
+        Assert.Empty(rig.Cache.Snapshot().Bricks);
+        Assert.False(rig.Cache.NeedsPublish);
+        rig.Cache.Frozen = false;
+        rig.Cache.Plan(Inputs);
+        Assert.True(rig.Cache.NeedsPublish);
+        Assert.Equal(pending, rig.Cache.TraceCount);
+    }
+    [Fact]
     public void TraceSupportOnlySeesStrataFromEarlierSuccessfulSubmissions() {
         using var rig = new Rig();
 

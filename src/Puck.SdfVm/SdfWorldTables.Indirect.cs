@@ -69,6 +69,8 @@ public sealed partial class SdfWorldTables {
         m_indirect?.Reset(epoch: m_indirectEpoch);
         m_indirectClear = (m_indirect is not null);
     }
+    // The residency consumes the editor's queued reset only after it has a renderable frame.
+    internal void ResetIndirectPresentation() => ResetIndirect();
 
     internal void PlanIndirect(SdfFrame frame) => m_indirect?.Plan(inputs: IndirectInputs(frame: frame));
 

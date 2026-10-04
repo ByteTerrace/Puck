@@ -91,6 +91,8 @@ public sealed partial class SdfIndirectCache : IDisposable {
     public bool HasWork => (((PlaceCount + ClassifyCount) + TraceCount) != 0);
     /// <summary>Gets whether publication owes a schedule, including a table-only eviction.</summary>
     public bool NeedsPublish => (m_pending is not null);
+    /// <summary>Gets or sets whether new update admission is paused. A pending submitted-frame plan remains intact.</summary>
+    public bool Frozen { get; set; }
     /// <summary>Gets whether all current demand has completed a successful trace submission.</summary>
     public bool IsComplete => (m_schedule.IsComplete && (m_pending is null));
     /// <summary>Returns the exact allocated brick box of one running level, or null before its first allocation.</summary>
@@ -136,6 +138,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     public void Reset(uint epoch) {
         Epoch = epoch;
         Frame = 1;
+        LightingPublication++;
         m_schedule = NewSchedule();
         m_pending = null;
         m_slots.Clear();
@@ -154,7 +157,7 @@ public sealed partial class SdfIndirectCache : IDisposable {
     }
     /// <summary>Plans once until a successful submission commits the same list.</summary>
     public void Plan(IrradianceFrameInputs inputs) {
-        if (m_pending is not null) { return; }
+        if ((m_pending is not null) || Frozen) { return; }
         m_pending = m_schedule.Frame(inputs: inputs);
         foreach (var key in m_pending.Evicted) {
             Array.Clear(array: m_traceStates, index: (m_slots[key] * SdfIndirectLayout.ProbesPerBrick), length: SdfIndirectLayout.ProbesPerBrick);

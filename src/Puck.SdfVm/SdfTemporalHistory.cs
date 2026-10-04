@@ -15,7 +15,11 @@ namespace Puck.SdfVm;
 /// output converges over one period and then stands.</param>
 /// <param name="Unread">The frames the instance's render graph has left it unread and absent from displayed outputs,
 /// including held consumer outputs: a view shown again after it was parked renders in a new epoch.</param>
-public readonly record struct SdfTemporalEpoch(long Binding, long Cut, uint Width, uint Height, float Ceiling, bool Enabled, int Debug, bool Temporal = false, long Unread = 0);
+public readonly record struct SdfTemporalEpoch(long Binding, long Cut, uint Width, uint Height, float Ceiling, bool Enabled, int Debug, bool Temporal = false, long Unread = 0) {
+    /// <summary>Gets the exact indirect allocation, geometry epoch and completed lighting publication. A changed
+    /// lane rejects accumulated color even when its old value lies inside the new frame's color bounds.</summary>
+    public SdfIndirectHistory Indirect { get; init; }
+}
 /// <summary>A rendered camera and its sample grid, retained for motion reconstruction.</summary>
 /// <param name="Camera">The camera whose basis and off-axis lens projected the sample.</param>
 /// <param name="Jitter">The ray offset in render pixels.</param>

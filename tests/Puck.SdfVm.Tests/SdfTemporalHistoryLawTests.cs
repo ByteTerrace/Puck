@@ -96,6 +96,9 @@ public sealed class SdfTemporalHistoryLawTests {
             Epoch with { Binding = 2 }, Epoch with { Cut = 2 }, Epoch with { Width = 800 },
             Epoch with { Height = 600 }, Epoch with { Ceiling = 1f }, Epoch with { Enabled = false },
             Epoch with { Debug = 1 },
+            Epoch with { Indirect = new SdfIndirectHistory(Allocation: 1, Epoch: 0, Publication: 0) },
+            Epoch with { Indirect = new SdfIndirectHistory(Allocation: 0, Epoch: 1, Publication: 0) },
+            Epoch with { Indirect = new SdfIndirectHistory(Allocation: 0, Epoch: 0, Publication: 1) },
         ];
 
         foreach (var next in changes) {

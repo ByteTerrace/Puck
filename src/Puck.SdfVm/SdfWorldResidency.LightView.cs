@@ -15,7 +15,7 @@ public sealed partial class SdfWorldResidency {
     public SdfIndirectLightViews IndirectLightViews { get; } = new();
 
     internal void PlanLightView(in FrameContext context) {
-        if (!Prepare(context: in context) || (Tables?.Indirect is not { } cache) || (Frame is not { } frame)) { return; }
+        if (!Prepare(context: in context) || (Tables?.Indirect is not { } cache) || (Frame is not { } frame) || IndirectFrozen) { return; }
         if (IndirectLightViews.Frame == PackageFrame) { return; }
         Tables.PlanIndirect(frame: frame);
         var inputs = SdfWorldTables.IndirectInputs(frame: frame);

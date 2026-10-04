@@ -9,6 +9,41 @@ namespace Puck.SdfVm.Tests;
 
 public sealed partial class SdfWorldPassesLawTests {
     [Fact]
+    public void IndirectControlsRemainResidencyOwnedAndResetOnlyAtTheNextRenderableFrame() {
+        var gpu = new FakeGpuDevice();
+        using var residency = new SdfWorldResidency(brickPoolVoxelCapacity: 0,
+            frameSource: new FixedFrameSource(frame: Frame()), height: Extent, kernels: SdfTestPipelines.Kernels(),
+            name: "indirect-controls", pipelines: SdfTestPipelines.Cache(), width: Extent) {
+            IndirectTierOverride = SdfIndirectTier.Medium,
+            IndirectFrozen = true,
+        };
+        var context = new FrameContext(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
+            Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
+            StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
+        TestLiveness.Until(step: () => { residency.BeginFrame(); return residency.Prepare(context); },
+            reason: () => residency.NotReadyReason, wait: residency.WaitPipelineBuilds);
+        var original = residency.Tables!.Indirect!;
+        var history = original.History;
+        residency.RequestIndirectReset();
+        Assert.True(residency.IndirectResetPending);
+        Assert.Equal(history, original.History);
+        Assert.True(residency.Prepare(context));
+        Assert.True(residency.IndirectResetPending);
+        residency.BeginFrame();
+        Assert.True(residency.Prepare(context));
+        Assert.False(residency.IndirectResetPending);
+        Assert.NotEqual(history, original.History);
+        Assert.True(original.Frozen);
+        residency.IndirectTierOverride = SdfIndirectTier.High;
+        residency.BeginFrame();
+        Assert.True(residency.Prepare(context));
+        var replacement = residency.Tables.Indirect!;
+        Assert.NotSame(original, replacement);
+        Assert.True(replacement.Frozen);
+        Assert.True(residency.IndirectFrozen);
+        Assert.NotEqual(original.History.Allocation, replacement.History.Allocation);
+    }
+    [Fact]
     public void AChangedFarDistancePublishesAndSubmitsTheReplacementCacheAtTheSameTier() {
         var gpu = new FakeGpuDevice();
         var pipelines = SdfTestPipelines.Cache();

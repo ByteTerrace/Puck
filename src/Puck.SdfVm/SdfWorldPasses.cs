@@ -248,6 +248,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             entry.TemporalFrame = m_frame;
             entry.InstalledTemporal = temporal;
             var tables = view.Residency.Tables!;
+            if (entry.Temporal.Epoch.Indirect != (tables.Indirect?.History ?? default)) { entry.Temporal.Changed(); }
 
             entry.Temporal.Prepare(
                 camera: SnapshotOf(view: view).Camera,
@@ -291,7 +292,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             Temporal: temporal,
             Unread: unread,
             Width: width
-        );
+        ) { Indirect = view.Residency.Tables?.Indirect?.History ?? default };
     }
 
     // A residency's signature may belong to another instance. This instance can stand only after its own passes

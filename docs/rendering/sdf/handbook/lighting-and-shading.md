@@ -213,6 +213,20 @@ part of the cache solve. The CPU and device laws share the existing subtexel-rod
 fixture, no-false-light condition and two-texel widening bound; the rendering plan
 tracks the outstanding device qualification.
 
+The residency owns the cache's freeze and reset controls. Freeze admits no new
+placement, partition or transport work after the already queued frame, while
+views keep reading the retained cache. Reset waits for a renderable frame,
+withdraws the old cache epoch and light-map validity, and changes no authoritative
+world state. It retains the freeze setting across tier and table replacements.
+Temporal history carries the exact cache allocation, geometry epoch and lighting
+publication identity, so a changed cache cannot leave old light inside the
+accumulated color merely because it passes the color-clipping test.
+
+`SdfIndirectCache.Snapshot()` copies CPU-owned admission, submitted stratum masks
+and allocation bytes. It does not claim probe classes or proof results from those
+counts: those are GPU records and require a fenced readback of the same
+allocation and epoch.
+
 ## Ambient occlusion: three taps into the ambient fill
 
 Puck's AO is the classic normal-ladder technique: from the hit, step fixed
